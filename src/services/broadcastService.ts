@@ -1,7 +1,8 @@
+// src/services/broadcastService.ts
 import { StorageService } from './storageService';
 import { Poll, ChainBlock } from '../types/chain';
 
-type SyncMessage = 
+type SyncMessage =
   | { type: 'new-poll'; data: Poll }
   | { type: 'new-block'; data: ChainBlock }
   | { type: 'request-sync'; peerId: string }
@@ -14,30 +15,24 @@ export class BroadcastService {
 
   static initialize() {
     if (typeof BroadcastChannel === 'undefined') {
-      console.warn('BroadcastChannel not supported');
       return;
     }
 
     this.channel = new BroadcastChannel('voting-chain-sync');
-    
+
     this.channel.onmessage = (event: MessageEvent) => {
       const message = event.data;
-      
+
       // Don't process our own messages
       if ('peerId' in message && message.peerId === this.peerId) {
         return;
       }
 
-      console.log('📨 Received broadcast:', message.type);
-      
-      // Trigger callbacks
       const callback = this.callbacks.get(message.type);
       if (callback) {
         callback(message.data || message);
       }
     };
-
-    console.log('📡 BroadcastChannel initialized, Peer ID:', this.peerId);
 
     // Request initial sync from other tabs
     setTimeout(() => {
@@ -49,12 +44,11 @@ export class BroadcastService {
     if (!this.channel) return;
 
     const message: any = { type, data, timestamp: Date.now() };
-    
+
     try {
       this.channel.postMessage(message);
-      console.log('📤 Broadcast sent:', type);
     } catch (error) {
-      console.error('Broadcast error:', error);
+      // silently ignore postMessage errors
     }
   }
 

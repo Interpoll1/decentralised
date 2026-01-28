@@ -27,10 +27,15 @@ export const usePostStore = defineStore('post', () => {
 
   // Load posts for a community
   async function loadPostsForCommunity(communityId: string) {
-    isLoading.value = true;
-    currentCommunityId.value = communityId;
-    currentFeed.value = 'community';
-    posts.value = [];
+    // Don't set isLoading or clear posts if we're batch loading
+    const isBatchLoad = currentCommunityId.value !== communityId;
+    
+    if (!isBatchLoad) {
+      isLoading.value = true;
+      currentCommunityId.value = communityId;
+      currentFeed.value = 'community';
+      posts.value = [];
+    }
 
     try {
       console.log('📡 Loading posts for community:', communityId);
@@ -71,13 +76,17 @@ export const usePostStore = defineStore('post', () => {
           }
         });
         
-        isLoading.value = false;
-        console.log(`✅ Loaded ${posts.value.length} posts`);
-      }, 2000); // Wait 2 seconds for Gun to sync
+        if (!isBatchLoad) {
+          isLoading.value = false;
+        }
+        console.log(`✅ Loaded ${allPosts.length} posts from ${communityId}`);
+      }, 500); // Reduced from 1s to 500ms for speed
       
     } catch (error) {
       console.error('❌ Error loading posts:', error);
-      isLoading.value = false;
+      if (!isBatchLoad) {
+        isLoading.value = false;
+      }
     }
   }
 
@@ -150,7 +159,7 @@ export const usePostStore = defineStore('post', () => {
     }
   }
 
-  // Vote on post
+  // Vote on post (legacy method - kept for compatibility)
   async function voteOnPost(postId: string, direction: 'up' | 'down') {
     try {
       const currentUser = await UserService.getCurrentUser();
@@ -177,6 +186,138 @@ export const usePostStore = defineStore('post', () => {
     }
   }
 
+  // Upvote a post
+  async function upvotePost(postId: string) {
+    try {
+      console.log('👍 Upvoting post:', postId);
+      
+      const currentUser = await UserService.getCurrentUser();
+      await PostService.voteOnPost(postId, 'up', currentUser.id);
+      
+      // Update local post
+      const post = posts.value.find(p => p.id === postId);
+      if (post) {
+        post.upvotes++;
+        post.score = post.upvotes - post.downvotes;
+        
+        // Update current post if it's the one being viewed
+        if (currentPost.value?.id === postId) {
+          currentPost.value.upvotes++;
+          currentPost.value.score = currentPost.value.upvotes - currentPost.value.downvotes;
+        }
+        
+        // Update author's karma
+        await UserService.incrementKarma(post.authorId, 1);
+      }
+      
+      console.log('✅ Post upvoted');
+    } catch (error) {
+      console.error('❌ Error upvoting post:', error);
+      throw error;
+    }
+  }
+
+  // Downvote a post
+  async function downvotePost(postId: string) {
+    try {
+      console.log('👎 Downvoting post:', postId);
+      
+      const currentUser = await UserService.getCurrentUser();
+      await PostService.voteOnPost(postId, 'down', currentUser.id);
+      
+      // Update local post
+      const post = posts.value.find(p => p.id === postId);
+      if (post) {
+        post.downvotes++;
+        post.score = post.upvotes - post.downvotes;
+        
+        // Update current post if it's the one being viewed
+        if (currentPost.value?.id === postId) {
+          currentPost.value.downvotes++;
+          currentPost.value.score = currentPost.value.upvotes - currentPost.value.downvotes;
+        }
+        
+        // Update author's karma
+        await UserService.incrementKarma(post.authorId, -1);
+      }
+      
+      console.log('✅ Post downvoted');
+    } catch (error) {
+      console.error('❌ Error downvoting post:', error);
+      throw error;
+    }
+  }
+
+  // Remove upvote from a post
+  async function removeUpvote(postId: string) {
+    try {
+      console.log('↩️ Removing upvote from post:', postId);
+      
+      const currentUser = await UserService.getCurrentUser();
+      
+      // Check if PostService has removeVote method, otherwise just decrement locally
+      if (PostService.removeVote) {
+        await PostService.removeVote(postId, 'up', currentUser.id);
+      }
+      
+      // Update local post
+      const post = posts.value.find(p => p.id === postId);
+      if (post) {
+        post.upvotes = Math.max(0, post.upvotes - 1);
+        post.score = post.upvotes - post.downvotes;
+        
+        // Update current post if it's the one being viewed
+        if (currentPost.value?.id === postId) {
+          currentPost.value.upvotes = Math.max(0, currentPost.value.upvotes - 1);
+          currentPost.value.score = currentPost.value.upvotes - currentPost.value.downvotes;
+        }
+        
+        // Update author's karma
+        await UserService.incrementKarma(post.authorId, -1);
+      }
+      
+      console.log('✅ Upvote removed');
+    } catch (error) {
+      console.error('❌ Error removing upvote:', error);
+      throw error;
+    }
+  }
+
+  // Remove downvote from a post
+  async function removeDownvote(postId: string) {
+    try {
+      console.log('↩️ Removing downvote from post:', postId);
+      
+      const currentUser = await UserService.getCurrentUser();
+      
+      // Check if PostService has removeVote method, otherwise just decrement locally
+      if (PostService.removeVote) {
+        await PostService.removeVote(postId, 'down', currentUser.id);
+      }
+      
+      // Update local post
+      const post = posts.value.find(p => p.id === postId);
+      if (post) {
+        post.downvotes = Math.max(0, post.downvotes - 1);
+        post.score = post.upvotes - post.downvotes;
+        
+        // Update current post if it's the one being viewed
+        if (currentPost.value?.id === postId) {
+          currentPost.value.downvotes = Math.max(0, currentPost.value.downvotes - 1);
+          currentPost.value.score = currentPost.value.upvotes - currentPost.value.downvotes;
+        }
+        
+        // Update author's karma
+        await UserService.incrementKarma(post.authorId, 1);
+      }
+      
+      console.log('✅ Downvote removed');
+    } catch (error) {
+      console.error('❌ Error removing downvote:', error);
+      throw error;
+    }
+  }
+
   // Refresh posts
   async function refreshPosts() {
     console.log('🔄 Refreshing posts...');
@@ -197,6 +338,10 @@ export const usePostStore = defineStore('post', () => {
     createPost,
     selectPost,
     voteOnPost,
+    upvotePost,
+    downvotePost,
+    removeUpvote,
+    removeDownvote,
     refreshPosts
   };
 });

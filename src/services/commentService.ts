@@ -1,135 +1,443 @@
 // src/services/commentService.ts
-import { GunService } from './gunService';
+import Gun from 'gun';
+import 'gun/sea';
+
+const gun = Gun({
+  peers: ['http://localhost:8765/gun']
+});
 
 export interface Comment {
   id: string;
   postId: string;
-  parentId?: string; // For nested replies
+  communityId: string;
   authorId: string;
   authorName: string;
   content: string;
+  parentId?: string;
   createdAt: number;
   upvotes: number;
   downvotes: number;
   score: number;
-  replyCount: number;
+  edited?: boolean;
+  editedAt?: number;
 }
 
-export class CommentService {
-  // Create comment or reply
-  static async createComment(
-    comment: Omit<Comment, 'id' | 'createdAt' | 'upvotes' | 'downvotes' | 'score' | 'replyCount'>
-  ): Promise<Comment> {
-    const gun = GunService.getGun();
-    
-    const newComment: Comment = {
-      ...comment,
-      id: `comment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      createdAt: Date.now(),
-      upvotes: 0,
-      downvotes: 0,
-      score: 0,
-      replyCount: 0
-    };
+export interface CreateCommentData {
+  postId: string;
+  communityId: string;
+  authorId: string;
+  authorName: string;
+  content: string;
+  parentId?: string;
+}
 
-    // Store in Gun
-    await gun.get('comments').get(newComment.id).put(newComment);
-    
-    // Add to post's comment list
-    await gun.get('posts').get(newComment.postId).get('comments').set(
-      gun.get('comments').get(newComment.id)
-    );
+/**
+ * Create a new comment
+ */
+export async function createComment(data: CreateCommentData): Promise<Comment> {
+  const commentId = `comment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const timestamp = Date.now();
 
-    // If it's a reply, add to parent's reply list
-    if (newComment.parentId) {
-      await gun.get('comments').get(newComment.parentId).get('replies').set(
-        gun.get('comments').get(newComment.id)
-      );
-      
-      // Increment parent's reply count
-      const parent = await this.getComment(newComment.parentId);
-      if (parent) {
-        await gun.get('comments').get(newComment.parentId).get('replyCount')
-          .put(parent.replyCount + 1);
-      }
-    }
-
-    // Increment post's comment count
-    const post = await gun.get('posts').get(newComment.postId).once().then();
-    if (post) {
-      await gun.get('posts').get(newComment.postId).get('commentCount')
-        .put((post.commentCount || 0) + 1);
-    }
-
-    console.log('✅ Comment created:', newComment.id);
-    return newComment;
+  // Debug logging
+  if (data.parentId) {
+    console.log('🔍 Creating reply with parentId:', data.parentId);
   }
 
-  // Subscribe to comments for a post
-  static subscribeToComments(postId: string, callback: (comment: Comment) => void) {
-    const gun = GunService.getGun();
+  const comment: Comment = {
+    id: commentId,
+    postId: data.postId,
+    communityId: data.communityId,
+    authorId: data.authorId,
+    authorName: data.authorName,
+    content: data.content,
+    parentId: data.parentId || undefined,
+    createdAt: timestamp,
+    upvotes: 0,
+    downvotes: 0,
+    score: 0,
+    edited: false
+  };
+
+  return new Promise((resolve, reject) => {
+    const commentNode = gun.get('comments').get(commentId);
     
-    gun.get('posts').get(postId).get('comments').map().on((data: any) => {
-      if (data && !data._) {
-        callback(data);
+    // Set each field individually (Gun.js prefers this approach)
+    commentNode.get('id').put(commentId);
+    commentNode.get('postId').put(data.postId);
+    commentNode.get('communityId').put(data.communityId);
+    commentNode.get('authorId').put(data.authorId);
+    commentNode.get('authorName').put(data.authorName);
+    commentNode.get('content').put(data.content);
+    
+    // CRITICAL: Always set parentId field, even if undefined
+    // This ensures Gun.js knows about the field
+    if (data.parentId) {
+      console.log('✅ Setting parentId in Gun.js:', data.parentId);
+      commentNode.get('parentId').put(data.parentId);
+    } else {
+      console.log('ℹ️ No parentId - this is a top-level comment');
+      // Explicitly set to null or don't set at all
+      // Don't set parentId field for top-level comments
+    }
+    
+    commentNode.get('createdAt').put(timestamp);
+    commentNode.get('upvotes').put(0);
+    commentNode.get('downvotes').put(0);
+    commentNode.get('score').put(0);
+    commentNode.get('edited').put(false);
+
+    // Add to post's comments index
+    gun.get('posts')
+      .get(data.postId)
+      .get('comments')
+      .set({ commentId, createdAt: timestamp });
+    
+    // Resolve immediately since Gun.js is eventually consistent
+    setTimeout(() => {
+      console.log('📤 Returning comment object:', { id: commentId, parentId: comment.parentId });
+      resolve(comment);
+    }, 100);
+  });
+}
+
+/**
+ * Get a single comment by ID
+ */
+export async function getComment(commentId: string): Promise<Comment | null> {
+  return new Promise((resolve) => {
+    gun.get('comments')
+      .get(commentId)
+      .once((data) => {
+        if (data && data.id) {
+          resolve(data as Comment);
+        } else {
+          resolve(null);
+        }
+      });
+  });
+}
+
+/**
+ * Subscribe to real-time updates for comments in a post
+ */
+export function subscribeToCommentsInPost(
+  postId: string,
+  callback: (comment: Comment) => void
+): void {
+  gun.get('posts')
+    .get(postId)
+    .get('comments')
+    .map()
+    .on((data: any) => {
+      if (data && data.commentId) {
+        // Fetch the full comment data
+        gun.get('comments')
+          .get(data.commentId)
+          .on((commentData: any) => {
+            if (commentData && commentData.id) {
+              // Reconstruct the comment object
+              // Use postId from the function parameter as fallback if Gun.js doesn't return it
+              const comment: Comment = {
+                id: commentData.id,
+                postId: commentData.postId || postId,
+                communityId: commentData.communityId,
+                authorId: commentData.authorId,
+                authorName: commentData.authorName,
+                content: commentData.content,
+                // CRITICAL: Only set parentId if it actually exists (not null, undefined, or empty string)
+                parentId: commentData.parentId && commentData.parentId !== 'null' && commentData.parentId !== '' ? commentData.parentId : undefined,
+                createdAt: commentData.createdAt,
+                upvotes: commentData.upvotes || 0,
+                downvotes: commentData.downvotes || 0,
+                score: commentData.score || 0,
+                edited: commentData.edited || false,
+                editedAt: commentData.editedAt
+              };
+              callback(comment);
+            }
+          });
       }
     });
-  }
+}
 
-  // Subscribe to replies for a comment
-  static subscribeToReplies(commentId: string, callback: (comment: Comment) => void) {
-    const gun = GunService.getGun();
-    
-    gun.get('comments').get(commentId).get('replies').map().on((data: any) => {
-      if (data && !data._) {
-        callback(data);
-      }
-    });
-  }
+/**
+ * Get all comments for a post (one-time fetch)
+ */
+export async function getAllCommentsInPost(postId: string): Promise<Comment[]> {
+  return new Promise((resolve) => {
+    const comments: Comment[] = [];
+    const seen = new Set<string>();
 
-  // Get single comment
-  static async getComment(commentId: string): Promise<Comment | null> {
-    const gun = GunService.getGun();
-    return await gun.get('comments').get(commentId).once().then();
-  }
-
-  // Vote on comment
-  static async voteOnComment(commentId: string, direction: 'up' | 'down'): Promise<void> {
-    const gun = GunService.getGun();
-    const comment = await this.getComment(commentId);
-    
-    if (!comment) return;
-
-    const upvoteChange = direction === 'up' ? 1 : 0;
-    const downvoteChange = direction === 'down' ? 1 : 0;
-
-    await gun.get('comments').get(commentId).get('upvotes').put(comment.upvotes + upvoteChange);
-    await gun.get('comments').get(commentId).get('downvotes').put(comment.downvotes + downvoteChange);
-    await gun.get('comments').get(commentId).get('score').put(
-      (comment.upvotes + upvoteChange) - (comment.downvotes + downvoteChange)
-    );
-
-    console.log(`✅ Vote on comment: ${direction} on ${commentId}`);
-  }
-
-  // Build comment tree (for nested display)
-  static async buildCommentTree(postId: string): Promise<Comment[]> {
-    return new Promise((resolve) => {
-      const comments: Comment[] = [];
-      const gun = GunService.getGun();
-
-      gun.get('posts').get(postId).get('comments').map().once((data: any) => {
-        if (data && !data._) {
-          comments.push(data);
+    gun.get('posts')
+      .get(postId)
+      .get('comments')
+      .map()
+      .once((data: any) => {
+        if (data && data.commentId && !seen.has(data.commentId)) {
+          seen.add(data.commentId);
+          
+          gun.get('comments')
+            .get(data.commentId)
+            .once((commentData: any) => {
+              if (commentData && commentData.id) {
+                const comment: Comment = {
+                  id: commentData.id,
+                  postId: commentData.postId || postId,
+                  communityId: commentData.communityId,
+                  authorId: commentData.authorId,
+                  authorName: commentData.authorName,
+                  content: commentData.content,
+                  // CRITICAL: Only set parentId if it actually exists (not null, undefined, or empty string)
+                  parentId: commentData.parentId && commentData.parentId !== 'null' && commentData.parentId !== '' ? commentData.parentId : undefined,
+                  createdAt: commentData.createdAt,
+                  upvotes: commentData.upvotes || 0,
+                  downvotes: commentData.downvotes || 0,
+                  score: commentData.score || 0,
+                  edited: commentData.edited || false,
+                  editedAt: commentData.editedAt
+                };
+                comments.push(comment);
+              }
+            });
         }
       });
 
-      // Wait a bit for all comments to load
-      setTimeout(() => {
-        // Sort by score (top comments first)
-        comments.sort((a, b) => b.score - a.score);
-        resolve(comments);
-      }, 1000);
-    });
-  }
+    // Wait for all comments to load
+    setTimeout(() => {
+      resolve(comments);
+    }, 1500);
+  });
 }
+
+/**
+ * Get replies to a comment
+ */
+export async function getReplies(parentCommentId: string): Promise<Comment[]> {
+  return new Promise((resolve) => {
+    const replies: Comment[] = [];
+    const seen = new Set<string>();
+
+    gun.get('comments')
+      .map()
+      .once((comment: any) => {
+        if (
+          comment && 
+          comment.id && 
+          comment.parentId === parentCommentId &&
+          !seen.has(comment.id)
+        ) {
+          seen.add(comment.id);
+          replies.push(comment as Comment);
+        }
+      });
+
+    setTimeout(() => {
+      resolve(replies.sort((a, b) => b.score - a.score));
+    }, 500);
+  });
+}
+
+/**
+ * Vote on a comment
+ */
+export async function voteOnComment(
+  commentId: string,
+  voteType: 'up' | 'down',
+  userId: string
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // Get current comment data
+    gun.get('comments')
+      .get(commentId)
+      .once((comment: any) => {
+        if (!comment || !comment.id) {
+          reject(new Error('Comment not found'));
+          return;
+        }
+
+        const voteKey = `vote_${userId}_${commentId}`;
+        
+        // Check existing vote
+        gun.get('votes')
+          .get(voteKey)
+          .once((existingVote: any) => {
+            let upvotes = comment.upvotes || 0;
+            let downvotes = comment.downvotes || 0;
+
+            // Remove old vote if exists
+            if (existingVote && existingVote.type) {
+              if (existingVote.type === 'up') {
+                upvotes = Math.max(0, upvotes - 1);
+              } else if (existingVote.type === 'down') {
+                downvotes = Math.max(0, downvotes - 1);
+              }
+            }
+
+            // Add new vote (or toggle off if same vote)
+            if (!existingVote || existingVote.type !== voteType) {
+              if (voteType === 'up') {
+                upvotes++;
+              } else {
+                downvotes++;
+              }
+
+              // Store the vote
+              gun.get('votes')
+                .get(voteKey)
+                .put({
+                  userId,
+                  commentId,
+                  type: voteType,
+                  timestamp: Date.now()
+                });
+            } else {
+              // Toggle off - remove vote
+              gun.get('votes')
+                .get(voteKey)
+                .put(null);
+            }
+
+            const score = upvotes - downvotes;
+
+            // Update comment - use .put() on the parent node with all fields
+            const commentNode = gun.get('comments').get(commentId);
+            
+            // Update vote counts
+            commentNode.put({
+              upvotes: upvotes,
+              downvotes: downvotes,
+              score: score
+            }, (ack: any) => {
+              if (ack.err) {
+                reject(new Error(ack.err));
+              } else {
+                resolve();
+              }
+            });
+          });
+      });
+  });
+}
+
+/**
+ * Edit a comment
+ */
+export async function editComment(commentId: string, newContent: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    gun.get('comments')
+      .get(commentId)
+      .once((comment: any) => {
+        if (!comment || !comment.id) {
+          reject(new Error('Comment not found'));
+          return;
+        }
+
+        gun.get('comments')
+          .get(commentId)
+          .get('content')
+          .put(newContent);
+
+        gun.get('comments')
+          .get(commentId)
+          .get('edited')
+          .put(true);
+
+        gun.get('comments')
+          .get(commentId)
+          .get('editedAt')
+          .put(Date.now());
+
+        resolve();
+      });
+  });
+}
+
+/**
+ * Delete a comment
+ */
+export async function deleteComment(commentId: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    gun.get('comments')
+      .get(commentId)
+      .once((comment: any) => {
+        if (!comment || !comment.id) {
+          reject(new Error('Comment not found'));
+          return;
+        }
+
+        // Mark as deleted instead of actually deleting
+        gun.get('comments')
+          .get(commentId)
+          .get('content')
+          .put('[deleted]');
+
+        gun.get('comments')
+          .get(commentId)
+          .get('deleted')
+          .put(true);
+
+        resolve();
+      });
+  });
+}
+
+/**
+ * Get user's vote on a comment
+ */
+export async function getUserVote(
+  commentId: string,
+  userId: string
+): Promise<'up' | 'down' | null> {
+  return new Promise((resolve) => {
+    const voteKey = `vote_${userId}_${commentId}`;
+    
+    gun.get('votes')
+      .get(voteKey)
+      .once((vote: any) => {
+        if (vote && vote.type) {
+          resolve(vote.type as 'up' | 'down');
+        } else {
+          resolve(null);
+        }
+      });
+  });
+}
+
+/**
+ * Get comment count for a post
+ */
+export async function getCommentCount(postId: string): Promise<number> {
+  return new Promise((resolve) => {
+    let count = 0;
+    const seen = new Set<string>();
+
+    gun.get('posts')
+      .get(postId)
+      .get('comments')
+      .map()
+      .once((commentRef: any) => {
+        if (commentRef && commentRef.ref && !seen.has(commentRef.ref)) {
+          seen.add(commentRef.ref);
+          count++;
+        }
+      });
+
+    setTimeout(() => {
+      resolve(count);
+    }, 500);
+  });
+}
+
+// Export as CommentService object for compatibility
+export const CommentService = {
+  createComment,
+  getComment,
+  subscribeToCommentsInPost,
+  getAllCommentsInPost,
+  getReplies,
+  voteOnComment,
+  editComment,
+  deleteComment,
+  getUserVote,
+  getCommentCount
+};

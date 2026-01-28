@@ -6,65 +6,137 @@
           <ion-back-button default-href="/home"></ion-back-button>
         </ion-buttons>
         <ion-title>Create Poll</ion-title>
+        <ion-buttons slot="end">
+          <ion-button @click="createPoll" :disabled="!isValid">
+            Post
+          </ion-button>
+        </ion-buttons>
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
+    <ion-content>
+      <!-- Community Selection -->
       <ion-card>
+        <ion-card-header>
+          <ion-card-title>Community</ion-card-title>
+        </ion-card-header>
+        <ion-card-content>
+          <ion-item button @click="showCommunityPicker">
+            <ion-label>
+              <h3>{{ selectedCommunity ? selectedCommunity.displayName : 'Select a community' }}</h3>
+              <p v-if="selectedCommunity">{{ selectedCommunity.id }}</p>
+            </ion-label>
+            <ion-icon :icon="chevronDownOutline" slot="end"></ion-icon>
+          </ion-item>
+        </ion-card-content>
+      </ion-card>
+
+      <!-- Poll Question -->
+      <ion-card>
+        <ion-card-header>
+          <ion-card-title>Poll Question</ion-card-title>
+        </ion-card-header>
         <ion-card-content>
           <ion-item>
-            <ion-input
-              v-model="title"
-              label="Poll Title"
-              label-placement="floating"
-              placeholder="Enter poll title"
+            <ion-label position="stacked">Question *</ion-label>
+            <ion-input 
+              v-model="question" 
+              placeholder="What would you like to ask?"
+              :counter="true"
+              maxlength="200"
             ></ion-input>
           </ion-item>
+        </ion-card-content>
+      </ion-card>
 
-          <ion-item>
-            <ion-textarea
-              v-model="description"
-              label="Description"
-              label-placement="floating"
-              placeholder="Enter description"
-              :rows="3"
-            ></ion-textarea>
-          </ion-item>
-
-          <div class="mt-4">
-            <p class="text-sm font-semibold mb-2">Options</p>
-            <div v-for="(option, index) in options" :key="index" class="mb-2">
-              <ion-item>
-                <ion-input
-                  v-model="options[index]"
-                  :placeholder="`Option ${index + 1}`"
-                ></ion-input>
-                <ion-button
-                  slot="end"
-                  fill="clear"
+      <!-- Poll Options -->
+      <ion-card>
+        <ion-card-header>
+          <ion-card-title>Poll Options</ion-card-title>
+        </ion-card-header>
+        <ion-card-content>
+          <ion-list>
+            <ion-item v-for="(option, index) in options" :key="index">
+              <ion-label position="stacked">Option {{ index + 1 }} *</ion-label>
+              <ion-input 
+                v-model="options[index]" 
+                :placeholder="`Option ${index + 1}`"
+                maxlength="100"
+              >
+                <ion-button 
+                  v-if="options.length > 2" 
+                  slot="end" 
+                  fill="clear" 
                   color="danger"
                   @click="removeOption(index)"
-                  v-if="options.length > 2"
                 >
-                  <ion-icon :icon="closeCircle"></ion-icon>
+                  <ion-icon :icon="closeCircleOutline"></ion-icon>
                 </ion-button>
-              </ion-item>
-            </div>
+              </ion-input>
+            </ion-item>
+          </ion-list>
 
-            <ion-button size="small" fill="outline" @click="addOption">
-              <ion-icon slot="start" :icon="add"></ion-icon>
-              Add Option
-            </ion-button>
-          </div>
-
-          <ion-button
-            expand="block"
-            @click="createPoll"
-            :disabled="!isValid"
-            class="mt-6"
+          <ion-button 
+            expand="block" 
+            fill="outline" 
+            @click="addOption"
+            :disabled="options.length >= 10"
           >
-            Create Poll
+            <ion-icon slot="start" :icon="addCircleOutline"></ion-icon>
+            Add Option ({{ options.length }}/10)
           </ion-button>
+        </ion-card-content>
+      </ion-card>
+
+      <!-- Poll Settings -->
+      <ion-card>
+        <ion-card-header>
+          <ion-card-title>Poll Settings</ion-card-title>
+        </ion-card-header>
+        <ion-card-content>
+          <ion-list>
+            <ion-item>
+              <ion-label>Poll Duration</ion-label>
+              <ion-select v-model="duration">
+                <ion-select-option value="1">1 Day</ion-select-option>
+                <ion-select-option value="3">3 Days</ion-select-option>
+                <ion-select-option value="7">7 Days</ion-select-option>
+                <ion-select-option value="14">14 Days</ion-select-option>
+                <ion-select-option value="30">30 Days</ion-select-option>
+              </ion-select>
+            </ion-item>
+
+            <ion-item>
+              <ion-toggle v-model="allowMultipleChoices">
+                Allow multiple choices
+              </ion-toggle>
+            </ion-item>
+
+            <ion-item>
+              <ion-toggle v-model="showResultsBeforeVoting">
+                Show results before voting
+              </ion-toggle>
+            </ion-item>
+          </ion-list>
+        </ion-card-content>
+      </ion-card>
+
+      <!-- Additional Details (Optional) -->
+      <ion-card>
+        <ion-card-header>
+          <ion-card-title>Additional Details (Optional)</ion-card-title>
+        </ion-card-header>
+        <ion-card-content>
+          <ion-item>
+            <ion-label position="stacked">Description</ion-label>
+            <ion-textarea 
+              v-model="description" 
+              placeholder="Add more context to your poll..."
+              rows="4"
+              maxlength="500"
+              :counter="true"
+            ></ion-textarea>
+          </ion-item>
         </ion-card-content>
       </ion-card>
     </ion-content>
@@ -72,7 +144,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   IonPage,
@@ -82,70 +154,155 @@ import {
   IonContent,
   IonButtons,
   IonBackButton,
+  IonButton,
   IonCard,
+  IonCardHeader,
+  IonCardTitle,
   IonCardContent,
+  IonList,
   IonItem,
+  IonLabel,
   IonInput,
   IonTextarea,
-  IonButton,
+  IonSelect,
+  IonSelectOption,
+  IonToggle,
   IonIcon,
+  actionSheetController,
   toastController
 } from '@ionic/vue';
-import { add, closeCircle } from 'ionicons/icons';
+import {
+  chevronDownOutline,
+  addCircleOutline,
+  closeCircleOutline
+} from 'ionicons/icons';
+import { useCommunityStore } from '../stores/communityStore';
 import { usePollStore } from '../stores/pollStore';
-import { Poll } from '../types/chain';
+import { Community } from '../services/communityService';
 
 const router = useRouter();
+const communityStore = useCommunityStore();
 const pollStore = usePollStore();
 
-const title = ref('');
-const description = ref('');
+const selectedCommunity = ref<Community | null>(null);
+const question = ref('');
 const options = ref(['', '']);
+const duration = ref('7');
+const allowMultipleChoices = ref(false);
+const showResultsBeforeVoting = ref(false);
+const description = ref('');
 
 const isValid = computed(() => {
   return (
-    title.value.trim() !== '' &&
-    description.value.trim() !== '' &&
-    options.value.filter(o => o.trim() !== '').length >= 2
+    selectedCommunity.value !== null &&
+    question.value.trim().length > 0 &&
+    options.value.filter(opt => opt.trim().length > 0).length >= 2
   );
 });
 
-const addOption = () => {
-  options.value.push('');
-};
+async function showCommunityPicker() {
+  const joinedCommunities = communityStore.communities.filter(c => 
+    communityStore.isJoined(c.id)
+  );
 
-const removeOption = (index: number) => {
-  options.value.splice(index, 1);
-};
+  if (joinedCommunities.length === 0) {
+    const toast = await toastController.create({
+      message: 'Please join a community first',
+      duration: 2000,
+      color: 'warning'
+    });
+    await toast.present();
+    return;
+  }
 
-const createPoll = async () => {
-  const validOptions = options.value.filter(o => o.trim() !== '');
-
-  const poll: Poll = {
-    id: `poll-${Date.now()}`,
-    title: title.value.trim(),
-    description: description.value.trim(),
-    options: validOptions,
-    createdAt: Date.now()
-  };
-
-  await pollStore.createPoll(poll);
-
-  const toast = await toastController.create({
-    message: 'Poll created successfully!',
-    duration: 2000,
-    color: 'success',
-    position: 'bottom'
+  const actionSheet = await actionSheetController.create({
+    header: 'Select Community',
+    buttons: [
+      ...joinedCommunities.map(community => ({
+        text: community.displayName,
+        handler: () => {
+          selectedCommunity.value = community;
+        }
+      })),
+      {
+        text: 'Cancel',
+        role: 'cancel'
+      }
+    ]
   });
 
-  await toast.present();
-  
-  // Reset form
-  title.value = '';
-  description.value = '';
-  options.value = ['', ''];
-  
-  // Navigate back to home
-  router.push('/home');
-};
+  await actionSheet.present();
+}
+
+function addOption() {
+  if (options.value.length < 10) {
+    options.value.push('');
+  }
+}
+
+function removeOption(index: number) {
+  if (options.value.length > 2) {
+    options.value.splice(index, 1);
+  }
+}
+
+async function createPoll() {
+  if (!isValid.value) return;
+
+  try {
+    // Filter out empty options
+    const validOptions = options.value.filter(opt => opt.trim().length > 0);
+
+    // Create poll using pollStore
+    await pollStore.createPoll({
+      communityId: selectedCommunity.value!.id,
+      question: question.value.trim(),
+      description: description.value.trim(),
+      options: validOptions,
+      durationDays: parseInt(duration.value),
+      allowMultipleChoices: allowMultipleChoices.value,
+      showResultsBeforeVoting: showResultsBeforeVoting.value
+    });
+
+    const toast = await toastController.create({
+      message: '✅ Poll created successfully!',
+      duration: 2000,
+      color: 'success'
+    });
+    await toast.present();
+
+    // Navigate to community
+    router.push(`/community/${selectedCommunity.value?.id}`);
+  } catch (error) {
+    console.error('Error creating poll:', error);
+    
+    const toast = await toastController.create({
+      message: '❌ Failed to create poll',
+      duration: 2000,
+      color: 'danger'
+    });
+    await toast.present();
+  }
+}
+
+onMounted(() => {
+  // If user came from a specific community, pre-select it
+  const routeCommunityId = router.currentRoute.value.query.communityId as string;
+  if (routeCommunityId) {
+    const community = communityStore.communities.find(c => c.id === routeCommunityId);
+    if (community) {
+      selectedCommunity.value = community;
+    }
+  }
+});
 </script>
+
+<style scoped>
+ion-card {
+  margin: 16px 12px;
+}
+
+ion-item ion-button {
+  margin: 0;
+}
+</style>

@@ -10,11 +10,18 @@ export interface Community {
   creatorId: string;
   createdAt: number;
   memberCount: number;
-  postCount?: number; // Optional for backwards compatibility
+  postCount?: number;
 }
 
 export class CommunityService {
-  // Create a new community
+  private static get gun() {
+    return GunService.getGun();
+  }
+
+  private static getCommunityNode(id: string) {
+    return this.gun.get('communities').get(id);
+  }
+
   static async createCommunity(data: {
     name: string;
     displayName: string;
@@ -22,10 +29,10 @@ export class CommunityService {
     rules: string[];
     creatorId: string;
   }): Promise<Community> {
-    const gun = GunService.getGun();
-    
+    const id = `c-${data.name.toLowerCase().replace(/\s+/g, '-')}`;
+
     const community: Community = {
-      id: `c-${data.name}`,
+      id,
       name: data.name,
       displayName: data.displayName,
       description: data.description,
@@ -36,205 +43,151 @@ export class CommunityService {
       postCount: 0,
     };
 
-    console.log('📝 Creating community:', community.name);
+    const gunData = {
+      id: community.id,
+      name: community.name,
+      displayName: community.displayName,
+      description: community.description,
+      creatorId: community.creatorId,
+      createdAt: community.createdAt,
+      memberCount: community.memberCount,
+      postCount: community.postCount,
+    };
 
-    try {
-      // Save to both individual path AND communities collection
-      console.log('📝 Saving community to Gun:', community.id);
-      
-      // 1. Save to individual path for direct access
-      await GunService.put(community.id, community);
-      
-      // 2. Add reference to communities collection (THIS IS KEY!)
-      await new Promise<void>((resolve, reject) => {
-        gun.get('communities').get(community.id).put(community, (ack: any) => {
-          if (ack.err) {
-            console.error('❌ Error adding to communities collection:', ack.err);
-            reject(ack.err);
-          } else {
-            console.log('✅ Community added to collection');
-            resolve();
-          }
-        });
-      });
-      
-      console.log('✅ Community saved to Gun');
-      return community;
-    } catch (error) {
-      console.error('❌ Error saving community:', error);
-      throw error;
+    // Save core fields
+    await this.put(this.getCommunityNode(id), gunData);
+
+    // Save rules as indexed object (Gun-friendly)
+    if (community.rules.length > 0) {
+      const rulesObj = Object.fromEntries(community.rules.map((rule, i) => [i, rule]));
+      await this.put(this.getCommunityNode(id).get('rules'), rulesObj);
     }
+
+    return community;
   }
 
-  // Subscribe to all communities
   static subscribeToCommunities(callback: (community: Community) => void): void {
-    const gun = GunService.getGun();
-    
-    console.log('📡 Subscribing to communities...');
-    
-    try {
-      // Subscribe to the 'communities' collection
-      gun.get('communities').map().on((data: any, key: string) => {
-        // Filter out Gun metadata and ensure we have valid data
-        if (data && data.name && data.id && typeof data === 'object') {
-          // Avoid processing Gun's internal metadata
-          if (!key.startsWith('_') && data._ === undefined) {
-            console.log('📥 Community received from Gun:', data.name, 'Key:', key);
-            callback(data as Community);
-          } else if (data.name && data.id) {
-            // Sometimes Gun includes metadata, extract clean data
-            const cleanData: Community = {
-              id: data.id || '',
-              name: data.name || '',
-              displayName: data.displayName || data.name || '',
-              description: data.description || '',
-              rules: Array.isArray(data.rules) ? data.rules : [],
-              creatorId: data.creatorId || '',
-              createdAt: data.createdAt || Date.now(),
-              memberCount: data.memberCount || 1,
-              postCount: data.postCount || 0,
-            };
-            console.log('📥 Community received (cleaned):', cleanData.name);
-            callback(cleanData);
-          }
-        }
-      });
-      
-      console.log('✅ Community subscription active');
-    } catch (error) {
-      console.error('❌ Error subscribing to communities:', error);
-    }
-  }
+    const seen = new Set<string>();
 
-  // Get a specific community
-  static async getCommunity(communityId: string): Promise<Community | null> {
-    console.log('🔍 Fetching community:', communityId);
-    
-    try {
-      // Try getting from communities collection first
-      const data = await new Promise<any>((resolve) => {
-        const gun = GunService.getGun();
-        let resolved = false;
-        
-        // Try from collection
-        gun.get('communities').get(communityId).once((collectionData: any) => {
-          if (!resolved && collectionData && collectionData.name) {
-            resolved = true;
-            resolve(collectionData);
-          }
+    this.gun
+      .get('communities')
+      .map()
+      .once((data: any, key: string) => {
+        if (!data?.name || !data?.id || seen.has(key) || key.startsWith('_')) {
+          return;
+        }
+
+        seen.add(key);
+
+        this.loadRules(key).then((rules) => {
+          const community = this.mapToCommunity(data, rules);
+          callback(community);
         });
-        
-        // Fallback to direct path after 1 second
-        setTimeout(() => {
-          if (!resolved) {
-            gun.get(communityId).once((directData: any) => {
-              if (!resolved) {
-                resolved = true;
-                resolve(directData);
-              }
-            });
-          }
-        }, 1000);
-        
-        // Timeout after 3 seconds
-        setTimeout(() => {
-          if (!resolved) {
-            resolved = true;
-            resolve(null);
-          }
-        }, 3000);
       });
-
-      if (data && data.name) {
-        console.log('✅ Community found:', data.name);
-        return {
-          id: data.id || '',
-          name: data.name || '',
-          displayName: data.displayName || data.name || '',
-          description: data.description || '',
-          rules: Array.isArray(data.rules) ? data.rules : [],
-          creatorId: data.creatorId || '',
-          createdAt: data.createdAt || Date.now(),
-          memberCount: data.memberCount || 1,
-          postCount: data.postCount || 0,
-        };
-      }
-
-      console.log('⚠️ Community not found:', communityId);
-      return null;
-    } catch (error) {
-      console.error('❌ Error fetching community:', error);
-      return null;
-    }
   }
 
-  // Join a community
+  static async getCommunity(communityId: string): Promise<Community | null> {
+    const node = this.getCommunityNode(communityId);
+
+    const [data, rules] = await Promise.all([
+      this.once<any>(node),
+      this.loadRules(communityId),
+    ]);
+
+    if (!data || !data.name) {
+      return null;
+    }
+
+    return this.mapToCommunity(data, rules);
+  }
+
   static async joinCommunity(communityId: string): Promise<void> {
-    const gun = GunService.getGun();
-    
-    try {
-      console.log('🤝 Joining community:', communityId);
-      
-      // Get current community
-      const community = await this.getCommunity(communityId);
-      if (!community) {
-        throw new Error('Community not found');
-      }
-
-      // Increment member count
-      const updatedCommunity = {
-        ...community,
-        memberCount: (community.memberCount || 1) + 1,
-      };
-
-      // Update both paths
-      await GunService.put(communityId, updatedCommunity);
-      gun.get('communities').get(communityId).put(updatedCommunity);
-      
-      console.log('✅ Joined community successfully');
-    } catch (error) {
-      console.error('❌ Error joining community:', error);
-      throw error;
+    const community = await this.getCommunity(communityId);
+    if (!community) {
+      throw new Error('Community not found');
     }
+
+    const newCount = community.memberCount + 1;
+
+    await this.put(
+      this.getCommunityNode(communityId).get('memberCount'),
+      newCount
+    );
   }
 
-  // Get all communities (alternative to subscription)
   static async getAllCommunities(): Promise<Community[]> {
-    const gun = GunService.getGun();
-    const communities: Community[] = [];
-    
-    return new Promise((resolve) => {
-      console.log('📡 Fetching all communities...');
-      
-      let timeout: NodeJS.Timeout;
+    return new Promise<Community[]>((resolve) => {
+      const communities: Community[] = [];
       const seen = new Set<string>();
-      
-      gun.get('communities').map().once((data: any, key: string) => {
-        if (data && data.name && data.id && !seen.has(data.id)) {
-          seen.add(data.id);
-          
-          const community: Community = {
-            id: data.id || '',
-            name: data.name || '',
-            displayName: data.displayName || data.name || '',
-            description: data.description || '',
-            rules: Array.isArray(data.rules) ? data.rules : [],
-            creatorId: data.creatorId || '',
-            createdAt: data.createdAt || Date.now(),
-            memberCount: data.memberCount || 1,
-            postCount: data.postCount || 0,
-          };
-          
-          communities.push(community);
-          console.log('📥 Loaded community:', community.name);
+
+      this.gun
+        .get('communities')
+        .map()
+        .once(async (data: any, key: string) => {
+          if (!data?.name || !data?.id || seen.has(key) || key.startsWith('_')) return;
+          seen.add(key);
+
+          const rules = await this.loadRules(key);
+          communities.push(this.mapToCommunity(data, rules));
+        });
+
+      // Gun eventual consistency window
+      setTimeout(() => resolve(communities), 1200);
+    });
+  }
+
+  // ─── Helpers ────────────────────────────────────────────────────────────────
+
+  private static put(node: any, value: any): Promise<void> {
+    return new Promise((res, rej) =>
+      node.put(value, (ack: any) => (ack.err ? rej(ack.err) : res()))
+    );
+  }
+
+  private static once<T = any>(node: any): Promise<T | null> {
+    return new Promise((res) => {
+      let done = false;
+      node.once((val: any) => {
+        if (!done) {
+          done = true;
+          res(val ?? null);
         }
       });
-      
-      // Wait 2 seconds for Gun to sync
-      timeout = setTimeout(() => {
-        console.log(`✅ Loaded ${communities.length} communities`);
-        resolve(communities);
-      }, 2000);
+      setTimeout(() => {
+        if (!done) {
+          done = true;
+          res(null);
+        }
+      }, 800);
     });
+  }
+
+  private static async loadRules(communityId: string): Promise<string[]> {
+    const rulesNode = this.getCommunityNode(communityId).get('rules');
+    const data = await this.once<any>(rulesNode);
+
+    if (!data || typeof data !== 'object') {
+      return [];
+    }
+
+    return Object.keys(data)
+      .filter((k) => !k.startsWith('_'))
+      .sort((a, b) => Number(a) - Number(b))
+      .map((k) => data[k] as string)
+      .filter(Boolean);
+  }
+
+  private static mapToCommunity(data: any, rules: string[]): Community {
+    return {
+      id: data.id || '',
+      name: data.name || '',
+      displayName: data.displayName || data.name || '',
+      description: data.description || '',
+      rules,
+      creatorId: data.creatorId || '',
+      createdAt: data.createdAt || Date.now(),
+      memberCount: Number(data.memberCount) || 1,
+      postCount: Number(data.postCount) || 0,
+    };
   }
 }

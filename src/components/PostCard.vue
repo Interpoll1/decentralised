@@ -1,172 +1,273 @@
-<!-- src/components/PostCard.vue -->
 <template>
-  <ion-card class="post-card" @click="openPost">
-    <!-- Community & Author Info -->
-    <div class="post-header">
-      <div class="community-info">
-        <strong>{{ post.communityId }}</strong>
-        <span class="separator">•</span>
-        <span class="author">u/{{ post.authorName }}</span>
-        <span class="separator">•</span>
-        <span class="time">{{ formatTime(post.createdAt) }}</span>
+  <ion-card class="post-card">
+    <!-- Clickable card content area -->
+    <ion-card-content @click="handleCardClick">
+      <!-- Post Header -->
+      <div class="post-header">
+        <div class="post-meta">
+          <span class="community-name">{{ communityName }}</span>
+          <span class="separator">•</span>
+          <span class="author">u/{{ post.authorName }}</span>
+          <span class="separator">•</span>
+          <span class="timestamp">{{ formatTime(post.createdAt) }}</span>
+        </div>
       </div>
-    </div>
 
-    <!-- Post Content -->
-    <ion-card-header>
-      <ion-card-title>{{ post.title }}</ion-card-title>
-    </ion-card-header>
+      <!-- Post Title -->
+      <h3 class="post-title">{{ post.title }}</h3>
 
-    <ion-card-content>
-      <p class="post-content">{{ post.content }}</p>
-      
-      <!-- Image Thumbnail -->
-      <img 
-        v-if="post.imageThumbnail" 
-        :src="post.imageThumbnail" 
-        class="post-thumbnail"
-        @click.stop="viewFullImage"
-      />
+      <!-- Post Content Preview -->
+      <p v-if="post.content" class="post-content">{{ truncatedContent }}</p>
+
+      <!-- Post Image -->
+      <div v-if="post.imageThumbnail || post.imageIPFS" class="post-image">
+        <img :src="post.imageThumbnail || getIPFSUrl(post.imageIPFS)" :alt="post.title" />
+      </div>
+
+      <!-- Post Footer - Not clickable for card navigation -->
+      <div class="post-footer" @click.stop>
+        <div class="post-stats">
+          <button class="stat-button upvote" @click="handleUpvote" :class="{ active: hasUpvoted }">
+            <ion-icon :icon="arrowUpOutline"></ion-icon>
+            <span>{{ formatNumber(post.upvotes) }}</span>
+          </button>
+          
+          <button class="stat-button downvote" @click="handleDownvote" :class="{ active: hasDownvoted }">
+            <ion-icon :icon="arrowDownOutline"></ion-icon>
+            <span>{{ formatNumber(post.downvotes) }}</span>
+          </button>
+
+          <button class="stat-button comments" @click="handleCommentsClick">
+            <ion-icon :icon="chatbubbleOutline"></ion-icon>
+            <span>{{ formatNumber(post.commentCount) }}</span>
+          </button>
+
+          <div class="stat-item score">
+            <ion-icon :icon="trendingUpOutline"></ion-icon>
+            <span>{{ post.score }}</span>
+          </div>
+        </div>
+      </div>
     </ion-card-content>
-
-    <!-- Vote & Actions Bar -->
-    <div class="post-actions">
-      <div class="vote-buttons">
-        <ion-button 
-          size="small" 
-          fill="clear" 
-          @click.stop="vote('up')"
-          :color="hasUpvoted ? 'primary' : 'medium'"
-        >
-          <ion-icon :icon="arrowUp"></ion-icon>
-        </ion-button>
-        <span class="score" :class="scoreClass">{{ post.score }}</span>
-        <ion-button 
-          size="small" 
-          fill="clear" 
-          @click.stop="vote('down')"
-          :color="hasDownvoted ? 'danger' : 'medium'"
-        >
-          <ion-icon :icon="arrowDown"></ion-icon>
-        </ion-button>
-      </div>
-
-      <ion-button size="small" fill="clear">
-        <ion-icon :icon="chatbubbleOutline"></ion-icon>
-        {{ post.commentCount }} Comments
-      </ion-button>
-
-      <ion-button size="small" fill="clear">
-        <ion-icon :icon="shareOutline"></ion-icon>
-        Share
-      </ion-button>
-    </div>
   </ion-card>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { IonCard, IonCardHeader, IonCardTitle, IonCardContent, IonButton, IonIcon } from '@ionic/vue';
-import { arrowUp, arrowDown, chatbubbleOutline, shareOutline } from 'ionicons/icons';
+import { IonCard, IonCardContent, IonIcon } from '@ionic/vue';
+import { 
+  arrowUpOutline, 
+  arrowDownOutline, 
+  chatbubbleOutline, 
+  trendingUpOutline 
+} from 'ionicons/icons';
 import { Post } from '../services/postService';
 
-const props = defineProps<{ post: Post }>();
 const router = useRouter();
 
-const hasUpvoted = ref(false);
-const hasDownvoted = ref(false);
+const props = defineProps<{ 
+  post: Post;
+  communityName?: string;
+  hasUpvoted?: boolean;
+  hasDownvoted?: boolean;
+}>();
 
-const scoreClass = computed(() => ({
-  'positive': props.post.score > 0,
-  'negative': props.post.score < 0
-}));
+const emit = defineEmits(['upvote', 'downvote']);
 
-const formatTime = (timestamp: number) => {
-  const diff = Date.now() - timestamp;
-  const hours = Math.floor(diff / (1000 * 60 * 60));
-  if (hours < 1) return 'just now';
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-};
-
-const vote = (direction: 'up' | 'down') => {
-  // TODO: Implement voting with blockchain
-  if (direction === 'up') {
-    hasUpvoted.value = !hasUpvoted.value;
-    hasDownvoted.value = false;
-  } else {
-    hasDownvoted.value = !hasDownvoted.value;
-    hasUpvoted.value = false;
+const truncatedContent = computed(() => {
+  const content = props.post.content || '';
+  if (content.length <= 200) {
+    return content;
   }
-};
+  return content.substring(0, 200) + '...';
+});
 
-const openPost = () => {
+function handleCardClick() {
+  console.log('📱 Card clicked, navigating to post detail:', props.post.id);
   router.push(`/post/${props.post.id}`);
-};
+}
 
-const viewFullImage = () => {
-  // TODO: Load full image from IPFS
-};
+function handleUpvote(event: Event) {
+  event.stopPropagation();
+  console.log('👍 Upvote clicked:', props.post.id);
+  emit('upvote');
+}
+
+function handleDownvote(event: Event) {
+  event.stopPropagation();
+  console.log('👎 Downvote clicked:', props.post.id);
+  emit('downvote');
+}
+
+function handleCommentsClick(event: Event) {
+  event.stopPropagation();
+  console.log('💬 Comments clicked, navigating to post detail:', props.post.id);
+  router.push(`/post/${props.post.id}`);
+}
+
+function formatTime(timestamp: number): string {
+  const now = Date.now();
+  const diff = now - timestamp;
+  
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days < 7) return `${days}d ago`;
+  
+  return new Date(timestamp).toLocaleDateString();
+}
+
+function formatNumber(num: number | undefined | null): string {
+  const n = num ?? 0;
+  
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  return n.toString();
+}
+
+function getIPFSUrl(cid?: string): string {
+  if (!cid) return '';
+  return `https://ipfs.io/ipfs/${cid}`;
+}
 </script>
 
 <style scoped>
 .post-card {
-  margin-bottom: 8px;
+  margin: 12px 12px;
   cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.post-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .post-header {
-  padding: 12px 16px 0;
+  margin-bottom: 8px;
 }
 
-.community-info {
+.post-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   color: var(--ion-color-medium);
 }
 
-.separator {
-  margin: 0 4px;
-}
-
-.post-content {
-  font-size: 14px;
-  margin-bottom: 12px;
-}
-
-.post-thumbnail {
-  width: 100%;
-  max-height: 400px;
-  object-fit: cover;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.post-actions {
-  display: flex;
-  align-items: center;
-  padding: 8px;
-  border-top: 1px solid var(--ion-color-light);
-}
-
-.vote-buttons {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.score {
+.community-name {
   font-weight: 600;
-  min-width: 40px;
-  text-align: center;
-}
-
-.score.positive {
   color: var(--ion-color-primary);
 }
 
-.score.negative {
-  color: var(--ion-color-danger);
+.separator {
+  color: var(--ion-color-medium-shade);
+}
+
+.author {
+  color: var(--ion-color-step-600);
+}
+
+.timestamp {
+  color: var(--ion-color-medium);
+}
+
+.post-title {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--ion-text-color);
+}
+
+.post-content {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ion-color-step-600);
+}
+
+.post-image {
+  margin: 12px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  max-height: 400px;
+}
+
+.post-image img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.post-footer {
+  border-top: 1px solid var(--ion-color-light);
+  padding-top: 12px;
+  margin-top: 12px;
+}
+
+.post-stats {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.stat-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--ion-color-step-600);
+  transition: background 0.2s;
+}
+
+.stat-button:hover {
+  background: var(--ion-color-light);
+}
+
+.stat-button ion-icon {
+  font-size: 18px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--ion-color-medium);
+}
+
+.stat-item ion-icon {
+  font-size: 16px;
+}
+
+.stat-item.score {
+  margin-left: auto;
+  font-weight: 500;
+}
+
+@media (max-width: 576px) {
+  .post-title {
+    font-size: 16px;
+  }
+  
+  .post-content {
+    font-size: 13px;
+  }
+  
+  .post-stats {
+    gap: 12px;
+    font-size: 12px;
+  }
 }
 </style>

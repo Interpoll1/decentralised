@@ -1,183 +1,134 @@
+// src/stores/pollStore.ts
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
-import { Poll, Vote } from '../types/chain';
-import { StorageService } from '../services/storageService';
-import { BroadcastService } from '../services/broadcastService';
-import { WebSocketService } from '../services/websocketService';
+import { ref, computed } from 'vue';
+import type { Poll } from '../services/pollService';
+import { PollService } from '../services/pollService';
+import { UserService } from '../services/userService';
 
 export const usePollStore = defineStore('poll', () => {
   const polls = ref<Poll[]>([]);
   const currentPoll = ref<Poll | null>(null);
   const isLoading = ref(false);
 
-  // Load polls from IndexedDB (persistent storage)
-  async function loadPolls() {
+  const sortedPolls = computed(() =>
+    [...polls.value].sort((a, b) => b.createdAt - a.createdAt)
+  );
+
+  const activePolls = computed(() =>
+    sortedPolls.value.filter((p) => !p.isExpired)
+  );
+
+  // ─────────────────────────────────────────────
+  // Loading & subscription
+  // ─────────────────────────────────────────────
+
+  async function loadPollsForCommunity(communityId: string) {
+    if (isLoading.value) return;
     isLoading.value = true;
+
+    const seen = new Set<string>();
+
+    // Real-time subscription
+    PollService.subscribeToPollsInCommunity(communityId, (poll) => {
+      if (seen.has(poll.id)) return;
+      seen.add(poll.id);
+
+      const index = polls.value.findIndex((p) => p.id === poll.id);
+      if (index >= 0) {
+        polls.value[index] = poll;
+      } else {
+        polls.value.push(poll);
+      }
+    });
+
+    // One-shot bulk load (helps with initial population & missed early events)
     try {
-      polls.value = await StorageService.getAllPolls();
-      console.log(`✅ Loaded ${polls.value.length} polls from IndexedDB`);
-      
-      // Setup sync listeners (both local and remote)
-      setupSyncListeners();
-      
-    } catch (error) {
-      console.error('Error loading polls:', error);
+      const fetched = await PollService.getAllPollsInCommunity(communityId);
+
+      for (const poll of fetched) {
+        if (seen.has(poll.id)) continue;
+        seen.add(poll.id);
+        polls.value.push(poll);
+      }
+    } catch (err) {
+      console.warn('Failed to perform initial poll fetch', err);
+      // subscription should still keep things alive
     } finally {
       isLoading.value = false;
     }
   }
 
-  // Setup listeners for BOTH BroadcastChannel (same browser) AND WebSocket (cross-browser/device)
-  function setupSyncListeners() {
-    // === BroadcastChannel Listeners (same browser tabs) ===
-    
-    BroadcastService.subscribe('new-poll', handleNewPoll);
-    BroadcastService.subscribe('request-sync', handleSyncRequest);
-    BroadcastService.subscribe('sync-response', handleSyncResponse);
+  // ─────────────────────────────────────────────
+  // Mutations / Actions
+  // ─────────────────────────────────────────────
 
-    // === WebSocket Listeners (cross-browser/device) ===
-    
-    WebSocketService.subscribe('new-poll', handleNewPoll);
-    WebSocketService.subscribe('request-sync', handleSyncRequest);
-    WebSocketService.subscribe('sync-response', handleSyncResponse);
-  }
+  async function createPoll(data: {
+    communityId: string;
+    question: string;
+    description?: string;
+    options: string[];
+    durationDays: number;
+    allowMultipleChoices: boolean;
+    showResultsBeforeVoting: boolean;
+  }) {
+    const user = await UserService.getCurrentUser();
 
-  // Unified handler for new polls (works for both BroadcastChannel and WebSocket)
-  async function handleNewPoll(poll: Poll) {
-    console.log('📥 Received new poll:', poll.title);
-    
-    try {
-      const existsInDB = await StorageService.getPoll(poll.id);
-      if (!existsInDB) {
-        console.log('💾 Saving new poll to IndexedDB');
-        await StorageService.savePoll(poll);
-        polls.value = await StorageService.getAllPolls();
-        console.log(`✅ UI updated with new poll. Total: ${polls.value.length}`);
-      } else {
-        console.log('⏭️ Poll already exists:', poll.id);
-      }
-    } catch (error) {
-      console.error('Error handling new poll:', error);
+    const poll = await PollService.createPoll({
+      ...data,
+      authorId: user.id,
+      authorName: user.username || 'Anonymous',
+    });
+
+    // optimistic insert at top (newest)
+    if (!polls.value.some((p) => p.id === poll.id)) {
+      polls.value.unshift(poll);
     }
+
+    return poll;
   }
 
-  // Unified handler for sync requests
-  async function handleSyncRequest(data: any) {
-    console.log('📤 Sync requested by peer:', data.peerId);
-    
-    const allPolls = await StorageService.getAllPolls();
-    const allBlocks = await StorageService.getAllBlocks();
-    
-    const response = {
-      polls: allPolls,
-      blocks: allBlocks,
-      peerId: BroadcastService.getPeerId()
-    };
-    
-    // Respond via both channels
-    BroadcastService.broadcast('sync-response', response);
-    WebSocketService.broadcast('sync-response', response);
-  }
+  async function voteOnPoll(pollId: string, optionIds: string[]) {
+    const user = await UserService.getCurrentUser();
 
-  // Unified handler for sync responses
-  async function handleSyncResponse(data: any) {
-    if (data.polls && data.polls.length > 0) {
-      console.log(`📥 Received ${data.polls.length} polls from sync`);
-      
-      let savedCount = 0;
-      
-      for (const poll of data.polls) {
-        try {
-          const existsInDB = await StorageService.getPoll(poll.id);
-          
-          if (!existsInDB) {
-            console.log(`💾 Saving poll: ${poll.id} - ${poll.title}`);
-            await StorageService.savePoll(poll);
-            savedCount++;
-          }
-        } catch (error) {
-          console.error(`❌ Error saving poll ${poll.id}:`, error);
+    // optimistic update
+    const poll = polls.value.find((p) => p.id === pollId);
+    if (poll) {
+      poll.totalVotes += optionIds.length;
+
+      for (const optionId of optionIds) {
+        const option = poll.options.find((o) => o.id === optionId);
+        if (option) {
+          option.votes += 1;
         }
       }
-      
-      if (savedCount > 0) {
-        console.log(`✅ Saved ${savedCount} new polls to IndexedDB`);
-      }
-      
-      // Always reload to ensure consistency
-      polls.value = await StorageService.getAllPolls();
-      console.log(`🔄 UI now shows ${polls.value.length} total polls`);
     }
-  }
 
-  // Create poll and broadcast to ALL peers (same browser + remote)
-  async function createPoll(poll: Poll) {
     try {
-      // Save to IndexedDB first (persistent!)
-      await StorageService.savePoll(poll);
-      console.log('✅ Poll saved to IndexedDB:', poll.title);
-      
-      // Add to local UI
-      polls.value.unshift(poll);
-
-      // Broadcast to same-browser tabs
-      BroadcastService.broadcast('new-poll', poll);
-      
-      // Broadcast to remote devices/browsers
-      WebSocketService.broadcast('new-poll', poll);
-
-      console.log('✅ Poll created and broadcast to all peers');
-    } catch (error) {
-      console.error('Error creating poll:', error);
-      throw error;
+      await PollService.voteOnPoll(pollId, optionIds, user.id);
+    } catch (err) {
+      console.warn('Vote failed — local state may be inconsistent', err);
+      // You could add rollback logic here if desired
+      throw err;
     }
   }
 
-  async function selectPoll(pollId: string) {
-    currentPoll.value = await StorageService.getPoll(pollId);
-  }
-
-  async function getVotesForPoll(pollId: string): Promise<Vote[]> {
-    return await StorageService.getVotesByPoll(pollId);
-  }
-
-  async function getResults(pollId: string) {
-    const votes = await getVotesForPoll(pollId);
-    const poll = await StorageService.getPoll(pollId);
-
-    if (!poll) return null;
-
-    const results: Record<string, number> = {};
-    poll.options.forEach(option => {
-      results[option] = 0;
-    });
-
-    votes.forEach(vote => {
-      if (results[vote.choice] !== undefined) {
-        results[vote.choice]++;
-      }
-    });
-
-    return {
-      poll,
-      results,
-      totalVotes: votes.length
-    };
-  }
-
-  async function refreshPolls() {
-    await loadPolls();
-  }
+  // ─────────────────────────────────────────────
+  // Public API
+  // ─────────────────────────────────────────────
 
   return {
+    // state
     polls,
     currentPoll,
     isLoading,
-    loadPolls,
+
+    // derived
+    sortedPolls,
+    activePolls,
+
+    // actions
+    loadPollsForCommunity,
     createPoll,
-    selectPoll,
-    getVotesForPoll,
-    getResults,
-    refreshPolls
+    voteOnPoll,
   };
 });

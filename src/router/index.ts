@@ -27,6 +27,12 @@ const routes: Array<RouteRecordRaw> = [
     props: true
   },
   {
+    path: '/community/:communityId/poll/:pollId',
+    name: 'PollDetail',
+    component: () => import('../views/PollDetailPage.vue'),
+    props: true
+  },
+  {
     path: '/post/:postId',
     name: 'PostDetail',
     component: () => import('../views/PostDetailPage.vue'),
@@ -36,6 +42,11 @@ const routes: Array<RouteRecordRaw> = [
     path: '/create-community',
     name: 'CreateCommunity',
     component: () => import('../views/CreateCommunityPage.vue')
+  },
+  {
+    path: '/create-poll',
+    name: 'CreatePoll',
+    component: () => import('../views/CreatePollPage.vue')
   },
   {
     path: '/profile',

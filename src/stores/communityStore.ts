@@ -18,30 +18,33 @@ export const useCommunityStore = defineStore('community', () => {
       console.log('📡 Loading communities from GunDB...');
       
       const seen = new Set<string>();
+      let subscriptionActive = true;
       
       // Subscribe to real-time updates
       CommunityService.subscribeToCommunities((community) => {
         // Prevent duplicates
         if (!seen.has(community.id)) {
           seen.add(community.id);
-          
-          // Check if already exists in array
-          const existingIndex = communities.value.findIndex(c => c.id === community.id);
-          
-          if (existingIndex >= 0) {
-            // Update existing
-            communities.value[existingIndex] = community;
-            console.log('🔄 Community updated:', community.name);
-          } else {
-            // Add new
-            communities.value.push(community);
-            console.log('📥 Community loaded:', community.name);
+          communities.value.push(community);
+          console.log('📥 Community loaded:', community.name);
+        } else {
+          // Update existing community
+          const index = communities.value.findIndex(c => c.id === community.id);
+          if (index >= 0) {
+            // Only update if data actually changed
+            const existing = communities.value[index];
+            if (JSON.stringify(existing) !== JSON.stringify(community)) {
+              communities.value[index] = community;
+              console.log('🔄 Community updated:', community.name);
+            }
           }
         }
       });
       
       // Also do a one-time fetch for initial load
       setTimeout(async () => {
+        if (!subscriptionActive) return;
+        
         const allCommunities = await CommunityService.getAllCommunities();
         
         // Merge with existing
@@ -59,7 +62,7 @@ export const useCommunityStore = defineStore('community', () => {
         if (communities.value.length === 0) {
           console.log('ℹ️ No communities found. Create one to get started!');
         }
-      }, 2000); // Wait 2 seconds for Gun to sync
+      }, 1000); // Wait 1 second for Gun to sync (faster)
       
     } catch (error) {
       console.error('❌ Error loading communities:', error);
