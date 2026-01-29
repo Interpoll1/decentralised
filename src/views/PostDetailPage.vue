@@ -176,6 +176,7 @@ import {
 import { usePostStore } from '../stores/postStore';
 import { useCommentStore } from '../stores/commentStore';
 import { useCommunityStore } from '../stores/communityStore';
+import { useUserStore } from '../stores/userStore';
 import CommentCard from '../components/CommentCard.vue';
 import { Post } from '../services/postService';
 
@@ -184,6 +185,7 @@ const router = useRouter();
 const postStore = usePostStore();
 const commentStore = useCommentStore();
 const communityStore = useCommunityStore();
+const userStore = useUserStore();
 
 const post = ref<Post | null>(null);
 const isLoading = ref(true);
@@ -216,7 +218,25 @@ const allComments = computed(() => {
 });
 
 const sortedComments = computed(() => {
-  return [...allComments.value].sort((a, b) => {
+  const minKarma = Number(localStorage.getItem('minUserKarma') || '-1000');
+
+  const visible = allComments.value.filter((c) => {
+    if (minKarma <= -1000) return true;
+
+    const authorId = c.authorId;
+    if (!authorId) return true;
+
+    const cached = userStore.getCachedKarma(authorId);
+    if (cached !== null) {
+      return cached >= minKarma;
+    }
+
+    // No profile yet: fetch in background and show for now
+    userStore.getProfile(authorId);
+    return true;
+  });
+
+  return visible.sort((a, b) => {
     if (b.score !== a.score) {
       return b.score - a.score;
     }

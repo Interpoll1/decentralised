@@ -118,6 +118,24 @@ export class ChainService {
     }
   }
 
+  static async resetChain(): Promise<void> {
+    const db = await StorageService.getDB();
+    const tx = db.transaction(['blocks', 'votes', 'receipts'], 'readwrite');
+
+    await Promise.all([
+      tx.objectStore('blocks').clear(),
+      tx.objectStore('votes').clear(),
+      tx.objectStore('receipts').clear(),
+    ]);
+
+    await tx.done;
+
+    const genesis = this.createGenesisBlock();
+    await StorageService.saveBlock(genesis);
+
+    console.log('🔁 Chain reset: new genesis block created');
+  }
+
   static async getChainHead(): Promise {
     const latestBlock = await StorageService.getLatestBlock();
     

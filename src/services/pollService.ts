@@ -20,6 +20,7 @@ export interface Poll {
   expiresAt: number;
   allowMultipleChoices: boolean;
   showResultsBeforeVoting: boolean;
+   requireLogin: boolean;
   totalVotes: number;
   isExpired: boolean;
 }
@@ -47,6 +48,7 @@ export class PollService {
     durationDays: number;
     allowMultipleChoices: boolean;
     showResultsBeforeVoting: boolean;
+    requireLogin: boolean;
   }): Promise<Poll> {
     const pollId = `poll-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
     const now = Date.now();
@@ -71,6 +73,7 @@ export class PollService {
       expiresAt,
       allowMultipleChoices: data.allowMultipleChoices,
       showResultsBeforeVoting: data.showResultsBeforeVoting,
+        requireLogin: !!data.requireLogin,
       totalVotes: 0,
       isExpired: false,
     };
@@ -87,6 +90,7 @@ export class PollService {
       expiresAt: poll.expiresAt,
       allowMultipleChoices: poll.allowMultipleChoices,
       showResultsBeforeVoting: poll.showResultsBeforeVoting,
+      requireLogin: poll.requireLogin,
       totalVotes: 0,
       isExpired: false,
     };
@@ -258,6 +262,7 @@ export class PollService {
       expiresAt: data.expiresAt || Date.now(),
       allowMultipleChoices: !!data.allowMultipleChoices,
       showResultsBeforeVoting: !!data.showResultsBeforeVoting,
+      requireLogin: !!data.requireLogin,
       totalVotes: data.totalVotes || 0,
     };
   }

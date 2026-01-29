@@ -76,6 +76,7 @@ import { informationCircle, warningOutline } from 'ionicons/icons';
 import { useChainStore } from '../stores/chainStore';
 import { VoteTrackerService } from '../services/voteTrackerService';
 import { Poll, Vote } from '../types/chain';
+import { AuditService } from '../services/auditService';
 
 interface Props {
   poll: Poll;
@@ -108,10 +109,25 @@ onMounted(async () => {
 const submitVote = async () => {
   if (!selectedOption.value) return;
 
+  const deviceId = await VoteTrackerService.getDeviceId();
+
   // Double-check vote eligibility
   if (await VoteTrackerService.hasVoted(props.poll.id)) {
     const toast = await toastController.create({
       message: '❌ You have already voted on this poll',
+      duration: 3000,
+      color: 'danger'
+    });
+    await toast.present();
+    hasAlreadyVoted.value = true;
+    return;
+  }
+
+  // Ask backend (if available) to enforce one-vote-per-device
+  const allowedByBackend = await AuditService.authorizeVote(props.poll.id, deviceId);
+  if (!allowedByBackend) {
+    const toast = await toastController.create({
+      message: '❌ This device has already voted on this poll (server)',
       duration: 3000,
       color: 'danger'
     });
@@ -127,7 +143,7 @@ const submitVote = async () => {
       pollId: props.poll.id,
       choice: selectedOption.value,
       timestamp: Date.now(),
-      deviceId: await VoteTrackerService.getDeviceId()
+      deviceId
     };
 
     // Add vote to blockchain

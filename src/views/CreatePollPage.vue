@@ -117,6 +117,11 @@
                 Show results before voting
               </ion-toggle>
             </ion-item>
+            <ion-item>
+              <ion-toggle v-model="requireLogin">
+                Require login to vote (Google/Microsoft)
+              </ion-toggle>
+            </ion-item>
           </ion-list>
         </ion-card-content>
       </ion-card>
@@ -191,6 +196,7 @@ const duration = ref('7');
 const allowMultipleChoices = ref(false);
 const showResultsBeforeVoting = ref(false);
 const description = ref('');
+const requireLogin = ref(false);
 
 const isValid = computed(() => {
   return (
@@ -261,7 +267,8 @@ async function createPoll() {
       options: validOptions,
       durationDays: parseInt(duration.value),
       allowMultipleChoices: allowMultipleChoices.value,
-      showResultsBeforeVoting: showResultsBeforeVoting.value
+      showResultsBeforeVoting: showResultsBeforeVoting.value,
+      requireLogin: requireLogin.value
     });
 
     const toast = await toastController.create({

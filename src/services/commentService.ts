@@ -1,6 +1,8 @@
 // src/services/commentService.ts
 import Gun from 'gun';
 import 'gun/sea';
+import { CryptoService } from './cryptoService';
+import { AuditService } from './auditService';
 
 const gun = Gun({
   peers: ['http://localhost:8765/gun']
@@ -92,9 +94,39 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
       .get('comments')
       .set({ commentId, createdAt: timestamp });
     
-    // Resolve immediately since Gun.js is eventually consistent
+    // Resolve shortly after write since Gun.js is eventually consistent
     setTimeout(() => {
       console.log('📤 Returning comment object:', { id: commentId, parentId: comment.parentId });
+
+      // Fire-and-forget: create a tamper-evident receipt for this comment
+      // and send it to the backend audit log. The full text stays in Gun,
+      // but the hashed content + metadata is immutable in the audit trail.
+      (async () => {
+        try {
+          const contentHash = CryptoService.hash(
+            JSON.stringify({
+              id: comment.id,
+              postId: comment.postId,
+              communityId: comment.communityId,
+              authorId: comment.authorId,
+              createdAt: comment.createdAt,
+              content: comment.content,
+            })
+          );
+
+          await AuditService.logReceipt('comment', {
+            commentId: comment.id,
+            postId: comment.postId,
+            communityId: comment.communityId,
+            authorId: comment.authorId,
+            createdAt: comment.createdAt,
+            contentHash,
+          });
+        } catch (error) {
+          console.warn('Failed to log comment receipt (non-fatal):', error);
+        }
+      })();
+
       resolve(comment);
     }, 100);
   });

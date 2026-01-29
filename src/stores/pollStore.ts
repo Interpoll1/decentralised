@@ -70,6 +70,7 @@ export const usePollStore = defineStore('poll', () => {
     durationDays: number;
     allowMultipleChoices: boolean;
     showResultsBeforeVoting: boolean;
+    requireLogin: boolean;
   }) {
     const user = await UserService.getCurrentUser();
 

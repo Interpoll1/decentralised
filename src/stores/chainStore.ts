@@ -6,6 +6,7 @@ import { ChainService } from '../services/chainService';
 import { StorageService } from '../services/storageService';
 import { BroadcastService } from '../services/broadcastService';
 import { WebSocketService } from '../services/websocketService';
+import { AuditService } from '../services/auditService';
 
 export const useChainStore = defineStore('chain', () => {
   const blocks = ref<ChainBlock[]>([]);
@@ -127,6 +128,12 @@ export const useChainStore = defineStore('chain', () => {
 
     await StorageService.saveReceipt(receipt);
 
+    // Mirror receipt to backend for independent audit log
+    AuditService.logReceipt('vote', {
+      ...receipt,
+      deviceId: vote.deviceId,
+    });
+
     return receipt;
   }
 
@@ -145,6 +152,12 @@ export const useChainStore = defineStore('chain', () => {
     await loadBlocks();
   }
 
+  async function resetChain() {
+    await ChainService.resetChain();
+    await loadBlocks();
+    chainValid.value = true;
+  }
+
   return {
     blocks,
     latestBlock,
@@ -159,5 +172,6 @@ export const useChainStore = defineStore('chain', () => {
     validateChain,
     checkForDowngrade,
     syncBlocks,
+    resetChain,
   };
 });

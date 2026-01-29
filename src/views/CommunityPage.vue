@@ -185,6 +185,7 @@ import {
 import { useCommunityStore } from '../stores/communityStore';
 import { usePostStore } from '../stores/postStore';
 import { usePollStore } from '../stores/pollStore';
+import { useUserStore } from '../stores/userStore';
 import PostCard from '../components/PostCard.vue';
 import PollCard from '../components/PollCard.vue';
 import { Post } from '../services/postService';
@@ -195,6 +196,7 @@ const router = useRouter();
 const communityStore = useCommunityStore();
 const postStore = usePostStore();
 const pollStore = usePollStore();
+const userStore = useUserStore();
 
 const communityId = computed(() => route.params.communityId as string);
 const community = computed(() => communityStore.currentCommunity);
@@ -232,8 +234,27 @@ const displayedContent = computed(() => {
     });
   }
   
+  // Apply user karma filter (hide low-reputation authors locally)
+  const minKarma = Number(localStorage.getItem('minUserKarma') || '-1000');
+
+  const filteredByKarma = items.filter((item) => {
+    if (minKarma <= -1000) return true; // "Show everyone"
+
+    const authorId = item.data.authorId;
+    if (!authorId) return true;
+
+    const cached = userStore.getCachedKarma(authorId);
+    if (cached !== null) {
+      return cached >= minKarma;
+    }
+
+    // No cached profile yet: optimistically include and fetch in background
+    userStore.getProfile(authorId);
+    return true;
+  });
+
   // Sort by creation date (newest first)
-  return items.sort((a, b) => b.createdAt - a.createdAt);
+  return filteredByKarma.sort((a, b) => b.createdAt - a.createdAt);
 });
 
 // ✅ CHANGE 3: Add vote tracking functions
