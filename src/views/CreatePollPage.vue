@@ -317,7 +317,7 @@ async function createPoll() {
           await navigator.clipboard.writeText(sampleLink);
         }
         const toast = await toastController.create({
-          message: '🔗 Private poll link copied to clipboard',
+          message: 'Private poll link copied to clipboard',
           duration: 2500,
           color: 'success'
         });
@@ -359,7 +359,7 @@ async function createPoll() {
       await alert.present();
     } else {
       const toast = await toastController.create({
-        message: '✅ Poll created successfully!',
+        message: 'Poll created successfully',
         duration: 2000,
         color: 'success'
       });
@@ -372,7 +372,7 @@ async function createPoll() {
     console.error('Error creating poll:', error);
     
     const toast = await toastController.create({
-      message: '❌ Failed to create poll',
+      message: 'Failed to create poll',
       duration: 2000,
       color: 'danger'
     });

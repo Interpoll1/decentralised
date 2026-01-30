@@ -86,7 +86,7 @@
           <ion-card-content>
             <!-- Debug Info -->
             <div v-if="!poll.options || poll.options.length === 0" style="color: red; padding: 12px; background: #fee; border-radius: 8px; margin-bottom: 16px;">
-              ⚠️ No poll options loaded. Options count: {{ poll.options?.length || 0 }}
+              No poll options loaded. Options count: {{ poll.options?.length || 0 }}
             </div>
             
             <!-- Show actual array for debugging -->
@@ -328,7 +328,7 @@ async function submitVote() {
     localStorage.setItem('voted-polls', JSON.stringify(votedPolls));
 
     const toast = await toastController.create({
-      message: '✅ Vote submitted successfully!',
+      message: 'Vote submitted successfully',
       duration: 2000,
       color: 'success'
     });
@@ -337,7 +337,7 @@ async function submitVote() {
     await loadPoll();
   } catch (error) {
     const toast = await toastController.create({
-      message: '❌ Failed to submit vote',
+      message: 'Failed to submit vote',
       duration: 2000,
       color: 'danger'
     });

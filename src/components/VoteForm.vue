@@ -129,7 +129,7 @@ const submitVote = async () => {
     const code = (props.inviteCode || '').trim();
     if (!code) {
       const toast = await toastController.create({
-        message: '❌ An invite code is required to vote in this poll',
+        message: 'An invite code is required to vote in this poll',
         duration: 3000,
         color: 'danger'
       });
@@ -140,7 +140,7 @@ const submitVote = async () => {
     try {
       await PollService.consumeInviteCode(props.poll.id, code);
     } catch (err: any) {
-      const message = err?.message || '❌ Invalid or already-used invite code';
+      const message = err?.message || 'Invalid or already-used invite code';
       const toast = await toastController.create({
         message,
         duration: 3000,
@@ -154,7 +154,7 @@ const submitVote = async () => {
   // Double-check vote eligibility
   if (await VoteTrackerService.hasVoted(props.poll.id)) {
     const toast = await toastController.create({
-      message: '❌ You have already voted on this poll',
+      message: 'You have already voted on this poll',
       duration: 3000,
       color: 'danger'
     });
@@ -167,7 +167,7 @@ const submitVote = async () => {
   const allowedByBackend = await AuditService.authorizeVote(props.poll.id, deviceId);
   if (!allowedByBackend) {
     const toast = await toastController.create({
-      message: '❌ This device has already voted on this poll (server)',
+      message: 'This device has already voted on this poll (server)',
       duration: 3000,
       color: 'danger'
     });
@@ -193,7 +193,7 @@ const submitVote = async () => {
     await VoteTrackerService.recordVote(props.poll.id, receipt.blockIndex);
 
     const toast = await toastController.create({
-      message: '✅ Vote submitted successfully!',
+      message: 'Vote submitted successfully',
       duration: 2000,
       color: 'success'
     });
@@ -205,7 +205,7 @@ const submitVote = async () => {
     console.error('Error submitting vote:', error);
     
     const toast = await toastController.create({
-      message: '❌ Failed to submit vote',
+      message: 'Failed to submit vote',
       duration: 3000,
       color: 'danger'
     });

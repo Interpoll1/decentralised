@@ -22,7 +22,7 @@ export function useChainSync() {
 
       if (isDowngrade) {
         downgradeDetected.value = true;
-        console.error('⚠️ CHAIN DOWNGRADE DETECTED!', payload);
+        console.error('CHAIN DOWNGRADE DETECTED!', payload);
       }
     });
 

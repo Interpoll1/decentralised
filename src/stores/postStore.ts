@@ -38,7 +38,7 @@ export const usePostStore = defineStore('post', () => {
     }
 
     try {
-      console.log('📡 Loading posts for community:', communityId);
+      console.log('Loading posts for community:', communityId);
       
       const seen = new Set<string>();
       
@@ -54,11 +54,11 @@ export const usePostStore = defineStore('post', () => {
           if (existingIndex >= 0) {
             // Update existing
             posts.value[existingIndex] = post;
-            console.log('🔄 Post updated:', post.title);
+            console.log('Post updated:', post.title);
           } else {
             // Add new
             posts.value.push(post);
-            console.log('📥 Post loaded:', post.title);
+            console.log('Post loaded:', post.title);
           }
         }
       });
@@ -72,18 +72,18 @@ export const usePostStore = defineStore('post', () => {
           if (!seen.has(post.id)) {
             seen.add(post.id);
             posts.value.push(post);
-            console.log('📥 Post loaded (fetch):', post.title);
+            console.log('Post loaded (fetch):', post.title);
           }
         });
         
         if (!isBatchLoad) {
           isLoading.value = false;
         }
-        console.log(`✅ Loaded ${allPosts.length} posts from ${communityId}`);
+        console.log(`Loaded ${allPosts.length} posts from ${communityId}`);
       }, 500); // Reduced from 1s to 500ms for speed
       
     } catch (error) {
-      console.error('❌ Error loading posts:', error);
+      console.error('Error loading posts:', error);
       if (!isBatchLoad) {
         isLoading.value = false;
       }
@@ -98,7 +98,7 @@ export const usePostStore = defineStore('post', () => {
     imageFile?: File;
   }) {
     try {
-      console.log('📝 Creating post...');
+      console.log('Creating post...');
       
       const currentUser = await UserService.getCurrentUser();
       
@@ -119,10 +119,10 @@ export const usePostStore = defineStore('post', () => {
         posts.value.unshift(post);
       }
       
-      console.log('✅ Post created:', post.id);
+      console.log('Post created:', post.id);
       return post;
     } catch (error) {
-      console.error('❌ Error creating post:', error);
+      console.error('Error creating post:', error);
       throw error;
     }
   }
@@ -130,13 +130,13 @@ export const usePostStore = defineStore('post', () => {
   // Select post for viewing
   async function selectPost(postId: string) {
     try {
-      console.log('🔍 Selecting post:', postId);
+      console.log('Selecting post:', postId);
       
       // First check if we have it locally
       const local = posts.value.find(p => p.id === postId);
       if (local) {
         currentPost.value = local;
-        console.log('✅ Post selected (from cache):', local.title);
+        console.log('Post selected (from cache):', local.title);
         return;
       }
       
@@ -144,7 +144,7 @@ export const usePostStore = defineStore('post', () => {
       currentPost.value = await PostService.getPost(postId);
       
       if (currentPost.value) {
-        console.log('✅ Post selected:', currentPost.value.title);
+        console.log('Post selected:', currentPost.value.title);
         
         // Add to posts array if not present
         const exists = posts.value.find(p => p.id === postId);
@@ -152,10 +152,10 @@ export const usePostStore = defineStore('post', () => {
           posts.value.push(currentPost.value);
         }
       } else {
-        console.log('⚠️ Post not found:', postId);
+        console.log('Post not found:', postId);
       }
     } catch (error) {
-      console.error('❌ Error selecting post:', error);
+      console.error('Error selecting post:', error);
     }
   }
 
@@ -179,9 +179,9 @@ export const usePostStore = defineStore('post', () => {
         await UserService.incrementKarma(post.authorId, direction === 'up' ? 1 : -1);
       }
       
-      console.log(`✅ Vote cast: ${direction} on post ${postId}`);
+      console.log(`Vote cast: ${direction} on post ${postId}`);
     } catch (error) {
-      console.error('❌ Error voting on post:', error);
+      console.error('Error voting on post:', error);
       throw error;
     }
   }
@@ -189,7 +189,7 @@ export const usePostStore = defineStore('post', () => {
   // Upvote a post
   async function upvotePost(postId: string) {
     try {
-      console.log('👍 Upvoting post:', postId);
+      console.log('Upvoting post:', postId);
       
       const currentUser = await UserService.getCurrentUser();
       await PostService.voteOnPost(postId, 'up', currentUser.id);
@@ -205,9 +205,9 @@ export const usePostStore = defineStore('post', () => {
         await UserService.incrementKarma(updated.authorId, 1);
       }
 
-      console.log('✅ Post upvoted');
+      console.log('Post upvoted');
     } catch (error) {
-      console.error('❌ Error upvoting post:', error);
+      console.error('Error upvoting post:', error);
       throw error;
     }
   }
@@ -215,7 +215,7 @@ export const usePostStore = defineStore('post', () => {
   // Downvote a post
   async function downvotePost(postId: string) {
     try {
-      console.log('👎 Downvoting post:', postId);
+      console.log('Downvoting post:', postId);
       
       const currentUser = await UserService.getCurrentUser();
       await PostService.voteOnPost(postId, 'down', currentUser.id);
@@ -230,9 +230,9 @@ export const usePostStore = defineStore('post', () => {
         await UserService.incrementKarma(updated.authorId, -1);
       }
 
-      console.log('✅ Post downvoted');
+      console.log('Post downvoted');
     } catch (error) {
-      console.error('❌ Error downvoting post:', error);
+      console.error('Error downvoting post:', error);
       throw error;
     }
   }
@@ -240,7 +240,7 @@ export const usePostStore = defineStore('post', () => {
   // Remove upvote from a post
   async function removeUpvote(postId: string) {
     try {
-      console.log('↩️ Removing upvote from post:', postId);
+      console.log('Removing upvote from post:', postId);
       
       const currentUser = await UserService.getCurrentUser();
       
@@ -259,9 +259,9 @@ export const usePostStore = defineStore('post', () => {
         await UserService.incrementKarma(updated.authorId, -1);
       }
 
-      console.log('✅ Upvote removed');
+      console.log('Upvote removed');
     } catch (error) {
-      console.error('❌ Error removing upvote:', error);
+      console.error('Error removing upvote:', error);
       throw error;
     }
   }
@@ -269,7 +269,7 @@ export const usePostStore = defineStore('post', () => {
   // Remove downvote from a post
   async function removeDownvote(postId: string) {
     try {
-      console.log('↩️ Removing downvote from post:', postId);
+      console.log('Removing downvote from post:', postId);
       
       const currentUser = await UserService.getCurrentUser();
       
@@ -288,16 +288,16 @@ export const usePostStore = defineStore('post', () => {
         await UserService.incrementKarma(updated.authorId, 1);
       }
 
-      console.log('✅ Downvote removed');
+      console.log('Downvote removed');
     } catch (error) {
-      console.error('❌ Error removing downvote:', error);
+      console.error('Error removing downvote:', error);
       throw error;
     }
   }
 
   // Refresh posts
   async function refreshPosts() {
-    console.log('🔄 Refreshing posts...');
+    console.log('Refreshing posts...');
     if (currentCommunityId.value) {
       posts.value = [];
       await loadPostsForCommunity(currentCommunityId.value);

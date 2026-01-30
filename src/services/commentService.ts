@@ -74,10 +74,10 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
     // CRITICAL: Always set parentId field, even if undefined
     // This ensures Gun.js knows about the field
     if (data.parentId) {
-      console.log('✅ Setting parentId in Gun.js:', data.parentId);
+      console.log('Setting parentId in Gun.js:', data.parentId);
       commentNode.get('parentId').put(data.parentId);
     } else {
-      console.log('ℹ️ No parentId - this is a top-level comment');
+      console.log('No parentId - this is a top-level comment');
       // Explicitly set to null or don't set at all
       // Don't set parentId field for top-level comments
     }

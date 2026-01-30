@@ -371,7 +371,7 @@ const savePolicy = async () => {
   await PinningService.setPolicy(policy.value);
   
   const toast = await toastController.create({
-    message: '✅ Policy saved',
+    message: 'Policy saved',
     duration: 1500,
     color: 'success'
   });
@@ -392,7 +392,7 @@ const saveFilterSettings = async () => {
   localStorage.setItem('minUserKarma', String(minUserKarma.value));
 
   const toast = await toastController.create({
-    message: '✅ Content filter updated',
+    message: 'Content filter updated',
     duration: 1500,
     color: 'success'
   });
@@ -411,7 +411,7 @@ const exportData = async () => {
     URL.revokeObjectURL(url);
 
     const toast = await toastController.create({
-      message: '✅ Data exported successfully',
+      message: 'Data exported successfully',
       duration: 2000,
       color: 'success'
     });
@@ -420,7 +420,7 @@ const exportData = async () => {
     console.error('Export error:', error);
     
     const toast = await toastController.create({
-      message: '❌ Export failed',
+      message: 'Export failed',
       duration: 2000,
       color: 'danger'
     });
@@ -445,7 +445,7 @@ const handleImportFile = async (event: Event) => {
     await StorageManager.importData(data);
 
     const toast = await toastController.create({
-      message: '✅ Data imported successfully',
+      message: 'Data imported successfully',
       duration: 2000,
       color: 'success'
     });
@@ -457,7 +457,7 @@ const handleImportFile = async (event: Event) => {
     console.error('Import error:', error);
     
     const toast = await toastController.create({
-      message: '❌ Import failed',
+      message: 'Import failed',
       duration: 2000,
       color: 'danger'
     });
@@ -477,7 +477,7 @@ const pruneOldContent = async () => {
           const result = await StorageManager.pruneOldData();
           
           const toast = await toastController.create({
-            message: `✅ Cleaned up ${result.pollsDeleted} items`,
+            message: `Cleaned up ${result.pollsDeleted} items`,
             duration: 2000,
             color: 'success'
           });
@@ -495,7 +495,7 @@ const pruneOldContent = async () => {
 const confirmClearAll = async () => {
   const alert = await alertController.create({
     header: 'Clear All Data',
-    message: '⚠️ This will delete EVERYTHING from local storage. This cannot be undone!',
+    message: 'This will delete EVERYTHING from local storage. This cannot be undone!',
     buttons: [
       { text: 'Cancel', role: 'cancel' },
       {
@@ -505,7 +505,7 @@ const confirmClearAll = async () => {
           await StorageManager.clearAll();
           
           const toast = await toastController.create({
-            message: '✅ All data cleared',
+            message: 'All data cleared',
             duration: 2000,
             color: 'success'
           });

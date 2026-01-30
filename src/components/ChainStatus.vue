@@ -130,7 +130,7 @@ const handleResetChain = async () => {
           await chainStore.resetChain();
 
           const toast = await toastController.create({
-            message: '✅ Chain reset locally',
+            message: 'Chain reset locally',
             duration: 2000,
             color: 'success',
           });

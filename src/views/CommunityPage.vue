@@ -258,7 +258,6 @@ const displayedContent = computed(() => {
   return filteredByKarma.sort((a, b) => b.createdAt - a.createdAt);
 });
 
-// ✅ CHANGE 3: Add vote tracking functions
 function hasUpvoted(postId: string): boolean {
   const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
   return votedPosts.includes(postId);
@@ -269,9 +268,8 @@ function hasDownvoted(postId: string): boolean {
   return votedPosts.includes(postId);
 }
 
-// ✅ CHANGE 4: Add upvote handler function
 async function handleUpvote(post: Post) {
-  console.log('👍 Upvoting post:', post.id);
+  console.log('Upvoting post:', post.id);
   
   try {
     // Check if already upvoted
@@ -308,7 +306,7 @@ async function handleUpvote(post: Post) {
       localStorage.setItem('upvoted-posts', JSON.stringify(votedPosts));
       
       const toast = await toastController.create({
-        message: '👍 Upvoted!',
+        message: 'Upvoted',
         duration: 1500,
         color: 'success'
       });
@@ -325,9 +323,8 @@ async function handleUpvote(post: Post) {
   }
 }
 
-// ✅ CHANGE 5: Add downvote handler function
 async function handleDownvote(post: Post) {
-  console.log('👎 Downvoting post:', post.id);
+  console.log('Downvoting post:', post.id);
   
   try {
     // Check if already downvoted
@@ -364,7 +361,7 @@ async function handleDownvote(post: Post) {
       localStorage.setItem('downvoted-posts', JSON.stringify(votedPosts));
       
       const toast = await toastController.create({
-        message: '👎 Downvoted',
+        message: 'Downvoted',
         duration: 1500,
         color: 'warning'
       });

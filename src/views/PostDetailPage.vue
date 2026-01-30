@@ -212,7 +212,7 @@ const allComments = computed(() => {
     return matchesPost && isTopLevel;
   });
   
-  console.log('📊 Top-level comments:', filtered.length, '| Total comments in store:', commentStore.comments.length);
+  console.log('Top-level comments:', filtered.length, '| Total comments in store:', commentStore.comments.length);
   
   return filtered;
 });
@@ -315,7 +315,7 @@ async function handleUpvote() {
       localStorage.setItem('upvoted-posts', JSON.stringify(votedPosts));
       
       const toast = await toastController.create({
-        message: '👍 Upvoted!',
+        message: 'Upvoted',
         duration: 1500,
         color: 'success'
       });
@@ -360,7 +360,7 @@ async function handleDownvote() {
       localStorage.setItem('downvoted-posts', JSON.stringify(votedPosts));
       
       const toast = await toastController.create({
-        message: '👎 Downvoted',
+        message: 'Downvoted',
         duration: 1500,
         color: 'warning'
       });
@@ -386,7 +386,7 @@ async function submitComment() {
     newCommentText.value = '';
     
     const toast = await toastController.create({
-      message: '💬 Comment posted!',
+      message: 'Comment posted',
       duration: 2000,
       color: 'success'
     });
@@ -413,7 +413,7 @@ async function handleCommentUpvote(comment: any) {
     await commentStore.upvoteComment(comment.id);
     
     const toast = await toastController.create({
-      message: '👍 Comment upvoted',
+      message: 'Comment upvoted',
       duration: 1500,
       color: 'success'
     });
@@ -428,7 +428,7 @@ async function handleCommentDownvote(comment: any) {
     await commentStore.downvoteComment(comment.id);
     
     const toast = await toastController.create({
-      message: '👎 Comment downvoted',
+      message: 'Comment downvoted',
       duration: 1500,
       color: 'warning'
     });

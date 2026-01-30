@@ -57,7 +57,7 @@ export class UserService {
     await gun.get('users').get(deviceId).put(newProfile);
     this.currentUser = newProfile;
 
-    console.log('✅ User profile created:', newProfile.username);
+    console.log('User profile created:', newProfile.username);
     return newProfile;
   }
 
@@ -70,7 +70,7 @@ export class UserService {
     await gun.get('users').get(currentUser.id).put(updatedProfile);
 
     this.currentUser = updatedProfile;
-    console.log('✅ Profile updated');
+    console.log('Profile updated');
     return updatedProfile;
   }
 

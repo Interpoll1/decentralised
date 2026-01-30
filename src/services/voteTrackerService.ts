@@ -78,7 +78,7 @@ export class VoteTrackerService {
     voteRecords.push(newRecord);
     await StorageService.setMetadata('vote-records', voteRecords);
     
-    console.log('✅ Vote recorded for device:', deviceId.substring(0, 8) + '...');
+    console.log('Vote recorded for device:', deviceId.substring(0, 8) + '...');
   }
   
   // Get all votes by this device

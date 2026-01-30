@@ -9,13 +9,12 @@ export const useCommunityStore = defineStore('community', () => {
   const isLoading = ref(false);
   const joinedCommunities = ref<Set<string>>(new Set());
 
-  // Load all communities using subscription
   async function loadCommunities() {
     isLoading.value = true;
     communities.value = [];
     
     try {
-      console.log('📡 Loading communities from GunDB...');
+      console.log('Loading communities from GunDB...');
       
       const seen = new Set<string>();
       let subscriptionActive = true;
@@ -26,7 +25,7 @@ export const useCommunityStore = defineStore('community', () => {
         if (!seen.has(community.id)) {
           seen.add(community.id);
           communities.value.push(community);
-          console.log('📥 Community loaded:', community.name);
+          console.log('Community loaded:', community.name);
         } else {
           // Update existing community
           const index = communities.value.findIndex(c => c.id === community.id);
@@ -35,7 +34,7 @@ export const useCommunityStore = defineStore('community', () => {
             const existing = communities.value[index];
             if (JSON.stringify(existing) !== JSON.stringify(community)) {
               communities.value[index] = community;
-              console.log('🔄 Community updated:', community.name);
+              console.log('Community updated:', community.name);
             }
           }
         }
@@ -52,20 +51,16 @@ export const useCommunityStore = defineStore('community', () => {
           if (!seen.has(community.id)) {
             seen.add(community.id);
             communities.value.push(community);
-            console.log('📥 Community loaded (fetch):', community.name);
+            console.log('Community loaded (fetch):', community.name);
           }
         });
         
         isLoading.value = false;
-        console.log(`✅ Loaded ${communities.value.length} communities`);
-        
-        if (communities.value.length === 0) {
-          console.log('ℹ️ No communities found. Create one to get started!');
-        }
+        console.log(`Loaded ${communities.value.length} communities`);
       }, 1000); // Wait 1 second for Gun to sync (faster)
       
     } catch (error) {
-      console.error('❌ Error loading communities:', error);
+      console.error('Error loading communities:', error);
       isLoading.value = false;
     }
   }
@@ -78,7 +73,7 @@ export const useCommunityStore = defineStore('community', () => {
     rules: string[];
   }) {
     try {
-      console.log('📝 Creating community:', data.name);
+      console.log('Creating community:', data.name);
       
       const community = await CommunityService.createCommunity({
         ...data,
@@ -91,11 +86,11 @@ export const useCommunityStore = defineStore('community', () => {
         communities.value.unshift(community);
       }
       
-      console.log('✅ Community created:', community.name);
+      console.log('Community created:', community.name);
       
       return community;
     } catch (error) {
-      console.error('❌ Error creating community:', error);
+      console.error('Error creating community:', error);
       throw error;
     }
   }
@@ -103,13 +98,13 @@ export const useCommunityStore = defineStore('community', () => {
   // Select community
   async function selectCommunity(communityId: string) {
     try {
-      console.log('🔍 Selecting community:', communityId);
+      console.log('Selecting community:', communityId);
       
       // First check if we have it locally
       const local = communities.value.find(c => c.id === communityId);
       if (local) {
         currentCommunity.value = local;
-        console.log('✅ Community selected (from cache):', local.name);
+        console.log('Community selected (from cache):', local.name);
         return;
       }
       
@@ -117,7 +112,7 @@ export const useCommunityStore = defineStore('community', () => {
       currentCommunity.value = await CommunityService.getCommunity(communityId);
       
       if (currentCommunity.value) {
-        console.log('✅ Community selected:', currentCommunity.value.name);
+        console.log('Community selected:', currentCommunity.value.name);
         
         // Add to communities array if not present
         const exists = communities.value.find(c => c.id === communityId);
@@ -125,28 +120,28 @@ export const useCommunityStore = defineStore('community', () => {
           communities.value.push(currentCommunity.value);
         }
       } else {
-        console.log('⚠️ Community not found:', communityId);
+        console.log('Community not found:', communityId);
       }
     } catch (error) {
-      console.error('❌ Error selecting community:', error);
+      console.error('Error selecting community:', error);
     }
   }
 
   // Join community
   async function joinCommunity(communityId: string) {
     try {
-      console.log('🤝 Joining community:', communityId);
+      console.log('Joining community:', communityId);
       await CommunityService.joinCommunity(communityId);
       joinedCommunities.value.add(communityId);
       
       // Save to local storage
       localStorage.setItem('joined-communities', JSON.stringify(Array.from(joinedCommunities.value)));
-      console.log('✅ Joined community');
+      console.log('Joined community');
       
       // Refresh the community to get updated member count
       await selectCommunity(communityId);
     } catch (error) {
-      console.error('❌ Error joining community:', error);
+      console.error('Error joining community:', error);
     }
   }
 
@@ -162,7 +157,7 @@ export const useCommunityStore = defineStore('community', () => {
       if (stored) {
         const joined = JSON.parse(stored);
         joinedCommunities.value = new Set(joined);
-        console.log(`✅ Loaded ${joined.length} joined communities from storage`);
+        console.log(`Loaded ${joined.length} joined communities from storage`);
       }
     } catch (error) {
       console.error('Error loading joined communities:', error);
@@ -171,7 +166,7 @@ export const useCommunityStore = defineStore('community', () => {
 
   // Refresh communities (force reload)
   async function refreshCommunities() {
-    console.log('🔄 Refreshing communities...');
+    console.log('Refreshing communities...');
     communities.value = [];
     await loadCommunities();
   }
