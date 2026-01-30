@@ -26,11 +26,24 @@
       </div>
 
       <!-- Vote Form -->
-      <VoteForm 
-        v-else-if="canVote"
-        :poll="pollStore.currentPoll" 
-        @vote-submitted="handleVoteSubmitted" 
-      />
+      <div v-else-if="canVote && pollStore.currentPoll">
+        <div v-if="pollStore.currentPoll.isPrivate" class="mb-4 space-y-2">
+          <ion-item>
+            <ion-label position="stacked">Invite Code</ion-label>
+            <ion-input
+              v-model="inviteCode"
+              placeholder="Enter your unique invite code"
+            ></ion-input>
+          </ion-item>
+        </div>
+
+        <VoteForm 
+          :poll="pollStore.currentPoll" 
+          :invite-code="inviteCode"
+          :requires-invite-code="pollStore.currentPoll.isPrivate"
+          @vote-submitted="handleVoteSubmitted" 
+        />
+      </div>
 
       <!-- Login required to vote -->
       <div
@@ -67,18 +80,24 @@ import {
   IonBackButton,
   IonSpinner,
   IonButton,
-  IonIcon
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonInput
 } from '@ionic/vue';
 import { alertCircle } from 'ionicons/icons';
 import { usePollStore } from '../stores/pollStore';
 import VoteForm from '../components/VoteForm.vue';
 import { AuditService } from '../services/auditService';
+import { useChainStore } from '../stores/chainStore';
 
 const route = useRoute();
 const router = useRouter();
 const pollStore = usePollStore();
+const chainStore = useChainStore();
 const isLoading = ref(true);
 const isAuthenticated = ref(false);
+const inviteCode = ref<string>('');
 
 const canVote = computed(() => {
   const poll = pollStore.currentPoll as any;
@@ -89,11 +108,17 @@ const canVote = computed(() => {
 
 onMounted(async () => {
   try {
+    await chainStore.initialize();
     const pollId = route.params.pollId as string;
     await pollStore.selectPoll(pollId);
 
     const user = await AuditService.getCloudUser();
     isAuthenticated.value = !!user;
+
+    const initialCode = route.query.code as string | undefined;
+    if (initialCode) {
+      inviteCode.value = initialCode;
+    }
   } catch (error) {
     console.error('Error loading poll:', error);
   } finally {

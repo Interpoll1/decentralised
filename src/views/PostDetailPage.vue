@@ -301,15 +301,15 @@ async function handleUpvote() {
       });
       await toast.present();
     } else {
-      await postStore.upvotePost(post.value.id);
-      
       const downvotedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
       if (downvotedPosts.includes(post.value.id)) {
         await postStore.removeDownvote(post.value.id);
         const filtered = downvotedPosts.filter((id: string) => id !== post.value!.id);
         localStorage.setItem('downvoted-posts', JSON.stringify(filtered));
       }
-      
+
+      await postStore.upvotePost(post.value.id);
+
       const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
       votedPosts.push(post.value.id);
       localStorage.setItem('upvoted-posts', JSON.stringify(votedPosts));
@@ -346,15 +346,15 @@ async function handleDownvote() {
       });
       await toast.present();
     } else {
-      await postStore.downvotePost(post.value.id);
-      
       const upvotedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
       if (upvotedPosts.includes(post.value.id)) {
         await postStore.removeUpvote(post.value.id);
         const filtered = upvotedPosts.filter((id: string) => id !== post.value!.id);
         localStorage.setItem('upvoted-posts', JSON.stringify(filtered));
       }
-      
+
+      await postStore.downvotePost(post.value.id);
+
       const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
       votedPosts.push(post.value.id);
       localStorage.setItem('downvoted-posts', JSON.stringify(votedPosts));

@@ -64,6 +64,18 @@ const routes: Array<RouteRecordRaw> = [
     component: () => import('../views/ChainExplorerPage.vue')
   },
   {
+    path: '/vote/:pollId',
+    name: 'Vote',
+    component: () => import('../views/VotePage.vue'),
+    props: true,
+  },
+  {
+    path: '/results/:pollId',
+    name: 'Results',
+    component: () => import('../views/ResultsPage.vue'),
+    props: true,
+  },
+  {
     path: '/receipt/:mnemonic?',
     name: 'Receipt',
     component: () => import('../views/ReceiptPage.vue')

@@ -193,23 +193,18 @@ export const usePostStore = defineStore('post', () => {
       
       const currentUser = await UserService.getCurrentUser();
       await PostService.voteOnPost(postId, 'up', currentUser.id);
-      
-      // Update local post
-      const post = posts.value.find(p => p.id === postId);
-      if (post) {
-        post.upvotes++;
-        post.score = post.upvotes - post.downvotes;
-        
-        // Update current post if it's the one being viewed
-        if (currentPost.value?.id === postId) {
-          currentPost.value.upvotes++;
-          currentPost.value.score = currentPost.value.upvotes - currentPost.value.downvotes;
-        }
-        
-        // Update author's karma
-        await UserService.incrementKarma(post.authorId, 1);
+
+      const updated = await PostService.getPost(postId);
+
+      if (updated) {
+        const idx = posts.value.findIndex(p => p.id === postId);
+        if (idx >= 0) posts.value[idx] = updated;
+        if (currentPost.value?.id === postId) currentPost.value = updated;
+
+        // Update author's karma only when direction actually changed to up
+        await UserService.incrementKarma(updated.authorId, 1);
       }
-      
+
       console.log('✅ Post upvoted');
     } catch (error) {
       console.error('❌ Error upvoting post:', error);
@@ -224,23 +219,17 @@ export const usePostStore = defineStore('post', () => {
       
       const currentUser = await UserService.getCurrentUser();
       await PostService.voteOnPost(postId, 'down', currentUser.id);
-      
-      // Update local post
-      const post = posts.value.find(p => p.id === postId);
-      if (post) {
-        post.downvotes++;
-        post.score = post.upvotes - post.downvotes;
-        
-        // Update current post if it's the one being viewed
-        if (currentPost.value?.id === postId) {
-          currentPost.value.downvotes++;
-          currentPost.value.score = currentPost.value.upvotes - currentPost.value.downvotes;
-        }
-        
-        // Update author's karma
-        await UserService.incrementKarma(post.authorId, -1);
+
+      const updated = await PostService.getPost(postId);
+
+      if (updated) {
+        const idx = posts.value.findIndex(p => p.id === postId);
+        if (idx >= 0) posts.value[idx] = updated;
+        if (currentPost.value?.id === postId) currentPost.value = updated;
+
+        await UserService.incrementKarma(updated.authorId, -1);
       }
-      
+
       console.log('✅ Post downvoted');
     } catch (error) {
       console.error('❌ Error downvoting post:', error);
@@ -259,23 +248,17 @@ export const usePostStore = defineStore('post', () => {
       if (PostService.removeVote) {
         await PostService.removeVote(postId, 'up', currentUser.id);
       }
-      
-      // Update local post
-      const post = posts.value.find(p => p.id === postId);
-      if (post) {
-        post.upvotes = Math.max(0, post.upvotes - 1);
-        post.score = post.upvotes - post.downvotes;
-        
-        // Update current post if it's the one being viewed
-        if (currentPost.value?.id === postId) {
-          currentPost.value.upvotes = Math.max(0, currentPost.value.upvotes - 1);
-          currentPost.value.score = currentPost.value.upvotes - currentPost.value.downvotes;
-        }
-        
-        // Update author's karma
-        await UserService.incrementKarma(post.authorId, -1);
+
+      const updated = await PostService.getPost(postId);
+
+      if (updated) {
+        const idx = posts.value.findIndex(p => p.id === postId);
+        if (idx >= 0) posts.value[idx] = updated;
+        if (currentPost.value?.id === postId) currentPost.value = updated;
+
+        await UserService.incrementKarma(updated.authorId, -1);
       }
-      
+
       console.log('✅ Upvote removed');
     } catch (error) {
       console.error('❌ Error removing upvote:', error);
@@ -294,23 +277,17 @@ export const usePostStore = defineStore('post', () => {
       if (PostService.removeVote) {
         await PostService.removeVote(postId, 'down', currentUser.id);
       }
-      
-      // Update local post
-      const post = posts.value.find(p => p.id === postId);
-      if (post) {
-        post.downvotes = Math.max(0, post.downvotes - 1);
-        post.score = post.upvotes - post.downvotes;
-        
-        // Update current post if it's the one being viewed
-        if (currentPost.value?.id === postId) {
-          currentPost.value.downvotes = Math.max(0, currentPost.value.downvotes - 1);
-          currentPost.value.score = currentPost.value.upvotes - currentPost.value.downvotes;
-        }
-        
-        // Update author's karma
-        await UserService.incrementKarma(post.authorId, 1);
+
+      const updated = await PostService.getPost(postId);
+
+      if (updated) {
+        const idx = posts.value.findIndex(p => p.id === postId);
+        if (idx >= 0) posts.value[idx] = updated;
+        if (currentPost.value?.id === postId) currentPost.value = updated;
+
+        await UserService.incrementKarma(updated.authorId, 1);
       }
-      
+
       console.log('✅ Downvote removed');
     } catch (error) {
       console.error('❌ Error removing downvote:', error);

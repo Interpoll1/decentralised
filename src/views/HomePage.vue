@@ -445,7 +445,8 @@ const allPosts = computed(() => {
 });
 
 const allPolls = computed(() => {
-  return pollStore.sortedPolls || [];
+  // Hide private polls from the global home feed
+  return (pollStore.sortedPolls || []).filter(p => !p.isPrivate);
 });
 
 // Combined feed of posts and polls, sorted by creation date
@@ -517,16 +518,15 @@ async function handleUpvote(post: Post) {
       });
       await toast.present();
     } else {
-      // Add upvote
-      await postStore.upvotePost(post.id);
-      
-      // Remove from downvoted if exists
+      // If previously downvoted, clear that first to avoid wiping the new upvote
       const downvotedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
       if (downvotedPosts.includes(post.id)) {
         await postStore.removeDownvote(post.id);
         const filtered = downvotedPosts.filter((id: string) => id !== post.id);
         localStorage.setItem('downvoted-posts', JSON.stringify(filtered));
       }
+
+      await postStore.upvotePost(post.id);
       
       // Add to localStorage
       const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
@@ -573,16 +573,15 @@ async function handleDownvote(post: Post) {
       });
       await toast.present();
     } else {
-      // Add downvote
-      await postStore.downvotePost(post.id);
-      
-      // Remove from upvoted if exists
+      // If previously upvoted, clear that first to avoid wiping the new downvote
       const upvotedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
       if (upvotedPosts.includes(post.id)) {
         await postStore.removeUpvote(post.id);
         const filtered = upvotedPosts.filter((id: string) => id !== post.id);
         localStorage.setItem('upvoted-posts', JSON.stringify(filtered));
       }
+
+      await postStore.downvotePost(post.id);
       
       // Add to localStorage
       const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');

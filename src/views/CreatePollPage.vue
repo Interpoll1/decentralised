@@ -122,6 +122,27 @@
                 Require login to vote (Google/Microsoft)
               </ion-toggle>
             </ion-item>
+            <ion-item>
+              <ion-toggle v-model="isPrivate">
+                Make this poll private (invite-only)
+              </ion-toggle>
+            </ion-item>
+            <ion-item v-if="isPrivate">
+              <ion-label class="text-xs text-gray-500">
+                Only people with a unique invite code can vote.
+                Each code can be used once.
+              </ion-label>
+            </ion-item>
+            <ion-item v-if="isPrivate">
+              <ion-label position="stacked">Number of invite codes</ion-label>
+              <ion-input
+                type="number"
+                v-model.number="inviteCodeCount"
+                min="1"
+                max="200"
+                placeholder="20"
+              ></ion-input>
+            </ion-item>
           </ion-list>
         </ion-card-content>
       </ion-card>
@@ -174,6 +195,7 @@ import {
   IonToggle,
   IonIcon,
   actionSheetController,
+  alertController,
   toastController
 } from '@ionic/vue';
 import {
@@ -197,6 +219,17 @@ const allowMultipleChoices = ref(false);
 const showResultsBeforeVoting = ref(false);
 const description = ref('');
 const requireLogin = ref(false);
+const isPrivate = ref(false);
+const inviteCodeCount = ref(20);
+
+function escapeHtml(input: string): string {
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 const isValid = computed(() => {
   return (
@@ -260,7 +293,7 @@ async function createPoll() {
     const validOptions = options.value.filter(opt => opt.trim().length > 0);
 
     // Create poll using pollStore
-    await pollStore.createPoll({
+    const poll = await pollStore.createPoll({
       communityId: selectedCommunity.value!.id,
       question: question.value.trim(),
       description: description.value.trim(),
@@ -268,15 +301,70 @@ async function createPoll() {
       durationDays: parseInt(duration.value),
       allowMultipleChoices: allowMultipleChoices.value,
       showResultsBeforeVoting: showResultsBeforeVoting.value,
-      requireLogin: requireLogin.value
+      requireLogin: requireLogin.value,
+      isPrivate: isPrivate.value,
+      inviteCodeCount: inviteCodeCount.value
     });
 
-    const toast = await toastController.create({
-      message: '✅ Poll created successfully!',
-      duration: 2000,
-      color: 'success'
-    });
-    await toast.present();
+    // If private, copy a ready-to-share invite link and show codes
+    if (isPrivate.value && (poll as any).inviteCodes?.length) {
+      const codes = (poll as any).inviteCodes as string[];
+      const baseUrl = window.location.origin;
+      const sampleLink = `${baseUrl}/vote/${poll.id}?code=${codes[0]}`;
+
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(sampleLink);
+        }
+        const toast = await toastController.create({
+          message: '🔗 Private poll link copied to clipboard',
+          duration: 2500,
+          color: 'success'
+        });
+        await toast.present();
+      } catch (e) {
+        const toast = await toastController.create({
+          message: `Private poll link: ${sampleLink}`,
+          duration: 4000,
+          color: 'medium'
+        });
+        await toast.present();
+      }
+
+      // Show full code list with statuses and copy-all option
+      const codesList = `<pre style="text-align:left;white-space:pre-wrap;margin:0">${codes
+        .map((c) => `${escapeHtml(c)} — unused`)
+        .join('\n')}</pre>`;
+      const linksList = codes.map((c) => `${baseUrl}/vote/${poll.id}?code=${c}`).join('\n');
+
+      const alert = await alertController.create({
+        header: 'Invite Codes',
+        message: codesList,
+        buttons: [
+          {
+            text: 'Copy all links',
+            handler: async () => {
+              if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(linksList);
+              }
+            },
+          },
+          {
+            text: 'Close',
+            role: 'cancel',
+          },
+        ],
+      });
+
+      await alert.present();
+    } else {
+      const toast = await toastController.create({
+        message: '✅ Poll created successfully!',
+        duration: 2000,
+        color: 'success'
+      });
+      await toast.present();
+    }
 
     // Navigate to community
     router.push(`/community/${selectedCommunity.value?.id}`);
