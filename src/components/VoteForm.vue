@@ -24,14 +24,14 @@
     </div>
 
     <ion-card-header v-if="!hasAlreadyVoted">
-      <ion-card-title>{{ poll.title }}</ion-card-title>
-      <ion-card-subtitle>{{ poll.description }}</ion-card-subtitle>
+      <ion-card-title>{{ displayTitle }}</ion-card-title>
+      <ion-card-subtitle>{{ displayDescription }}</ion-card-subtitle>
     </ion-card-header>
 
     <ion-card-content v-if="!hasAlreadyVoted">
       <ion-radio-group v-model="selectedOption">
-        <ion-item v-for="option in poll.options" :key="option">
-          <ion-radio :value="option">{{ option }}</ion-radio>
+        <ion-item v-for="(option, index) in poll.options" :key="getOptionKey(option, index)">
+          <ion-radio :value="getOptionValue(option)">{{ getOptionLabel(option, index) }}</ion-radio>
         </ion-item>
       </ion-radio-group>
 
@@ -57,7 +57,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import {
   IonCard,
   IonCardHeader,
@@ -76,9 +76,13 @@ import { informationCircle, warningOutline } from 'ionicons/icons';
 import { useChainStore } from '../stores/chainStore';
 import { VoteTrackerService } from '../services/voteTrackerService';
 import { Poll, Vote } from '../types/chain';
+import { AuditService } from '../services/auditService';
+import { PollService } from '../services/pollService';
 
 interface Props {
   poll: Poll;
+  inviteCode?: string | null;
+  requiresInviteCode?: boolean;
 }
 
 const props = defineProps<Props>();
@@ -89,6 +93,16 @@ const selectedOption = ref('');
 const isSubmitting = ref(false);
 const hasAlreadyVoted = ref(false);
 const myVoteReceipt = ref<string | null>(null);
+
+const displayTitle = computed(() => {
+  const anyPoll: any = props.poll as any;
+  return anyPoll.title || anyPoll.question || '';
+});
+
+const displayDescription = computed(() => {
+  const anyPoll: any = props.poll as any;
+  return anyPoll.description || '';
+});
 
 onMounted(async () => {
   // Check if this device has already voted
@@ -108,10 +122,52 @@ onMounted(async () => {
 const submitVote = async () => {
   if (!selectedOption.value) return;
 
+  const deviceId = await VoteTrackerService.getDeviceId();
+
+  // Private poll: require a valid, unused invite code
+  if (props.requiresInviteCode) {
+    const code = (props.inviteCode || '').trim();
+    if (!code) {
+      const toast = await toastController.create({
+        message: 'An invite code is required to vote in this poll',
+        duration: 3000,
+        color: 'danger'
+      });
+      await toast.present();
+      return;
+    }
+
+    try {
+      await PollService.consumeInviteCode(props.poll.id, code);
+    } catch (err: any) {
+      const message = err?.message || 'Invalid or already-used invite code';
+      const toast = await toastController.create({
+        message,
+        duration: 3000,
+        color: 'danger'
+      });
+      await toast.present();
+      return;
+    }
+  }
+
   // Double-check vote eligibility
   if (await VoteTrackerService.hasVoted(props.poll.id)) {
     const toast = await toastController.create({
-      message: '❌ You have already voted on this poll',
+      message: 'You have already voted on this poll',
+      duration: 3000,
+      color: 'danger'
+    });
+    await toast.present();
+    hasAlreadyVoted.value = true;
+    return;
+  }
+
+  // Ask backend (if available) to enforce one-vote-per-device
+  const allowedByBackend = await AuditService.authorizeVote(props.poll.id, deviceId);
+  if (!allowedByBackend) {
+    const toast = await toastController.create({
+      message: 'This device has already voted on this poll (server)',
       duration: 3000,
       color: 'danger'
     });
@@ -127,7 +183,7 @@ const submitVote = async () => {
       pollId: props.poll.id,
       choice: selectedOption.value,
       timestamp: Date.now(),
-      deviceId: await VoteTrackerService.getDeviceId()
+      deviceId
     };
 
     // Add vote to blockchain
@@ -137,7 +193,7 @@ const submitVote = async () => {
     await VoteTrackerService.recordVote(props.poll.id, receipt.blockIndex);
 
     const toast = await toastController.create({
-      message: '✅ Vote submitted successfully!',
+      message: 'Vote submitted successfully',
       duration: 2000,
       color: 'success'
     });
@@ -149,7 +205,7 @@ const submitVote = async () => {
     console.error('Error submitting vote:', error);
     
     const toast = await toastController.create({
-      message: '❌ Failed to submit vote',
+      message: 'Failed to submit vote',
       duration: 3000,
       color: 'danger'
     });
@@ -164,4 +220,47 @@ const viewMyReceipt = () => {
   // Could auto-fill if we stored receipt reference
   window.location.href = '/receipt';
 };
+
+// ─── Option Helpers ─────────────────────────────────────────────────────────
+
+type RawOption = string | { id?: string; text?: string; votes?: number };
+
+function tryParseOption(option: string): { text?: string } | null {
+  try {
+    const parsed = JSON.parse(option);
+    if (parsed && typeof parsed === 'object') {
+      return parsed;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function getOptionLabel(option: RawOption, index: number): string {
+  if (typeof option === 'string') {
+    const parsed = option.trim().startsWith('{') ? tryParseOption(option) : null;
+    if (parsed?.text) return parsed.text;
+    return option;
+  }
+  return option.text || `[Option ${index + 1}]`;
+}
+
+function getOptionValue(option: RawOption): string {
+  if (typeof option === 'string') {
+    const parsed = option.trim().startsWith('{') ? tryParseOption(option) : null;
+    if (parsed?.text) return parsed.text;
+    return option;
+  }
+  return option.text || option.id || '';
+}
+
+function getOptionKey(option: RawOption, index: number): string {
+  if (typeof option === 'string') {
+    const parsed = option.trim().startsWith('{') ? tryParseOption(option) : null;
+    if (parsed?.text) return `${index}-${parsed.text}`;
+    return `${index}-${option}`;
+  }
+  return option.id || `${index}`;
+}
 </script>

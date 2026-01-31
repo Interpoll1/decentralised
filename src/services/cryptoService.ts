@@ -1,6 +1,12 @@
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import * as bip39 from 'bip39';
+import { Buffer } from 'buffer';
+
+// Ensure Buffer exists in browser for bip39
+if (typeof (globalThis as any).Buffer === 'undefined') {
+  (globalThis as any).Buffer = Buffer;
+}
 
 export class CryptoService {
   // Hash any data

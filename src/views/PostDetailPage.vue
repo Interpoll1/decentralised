@@ -176,6 +176,7 @@ import {
 import { usePostStore } from '../stores/postStore';
 import { useCommentStore } from '../stores/commentStore';
 import { useCommunityStore } from '../stores/communityStore';
+import { useUserStore } from '../stores/userStore';
 import CommentCard from '../components/CommentCard.vue';
 import { Post } from '../services/postService';
 
@@ -184,6 +185,7 @@ const router = useRouter();
 const postStore = usePostStore();
 const commentStore = useCommentStore();
 const communityStore = useCommunityStore();
+const userStore = useUserStore();
 
 const post = ref<Post | null>(null);
 const isLoading = ref(true);
@@ -210,13 +212,31 @@ const allComments = computed(() => {
     return matchesPost && isTopLevel;
   });
   
-  console.log('📊 Top-level comments:', filtered.length, '| Total comments in store:', commentStore.comments.length);
+  console.log('Top-level comments:', filtered.length, '| Total comments in store:', commentStore.comments.length);
   
   return filtered;
 });
 
 const sortedComments = computed(() => {
-  return [...allComments.value].sort((a, b) => {
+  const minKarma = Number(localStorage.getItem('minUserKarma') || '-1000');
+
+  const visible = allComments.value.filter((c) => {
+    if (minKarma <= -1000) return true;
+
+    const authorId = c.authorId;
+    if (!authorId) return true;
+
+    const cached = userStore.getCachedKarma(authorId);
+    if (cached !== null) {
+      return cached >= minKarma;
+    }
+
+    // No profile yet: fetch in background and show for now
+    userStore.getProfile(authorId);
+    return true;
+  });
+
+  return visible.sort((a, b) => {
     if (b.score !== a.score) {
       return b.score - a.score;
     }
@@ -281,21 +301,21 @@ async function handleUpvote() {
       });
       await toast.present();
     } else {
-      await postStore.upvotePost(post.value.id);
-      
       const downvotedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
       if (downvotedPosts.includes(post.value.id)) {
         await postStore.removeDownvote(post.value.id);
         const filtered = downvotedPosts.filter((id: string) => id !== post.value!.id);
         localStorage.setItem('downvoted-posts', JSON.stringify(filtered));
       }
-      
+
+      await postStore.upvotePost(post.value.id);
+
       const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
       votedPosts.push(post.value.id);
       localStorage.setItem('upvoted-posts', JSON.stringify(votedPosts));
       
       const toast = await toastController.create({
-        message: '👍 Upvoted!',
+        message: 'Upvoted',
         duration: 1500,
         color: 'success'
       });
@@ -326,21 +346,21 @@ async function handleDownvote() {
       });
       await toast.present();
     } else {
-      await postStore.downvotePost(post.value.id);
-      
       const upvotedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
       if (upvotedPosts.includes(post.value.id)) {
         await postStore.removeUpvote(post.value.id);
         const filtered = upvotedPosts.filter((id: string) => id !== post.value!.id);
         localStorage.setItem('upvoted-posts', JSON.stringify(filtered));
       }
-      
+
+      await postStore.downvotePost(post.value.id);
+
       const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
       votedPosts.push(post.value.id);
       localStorage.setItem('downvoted-posts', JSON.stringify(votedPosts));
       
       const toast = await toastController.create({
-        message: '👎 Downvoted',
+        message: 'Downvoted',
         duration: 1500,
         color: 'warning'
       });
@@ -366,7 +386,7 @@ async function submitComment() {
     newCommentText.value = '';
     
     const toast = await toastController.create({
-      message: '💬 Comment posted!',
+      message: 'Comment posted',
       duration: 2000,
       color: 'success'
     });
@@ -393,7 +413,7 @@ async function handleCommentUpvote(comment: any) {
     await commentStore.upvoteComment(comment.id);
     
     const toast = await toastController.create({
-      message: '👍 Comment upvoted',
+      message: 'Comment upvoted',
       duration: 1500,
       color: 'success'
     });
@@ -408,7 +428,7 @@ async function handleCommentDownvote(comment: any) {
     await commentStore.downvoteComment(comment.id);
     
     const toast = await toastController.create({
-      message: '👎 Comment downvoted',
+      message: 'Comment downvoted',
       duration: 1500,
       color: 'warning'
     });

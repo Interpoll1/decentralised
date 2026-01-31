@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+gun-relay-server/radata
+gun-relay-server/radata/!
+gun-relay-server/radata/%1C
+gun-relay-server/radata/!

@@ -20,6 +20,8 @@ export interface Poll {
   expiresAt: number;
   allowMultipleChoices: boolean;
   showResultsBeforeVoting: boolean;
+  requireLogin: boolean;
+  isPrivate: boolean;
   totalVotes: number;
   isExpired: boolean;
 }
@@ -47,6 +49,9 @@ export class PollService {
     durationDays: number;
     allowMultipleChoices: boolean;
     showResultsBeforeVoting: boolean;
+    requireLogin: boolean;
+    isPrivate: boolean;
+    inviteCodeCount?: number;
   }): Promise<Poll> {
     const pollId = `poll-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
     const now = Date.now();
@@ -71,6 +76,8 @@ export class PollService {
       expiresAt,
       allowMultipleChoices: data.allowMultipleChoices,
       showResultsBeforeVoting: data.showResultsBeforeVoting,
+      requireLogin: !!data.requireLogin,
+      isPrivate: !!data.isPrivate,
       totalVotes: 0,
       isExpired: false,
     };
@@ -87,6 +94,8 @@ export class PollService {
       expiresAt: poll.expiresAt,
       allowMultipleChoices: poll.allowMultipleChoices,
       showResultsBeforeVoting: poll.showResultsBeforeVoting,
+      requireLogin: poll.requireLogin,
+      isPrivate: poll.isPrivate,
       totalVotes: 0,
       isExpired: false,
     };
@@ -107,6 +116,38 @@ export class PollService {
 
     await this.putPromise(communityPolls.get(pollId), gunPoll);
     await this.putPromise(communityPolls.get(pollId).get('options'), optionsMap);
+
+    // ─────────────────────────────────────────────
+    // Private poll invite codes (one-vote-per-code)
+    // ─────────────────────────────────────────────
+
+    if (poll.isPrivate) {
+      const inviteCount = Math.max(1, Math.min(200, Number(data.inviteCodeCount ?? 20)));
+      const inviteCodes = this.generateInviteCodes(inviteCount);
+
+      const codesMap: Record<string, any> = {};
+      inviteCodes.forEach((code, index) => {
+        codesMap[index] = { code, used: false };
+      });
+
+      await this.putPromise(this.getPollPath(pollId).get('inviteCodes'), codesMap);
+      await this.putPromise(communityPolls.get(pollId).get('inviteCodes'), codesMap);
+
+      // Also index by code for simpler, reliable lookups
+      const mainByCode = this.getPollPath(pollId).get('inviteCodesByCode');
+      const communityByCode = communityPolls.get(pollId).get('inviteCodesByCode');
+
+      for (const rawCode of inviteCodes) {
+        const codeKey = rawCode.trim().toUpperCase();
+        await Promise.all([
+          this.putPromise(mainByCode.get(codeKey), { used: false }),
+          this.putPromise(communityByCode.get(codeKey), { used: false }),
+        ]);
+      }
+
+      // Return codes to caller so they can be shared immediately
+      (poll as any).inviteCodes = inviteCodes;
+    }
 
     return poll;
   }
@@ -140,6 +181,28 @@ export class PollService {
           onPoll(poll);
         });
       });
+  }
+
+  static async getPollById(pollId: string): Promise<Poll | null> {
+    return new Promise<Poll | null>((resolve) => {
+      this.getPollPath(pollId).once(async (data: any) => {
+        if (!data?.id || !data?.question) {
+          resolve(null);
+          return;
+        }
+
+        const communityId = data.communityId || (await this.getCommunityId(pollId));
+        const options = await this.loadPollOptions(pollId, communityId);
+
+        const poll: Poll = {
+          ...this.mapPollMetadata(data, communityId),
+          options: options ?? [],
+          isExpired: Date.now() > (data.expiresAt ?? 0),
+        };
+
+        resolve(poll);
+      });
+    });
   }
 
   static async getAllPollsInCommunity(communityId: string): Promise<Poll[]> {
@@ -190,6 +253,156 @@ export class PollService {
     // Increment total
     const total = await this.getNumber(mainPath.get('totalVotes'));
     await this.putBoth(mainPath, commPath, 'totalVotes', total + optionIds.length);
+  }
+
+  // ─── Private Poll Access Codes ────────────────────────────────────────────
+
+  /**
+   * Consume an invite code for a private poll.
+   *
+   * Ensures the code exists and has not been used yet, then marks it as used
+   * so it cannot be used again. Throws an error if the code is invalid or
+   * already consumed.
+   */
+  static async consumeInviteCode(pollId: string, code: string): Promise<void> {
+    const communityId = await this.getCommunityId(pollId);
+    if (!communityId) throw new Error('Community ID not found');
+    const normalized = code.trim().toUpperCase();
+    const pollPath = this.getPollPath(pollId);
+    const communityPath = this.getCommunityPollPath(communityId, pollId);
+
+    const mainByCode = pollPath.get('inviteCodesByCode').get(normalized);
+    const communityByCode = communityPath.get('inviteCodesByCode').get(normalized);
+
+    // Try direct by-code lookup first (new format)
+    const entry = await this.lookupByCode(mainByCode, communityByCode);
+
+    if (entry && entry.used) {
+      throw new Error('Invite code already used');
+    }
+
+    if (entry) {
+      await Promise.all([
+        this.putPromise(mainByCode.get('used'), true),
+        this.putPromise(communityByCode.get('used'), true),
+      ]);
+      return;
+    }
+
+    // Fallback: old numeric-indexed map (inviteCodes)
+    const legacyEntry = await this.lookupLegacyCode(pollPath, communityPath, normalized);
+    if (!legacyEntry) {
+      throw new Error('Invalid invite code');
+    }
+    if (legacyEntry.used) {
+      throw new Error('Invite code already used');
+    }
+
+    // Mark used in both legacy map and by-code map to keep future lookups simple
+    const { key, nodeMain, nodeComm } = legacyEntry;
+
+    await Promise.all([
+      this.putPromise(nodeMain.get(key).get('used'), true),
+      this.putPromise(nodeComm.get(key).get('used'), true),
+      this.putPromise(mainByCode.get('used'), true),
+      this.putPromise(communityByCode.get('used'), true),
+    ]);
+  }
+
+  /**
+   * Retrieve invite codes with their used status. Tries by-code index first, then legacy map.
+   */
+  static async getInviteCodes(pollId: string): Promise<{ code: string; used: boolean }[]> {
+    const communityId = await this.getCommunityId(pollId);
+    if (!communityId) return [];
+
+    const pollPath = this.getPollPath(pollId);
+    const communityPath = this.getCommunityPollPath(communityId, pollId);
+
+    // New format
+    const byCodeNode = pollPath.get('inviteCodesByCode');
+    const listByCode: { code: string; used: boolean }[] = await new Promise((resolve) => {
+      byCodeNode.once((data: any) => {
+        if (!data || typeof data !== 'object') return resolve([]);
+        const items: { code: string; used: boolean }[] = [];
+        for (const key of Object.keys(data)) {
+          if (key.startsWith('_')) continue;
+          const entry = data[key];
+          if (entry && typeof entry === 'object') {
+            items.push({ code: key, used: !!entry.used });
+          }
+        }
+        resolve(items);
+      });
+    });
+
+    if (listByCode.length > 0) return listByCode;
+
+    // Legacy format fallback
+    const legacyNode = pollPath.get('inviteCodes');
+    const legacy: { code: string; used: boolean }[] = await new Promise((resolve) => {
+      legacyNode.once((data: any) => {
+        if (!data || typeof data !== 'object') return resolve([]);
+        const items: { code: string; used: boolean }[] = [];
+        for (const key of Object.keys(data)) {
+          if (key.startsWith('_')) continue;
+          const entry = data[key];
+          if (entry && typeof entry === 'object' && 'code' in entry) {
+            items.push({ code: String(entry.code), used: !!entry.used });
+          }
+        }
+        resolve(items);
+      });
+    });
+
+    return legacy;
+  }
+
+  private static async lookupByCode(mainNode: any, communityNode: any): Promise<any | null> {
+    const mainEntry: any = await new Promise((resolve) =>
+      mainNode.once((v: any) => resolve(v ?? null)),
+    );
+    if (mainEntry && typeof mainEntry === 'object') return mainEntry;
+
+    const commEntry: any = await new Promise((resolve) =>
+      communityNode.once((v: any) => resolve(v ?? null)),
+    );
+    if (commEntry && typeof commEntry === 'object') return commEntry;
+    return null;
+  }
+
+  private static async lookupLegacyCode(
+    pollPath: any,
+    communityPath: any,
+    normalized: string,
+  ): Promise<{ key: string; used: boolean; nodeMain: any; nodeComm: any } | null> {
+    const mainCodes = pollPath.get('inviteCodes');
+    const commCodes = communityPath.get('inviteCodes');
+
+    const load = (node: any) => new Promise<any>((resolve) => node.once((v: any) => resolve(v || {})));
+
+    let data = await load(mainCodes);
+    if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
+      data = await load(commCodes);
+    }
+
+    if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
+      return null;
+    }
+
+    const keys = Object.keys(data).filter((k) => !k.startsWith('_'));
+    for (const key of keys) {
+      const entry = data[key];
+      const entryCode =
+        entry && typeof entry === 'object' && 'code' in entry ? String(entry.code).trim().toUpperCase() : null;
+      const entryUsed = entry && typeof entry === 'object' && 'used' in entry ? Boolean(entry.used) : false;
+      if (!entryCode) continue;
+      if (entryCode === normalized) {
+        return { key, used: entryUsed, nodeMain: mainCodes, nodeComm: commCodes };
+      }
+    }
+
+    return null;
   }
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -258,6 +471,8 @@ export class PollService {
       expiresAt: data.expiresAt || Date.now(),
       allowMultipleChoices: !!data.allowMultipleChoices,
       showResultsBeforeVoting: !!data.showResultsBeforeVoting,
+      requireLogin: !!data.requireLogin,
+      isPrivate: !!data.isPrivate,
       totalVotes: data.totalVotes || 0,
     };
   }
@@ -275,5 +490,16 @@ export class PollService {
     });
 
     await Promise.all([this.putPromise(main, value), this.putPromise(comm, value)]);
+  }
+
+  private static generateInviteCodes(count: number): string[] {
+    const codes = new Set<string>();
+
+    while (codes.size < count) {
+      const raw = Math.random().toString(36).slice(2, 10).toUpperCase();
+      codes.add(raw);
+    }
+
+    return Array.from(codes);
   }
 }

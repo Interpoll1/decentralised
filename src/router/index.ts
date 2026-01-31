@@ -64,6 +64,18 @@ const routes: Array<RouteRecordRaw> = [
     component: () => import('../views/ChainExplorerPage.vue')
   },
   {
+    path: '/vote/:pollId',
+    name: 'Vote',
+    component: () => import('../views/VotePage.vue'),
+    props: true,
+  },
+  {
+    path: '/results/:pollId',
+    name: 'Results',
+    component: () => import('../views/ResultsPage.vue'),
+    props: true,
+  },
+  {
     path: '/receipt/:mnemonic?',
     name: 'Receipt',
     component: () => import('../views/ReceiptPage.vue')
@@ -80,9 +92,8 @@ const router = createRouter({
   routes
 });
 
-// Navigation guard for debugging
 router.beforeEach((to, from, next) => {
-  console.log(`🧭 Navigating from ${from.path} to ${to.path}`);
+  console.log(`Navigating from ${from.path} to ${to.path}`);
   next();
 });
 

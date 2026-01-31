@@ -70,6 +70,9 @@ export const usePollStore = defineStore('poll', () => {
     durationDays: number;
     allowMultipleChoices: boolean;
     showResultsBeforeVoting: boolean;
+    requireLogin: boolean;
+    isPrivate: boolean;
+    inviteCodeCount?: number;
   }) {
     const user = await UserService.getCurrentUser();
 
@@ -112,6 +115,27 @@ export const usePollStore = defineStore('poll', () => {
     }
   }
 
+  // Load a single poll by id (used on the vote page)
+  async function selectPoll(pollId: string) {
+    isLoading.value = true;
+    try {
+      const existing = polls.value.find((p) => p.id === pollId);
+      if (existing) {
+        currentPoll.value = existing;
+        return;
+      }
+
+      const poll = await PollService.getPollById(pollId);
+      currentPoll.value = poll;
+
+      if (poll && !polls.value.some((p) => p.id === poll.id)) {
+        polls.value.push(poll);
+      }
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
   // ─────────────────────────────────────────────
   // Public API
   // ─────────────────────────────────────────────
@@ -130,5 +154,6 @@ export const usePollStore = defineStore('poll', () => {
     loadPollsForCommunity,
     createPoll,
     voteOnPoll,
+    selectPoll,
   };
 });

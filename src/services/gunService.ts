@@ -12,7 +12,7 @@ export class GunService {
       return this.gun;
     }
 
-    console.log('🔫 Initializing GunDB...');
+    console.log('Initializing GunDB...');
 
     try {
       // Initialize Gun with relay server
@@ -25,7 +25,7 @@ export class GunService {
       this.user = this.gun.user();
       this.isInitialized = true;
 
-      console.log('✅ GunDB initialized successfully');
+      console.log('GunDB initialized successfully');
 
       // Monitor connections (but don't spam)
       let lastPeerCount = -1;
@@ -33,7 +33,7 @@ export class GunService {
         try {
           const peerCount = Object.keys(this.gun?._.opt?.peers || {}).length;
           if (peerCount !== lastPeerCount) {
-            console.log(`🔫 Gun peers: ${peerCount}`);
+            console.log(`Gun peers: ${peerCount}`);
             lastPeerCount = peerCount;
           }
         } catch (e) {
@@ -43,14 +43,14 @@ export class GunService {
 
       return this.gun;
     } catch (error) {
-      console.error('❌ Gun initialization error:', error);
+      console.error('Gun initialization error:', error);
       throw error;
     }
   }
 
   static getGun() {
     if (!this.gun) {
-      console.log('⚠️ Gun not initialized, initializing now...');
+      console.log('Gun not initialized, initializing now...');
       return this.initialize();
     }
     return this.gun;
@@ -131,7 +131,7 @@ export class GunService {
     if (this.gun) {
       // Gun doesn't have a formal cleanup, but we can reset
       this.isInitialized = false;
-      console.log('🧹 Gun cleaned up');
+      console.log('Gun cleaned up');
     }
   }
 }

@@ -214,7 +214,7 @@ const createCommunity = async () => {
     });
 
     const toast = await toastController.create({
-      message: '✅ Community created successfully!',
+      message: 'Community created successfully',
       duration: 2000,
       color: 'success'
     });
@@ -226,7 +226,7 @@ const createCommunity = async () => {
     console.error('Error creating community:', error);
     
     const toast = await toastController.create({
-      message: '❌ Failed to create community',
+      message: 'Failed to create community',
       duration: 3000,
       color: 'danger'
     });

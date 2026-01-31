@@ -72,6 +72,17 @@
           <ion-icon slot="start" :icon="shield"></ion-icon>
           {{ chainStore.isValidating ? 'Validating...' : 'Validate Chain' }}
         </ion-button>
+
+        <ion-button
+          expand="block"
+          size="small"
+          color="danger"
+          fill="outline"
+          @click="handleResetChain"
+        >
+          <ion-icon slot="start" :icon="warningOutline"></ion-icon>
+          Reset Chain
+        </ion-button>
       </div>
     </ion-card-content>
   </ion-card>
@@ -86,9 +97,11 @@ import {
   IonCardContent,
   IonBadge,
   IonButton,
-  IonIcon
+  IonIcon,
+  alertController,
+  toastController,
 } from '@ionic/vue';
-import { checkmarkCircle, closeCircle, shield } from 'ionicons/icons';
+import { checkmarkCircle, closeCircle, shield, warningOutline } from 'ionicons/icons';
 import { useChainStore } from '../stores/chainStore';
 
 const chainStore = useChainStore();
@@ -101,5 +114,32 @@ const truncateHash = (hash?: string) => {
 const handleValidateChain = async () => {
   await chainStore.validateChain();
   await nextTick();
+};
+
+const handleResetChain = async () => {
+  const alert = await alertController.create({
+    header: 'Reset Local Chain',
+    message:
+      'This will clear all local blocks, votes, and receipts, then create a fresh genesis block. This cannot be undone.',
+    buttons: [
+      { text: 'Cancel', role: 'cancel' },
+      {
+        text: 'Reset',
+        role: 'destructive',
+        handler: async () => {
+          await chainStore.resetChain();
+
+          const toast = await toastController.create({
+            message: 'Chain reset locally',
+            duration: 2000,
+            color: 'success',
+          });
+          await toast.present();
+        },
+      },
+    ],
+  });
+
+  await alert.present();
 };
 </script>

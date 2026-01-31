@@ -185,6 +185,7 @@ import {
 import { useCommunityStore } from '../stores/communityStore';
 import { usePostStore } from '../stores/postStore';
 import { usePollStore } from '../stores/pollStore';
+import { useUserStore } from '../stores/userStore';
 import PostCard from '../components/PostCard.vue';
 import PollCard from '../components/PollCard.vue';
 import { Post } from '../services/postService';
@@ -195,6 +196,7 @@ const router = useRouter();
 const communityStore = useCommunityStore();
 const postStore = usePostStore();
 const pollStore = usePollStore();
+const userStore = useUserStore();
 
 const communityId = computed(() => route.params.communityId as string);
 const community = computed(() => communityStore.currentCommunity);
@@ -209,7 +211,8 @@ const communityPosts = computed(() => {
 });
 
 const communityPolls = computed(() => {
-  return pollStore.polls.filter(p => p.communityId === communityId.value);
+  // Hide private polls from the public community feed
+  return pollStore.polls.filter(p => p.communityId === communityId.value && !p.isPrivate);
 });
 
 const totalContentCount = computed(() => {
@@ -232,11 +235,29 @@ const displayedContent = computed(() => {
     });
   }
   
+  // Apply user karma filter (hide low-reputation authors locally)
+  const minKarma = Number(localStorage.getItem('minUserKarma') || '-1000');
+
+  const filteredByKarma = items.filter((item) => {
+    if (minKarma <= -1000) return true; // "Show everyone"
+
+    const authorId = item.data.authorId;
+    if (!authorId) return true;
+
+    const cached = userStore.getCachedKarma(authorId);
+    if (cached !== null) {
+      return cached >= minKarma;
+    }
+
+    // No cached profile yet: optimistically include and fetch in background
+    userStore.getProfile(authorId);
+    return true;
+  });
+
   // Sort by creation date (newest first)
-  return items.sort((a, b) => b.createdAt - a.createdAt);
+  return filteredByKarma.sort((a, b) => b.createdAt - a.createdAt);
 });
 
-// ✅ CHANGE 3: Add vote tracking functions
 function hasUpvoted(postId: string): boolean {
   const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
   return votedPosts.includes(postId);
@@ -247,9 +268,8 @@ function hasDownvoted(postId: string): boolean {
   return votedPosts.includes(postId);
 }
 
-// ✅ CHANGE 4: Add upvote handler function
 async function handleUpvote(post: Post) {
-  console.log('👍 Upvoting post:', post.id);
+  console.log('Upvoting post:', post.id);
   
   try {
     // Check if already upvoted
@@ -269,16 +289,16 @@ async function handleUpvote(post: Post) {
       });
       await toast.present();
     } else {
-      // Add upvote
-      await postStore.upvotePost(post.id);
-      
-      // Remove from downvoted if exists
+      // If previously downvoted, clear that first so we don't override the new upvote
       const downvotedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
       if (downvotedPosts.includes(post.id)) {
         await postStore.removeDownvote(post.id);
         const filtered = downvotedPosts.filter((id: string) => id !== post.id);
         localStorage.setItem('downvoted-posts', JSON.stringify(filtered));
       }
+
+      // Add upvote
+      await postStore.upvotePost(post.id);
       
       // Add to localStorage
       const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
@@ -286,7 +306,7 @@ async function handleUpvote(post: Post) {
       localStorage.setItem('upvoted-posts', JSON.stringify(votedPosts));
       
       const toast = await toastController.create({
-        message: '👍 Upvoted!',
+        message: 'Upvoted',
         duration: 1500,
         color: 'success'
       });
@@ -303,9 +323,8 @@ async function handleUpvote(post: Post) {
   }
 }
 
-// ✅ CHANGE 5: Add downvote handler function
 async function handleDownvote(post: Post) {
-  console.log('👎 Downvoting post:', post.id);
+  console.log('Downvoting post:', post.id);
   
   try {
     // Check if already downvoted
@@ -325,16 +344,16 @@ async function handleDownvote(post: Post) {
       });
       await toast.present();
     } else {
-      // Add downvote
-      await postStore.downvotePost(post.id);
-      
-      // Remove from upvoted if exists
+      // If previously upvoted, clear that first so we don't override the new downvote
       const upvotedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
       if (upvotedPosts.includes(post.id)) {
         await postStore.removeUpvote(post.id);
         const filtered = upvotedPosts.filter((id: string) => id !== post.id);
         localStorage.setItem('upvoted-posts', JSON.stringify(filtered));
       }
+
+      // Add downvote
+      await postStore.downvotePost(post.id);
       
       // Add to localStorage
       const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
@@ -342,7 +361,7 @@ async function handleDownvote(post: Post) {
       localStorage.setItem('downvoted-posts', JSON.stringify(votedPosts));
       
       const toast = await toastController.create({
-        message: '👎 Downvoted',
+        message: 'Downvoted',
         duration: 1500,
         color: 'warning'
       });

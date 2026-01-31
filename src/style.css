@@ -1,3 +1,23 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Basic light/dark theme bridge for Ionic + Tailwind */
+:root {
+	color-scheme: light;
+}
+
+body.dark {
+	color-scheme: dark;
+	--ion-background-color: #020617; /* slate-950 */
+	--ion-background-color-rgb: 2, 6, 23;
+	--ion-text-color: #e5e7eb; /* gray-200 */
+	--ion-text-color-rgb: 229, 231, 235;
+	--ion-card-background: #0f172a; /* slate-900 */
+	--ion-item-background: #020617;
+}
+
+body.dark ion-content,
+body.dark .ion-page {
+	background: var(--ion-background-color);
+}

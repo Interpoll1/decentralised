@@ -29,7 +29,7 @@ import { GunService } from './services/gunService';
 import { IPFSService } from './services/ipfsService';
 
 // Pre-initialize Gun (so it's ready when stores need it)
-console.log('🚀 Initializing P2P services...');
+console.log('Initializing P2P services...');
 GunService.initialize();
 IPFSService.initialize();
 
@@ -40,5 +40,5 @@ const app = createApp(App)
 
 router.isReady().then(() => {
   app.mount('#app');
-  console.log('✅ App mounted');
+  console.log('App mounted');
 });

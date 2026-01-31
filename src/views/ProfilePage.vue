@@ -261,7 +261,7 @@ async function saveProfile() {
     });
 
     const toast = await toastController.create({
-      message: '✅ Profile updated successfully',
+      message: 'Profile updated successfully',
       duration: 2000,
       color: 'success'
     });
@@ -273,7 +273,7 @@ async function saveProfile() {
     console.error('Error saving profile:', error);
     
     const toast = await toastController.create({
-      message: '❌ Failed to update profile',
+      message: 'Failed to update profile',
       duration: 2000,
       color: 'danger'
     });
@@ -316,7 +316,7 @@ async function handleAvatarChange(event: Event) {
     await loadingToast.dismiss();
 
     const toast = await toastController.create({
-      message: '✅ Avatar updated successfully',
+      message: 'Avatar updated successfully',
       duration: 2000,
       color: 'success'
     });
@@ -328,7 +328,7 @@ async function handleAvatarChange(event: Event) {
     console.error('Error uploading avatar:', error);
     
     const toast = await toastController.create({
-      message: '❌ Failed to upload avatar',
+      message: 'Failed to upload avatar',
       duration: 2000,
       color: 'danger'
     });
@@ -341,7 +341,7 @@ async function copyDeviceId() {
     await navigator.clipboard.writeText(deviceId.value);
     
     const toast = await toastController.create({
-      message: '✅ Device ID copied to clipboard',
+      message: 'Device ID copied to clipboard',
       duration: 1500,
       color: 'success'
     });

@@ -84,25 +84,25 @@ const truncatedContent = computed(() => {
 });
 
 function handleCardClick() {
-  console.log('📱 Card clicked, navigating to post detail:', props.post.id);
+  console.log('Card clicked, navigating to post detail:', props.post.id);
   router.push(`/post/${props.post.id}`);
 }
 
 function handleUpvote(event: Event) {
   event.stopPropagation();
-  console.log('👍 Upvote clicked:', props.post.id);
+  console.log('Upvote clicked:', props.post.id);
   emit('upvote');
 }
 
 function handleDownvote(event: Event) {
   event.stopPropagation();
-  console.log('👎 Downvote clicked:', props.post.id);
+  console.log('Downvote clicked:', props.post.id);
   emit('downvote');
 }
 
 function handleCommentsClick(event: Event) {
   event.stopPropagation();
-  console.log('💬 Comments clicked, navigating to post detail:', props.post.id);
+  console.log('Comments clicked, navigating to post detail:', props.post.id);
   router.push(`/post/${props.post.id}`);
 }
 

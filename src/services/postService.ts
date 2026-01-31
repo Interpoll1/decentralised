@@ -184,26 +184,92 @@ export class PostService {
   }
 
   static async voteOnPost(postId: string, direction: 'up' | 'down', userId: string): Promise<void> {
+    // Delegate to user-specific vote setter to avoid double-counting
+    await this.setUserVote(postId, direction, userId);
+  }
+
+  /**
+   * Remove a user's vote (up or down) from a post.
+   * This is used by the store when toggling votes off.
+   */
+  static async removeVote(postId: string, direction: 'up' | 'down', userId: string): Promise<void> {
+    await this.setUserVote(postId, 'none', userId);
+  }
+
+  /**
+   * Set a user's vote on a post to up, down, or none.
+   * Ensures that multiple clicks from the same user do not inflate counts.
+   */
+  private static async setUserVote(
+    postId: string,
+    direction: 'up' | 'down' | 'none',
+    userId: string,
+  ): Promise<void> {
+    const gun = GunService.getGun();
+
     const post = await this.getPost(postId);
     if (!post) return;
 
-    const upvoteChange = direction === 'up' ? 1 : 0;
-    const downvoteChange = direction === 'down' ? 1 : 0;
+    // Read previous vote state for this user
+    const prevDirection: 'up' | 'down' | 'none' = await new Promise((resolve) => {
+      gun
+        .get('postVotes')
+        .get(postId)
+        .get(userId)
+        .once((v: any) => {
+          if (v === 'up' || v === 'down') resolve(v);
+          else resolve('none');
+        });
+    });
 
-    const newUpvotes = post.upvotes + upvoteChange;
-    const newDownvotes = post.downvotes + downvoteChange;
-    const newScore = newUpvotes - newDownvotes;
+    if (prevDirection === direction) {
+      // No change; avoid double counting
+      return;
+    }
 
-    const gun = GunService.getGun();
+    let upvotes = post.upvotes || 0;
+    let downvotes = post.downvotes || 0;
 
-    await gun.get('posts').get(postId).get('upvotes').put(newUpvotes);
-    await gun.get('posts').get(postId).get('downvotes').put(newDownvotes);
-    await gun.get('posts').get(postId).get('score').put(newScore);
+    // Remove previous vote effect
+    if (prevDirection === 'up') upvotes = Math.max(0, upvotes - 1);
+    if (prevDirection === 'down') downvotes = Math.max(0, downvotes - 1);
 
-    await gun.get('communities').get(post.communityId).get('posts').get(postId).get('upvotes').put(newUpvotes);
-    await gun.get('communities').get(post.communityId).get('posts').get(postId).get('downvotes').put(newDownvotes);
-    await gun.get('communities').get(post.communityId).get('posts').get(postId).get('score').put(newScore);
+    // Apply new vote effect
+    if (direction === 'up') upvotes += 1;
+    if (direction === 'down') downvotes += 1;
 
-    // TODO: Add to blockchain for verification
+    const score = upvotes - downvotes;
+
+    await Promise.all([
+      gun.get('posts').get(postId).get('upvotes').put(upvotes),
+      gun.get('posts').get(postId).get('downvotes').put(downvotes),
+      gun.get('posts').get(postId).get('score').put(score),
+      gun
+        .get('communities')
+        .get(post.communityId)
+        .get('posts')
+        .get(postId)
+        .get('upvotes')
+        .put(upvotes),
+      gun
+        .get('communities')
+        .get(post.communityId)
+        .get('posts')
+        .get(postId)
+        .get('downvotes')
+        .put(downvotes),
+      gun
+        .get('communities')
+        .get(post.communityId)
+        .get('posts')
+        .get(postId)
+        .get('score')
+        .put(score),
+      gun
+        .get('postVotes')
+        .get(postId)
+        .get(userId)
+        .put(direction === 'none' ? null : direction),
+    ]);
   }
 }

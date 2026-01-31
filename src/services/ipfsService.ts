@@ -8,9 +8,9 @@ export class IPFSService {
 
   // Initialize (simplified - just use GunDB)
   static async initialize() {
-    console.log('🖼️ Initializing image storage (GunDB)...');
+    console.log('Initializing image storage (GunDB)...');
     this.isReady = true;
-    console.log('✅ Image storage ready');
+    console.log('Image storage ready');
   }
 
   // Upload image (returns hash, stores in GunDB)
@@ -52,7 +52,7 @@ export class IPFSService {
       uploadedAt: Date.now()
     });
 
-    console.log(`✅ Image uploaded: ${cid} (${(compressed.size / 1024).toFixed(0)} KB)`);
+    console.log(`Image uploaded: ${cid} (${(compressed.size / 1024).toFixed(0)} KB)`);
 
     return {
       cid: cid,
@@ -82,14 +82,14 @@ export class IPFSService {
   static async pin(cid: string) {
     const gun = GunService.getGun();
     await gun.get('images').get(cid).get('pinned').put(true);
-    console.log(`📌 Pinned: ${cid}`);
+    console.log(`Pinned: ${cid}`);
   }
 
   // Unpin content
   static async unpin(cid: string) {
     const gun = GunService.getGun();
     await gun.get('images').get(cid).get('pinned').put(false);
-    console.log(`📍 Unpinned: ${cid}`);
+    console.log(`Unpinned: ${cid}`);
   }
 
   // List pinned content

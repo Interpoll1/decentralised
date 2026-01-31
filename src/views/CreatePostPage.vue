@@ -224,7 +224,7 @@ const submitPost = async () => {
     });
 
     const toast = await toastController.create({
-      message: '✅ Post created successfully!',
+      message: 'Post created successfully',
       duration: 2000,
       color: 'success'
     });
@@ -241,7 +241,7 @@ const submitPost = async () => {
     console.error('Error creating post:', error);
     
     const toast = await toastController.create({
-      message: '❌ Failed to create post',
+      message: 'Failed to create post',
       duration: 3000,
       color: 'danger'
     });

@@ -57,7 +57,6 @@
         <div v-else-if="combinedFeed.length > 0" class="feed-list">
           <template v-for="item in combinedFeed" :key="`${item.type}-${item.data.id}`">
             <!-- Post Card -->
-            <!-- ✅ WITH UPVOTE/DOWNVOTE HANDLERS -->
             <PostCard 
               v-if="item.type === 'post'"
               :post="item.data"
@@ -445,7 +444,8 @@ const allPosts = computed(() => {
 });
 
 const allPolls = computed(() => {
-  return pollStore.sortedPolls || [];
+  // Hide private polls from the global home feed
+  return (pollStore.sortedPolls || []).filter(p => !p.isPrivate);
 });
 
 // Combined feed of posts and polls, sorted by creation date
@@ -484,7 +484,6 @@ const joinedCommunities = computed(() => {
   return communityStore.communities.filter(c => communityStore.isJoined(c.id));
 });
 
-// ✅ Vote tracking functions
 function hasUpvoted(postId: string): boolean {
   const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
   return votedPosts.includes(postId);
@@ -495,9 +494,8 @@ function hasDownvoted(postId: string): boolean {
   return votedPosts.includes(postId);
 }
 
-// ✅ Upvote handler
 async function handleUpvote(post: Post) {
-  console.log('👍 Upvoting post:', post.id);
+  console.log('Upvoting post:', post.id);
   
   try {
     // Check if already upvoted
@@ -517,16 +515,15 @@ async function handleUpvote(post: Post) {
       });
       await toast.present();
     } else {
-      // Add upvote
-      await postStore.upvotePost(post.id);
-      
-      // Remove from downvoted if exists
+      // If previously downvoted, clear that first to avoid wiping the new upvote
       const downvotedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
       if (downvotedPosts.includes(post.id)) {
         await postStore.removeDownvote(post.id);
         const filtered = downvotedPosts.filter((id: string) => id !== post.id);
         localStorage.setItem('downvoted-posts', JSON.stringify(filtered));
       }
+
+      await postStore.upvotePost(post.id);
       
       // Add to localStorage
       const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
@@ -534,7 +531,7 @@ async function handleUpvote(post: Post) {
       localStorage.setItem('upvoted-posts', JSON.stringify(votedPosts));
       
       const toast = await toastController.create({
-        message: '👍 Upvoted!',
+        message: 'Upvoted',
         duration: 1500,
         color: 'success'
       });
@@ -551,9 +548,8 @@ async function handleUpvote(post: Post) {
   }
 }
 
-// ✅ Downvote handler
 async function handleDownvote(post: Post) {
-  console.log('👎 Downvoting post:', post.id);
+  console.log('Downvoting post:', post.id);
   
   try {
     // Check if already downvoted
@@ -573,16 +569,15 @@ async function handleDownvote(post: Post) {
       });
       await toast.present();
     } else {
-      // Add downvote
-      await postStore.downvotePost(post.id);
-      
-      // Remove from upvoted if exists
+      // If previously upvoted, clear that first to avoid wiping the new downvote
       const upvotedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
       if (upvotedPosts.includes(post.id)) {
         await postStore.removeUpvote(post.id);
         const filtered = upvotedPosts.filter((id: string) => id !== post.id);
         localStorage.setItem('upvoted-posts', JSON.stringify(filtered));
       }
+
+      await postStore.downvotePost(post.id);
       
       // Add to localStorage
       const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
@@ -590,7 +585,7 @@ async function handleDownvote(post: Post) {
       localStorage.setItem('downvoted-posts', JSON.stringify(votedPosts));
       
       const toast = await toastController.create({
-        message: '👎 Downvoted',
+        message: 'Downvoted',
         duration: 1500,
         color: 'warning'
       });
@@ -622,19 +617,19 @@ function navigateToPoll(poll: Poll) {
 
 async function loadAllPosts() {
   if (hasLoadedPosts.value) {
-    console.log('📦 Posts already loaded, skipping...');
+    console.log('Posts already loaded, skipping');
     return;
   }
   
   if (communityStore.communities.length === 0) {
-    console.log('⚠️ No communities available to load content from');
+    console.log('No communities available to load content from');
     return;
   }
   
   isLoadingPosts.value = true;
   
   try {
-    console.log(`📡 Loading content from ${communityStore.communities.length} communities...`);
+    console.log(`Loading content from ${communityStore.communities.length} communities...`);
     
     // Load both posts and polls from all communities in parallel
     const loadPromises = communityStore.communities.flatMap(community => [
@@ -645,9 +640,9 @@ async function loadAllPosts() {
     await Promise.all(loadPromises);
     
     hasLoadedPosts.value = true;
-    console.log(`✅ Loaded ${postStore.posts.length} posts and ${pollStore.polls.length} polls`);
+    console.log(`Loaded ${postStore.posts.length} posts and ${pollStore.polls.length} polls`);
   } catch (error) {
-    console.error('❌ Error loading content:', error);
+    console.error('Error loading content:', error);
   } finally {
     isLoadingPosts.value = false;
   }
@@ -736,7 +731,7 @@ async function refreshStatus() {
 watch(() => communityStore.communities.length, async (newLength, oldLength) => {
   if (newLength > 0 && oldLength === 0 && !hasLoadedPosts.value) {
     // Communities just finished loading, now load posts
-    console.log('📡 Communities loaded, now loading posts...');
+    console.log('Communities loaded, now loading posts...');
     await loadAllPosts();
   }
 });
@@ -749,7 +744,7 @@ watch(activeTab, async (newTab) => {
 });
 
 onMounted(async () => {
-  console.log('📱 HomePage mounted');
+  console.log('HomePage mounted');
   
   // Initialize chain
   await chainStore.initialize();
