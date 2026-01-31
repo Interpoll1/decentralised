@@ -2,6 +2,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { Comment, CommentService } from '../services/commentService';
+import { generatePseudonym } from '../utils/pseudonym';
 
 // Helper function to get current user
 function getCurrentUser() {
@@ -121,7 +122,7 @@ export const useCommentStore = defineStore('comment', () => {
         postId: data.postId,
         communityId: data.communityId,
         authorId: currentUser.id,
-        authorName: currentUser.username,
+        authorName: generatePseudonym(data.postId, currentUser.id),
         content: data.content,
         parentId: data.parentId
       };

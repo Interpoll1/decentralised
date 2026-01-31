@@ -63,6 +63,32 @@ export class GunService {
     return this.user;
   }
 
+  static getPeerStats(): { isConnected: boolean; peerCount: number } {
+    if (typeof window === 'undefined') {
+      return { isConnected: false, peerCount: 0 };
+    }
+
+    if (!this.gun) {
+      try {
+        this.initialize();
+      } catch (_err) {
+        return { isConnected: false, peerCount: 0 };
+      }
+    }
+
+    try {
+      const peers = this.gun?._.opt?.peers || {};
+      const activePeers = Object.values(peers).filter((peer: any) => peer?.wire?.readyState === 1);
+
+      return {
+        isConnected: activePeers.length > 0,
+        peerCount: activePeers.length,
+      };
+    } catch (_error) {
+      return { isConnected: false, peerCount: 0 };
+    }
+  }
+
   // Helper: Safely put data
   static async put(path: string, data: any): Promise<void> {
     const gun = this.getGun();

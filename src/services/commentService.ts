@@ -3,6 +3,7 @@ import Gun from 'gun';
 import 'gun/sea';
 import { CryptoService } from './cryptoService';
 import { AuditService } from './auditService';
+import { PostService } from './postService';
 
 const gun = Gun({
   peers: ['http://localhost:8765/gun']
@@ -124,6 +125,15 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
           });
         } catch (error) {
           console.warn('Failed to log comment receipt (non-fatal):', error);
+        }
+      })();
+
+      // Bump comment count on the associated post (best-effort)
+      (async () => {
+        try {
+          await PostService.incrementCommentCount(data.postId, data.communityId);
+        } catch (err) {
+          console.warn('Failed to increment post comment count (non-fatal):', err);
         }
       })();
 

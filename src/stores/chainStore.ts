@@ -38,9 +38,9 @@ export const useChainStore = defineStore('chain', () => {
 
     setupSyncListeners();
 
-    setInterval(() => {
-      isWebSocketConnected.value = WebSocketService.getConnectionStatus();
-    }, 1000);
+    WebSocketService.onStatusChange(({ connected }) => {
+      isWebSocketConnected.value = connected;
+    });
 
     isInitialized.value = true;
   }

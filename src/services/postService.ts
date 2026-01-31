@@ -183,6 +183,33 @@ export class PostService {
     });
   }
 
+  static async incrementCommentCount(postId: string, communityId: string): Promise<void> {
+    const gun = GunService.getGun();
+
+    const current = await new Promise<number>((resolve) => {
+      let resolved = false;
+      gun.get('posts').get(postId).get('commentCount').once((val: any) => {
+        if (!resolved) {
+          resolved = true;
+          resolve(typeof val === 'number' ? val : Number(val) || 0);
+        }
+      });
+      setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          resolve(0);
+        }
+      }, 500);
+    });
+
+    const next = current + 1;
+
+    await Promise.all([
+      gun.get('posts').get(postId).get('commentCount').put(next),
+      gun.get('communities').get(communityId).get('posts').get(postId).get('commentCount').put(next),
+    ]);
+  }
+
   static async voteOnPost(postId: string, direction: 'up' | 'down', userId: string): Promise<void> {
     // Delegate to user-specific vote setter to avoid double-counting
     await this.setUserVote(postId, direction, userId);

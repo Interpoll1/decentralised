@@ -2,7 +2,7 @@
   <div class="comment-card">
     <!-- Comment Header -->
     <div class="comment-header">
-      <span class="author-name">u/{{ comment.authorName }}</span>
+      <span class="author-name">u/{{ displayName }}</span>
       <span class="separator">•</span>
       <span class="timestamp">{{ formatTime(comment.createdAt) }}</span>
       <span v-if="comment.edited" class="edited-label">(edited)</span>
@@ -97,8 +97,9 @@ import {
   trendingUpOutline,
   sendOutline,
 } from 'ionicons/icons';
-import { Comment } from '../services/commentService';
 import { useCommentStore } from '../stores/commentStore';
+import { Comment } from '../services/commentService';
+import { generatePseudonym } from '../utils/pseudonym';
 
 const props = defineProps<{
   comment: Comment;
@@ -111,6 +112,13 @@ defineEmits(['upvote', 'downvote']);
 const commentStore = useCommentStore();
 const showReplyForm = ref(false);
 const replyText = ref('');
+
+const displayName = computed(() => {
+  if (props.comment?.authorId && props.postId) {
+    return generatePseudonym(props.postId, props.comment.authorId);
+  }
+  return props.comment.authorName || 'anon';
+});
 
 const hasUpvoted = computed(() => {
   const votedComments = JSON.parse(localStorage.getItem('upvoted-comments') || '[]');

@@ -14,6 +14,8 @@ export class WebSocketService {
   private static maxReconnectAttempts = 10;
   private static reconnectDelay = 3000;
   private static messageQueue: any[] = [];
+  private static peers: Set<string> = new Set();
+  private static statusListeners: Set<(status: { connected: boolean; peerCount: number }) => void> = new Set();
 
   private static RELAY_URL = 'ws://localhost:8080';
 
@@ -28,6 +30,10 @@ export class WebSocketService {
       this.ws.onopen = () => {
         this.isConnected = true;
         this.reconnectAttempts = 0;
+
+        // Assume at least our own peer is present while waiting for the first peer list
+        this.peers.add(this.peerId);
+        this.notifyStatus();
 
         this.sendToRelay('register', { peerId: this.peerId });
 
@@ -52,10 +58,18 @@ export class WebSocketService {
           }
           
           if (message.type === 'peer-list') {
+            if (Array.isArray(message.peers)) {
+              this.peers = new Set(message.peers.filter(Boolean));
+              this.notifyStatus();
+            }
             return;
           }
 
           if (message.type === 'peer-left') {
+            if (message.peerId) {
+              this.peers.delete(message.peerId);
+              this.notifyStatus();
+            }
             return;
           }
 
@@ -74,6 +88,8 @@ export class WebSocketService {
 
       this.ws.onclose = () => {
         this.isConnected = false;
+        this.peers.clear();
+        this.notifyStatus();
 
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
           this.reconnectAttempts++;
@@ -116,6 +132,20 @@ export class WebSocketService {
     return this.isConnected;
   }
 
+  static getPeerCount(): number {
+    const totalPeers = this.peers.size || (this.isConnected ? 1 : 0);
+    return Math.max(0, totalPeers - 1);
+  }
+
+  static onStatusChange(callback: (status: { connected: boolean; peerCount: number }) => void): () => void {
+    this.statusListeners.add(callback);
+    callback({ connected: this.isConnected, peerCount: this.getPeerCount() });
+
+    return () => {
+      this.statusListeners.delete(callback);
+    };
+  }
+
   static cleanup() {
     if (this.ws) {
       this.ws.close();
@@ -123,5 +153,18 @@ export class WebSocketService {
     }
     this.callbacks.clear();
     this.isConnected = false;
+    this.peers.clear();
+    this.statusListeners.clear();
+  }
+
+  private static notifyStatus() {
+    const snapshot = { connected: this.isConnected, peerCount: this.getPeerCount() };
+    this.statusListeners.forEach((listener) => {
+      try {
+        listener(snapshot);
+      } catch (_err) {
+        // Ignore listener errors to avoid breaking status propagation
+      }
+    });
   }
 }
