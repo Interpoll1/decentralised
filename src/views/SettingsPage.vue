@@ -128,7 +128,8 @@
           <ion-list>
             <ion-item>
               <ion-toggle v-model="isDarkMode" @ionChange="toggleDarkMode">
-                Enable dark mode
+                <span v-if="!isDarkMode">Enable dark mode</span>
+                <span v-else>Disable dark mode</span>
               </ion-toggle>
             </ion-item>
           </ion-list>

@@ -5,6 +5,15 @@
 /* Basic light/dark theme bridge for Ionic + Tailwind */
 :root {
 	color-scheme: light;
+	--ion-background-color: #f8fafc; /* slate-50 */
+	--ion-background-color-rgb: 248, 250, 252;
+	--ion-text-color: #0f172a; /* slate-900 */
+	--ion-text-color-rgb: 15, 23, 42;
+	--ion-card-background: rgba(255,255,255,0.7);
+	--ion-item-background: rgba(255,255,255,0.5);
+	--glass-blur: 16px;
+	--glass-bg: rgba(255,255,255,0.25);
+	--glass-border: rgba(255,255,255,0.3);
 }
 
 body.dark {
@@ -13,11 +22,17 @@ body.dark {
 	--ion-background-color-rgb: 2, 6, 23;
 	--ion-text-color: #e5e7eb; /* gray-200 */
 	--ion-text-color-rgb: 229, 231, 235;
-	--ion-card-background: #0f172a; /* slate-900 */
-	--ion-item-background: #020617;
+	--ion-card-background: rgba(30,41,59,0.7); /* slate-800 glass */
+	--ion-item-background: rgba(15,23,42,0.5);
+	--glass-blur: 18px;
+	--glass-bg: rgba(30,41,59,0.25);
+	--glass-border: rgba(51,65,85,0.3);
 }
 
-body.dark ion-content,
-body.dark .ion-page {
+body,
+.ion-page {
 	background: var(--ion-background-color);
+	color: var(--ion-text-color);
 }
+
+/* Liquid Glass (Glassmorphism) Utility Class */

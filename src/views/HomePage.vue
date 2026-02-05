@@ -68,7 +68,6 @@
               @downvote="handleDownvote(item.data)"
               @comments="navigateToPost(item.data)"
             />
-            
             <!-- Poll Card -->
             <PollCard 
               v-else-if="item.type === 'poll'"

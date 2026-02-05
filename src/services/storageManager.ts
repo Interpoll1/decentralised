@@ -1,6 +1,3 @@
-// src/services/storageManager.ts
-// Manages storage limits and prunes old data
-
 import { StorageService } from './storageService';
 
 export class StorageManager {
@@ -9,6 +6,24 @@ export class StorageManager {
   private static readonly MAX_BLOCKS = 1000; // Keep last 1000 blocks
   private static readonly MAX_RECEIPTS = 500; // Keep last 500 receipts
   private static readonly POLL_RETENTION_DAYS = 30; // Delete polls older than 30 days
+
+  // Clear all local storage data
+  static async clearAll() {
+    if (window.localStorage) {
+      localStorage.clear();
+    }
+    if (window.indexedDB) {
+      // Delete all IndexedDB databases (best effort)
+      const dbs = await indexedDB.databases?.();
+      if (dbs && Array.isArray(dbs)) {
+        for (const db of dbs) {
+          if (db.name) indexedDB.deleteDatabase(db.name);
+        }
+      }
+    }
+    // Optionally, clear any other storage mechanisms here
+    console.log('All local storage cleared');
+  }
   
   // Check storage usage
   static async getStorageInfo() {
