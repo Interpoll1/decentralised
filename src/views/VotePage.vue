@@ -90,7 +90,6 @@ import { usePollStore } from '../stores/pollStore';
 import VoteForm from '../components/VoteForm.vue';
 import { AuditService } from '../services/auditService';
 import { useChainStore } from '../stores/chainStore';
-import config from '../config';
 
 const route = useRoute();
 const router = useRouter();
@@ -113,6 +112,10 @@ onMounted(async () => {
     const pollId = route.params.pollId as string;
     await pollStore.selectPoll(pollId);
 
+    // Use cached user first for instant UI, then validate against backend
+    const cached = AuditService.getCachedUser();
+    isAuthenticated.value = !!cached;
+
     const user = await AuditService.getCloudUser();
     isAuthenticated.value = !!user;
 
@@ -132,10 +135,10 @@ const handleVoteSubmitted = (mnemonic: string) => {
 };
 
 const loginWithGoogle = () => {
-  window.open(config.auth.googleStart, '_blank', 'noopener,noreferrer');
+  AuditService.login('google');
 };
 
 const loginWithMicrosoft = () => {
-  window.open(config.auth.microsoftStart, '_blank', 'noopener,noreferrer');
+  AuditService.login('microsoft');
 };
 </script>

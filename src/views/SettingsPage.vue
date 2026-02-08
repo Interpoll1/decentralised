@@ -105,15 +105,24 @@
               Edit Profile
             </ion-button>
 
-            <ion-button expand="block" class="mt-2" fill="outline" color="dark" @click="loginWithGoogle">
-              <ion-icon slot="start" :icon="logoGoogle"></ion-icon>
-              Sign in with Google
-            </ion-button>
+            <template v-if="cloudUser">
+              <ion-button expand="block" class="mt-2" fill="outline" color="danger" @click="handleLogout">
+                <ion-icon slot="start" :icon="logOutOutline"></ion-icon>
+                Sign Out ({{ cloudUser.provider }})
+              </ion-button>
+            </template>
 
-            <ion-button expand="block" class="mt-2" fill="outline" color="tertiary" @click="loginWithMicrosoft">
-              <ion-icon slot="start" :icon="logoMicrosoft"></ion-icon>
-              Sign in with Microsoft
-            </ion-button>
+            <template v-else>
+              <ion-button expand="block" class="mt-2" fill="outline" color="dark" @click="loginWithGoogle">
+                <ion-icon slot="start" :icon="logoGoogle"></ion-icon>
+                Sign in with Google
+              </ion-button>
+
+              <ion-button expand="block" class="mt-2" fill="outline" color="tertiary" @click="loginWithMicrosoft">
+                <ion-icon slot="start" :icon="logoMicrosoft"></ion-icon>
+                Sign in with Microsoft
+              </ion-button>
+            </template>
           </ion-card-content>
         </ion-card>
       </div>
@@ -544,7 +553,8 @@ import {
   logoMicrosoft,
   globeOutline,
   swapHorizontalOutline,
-  serverOutline
+  serverOutline,
+  logOutOutline
 } from 'ionicons/icons';
 import { PinningService } from '../services/pinningService';
 import { StorageManager } from '../services/storageManager';
@@ -748,7 +758,12 @@ onMounted(async () => {
   await loadPolicy();
   userProfile.value = await UserService.getCurrentUser();
   deviceId.value = await VoteTrackerService.getDeviceId();
-  cloudUser.value = await AuditService.getCloudUser();
+
+  // Show cached user immediately, then validate against backend
+  cloudUser.value = AuditService.getCachedUser();
+  AuditService.getCloudUser().then(user => {
+    cloudUser.value = user;
+  });
 
   const storedTheme = localStorage.getItem('theme');
   if (storedTheme === 'dark') {
@@ -932,11 +947,23 @@ const confirmClearAll = async () => {
 };
 
 const loginWithGoogle = () => {
-  window.open(config.auth.googleStart, '_blank', 'noopener,noreferrer');
+  AuditService.login('google');
 };
 
 const loginWithMicrosoft = () => {
-  window.open(config.auth.microsoftStart, '_blank', 'noopener,noreferrer');
+  AuditService.login('microsoft');
+};
+
+const handleLogout = async () => {
+  await AuditService.logout();
+  cloudUser.value = null;
+
+  const toast = await toastController.create({
+    message: 'Signed out',
+    duration: 2000,
+    color: 'success'
+  });
+  await toast.present();
 };
 </script>
 

@@ -26,9 +26,13 @@ import router from './router';
 
 import { GunService } from './services/gunService';
 import { IPFSService } from './services/ipfsService';
+import { AuditService } from './services/auditService';
 
 GunService.initialize();
 IPFSService.initialize();
+
+// Validate cached auth session against the backend (non-blocking)
+AuditService.getCloudUser();
 
 const app = createApp(App)
   .use(IonicVue)

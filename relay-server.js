@@ -234,7 +234,7 @@ server.on('request', (req, res) => {
           };
 
           setSessionCookie(res, user);
-          res.writeHead(302, { Location: `${FRONTEND_ORIGIN}/home` });
+          res.writeHead(302, { Location: `${FRONTEND_ORIGIN}/auth/callback` });
           res.end();
           return;
         }
@@ -262,7 +262,7 @@ server.on('request', (req, res) => {
           };
 
           setSessionCookie(res, user);
-          res.writeHead(302, { Location: `${FRONTEND_ORIGIN}/home` });
+          res.writeHead(302, { Location: `${FRONTEND_ORIGIN}/auth/callback` });
           res.end();
         });
       })
@@ -344,7 +344,7 @@ server.on('request', (req, res) => {
         };
 
         setSessionCookie(res, user);
-        res.writeHead(302, { Location: `${FRONTEND_ORIGIN}/home` });
+        res.writeHead(302, { Location: `${FRONTEND_ORIGIN}/auth/callback` });
         res.end();
       })
       .catch((error) => {
@@ -360,6 +360,24 @@ server.on('request', (req, res) => {
     const user = getSessionFromRequest(req) || null;
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ user }));
+    return;
+  }
+
+  // Logout: clear the session cookie and remove from store
+  if (req.method === 'POST' && url.pathname === '/auth/logout') {
+    const cookieHeader = req.headers['cookie'];
+    if (cookieHeader) {
+      const parts = cookieHeader.split(';').map((c) => c.trim());
+      const sessionPart = parts.find((p) => p.startsWith('sessionId='));
+      if (sessionPart) {
+        const sessionId = sessionPart.split('=')[1];
+        if (sessionId) sessions.delete(sessionId);
+      }
+    }
+    // Expire the cookie
+    res.setHeader('Set-Cookie', 'sessionId=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
     return;
   }
 
