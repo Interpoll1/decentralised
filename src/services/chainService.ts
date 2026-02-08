@@ -4,7 +4,7 @@ import { StorageService } from './storageService';
 
 export class ChainService {
   private static readonly GENESIS_HASH = '0'.repeat(64);
-  private static readonly PRIVATE_KEY = 'voting-chain-private-key';
+  private static readonly PRIVATE_KEY = 'intepoll-private-key';
 
   static createGenesisBlock(): ChainBlock {
     const block: ChainBlock = {

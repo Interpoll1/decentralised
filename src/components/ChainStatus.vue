@@ -59,7 +59,7 @@
 
         <div class="rounded p-3 mt-3 border border-primary/10 bg-primary/5">
           <p class="text-xs text-primary font-semibold">
-            Hybrid P2P Network<br/>
+            Intepoll Network<br/>
             <span class="opacity-70 font-normal">Cross-Device &middot; Cross-Browser &middot; Persistent Storage</span>
           </p>
         </div>
@@ -109,11 +109,6 @@ import { checkmarkCircle, closeCircle, shield, warningOutline } from 'ionicons/i
 import { useChainStore } from '../stores/chainStore';
 
 const chainStore = useChainStore();
-
-const truncateHash = (hash?: string) => {
-  if (!hash) return 'N/A';
-  return `${hash.substring(0, 8)}...${hash.substring(hash.length - 8)}`;
-};
 
 const handleValidateChain = async () => {
   await chainStore.validateChain();

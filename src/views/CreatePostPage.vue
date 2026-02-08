@@ -105,7 +105,7 @@
           <div class="info-box" v-if="imageFile">
             <ion-icon :icon="informationCircle"></ion-icon>
             <p>
-              Image will be compressed to ~200 KB and stored on GunDB (decentralized P2P network).
+              Image will be compressed to ~200 KB and stored on GunDB (peer-to-peer network).
               Thumbnail (~15 KB) will be cached locally for fast loading.
             </p>
           </div>

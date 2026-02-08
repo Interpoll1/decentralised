@@ -2,7 +2,7 @@
   <ion-page>
     <ion-header>
       <ion-toolbar>
-        <ion-title>Decentralized Network</ion-title>
+        <ion-title>Intepoll</ion-title>
         <ion-buttons slot="end">
           <ion-button @click="$router.push('/profile')">
             <ion-icon :icon="personCircleOutline"></ion-icon>
@@ -30,10 +30,6 @@
           <ion-segment-button value="create">
             <ion-icon :icon="addCircleOutline"></ion-icon>
             <ion-label>Create</ion-label>
-          </ion-segment-button>
-          <ion-segment-button value="network">
-            <ion-icon :icon="statsChartOutline"></ion-icon>
-            <ion-label>Network</ion-label>
           </ion-segment-button>
         </ion-segment>
       </ion-toolbar>
@@ -202,161 +198,6 @@
         </div>
       </div>
 
-      <!-- NETWORK TAB - Network & Connectivity -->
-      <div v-else-if="activeTab === 'network'" class="network-tab">
-        <div class="ion-padding">
-          <h2>Network Status</h2>
-        </div>
-
-        <!-- Chain Status -->
-        <ChainStatus />
-
-        <!-- P2P Network Status -->
-        <ion-card class="status-card">
-          <ion-card-header>
-            <ion-card-title>P2P Network Status</ion-card-title>
-          </ion-card-header>
-          <ion-card-content>
-            <div class="status-row">
-              <div class="status-item">
-                <ion-icon :icon="serverOutline" :color="websocketConnected ? 'success' : 'danger'"></ion-icon>
-                <div>
-                  <strong class="text-[10px] uppercase tracking-widest opacity-50">Relay Node</strong>
-                  <p class="text-lg font-black leading-none" :class="websocketConnected ? 'text-emerald-400' : 'text-rose-400'">
-                    {{ websocketConnected ? 'ONLINE' : 'OFFLINE' }}
-                  </p>
-                </div>
-              </div>
-              <div class="status-item">
-                <ion-icon :icon="peopleOutline" :color="peerCount > 0 ? 'success' : 'warning'"></ion-icon>
-                <div>
-                  <strong class="text-[10px] uppercase tracking-widest opacity-50">Peers Online</strong>
-                  <p class="text-lg font-black leading-none">{{ peerCount }}</p>
-                </div>
-              </div>
-            </div>
-          </ion-card-content>
-        </ion-card>
-
-        <!-- GunDB Status -->
-        <ion-card class="status-card">
-          <ion-card-header>
-            <ion-card-title>P2P Database</ion-card-title>
-          </ion-card-header>
-          <ion-card-content>
-            <div class="status-row">
-              <div class="status-item">
-                <ion-icon :icon="cloudOutline" :color="gunConnected ? 'success' : 'danger'"></ion-icon>
-                <div>
-                  <strong class="text-xs uppercase tracking-wider opacity-60">GunDB Mesh</strong>
-                  <p class="text-lg font-bold" :class="gunConnected ? 'text-success' : 'text-danger'">
-                    {{ gunConnected ? 'Connected' : 'Disconnected' }}
-                  </p>
-                </div>
-              </div>
-              <div class="status-item">
-                <ion-icon :icon="syncOutline" :color="gunConnected ? 'primary' : 'medium'"></ion-icon>
-                <div>
-                  <strong class="text-xs uppercase tracking-wider opacity-60">Sync State</strong>
-                  <p class="text-sm font-semibold truncate">{{ gunSyncStatus }}</p>
-                </div>
-              </div>
-            </div>
-          </ion-card-content>
-        </ion-card>
-
-        <!-- IPFS Status -->
-        <ion-card class="status-card">
-          <ion-card-header>
-            <ion-card-title>Blob Storage</ion-card-title>
-          </ion-card-header>
-          <ion-card-content>
-            <div class="status-row">
-              <div class="status-item">
-                <ion-icon :icon="imageOutline" :color="ipfsReady ? 'success' : 'medium'"></ion-icon>
-                <div>
-                  <strong class="text-xs uppercase tracking-wider opacity-60">Images</strong>
-                  <p class="text-lg font-bold">{{ ipfsReady ? 'Enabled' : 'Init...' }}</p>
-                </div>
-              </div>
-              <div class="status-item">
-                <ion-icon :icon="cubeOutline" color="secondary"></ion-icon>
-                <div>
-                  <strong class="text-xs uppercase tracking-wider opacity-60">Storage</strong>
-                  <p class="text-lg font-bold">Local + P2P</p>
-                </div>
-              </div>
-            </div>
-          </ion-card-content>
-        </ion-card>
-
-        <!-- Blockchain Status -->
-        <ion-card class="status-card">
-          <ion-card-header>
-            <ion-card-title>Blockchain</ion-card-title>
-          </ion-card-header>
-          <ion-card-content>
-            <div class="status-row">
-              <div class="status-item">
-                <ion-icon :icon="cubeOutline" color="primary"></ion-icon>
-                <div>
-                  <strong class="text-[10px] uppercase tracking-widest opacity-50">Latest Block</strong>
-                  <p class="text-xl font-black leading-none">#{{ blockCount }}</p>
-                </div>
-              </div>
-              <div class="status-item">
-                <ion-icon 
-                  :icon="isChainValid ? checkmarkCircleOutline : closeCircleOutline" 
-                  :color="isChainValid ? 'success' : 'danger'"
-                ></ion-icon>
-                <div>
-                  <strong class="text-[10px] uppercase tracking-widest opacity-50">Chain Validity</strong>
-                  <p class="text-lg font-black leading-none" :class="isChainValid ? 'text-emerald-400' : 'text-rose-400'">
-                    {{ isChainValid ? 'VALID' : 'INVALID' }}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </ion-card-content>
-        </ion-card>
-
-        <!-- Statistics -->
-        <ion-card class="status-card">
-          <ion-card-header>
-            <ion-card-title>Network Statistics</ion-card-title>
-          </ion-card-header>
-          <ion-card-content>
-            <ion-list>
-              <ion-item>
-                <ion-label>
-                  <h3>Total Communities</h3>
-                  <p>{{ totalCommunities }}</p>
-                </ion-label>
-              </ion-item>
-              <ion-item>
-                <ion-label>
-                  <h3>Joined Communities</h3>
-                  <p>{{ joinedCount }}</p>
-                </ion-label>
-              </ion-item>
-              <ion-item>
-                <ion-label>
-                  <h3>Total Posts</h3>
-                  <p>{{ allPosts.length }}</p>
-                </ion-label>
-              </ion-item>
-            </ion-list>
-          </ion-card-content>
-        </ion-card>
-
-        <!-- Refresh Button -->
-        <div class="ion-padding">
-          <ion-button expand="block" @click="refreshStatus">
-            <ion-icon slot="start" :icon="refreshOutline"></ion-icon>
-            Refresh Status
-          </ion-button>
-        </div>
-      </div>
     </ion-content>
   </ion-page>
 </template>
@@ -374,35 +215,23 @@ import {
   IonIcon,
   IonCard,
   IonCardContent,
-  IonCardHeader,
-  IonCardTitle,
   IonSegment,
   IonSegmentButton,
   IonLabel,
   IonSpinner,
-  IonList,
-  IonItem,
   IonChip,
   actionSheetController,
   toastController
 } from '@ionic/vue';
-import { 
-  cube, 
-  personCircleOutline, 
+import {
+  cube,
+  personCircleOutline,
   settingsOutline,
   addCircleOutline,
   earthOutline,
-  cloudOutline,
   peopleOutline,
   homeOutline,
-  statsChartOutline,
   documentTextOutline,
-  serverOutline,
-  syncOutline,
-  imageOutline,
-  cubeOutline,
-  checkmarkCircleOutline,
-  closeCircleOutline,
   refreshOutline,
   chevronForwardOutline
 } from 'ionicons/icons';
@@ -411,15 +240,11 @@ import { useChainStore } from '../stores/chainStore';
 import { useCommunityStore } from '../stores/communityStore';
 import { usePostStore } from '../stores/postStore';
 import { usePollStore } from '../stores/pollStore';
-import ChainStatus from '../components/ChainStatus.vue';
 import CommunityCard from '../components/CommunityCard.vue';
 import PostCard from '../components/PostCard.vue';
 import PollCard from '../components/PollCard.vue';
 import { Post } from '../services/postService';
 import { Poll } from '../services/pollService';
-import { WebSocketService } from '../services/websocketService';
-import { GunService } from '../services/gunService';
-import { IPFSService } from '../services/ipfsService';
 
 const router = useRouter();
 const chainStore = useChainStore();
@@ -430,17 +255,7 @@ const pollStore = usePollStore();
 const activeTab = ref('home'); // Start on home
 const communityFilter = ref('all');
 const isLoadingPosts = ref(false);
-const hasLoadedPosts = ref(false); // Track if posts have been loaded
-
-// Network status
-const websocketConnected = ref(false);
-const peerCount = ref(0);
-const gunConnected = ref(false);
-const gunSyncStatus = ref('Initializing...');
-const ipfsReady = ref(false);
-
-// Update interval
-let statusInterval: any = null;
+const hasLoadedPosts = ref(false);
 
 const displayedCommunities = computed(() => {
   if (communityFilter.value === 'joined') {
@@ -474,22 +289,6 @@ const combinedFeed = computed(() => {
   
   // Sort by creation date (newest first)
   return items.sort((a, b) => b.createdAt - a.createdAt);
-});
-
-const blockCount = computed(() => {
-  return chainStore.blocks?.length || 0;
-});
-
-const isChainValid = computed(() => {
-  return chainStore.chainValid ?? false;
-});
-
-const totalCommunities = computed(() => {
-  return communityStore.communities?.length || 0;
-});
-
-const joinedCount = computed(() => {
-  return communityStore.joinedCommunities?.size || 0;
 });
 
 const joinedCommunities = computed(() => {
@@ -651,37 +450,6 @@ async function loadAllPosts() {
   }
 }
 
-function updateNetworkStatus() {
-  // Check WebSocket status
-  try {
-    websocketConnected.value = WebSocketService.getConnectionStatus();
-    peerCount.value = WebSocketService.getPeerCount();
-  } catch (error) {
-    websocketConnected.value = false;
-    peerCount.value = 0;
-  }
-
-  // Check Gun status
-  try {
-    const gunStats = GunService.getPeerStats();
-    gunConnected.value = gunStats.isConnected;
-    gunSyncStatus.value = gunStats.isConnected 
-      ? `Synced (${gunStats.peerCount} peers)` 
-      : 'Connecting...';
-    
-    // If we have actual peers in Gun, update peerCount if WebSocket is lower
-    if (gunStats.peerCount > peerCount.value) {
-      peerCount.value = gunStats.peerCount;
-    }
-  } catch (error) {
-    gunConnected.value = false;
-    gunSyncStatus.value = 'Error';
-  }
-
-  // IPFS status (simplified to GunDB ready state)
-  ipfsReady.value = IPFSService.getReadyStatus();
-}
-
 async function showPostOptions() {
   // If user has joined communities, show them
   if (joinedCommunities.value.length > 0) {
@@ -756,23 +524,13 @@ watch(activeTab, async (newTab) => {
 onMounted(async () => {
   // Initialize chain
   await chainStore.initialize();
-  
+
   // Load communities (fast)
   await communityStore.loadCommunities();
-
-  // Posts will auto-load via watcher when communities finish loading
-
-  // Update network status
-  updateNetworkStatus();
-
-  // Update status every second
-  statusInterval = setInterval(updateNetworkStatus, 1000);
 });
 
 onUnmounted(() => {
-  if (statusInterval) {
-    clearInterval(statusInterval);
-  }
+  // Cleanup if needed
 });
 </script>
 
@@ -803,12 +561,8 @@ onUnmounted(() => {
   color: var(--ion-color-medium);
 }
 
-.posts-list {
-  padding: 0 0px 0px 0px;
-}
-
 .communities-list {
-  padding: 0 0 0px 0;
+  padding: 0;
 }
 
 .empty-state {
@@ -830,38 +584,6 @@ onUnmounted(() => {
   margin: 8px 0;
 }
 
-.status-card {
-  margin: 12px;
-}
-
-.status-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  padding: 4px 0;
-}
-
-.status-item {
-  display: flex;
-  gap: 12px;
-  align-items: center; /* Changed from flex-start to center for better alignment */
-}
-
-.status-item ion-icon {
-  font-size: 36px; /* Slightly larger */
-  flex-shrink: 0;
-}
-
-.status-item strong {
-  display: block;
-  margin-bottom: 2px;
-}
-
-.status-item p {
-  margin: 0;
-  line-height: 1.2;
-}
-
 ion-segment {
   padding: 0 12px;
 }
@@ -879,7 +601,6 @@ ion-item {
 }
 
 @media (min-width: 768px) {
-  .posts-list,
   .communities-list {
     max-width: 800px;
     margin: 0 auto;
