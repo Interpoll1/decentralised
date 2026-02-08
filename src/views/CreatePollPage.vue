@@ -13,7 +13,6 @@
         </ion-buttons>
       </ion-toolbar>
     </ion-header>
-
     <ion-content>
       <!-- Community Selection -->
       <ion-card>

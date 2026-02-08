@@ -93,8 +93,7 @@
       <div v-else-if="displayedContent.length > 0" class="content-feed">
         <template v-for="item in displayedContent" :key="`${item.type}-${item.data.id}`">
           <!-- Post Card -->
-          <!-- ✅ CHANGE 1: Add upvote, downvote, and comments event handlers -->
-          <PostCard 
+          <PostCard
             v-if="item.type === 'post'"
             :post="item.data"
             :community-name="community?.displayName"
@@ -171,7 +170,7 @@ import {
   IonSegmentButton,
   IonLabel,
   IonSpinner,
-  toastController // ✅ CHANGE 2: Add toastController import
+  toastController
 } from '@ionic/vue';
 import {
   homeOutline,
@@ -269,8 +268,6 @@ function hasDownvoted(postId: string): boolean {
 }
 
 async function handleUpvote(post: Post) {
-  console.log('Upvoting post:', post.id);
-  
   try {
     // Check if already upvoted
     if (hasUpvoted(post.id)) {
@@ -324,8 +321,6 @@ async function handleUpvote(post: Post) {
 }
 
 async function handleDownvote(post: Post) {
-  console.log('Downvoting post:', post.id);
-  
   try {
     // Check if already downvoted
     if (hasDownvoted(post.id)) {
@@ -395,8 +390,7 @@ function navigateToPoll(poll: Poll) {
 
 async function toggleJoin() {
   if (isJoined.value) {
-    // TODO: Implement leave functionality
-    console.log('Leave not implemented yet');
+    // Leave is not yet implemented
   } else {
     await communityStore.joinCommunity(communityId.value);
   }
@@ -415,7 +409,6 @@ async function loadCommunityContent() {
       pollStore.loadPollsForCommunity(communityId.value)
     ]);
 
-    console.log(`✅ Loaded ${communityPosts.value.length} posts and ${communityPolls.value.length} polls`);
   } catch (error) {
     console.error('Error loading community content:', error);
   } finally {

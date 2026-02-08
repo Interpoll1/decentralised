@@ -50,7 +50,7 @@
             </div>
           </div>
           <p class="text-xs text-yellow-700 mt-2">
-            ⚠️ Save these words securely. You'll need them to verify your vote.
+            Save these words securely. You'll need them to verify your vote.
           </p>
         </div>
 

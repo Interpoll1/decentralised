@@ -200,21 +200,10 @@ const communityName = computed(() => {
 });
 
 const allComments = computed(() => {
-  const filtered = commentStore.comments.filter(c => {
+  return commentStore.comments.filter(c => {
     const matchesPost = c.postId === postId.value || c.postId === post.value?.id;
-    const isTopLevel = !c.parentId;
-    
-    // Debug logging
-    if (matchesPost && c.parentId) {
-      console.log('🔍 Comment has parentId:', { id: c.id, parentId: c.parentId, content: c.content.substring(0, 30) });
-    }
-    
-    return matchesPost && isTopLevel;
+    return matchesPost && !c.parentId;
   });
-  
-  console.log('Top-level comments:', filtered.length, '| Total comments in store:', commentStore.comments.length);
-  
-  return filtered;
 });
 
 const sortedComments = computed(() => {
@@ -323,8 +312,8 @@ async function handleUpvote() {
     }
     
     await loadPost();
-  } catch (error) {
-    console.error('Error upvoting:', error);
+  } catch (_error) {
+    // Upvote failed
   }
 }
 
@@ -368,8 +357,8 @@ async function handleDownvote() {
     }
     
     await loadPost();
-  } catch (error) {
-    console.error('Error downvoting:', error);
+  } catch (_error) {
+    // Downvote failed
   }
 }
 
@@ -396,9 +385,7 @@ async function submitComment() {
       commentStore.loadCommentsForPost(post.value!.id);
     }, 500);
     
-  } catch (error) {
-    console.error('Error posting comment:', error);
-    
+  } catch (_error) {
     const toast = await toastController.create({
       message: 'Failed to post comment',
       duration: 2000,
@@ -418,8 +405,8 @@ async function handleCommentUpvote(comment: any) {
       color: 'success'
     });
     await toast.present();
-  } catch (error) {
-    console.error('Error upvoting comment:', error);
+  } catch (_error) {
+    // Comment upvote failed
   }
 }
 
@@ -433,8 +420,8 @@ async function handleCommentDownvote(comment: any) {
       color: 'warning'
     });
     await toast.present();
-  } catch (error) {
-    console.error('Error downvoting comment:', error);
+  } catch (_error) {
+    // Comment downvote failed
   }
 }
 
@@ -491,8 +478,8 @@ async function loadPost() {
     if (post.value) {
       await commentStore.loadCommentsForPost(post.value.id);
     }
-  } catch (error) {
-    console.error('Error loading post:', error);
+  } catch (_error) {
+    // Post loading failed
   } finally {
     isLoading.value = false;
   }

@@ -14,9 +14,8 @@ const chainStore = useChainStore();
 onMounted(async () => {
   try {
     await chainStore.initialize();
-    console.log('Chain initialized successfully');
-  } catch (error) {
-    console.error('Failed to initialize chain:', error);
+  } catch (_error) {
+    // Chain initialization failed
   }
 });
 </script>

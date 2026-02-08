@@ -1,11 +1,6 @@
 <template>
   <ion-card class="poll-card" @click="$emit('click')">
     <ion-card-content>
-      <!-- Debug Info (remove after testing) -->
-      <div v-if="!poll.question" style="color: red; font-size: 12px; margin-bottom: 8px;">
-        DEBUG: Poll missing data - ID: {{ poll.id }}, Options: {{ poll.options?.length || 0 }}
-      </div>
-
       <!-- Poll Header -->
       <div class="poll-header">
         <div class="poll-badge">

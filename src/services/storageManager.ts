@@ -22,7 +22,6 @@ export class StorageManager {
       }
     }
     // Optionally, clear any other storage mechanisms here
-    console.log('All local storage cleared');
   }
   
   // Check storage usage
@@ -47,8 +46,6 @@ export class StorageManager {
     blocksDeleted: number;
     receiptsDeleted: number;
   }> {
-    console.log('🧹 Starting storage cleanup...');
-    
     let pollsDeleted = 0;
     let blocksDeleted = 0;
     let receiptsDeleted = 0;
@@ -91,11 +88,7 @@ export class StorageManager {
     // But we could archive them to a separate compressed storage
     
     const info = await this.getStorageInfo();
-    console.log(`Cleanup complete: ${pollsDeleted} polls, ${blocksDeleted} blocks, ${receiptsDeleted} receipts deleted`);
-    if (info) {
-      console.log(`Storage: ${info.usageMB}MB / ${info.quotaMB}MB (${info.usagePercent.toFixed(1)}%)`);
-    }
-    
+
     return { pollsDeleted, blocksDeleted, receiptsDeleted };
   }
   
@@ -104,7 +97,6 @@ export class StorageManager {
     const info = await this.getStorageInfo();
     
     if (info && info.usagePercent > 80) {
-      console.warn('Storage usage high, running cleanup...');
       await this.pruneOldData();
     }
   }
@@ -146,7 +138,5 @@ export class StorageManager {
         await StorageService.saveReceipt(receipt);
       }
     }
-    
-    console.log('Data imported successfully');
   }
 }

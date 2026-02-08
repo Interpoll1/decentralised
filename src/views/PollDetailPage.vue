@@ -84,14 +84,6 @@
           </ion-card-header>
 
           <ion-card-content>
-            <!-- Debug Info -->
-            <div v-if="!poll.options || poll.options.length === 0" style="color: red; padding: 12px; background: #fee; border-radius: 8px; margin-bottom: 16px;">
-              No poll options loaded. Options count: {{ poll.options?.length || 0 }}
-            </div>
-            
-            <!-- Show actual array for debugging -->
-
-
             <!-- Multiple Choice (Checkboxes) -->
             <ion-list v-if="poll.allowMultipleChoices && poll.options && poll.options.length > 0">
               <ion-item v-for="(option, index) in poll.options" :key="`option-${index}-${option.id}`">
@@ -101,10 +93,7 @@
                   slot="start"
                 ></ion-checkbox>
                 <ion-label>
-                  <h3>{{ option.text || `[Empty] Option ${index + 1}` }}</h3>
-                  <p v-if="!option.text" style="color: red; font-size: 11px;">
-                    ID: {{ option.id }} | Votes: {{ option.votes }}
-                  </p>
+                  <h3>{{ option.text }}</h3>
                 </ion-label>
               </ion-item>
             </ion-list>
@@ -118,16 +107,13 @@
                     slot="start"
                   ></ion-radio>
                   <ion-label>
-                    <h3>{{ option.text || `[Empty] Option ${index + 1}` }}</h3>
-                    <p v-if="!option.text" style="color: red; font-size: 11px;">
-                      ID: {{ option.id }} | Votes: {{ option.votes }}
-                    </p>
+                    <h3>{{ option.text }}</h3>
                   </ion-label>
                 </ion-item>
               </ion-list>
             </ion-radio-group>
 
-            <div v-else style="padding: 24px; text-align: center; color: var(--ion-color-medium);">
+            <div v-else class="empty-options">
               <p>No options available for this poll</p>
             </div>
 
@@ -372,154 +358,6 @@ onMounted(async () => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  gap: 16px;
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  gap: 16px;
-  padding: 24px;
-  text-align: center;
-}
-
-.poll-meta {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-}
-
-.poll-description {
-  margin: 0;
-  line-height: 1.5;
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-}
-
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.stat-item ion-icon {
-  font-size: 32px;
-}
-
-.stat-item div {
-  display: flex;
-  flex-direction: column;
-}
-
-.stat-item strong {
-  font-size: 20px;
-  font-weight: 600;
-}
-
-.stat-item span {
-  font-size: 12px;
-  color: var(--ion-color-medium);
-}
-
-.vote-button {
-  margin-top: 16px;
-}
-
-.hint {
-  text-align: center;
-  font-size: 12px;
-  color: var(--ion-color-medium);
-  margin-top: 8px;
-}
-
-.voted-message {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 24px;
-  text-align: center;
-}
-
-.voted-message ion-icon {
-  font-size: 64px;
-}
-
-.results-hidden {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 24px;
-  text-align: center;
-  color: var(--ion-color-medium);
-}
-
-.results-hidden ion-icon {
-  font-size: 64px;
-}
-
-.poll-results {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.result-item {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.result-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.option-text {
-  font-weight: 500;
-}
-
-.option-percent {
-  font-weight: 600;
-  color: var(--ion-color-primary);
-}
-
-.result-bar {
-  height: 8px;
-  background: var(--ion-color-light);
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.result-fill {
-  height: 100%;
-  background: var(--ion-color-primary);
-  border-radius: 4px;
-  transition: width 0.3s ease;
-}
-
-.result-votes {
-  font-size: 12px;
-  color: var(--ion-color-medium);
-}
-</style>
-<style scoped>
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
   padding: 64px 24px;
 }
 
@@ -598,6 +436,12 @@ ion-card {
   font-size: 13px;
   color: var(--ion-color-medium);
   text-align: center;
+}
+
+.empty-options {
+  padding: 24px;
+  text-align: center;
+  color: var(--ion-color-medium);
 }
 
 .voted-message {

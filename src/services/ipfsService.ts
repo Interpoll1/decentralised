@@ -1,16 +1,15 @@
-// src/services/ipfsService.ts
-// Simplified image storage using GunDB (no IPFS - avoids Node.js issues)
 import { GunService } from './gunService';
 import imageCompression from 'browser-image-compression';
 
 export class IPFSService {
   private static isReady = false;
 
-  // Initialize (simplified - just use GunDB)
+  static getReadyStatus(): boolean {
+    return this.isReady;
+  }
+
   static async initialize() {
-    console.log('Initializing image storage (GunDB)...');
     this.isReady = true;
-    console.log('Image storage ready');
   }
 
   // Upload image (returns hash, stores in GunDB)
@@ -52,8 +51,6 @@ export class IPFSService {
       uploadedAt: Date.now()
     });
 
-    console.log(`Image uploaded: ${cid} (${(compressed.size / 1024).toFixed(0)} KB)`);
-
     return {
       cid: cid,
       thumbnail: thumbnailBase64,
@@ -82,14 +79,12 @@ export class IPFSService {
   static async pin(cid: string) {
     const gun = GunService.getGun();
     await gun.get('images').get(cid).get('pinned').put(true);
-    console.log(`Pinned: ${cid}`);
   }
 
   // Unpin content
   static async unpin(cid: string) {
     const gun = GunService.getGun();
     await gun.get('images').get(cid).get('pinned').put(false);
-    console.log(`Unpinned: ${cid}`);
   }
 
   // List pinned content

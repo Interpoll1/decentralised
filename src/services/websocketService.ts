@@ -1,9 +1,11 @@
-// src/services/websocketService.ts
+import config from '../config';
+
 type SyncMessage =
   | { type: 'new-poll'; data: any }
   | { type: 'new-block'; data: any }
   | { type: 'request-sync'; peerId: string }
-  | { type: 'sync-response'; data: any };
+  | { type: 'sync-response'; data: any }
+  | { type: 'peer-addresses'; data: any };
 
 export class WebSocketService {
   private static ws: WebSocket | null = null;
@@ -15,9 +17,8 @@ export class WebSocketService {
   private static reconnectDelay = 3000;
   private static messageQueue: any[] = [];
   private static peers: Set<string> = new Set();
+  private static peerAddresses: Map<string, { peerId: string; relayUrl: string; gunPeers: string[]; joinedAt: number }> = new Map();
   private static statusListeners: Set<(status: { connected: boolean; peerCount: number }) => void> = new Set();
-
-  private static RELAY_URL = 'ws://localhost:8080';
 
   static initialize() {
     this.connect();
@@ -25,24 +26,25 @@ export class WebSocketService {
 
   static connect() {
     try {
-      this.ws = new WebSocket(this.RELAY_URL);
+      this.ws = new WebSocket(config.relay.websocket);
 
       this.ws.onopen = () => {
         this.isConnected = true;
         this.reconnectAttempts = 0;
 
-        // Assume at least our own peer is present while waiting for the first peer list
         this.peers.add(this.peerId);
         this.notifyStatus();
 
         this.sendToRelay('register', { peerId: this.peerId });
-
         this.sendToRelay('join-room', { roomId: 'default' });
 
         while (this.messageQueue.length > 0) {
           const msg = this.messageQueue.shift();
           this.broadcast(msg.type, msg.data);
         }
+
+        // Share our relay addresses with all peers
+        this.broadcastAddresses();
 
         setTimeout(() => {
           this.broadcast('request-sync', { peerId: this.peerId });
@@ -52,11 +54,11 @@ export class WebSocketService {
       this.ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
-          
+
           if (message.type === 'welcome') {
             return;
           }
-          
+
           if (message.type === 'peer-list') {
             if (Array.isArray(message.peers)) {
               this.peers = new Set(message.peers.filter(Boolean));
@@ -68,6 +70,7 @@ export class WebSocketService {
           if (message.type === 'peer-left') {
             if (message.peerId) {
               this.peers.delete(message.peerId);
+              this.peerAddresses.delete(message.peerId);
               this.notifyStatus();
             }
             return;
@@ -77,18 +80,19 @@ export class WebSocketService {
           if (callback) {
             callback(message.data || message);
           }
-        } catch (error) {
-          // silently ignore
+        } catch (_error) {
+          // Malformed message
         }
       };
 
-      this.ws.onerror = (error) => {
-        // handled in onclose
+      this.ws.onerror = () => {
+        // Handled in onclose
       };
 
       this.ws.onclose = () => {
         this.isConnected = false;
         this.peers.clear();
+        this.peerAddresses.clear();
         this.notifyStatus();
 
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
@@ -96,9 +100,30 @@ export class WebSocketService {
           setTimeout(() => this.connect(), this.reconnectDelay);
         }
       };
-    } catch (error) {
-      // silently ignore
+
+      // Listen for address broadcasts from other peers
+      this.subscribe('peer-addresses', (data: any) => {
+        if (data?.peerId && data.peerId !== this.peerId) {
+          this.peerAddresses.set(data.peerId, {
+            peerId: data.peerId,
+            relayUrl: data.relayUrl || '',
+            gunPeers: data.gunPeers || [],
+            joinedAt: data.joinedAt || Date.now(),
+          });
+        }
+      });
+    } catch (_error) {
+      // Connection failed
     }
+  }
+
+  private static broadcastAddresses() {
+    this.broadcast('peer-addresses', {
+      peerId: this.peerId,
+      relayUrl: config.relay.websocket,
+      gunPeers: [config.relay.gun],
+      joinedAt: Date.now(),
+    });
   }
 
   private static sendToRelay(type: string, data: any) {
@@ -137,6 +162,10 @@ export class WebSocketService {
     return Math.max(0, totalPeers - 1);
   }
 
+  static getPeerAddresses(): Map<string, { peerId: string; relayUrl: string; gunPeers: string[]; joinedAt: number }> {
+    return new Map(this.peerAddresses);
+  }
+
   static onStatusChange(callback: (status: { connected: boolean; peerCount: number }) => void): () => void {
     this.statusListeners.add(callback);
     callback({ connected: this.isConnected, peerCount: this.getPeerCount() });
@@ -154,6 +183,7 @@ export class WebSocketService {
     this.callbacks.clear();
     this.isConnected = false;
     this.peers.clear();
+    this.peerAddresses.clear();
     this.statusListeners.clear();
   }
 
@@ -163,7 +193,7 @@ export class WebSocketService {
       try {
         listener(snapshot);
       } catch (_err) {
-        // Ignore listener errors to avoid breaking status propagation
+        // Ignore listener errors
       }
     });
   }

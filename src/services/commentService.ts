@@ -1,13 +1,11 @@
-// src/services/commentService.ts
-import Gun from 'gun';
-import 'gun/sea';
+import { GunService } from './gunService';
 import { CryptoService } from './cryptoService';
 import { AuditService } from './auditService';
 import { PostService } from './postService';
 
-const gun = Gun({
-  peers: ['http://localhost:8765/gun']
-});
+function getGun() {
+  return GunService.getGun();
+}
 
 export interface Comment {
   id: string;
@@ -41,11 +39,6 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
   const commentId = `comment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   const timestamp = Date.now();
 
-  // Debug logging
-  if (data.parentId) {
-    console.log('🔍 Creating reply with parentId:', data.parentId);
-  }
-
   const comment: Comment = {
     id: commentId,
     postId: data.postId,
@@ -62,7 +55,7 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
   };
 
   return new Promise((resolve, reject) => {
-    const commentNode = gun.get('comments').get(commentId);
+    const commentNode = getGun().get('comments').get(commentId);
     
     // Set each field individually (Gun.js prefers this approach)
     commentNode.get('id').put(commentId);
@@ -72,15 +65,8 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
     commentNode.get('authorName').put(data.authorName);
     commentNode.get('content').put(data.content);
     
-    // CRITICAL: Always set parentId field, even if undefined
-    // This ensures Gun.js knows about the field
     if (data.parentId) {
-      console.log('Setting parentId in Gun.js:', data.parentId);
       commentNode.get('parentId').put(data.parentId);
-    } else {
-      console.log('No parentId - this is a top-level comment');
-      // Explicitly set to null or don't set at all
-      // Don't set parentId field for top-level comments
     }
     
     commentNode.get('createdAt').put(timestamp);
@@ -90,18 +76,13 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
     commentNode.get('edited').put(false);
 
     // Add to post's comments index
-    gun.get('posts')
+    getGun().get('posts')
       .get(data.postId)
       .get('comments')
       .set({ commentId, createdAt: timestamp });
     
-    // Resolve shortly after write since Gun.js is eventually consistent
     setTimeout(() => {
-      console.log('📤 Returning comment object:', { id: commentId, parentId: comment.parentId });
-
-      // Fire-and-forget: create a tamper-evident receipt for this comment
-      // and send it to the backend audit log. The full text stays in Gun,
-      // but the hashed content + metadata is immutable in the audit trail.
+      // Audit receipt (fire-and-forget)
       (async () => {
         try {
           const contentHash = CryptoService.hash(
@@ -123,8 +104,8 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
             createdAt: comment.createdAt,
             contentHash,
           });
-        } catch (error) {
-          console.warn('Failed to log comment receipt (non-fatal):', error);
+        } catch (_error) {
+          // Non-fatal: audit logging failed
         }
       })();
 
@@ -132,8 +113,8 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
       (async () => {
         try {
           await PostService.incrementCommentCount(data.postId, data.communityId);
-        } catch (err) {
-          console.warn('Failed to increment post comment count (non-fatal):', err);
+        } catch (_err) {
+          // Non-fatal: comment count increment failed
         }
       })();
 
@@ -147,7 +128,7 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
  */
 export async function getComment(commentId: string): Promise<Comment | null> {
   return new Promise((resolve) => {
-    gun.get('comments')
+    getGun().get('comments')
       .get(commentId)
       .once((data) => {
         if (data && data.id) {
@@ -166,14 +147,14 @@ export function subscribeToCommentsInPost(
   postId: string,
   callback: (comment: Comment) => void
 ): void {
-  gun.get('posts')
+  getGun().get('posts')
     .get(postId)
     .get('comments')
     .map()
     .on((data: any) => {
       if (data && data.commentId) {
         // Fetch the full comment data
-        gun.get('comments')
+        getGun().get('comments')
           .get(data.commentId)
           .on((commentData: any) => {
             if (commentData && commentData.id) {
@@ -210,7 +191,7 @@ export async function getAllCommentsInPost(postId: string): Promise<Comment[]> {
     const comments: Comment[] = [];
     const seen = new Set<string>();
 
-    gun.get('posts')
+    getGun().get('posts')
       .get(postId)
       .get('comments')
       .map()
@@ -218,7 +199,7 @@ export async function getAllCommentsInPost(postId: string): Promise<Comment[]> {
         if (data && data.commentId && !seen.has(data.commentId)) {
           seen.add(data.commentId);
           
-          gun.get('comments')
+          getGun().get('comments')
             .get(data.commentId)
             .once((commentData: any) => {
               if (commentData && commentData.id) {
@@ -259,7 +240,7 @@ export async function getReplies(parentCommentId: string): Promise<Comment[]> {
     const replies: Comment[] = [];
     const seen = new Set<string>();
 
-    gun.get('comments')
+    getGun().get('comments')
       .map()
       .once((comment: any) => {
         if (
@@ -289,7 +270,7 @@ export async function voteOnComment(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     // Get current comment data
-    gun.get('comments')
+    getGun().get('comments')
       .get(commentId)
       .once((comment: any) => {
         if (!comment || !comment.id) {
@@ -300,7 +281,7 @@ export async function voteOnComment(
         const voteKey = `vote_${userId}_${commentId}`;
         
         // Check existing vote
-        gun.get('votes')
+        getGun().get('votes')
           .get(voteKey)
           .once((existingVote: any) => {
             let upvotes = comment.upvotes || 0;
@@ -324,7 +305,7 @@ export async function voteOnComment(
               }
 
               // Store the vote
-              gun.get('votes')
+              getGun().get('votes')
                 .get(voteKey)
                 .put({
                   userId,
@@ -334,7 +315,7 @@ export async function voteOnComment(
                 });
             } else {
               // Toggle off - remove vote
-              gun.get('votes')
+              getGun().get('votes')
                 .get(voteKey)
                 .put(null);
             }
@@ -342,7 +323,7 @@ export async function voteOnComment(
             const score = upvotes - downvotes;
 
             // Update comment - use .put() on the parent node with all fields
-            const commentNode = gun.get('comments').get(commentId);
+            const commentNode = getGun().get('comments').get(commentId);
             
             // Update vote counts
             commentNode.put({
@@ -366,7 +347,7 @@ export async function voteOnComment(
  */
 export async function editComment(commentId: string, newContent: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    gun.get('comments')
+    getGun().get('comments')
       .get(commentId)
       .once((comment: any) => {
         if (!comment || !comment.id) {
@@ -374,17 +355,17 @@ export async function editComment(commentId: string, newContent: string): Promis
           return;
         }
 
-        gun.get('comments')
+        getGun().get('comments')
           .get(commentId)
           .get('content')
           .put(newContent);
 
-        gun.get('comments')
+        getGun().get('comments')
           .get(commentId)
           .get('edited')
           .put(true);
 
-        gun.get('comments')
+        getGun().get('comments')
           .get(commentId)
           .get('editedAt')
           .put(Date.now());
@@ -399,7 +380,7 @@ export async function editComment(commentId: string, newContent: string): Promis
  */
 export async function deleteComment(commentId: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    gun.get('comments')
+    getGun().get('comments')
       .get(commentId)
       .once((comment: any) => {
         if (!comment || !comment.id) {
@@ -408,12 +389,12 @@ export async function deleteComment(commentId: string): Promise<void> {
         }
 
         // Mark as deleted instead of actually deleting
-        gun.get('comments')
+        getGun().get('comments')
           .get(commentId)
           .get('content')
           .put('[deleted]');
 
-        gun.get('comments')
+        getGun().get('comments')
           .get(commentId)
           .get('deleted')
           .put(true);
@@ -433,7 +414,7 @@ export async function getUserVote(
   return new Promise((resolve) => {
     const voteKey = `vote_${userId}_${commentId}`;
     
-    gun.get('votes')
+    getGun().get('votes')
       .get(voteKey)
       .once((vote: any) => {
         if (vote && vote.type) {
@@ -453,7 +434,7 @@ export async function getCommentCount(postId: string): Promise<number> {
     let count = 0;
     const seen = new Set<string>();
 
-    gun.get('posts')
+    getGun().get('posts')
       .get(postId)
       .get('comments')
       .map()

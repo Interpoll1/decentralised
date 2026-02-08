@@ -57,7 +57,7 @@ export const useCommentStore = defineStore('comment', () => {
           }
         });
       } catch (err) {
-        console.warn('Real-time subscription failed, using one-time fetch only');
+        // Fall back to one-time fetch only
       }
       
       // Also do a one-time fetch

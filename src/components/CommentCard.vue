@@ -132,11 +132,7 @@ const hasDownvoted = computed(() => {
 
 const replies = computed(() => {
   const filtered = commentStore.comments.filter(c => {
-    const matches = c.parentId === props.comment.id;
-    if (matches) {
-      console.log('✅ Found reply:', { replyId: c.id, parentId: c.parentId, content: c.content.substring(0, 30) });
-    }
-    return matches;
+    return c.parentId === props.comment.id;
   }).sort((a, b) => {
     // Sort by score first, then by creation date
     if (b.score !== a.score) {
@@ -144,11 +140,7 @@ const replies = computed(() => {
     }
     return a.createdAt - b.createdAt; // Older replies first
   });
-  
-  if (filtered.length > 0) {
-    console.log(`💬 Comment ${props.comment.id} has ${filtered.length} replies`);
-  }
-  
+
   return filtered;
 });
 
@@ -176,7 +168,7 @@ async function submitReply() {
     });
 
     const toast = await toastController.create({
-      message: '💬 Reply posted!',
+      message: 'Reply posted!',
       duration: 2000,
       color: 'success'
     });

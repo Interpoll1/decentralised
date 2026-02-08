@@ -90,6 +90,7 @@ import { usePollStore } from '../stores/pollStore';
 import VoteForm from '../components/VoteForm.vue';
 import { AuditService } from '../services/auditService';
 import { useChainStore } from '../stores/chainStore';
+import config from '../config';
 
 const route = useRoute();
 const router = useRouter();
@@ -131,10 +132,10 @@ const handleVoteSubmitted = (mnemonic: string) => {
 };
 
 const loginWithGoogle = () => {
-  window.open('http://localhost:8080/auth/google/start', '_blank', 'noopener,noreferrer');
+  window.open(config.auth.googleStart, '_blank', 'noopener,noreferrer');
 };
 
 const loginWithMicrosoft = () => {
-  window.open('http://localhost:8080/auth/microsoft/start', '_blank', 'noopener,noreferrer');
+  window.open(config.auth.microsoftStart, '_blank', 'noopener,noreferrer');
 };
 </script>

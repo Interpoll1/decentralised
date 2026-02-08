@@ -114,7 +114,6 @@ onMounted(async () => {
     const thisVote = myVotes.find(v => v.pollId === props.poll.id);
     if (thisVote) {
       // Could store receipt reference in vote record for easy lookup
-      console.log('Found previous vote at block:', thisVote.blockIndex);
     }
   }
 });

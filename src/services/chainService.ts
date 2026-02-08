@@ -114,7 +114,6 @@ export class ChainService {
       const genesis = this.createGenesisBlock();
       await StorageService.saveBlock(genesis);
       
-      console.log('Genesis block created');
     }
   }
 
@@ -132,8 +131,6 @@ export class ChainService {
 
     const genesis = this.createGenesisBlock();
     await StorageService.saveBlock(genesis);
-
-    console.log('Chain reset: new genesis block created');
   }
 
   static async getChainHead(): Promise {
@@ -161,8 +158,6 @@ export class ChainService {
 
     const mnemonic = CryptoService.generateMnemonic();
 
-    console.log(`Block #${newBlock.index} created`);
-
     return { block: newBlock, receipt: mnemonic };
   }
 
@@ -172,12 +167,10 @@ export class ChainService {
     if (!localHead) return false;
 
     if (remoteIndex < localHead.index) {
-      console.warn('Chain downgrade detected');
       return true;
     }
 
     if (remoteIndex === localHead.index && remoteHash !== localHead.hash) {
-      console.warn('Chain fork detected');
       return true;
     }
 

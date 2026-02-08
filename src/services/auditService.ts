@@ -1,5 +1,4 @@
-// src/services/auditService.ts
-// Lightweight backend integration for receipts and vote authorization
+import config from '../config';
 
 export type ReceiptKind = 'vote' | 'comment';
 
@@ -16,8 +15,7 @@ interface VoteAuthorizeResponse {
 }
 
 export class AuditService {
-  // Reuse the relay server HTTP port
-  private static readonly API_BASE = 'http://localhost:8080';
+  private static readonly API_BASE = config.relay.api;
 
   static async logReceipt(type: ReceiptKind, payload: any): Promise<void> {
     try {
@@ -28,9 +26,8 @@ export class AuditService {
         },
         body: JSON.stringify({ type, payload }),
       });
-    } catch (error) {
-      // Backend is optional; fail open and stay silent in UI
-      console.warn('AuditService.logReceipt failed (non-fatal):', error);
+    } catch (_error) {
+      // Backend is optional; fail silently
     }
   }
 
@@ -60,8 +57,8 @@ export class AuditService {
       }
 
       return true;
-    } catch (error) {
-      console.warn('AuditService.authorizeVote failed (offline or backend down):', error);
+    } catch (_error) {
+      // Fail open: keep app usable offline
       return true;
     }
   }
@@ -80,8 +77,7 @@ export class AuditService {
 
       const data = (await res.json()) as { user?: CloudUser | null };
       return data.user ?? null;
-    } catch (error) {
-      console.warn('AuditService.getCloudUser failed:', error);
+    } catch (_error) {
       return null;
     }
   }
