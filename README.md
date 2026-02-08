@@ -1,6 +1,8 @@
 # interpoll
 
-A decentralized polling platform. Votes are recorded on a local blockchain, poll data lives in a distributed database (GunDB), and peers find each other through a lightweight WebSocket relay. Everything works offline -- sync happens when a connection is available. Data is basically unerasable, because as soon as one peer 
+A decentralized polling platform. Votes are recorded on a local blockchain, poll data lives in a distributed database (GunDB), and peers find each other through a lightweight WebSocket relay. Everything works offline -- sync happens when a connection is available. Data is basically unerasable, because as soon as one peer is back online, whole data is restored.
+<img width="1919" height="971" alt="image" src="https://github.com/user-attachments/assets/6605d874-eebd-40ad-8ce4-7fca1fefed16" />
+
 
 ## Quick start
 
