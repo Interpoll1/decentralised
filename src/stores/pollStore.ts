@@ -4,6 +4,9 @@ import { ref, computed } from 'vue';
 import type { Poll } from '../services/pollService';
 import { PollService } from '../services/pollService';
 import { UserService } from '../services/userService';
+import { EventService } from '../services/eventService';
+import { BroadcastService } from '../services/broadcastService';
+import { WebSocketService } from '../services/websocketService';
 
 export const usePollStore = defineStore('poll', () => {
   const polls = ref<Poll[]>([]);
@@ -85,6 +88,27 @@ export const usePollStore = defineStore('poll', () => {
     // optimistic insert at top (newest)
     if (!polls.value.some((p) => p.id === poll.id)) {
       polls.value.unshift(poll);
+    }
+
+    // Create and broadcast signed poll event
+    try {
+      const pollEvent = await EventService.createPollEvent({
+        id: poll.id,
+        communityId: data.communityId,
+        question: data.question,
+        description: data.description,
+        options: data.options,
+        durationDays: data.durationDays,
+        allowMultipleChoices: data.allowMultipleChoices,
+        showResultsBeforeVoting: data.showResultsBeforeVoting,
+        requireLogin: data.requireLogin,
+        isPrivate: data.isPrivate,
+      });
+
+      BroadcastService.broadcast('new-event', pollEvent);
+      WebSocketService.broadcast('new-event', pollEvent);
+    } catch (err) {
+      console.warn('Failed to create signed poll event:', err);
     }
 
     return poll;

@@ -53,17 +53,40 @@
                     {{ fullHash(block.voteHash) }}
                   </code>
                 </div>
+
+                <div class="hash-row" v-if="block.pubkey">
+                  <span class="hash-label">Signer:</span>
+                  <code class="hash-value signer-value">
+                    {{ block.pubkey }}
+                  </code>
+                </div>
+
+                <div class="hash-row">
+                  <span class="hash-label">Signature:</span>
+                  <code class="hash-value">
+                    {{ fullHash(block.signature) }}
+                  </code>
+                </div>
               </div>
 
               <div class="block-validity">
-                <ion-icon
-                  :icon="checkmarkCircle"
-                  color="success"
-                  v-if="block.index > 0"
-                ></ion-icon>
-                <span class="validity-label">
-                  {{ block.index === 0 ? 'Genesis Block' : 'Valid' }}
-                </span>
+                <template v-if="block.index === 0">
+                  <ion-icon :icon="shieldCheckmarkOutline" color="primary"></ion-icon>
+                  <span class="validity-label">Genesis Block</span>
+                </template>
+                <template v-else-if="block.pubkey">
+                  <ion-icon
+                    :icon="verificationStatus[block.index] ? shieldCheckmarkOutline : alertCircleOutline"
+                    :color="verificationStatus[block.index] ? 'success' : 'danger'"
+                  ></ion-icon>
+                  <span class="validity-label" :class="verificationStatus[block.index] ? 'sig-verified' : 'sig-invalid'">
+                    {{ verificationStatus[block.index] ? 'Schnorr Verified' : 'Signature Invalid' }}
+                  </span>
+                </template>
+                <template v-else>
+                  <ion-icon :icon="informationCircleOutline" color="medium"></ion-icon>
+                  <span class="validity-label">Legacy (no signature)</span>
+                </template>
               </div>
             </div>
           </div>
@@ -74,7 +97,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, watchEffect } from 'vue';
 import {
   IonPage,
   IonHeader,
@@ -91,13 +114,36 @@ import {
   IonBadge,
   IonIcon
 } from '@ionic/vue';
-import { checkmarkCircle } from 'ionicons/icons';
+import {
+  shieldCheckmarkOutline,
+  alertCircleOutline,
+  informationCircleOutline
+} from 'ionicons/icons';
 import { useChainStore } from '../stores/chainStore';
+import { CryptoService } from '../services/cryptoService';
 
 const chainStore = useChainStore();
 
 const reversedBlocks = computed(() => {
   return [...chainStore.blocks].reverse();
+});
+
+// Verify Schnorr signatures for all blocks with pubkeys
+const verificationStatus = ref<Record<number, boolean>>({});
+
+watchEffect(() => {
+  const status: Record<number, boolean> = {};
+  for (const block of chainStore.blocks) {
+    if (block.pubkey) {
+      const dataToVerify = JSON.stringify({
+        index: block.index,
+        voteHash: block.voteHash,
+        previousHash: block.previousHash,
+      });
+      status[block.index] = CryptoService.verify(dataToVerify, block.signature, block.pubkey);
+    }
+  }
+  verificationStatus.value = status;
 });
 
 const fullHash = (hash: string) => {
@@ -172,6 +218,11 @@ const formatDate = (timestamp: number) => {
   box-shadow: var(--glass-highlight);
 }
 
+.signer-value {
+  border-color: rgba(var(--ion-color-primary-rgb), 0.3);
+  background: rgba(var(--ion-color-primary-rgb), 0.04);
+}
+
 .block-validity {
   display: flex;
   align-items: center;
@@ -182,5 +233,15 @@ const formatDate = (timestamp: number) => {
 .validity-label {
   font-size: 12px;
   color: var(--ion-color-medium);
+}
+
+.sig-verified {
+  color: var(--ion-color-success);
+  font-weight: 600;
+}
+
+.sig-invalid {
+  color: var(--ion-color-danger);
+  font-weight: 600;
 }
 </style>

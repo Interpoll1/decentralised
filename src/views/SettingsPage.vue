@@ -125,9 +125,48 @@
             </template>
           </ion-card-content>
         </ion-card>
-      </div>
 
-      <!-- NETWORK TAB -->
+        <!-- Cryptographic Identity -->
+        <ion-card>
+          <ion-card-header>
+            <ion-card-title>Cryptographic Identity</ion-card-title>
+            <ion-card-subtitle>Schnorr / secp256k1 keypair for signing events</ion-card-subtitle>
+          </ion-card-header>
+
+          <ion-card-content>
+            <div class="info-grid">
+              <div class="info-row">
+                <span>Public Key</span>
+              </div>
+              <div class="key-display">
+                <code class="key-value">{{ publicKeyHex }}</code>
+                <ion-button fill="clear" size="small" @click="copyPublicKey">
+                  <ion-icon :icon="copyOutline"></ion-icon>
+                </ion-button>
+              </div>
+
+              <div class="info-row" style="margin-top: 12px">
+                <span>Private Key</span>
+              </div>
+              <div v-if="!showPrivateKey" class="key-display">
+                <code class="key-value key-hidden">**** hidden ****</code>
+                <ion-button fill="clear" size="small" color="warning" @click="revealPrivateKey">
+                  <ion-icon :icon="eyeOutline"></ion-icon>
+                </ion-button>
+              </div>
+              <div v-else class="key-display">
+                <code class="key-value key-danger">{{ privateKeyHex }}</code>
+                <ion-button fill="clear" size="small" @click="copyPrivateKey">
+                  <ion-icon :icon="copyOutline"></ion-icon>
+                </ion-button>
+              </div>
+              <p v-if="showPrivateKey" class="key-warning">
+                Never share your private key. Anyone with it can sign events as you.
+              </p>
+            </div>
+          </ion-card-content>
+        </ion-card>
+      </div>
       <div v-if="activeTab === 'network'">
         <!-- Connection Status -->
         <ion-card>
@@ -576,7 +615,9 @@ import {
   globeOutline,
   swapHorizontalOutline,
   serverOutline,
-  logOutOutline
+  logOutOutline,
+  copyOutline,
+  eyeOutline
 } from 'ionicons/icons';
 import { PinningService } from '../services/pinningService';
 import { StorageManager } from '../services/storageManager';
@@ -585,6 +626,7 @@ import { VoteTrackerService } from '../services/voteTrackerService';
 import { AuditService, type CloudUser } from '../services/auditService';
 import { WebSocketService, type KnownServer } from '../services/websocketService';
 import { GunService } from '../services/gunService';
+import { KeyService } from '../services/keyService';
 import { useChainStore } from '../stores/chainStore';
 import config from '../config';
 
@@ -610,6 +652,11 @@ const minUserKarma = ref<number>(-1000);
 const userProfile = ref<any>(null);
 const deviceId = ref('');
 const cloudUser = ref<CloudUser | null>(null);
+
+// Crypto identity state
+const publicKeyHex = ref('');
+const privateKeyHex = ref('');
+const showPrivateKey = ref(false);
 
 // Network state
 const networkStatus = ref({
@@ -790,11 +837,49 @@ function formatPeerTime(timestamp: number): string {
   return `${hours}h ago`;
 }
 
+async function revealPrivateKey() {
+  const keyPair = await KeyService.getKeyPair();
+  privateKeyHex.value = keyPair.privateKey;
+  showPrivateKey.value = true;
+}
+
+async function copyPublicKey() {
+  try {
+    await navigator.clipboard.writeText(publicKeyHex.value);
+    const toast = await toastController.create({
+      message: 'Public key copied',
+      duration: 1500,
+      color: 'success',
+    });
+    await toast.present();
+  } catch { /* clipboard not available */ }
+}
+
+async function copyPrivateKey() {
+  try {
+    await navigator.clipboard.writeText(privateKeyHex.value);
+    const toast = await toastController.create({
+      message: 'Private key copied — keep it safe!',
+      duration: 2000,
+      color: 'warning',
+    });
+    await toast.present();
+  } catch { /* clipboard not available */ }
+}
+
 onMounted(async () => {
   await refreshStorageStats();
   await loadPolicy();
   userProfile.value = await UserService.getCurrentUser();
   deviceId.value = await VoteTrackerService.getDeviceId();
+
+  // Load crypto keypair
+  try {
+    const keyPair = await KeyService.getKeyPair();
+    publicKeyHex.value = keyPair.publicKey;
+  } catch {
+    // Key generation failed silently
+  }
 
   // Show cached user immediately, then validate against backend
   cloudUser.value = AuditService.getCachedUser();
@@ -1508,5 +1593,43 @@ const handleLogout = async () => {
   padding: 4px 8px;
   border-radius: 8px;
   word-break: break-all;
+}
+
+/* ── Crypto Identity ── */
+.key-display {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.key-value {
+  font-size: 11px;
+  background: rgba(var(--ion-card-background-rgb), 0.18);
+  backdrop-filter: blur(10px) saturate(1.3);
+  -webkit-backdrop-filter: blur(10px) saturate(1.3);
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
+  padding: 6px 10px;
+  border-radius: 12px;
+  word-break: break-all;
+  flex: 1;
+  box-shadow: var(--glass-highlight);
+}
+
+.key-hidden {
+  color: var(--ion-color-medium);
+  font-style: italic;
+}
+
+.key-danger {
+  border-color: rgba(var(--ion-color-warning-rgb), 0.35);
+  background: rgba(var(--ion-color-warning-rgb), 0.06);
+}
+
+.key-warning {
+  font-size: 12px;
+  color: var(--ion-color-warning);
+  margin-top: 6px;
+  line-height: 1.4;
 }
 </style>

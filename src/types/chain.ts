@@ -23,6 +23,8 @@ export interface ChainBlock {
   signature: string;
   currentHash: string;
   nonce: number;
+  pubkey?: string;    // Signer's x-only public key (hex) — absent on legacy blocks
+  eventId?: string;   // Reference to the NostrEvent that produced this block
 }
 
 export interface Receipt {
