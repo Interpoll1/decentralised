@@ -134,22 +134,44 @@
           <ion-card-header>
             <div class="status-header">
               <ion-card-title>Connection Status</ion-card-title>
-              <div class="status-indicator" :class="{ connected: networkStatus.wsConnected }">
+              <div class="status-indicator" :class="connectionStatusClass">
                 <span class="status-dot"></span>
-                {{ networkStatus.wsConnected ? 'Connected' : 'Disconnected' }}
+                {{ connectionStatusLabel }}
               </div>
             </div>
           </ion-card-header>
 
           <ion-card-content>
+            <!-- Individual service status -->
+            <div class="service-status-list">
+              <div class="service-status-row">
+                <div class="service-info">
+                  <span class="service-dot" :class="{ online: networkStatus.wsConnected }"></span>
+                  <span class="service-name">WebSocket Relay</span>
+                </div>
+                <span class="service-state" :class="networkStatus.wsConnected ? 'state-ok' : 'state-off'">
+                  {{ networkStatus.wsConnected ? 'Connected' : 'Disconnected' }}
+                </span>
+              </div>
+              <div class="service-status-row">
+                <div class="service-info">
+                  <span class="service-dot" :class="{ online: networkStatus.gunConnected }"></span>
+                  <span class="service-name">GunDB Relay</span>
+                </div>
+                <span class="service-state" :class="networkStatus.gunConnected ? 'state-ok' : 'state-off'">
+                  {{ networkStatus.gunConnected ? 'Connected' : 'Disconnected' }}
+                </span>
+              </div>
+            </div>
+
             <div class="metrics-grid">
               <div class="metric-card">
                 <div class="metric-value">{{ networkStatus.peerCount }}</div>
                 <div class="metric-label">Active Peers</div>
               </div>
               <div class="metric-card">
-                <div class="metric-value">{{ networkStatus.gunConnected ? 'Yes' : 'No' }}</div>
-                <div class="metric-label">DB Relay</div>
+                <div class="metric-value">{{ networkStatus.gunPeerCount }}</div>
+                <div class="metric-label">DB Peers</div>
               </div>
               <div class="metric-card">
                 <div class="metric-value">{{ networkStatus.blockHeight }}</div>
@@ -295,14 +317,14 @@
                 <ion-icon :icon="refreshOutline"></ion-icon>
               </ion-button>
             </div>
-            <ion-card-subtitle>Peers sharing relay addresses</ion-card-subtitle>
+            <ion-card-subtitle>Peers sharing relay addresses automatically</ion-card-subtitle>
           </ion-card-header>
 
           <ion-card-content>
             <div v-if="peerList.length === 0" class="empty-peers">
               <ion-icon :icon="globeOutline" size="large"></ion-icon>
               <p>No peers connected yet</p>
-              <p class="helper-text">Peers will appear here once they join the network</p>
+              <p class="helper-text">Peers will appear here once they join the network. Relay addresses are shared automatically on connect.</p>
             </div>
 
             <div v-else class="peer-list">
@@ -594,8 +616,22 @@ const networkStatus = ref({
   wsConnected: false,
   gunConnected: false,
   peerCount: 0,
+  gunPeerCount: 0,
   blockHeight: 0,
   chainValid: true
+});
+
+const connectionStatusClass = computed(() => {
+  if (networkStatus.value.wsConnected && networkStatus.value.gunConnected) return 'connected';
+  if (networkStatus.value.wsConnected || networkStatus.value.gunConnected) return 'partial';
+  return '';
+});
+
+const connectionStatusLabel = computed(() => {
+  if (networkStatus.value.wsConnected && networkStatus.value.gunConnected) return 'Fully Connected';
+  if (networkStatus.value.wsConnected) return 'WS Only';
+  if (networkStatus.value.gunConnected) return 'Gun Only';
+  return 'Disconnected';
 });
 
 const peerList = ref<Array<{ peerId: string; relayUrl: string; gunPeers: string[]; joinedAt: number }>>([]);
@@ -648,6 +684,7 @@ function refreshNetwork() {
     wsConnected,
     gunConnected: gunStats.isConnected,
     peerCount: WebSocketService.getPeerCount(),
+    gunPeerCount: gunStats.peerCount,
     blockHeight: chainStore.blocks.length,
     chainValid: chainStore.chainValid
   };
@@ -836,7 +873,7 @@ const exportData = async () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `intepoll-backup-${Date.now()}.json`;
+    a.download = `interpoll-backup-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
 
@@ -1083,12 +1120,75 @@ const handleLogout = async () => {
   background: rgba(var(--ion-color-success-rgb), 0.1);
 }
 
+.status-indicator.partial {
+  color: var(--ion-color-warning);
+  background: rgba(var(--ion-color-warning-rgb), 0.1);
+}
+
 .status-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: currentColor;
   animation: pulse 2s infinite;
+}
+
+/* ── Service Status Rows ── */
+.service-status-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--ion-color-light);
+  border-radius: 10px;
+}
+
+.service-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.service-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.service-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ion-color-danger);
+  flex-shrink: 0;
+}
+
+.service-dot.online {
+  background: var(--ion-color-success);
+  animation: pulse 2s infinite;
+}
+
+.service-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.service-state {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.service-state.state-ok {
+  color: var(--ion-color-success);
+  background: rgba(var(--ion-color-success-rgb), 0.1);
+}
+
+.service-state.state-off {
+  color: var(--ion-color-danger);
+  background: rgba(var(--ion-color-danger-rgb), 0.1);
 }
 
 @keyframes pulse {

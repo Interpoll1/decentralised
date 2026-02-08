@@ -2,7 +2,10 @@
   <div class="comment-card">
     <!-- Comment Header -->
     <div class="comment-header">
-      <span class="author-name">u/{{ displayName }}</span>
+      <span class="author-badge">
+        <span class="commenter-dot"></span>
+        <span class="author-name">u/{{ displayName }}</span>
+      </span>
       <span class="separator">•</span>
       <span class="timestamp">{{ formatTime(comment.createdAt) }}</span>
       <span v-if="comment.edited" class="edited-label">(edited)</span>
@@ -229,6 +232,25 @@ function formatNumber(num: number | undefined | null): string {
 
 .comment-header {
   margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.author-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.commenter-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ion-color-success);
+  flex-shrink: 0;
+  box-shadow: 0 0 4px rgba(var(--ion-color-success-rgb), 0.5);
 }
 
 .comment-author {
@@ -321,7 +343,7 @@ function formatNumber(num: number | undefined | null): string {
 .reply-form {
   margin-top: 12px;
   padding: 12px;
-  background: #f8f8f8;
+  background: var(--ion-color-light);
   border-radius: 8px;
 }
 
@@ -337,6 +359,6 @@ function formatNumber(num: number | undefined | null): string {
 .replies-container {
   margin-top: 12px;
   margin-left: 20px;
-  border-left: 2px solid #e0e0e0;
+  border-left: 2px solid var(--ion-color-light-shade, #e0e0e0);
 }
 </style>

@@ -1,4 +1,4 @@
-# Intepoll
+# interpoll
 
 A decentralized polling platform. Votes are recorded on a local blockchain, poll data lives in a distributed database (GunDB), and peers find each other through a lightweight WebSocket relay. Everything works offline -- sync happens when a connection is available.
 
@@ -65,7 +65,7 @@ The system has four layers that each handle a different concern.
 ```mermaid
 graph TD
     A[Browser Tab] -->|votes, polls| B[Local Blockchain - IndexedDB]
-    A -->|poll metadata, users, images| C[GunDB - Distributed]
+    A -->|poll metadata, users, images| C[GunDB - Distributed]  
     A -->|peer sync, new blocks| D[WebSocket Relay]
     A -->|cross-tab sync| E[BroadcastChannel API]
     D -->|relays messages| F[Other Peers]

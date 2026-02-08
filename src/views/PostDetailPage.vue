@@ -84,6 +84,24 @@
           </ion-card-content>
         </ion-card>
 
+        <!-- Commenters Panel -->
+        <ion-card v-if="uniqueCommenters.length > 0" class="commenters-card">
+          <ion-card-header>
+            <ion-card-title class="commenters-title">
+              Commenters ({{ uniqueCommenters.length }})
+            </ion-card-title>
+          </ion-card-header>
+          <ion-card-content>
+            <div class="commenters-list">
+              <div v-for="commenter in uniqueCommenters" :key="commenter.authorId" class="commenter-chip">
+                <span class="commenter-online-dot"></span>
+                <span class="commenter-name">u/{{ commenter.displayName }}</span>
+                <ion-badge color="medium" class="commenter-count">{{ commenter.commentCount }}</ion-badge>
+              </div>
+            </div>
+          </ion-card-content>
+        </ion-card>
+
         <!-- Comments Section -->
         <ion-card class="comments-card">
           <ion-card-header>
@@ -159,6 +177,7 @@ import {
   IonLabel,
   IonSpinner,
   IonTextarea,
+  IonBadge,
   toastController,
   actionSheetController
 } from '@ionic/vue';
@@ -179,6 +198,7 @@ import { useCommunityStore } from '../stores/communityStore';
 import { useUserStore } from '../stores/userStore';
 import CommentCard from '../components/CommentCard.vue';
 import { Post } from '../services/postService';
+import { generatePseudonym } from '../utils/pseudonym';
 
 const route = useRoute();
 const router = useRouter();
@@ -231,6 +251,27 @@ const sortedComments = computed(() => {
     }
     return b.createdAt - a.createdAt;
   });
+});
+
+const uniqueCommenters = computed(() => {
+  const authorMap = new Map<string, { authorId: string; displayName: string; commentCount: number }>();
+
+  commentStore.comments
+    .filter(c => c.postId === postId.value || c.postId === post.value?.id)
+    .forEach(c => {
+      const existing = authorMap.get(c.authorId);
+      if (existing) {
+        existing.commentCount++;
+      } else {
+        authorMap.set(c.authorId, {
+          authorId: c.authorId,
+          displayName: c.authorId && postId.value ? generatePseudonym(postId.value, c.authorId) : (c.authorName || 'anon'),
+          commentCount: 1,
+        });
+      }
+    });
+
+  return Array.from(authorMap.values()).sort((a, b) => b.commentCount - a.commentCount);
 });
 
 const hasUpvoted = computed(() => {
@@ -651,6 +692,51 @@ onMounted(async () => {
 
 .comments-card {
   margin: 12px;
+}
+
+/* ── Commenters Panel ── */
+.commenters-card {
+  margin: 12px;
+}
+
+.commenters-title {
+  font-size: 16px;
+}
+
+.commenters-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.commenter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--ion-color-light);
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.commenter-online-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ion-color-success);
+  flex-shrink: 0;
+  box-shadow: 0 0 4px rgba(var(--ion-color-success-rgb), 0.5);
+}
+
+.commenter-name {
+  color: var(--ion-text-color);
+}
+
+.commenter-count {
+  font-size: 10px;
+  --padding-start: 4px;
+  --padding-end: 4px;
 }
 
 .add-comment-form {

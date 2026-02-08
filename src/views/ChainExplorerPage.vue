@@ -19,49 +19,49 @@
         </ion-card-header>
 
         <ion-card-content>
-          <div class="space-y-3">
+          <div class="blocks-list">
             <div
               v-for="block in reversedBlocks"
               :key="block.index"
-              class="border border-gray-200 rounded p-3 bg-gray-50"
+              class="block-item"
             >
-              <div class="flex justify-between items-start mb-2">
+              <div class="block-header">
                 <ion-badge color="primary">Block #{{ block.index }}</ion-badge>
-                <span class="text-xs text-gray-500">
+                <span class="block-timestamp">
                   {{ formatDate(block.timestamp) }}
                 </span>
               </div>
 
-              <div class="space-y-1 text-xs">
-                <div>
-                  <span class="text-gray-600">Previous Hash:</span>
-                  <code class="block bg-white px-2 py-1 rounded mt-1 break-all">
+              <div class="block-hashes">
+                <div class="hash-row">
+                  <span class="hash-label">Previous Hash:</span>
+                  <code class="hash-value">
                     {{ truncateHash(block.previousHash) }}
                   </code>
                 </div>
 
-                <div>
-                  <span class="text-gray-600">Current Hash:</span>
-                  <code class="block bg-white px-2 py-1 rounded mt-1 break-all">
+                <div class="hash-row">
+                  <span class="hash-label">Current Hash:</span>
+                  <code class="hash-value">
                     {{ truncateHash(block.currentHash) }}
                   </code>
                 </div>
 
-                <div>
-                  <span class="text-gray-600">Vote Hash:</span>
-                  <code class="block bg-white px-2 py-1 rounded mt-1 break-all">
+                <div class="hash-row">
+                  <span class="hash-label">Vote Hash:</span>
+                  <code class="hash-value">
                     {{ truncateHash(block.voteHash) }}
                   </code>
                 </div>
               </div>
 
-              <div class="mt-2 flex gap-2">
+              <div class="block-validity">
                 <ion-icon
                   :icon="checkmarkCircle"
                   color="success"
                   v-if="block.index > 0"
                 ></ion-icon>
-                <span class="text-xs text-gray-600">
+                <span class="validity-label">
                   {{ block.index === 0 ? 'Genesis Block' : 'Valid' }}
                 </span>
               </div>
@@ -109,3 +109,70 @@ const formatDate = (timestamp: number) => {
   return new Date(timestamp).toLocaleString();
 };
 </script>
+
+<style scoped>
+.blocks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.block-item {
+  border: 1px solid var(--ion-color-light-shade, #d7d8da);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--ion-color-light);
+}
+
+.block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.block-timestamp {
+  font-size: 12px;
+  color: var(--ion-color-medium);
+}
+
+.block-hashes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.hash-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hash-label {
+  color: var(--ion-color-medium);
+}
+
+.hash-value {
+  display: block;
+  background: var(--ion-color-light-shade, rgba(0,0,0,0.05));
+  color: var(--ion-text-color);
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-top: 2px;
+  word-break: break-all;
+  font-size: 12px;
+}
+
+.block-validity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.validity-label {
+  font-size: 12px;
+  color: var(--ion-color-medium);
+}
+</style>

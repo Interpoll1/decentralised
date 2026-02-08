@@ -14,7 +14,7 @@
  *   const ws = new WebSocket(config.relay.websocket);
  */
 
-const STORAGE_KEY = 'intepoll_relay_config';
+const STORAGE_KEY = 'interpoll_relay_config';
 
 interface RelayOverrides {
   websocket?: string;

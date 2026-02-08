@@ -3,12 +3,12 @@
     <ion-card-header>
       <ion-card-title class="flex items-center justify-between">
         <span class="text-lg font-bold">Chain Status</span>
-        <ion-badge 
-          :color="chainStore.isWebSocketConnected ? 'success' : 'warning'"
+        <ion-badge
+          :color="overallStatusColor"
           class="px-3 py-1 rounded-full text-[10px] uppercase tracking-wider"
-          :key="`ws-${chainStore.isWebSocketConnected}`"
+          :key="`ws-${chainStore.isWebSocketConnected}-gun-${gunConnected}`"
         >
-          {{ chainStore.isWebSocketConnected ? 'Online' : 'Offline' }}
+          {{ overallStatusLabel }}
         </ion-badge>
       </ion-card-title>
     </ion-card-header>
@@ -22,14 +22,27 @@
         </div>
 
         <div class="flex justify-between items-center">
-          <span class="text-sm font-medium opacity-80">WebSocket Status:</span>
+          <span class="text-sm font-medium opacity-80">WebSocket:</span>
           <div class="flex items-center gap-2">
-            <div 
+            <div
               class="w-2 h-2 rounded-full"
               :class="chainStore.isWebSocketConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'"
             ></div>
             <span class="text-xs font-semibold">
-              {{ chainStore.isWebSocketConnected ? 'Online' : 'Local Only' }}
+              {{ chainStore.isWebSocketConnected ? 'Connected' : 'Disconnected' }}
+            </span>
+          </div>
+        </div>
+
+        <div class="flex justify-between items-center">
+          <span class="text-sm font-medium opacity-80">GunDB:</span>
+          <div class="flex items-center gap-2">
+            <div
+              class="w-2 h-2 rounded-full"
+              :class="gunConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'"
+            ></div>
+            <span class="text-xs font-semibold">
+              {{ gunConnected ? 'Connected' : 'Disconnected' }}
             </span>
           </div>
         </div>
@@ -43,7 +56,7 @@
 
         <div class="flex justify-between items-center">
           <span class="text-sm font-medium opacity-80">Chain Valid:</span>
-          <ion-icon 
+          <ion-icon
             :icon="chainStore.chainValid ? checkmarkCircle : closeCircle"
             :color="chainStore.chainValid ? 'success' : 'danger'"
             size="large"
@@ -59,13 +72,13 @@
 
         <div class="rounded p-3 mt-3 border border-primary/10 bg-primary/5">
           <p class="text-xs text-primary font-semibold">
-            Intepoll Network<br/>
+            interpoll Network<br/>
             <span class="opacity-70 font-normal">Cross-Device &middot; Cross-Browser &middot; Persistent Storage</span>
           </p>
         </div>
 
-        <ion-button 
-          expand="block" 
+        <ion-button
+          expand="block"
           size="small"
           @click="handleValidateChain"
           :disabled="chainStore.isValidating"
@@ -93,11 +106,11 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick } from 'vue';
-import { 
-  IonCard, 
-  IonCardHeader, 
-  IonCardTitle, 
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue';
+import {
+  IonCard,
+  IonCardHeader,
+  IonCardTitle,
   IonCardContent,
   IonBadge,
   IonButton,
@@ -107,8 +120,38 @@ import {
 } from '@ionic/vue';
 import { checkmarkCircle, closeCircle, shield, warningOutline } from 'ionicons/icons';
 import { useChainStore } from '../stores/chainStore';
+import { GunService } from '../services/gunService';
 
 const chainStore = useChainStore();
+const gunConnected = ref(false);
+let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+const overallStatusColor = computed(() => {
+  if (chainStore.isWebSocketConnected && gunConnected.value) return 'success';
+  if (chainStore.isWebSocketConnected || gunConnected.value) return 'warning';
+  return 'warning';
+});
+
+const overallStatusLabel = computed(() => {
+  if (chainStore.isWebSocketConnected && gunConnected.value) return 'Online';
+  if (chainStore.isWebSocketConnected) return 'WS Only';
+  if (gunConnected.value) return 'Gun Only';
+  return 'Offline';
+});
+
+function refreshGunStatus() {
+  const stats = GunService.getPeerStats();
+  gunConnected.value = stats.isConnected;
+}
+
+onMounted(() => {
+  refreshGunStatus();
+  pollInterval = setInterval(refreshGunStatus, 5000);
+});
+
+onUnmounted(() => {
+  if (pollInterval) clearInterval(pollInterval);
+});
 
 const handleValidateChain = async () => {
   await chainStore.validateChain();

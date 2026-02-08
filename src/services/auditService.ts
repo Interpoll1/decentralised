@@ -14,8 +14,8 @@ interface VoteAuthorizeResponse {
   reason?: string;
 }
 
-const STORAGE_KEY = 'intepoll_cloud_user';
-const RETURN_URL_KEY = 'intepoll_auth_return';
+const STORAGE_KEY = 'interpoll_cloud_user';
+const RETURN_URL_KEY = 'interpoll_auth_return';
 
 export class AuditService {
   private static cachedUser: CloudUser | null | undefined = undefined;

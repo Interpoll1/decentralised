@@ -2,7 +2,7 @@
   <ion-page>
     <ion-header>
       <ion-toolbar>
-        <ion-title>Intepoll</ion-title>
+        <ion-title>interpoll</ion-title>
         <ion-buttons slot="end">
           <ion-button @click="$router.push('/profile')">
             <ion-icon :icon="personCircleOutline"></ion-icon>
