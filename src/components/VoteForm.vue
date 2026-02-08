@@ -1,12 +1,12 @@
 <template>
   <ion-card>
     <!-- Already Voted Warning -->
-    <div v-if="hasAlreadyVoted" class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+    <div v-if="hasAlreadyVoted" class="voted-warning">
       <div class="flex">
         <ion-icon :icon="warningOutline" class="text-yellow-400 text-2xl mr-3"></ion-icon>
         <div>
-          <h3 class="text-sm font-medium text-yellow-800">Already Voted</h3>
-          <p class="mt-1 text-sm text-yellow-700">
+          <h3 class="text-sm font-medium">Already Voted</h3>
+          <p class="mt-1 text-sm opacity-80">
             You've already voted on this poll from this device.
             Each device can only vote once to ensure fair results.
           </p>
@@ -35,10 +35,10 @@
         </ion-item>
       </ion-radio-group>
 
-      <div class="mt-4 bg-blue-50 border border-blue-200 rounded p-3">
-        <p class="text-xs text-blue-800">
+      <div class="mt-4 info-notice">
+        <p class="text-xs">
           <ion-icon :icon="informationCircle" class="align-middle"></ion-icon>
-          <strong>One Vote Per Device:</strong> Your device fingerprint will be recorded 
+          <strong>One Vote Per Device:</strong> Your device fingerprint will be recorded
           to prevent duplicate votes. You'll receive a 12-word receipt to verify your vote later.
         </p>
       </div>
@@ -263,3 +263,24 @@ function getOptionKey(option: RawOption, index: number): string {
   return option.id || `${index}`;
 }
 </script>
+
+<style scoped>
+.voted-warning {
+  padding: 16px;
+  background: rgba(var(--ion-color-warning-rgb), 0.08);
+  border-left: 4px solid var(--ion-color-warning);
+  border-radius: 0 14px 14px 0;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.info-notice {
+  padding: 12px;
+  background: rgba(var(--ion-color-primary-rgb), 0.06);
+  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.12);
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--ion-color-primary);
+}
+</style>

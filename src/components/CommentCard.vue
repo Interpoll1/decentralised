@@ -225,9 +225,15 @@ function formatNumber(num: number | undefined | null): string {
 <style scoped>
 .comment-card {
   padding: 16px;
-  background: var(--ion-color-light);
-  border-radius: 8px;
+  background: rgba(var(--ion-card-background-rgb), 0.35);
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  border-radius: 14px;
   border-left: 3px solid var(--ion-color-primary);
+  border-top: 1px solid var(--glass-border);
+  border-right: 1px solid var(--glass-border);
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
 }
 
 .comment-header {
@@ -293,20 +299,23 @@ function formatNumber(num: number | undefined | null): string {
   display: flex;
   align-items: center;
   gap: 4px;
-  background: none;
-  border: none;
+  background: rgba(var(--ion-card-background-rgb), 0.25);
+  border: 1px solid var(--glass-border);
   padding: 6px 10px;
   font-size: 13px;
   color: var(--ion-color-medium);
   cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.2s ease;
+  border-radius: 10px;
+  transition: var(--liquid-transition);
   font-family: inherit;
   font-weight: 500;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .action-button:hover {
-  background: var(--ion-color-light-shade);
+  background: rgba(var(--ion-color-primary-rgb), 0.1);
+  border-color: rgba(var(--ion-color-primary-rgb), 0.2);
 }
 
 .action-button:active {
@@ -315,12 +324,14 @@ function formatNumber(num: number | undefined | null): string {
 
 .action-button.upvote.active {
   color: var(--ion-color-primary);
-  background: rgba(var(--ion-color-primary-rgb), 0.1);
+  background: rgba(var(--ion-color-primary-rgb), 0.12);
+  border-color: rgba(var(--ion-color-primary-rgb), 0.25);
 }
 
 .action-button.downvote.active {
   color: var(--ion-color-danger);
-  background: rgba(var(--ion-color-danger-rgb), 0.1);
+  background: rgba(var(--ion-color-danger-rgb), 0.12);
+  border-color: rgba(var(--ion-color-danger-rgb), 0.25);
 }
 
 .action-button.reply:hover {
@@ -343,8 +354,11 @@ function formatNumber(num: number | undefined | null): string {
 .reply-form {
   margin-top: 12px;
   padding: 12px;
-  background: var(--ion-color-light);
-  border-radius: 8px;
+  background: rgba(var(--ion-card-background-rgb), 0.25);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
 }
 
 .reply-textarea {
@@ -359,6 +373,6 @@ function formatNumber(num: number | undefined | null): string {
 .replies-container {
   margin-top: 12px;
   margin-left: 20px;
-  border-left: 2px solid var(--ion-color-light-shade, #e0e0e0);
+  border-left: 2px solid rgba(var(--ion-color-primary-rgb), 0.2);
 }
 </style>

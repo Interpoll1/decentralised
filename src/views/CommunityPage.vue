@@ -477,8 +477,10 @@ onMounted(async () => {
 
 .content-filter {
   padding: 12px;
-  background: white;
-  border-bottom: 1px solid var(--ion-color-light);
+  background: rgba(var(--ion-card-background-rgb), 0.4);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
+  border-bottom: 1px solid var(--glass-border);
   position: sticky;
   top: 0;
   z-index: 10;

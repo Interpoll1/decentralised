@@ -136,12 +136,12 @@ function getIPFSUrl(cid?: string): string {
 .post-card {
   margin: 12px 12px;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  border-radius: 16px;
 }
 
 .post-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-3px);
 }
 
 .post-header {
@@ -190,7 +190,7 @@ function getIPFSUrl(cid?: string): string {
 
 .post-image {
   margin: 12px 0;
-  border-radius: 8px;
+  border-radius: 12px;
   overflow: hidden;
   max-height: 400px;
 }
@@ -202,7 +202,7 @@ function getIPFSUrl(cid?: string): string {
 }
 
 .post-footer {
-  border-top: 1px solid var(--ion-color-light);
+  border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.06);
   padding-top: 12px;
   margin-top: 12px;
 }
@@ -217,18 +217,33 @@ function getIPFSUrl(cid?: string): string {
   display: flex;
   align-items: center;
   gap: 4px;
-  background: none;
-  border: none;
-  padding: 4px 8px;
-  border-radius: 4px;
+  background: rgba(var(--ion-card-background-rgb), 0.3);
+  border: 1px solid var(--glass-border);
+  padding: 4px 10px;
+  border-radius: 10px;
   cursor: pointer;
   font-size: 13px;
   color: var(--ion-color-step-600);
-  transition: background 0.2s;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .stat-button:hover {
-  background: var(--ion-color-light);
+  background: rgba(var(--ion-color-primary-rgb), 0.1);
+  border-color: rgba(var(--ion-color-primary-rgb), 0.2);
+}
+
+.stat-button.upvote.active {
+  background: rgba(var(--ion-color-primary-rgb), 0.15);
+  color: var(--ion-color-primary);
+  border-color: rgba(var(--ion-color-primary-rgb), 0.3);
+}
+
+.stat-button.downvote.active {
+  background: rgba(var(--ion-color-danger-rgb), 0.15);
+  color: var(--ion-color-danger);
+  border-color: rgba(var(--ion-color-danger-rgb), 0.3);
 }
 
 .stat-button ion-icon {
@@ -256,11 +271,11 @@ function getIPFSUrl(cid?: string): string {
   .post-title {
     font-size: 16px;
   }
-  
+
   .post-content {
     font-size: 13px;
   }
-  
+
   .post-stats {
     gap: 12px;
     font-size: 12px;

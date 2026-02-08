@@ -266,8 +266,8 @@ const submitPost = async () => {
   width: 100%;
   max-height: 400px;
   object-fit: cover;
-  border-radius: 8px;
-  border: 2px solid var(--ion-color-light);
+  border-radius: 12px;
+  border: 2px solid var(--glass-border);
 }
 
 .remove-image {
@@ -289,8 +289,11 @@ const submitPost = async () => {
   gap: 8px;
   margin-top: 16px;
   padding: 12px;
-  background: var(--ion-color-light);
-  border-radius: 8px;
+  background: rgba(var(--ion-card-background-rgb), 0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
   font-size: 12px;
   color: var(--ion-color-medium);
 }

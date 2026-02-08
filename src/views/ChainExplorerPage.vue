@@ -118,10 +118,13 @@ const formatDate = (timestamp: number) => {
 }
 
 .block-item {
-  border: 1px solid var(--ion-color-light-shade, #d7d8da);
-  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
   padding: 12px;
-  background: var(--ion-color-light);
+  background: rgba(var(--ion-card-background-rgb), 0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: var(--glass-highlight);
 }
 
 .block-header {
@@ -155,10 +158,13 @@ const formatDate = (timestamp: number) => {
 
 .hash-value {
   display: block;
-  background: var(--ion-color-light-shade, rgba(0,0,0,0.05));
+  background: rgba(var(--ion-card-background-rgb), 0.3);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid var(--glass-border);
   color: var(--ion-text-color);
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: 6px;
   margin-top: 2px;
   word-break: break-all;
   font-size: 12px;

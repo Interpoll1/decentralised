@@ -407,8 +407,12 @@ ion-card {
   align-items: center;
   gap: 12px;
   padding: 12px;
-  background: var(--ion-color-light);
-  border-radius: 8px;
+  background: rgba(var(--ion-card-background-rgb), 0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  box-shadow: var(--glass-highlight);
 }
 
 .stat-item ion-icon {
@@ -508,8 +512,11 @@ ion-card {
 
 .result-bar {
   height: 32px;
-  background: var(--ion-color-light);
-  border-radius: 8px;
+  background: rgba(var(--ion-card-background-rgb), 0.3);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
   overflow: hidden;
   margin-bottom: 4px;
 }

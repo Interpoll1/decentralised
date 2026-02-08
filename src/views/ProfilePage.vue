@@ -375,12 +375,14 @@ onMounted(async () => {
   width: 120px;
   height: 120px;
   border-radius: 50%;
-  border: 4px solid white;
+  border: 4px solid rgba(255, 255, 255, 0.3);
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--ion-color-light);
+  background: rgba(var(--ion-card-background-rgb), 0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .avatar img {
@@ -462,8 +464,12 @@ onMounted(async () => {
   align-items: center;
   gap: 12px;
   padding: 12px;
-  border-radius: 8px;
-  background: var(--ion-color-light);
+  border-radius: 14px;
+  background: rgba(var(--ion-card-background-rgb), 0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-highlight);
 }
 
 .activity-item ion-icon {

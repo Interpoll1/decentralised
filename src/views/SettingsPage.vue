@@ -1042,8 +1042,9 @@ const handleLogout = async () => {
 .progress-bar {
   width: 100%;
   height: 8px;
-  background: var(--ion-color-light);
-  border-radius: 4px;
+  background: rgba(var(--ion-card-background-rgb), 0.3);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
   overflow: hidden;
   margin-top: 16px;
 }
@@ -1091,9 +1092,12 @@ const handleLogout = async () => {
 
 .info-row code {
   font-size: 12px;
-  background: var(--ion-color-light);
+  background: rgba(var(--ion-card-background-rgb), 0.3);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid var(--glass-border);
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: 8px;
 }
 
 /* ── Network Tab ── */
@@ -1113,16 +1117,21 @@ const handleLogout = async () => {
   padding: 4px 10px;
   border-radius: 20px;
   background: rgba(var(--ion-color-danger-rgb), 0.1);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid rgba(var(--ion-color-danger-rgb), 0.15);
 }
 
 .status-indicator.connected {
   color: var(--ion-color-success);
   background: rgba(var(--ion-color-success-rgb), 0.1);
+  border-color: rgba(var(--ion-color-success-rgb), 0.15);
 }
 
 .status-indicator.partial {
   color: var(--ion-color-warning);
   background: rgba(var(--ion-color-warning-rgb), 0.1);
+  border-color: rgba(var(--ion-color-warning-rgb), 0.15);
 }
 
 .status-dot {
@@ -1140,8 +1149,11 @@ const handleLogout = async () => {
   gap: 10px;
   margin-bottom: 16px;
   padding: 12px;
-  background: var(--ion-color-light);
-  border-radius: 10px;
+  background: rgba(var(--ion-card-background-rgb), 0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
 }
 
 .service-status-row {
@@ -1178,17 +1190,21 @@ const handleLogout = async () => {
   font-size: 12px;
   font-weight: 600;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: 8px;
 }
 
 .service-state.state-ok {
   color: var(--ion-color-success);
   background: rgba(var(--ion-color-success-rgb), 0.1);
+  border: 1px solid rgba(var(--ion-color-success-rgb), 0.15);
+  border-radius: 8px;
 }
 
 .service-state.state-off {
   color: var(--ion-color-danger);
   background: rgba(var(--ion-color-danger-rgb), 0.1);
+  border: 1px solid rgba(var(--ion-color-danger-rgb), 0.15);
+  border-radius: 8px;
 }
 
 @keyframes pulse {
@@ -1204,9 +1220,13 @@ const handleLogout = async () => {
 
 .metric-card {
   padding: 16px;
-  background: var(--ion-color-light);
-  border-radius: 10px;
+  background: rgba(var(--ion-card-background-rgb), 0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
   text-align: center;
+  box-shadow: var(--glass-highlight);
 }
 
 .metric-value {
@@ -1256,19 +1276,22 @@ const handleLogout = async () => {
 .relay-input {
   font-size: 13px;
   font-family: monospace;
-  background: var(--ion-color-light);
+  background: rgba(var(--ion-card-background-rgb), 0.3);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   color: var(--ion-text-color);
-  border: 1px solid var(--ion-color-light-shade, #d7d8da);
+  border: 1px solid var(--glass-border);
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: 10px;
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
   width: 100%;
   box-sizing: border-box;
 }
 
 .relay-input:focus {
-  border-color: var(--ion-color-primary);
+  border-color: rgba(var(--ion-color-primary-rgb), 0.4);
+  box-shadow: 0 0 0 3px rgba(var(--ion-color-primary-rgb), 0.1);
 }
 
 /* ── Known Servers ── */
@@ -1279,14 +1302,17 @@ const handleLogout = async () => {
 }
 
 .server-item {
-  border: 1px solid var(--ion-color-light-shade, #d7d8da);
-  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
   padding: 12px;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  background: rgba(var(--ion-card-background-rgb), 0.2);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .server-item.active {
-  border-color: var(--ion-color-success);
+  border-color: rgba(var(--ion-color-success-rgb), 0.4);
   background: rgba(var(--ion-color-success-rgb), 0.05);
 }
 
@@ -1336,9 +1362,12 @@ const handleLogout = async () => {
 
 .server-detail code {
   font-size: 12px;
-  background: var(--ion-color-light);
+  background: rgba(var(--ion-card-background-rgb), 0.3);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid var(--glass-border);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: 6px;
   word-break: break-all;
 }
 
@@ -1379,9 +1408,12 @@ const handleLogout = async () => {
 }
 
 .peer-item {
-  border: 1px solid var(--ion-color-light);
-  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
   padding: 12px;
+  background: rgba(var(--ion-card-background-rgb), 0.2);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .peer-header {
@@ -1435,9 +1467,12 @@ const handleLogout = async () => {
 
 .peer-detail code {
   font-size: 12px;
-  background: var(--ion-color-light);
+  background: rgba(var(--ion-card-background-rgb), 0.3);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid var(--glass-border);
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: 6px;
   word-break: break-all;
 }
 </style>

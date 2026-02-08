@@ -137,13 +137,13 @@ function getTimeRemaining(): string {
 .poll-card {
   margin: 12px 12px;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
-  border-left: 4px solid var(--ion-color-tertiary);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  border-left: 4px solid var(--ion-color-tertiary) !important;
+  border-radius: 16px;
 }
 
 .poll-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-3px);
 }
 
 .poll-header {
@@ -157,12 +157,15 @@ function getTimeRemaining(): string {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 8px;
-
+  padding: 4px 10px;
+  background: rgba(var(--ion-color-tertiary-rgb), 0.1);
+  border: 1px solid rgba(var(--ion-color-tertiary-rgb), 0.2);
   color: var(--ion-color-tertiary);
-  border-radius: 4px;
+  border-radius: 10px;
   font-size: 12px;
   font-weight: 600;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .poll-badge ion-icon {
@@ -187,12 +190,15 @@ function getTimeRemaining(): string {
 }
 
 .expired-badge {
-  padding: 2px 6px;
-  background: var(--ion-color-medium);
-  color: white;
-  border-radius: 4px;
+  padding: 2px 8px;
+  background: rgba(var(--ion-color-medium-rgb), 0.15);
+  color: var(--ion-color-medium);
+  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.2);
+  border-radius: 8px;
   font-size: 10px;
   font-weight: 600;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .poll-question {
@@ -220,10 +226,11 @@ function getTimeRemaining(): string {
 
 .option-bar {
   height: 8px;
-  background: var(--ion-color-light);
-  border-radius: 4px;
+  background: rgba(var(--ion-card-background-rgb), 0.4);
+  border-radius: 6px;
   overflow: hidden;
   margin-bottom: 4px;
+  border: 1px solid var(--glass-border);
 }
 
 .option-fill {
@@ -260,16 +267,19 @@ function getTimeRemaining(): string {
   padding: 16px;
   text-align: center;
   color: var(--ion-color-medium);
-  background: var(--ion-color-light);
-  border-radius: 8px;
+  background: rgba(var(--ion-card-background-rgb), 0.3);
+  border-radius: 12px;
   margin: 12px 0;
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .poll-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-top: 1px solid var(--ion-color-light);
+  border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.06);
   padding-top: 12px;
   margin-top: 12px;
 }

@@ -561,6 +561,7 @@ onMounted(async () => {
 
 .post-detail-card {
   margin: 12px;
+  border-radius: 16px;
 }
 
 .post-meta {
@@ -609,7 +610,7 @@ onMounted(async () => {
   align-items: center;
   margin-top: 20px;
   padding-top: 16px;
-  border-top: 1px solid var(--ion-color-light);
+  border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.06);
 }
 
 .vote-buttons {
@@ -622,20 +623,23 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: none;
-  border: none;
+  background: rgba(var(--ion-card-background-rgb), 0.3);
+  border: 1px solid var(--glass-border);
   padding: 8px 12px;
   font-size: 14px;
   color: var(--ion-color-medium);
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: 10px;
   transition: all 0.2s ease;
   font-family: inherit;
   font-weight: 500;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .vote-button:hover {
-  background: var(--ion-color-light);
+  background: rgba(var(--ion-color-primary-rgb), 0.1);
+  border-color: rgba(var(--ion-color-primary-rgb), 0.2);
 }
 
 .vote-button:active {
@@ -643,9 +647,9 @@ onMounted(async () => {
 }
 
 .vote-button.upvote.active {
-  background: transparent;
+  background: rgba(var(--ion-color-primary-rgb), 0.15);
   color: var(--ion-color-primary);
-  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.5);
+  border-color: rgba(var(--ion-color-primary-rgb), 0.3);
 }
 
 .vote-button.upvote.active ion-icon {
@@ -654,7 +658,8 @@ onMounted(async () => {
 
 .vote-button.downvote.active {
   color: var(--ion-color-danger);
-  background: var(--ion-color-danger-tint);
+  background: rgba(var(--ion-color-danger-rgb), 0.15);
+  border-color: rgba(var(--ion-color-danger-rgb), 0.3);
 }
 
 .vote-button.downvote.active ion-icon {
@@ -674,20 +679,23 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: none;
-  border: none;
+  background: rgba(var(--ion-card-background-rgb), 0.3);
+  border: 1px solid var(--glass-border);
   padding: 8px 12px;
   font-size: 14px;
   color: var(--ion-color-medium);
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: 10px;
   transition: all 0.2s ease;
   font-family: inherit;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .action-button:hover {
-  background: var(--ion-color-light);
+  background: rgba(var(--ion-color-primary-rgb), 0.1);
   color: var(--ion-color-primary);
+  border-color: rgba(var(--ion-color-primary-rgb), 0.2);
 }
 
 .comments-card {
@@ -714,7 +722,10 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  background: var(--ion-color-light);
+  background: rgba(var(--ion-card-background-rgb), 0.3);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border);
   border-radius: 20px;
   font-size: 13px;
   font-weight: 500;
@@ -745,12 +756,12 @@ onMounted(async () => {
 
 .comment-textarea {
   margin-bottom: 12px;
-  --background: var(--ion-color-light);
+  --background: rgba(var(--ion-card-background-rgb), 0.3);
   --padding-start: 12px;
   --padding-end: 12px;
   --padding-top: 12px;
   --padding-bottom: 12px;
-  border-radius: 8px;
+  border-radius: 12px;
 }
 
 .comments-list {
