@@ -119,11 +119,12 @@ const formatDate = (timestamp: number) => {
 
 .block-item {
   border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
   border-radius: 14px;
   padding: 12px;
-  background: rgba(var(--ion-card-background-rgb), 0.3);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(var(--ion-card-background-rgb), 0.20);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
   box-shadow: var(--glass-highlight);
 }
 
@@ -158,16 +159,18 @@ const formatDate = (timestamp: number) => {
 
 .hash-value {
   display: block;
-  background: rgba(var(--ion-card-background-rgb), 0.3);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(var(--ion-card-background-rgb), 0.18);
+  backdrop-filter: blur(12px) saturate(1.3);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
   border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
   color: var(--ion-text-color);
   padding: 4px 8px;
-  border-radius: 6px;
+  border-radius: 12px;
   margin-top: 2px;
   word-break: break-all;
   font-size: 12px;
+  box-shadow: var(--glass-highlight);
 }
 
 .block-validity {

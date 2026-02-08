@@ -380,9 +380,9 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(var(--ion-card-background-rgb), 0.3);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(var(--ion-card-background-rgb), 0.20);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
 }
 
 .avatar img {
@@ -465,10 +465,11 @@ onMounted(async () => {
   gap: 12px;
   padding: 12px;
   border-radius: 14px;
-  background: rgba(var(--ion-card-background-rgb), 0.3);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(var(--ion-card-background-rgb), 0.20);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
   border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
   box-shadow: var(--glass-highlight);
 }
 

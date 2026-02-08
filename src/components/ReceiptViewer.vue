@@ -152,35 +152,41 @@ const shareReceipt = async () => {
 .receipt-hash {
   display: block;
   font-size: 12px;
-  background: rgba(var(--ion-card-background-rgb), 0.3);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(var(--ion-card-background-rgb), 0.18);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
   border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: 12px;
   word-break: break-all;
   font-family: monospace;
+  box-shadow: var(--glass-highlight);
 }
 
 .mnemonic-box {
   padding: 16px;
-  background: rgba(var(--ion-color-warning-rgb), 0.06);
-  border: 1px solid rgba(var(--ion-color-warning-rgb), 0.15);
-  border-radius: 14px;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(var(--ion-color-warning-rgb), 0.05);
+  border: 1px solid rgba(var(--ion-color-warning-rgb), 0.12);
+  border-top-color: rgba(var(--ion-color-warning-rgb), 0.20);
+  border-radius: 16px;
+  backdrop-filter: blur(14px) saturate(1.5);
+  -webkit-backdrop-filter: blur(14px) saturate(1.5);
   color: var(--ion-color-warning);
+  box-shadow: var(--glass-inner-glow);
 }
 
 .mnemonic-word {
-  background: rgba(var(--ion-card-background-rgb), 0.4);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(var(--ion-card-background-rgb), 0.22);
+  backdrop-filter: blur(10px) saturate(1.3);
+  -webkit-backdrop-filter: blur(10px) saturate(1.3);
   border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
   padding: 6px 8px;
-  border-radius: 8px;
+  border-radius: 12px;
   font-size: 12px;
   text-align: center;
   color: var(--ion-text-color);
+  box-shadow: var(--glass-highlight);
 }
 </style>

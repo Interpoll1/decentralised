@@ -137,13 +137,8 @@ function getTimeRemaining(): string {
 .poll-card {
   margin: 12px 12px;
   cursor: pointer;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
   border-left: 4px solid var(--ion-color-tertiary) !important;
-  border-radius: 16px;
-}
-
-.poll-card:hover {
-  transform: translateY(-3px);
+  border-radius: 20px;
 }
 
 .poll-header {
@@ -158,14 +153,16 @@ function getTimeRemaining(): string {
   align-items: center;
   gap: 4px;
   padding: 4px 10px;
-  background: rgba(var(--ion-color-tertiary-rgb), 0.1);
-  border: 1px solid rgba(var(--ion-color-tertiary-rgb), 0.2);
+  background: rgba(var(--ion-color-tertiary-rgb), 0.08);
+  border: 1px solid rgba(var(--ion-color-tertiary-rgb), 0.18);
+  border-top-color: rgba(var(--ion-color-tertiary-rgb), 0.25);
   color: var(--ion-color-tertiary);
-  border-radius: 10px;
+  border-radius: 12px;
   font-size: 12px;
   font-weight: 600;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(10px) saturate(1.4);
+  -webkit-backdrop-filter: blur(10px) saturate(1.4);
+  box-shadow: var(--glass-highlight);
 }
 
 .poll-badge ion-icon {
@@ -191,14 +188,14 @@ function getTimeRemaining(): string {
 
 .expired-badge {
   padding: 2px 8px;
-  background: rgba(var(--ion-color-medium-rgb), 0.15);
+  background: rgba(var(--ion-color-medium-rgb), 0.10);
   color: var(--ion-color-medium);
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.2);
-  border-radius: 8px;
+  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.16);
+  border-radius: 12px;
   font-size: 10px;
   font-weight: 600;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(8px) saturate(1.3);
+  -webkit-backdrop-filter: blur(8px) saturate(1.3);
 }
 
 .poll-question {
@@ -226,17 +223,21 @@ function getTimeRemaining(): string {
 
 .option-bar {
   height: 8px;
-  background: rgba(var(--ion-card-background-rgb), 0.4);
-  border-radius: 6px;
+  background: rgba(var(--ion-card-background-rgb), 0.22);
+  border-radius: 8px;
   overflow: hidden;
   margin-bottom: 4px;
   border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
+  backdrop-filter: blur(10px) saturate(1.3);
+  -webkit-backdrop-filter: blur(10px) saturate(1.3);
 }
 
 .option-fill {
   height: 100%;
   background: var(--ion-color-tertiary);
-  transition: width 0.3s;
+  transition: width 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+  border-radius: 8px;
 }
 
 .option-info {
@@ -267,19 +268,21 @@ function getTimeRemaining(): string {
   padding: 16px;
   text-align: center;
   color: var(--ion-color-medium);
-  background: rgba(var(--ion-card-background-rgb), 0.3);
-  border-radius: 12px;
+  background: rgba(var(--ion-card-background-rgb), 0.18);
+  border-radius: 14px;
   margin: 12px 0;
   border: 1px solid var(--glass-border);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  border-top-color: var(--glass-border-top);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  box-shadow: var(--glass-inner-glow);
 }
 
 .poll-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.06);
+  border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.05);
   padding-top: 12px;
   margin-top: 12px;
 }
@@ -306,11 +309,11 @@ function getTimeRemaining(): string {
   .poll-question {
     font-size: 16px;
   }
-  
+
   .poll-description {
     font-size: 13px;
   }
-  
+
   .poll-stats {
     gap: 8px;
     flex-wrap: wrap;

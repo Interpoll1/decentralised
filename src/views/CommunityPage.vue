@@ -477,13 +477,14 @@ onMounted(async () => {
 
 .content-filter {
   padding: 12px;
-  background: rgba(var(--ion-card-background-rgb), 0.4);
-  backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
+  background: rgba(var(--ion-card-background-rgb), 0.22);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
   border-bottom: 1px solid var(--glass-border);
   position: sticky;
   top: 0;
   z-index: 10;
+  box-shadow: var(--glass-highlight);
 }
 
 .loading-container {

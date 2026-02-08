@@ -407,10 +407,11 @@ ion-card {
   align-items: center;
   gap: 12px;
   padding: 12px;
-  background: rgba(var(--ion-card-background-rgb), 0.3);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(var(--ion-card-background-rgb), 0.20);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
   border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
   border-radius: 14px;
   box-shadow: var(--glass-highlight);
 }
@@ -512,13 +513,15 @@ ion-card {
 
 .result-bar {
   height: 32px;
-  background: rgba(var(--ion-card-background-rgb), 0.3);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(var(--ion-card-background-rgb), 0.20);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
   border: 1px solid var(--glass-border);
-  border-radius: 10px;
+  border-top-color: var(--glass-border-top);
+  border-radius: 14px;
   overflow: hidden;
   margin-bottom: 4px;
+  box-shadow: var(--glass-highlight);
 }
 
 .result-fill {

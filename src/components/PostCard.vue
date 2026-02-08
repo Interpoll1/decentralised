@@ -136,12 +136,7 @@ function getIPFSUrl(cid?: string): string {
 .post-card {
   margin: 12px 12px;
   cursor: pointer;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-  border-radius: 16px;
-}
-
-.post-card:hover {
-  transform: translateY(-3px);
+  border-radius: 20px;
 }
 
 .post-header {
@@ -190,7 +185,7 @@ function getIPFSUrl(cid?: string): string {
 
 .post-image {
   margin: 12px 0;
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
   max-height: 400px;
 }
@@ -202,7 +197,7 @@ function getIPFSUrl(cid?: string): string {
 }
 
 .post-footer {
-  border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.06);
+  border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.05);
   padding-top: 12px;
   margin-top: 12px;
 }
@@ -210,40 +205,49 @@ function getIPFSUrl(cid?: string): string {
 .post-stats {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
 }
 
 .stat-button {
   display: flex;
   align-items: center;
   gap: 4px;
-  background: rgba(var(--ion-card-background-rgb), 0.3);
+  background: rgba(var(--ion-card-background-rgb), 0.18);
   border: 1px solid var(--glass-border);
-  padding: 4px 10px;
-  border-radius: 10px;
+  border-top-color: var(--glass-border-top);
+  padding: 5px 11px;
+  border-radius: 12px;
   cursor: pointer;
   font-size: 13px;
   color: var(--ion-color-step-600);
-  transition: all 0.2s ease;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  transition: var(--liquid-spring);
+  backdrop-filter: blur(10px) saturate(1.4);
+  -webkit-backdrop-filter: blur(10px) saturate(1.4);
+  box-shadow: var(--glass-highlight);
 }
 
 .stat-button:hover {
-  background: rgba(var(--ion-color-primary-rgb), 0.1);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.2);
+  background: rgba(var(--ion-color-primary-rgb), 0.10);
+  border-color: rgba(var(--ion-color-primary-rgb), 0.22);
+  transform: translateY(-1px);
+}
+
+.stat-button:active {
+  transform: scale(0.96) translateY(0);
 }
 
 .stat-button.upvote.active {
-  background: rgba(var(--ion-color-primary-rgb), 0.15);
+  background: rgba(var(--ion-color-primary-rgb), 0.14);
   color: var(--ion-color-primary);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.3);
+  border-color: rgba(var(--ion-color-primary-rgb), 0.30);
+  box-shadow: var(--glass-highlight), 0 0 14px rgba(var(--ion-color-primary-rgb), 0.12);
 }
 
 .stat-button.downvote.active {
-  background: rgba(var(--ion-color-danger-rgb), 0.15);
+  background: rgba(var(--ion-color-danger-rgb), 0.14);
   color: var(--ion-color-danger);
-  border-color: rgba(var(--ion-color-danger-rgb), 0.3);
+  border-color: rgba(var(--ion-color-danger-rgb), 0.30);
+  box-shadow: var(--glass-highlight), 0 0 14px rgba(var(--ion-color-danger-rgb), 0.12);
 }
 
 .stat-button ion-icon {
@@ -277,7 +281,7 @@ function getIPFSUrl(cid?: string): string {
   }
 
   .post-stats {
-    gap: 12px;
+    gap: 10px;
     font-size: 12px;
   }
 }

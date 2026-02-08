@@ -266,8 +266,9 @@ const submitPost = async () => {
   width: 100%;
   max-height: 400px;
   object-fit: cover;
-  border-radius: 12px;
+  border-radius: 14px;
   border: 2px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
 }
 
 .remove-image {
@@ -289,13 +290,15 @@ const submitPost = async () => {
   gap: 8px;
   margin-top: 16px;
   padding: 12px;
-  background: rgba(var(--ion-card-background-rgb), 0.3);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(var(--ion-card-background-rgb), 0.20);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
   border: 1px solid var(--glass-border);
-  border-radius: 12px;
+  border-top-color: var(--glass-border-top);
+  border-radius: 14px;
   font-size: 12px;
   color: var(--ion-color-medium);
+  box-shadow: var(--glass-highlight);
 }
 
 .info-box ion-icon {

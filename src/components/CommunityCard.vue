@@ -72,12 +72,7 @@ const formatNumber = (num: number | undefined | null): string => {
 <style scoped>
 .community-card {
   cursor: pointer;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-  border-radius: 16px;
-}
-
-.community-card:hover {
-  transform: translateY(-3px);
+  border-radius: 20px;
 }
 
 .card-header {
@@ -90,15 +85,17 @@ const formatNumber = (num: number | undefined | null): string => {
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background: rgba(var(--ion-card-background-rgb), 0.4);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(var(--ion-card-background-rgb), 0.22);
+  backdrop-filter: blur(14px) saturate(1.5);
+  -webkit-backdrop-filter: blur(14px) saturate(1.5);
   border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   overflow: hidden;
+  box-shadow: var(--glass-highlight), var(--glass-inner-glow);
 }
 
 .community-icon img {
@@ -140,7 +137,7 @@ const formatNumber = (num: number | undefined | null): string => {
   justify-content: space-between;
   align-items: center;
   padding-top: 12px;
-  border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.06);
+  border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.05);
 }
 
 .stats {

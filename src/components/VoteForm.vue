@@ -267,20 +267,26 @@ function getOptionKey(option: RawOption, index: number): string {
 <style scoped>
 .voted-warning {
   padding: 16px;
-  background: rgba(var(--ion-color-warning-rgb), 0.08);
+  background: rgba(var(--ion-color-warning-rgb), 0.06);
   border-left: 4px solid var(--ion-color-warning);
-  border-radius: 0 14px 14px 0;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  border-radius: 0 16px 16px 0;
+  backdrop-filter: blur(16px) saturate(1.5);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  border-top: 1px solid rgba(var(--ion-color-warning-rgb), 0.10);
+  border-right: 1px solid rgba(var(--ion-color-warning-rgb), 0.08);
+  border-bottom: 1px solid rgba(var(--ion-color-warning-rgb), 0.05);
+  box-shadow: var(--glass-inner-glow);
 }
 
 .info-notice {
   padding: 12px;
-  background: rgba(var(--ion-color-primary-rgb), 0.06);
-  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.12);
-  border-radius: 12px;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(var(--ion-color-primary-rgb), 0.05);
+  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.10);
+  border-top-color: rgba(var(--ion-color-primary-rgb), 0.16);
+  border-radius: 14px;
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
   color: var(--ion-color-primary);
+  box-shadow: var(--glass-highlight);
 }
 </style>

@@ -268,11 +268,13 @@ const createCommunity = async () => {
   gap: 12px;
   margin-top: 24px;
   padding: 16px;
-  background: rgba(var(--ion-card-background-rgb), 0.3);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(var(--ion-card-background-rgb), 0.20);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
   border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
   border-radius: 14px;
+  box-shadow: var(--glass-highlight);
 }
 
 .info-box ion-icon {

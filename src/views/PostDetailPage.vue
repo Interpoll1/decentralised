@@ -623,18 +623,20 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(var(--ion-card-background-rgb), 0.3);
+  background: rgba(var(--ion-card-background-rgb), 0.20);
   border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
   padding: 8px 12px;
   font-size: 14px;
   color: var(--ion-color-medium);
   cursor: pointer;
-  border-radius: 10px;
+  border-radius: 14px;
   transition: all 0.2s ease;
   font-family: inherit;
   font-weight: 500;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  box-shadow: var(--glass-highlight);
 }
 
 .vote-button:hover {
@@ -679,17 +681,19 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(var(--ion-card-background-rgb), 0.3);
+  background: rgba(var(--ion-card-background-rgb), 0.20);
   border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
   padding: 8px 12px;
   font-size: 14px;
   color: var(--ion-color-medium);
   cursor: pointer;
-  border-radius: 10px;
+  border-radius: 14px;
   transition: all 0.2s ease;
   font-family: inherit;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  box-shadow: var(--glass-highlight);
 }
 
 .action-button:hover {
@@ -722,13 +726,15 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  background: rgba(var(--ion-card-background-rgb), 0.3);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(var(--ion-card-background-rgb), 0.20);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
   border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
   border-radius: 20px;
   font-size: 13px;
   font-weight: 500;
+  box-shadow: var(--glass-highlight);
 }
 
 .commenter-online-dot {
