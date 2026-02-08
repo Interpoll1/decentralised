@@ -42,6 +42,30 @@ export class GunService {
     return this.user;
   }
 
+  /**
+   * Reconnect Gun to a new relay peer URL.
+   * Creates a fresh Gun instance pointed at the new peer.
+   */
+  static reconnect(newPeerUrl?: string) {
+    const peerUrl = newPeerUrl || config.relay.gun;
+
+    // Tear down old instance
+    this.isInitialized = false;
+    this.gun = null;
+    this.user = null;
+
+    this.gun = Gun({
+      peers: [peerUrl],
+      localStorage: true,
+      radisk: false
+    });
+
+    this.user = this.gun.user();
+    this.isInitialized = true;
+
+    return this.gun;
+  }
+
   static getPeerStats(): { isConnected: boolean; peerCount: number } {
     if (typeof window === 'undefined') {
       return { isConnected: false, peerCount: 0 };

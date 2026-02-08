@@ -50,10 +50,10 @@
           ></ion-icon>
         </div>
 
-        <div class="flex justify-between items-center" v-if="chainStore.chainHead">
+        <div class="flex flex-col gap-1" v-if="chainStore.chainHead">
           <span class="text-sm font-medium opacity-80">Latest Hash:</span>
-          <code class="text-[10px] font-mono opacity-70 bg-black/10 dark:bg-white/10 px-2 py-1 rounded">
-            {{ truncateHash(chainStore.chainHead.hash) }}
+          <code class="text-[10px] font-mono opacity-70 bg-black/10 dark:bg-white/10 px-2 py-1 rounded break-all leading-relaxed select-all">
+            {{ chainStore.chainHead.hash }}
           </code>
         </div>
 

@@ -24,7 +24,7 @@
     </ion-header>
 
     <ion-content>
-      <!-- ═══════════════ GENERAL TAB ═══════════════ -->
+      <!-- GENERAL TAB -->
       <div v-if="activeTab === 'general'">
         <!-- Appearance -->
         <ion-card>
@@ -118,7 +118,7 @@
         </ion-card>
       </div>
 
-      <!-- ═══════════════ NETWORK TAB ═══════════════ -->
+      <!-- NETWORK TAB -->
       <div v-if="activeTab === 'network'">
         <!-- Connection Status -->
         <ion-card>
@@ -156,26 +156,122 @@
           </ion-card-content>
         </ion-card>
 
-        <!-- Relay Endpoints -->
+        <!-- Relay Configuration -->
         <ion-card>
           <ion-card-header>
-            <ion-card-title>Relay Endpoints</ion-card-title>
-            <ion-card-subtitle>Your node configuration</ion-card-subtitle>
+            <div class="status-header">
+              <ion-card-title>Relay Configuration</ion-card-title>
+              <ion-badge v-if="hasCustomRelay" color="warning">Custom</ion-badge>
+            </div>
+            <ion-card-subtitle>Change the servers your node connects to</ion-card-subtitle>
           </ion-card-header>
 
           <ion-card-content>
-            <div class="endpoint-list">
-              <div class="endpoint-item">
-                <div class="endpoint-label">WebSocket Relay</div>
-                <code class="endpoint-url">{{ relayConfig.websocket }}</code>
+            <div class="relay-form">
+              <div class="relay-field">
+                <label class="relay-label">WebSocket Relay</label>
+                <input
+                  v-model="editRelay.websocket"
+                  type="text"
+                  class="relay-input"
+                  placeholder="ws://localhost:8080"
+                />
               </div>
-              <div class="endpoint-item">
-                <div class="endpoint-label">GunDB Relay</div>
-                <code class="endpoint-url">{{ relayConfig.gun }}</code>
+              <div class="relay-field">
+                <label class="relay-label">GunDB Relay</label>
+                <input
+                  v-model="editRelay.gun"
+                  type="text"
+                  class="relay-input"
+                  placeholder="http://localhost:8765/gun"
+                />
               </div>
-              <div class="endpoint-item">
-                <div class="endpoint-label">API Server</div>
-                <code class="endpoint-url">{{ relayConfig.api }}</code>
+              <div class="relay-field">
+                <label class="relay-label">API Server</label>
+                <input
+                  v-model="editRelay.api"
+                  type="text"
+                  class="relay-input"
+                  placeholder="http://localhost:8080"
+                />
+              </div>
+            </div>
+
+            <ion-button expand="block" @click="applyRelayConfig" class="mt-3">
+              <ion-icon slot="start" :icon="swapHorizontalOutline"></ion-icon>
+              Apply &amp; Reconnect
+            </ion-button>
+
+            <ion-button
+              v-if="hasCustomRelay"
+              expand="block"
+              fill="outline"
+              color="medium"
+              @click="resetRelayConfig"
+              class="mt-2"
+            >
+              Reset to Defaults
+            </ion-button>
+          </ion-card-content>
+        </ion-card>
+
+        <!-- Known Servers (discovered from peers) -->
+        <ion-card>
+          <ion-card-header>
+            <div class="status-header">
+              <ion-card-title>Known Servers</ion-card-title>
+              <ion-badge color="primary">{{ knownServers.length }}</ion-badge>
+            </div>
+            <ion-card-subtitle>Servers discovered from the network</ion-card-subtitle>
+          </ion-card-header>
+
+          <ion-card-content>
+            <div v-if="knownServers.length === 0" class="empty-peers">
+              <ion-icon :icon="serverOutline" size="large"></ion-icon>
+              <p>No servers discovered yet</p>
+              <p class="helper-text">Servers shared by peers will appear here</p>
+            </div>
+
+            <div v-else class="server-list">
+              <div
+                v-for="server in knownServers"
+                :key="server.websocket"
+                class="server-item"
+                :class="{ active: isActiveServer(server.websocket) }"
+              >
+                <div class="server-header">
+                  <div class="server-url-badge">
+                    <span class="server-dot" :class="{ active: isActiveServer(server.websocket) }"></span>
+                    {{ shortenUrl(server.websocket) }}
+                  </div>
+                  <span class="server-seen">{{ formatPeerTime(server.firstSeen) }}</span>
+                </div>
+                <div class="server-details">
+                  <div class="server-detail">
+                    <span class="detail-label">WS</span>
+                    <code>{{ server.websocket }}</code>
+                  </div>
+                  <div class="server-detail">
+                    <span class="detail-label">Gun</span>
+                    <code>{{ server.gun }}</code>
+                  </div>
+                  <div class="server-detail">
+                    <span class="detail-label">API</span>
+                    <code>{{ server.api }}</code>
+                  </div>
+                </div>
+                <ion-button
+                  v-if="!isActiveServer(server.websocket)"
+                  expand="block"
+                  size="small"
+                  fill="outline"
+                  @click="switchToServer(server)"
+                  class="mt-2"
+                >
+                  <ion-icon slot="start" :icon="swapHorizontalOutline"></ion-icon>
+                  Switch to this server
+                </ion-button>
+                <div v-else class="active-badge">Currently connected</div>
               </div>
             </div>
           </ion-card-content>
@@ -245,7 +341,7 @@
         </ion-card>
       </div>
 
-      <!-- ═══════════════ DATA TAB ═══════════════ -->
+      <!-- DATA TAB -->
       <div v-if="activeTab === 'data'">
         <!-- Storage Usage -->
         <ion-card>
@@ -446,14 +542,16 @@ import {
   personCircleOutline,
   logoGoogle,
   logoMicrosoft,
-  globeOutline
+  globeOutline,
+  swapHorizontalOutline,
+  serverOutline
 } from 'ionicons/icons';
 import { PinningService } from '../services/pinningService';
 import { StorageManager } from '../services/storageManager';
 import { UserService } from '../services/userService';
 import { VoteTrackerService } from '../services/voteTrackerService';
 import { AuditService, type CloudUser } from '../services/auditService';
-import { WebSocketService } from '../services/websocketService';
+import { WebSocketService, type KnownServer } from '../services/websocketService';
 import { GunService } from '../services/gunService';
 import { useChainStore } from '../stores/chainStore';
 import config from '../config';
@@ -492,12 +590,19 @@ const networkStatus = ref({
 
 const peerList = ref<Array<{ peerId: string; relayUrl: string; gunPeers: string[]; joinedAt: number }>>([]);
 const myPeerId = ref('');
+const knownServers = ref<KnownServer[]>([]);
 
-const relayConfig = {
+// Relay editing
+const editRelay = ref({
   websocket: config.relay.websocket,
   gun: config.relay.gun,
   api: config.relay.api
-};
+});
+
+const hasCustomRelay = computed(() => {
+  const overrides = config.getRelayOverrides();
+  return !!(overrides.websocket || overrides.gun || overrides.api);
+});
 
 let statusCleanup: (() => void) | null = null;
 let networkPollInterval: ReturnType<typeof setInterval> | null = null;
@@ -510,6 +615,19 @@ const storagePercent = computed(() => {
 const truncatedDeviceId = computed(() => {
   return deviceId.value.substring(0, 16) + '...';
 });
+
+function isActiveServer(wsUrl: string): boolean {
+  return config.relay.websocket === wsUrl;
+}
+
+function shortenUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.host;
+  } catch {
+    return url;
+  }
+}
 
 function refreshNetwork() {
   const wsConnected = WebSocketService.getConnectionStatus();
@@ -526,6 +644,94 @@ function refreshNetwork() {
 
   peerList.value = Array.from(peerAddresses.values());
   myPeerId.value = WebSocketService.getPeerId();
+  knownServers.value = WebSocketService.getKnownServers();
+
+  // Keep edit fields in sync with current config
+  editRelay.value = {
+    websocket: config.relay.websocket,
+    gun: config.relay.gun,
+    api: config.relay.api
+  };
+}
+
+async function applyRelayConfig() {
+  const ws = editRelay.value.websocket.trim();
+  const gun = editRelay.value.gun.trim();
+  const api = editRelay.value.api.trim();
+
+  if (!ws || !gun || !api) {
+    const toast = await toastController.create({
+      message: 'All relay fields are required',
+      duration: 2000,
+      color: 'warning'
+    });
+    await toast.present();
+    return;
+  }
+
+  config.setRelayOverrides({ websocket: ws, gun, api });
+
+  // Reconnect both services
+  WebSocketService.reconnect(ws);
+  GunService.reconnect(gun);
+
+  const toast = await toastController.create({
+    message: 'Relay configuration updated, reconnecting...',
+    duration: 2000,
+    color: 'success'
+  });
+  await toast.present();
+
+  // Refresh after a short delay to pick up new connection status
+  setTimeout(refreshNetwork, 2000);
+}
+
+async function resetRelayConfig() {
+  config.resetRelayOverrides();
+
+  editRelay.value = {
+    websocket: config.relay.websocket,
+    gun: config.relay.gun,
+    api: config.relay.api
+  };
+
+  WebSocketService.reconnect();
+  GunService.reconnect();
+
+  const toast = await toastController.create({
+    message: 'Relay reset to defaults, reconnecting...',
+    duration: 2000,
+    color: 'success'
+  });
+  await toast.present();
+
+  setTimeout(refreshNetwork, 2000);
+}
+
+async function switchToServer(server: KnownServer) {
+  config.setRelayOverrides({
+    websocket: server.websocket,
+    gun: server.gun,
+    api: server.api
+  });
+
+  editRelay.value = {
+    websocket: server.websocket,
+    gun: server.gun,
+    api: server.api
+  };
+
+  WebSocketService.reconnect(server.websocket);
+  GunService.reconnect(server.gun);
+
+  const toast = await toastController.create({
+    message: `Switching to ${shortenUrl(server.websocket)}...`,
+    duration: 2000,
+    color: 'success'
+  });
+  await toast.present();
+
+  setTimeout(refreshNetwork, 2000);
 }
 
 function formatPeerTime(timestamp: number): string {
@@ -615,7 +821,7 @@ const exportData = async () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `agora-backup-${Date.now()}.json`;
+    a.download = `intepoll-backup-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
 
@@ -899,20 +1105,20 @@ const loginWithMicrosoft = () => {
   letter-spacing: 0.5px;
 }
 
-/* ── Relay Endpoints ── */
-.endpoint-list {
+/* ── Relay Config Form ── */
+.relay-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
-.endpoint-item {
+.relay-field {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.endpoint-label {
+.relay-label {
   font-size: 12px;
   font-weight: 600;
   color: var(--ion-color-medium);
@@ -920,13 +1126,103 @@ const loginWithMicrosoft = () => {
   letter-spacing: 0.5px;
 }
 
-.endpoint-url {
+.relay-input {
   font-size: 13px;
+  font-family: monospace;
   background: var(--ion-color-light);
-  padding: 8px 12px;
-  border-radius: 6px;
+  color: var(--ion-text-color);
+  border: 1px solid var(--ion-color-light-shade, #d7d8da);
+  padding: 10px 12px;
+  border-radius: 8px;
+  outline: none;
+  transition: border-color 0.2s;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.relay-input:focus {
+  border-color: var(--ion-color-primary);
+}
+
+/* ── Known Servers ── */
+.server-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.server-item {
+  border: 1px solid var(--ion-color-light-shade, #d7d8da);
+  border-radius: 10px;
+  padding: 12px;
+  transition: border-color 0.2s;
+}
+
+.server-item.active {
+  border-color: var(--ion-color-success);
+  background: rgba(var(--ion-color-success-rgb), 0.05);
+}
+
+.server-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.server-url-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.server-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ion-color-medium);
+}
+
+.server-dot.active {
+  background: var(--ion-color-success);
+  animation: pulse 2s infinite;
+}
+
+.server-seen {
+  font-size: 12px;
+  color: var(--ion-color-medium);
+}
+
+.server-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.server-detail {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.server-detail code {
+  font-size: 12px;
+  background: var(--ion-color-light);
+  padding: 2px 6px;
+  border-radius: 4px;
   word-break: break-all;
-  display: block;
+}
+
+.active-badge {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ion-color-success);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 /* ── Peer List ── */

@@ -5,7 +5,16 @@ type SyncMessage =
   | { type: 'new-block'; data: any }
   | { type: 'request-sync'; peerId: string }
   | { type: 'sync-response'; data: any }
-  | { type: 'peer-addresses'; data: any };
+  | { type: 'peer-addresses'; data: any }
+  | { type: 'server-list'; data: any };
+
+export interface KnownServer {
+  websocket: string;
+  gun: string;
+  api: string;
+  addedBy: string;         // peerId that reported it
+  firstSeen: number;
+}
 
 export class WebSocketService {
   private static ws: WebSocket | null = null;
@@ -19,14 +28,24 @@ export class WebSocketService {
   private static peers: Set<string> = new Set();
   private static peerAddresses: Map<string, { peerId: string; relayUrl: string; gunPeers: string[]; joinedAt: number }> = new Map();
   private static statusListeners: Set<(status: { connected: boolean; peerCount: number }) => void> = new Set();
+  private static knownServers: Map<string, KnownServer> = new Map();
 
   static initialize() {
+    this.loadKnownServers();
     this.connect();
   }
 
-  static connect() {
+  static connect(wsUrl?: string) {
+    // Close existing connection if any
+    if (this.ws) {
+      try { this.ws.close(); } catch { /* ignore */ }
+      this.ws = null;
+    }
+
+    const url = wsUrl || config.relay.websocket;
+
     try {
-      this.ws = new WebSocket(config.relay.websocket);
+      this.ws = new WebSocket(url);
 
       this.ws.onopen = () => {
         this.isConnected = true;
@@ -45,6 +64,8 @@ export class WebSocketService {
 
         // Share our relay addresses with all peers
         this.broadcastAddresses();
+        // Share our known server list
+        this.broadcastServerList();
 
         setTimeout(() => {
           this.broadcast('request-sync', { peerId: this.peerId });
@@ -112,9 +133,25 @@ export class WebSocketService {
           });
         }
       });
+
+      // Listen for server list broadcasts from other peers
+      this.subscribe('server-list', (data: any) => {
+        if (data?.servers && Array.isArray(data.servers)) {
+          this.mergeServerList(data.servers, data.peerId || 'unknown');
+        }
+      });
     } catch (_error) {
       // Connection failed
     }
+  }
+
+  /**
+   * Reconnect to a different WebSocket relay.
+   * Resets reconnect counter so auto-reconnect works with the new URL.
+   */
+  static reconnect(wsUrl?: string) {
+    this.reconnectAttempts = 0;
+    this.connect(wsUrl);
   }
 
   private static broadcastAddresses() {
@@ -124,6 +161,76 @@ export class WebSocketService {
       gunPeers: [config.relay.gun],
       joinedAt: Date.now(),
     });
+  }
+
+  private static broadcastServerList() {
+    // Add our own current server to the list before broadcasting
+    this.addKnownServer({
+      websocket: config.relay.websocket,
+      gun: config.relay.gun,
+      api: config.relay.api,
+      addedBy: this.peerId,
+      firstSeen: Date.now(),
+    });
+
+    const servers = Array.from(this.knownServers.values());
+    this.broadcast('server-list', {
+      peerId: this.peerId,
+      servers,
+    });
+  }
+
+  private static mergeServerList(servers: KnownServer[], fromPeerId: string) {
+    for (const server of servers) {
+      this.addKnownServer({
+        ...server,
+        addedBy: server.addedBy || fromPeerId,
+      });
+    }
+  }
+
+  static addKnownServer(server: KnownServer) {
+    // Use the websocket URL as the unique key
+    const key = server.websocket;
+    if (!this.knownServers.has(key)) {
+      this.knownServers.set(key, {
+        ...server,
+        firstSeen: server.firstSeen || Date.now(),
+      });
+      this.saveKnownServers();
+    }
+  }
+
+  static removeKnownServer(websocketUrl: string) {
+    this.knownServers.delete(websocketUrl);
+    this.saveKnownServers();
+  }
+
+  static getKnownServers(): KnownServer[] {
+    return Array.from(this.knownServers.values());
+  }
+
+  private static saveKnownServers() {
+    try {
+      const servers = Array.from(this.knownServers.values());
+      localStorage.setItem('intepoll_known_servers', JSON.stringify(servers));
+    } catch {
+      // Storage full or unavailable
+    }
+  }
+
+  private static loadKnownServers() {
+    try {
+      const raw = localStorage.getItem('intepoll_known_servers');
+      if (raw) {
+        const servers: KnownServer[] = JSON.parse(raw);
+        for (const server of servers) {
+          this.knownServers.set(server.websocket, server);
+        }
+      }
+    } catch {
+      // Corrupted data; ignore
+    }
   }
 
   private static sendToRelay(type: string, data: any) {
