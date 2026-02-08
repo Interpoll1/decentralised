@@ -36,21 +36,21 @@
                 <div class="hash-row">
                   <span class="hash-label">Previous Hash:</span>
                   <code class="hash-value">
-                    {{ truncateHash(block.previousHash) }}
+                    {{ fullHash(block.previousHash) }}
                   </code>
                 </div>
 
                 <div class="hash-row">
                   <span class="hash-label">Current Hash:</span>
                   <code class="hash-value">
-                    {{ truncateHash(block.currentHash) }}
+                    {{ fullHash(block.currentHash) }}
                   </code>
                 </div>
 
                 <div class="hash-row">
                   <span class="hash-label">Vote Hash:</span>
                   <code class="hash-value">
-                    {{ truncateHash(block.voteHash) }}
+                    {{ fullHash(block.voteHash) }}
                   </code>
                 </div>
               </div>
@@ -100,9 +100,8 @@ const reversedBlocks = computed(() => {
   return [...chainStore.blocks].reverse();
 });
 
-const truncateHash = (hash: string) => {
-  if (hash.length <= 20) return hash;
-  return `${hash.substring(0, 10)}...${hash.substring(hash.length - 10)}`;
+const fullHash = (hash: string) => {
+  return hash || '';
 };
 
 const formatDate = (timestamp: number) => {

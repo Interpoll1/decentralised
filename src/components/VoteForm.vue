@@ -78,6 +78,7 @@ import { VoteTrackerService } from '../services/voteTrackerService';
 import { Poll, Vote } from '../types/chain';
 import { AuditService } from '../services/auditService';
 import { PollService } from '../services/pollService';
+import { UserService } from '../services/userService';
 
 interface Props {
   poll: Poll;
@@ -187,6 +188,21 @@ const submitVote = async () => {
 
     // Add vote to blockchain
     const receipt = await chainStore.addVote(vote);
+
+    // Also update Gun poll option counts so results show up everywhere
+    try {
+      const matchedOption = (props.poll.options as any[]).find((o: any) => {
+        if (typeof o === 'string') return false;
+        return o.text === selectedOption.value || o.id === selectedOption.value;
+      });
+      if (matchedOption?.id) {
+        const user = await UserService.getCurrentUser();
+        await PollService.voteOnPoll(props.poll.id, [matchedOption.id], user.id);
+      }
+    } catch (gunErr) {
+      // Non-critical: blockchain vote succeeded, Gun count update is best-effort
+      console.warn('Gun poll count update failed:', gunErr);
+    }
 
     // Record that this device voted
     await VoteTrackerService.recordVote(props.poll.id, receipt.blockIndex);

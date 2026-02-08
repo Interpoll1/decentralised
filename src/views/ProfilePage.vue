@@ -94,7 +94,7 @@
             <ion-item>
               <ion-label>
                 <h3>Device ID</h3>
-                <p class="device-id">{{ truncatedDeviceId }}</p>
+                <p class="device-id">{{ fullDeviceId }}</p>
               </ion-label>
               <ion-button slot="end" fill="clear" @click="copyDeviceId">
                 <ion-icon :icon="copyOutline"></ion-icon>
@@ -217,9 +217,8 @@ const bio = ref('');
 const deviceId = ref('');
 const avatarInput = ref<HTMLInputElement | null>(null);
 
-const truncatedDeviceId = computed(() => {
-  if (!deviceId.value) return '';
-  return deviceId.value.substring(0, 16) + '...';
+const fullDeviceId = computed(() => {
+  return deviceId.value || '';
 });
 
 const joinedCommunitiesCount = computed(() => {
@@ -451,6 +450,7 @@ onMounted(async () => {
   font-family: monospace;
   font-size: 12px;
   color: var(--ion-color-medium);
+  word-break: break-all;
 }
 
 .activity-grid {

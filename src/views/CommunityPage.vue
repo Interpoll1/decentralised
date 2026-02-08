@@ -185,6 +185,7 @@ import { useCommunityStore } from '../stores/communityStore';
 import { usePostStore } from '../stores/postStore';
 import { usePollStore } from '../stores/pollStore';
 import { useUserStore } from '../stores/userStore';
+import { UserService } from '../services/userService';
 import PostCard from '../components/PostCard.vue';
 import PollCard from '../components/PollCard.vue';
 import { Post } from '../services/postService';
@@ -203,6 +204,7 @@ const isJoined = computed(() => communityStore.isJoined(communityId.value));
 
 const isLoading = ref(false);
 const contentFilter = ref<'all' | 'posts' | 'polls'>('all');
+const currentUserId = ref('');
 
 // Get posts and polls for this community
 const communityPosts = computed(() => {
@@ -210,8 +212,11 @@ const communityPosts = computed(() => {
 });
 
 const communityPolls = computed(() => {
-  // Hide private polls from the public community feed
-  return pollStore.polls.filter(p => p.communityId === communityId.value && !p.isPrivate);
+  // Show public polls + private polls authored by the current user
+  return pollStore.polls.filter(p =>
+    p.communityId === communityId.value &&
+    (!p.isPrivate || p.authorId === currentUserId.value)
+  );
 });
 
 const totalContentCount = computed(() => {
@@ -400,6 +405,14 @@ async function loadCommunityContent() {
   isLoading.value = true;
 
   try {
+    // Load current user for private poll filtering
+    try {
+      const user = await UserService.getCurrentUser();
+      currentUserId.value = user.id;
+    } catch {
+      // Not critical
+    }
+
     // Select the community
     await communityStore.selectCommunity(communityId.value);
 

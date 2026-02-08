@@ -365,8 +365,13 @@ async function createPoll() {
       await toast.present();
     }
 
-    // Navigate to community
-    router.push(`/community/${selectedCommunity.value?.id}`);
+    // Navigate to poll detail for private polls (so author can manage invite codes),
+    // or community page for public polls
+    if (isPrivate.value) {
+      router.push(`/community/${selectedCommunity.value?.id}/poll/${poll.id}`);
+    } else {
+      router.push(`/community/${selectedCommunity.value?.id}`);
+    }
   } catch (error) {
     console.error('Error creating poll:', error);
     

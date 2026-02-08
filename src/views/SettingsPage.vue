@@ -80,7 +80,7 @@
             <div class="info-grid">
               <div class="info-row">
                 <span>Device ID</span>
-                <code>{{ truncatedDeviceId }}</code>
+                <code>{{ fullDeviceId }}</code>
               </div>
               <div class="info-row">
                 <span>Username</span>
@@ -365,7 +365,7 @@
               </div>
               <div class="info-row">
                 <span>Device ID</span>
-                <code>{{ truncatedDeviceId }}</code>
+                <code>{{ fullDeviceId }}</code>
               </div>
             </div>
           </ion-card-content>
@@ -658,8 +658,8 @@ const storagePercent = computed(() => {
   return (storageStats.value.used / storageStats.value.quota) * 100;
 });
 
-const truncatedDeviceId = computed(() => {
-  return deviceId.value.substring(0, 16) + '...';
+const fullDeviceId = computed(() => {
+  return deviceId.value || '';
 });
 
 function isActiveServer(wsUrl: string): boolean {
