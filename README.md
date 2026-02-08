@@ -1,29 +1,18 @@
 # interpoll
 
-A decentralized polling platform. Votes are recorded on a local blockchain, poll data lives in a distributed database (GunDB), and peers find each other through a lightweight WebSocket relay. Everything works offline -- sync happens when a connection is available.
+A decentralized polling platform. Votes are recorded on a local blockchain, poll data lives in a distributed database (GunDB), and peers find each other through a lightweight WebSocket relay. Everything works offline -- sync happens when a connection is available. Data is basically unerasable, because as soon as one peer 
 
 ## Quick start
 
 You need two things running: the frontend dev server and the relay server.
 
 ```bash
-# Terminal 1 -- relay server
-node relay-server.js
-
-# Terminal 2 -- frontend
-npm install
-npm run dev
+chmod 777 run.sh
+./run.sh
 ```
 
 The app opens at `http://localhost:5173`. The relay listens on port 8080.
-
-If you want the GunDB relay as well (for distributed persistence across devices):
-
-```bash
-cd gun-relay-server
-npm install
-node gun-relay.js
-```
+The script loads GunDB,WS, and client. Alternative clients coming soon
 
 ### Environment variables
 
