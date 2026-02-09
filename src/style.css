@@ -144,53 +144,38 @@
 }
 
 /* ──────────────────────────────────────────────────────────────────
-   Dark Theme
+   Dark Theme — Pure Dark + Glassy Hover Lift
+   Solid dark at rest, subtle glass effect on interaction
    ────────────────────────────────────────────────────────────────── */
 html.dark,
 body.dark {
 	color-scheme: dark;
 
-	/* ── Surfaces – much more translucent ── */
-	--ion-background-color: #0b0d14;
-	--ion-background-color-rgb: 11, 13, 20;
-	--ion-card-background: rgba(20, 22, 32, 0.30);
-	--ion-card-background-rgb: 20, 22, 32;
-	--ion-item-background: rgba(20, 22, 32, 0.20);
-	--ion-item-background-rgb: 20, 22, 32;
+	/* ── Surfaces – solid dark ── */
+	--ion-background-color: #050505;
+	--ion-background-color-rgb: 5, 5, 5;
+	--ion-card-background: #0e0e0e;
+	--ion-card-background-rgb: 14, 14, 14;
+	--ion-item-background: #0e0e0e;
+	--ion-item-background-rgb: 14, 14, 14;
 
-	/* ── Liquid Glass Tokens (dark) ── */
-	--glass-blur: 32px;
-	--glass-saturation: 2.0;
-	--glass-tint: rgba(140, 150, 255, 0.04);
-	--glass-border-top: rgba(255, 255, 255, 0.14);
-	--glass-border: rgba(255, 255, 255, 0.08);
-	--glass-border-bottom: rgba(255, 255, 255, 0.03);
-	--glass-shadow:
-		0 8px 40px rgba(0, 0, 0, 0.45),
-		0 1.5px 4px rgba(0, 0, 0, 0.25);
-	--glass-highlight:
-		inset 0 1px 0 rgba(255, 255, 255, 0.10),
-		inset 0 -1px 0 rgba(255, 255, 255, 0.02);
-	--glass-specular: linear-gradient(
-		135deg,
-		rgba(255, 255, 255, 0.12) 0%,
-		rgba(255, 255, 255, 0.04) 25%,
-		rgba(255, 255, 255, 0.01) 50%,
-		transparent 70%
-	);
-	--glass-refraction: linear-gradient(
-		320deg,
-		transparent 40%,
-		rgba(180, 190, 255, 0.03) 60%,
-		rgba(180, 190, 255, 0.06) 80%,
-		rgba(180, 190, 255, 0.10) 100%
-	);
-	--glass-inner-glow: inset 0 0 30px rgba(129, 140, 248, 0.05);
-	--glass-depth: 0 20px 60px rgba(0, 0, 0, 0.30);
+	/* ── Glass tokens – dormant at rest, used only on hover ── */
+	--glass-blur: 0px;
+	--glass-saturation: 1.0;
+	--glass-tint: transparent;
+	--glass-border-top: rgba(255, 255, 255, 0.06);
+	--glass-border: rgba(255, 255, 255, 0.04);
+	--glass-border-bottom: rgba(255, 255, 255, 0.02);
+	--glass-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+	--glass-highlight: none;
+	--glass-specular: none;
+	--glass-refraction: none;
+	--glass-inner-glow: none;
+	--glass-depth: none;
 
 	/* ── Text ── */
-	--ion-text-color: #f1f5f9;
-	--ion-text-color-rgb: 241, 245, 249;
+	--ion-text-color: #e4e4e7;
+	--ion-text-color-rgb: 228, 228, 231;
 
 	/* ── Brand (lifted for dark bg contrast) ── */
 	--ion-color-primary: #818cf8;
@@ -242,51 +227,51 @@ body.dark {
 	--ion-color-dark-shade: #d7d8da;
 	--ion-color-dark-tint: #f5f6f9;
 
-	--ion-color-medium: #94a3b8;
-	--ion-color-medium-rgb: 148, 163, 184;
-	--ion-color-medium-contrast: #0f172a;
-	--ion-color-medium-contrast-rgb: 15, 23, 42;
-	--ion-color-medium-shade: #64748b;
-	--ion-color-medium-tint: #cbd5e1;
+	--ion-color-medium: #a1a1aa;
+	--ion-color-medium-rgb: 161, 161, 170;
+	--ion-color-medium-contrast: #000000;
+	--ion-color-medium-contrast-rgb: 0, 0, 0;
+	--ion-color-medium-shade: #71717a;
+	--ion-color-medium-tint: #d4d4d8;
 
-	--ion-color-light: #1e293b;
-	--ion-color-light-rgb: 30, 41, 59;
+	--ion-color-light: #18181b;
+	--ion-color-light-rgb: 24, 24, 27;
 	--ion-color-light-contrast: #ffffff;
 	--ion-color-light-contrast-rgb: 255, 255, 255;
-	--ion-color-light-shade: #0f172a;
-	--ion-color-light-tint: #334155;
+	--ion-color-light-shade: #09090b;
+	--ion-color-light-tint: #27272a;
 
 	/* ── Toolbar ── */
-	--ion-toolbar-background: rgba(20, 22, 32, 0.45);
-	--ion-toolbar-color: #f1f5f9;
-	--ion-tab-bar-background: rgba(20, 22, 32, 0.45);
-	--ion-tab-bar-color: #94a3b8;
+	--ion-toolbar-background: #080808;
+	--ion-toolbar-color: #e4e4e7;
+	--ion-tab-bar-background: #080808;
+	--ion-tab-bar-color: #a1a1aa;
 	--ion-tab-bar-color-selected: #818cf8;
 
-	/* ── Step colors ── */
-	--ion-color-step-50: #1a1c28;
-	--ion-color-step-100: #252839;
-	--ion-color-step-150: #30344a;
-	--ion-color-step-200: #3b405b;
-	--ion-color-step-250: #464c6c;
-	--ion-color-step-300: #51587d;
-	--ion-color-step-350: #5d648e;
-	--ion-color-step-400: #68709f;
-	--ion-color-step-450: #737cb0;
-	--ion-color-step-500: #7e88c1;
-	--ion-color-step-550: #8994d2;
-	--ion-color-step-600: #94a0e3;
-	--ion-color-step-650: #a0abec;
-	--ion-color-step-700: #abb7f0;
-	--ion-color-step-750: #b6c3f3;
-	--ion-color-step-800: #c1cff6;
-	--ion-color-step-850: #ccdbf9;
-	--ion-color-step-900: #d7e7fc;
-	--ion-color-step-950: #e3f0fe;
+	/* ── Step colors (pure neutral grays) ── */
+	--ion-color-step-50: #0d0d0d;
+	--ion-color-step-100: #1a1a1a;
+	--ion-color-step-150: #262626;
+	--ion-color-step-200: #333333;
+	--ion-color-step-250: #404040;
+	--ion-color-step-300: #4d4d4d;
+	--ion-color-step-350: #595959;
+	--ion-color-step-400: #666666;
+	--ion-color-step-450: #737373;
+	--ion-color-step-500: #808080;
+	--ion-color-step-550: #8c8c8c;
+	--ion-color-step-600: #999999;
+	--ion-color-step-650: #a6a6a6;
+	--ion-color-step-700: #b3b3b3;
+	--ion-color-step-750: #bfbfbf;
+	--ion-color-step-800: #cccccc;
+	--ion-color-step-850: #d9d9d9;
+	--ion-color-step-900: #e6e6e6;
+	--ion-color-step-950: #f2f2f2;
 
 	--ion-item-background: transparent;
-	--ion-item-color: #f1f5f9;
-	--ion-placeholder-color: #64748b;
+	--ion-item-color: #e4e4e7;
+	--ion-placeholder-color: #71717a;
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -324,13 +309,8 @@ body::before {
 }
 
 html.dark body::before {
-	background:
-		radial-gradient(ellipse 90% 70% at 15% 20%, rgba(129, 140, 248, 0.20) 0%, transparent 55%),
-		radial-gradient(ellipse 70% 90% at 85% 75%, rgba(34, 211, 238, 0.15) 0%, transparent 55%),
-		radial-gradient(ellipse 80% 60% at 50% 45%, rgba(167, 139, 250, 0.12) 0%, transparent 55%),
-		radial-gradient(ellipse 60% 50% at 80% 15%, rgba(52, 211, 153, 0.09) 0%, transparent 50%),
-		radial-gradient(ellipse 50% 70% at 25% 80%, rgba(251, 191, 36, 0.06) 0%, transparent 50%),
-		radial-gradient(ellipse 40% 40% at 65% 60%, rgba(244, 114, 182, 0.07) 0%, transparent 50%);
+	background: none;
+	animation: none;
 }
 
 @keyframes meshFloat {
@@ -455,13 +435,15 @@ ion-card:hover::before {
 	opacity: 1.2;
 }
 
+/* Dark hover: lift up with subtle glass glow */
 html.dark ion-card:hover {
+	transform: translateY(-3px) scale(1.005);
+	background: #141414;
 	box-shadow:
-		0 24px 64px rgba(0, 0, 0, 0.55),
-		0 4px 16px rgba(0, 0, 0, 0.35),
-		var(--glass-highlight),
-		var(--glass-inner-glow);
-	border-color: rgba(255, 255, 255, 0.16) !important;
+		0 12px 40px rgba(129, 140, 248, 0.08),
+		0 4px 12px rgba(0, 0, 0, 0.5),
+		inset 0 1px 0 rgba(255, 255, 255, 0.06);
+	border-color: rgba(255, 255, 255, 0.10) !important;
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -591,32 +573,112 @@ ion-toast::part(container) {
 
 /* ══════════════════════════════════════════════════════════════════
    Dark-mode Ionic Overrides
+   Solid dark at rest — glassy lift on hover/interaction
    ══════════════════════════════════════════════════════════════════ */
 html.dark ion-content {
-	--background: var(--ion-background-color);
+	--background: #050505;
 }
 
+/* Cards: solid dark, no glass at rest */
 html.dark ion-card {
-	--background: rgba(var(--ion-card-background-rgb), 0.28);
+	--background: #0e0e0e;
+	background: #0e0e0e;
 	--color: var(--ion-text-color);
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+}
+
+html.dark ion-card::before,
+html.dark ion-card::after {
+	display: none;
 }
 
 html.dark ion-card-header {
-	--background: rgba(var(--ion-card-background-rgb), 0.18);
+	--background: transparent;
 }
 
+/* Toolbar & tab bar: solid */
 html.dark ion-toolbar {
-	--background: var(--ion-toolbar-background);
+	--background: #080808;
 	--color: var(--ion-toolbar-color);
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+	border-bottom-color: rgba(255, 255, 255, 0.04);
 }
 
+html.dark ion-tab-bar {
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+	border-top-color: rgba(255, 255, 255, 0.04);
+}
+
+/* Items & lists */
 html.dark ion-item {
-	--background: var(--ion-item-background);
+	--background: transparent;
 	--color: var(--ion-item-color);
 }
 
 html.dark ion-list {
 	--background: transparent;
+}
+
+/* Segments: solid dark */
+html.dark ion-segment {
+	background: #0e0e0e;
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+	border-color: rgba(255, 255, 255, 0.04);
+}
+
+/* Buttons: solid at rest, glassy lift on hover */
+html.dark ion-button {
+	--box-shadow: none;
+}
+
+html.dark ion-button[fill="outline"],
+html.dark ion-button[fill="clear"] {
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+}
+
+html.dark ion-button:hover {
+	--box-shadow: 0 6px 20px rgba(129, 140, 248, 0.15);
+	transform: translateY(-2px);
+}
+
+/* Chips & badges: solid */
+html.dark ion-chip {
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+	border-color: rgba(255, 255, 255, 0.06);
+}
+
+html.dark ion-badge {
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+}
+
+/* Toasts, alerts, action sheets: solid dark */
+html.dark ion-toast::part(container) {
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+	background: #141414;
+	border-color: rgba(255, 255, 255, 0.06);
+}
+
+html.dark ion-alert .alert-wrapper,
+html.dark ion-action-sheet .action-sheet-wrapper {
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+	background: #141414 !important;
+	border-color: rgba(255, 255, 255, 0.06);
+}
+
+/* Inputs: dark surface */
+html.dark ion-textarea,
+html.dark ion-input,
+html.dark ion-select {
+	--background: #0a0a0a;
 }
 
 /* ══════════════════════════════════════════════════════════════════
