@@ -2,22 +2,779 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Basic light/dark theme bridge for Ionic + Tailwind */
+/* ══════════════════════════════════════════════════════════════════
+   Apple Liquid Glass Design System
+   Inspired by iOS 26 / macOS Tahoe
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ──────────────────────────────────────────────────────────────────
+   Light Theme (default)
+   ────────────────────────────────────────────────────────────────── */
 :root {
 	color-scheme: light;
+
+	/* ── Surfaces ── */
+	--ion-background-color: #f0f2f7;
+	--ion-background-color-rgb: 240, 242, 247;
+	--ion-card-background: rgba(255, 255, 255, 0.32);
+	--ion-card-background-rgb: 255, 255, 255;
+	--ion-item-background: rgba(255, 255, 255, 0.22);
+	--ion-item-background-rgb: 255, 255, 255;
+
+	/* ── Liquid Glass Tokens ── */
+	--glass-blur: 28px;
+	--glass-saturation: 1.8;
+	--glass-tint: rgba(255, 255, 255, 0.18);
+	--glass-border-top: rgba(255, 255, 255, 0.75);
+	--glass-border: rgba(255, 255, 255, 0.45);
+	--glass-border-bottom: rgba(255, 255, 255, 0.12);
+	--glass-shadow:
+		0 8px 40px rgba(100, 100, 140, 0.10),
+		0 1.5px 4px rgba(0, 0, 0, 0.04);
+	--glass-highlight:
+		inset 0 1px 0 rgba(255, 255, 255, 0.85),
+		inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+	--glass-specular: linear-gradient(
+		135deg,
+		rgba(255, 255, 255, 0.50) 0%,
+		rgba(255, 255, 255, 0.18) 25%,
+		rgba(255, 255, 255, 0.02) 50%,
+		transparent 70%
+	);
+	--glass-refraction: linear-gradient(
+		320deg,
+		transparent 40%,
+		rgba(255, 255, 255, 0.06) 60%,
+		rgba(255, 255, 255, 0.14) 80%,
+		rgba(255, 255, 255, 0.22) 100%
+	);
+	--glass-inner-glow: inset 0 0 30px rgba(255, 255, 255, 0.12);
+	--glass-depth: 0 20px 60px rgba(0, 0, 0, 0.06);
+	--liquid-transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+	--liquid-spring: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+	/* ── Text ── */
+	--ion-text-color: #111827;
+	--ion-text-color-rgb: 17, 24, 39;
+
+	/* ── Brand ── */
+	--ion-color-primary: #6366f1;
+	--ion-color-primary-rgb: 99, 102, 241;
+	--ion-color-primary-contrast: #ffffff;
+	--ion-color-primary-contrast-rgb: 255, 255, 255;
+	--ion-color-primary-shade: #5457d5;
+	--ion-color-primary-tint: #7375f2;
+
+	--ion-color-secondary: #06b6d4;
+	--ion-color-secondary-rgb: 6, 182, 212;
+	--ion-color-secondary-contrast: #ffffff;
+	--ion-color-secondary-contrast-rgb: 255, 255, 255;
+	--ion-color-secondary-shade: #05a0bb;
+	--ion-color-secondary-tint: #1fbdd8;
+
+	--ion-color-tertiary: #8b5cf6;
+	--ion-color-tertiary-rgb: 139, 92, 246;
+	--ion-color-tertiary-contrast: #ffffff;
+	--ion-color-tertiary-contrast-rgb: 255, 255, 255;
+	--ion-color-tertiary-shade: #7a51d8;
+	--ion-color-tertiary-tint: #976cf7;
+
+	--ion-color-success: #10b981;
+	--ion-color-success-rgb: 16, 185, 129;
+	--ion-color-success-contrast: #ffffff;
+	--ion-color-success-contrast-rgb: 255, 255, 255;
+	--ion-color-success-shade: #0ea372;
+	--ion-color-success-tint: #28c08e;
+
+	--ion-color-warning: #f59e0b;
+	--ion-color-warning-rgb: 245, 158, 11;
+	--ion-color-warning-contrast: #000000;
+	--ion-color-warning-contrast-rgb: 0, 0, 0;
+	--ion-color-warning-shade: #d88b0a;
+	--ion-color-warning-tint: #f6a823;
+
+	--ion-color-danger: #ef4444;
+	--ion-color-danger-rgb: 239, 68, 68;
+	--ion-color-danger-contrast: #ffffff;
+	--ion-color-danger-contrast-rgb: 255, 255, 255;
+	--ion-color-danger-shade: #d23c3c;
+	--ion-color-danger-tint: #f15757;
+
+	--ion-color-medium: #6b7280;
+	--ion-color-medium-rgb: 107, 114, 128;
+	--ion-color-medium-contrast: #ffffff;
+	--ion-color-medium-contrast-rgb: 255, 255, 255;
+	--ion-color-medium-shade: #5e6470;
+	--ion-color-medium-tint: #7a808d;
+
+	--ion-color-light: #e5e7eb;
+	--ion-color-light-rgb: 229, 231, 235;
+	--ion-color-light-contrast: #111827;
+	--ion-color-light-contrast-rgb: 17, 24, 39;
+	--ion-color-light-shade: #cacdd2;
+	--ion-color-light-tint: #e8eaed;
+
+	/* ── Toolbar ── */
+	--ion-toolbar-background: rgba(255, 255, 255, 0.48);
+	--ion-toolbar-color: #111827;
+	--ion-tab-bar-background: rgba(255, 255, 255, 0.48);
+	--ion-tab-bar-color: #6b7280;
+	--ion-tab-bar-color-selected: #6366f1;
+
+	/* ── Step colors ── */
+	--ion-color-step-50: #f0f1f3;
+	--ion-color-step-100: #e1e3e7;
+	--ion-color-step-150: #d2d5da;
+	--ion-color-step-200: #c3c7ce;
+	--ion-color-step-250: #b4b9c2;
+	--ion-color-step-300: #a5abb5;
+	--ion-color-step-350: #969da9;
+	--ion-color-step-400: #878f9d;
+	--ion-color-step-450: #798190;
+	--ion-color-step-500: #6a7384;
+	--ion-color-step-550: #5b6578;
+	--ion-color-step-600: #4c576b;
+	--ion-color-step-650: #3d495f;
+	--ion-color-step-700: #2e3b52;
+	--ion-color-step-750: #202d46;
+	--ion-color-step-800: #111f3a;
+	--ion-color-step-850: #07142e;
+	--ion-color-step-900: #030d24;
+	--ion-color-step-950: #010818;
 }
 
+/* ──────────────────────────────────────────────────────────────────
+   Dark Theme — Pure Dark + Glassy Hover Lift
+   Solid dark at rest, subtle glass effect on interaction
+   ────────────────────────────────────────────────────────────────── */
+html.dark,
 body.dark {
 	color-scheme: dark;
-	--ion-background-color: #020617; /* slate-950 */
-	--ion-background-color-rgb: 2, 6, 23;
-	--ion-text-color: #e5e7eb; /* gray-200 */
-	--ion-text-color-rgb: 229, 231, 235;
-	--ion-card-background: #0f172a; /* slate-900 */
-	--ion-item-background: #020617;
+
+	/* ── Surfaces – pure OLED black ── */
+	--ion-background-color: #000000;
+	--ion-background-color-rgb: 0, 0, 0;
+	--ion-card-background: #000000;
+	--ion-card-background-rgb: 0, 0, 0;
+	--ion-item-background: #000000;
+	--ion-item-background-rgb: 0, 0, 0;
+
+	/* ── Glass tokens – dormant at rest, used only on hover ── */
+	--glass-blur: 0px;
+	--glass-saturation: 1.0;
+	--glass-tint: transparent;
+	--glass-border-top: rgba(255, 255, 255, 0.06);
+	--glass-border: rgba(255, 255, 255, 0.04);
+	--glass-border-bottom: rgba(255, 255, 255, 0.02);
+	--glass-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+	--glass-highlight: none;
+	--glass-specular: none;
+	--glass-refraction: none;
+	--glass-inner-glow: none;
+	--glass-depth: none;
+
+	/* ── Text ── */
+	--ion-text-color: #e4e4e7;
+	--ion-text-color-rgb: 228, 228, 231;
+
+	/* ── Brand (lifted for dark bg contrast) ── */
+	--ion-color-primary: #818cf8;
+	--ion-color-primary-rgb: 129, 140, 248;
+	--ion-color-primary-contrast: #000000;
+	--ion-color-primary-contrast-rgb: 0, 0, 0;
+	--ion-color-primary-shade: #727bda;
+	--ion-color-primary-tint: #8e97f9;
+
+	--ion-color-secondary: #22d3ee;
+	--ion-color-secondary-rgb: 34, 211, 238;
+	--ion-color-secondary-contrast: #000000;
+	--ion-color-secondary-contrast-rgb: 0, 0, 0;
+	--ion-color-secondary-shade: #1ebad1;
+	--ion-color-secondary-tint: #38d7f0;
+
+	--ion-color-tertiary: #a78bfa;
+	--ion-color-tertiary-rgb: 167, 139, 250;
+	--ion-color-tertiary-contrast: #000000;
+	--ion-color-tertiary-contrast-rgb: 0, 0, 0;
+	--ion-color-tertiary-shade: #937adc;
+	--ion-color-tertiary-tint: #b097fb;
+
+	--ion-color-success: #34d399;
+	--ion-color-success-rgb: 52, 211, 153;
+	--ion-color-success-contrast: #ffffff;
+	--ion-color-success-contrast-rgb: 255, 255, 255;
+	--ion-color-success-shade: #2dba87;
+	--ion-color-success-tint: #48d7a3;
+
+	--ion-color-warning: #fbbf24;
+	--ion-color-warning-rgb: 251, 191, 36;
+	--ion-color-warning-contrast: #000000;
+	--ion-color-warning-contrast-rgb: 0, 0, 0;
+	--ion-color-warning-shade: #dda820;
+	--ion-color-warning-tint: #fbc53a;
+
+	--ion-color-danger: #f87171;
+	--ion-color-danger-rgb: 248, 113, 113;
+	--ion-color-danger-contrast: #ffffff;
+	--ion-color-danger-contrast-rgb: 255, 255, 255;
+	--ion-color-danger-shade: #da6363;
+	--ion-color-danger-tint: #f97f7f;
+
+	--ion-color-dark: #f4f5f8;
+	--ion-color-dark-rgb: 244, 245, 248;
+	--ion-color-dark-contrast: #000000;
+	--ion-color-dark-contrast-rgb: 0, 0, 0;
+	--ion-color-dark-shade: #d7d8da;
+	--ion-color-dark-tint: #f5f6f9;
+
+	--ion-color-medium: #a1a1aa;
+	--ion-color-medium-rgb: 161, 161, 170;
+	--ion-color-medium-contrast: #000000;
+	--ion-color-medium-contrast-rgb: 0, 0, 0;
+	--ion-color-medium-shade: #71717a;
+	--ion-color-medium-tint: #d4d4d8;
+
+	--ion-color-light: #18181b;
+	--ion-color-light-rgb: 24, 24, 27;
+	--ion-color-light-contrast: #ffffff;
+	--ion-color-light-contrast-rgb: 255, 255, 255;
+	--ion-color-light-shade: #09090b;
+	--ion-color-light-tint: #27272a;
+
+	/* ── Toolbar ── */
+	--ion-toolbar-background: #000000;
+	--ion-toolbar-color: #e4e4e7;
+	--ion-tab-bar-background: #000000;
+	--ion-tab-bar-color: #a1a1aa;
+	--ion-tab-bar-color-selected: #818cf8;
+
+	/* ── Step colors (pure neutral grays) ── */
+	--ion-color-step-50: #0d0d0d;
+	--ion-color-step-100: #1a1a1a;
+	--ion-color-step-150: #262626;
+	--ion-color-step-200: #333333;
+	--ion-color-step-250: #404040;
+	--ion-color-step-300: #4d4d4d;
+	--ion-color-step-350: #595959;
+	--ion-color-step-400: #666666;
+	--ion-color-step-450: #737373;
+	--ion-color-step-500: #808080;
+	--ion-color-step-550: #8c8c8c;
+	--ion-color-step-600: #999999;
+	--ion-color-step-650: #a6a6a6;
+	--ion-color-step-700: #b3b3b3;
+	--ion-color-step-750: #bfbfbf;
+	--ion-color-step-800: #cccccc;
+	--ion-color-step-850: #d9d9d9;
+	--ion-color-step-900: #e6e6e6;
+	--ion-color-step-950: #f2f2f2;
+
+	--ion-item-background: transparent;
+	--ion-item-color: #e4e4e7;
+	--ion-placeholder-color: #71717a;
 }
 
-body.dark ion-content,
-body.dark .ion-page {
+/* ══════════════════════════════════════════════════════════════════
+   Liquid Transitions
+   ══════════════════════════════════════════════════════════════════ */
+body,
+ion-content,
+ion-card,
+ion-toolbar,
+ion-item,
+ion-tab-bar {
+	transition: var(--liquid-transition);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Living Mesh Background
+   Vivid ambient color field — the soul of Liquid Glass.
+   Everything refracts through this.
+   ══════════════════════════════════════════════════════════════════ */
+body::before {
+	content: '';
+	position: fixed;
+	inset: -30%;
+	z-index: -1;
+	background:
+		radial-gradient(ellipse 90% 70% at 15% 20%, rgba(99, 102, 241, 0.24) 0%, transparent 55%),
+		radial-gradient(ellipse 70% 90% at 85% 75%, rgba(6, 182, 212, 0.20) 0%, transparent 55%),
+		radial-gradient(ellipse 80% 60% at 50% 45%, rgba(139, 92, 246, 0.16) 0%, transparent 55%),
+		radial-gradient(ellipse 60% 50% at 80% 15%, rgba(16, 185, 129, 0.12) 0%, transparent 50%),
+		radial-gradient(ellipse 50% 70% at 25% 80%, rgba(245, 158, 11, 0.10) 0%, transparent 50%),
+		radial-gradient(ellipse 40% 40% at 65% 60%, rgba(236, 72, 153, 0.08) 0%, transparent 50%);
+	animation: meshFloat 30s ease-in-out infinite alternate;
+	pointer-events: none;
+	will-change: transform;
+}
+
+html.dark body::before {
+	background: none;
+	animation: none;
+}
+
+@keyframes meshFloat {
+	0% {
+		transform: scale(1) translate(0, 0) rotate(0deg);
+	}
+	20% {
+		transform: scale(1.08) translate(-4%, 2%) rotate(0.8deg);
+	}
+	40% {
+		transform: scale(0.95) translate(3%, -2%) rotate(-0.5deg);
+	}
+	60% {
+		transform: scale(1.05) translate(-2%, 4%) rotate(0.4deg);
+	}
+	80% {
+		transform: scale(0.98) translate(2%, -1%) rotate(-0.3deg);
+	}
+	100% {
+		transform: scale(1.03) translate(-1%, 1%) rotate(0.2deg);
+	}
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Liquid Glass Primitives
+   ══════════════════════════════════════════════════════════════════ */
+.glass-panel {
+	background: rgba(var(--ion-background-color-rgb), 0.35) !important;
+	backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+	-webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+	border: 1px solid var(--glass-border);
+	border-top-color: var(--glass-border-top);
+	border-bottom-color: var(--glass-border-bottom);
+	box-shadow: var(--glass-shadow), var(--glass-highlight), var(--glass-inner-glow);
+}
+
+.glass-card {
+	--background: rgba(var(--ion-card-background-rgb), 0.28);
+	backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+	-webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+	border: 1px solid var(--glass-border) !important;
+	border-top-color: var(--glass-border-top) !important;
+	border-bottom-color: var(--glass-border-bottom) !important;
+	box-shadow: var(--glass-shadow), var(--glass-highlight), var(--glass-inner-glow);
+}
+
+ion-card.status-card {
+	--background: rgba(var(--ion-item-background-rgb), 0.22);
+	backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+	-webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+	border: 1px solid var(--glass-border);
+	border-top-color: var(--glass-border-top);
+	border-bottom-color: var(--glass-border-bottom);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   All ion-cards — True Liquid Glass
+   Deep translucency + specular highlight + refraction edge
+   ══════════════════════════════════════════════════════════════════ */
+ion-card {
+	--background: rgba(var(--ion-card-background-rgb), 0.28);
+	background: rgba(var(--ion-card-background-rgb), 0.28);
+	backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+	-webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+	border: 1px solid var(--glass-border) !important;
+	border-top-color: var(--glass-border-top) !important;
+	border-bottom-color: var(--glass-border-bottom) !important;
+	border-radius: 20px;
+	box-shadow:
+		var(--glass-shadow),
+		var(--glass-highlight),
+		var(--glass-inner-glow),
+		var(--glass-depth);
+	overflow: hidden;
+	position: relative;
+	transition: var(--liquid-transition);
+}
+
+/* Specular highlight — the bright reflection streak */
+ion-card::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background: var(--glass-specular);
+	border-radius: inherit;
+	pointer-events: none;
+	z-index: 0;
+	opacity: 1;
+	transition: opacity 0.5s ease;
+}
+
+/* Refraction edge — bottom-right color bleed */
+ion-card::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background: var(--glass-refraction);
+	border-radius: inherit;
+	pointer-events: none;
+	z-index: 0;
+	opacity: 1;
+	mix-blend-mode: overlay;
+}
+
+ion-card > * {
+	position: relative;
+	z-index: 1;
+}
+
+/* Hover: lift from surface, brighten specular */
+ion-card:hover {
+	transform: translateY(-3px) scale(1.005);
+	box-shadow:
+		0 24px 64px rgba(99, 102, 241, 0.14),
+		0 4px 16px rgba(0, 0, 0, 0.06),
+		var(--glass-highlight),
+		var(--glass-inner-glow);
+	border-color: rgba(255, 255, 255, 0.65) !important;
+}
+
+ion-card:hover::before {
+	opacity: 1.2;
+}
+
+/* Dark hover: lift up with subtle glass glow */
+html.dark ion-card:hover {
+	transform: translateY(-3px) scale(1.005);
+	background: #0c0c0c;
+	box-shadow:
+		0 12px 40px rgba(129, 140, 248, 0.08),
+		0 4px 12px rgba(0, 0, 0, 0.5),
+		inset 0 1px 0 rgba(255, 255, 255, 0.06);
+	border-color: rgba(255, 255, 255, 0.10) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Liquid Toolbar & Tab Bar
+   Deeply frosted navigation chrome
+   ══════════════════════════════════════════════════════════════════ */
+ion-toolbar {
+	--background: var(--ion-toolbar-background);
+	backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+	-webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+	border-bottom: 1px solid var(--glass-border-bottom);
+	box-shadow: var(--glass-highlight);
+}
+
+ion-tab-bar {
+	backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+	-webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+	border-top: 1px solid var(--glass-border);
+	box-shadow: inset 0 1px 0 var(--glass-border-top);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Liquid Segments
+   ══════════════════════════════════════════════════════════════════ */
+ion-segment {
+	background: rgba(var(--ion-card-background-rgb), 0.18);
+	border-radius: 16px;
+	border: 1px solid var(--glass-border);
+	border-top-color: var(--glass-border-top);
+	backdrop-filter: blur(16px) saturate(1.5);
+	-webkit-backdrop-filter: blur(16px) saturate(1.5);
+	box-shadow: var(--glass-inner-glow);
+	padding: 3px;
+}
+
+ion-segment-button {
+	--indicator-color: rgba(var(--ion-color-primary-rgb), 0.16);
+	--background-checked: rgba(var(--ion-color-primary-rgb), 0.10);
+	border-radius: 13px;
+	transition: var(--liquid-transition);
+	--indicator-box-shadow:
+		0 2px 12px rgba(var(--ion-color-primary-rgb), 0.18),
+		inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Liquid Alerts, Modals & Action Sheets
+   Very deep frost — feels like looking into thick glass
+   ══════════════════════════════════════════════════════════════════ */
+ion-alert .alert-wrapper,
+ion-action-sheet .action-sheet-wrapper {
+	backdrop-filter: blur(40px) saturate(2.0);
+	-webkit-backdrop-filter: blur(40px) saturate(2.0);
+	background: rgba(var(--ion-card-background-rgb), 0.50) !important;
+	border: 1px solid var(--glass-border);
+	border-top-color: var(--glass-border-top);
+	border-radius: 24px;
+	box-shadow:
+		0 32px 100px rgba(0, 0, 0, 0.18),
+		var(--glass-highlight),
+		var(--glass-inner-glow);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Liquid Buttons
+   ══════════════════════════════════════════════════════════════════ */
+ion-button {
+	--border-radius: 14px;
+	--box-shadow: var(--glass-shadow);
+	transition: var(--liquid-spring);
+}
+
+ion-button[fill="outline"],
+ion-button[fill="clear"] {
+	backdrop-filter: blur(12px) saturate(1.4);
+	-webkit-backdrop-filter: blur(12px) saturate(1.4);
+}
+
+ion-button:hover {
+	--box-shadow: 0 8px 28px rgba(var(--ion-color-primary-rgb), 0.22);
+	transform: translateY(-1px);
+}
+
+ion-button:active {
+	transform: translateY(0) scale(0.98);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Liquid Chips & Badges
+   ══════════════════════════════════════════════════════════════════ */
+ion-chip {
+	backdrop-filter: blur(12px) saturate(1.4);
+	-webkit-backdrop-filter: blur(12px) saturate(1.4);
+	border: 1px solid var(--glass-border);
+	box-shadow: var(--glass-highlight);
+}
+
+ion-badge {
+	backdrop-filter: blur(10px) saturate(1.3);
+	-webkit-backdrop-filter: blur(10px) saturate(1.3);
+	box-shadow: var(--glass-highlight);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Liquid List Items & Toggles
+   ══════════════════════════════════════════════════════════════════ */
+ion-item {
+	--background: var(--ion-item-background);
+	transition: var(--liquid-transition);
+}
+
+ion-toggle {
+	transition: var(--liquid-transition);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Liquid Toasts
+   ══════════════════════════════════════════════════════════════════ */
+ion-toast::part(container) {
+	backdrop-filter: blur(28px) saturate(1.8);
+	-webkit-backdrop-filter: blur(28px) saturate(1.8);
+	background: var(--glass-tint, rgba(255, 255, 255, 0.4));
+	border: 1px solid var(--glass-border);
+	border-top-color: var(--glass-border-top);
+	border-radius: 20px;
+	box-shadow: var(--glass-shadow), var(--glass-highlight);
+}
+
+ion-toast.ion-color-success::part(container) {
+	background: rgba(16, 185, 129, 0.15) !important;
+	color: #059669 !important;
+	border-color: rgba(16, 185, 129, 0.4) !important;
+}
+
+ion-toast.ion-color-danger::part(container) {
+	background: rgba(239, 68, 68, 0.15) !important;
+	color: #dc2626 !important;
+	border-color: rgba(239, 68, 68, 0.4) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Dark-mode Ionic Overrides
+   Solid dark at rest — glassy lift on hover/interaction
+   ══════════════════════════════════════════════════════════════════ */
+html.dark ion-content {
+	--background: #000000;
+}
+
+/* Cards: solid dark, no glass at rest */
+html.dark ion-card {
+	--background: #000000;
+	background: #000000;
+	--color: var(--ion-text-color);
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+}
+
+html.dark ion-card::before,
+html.dark ion-card::after {
+	display: none;
+}
+
+html.dark ion-card-header {
+	--background: transparent;
+}
+
+/* Toolbar & tab bar: solid */
+html.dark ion-toolbar {
+	--background: #000000;
+	--color: var(--ion-toolbar-color);
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+	border-bottom-color: rgba(255, 255, 255, 0.04);
+}
+
+html.dark ion-tab-bar {
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+	border-top-color: rgba(255, 255, 255, 0.04);
+}
+
+/* Items & lists */
+html.dark ion-item {
+	--background: transparent;
+	--color: var(--ion-item-color);
+}
+
+html.dark ion-list {
+	--background: transparent;
+}
+
+/* Segments: solid dark */
+html.dark ion-segment {
+	background: #000000;
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+	border-color: rgba(255, 255, 255, 0.04);
+}
+
+/* Buttons: solid at rest, glassy lift on hover */
+html.dark ion-button {
+	--box-shadow: none;
+}
+
+html.dark ion-button[fill="outline"],
+html.dark ion-button[fill="clear"] {
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+}
+
+html.dark ion-button:hover {
+	--box-shadow: 0 6px 20px rgba(129, 140, 248, 0.15);
+	transform: translateY(-2px);
+}
+
+/* Chips & badges: solid */
+html.dark ion-chip {
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+	border-color: rgba(255, 255, 255, 0.06);
+}
+
+html.dark ion-badge {
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+}
+
+/* Toasts, alerts, action sheets: solid dark */
+html.dark ion-toast::part(container) {
+	backdrop-filter: blur(24px) saturate(1.8);
+	-webkit-backdrop-filter: blur(24px) saturate(1.8);
+	background: rgba(20, 20, 20, 0.85);
+	border-color: rgba(255, 255, 255, 0.1);
+}
+
+html.dark ion-toast.ion-color-success::part(container) {
+	background: rgba(16, 185, 129, 0.2) !important;
+	color: #34d399 !important;
+	border-color: rgba(52, 211, 153, 0.4) !important;
+}
+
+html.dark ion-toast.ion-color-danger::part(container) {
+	background: rgba(239, 68, 68, 0.2) !important;
+	color: #f87171 !important;
+	border-color: rgba(248, 113, 113, 0.4) !important;
+}
+
+html.dark ion-alert .alert-wrapper,
+html.dark ion-action-sheet .action-sheet-wrapper {
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+	background: #0a0a0a !important;
+	border-color: rgba(255, 255, 255, 0.06);
+}
+
+/* Inputs: dark surface */
+html.dark ion-textarea,
+html.dark ion-input,
+html.dark ion-select {
+	--background: #000000;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Base / Global Styles
+   ══════════════════════════════════════════════════════════════════ */
+body,
+.ion-page,
+ion-content {
 	background: var(--ion-background-color);
+	color: var(--ion-text-color);
+}
+
+h1, h2, h3, h4, h5, h6 {
+	color: var(--ion-text-color);
+}
+
+p {
+	color: var(--ion-text-color);
+	opacity: 0.9;
+}
+
+.text-muted {
+	color: var(--ion-color-medium);
+}
+
+ion-item {
+	--background: var(--ion-item-background);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Liquid Input Fields
+   ══════════════════════════════════════════════════════════════════ */
+ion-textarea,
+ion-input,
+ion-select {
+	--background: rgba(var(--ion-card-background-rgb), 0.18);
+	--border-radius: 14px;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Liquid Scrollbar
+   ══════════════════════════════════════════════════════════════════ */
+::-webkit-scrollbar {
+	width: 6px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: rgba(var(--ion-text-color-rgb), 0.10);
+	border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: rgba(var(--ion-text-color-rgb), 0.18);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Accessibility: prefers-reduced-motion
+   ══════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+	body::before {
+		animation: none;
+	}
+
+	*,
+	*::before,
+	*::after {
+		transition-duration: 0.01ms !important;
+		animation-duration: 0.01ms !important;
+	}
 }

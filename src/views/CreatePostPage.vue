@@ -105,7 +105,7 @@
           <div class="info-box" v-if="imageFile">
             <ion-icon :icon="informationCircle"></ion-icon>
             <p>
-              Image will be compressed to ~200 KB and stored on GunDB (decentralized P2P network).
+              Image will be compressed to ~200 KB and stored on GunDB (peer-to-peer network).
               Thumbnail (~15 KB) will be cached locally for fast loading.
             </p>
           </div>
@@ -266,8 +266,9 @@ const submitPost = async () => {
   width: 100%;
   max-height: 400px;
   object-fit: cover;
-  border-radius: 8px;
-  border: 2px solid var(--ion-color-light);
+  border-radius: 14px;
+  border: 2px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
 }
 
 .remove-image {
@@ -289,10 +290,15 @@ const submitPost = async () => {
   gap: 8px;
   margin-top: 16px;
   padding: 12px;
-  background: var(--ion-color-light);
-  border-radius: 8px;
+  background: rgba(var(--ion-card-background-rgb), 0.20);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
+  border-radius: 14px;
   font-size: 12px;
   color: var(--ion-color-medium);
+  box-shadow: var(--glass-highlight);
 }
 
 .info-box ion-icon {

@@ -32,7 +32,7 @@ export class StorageService {
 
   static async getDB(): Promise<IDBPDatabase> {
     if (!this.dbPromise) {
-      this.dbPromise = openDB('voting-chain-db', 1, {
+      this.dbPromise = openDB('interpoll-db', 1, {
         upgrade(db) {
           // Blocks store
           const blockStore = db.createObjectStore('blocks', { keyPath: 'index' });

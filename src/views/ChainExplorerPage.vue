@@ -19,51 +19,87 @@
         </ion-card-header>
 
         <ion-card-content>
-          <div class="space-y-3">
+          <div class="blocks-list">
             <div
               v-for="block in reversedBlocks"
               :key="block.index"
-              class="border border-gray-200 rounded p-3 bg-gray-50"
+              class="block-item"
             >
-              <div class="flex justify-between items-start mb-2">
-                <ion-badge color="primary">Block #{{ block.index }}</ion-badge>
-                <span class="text-xs text-gray-500">
+              <div class="block-header">
+                <div class="block-header-left">
+                  <ion-badge color="primary">Block #{{ block.index }}</ion-badge>
+                  <ion-badge
+                    v-if="block.actionType"
+                    :color="actionBadgeColor(block.actionType)"
+                    class="action-badge"
+                  >
+                    {{ actionLabel(block.actionType) }}
+                  </ion-badge>
+                </div>
+                <span class="block-timestamp">
                   {{ formatDate(block.timestamp) }}
                 </span>
               </div>
 
-              <div class="space-y-1 text-xs">
-                <div>
-                  <span class="text-gray-600">Previous Hash:</span>
-                  <code class="block bg-white px-2 py-1 rounded mt-1 break-all">
-                    {{ truncateHash(block.previousHash) }}
+              <div v-if="block.actionLabel" class="block-action-label">
+                {{ block.actionLabel }}
+              </div>
+
+              <div class="block-hashes">
+                <div class="hash-row">
+                  <span class="hash-label">Previous Hash:</span>
+                  <code class="hash-value">
+                    {{ fullHash(block.previousHash) }}
                   </code>
                 </div>
 
-                <div>
-                  <span class="text-gray-600">Current Hash:</span>
-                  <code class="block bg-white px-2 py-1 rounded mt-1 break-all">
-                    {{ truncateHash(block.currentHash) }}
+                <div class="hash-row">
+                  <span class="hash-label">Current Hash:</span>
+                  <code class="hash-value">
+                    {{ fullHash(block.currentHash) }}
                   </code>
                 </div>
 
-                <div>
-                  <span class="text-gray-600">Vote Hash:</span>
-                  <code class="block bg-white px-2 py-1 rounded mt-1 break-all">
-                    {{ truncateHash(block.voteHash) }}
+                <div class="hash-row">
+                  <span class="hash-label">Data Hash:</span>
+                  <code class="hash-value">
+                    {{ fullHash(block.voteHash) }}
+                  </code>
+                </div>
+
+                <div class="hash-row" v-if="block.pubkey">
+                  <span class="hash-label">Signer:</span>
+                  <code class="hash-value signer-value">
+                    {{ block.pubkey }}
+                  </code>
+                </div>
+
+                <div class="hash-row">
+                  <span class="hash-label">Signature:</span>
+                  <code class="hash-value">
+                    {{ fullHash(block.signature) }}
                   </code>
                 </div>
               </div>
 
-              <div class="mt-2 flex gap-2">
-                <ion-icon
-                  :icon="checkmarkCircle"
-                  color="success"
-                  v-if="block.index > 0"
-                ></ion-icon>
-                <span class="text-xs text-gray-600">
-                  {{ block.index === 0 ? 'Genesis Block' : 'Valid' }}
-                </span>
+              <div class="block-validity">
+                <template v-if="block.index === 0">
+                  <ion-icon :icon="shieldCheckmarkOutline" color="primary"></ion-icon>
+                  <span class="validity-label">Genesis Block</span>
+                </template>
+                <template v-else-if="block.pubkey">
+                  <ion-icon
+                    :icon="verificationStatus[block.index] ? shieldCheckmarkOutline : alertCircleOutline"
+                    :color="verificationStatus[block.index] ? 'success' : 'danger'"
+                  ></ion-icon>
+                  <span class="validity-label" :class="verificationStatus[block.index] ? 'sig-verified' : 'sig-invalid'">
+                    {{ verificationStatus[block.index] ? 'Schnorr Verified' : 'Signature Invalid' }}
+                  </span>
+                </template>
+                <template v-else>
+                  <ion-icon :icon="informationCircleOutline" color="medium"></ion-icon>
+                  <span class="validity-label">Legacy (no signature)</span>
+                </template>
               </div>
             </div>
           </div>
@@ -74,7 +110,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, watchEffect } from 'vue';
 import {
   IonPage,
   IonHeader,
@@ -91,8 +127,13 @@ import {
   IonBadge,
   IonIcon
 } from '@ionic/vue';
-import { checkmarkCircle } from 'ionicons/icons';
+import {
+  shieldCheckmarkOutline,
+  alertCircleOutline,
+  informationCircleOutline
+} from 'ionicons/icons';
 import { useChainStore } from '../stores/chainStore';
+import { CryptoService } from '../services/cryptoService';
 
 const chainStore = useChainStore();
 
@@ -100,12 +141,157 @@ const reversedBlocks = computed(() => {
   return [...chainStore.blocks].reverse();
 });
 
-const truncateHash = (hash: string) => {
-  if (hash.length <= 20) return hash;
-  return `${hash.substring(0, 10)}...${hash.substring(hash.length - 10)}`;
+// Verify Schnorr signatures for all blocks with pubkeys
+const verificationStatus = ref<Record<number, boolean>>({});
+
+watchEffect(() => {
+  const status: Record<number, boolean> = {};
+  for (const block of chainStore.blocks) {
+    if (block.pubkey) {
+      const dataToVerify = JSON.stringify({
+        index: block.index,
+        voteHash: block.voteHash,
+        previousHash: block.previousHash,
+      });
+      status[block.index] = CryptoService.verify(dataToVerify, block.signature, block.pubkey);
+    }
+  }
+  verificationStatus.value = status;
+});
+
+const fullHash = (hash: string) => {
+  return hash || '';
 };
 
 const formatDate = (timestamp: number) => {
   return new Date(timestamp).toLocaleString();
 };
+
+const actionBadgeColor = (actionType: string) => {
+  switch (actionType) {
+    case 'community-create': return 'tertiary';
+    case 'post-create': return 'success';
+    case 'vote': return 'warning';
+    default: return 'medium';
+  }
+};
+
+const actionLabel = (actionType: string) => {
+  switch (actionType) {
+    case 'community-create': return 'Community';
+    case 'post-create': return 'Post';
+    case 'vote': return 'Vote';
+    default: return actionType;
+  }
+};
 </script>
+
+<style scoped>
+.blocks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.block-item {
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(var(--ion-card-background-rgb), 0.20);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  box-shadow: var(--glass-highlight);
+}
+
+.block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.block-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.action-badge {
+  font-size: 10px;
+}
+
+.block-action-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ion-text-color);
+  margin-bottom: 8px;
+  padding: 0 2px;
+}
+
+.block-timestamp {
+  font-size: 12px;
+  color: var(--ion-color-medium);
+}
+
+.block-hashes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.hash-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hash-label {
+  color: var(--ion-color-medium);
+}
+
+.hash-value {
+  display: block;
+  background: rgba(var(--ion-card-background-rgb), 0.18);
+  backdrop-filter: blur(12px) saturate(1.3);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
+  color: var(--ion-text-color);
+  padding: 4px 8px;
+  border-radius: 12px;
+  margin-top: 2px;
+  word-break: break-all;
+  font-size: 12px;
+  box-shadow: var(--glass-highlight);
+}
+
+.signer-value {
+  border-color: rgba(var(--ion-color-primary-rgb), 0.3);
+  background: rgba(var(--ion-color-primary-rgb), 0.04);
+}
+
+.block-validity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.validity-label {
+  font-size: 12px;
+  color: var(--ion-color-medium);
+}
+
+.sig-verified {
+  color: var(--ion-color-success);
+  font-weight: 600;
+}
+
+.sig-invalid {
+  color: var(--ion-color-danger);
+  font-weight: 600;
+}
+</style>

@@ -95,7 +95,7 @@
           <div class="info-box">
             <ion-icon :icon="informationCircle"></ion-icon>
             <div>
-              <p><strong>Decentralized Community</strong></p>
+              <p><strong>Peer-to-Peer Community</strong></p>
               <p>
                 This community will be stored on GunDB and synced across all peers. 
                 Once created, it cannot be deleted (that's the nature of P2P!).
@@ -268,8 +268,13 @@ const createCommunity = async () => {
   gap: 12px;
   margin-top: 24px;
   padding: 16px;
-  background: var(--ion-color-light);
-  border-radius: 8px;
+  background: rgba(var(--ion-card-background-rgb), 0.20);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
+  border-radius: 14px;
+  box-shadow: var(--glass-highlight);
 }
 
 .info-box ion-icon {

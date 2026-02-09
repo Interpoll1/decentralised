@@ -6,6 +6,11 @@
           <ion-back-button :default-href="`/community/${poll?.communityId || '/home'}`"></ion-back-button>
         </ion-buttons>
         <ion-title>Poll</ion-title>
+        <ion-buttons slot="end" v-if="poll && isAuthor && poll.isPrivate">
+          <ion-button @click="loadInviteCodes">
+            <ion-icon :icon="shareOutline"></ion-icon>
+          </ion-button>
+        </ion-buttons>
       </ion-toolbar>
     </ion-header>
 
@@ -32,6 +37,10 @@
               <ion-chip>
                 <ion-icon :icon="statsChartOutline"></ion-icon>
                 <ion-label>Poll</ion-label>
+              </ion-chip>
+              <ion-chip v-if="poll.isPrivate" color="warning">
+                <ion-icon :icon="lockClosedOutline"></ion-icon>
+                <ion-label>Private</ion-label>
               </ion-chip>
               <ion-chip v-if="poll.isExpired" color="danger">
                 <ion-label>Ended</ion-label>
@@ -74,8 +83,76 @@
           </ion-card-content>
         </ion-card>
 
-        <!-- Voting Card -->
-        <ion-card v-if="!hasVoted && !poll.isExpired">
+        <!-- Invite Code Management (author of private poll) -->
+        <ion-card v-if="poll.isPrivate && isAuthor">
+          <ion-card-header>
+            <div class="status-header">
+              <ion-card-title>Invite Links</ion-card-title>
+              <ion-badge color="warning">{{ inviteCodes.length }} codes</ion-badge>
+            </div>
+            <ion-card-subtitle>Share these unique links — each can only be used once</ion-card-subtitle>
+          </ion-card-header>
+
+          <ion-card-content>
+            <div v-if="inviteCodes.length === 0" class="empty-codes">
+              <ion-spinner v-if="isLoadingCodes"></ion-spinner>
+              <p v-else>No invite codes found</p>
+            </div>
+
+            <div v-else class="invite-code-list">
+              <div
+                v-for="entry in inviteCodes"
+                :key="entry.code"
+                class="invite-code-item"
+                :class="{ used: entry.used }"
+              >
+                <div class="code-info">
+                  <code class="code-value">{{ entry.code }}</code>
+                  <ion-badge :color="entry.used ? 'medium' : 'success'" class="code-status">
+                    {{ entry.used ? 'Used' : 'Available' }}
+                  </ion-badge>
+                </div>
+                <ion-button
+                  v-if="!entry.used"
+                  size="small"
+                  fill="clear"
+                  @click="copyInviteLink(entry.code)"
+                >
+                  <ion-icon :icon="copyOutline"></ion-icon>
+                </ion-button>
+              </div>
+            </div>
+
+            <ion-button expand="block" fill="outline" @click="copyAllLinks" class="mt-3">
+              <ion-icon slot="start" :icon="copyOutline"></ion-icon>
+              Copy All Available Links
+            </ion-button>
+          </ion-card-content>
+        </ion-card>
+
+        <!-- Private poll notice (non-author visitor) -->
+        <ion-card v-if="poll.isPrivate && !isAuthor && !hasVoted && !poll.isExpired">
+          <ion-card-content>
+            <div class="private-notice">
+              <ion-icon :icon="lockClosedOutline" color="warning"></ion-icon>
+              <div>
+                <h3>Private Poll</h3>
+                <p>This poll requires an invite code to vote. Use the unique link you were given.</p>
+                <ion-button
+                  size="small"
+                  fill="outline"
+                  @click="router.push(`/vote/${poll!.id}`)"
+                  class="mt-2"
+                >
+                  Enter Invite Code
+                </ion-button>
+              </div>
+            </div>
+          </ion-card-content>
+        </ion-card>
+
+        <!-- Voting Card (public polls only) -->
+        <ion-card v-if="!poll.isPrivate && !hasVoted && !poll.isExpired">
           <ion-card-header>
             <ion-card-title>Cast Your Vote</ion-card-title>
             <ion-card-subtitle v-if="poll.allowMultipleChoices">
@@ -84,14 +161,6 @@
           </ion-card-header>
 
           <ion-card-content>
-            <!-- Debug Info -->
-            <div v-if="!poll.options || poll.options.length === 0" style="color: red; padding: 12px; background: #fee; border-radius: 8px; margin-bottom: 16px;">
-              No poll options loaded. Options count: {{ poll.options?.length || 0 }}
-            </div>
-            
-            <!-- Show actual array for debugging -->
-
-
             <!-- Multiple Choice (Checkboxes) -->
             <ion-list v-if="poll.allowMultipleChoices && poll.options && poll.options.length > 0">
               <ion-item v-for="(option, index) in poll.options" :key="`option-${index}-${option.id}`">
@@ -101,10 +170,7 @@
                   slot="start"
                 ></ion-checkbox>
                 <ion-label>
-                  <h3>{{ option.text || `[Empty] Option ${index + 1}` }}</h3>
-                  <p v-if="!option.text" style="color: red; font-size: 11px;">
-                    ID: {{ option.id }} | Votes: {{ option.votes }}
-                  </p>
+                  <h3>{{ option.text }}</h3>
                 </ion-label>
               </ion-item>
             </ion-list>
@@ -118,32 +184,26 @@
                     slot="start"
                   ></ion-radio>
                   <ion-label>
-                    <h3>{{ option.text || `[Empty] Option ${index + 1}` }}</h3>
-                    <p v-if="!option.text" style="color: red; font-size: 11px;">
-                      ID: {{ option.id }} | Votes: {{ option.votes }}
-                    </p>
+                    <h3>{{ option.text }}</h3>
                   </ion-label>
                 </ion-item>
               </ion-list>
             </ion-radio-group>
 
-            <div v-else style="padding: 24px; text-align: center; color: var(--ion-color-medium);">
+            <div v-else class="empty-options">
               <p>No options available for this poll</p>
             </div>
 
-            <ion-button 
-              expand="block" 
+            <ion-button
+              expand="block"
               @click="submitVote"
-              :disabled="!canVote"
+              :disabled="!canSubmitVote || isSubmitting"
               class="vote-button"
             >
-              <ion-icon slot="start" :icon="checkmarkCircleOutline"></ion-icon>
-              Submit Vote
+              <ion-spinner v-if="isSubmitting" name="crescent" slot="start"></ion-spinner>
+              <ion-icon v-else slot="start" :icon="checkmarkCircleOutline"></ion-icon>
+              {{ isSubmitting ? 'Submitting...' : 'Submit Vote' }}
             </ion-button>
-
-            <p v-if="poll.showResultsBeforeVoting" class="hint">
-              You can see results before voting
-            </p>
           </ion-card-content>
         </ion-card>
 
@@ -170,8 +230,8 @@
             </div>
 
             <div v-else class="poll-results">
-              <div 
-                v-for="option in sortedOptions" 
+              <div
+                v-for="option in sortedOptions"
                 :key="option.id"
                 class="result-item"
               >
@@ -180,8 +240,8 @@
                   <span class="option-percent">{{ getOptionPercent(option) }}%</span>
                 </div>
                 <div class="result-bar">
-                  <div 
-                    class="result-fill" 
+                  <div
+                    class="result-fill"
                     :style="{ width: `${getOptionPercent(option)}%` }"
                   ></div>
                 </div>
@@ -222,6 +282,7 @@ import {
   IonButton,
   IonIcon,
   IonChip,
+  IonBadge,
   IonSpinner,
   toastController
 } from '@ionic/vue';
@@ -231,22 +292,40 @@ import {
   peopleOutline,
   checkmarkCircleOutline,
   alertCircleOutline,
-  eyeOffOutline
+  eyeOffOutline,
+  lockClosedOutline,
+  shareOutline,
+  copyOutline
 } from 'ionicons/icons';
 import { usePollStore } from '../stores/pollStore';
-import { Poll } from '../services/pollService';
+import { useChainStore } from '../stores/chainStore';
+import { PollService, Poll } from '../services/pollService';
+import { UserService } from '../services/userService';
+import { VoteTrackerService } from '../services/voteTrackerService';
+import { AuditService } from '../services/auditService';
+import type { Vote } from '../types/chain';
 
 const route = useRoute();
 const router = useRouter();
 const pollStore = usePollStore();
+const chainStore = useChainStore();
 
 const poll = ref<Poll | null>(null);
 const isLoading = ref(true);
+const isSubmitting = ref(false);
 const selectedOption = ref<string>('');
 const selectedOptions = ref<string[]>([]);
 const hasVoted = ref(false);
+const currentUserId = ref('');
+const inviteCodes = ref<{ code: string; used: boolean }[]>([]);
+const isLoadingCodes = ref(false);
 
-const canVote = computed(() => {
+const isAuthor = computed(() => {
+  if (!poll.value || !currentUserId.value) return false;
+  return poll.value.authorId === currentUserId.value;
+});
+
+const canSubmitVote = computed(() => {
   if (poll.value?.allowMultipleChoices) {
     return selectedOptions.value.length > 0;
   }
@@ -266,16 +345,16 @@ const actualTotalVotes = computed(() => {
 function formatTime(timestamp: number): string {
   const now = Date.now();
   const diff = now - timestamp;
-  
+
   const minutes = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
-  
+
   if (minutes < 1) return 'just now';
   if (minutes < 60) return `${minutes}m ago`;
   if (hours < 24) return `${hours}h ago`;
   if (days < 7) return `${days}d ago`;
-  
+
   return new Date(timestamp).toLocaleDateString();
 }
 
@@ -283,46 +362,94 @@ function getTimeRemaining(): string {
   if (!poll.value || poll.value.isExpired) {
     return 'Ended';
   }
-  
+
   const now = Date.now();
   const remaining = poll.value.expiresAt - now;
-  
+
   const days = Math.floor(remaining / 86400000);
   const hours = Math.floor((remaining % 86400000) / 3600000);
   const minutes = Math.floor((remaining % 3600000) / 60000);
-  
-  if (days > 0) {
-    return `${days}d ${hours}h left`;
-  } else if (hours > 0) {
-    return `${hours}h ${minutes}m left`;
-  } else if (minutes > 0) {
-    return `${minutes}m left`;
-  } else {
-    return 'Ending soon';
-  }
+
+  if (days > 0) return `${days}d ${hours}h left`;
+  if (hours > 0) return `${hours}h ${minutes}m left`;
+  if (minutes > 0) return `${minutes}m left`;
+  return 'Ending soon';
 }
 
 function getOptionPercent(option: { votes: number }): number {
   const total = actualTotalVotes.value;
-  
   if (total === 0) return 0;
-  
-  const percentage = (option.votes / total) * 100;
-  return Math.round(percentage);
+  return Math.round((option.votes / total) * 100);
 }
 
 async function submitVote() {
-  if (!poll.value || !canVote.value) return;
+  if (!poll.value || !canSubmitVote.value) return;
+
+  isSubmitting.value = true;
 
   try {
-    const optionIds = poll.value.allowMultipleChoices 
-      ? selectedOptions.value 
+    const deviceId = await VoteTrackerService.getDeviceId();
+
+    // Check local vote tracker
+    if (await VoteTrackerService.hasVoted(poll.value.id)) {
+      const toast = await toastController.create({
+        message: 'You have already voted on this poll',
+        duration: 3000,
+        color: 'danger'
+      });
+      await toast.present();
+      hasVoted.value = true;
+      return;
+    }
+
+    // Check backend authorization
+    const allowedByBackend = await AuditService.authorizeVote(poll.value.id, deviceId);
+    if (!allowedByBackend) {
+      const toast = await toastController.create({
+        message: 'This device has already voted on this poll',
+        duration: 3000,
+        color: 'danger'
+      });
+      await toast.present();
+      hasVoted.value = true;
+      return;
+    }
+
+    const optionIds = poll.value.allowMultipleChoices
+      ? selectedOptions.value
       : [selectedOption.value];
 
-    await pollStore.voteOnPoll(poll.value.id, optionIds);
+    // Initialize chain if needed
+    await chainStore.initialize();
+
+    // Find option text for the blockchain record
+    const choiceText = optionIds
+      .map(id => poll.value!.options.find(o => o.id === id)?.text || id)
+      .join(', ');
+
+    // Record on blockchain
+    const vote: Vote = {
+      pollId: poll.value.id,
+      choice: choiceText,
+      timestamp: Date.now(),
+      deviceId
+    };
+    const receipt = await chainStore.addVote(vote);
+
+    // Update Gun poll option counts
+    try {
+      const user = await UserService.getCurrentUser();
+      await PollService.voteOnPoll(poll.value.id, optionIds, user.id);
+    } catch (gunErr) {
+      console.warn('Gun poll count update failed:', gunErr);
+    }
+
+    // Record device vote
+    await VoteTrackerService.recordVote(poll.value.id, receipt.blockIndex);
 
     hasVoted.value = true;
 
+    // Track locally
     const votedPolls = JSON.parse(localStorage.getItem('voted-polls') || '[]');
     votedPolls.push(poll.value.id);
     localStorage.setItem('voted-polls', JSON.stringify(votedPolls));
@@ -334,10 +461,115 @@ async function submitVote() {
     });
     await toast.present();
 
+    // Reload poll to get updated counts
     await loadPoll();
   } catch (error) {
+    console.error('Error submitting vote:', error);
     const toast = await toastController.create({
       message: 'Failed to submit vote',
+      duration: 2000,
+      color: 'danger'
+    });
+    await toast.present();
+  } finally {
+    isSubmitting.value = false;
+  }
+}
+
+async function loadPoll() {
+  const pollId = route.params.pollId as string;
+
+  // Check local vote state
+  const votedPolls = JSON.parse(localStorage.getItem('voted-polls') || '[]');
+  const votedLocally = votedPolls.includes(pollId);
+  const votedByDevice = await VoteTrackerService.hasVoted(pollId);
+  hasVoted.value = votedLocally || votedByDevice;
+
+  // Fetch from Gun via pollStore (not just local store)
+  await pollStore.selectPoll(pollId);
+  poll.value = pollStore.currentPoll;
+
+  // Load current user for author check
+  try {
+    const user = await UserService.getCurrentUser();
+    currentUserId.value = user.id;
+  } catch {
+    // Not critical
+  }
+
+  // Load invite codes if author of private poll
+  if (poll.value?.isPrivate && isAuthor.value) {
+    await loadInviteCodes();
+  }
+
+  isLoading.value = false;
+}
+
+async function loadInviteCodes() {
+  if (!poll.value) return;
+  isLoadingCodes.value = true;
+  try {
+    inviteCodes.value = await PollService.getInviteCodes(poll.value.id);
+  } catch (err) {
+    console.warn('Failed to load invite codes:', err);
+  } finally {
+    isLoadingCodes.value = false;
+  }
+}
+
+async function copyInviteLink(code: string) {
+  if (!poll.value) return;
+  const baseUrl = window.location.origin;
+  const link = `${baseUrl}/vote/${poll.value.id}?code=${code}`;
+
+  try {
+    await navigator.clipboard.writeText(link);
+    const toast = await toastController.create({
+      message: 'Invite link copied',
+      duration: 1500,
+      color: 'success'
+    });
+    await toast.present();
+  } catch {
+    const toast = await toastController.create({
+      message: link,
+      duration: 4000,
+      color: 'medium'
+    });
+    await toast.present();
+  }
+}
+
+async function copyAllLinks() {
+  if (!poll.value) return;
+  const baseUrl = window.location.origin;
+  const availableCodes = inviteCodes.value.filter(c => !c.used);
+
+  if (availableCodes.length === 0) {
+    const toast = await toastController.create({
+      message: 'No available codes left',
+      duration: 2000,
+      color: 'warning'
+    });
+    await toast.present();
+    return;
+  }
+
+  const links = availableCodes
+    .map(c => `${baseUrl}/vote/${poll.value!.id}?code=${c.code}`)
+    .join('\n');
+
+  try {
+    await navigator.clipboard.writeText(links);
+    const toast = await toastController.create({
+      message: `${availableCodes.length} invite links copied`,
+      duration: 2000,
+      color: 'success'
+    });
+    await toast.present();
+  } catch {
+    const toast = await toastController.create({
+      message: 'Failed to copy links',
       duration: 2000,
       color: 'danger'
     });
@@ -345,175 +577,12 @@ async function submitVote() {
   }
 }
 
-async function loadPoll() {
-  const pollId = route.params.pollId as string;
-  
-  const votedPolls = JSON.parse(localStorage.getItem('voted-polls') || '[]');
-  hasVoted.value = votedPolls.includes(pollId);
-
-  const foundPoll = pollStore.polls.find(p => p.id === pollId);
-  
-  if (foundPoll) {
-    poll.value = foundPoll;
-  }
-
-  isLoading.value = false;
-}
-
 onMounted(async () => {
+  await chainStore.initialize();
   await loadPoll();
 });
 </script>
 
-
-<style scoped>
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  gap: 16px;
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  gap: 16px;
-  padding: 24px;
-  text-align: center;
-}
-
-.poll-meta {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-}
-
-.poll-description {
-  margin: 0;
-  line-height: 1.5;
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-}
-
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.stat-item ion-icon {
-  font-size: 32px;
-}
-
-.stat-item div {
-  display: flex;
-  flex-direction: column;
-}
-
-.stat-item strong {
-  font-size: 20px;
-  font-weight: 600;
-}
-
-.stat-item span {
-  font-size: 12px;
-  color: var(--ion-color-medium);
-}
-
-.vote-button {
-  margin-top: 16px;
-}
-
-.hint {
-  text-align: center;
-  font-size: 12px;
-  color: var(--ion-color-medium);
-  margin-top: 8px;
-}
-
-.voted-message {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 24px;
-  text-align: center;
-}
-
-.voted-message ion-icon {
-  font-size: 64px;
-}
-
-.results-hidden {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 24px;
-  text-align: center;
-  color: var(--ion-color-medium);
-}
-
-.results-hidden ion-icon {
-  font-size: 64px;
-}
-
-.poll-results {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.result-item {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.result-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.option-text {
-  font-weight: 500;
-}
-
-.option-percent {
-  font-weight: 600;
-  color: var(--ion-color-primary);
-}
-
-.result-bar {
-  height: 8px;
-  background: var(--ion-color-light);
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.result-fill {
-  height: 100%;
-  background: var(--ion-color-primary);
-  border-radius: 4px;
-  transition: width 0.3s ease;
-}
-
-.result-votes {
-  font-size: 12px;
-  color: var(--ion-color-medium);
-}
-</style>
 <style scoped>
 .loading-container {
   display: flex;
@@ -569,8 +638,13 @@ ion-card {
   align-items: center;
   gap: 12px;
   padding: 12px;
-  background: var(--ion-color-light);
-  border-radius: 8px;
+  background: rgba(var(--ion-card-background-rgb), 0.20);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
+  border-radius: 14px;
+  box-shadow: var(--glass-highlight);
 }
 
 .stat-item ion-icon {
@@ -593,11 +667,10 @@ ion-card {
   margin-top: 16px;
 }
 
-.hint {
-  margin: 12px 0 0 0;
-  font-size: 13px;
-  color: var(--ion-color-medium);
+.empty-options {
+  padding: 24px;
   text-align: center;
+  color: var(--ion-color-medium);
 }
 
 .voted-message {
@@ -664,10 +737,15 @@ ion-card {
 
 .result-bar {
   height: 32px;
-  background: var(--ion-color-light);
-  border-radius: 8px;
+  background: rgba(var(--ion-card-background-rgb), 0.20);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
+  border-radius: 14px;
   overflow: hidden;
   margin-bottom: 4px;
+  box-shadow: var(--glass-highlight);
 }
 
 .result-fill {
@@ -679,5 +757,89 @@ ion-card {
 .result-votes {
   font-size: 13px;
   color: var(--ion-color-medium);
+}
+
+/* ── Invite Codes ── */
+.status-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mt-2 { margin-top: 8px; }
+.mt-3 { margin-top: 12px; }
+
+.invite-code-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.invite-code-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(var(--ion-card-background-rgb), 0.18);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
+  border-radius: 12px;
+  box-shadow: var(--glass-highlight);
+}
+
+.invite-code-item.used {
+  opacity: 0.5;
+}
+
+.code-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.code-value {
+  font-size: 13px;
+  font-family: monospace;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.code-status {
+  font-size: 10px;
+}
+
+.empty-codes {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+  color: var(--ion-color-medium);
+}
+
+/* ── Private Poll Notice ── */
+.private-notice {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.private-notice ion-icon {
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.private-notice h3 {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.private-notice p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ion-color-medium);
+  line-height: 1.5;
 }
 </style>

@@ -2,7 +2,10 @@
   <div class="comment-card">
     <!-- Comment Header -->
     <div class="comment-header">
-      <span class="author-name">u/{{ comment.authorName }}</span>
+      <span class="author-badge">
+        <span class="commenter-dot"></span>
+        <span class="author-name">u/{{ displayName }}</span>
+      </span>
       <span class="separator">•</span>
       <span class="timestamp">{{ formatTime(comment.createdAt) }}</span>
       <span v-if="comment.edited" class="edited-label">(edited)</span>
@@ -97,8 +100,9 @@ import {
   trendingUpOutline,
   sendOutline,
 } from 'ionicons/icons';
-import { Comment } from '../services/commentService';
 import { useCommentStore } from '../stores/commentStore';
+import { Comment } from '../services/commentService';
+import { generatePseudonym } from '../utils/pseudonym';
 
 const props = defineProps<{
   comment: Comment;
@@ -112,23 +116,28 @@ const commentStore = useCommentStore();
 const showReplyForm = ref(false);
 const replyText = ref('');
 
+const displayName = computed(() => {
+  if (props.comment?.authorId && props.postId) {
+    return generatePseudonym(props.postId, props.comment.authorId);
+  }
+  return props.comment.authorName || 'anon';
+});
+
 const hasUpvoted = computed(() => {
+  commentStore.voteVersion; // reactive dependency to trigger re-evaluation on vote changes
   const votedComments = JSON.parse(localStorage.getItem('upvoted-comments') || '[]');
   return votedComments.includes(props.comment.id);
 });
 
 const hasDownvoted = computed(() => {
+  commentStore.voteVersion; // reactive dependency to trigger re-evaluation on vote changes
   const votedComments = JSON.parse(localStorage.getItem('downvoted-comments') || '[]');
   return votedComments.includes(props.comment.id);
 });
 
 const replies = computed(() => {
   const filtered = commentStore.comments.filter(c => {
-    const matches = c.parentId === props.comment.id;
-    if (matches) {
-      console.log('✅ Found reply:', { replyId: c.id, parentId: c.parentId, content: c.content.substring(0, 30) });
-    }
-    return matches;
+    return c.parentId === props.comment.id;
   }).sort((a, b) => {
     // Sort by score first, then by creation date
     if (b.score !== a.score) {
@@ -136,11 +145,7 @@ const replies = computed(() => {
     }
     return a.createdAt - b.createdAt; // Older replies first
   });
-  
-  if (filtered.length > 0) {
-    console.log(`💬 Comment ${props.comment.id} has ${filtered.length} replies`);
-  }
-  
+
   return filtered;
 });
 
@@ -168,7 +173,7 @@ async function submitReply() {
     });
 
     const toast = await toastController.create({
-      message: '💬 Reply posted!',
+      message: 'Reply posted!',
       duration: 2000,
       color: 'success'
     });
@@ -222,13 +227,39 @@ function formatNumber(num: number | undefined | null): string {
 <style scoped>
 .comment-card {
   padding: 16px;
-  background: var(--ion-color-light);
-  border-radius: 8px;
+  background: rgba(var(--ion-card-background-rgb), 0.22);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  border-radius: 16px;
   border-left: 3px solid var(--ion-color-primary);
+  border-top: 1px solid var(--glass-border-top);
+  border-right: 1px solid var(--glass-border);
+  border-bottom: 1px solid var(--glass-border-bottom);
+  box-shadow: var(--glass-shadow), var(--glass-highlight), var(--glass-inner-glow);
+  position: relative;
 }
 
 .comment-header {
   margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.author-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.commenter-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ion-color-success);
+  flex-shrink: 0;
+  box-shadow: 0 0 6px rgba(var(--ion-color-success-rgb), 0.5);
 }
 
 .comment-author {
@@ -271,34 +302,44 @@ function formatNumber(num: number | undefined | null): string {
   display: flex;
   align-items: center;
   gap: 4px;
-  background: none;
-  border: none;
+  background: rgba(var(--ion-card-background-rgb), 0.18);
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
   padding: 6px 10px;
   font-size: 13px;
   color: var(--ion-color-medium);
   cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.2s ease;
+  border-radius: 12px;
+  transition: var(--liquid-spring);
   font-family: inherit;
   font-weight: 500;
+  backdrop-filter: blur(10px) saturate(1.4);
+  -webkit-backdrop-filter: blur(10px) saturate(1.4);
+  box-shadow: var(--glass-highlight);
 }
 
 .action-button:hover {
-  background: var(--ion-color-light-shade);
+  background: rgba(var(--ion-color-primary-rgb), 0.10);
+  border-color: rgba(var(--ion-color-primary-rgb), 0.22);
+  transform: translateY(-1px);
 }
 
 .action-button:active {
-  transform: scale(0.95);
+  transform: scale(0.96) translateY(0);
 }
 
 .action-button.upvote.active {
   color: var(--ion-color-primary);
-  background: rgba(var(--ion-color-primary-rgb), 0.1);
+  background: rgba(var(--ion-color-primary-rgb), 0.14);
+  border-color: rgba(var(--ion-color-primary-rgb), 0.28);
+  box-shadow: var(--glass-highlight), 0 0 12px rgba(var(--ion-color-primary-rgb), 0.10);
 }
 
 .action-button.downvote.active {
   color: var(--ion-color-danger);
-  background: rgba(var(--ion-color-danger-rgb), 0.1);
+  background: rgba(var(--ion-color-danger-rgb), 0.14);
+  border-color: rgba(var(--ion-color-danger-rgb), 0.28);
+  box-shadow: var(--glass-highlight), 0 0 12px rgba(var(--ion-color-danger-rgb), 0.10);
 }
 
 .action-button.reply:hover {
@@ -318,11 +359,17 @@ function formatNumber(num: number | undefined | null): string {
 .score ion-icon {
   font-size: 16px;
 }
+
 .reply-form {
   margin-top: 12px;
   padding: 12px;
-  background: #f8f8f8;
-  border-radius: 8px;
+  background: rgba(var(--ion-card-background-rgb), 0.18);
+  backdrop-filter: blur(16px) saturate(1.5);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  border-radius: 14px;
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
+  box-shadow: var(--glass-inner-glow);
 }
 
 .reply-textarea {
@@ -337,6 +384,6 @@ function formatNumber(num: number | undefined | null): string {
 .replies-container {
   margin-top: 12px;
   margin-left: 20px;
-  border-left: 2px solid #e0e0e0;
+  border-left: 2px solid rgba(var(--ion-color-primary-rgb), 0.18);
 }
 </style>

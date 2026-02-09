@@ -18,14 +18,14 @@
 
         <div>
           <p class="text-xs text-gray-500 mb-1">Vote Hash</p>
-          <code class="text-xs bg-gray-100 px-2 py-1 rounded block break-all">
+          <code class="receipt-hash">
             {{ receipt.voteHash }}
           </code>
         </div>
 
         <div>
           <p class="text-xs text-gray-500 mb-1">Chain Head Hash</p>
-          <code class="text-xs bg-gray-100 px-2 py-1 rounded block break-all">
+          <code class="receipt-hash">
             {{ receipt.chainHeadHash }}
           </code>
         </div>
@@ -35,22 +35,22 @@
           <p class="text-sm">{{ formatDate(receipt.timestamp) }}</p>
         </div>
 
-        <div class="bg-yellow-50 border border-yellow-200 rounded p-3">
-          <p class="text-xs font-semibold text-yellow-800 mb-2">
-            🔑 Your 12-Word Recovery Phrase
+        <div class="mnemonic-box">
+          <p class="text-xs font-semibold mb-2">
+            Your 12-Word Recovery Phrase
           </p>
           <div class="grid grid-cols-3 gap-2">
-            <div 
-              v-for="(word, index) in mnemonicWords" 
+            <div
+              v-for="(word, index) in mnemonicWords"
               :key="index"
-              class="bg-white px-2 py-1 rounded text-xs text-center"
+              class="mnemonic-word"
             >
-              <span class="text-gray-400">{{ index + 1 }}.</span>
+              <span class="opacity-50">{{ index + 1 }}.</span>
               <span class="font-mono font-semibold ml-1">{{ word }}</span>
             </div>
           </div>
-          <p class="text-xs text-yellow-700 mt-2">
-            ⚠️ Save these words securely. You'll need them to verify your vote.
+          <p class="text-xs opacity-70 mt-2">
+            Save these words securely. You'll need them to verify your vote.
           </p>
         </div>
 
@@ -147,3 +147,46 @@ const shareReceipt = async () => {
   }
 };
 </script>
+
+<style scoped>
+.receipt-hash {
+  display: block;
+  font-size: 12px;
+  background: rgba(var(--ion-card-background-rgb), 0.18);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
+  padding: 8px 10px;
+  border-radius: 12px;
+  word-break: break-all;
+  font-family: monospace;
+  box-shadow: var(--glass-highlight);
+}
+
+.mnemonic-box {
+  padding: 16px;
+  background: rgba(var(--ion-color-warning-rgb), 0.05);
+  border: 1px solid rgba(var(--ion-color-warning-rgb), 0.12);
+  border-top-color: rgba(var(--ion-color-warning-rgb), 0.20);
+  border-radius: 16px;
+  backdrop-filter: blur(14px) saturate(1.5);
+  -webkit-backdrop-filter: blur(14px) saturate(1.5);
+  color: var(--ion-color-warning);
+  box-shadow: var(--glass-inner-glow);
+}
+
+.mnemonic-word {
+  background: rgba(var(--ion-card-background-rgb), 0.22);
+  backdrop-filter: blur(10px) saturate(1.3);
+  -webkit-backdrop-filter: blur(10px) saturate(1.3);
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
+  padding: 6px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  text-align: center;
+  color: var(--ion-text-color);
+  box-shadow: var(--glass-highlight);
+}
+</style>

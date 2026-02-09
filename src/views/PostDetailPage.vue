@@ -84,6 +84,24 @@
           </ion-card-content>
         </ion-card>
 
+        <!-- Commenters Panel -->
+        <ion-card v-if="uniqueCommenters.length > 0" class="commenters-card">
+          <ion-card-header>
+            <ion-card-title class="commenters-title">
+              Commenters ({{ uniqueCommenters.length }})
+            </ion-card-title>
+          </ion-card-header>
+          <ion-card-content>
+            <div class="commenters-list">
+              <div v-for="commenter in uniqueCommenters" :key="commenter.authorId" class="commenter-chip">
+                <span class="commenter-online-dot"></span>
+                <span class="commenter-name">u/{{ commenter.displayName }}</span>
+                <ion-badge color="medium" class="commenter-count">{{ commenter.commentCount }}</ion-badge>
+              </div>
+            </div>
+          </ion-card-content>
+        </ion-card>
+
         <!-- Comments Section -->
         <ion-card class="comments-card">
           <ion-card-header>
@@ -159,6 +177,7 @@ import {
   IonLabel,
   IonSpinner,
   IonTextarea,
+  IonBadge,
   toastController,
   actionSheetController
 } from '@ionic/vue';
@@ -179,6 +198,7 @@ import { useCommunityStore } from '../stores/communityStore';
 import { useUserStore } from '../stores/userStore';
 import CommentCard from '../components/CommentCard.vue';
 import { Post } from '../services/postService';
+import { generatePseudonym } from '../utils/pseudonym';
 
 const route = useRoute();
 const router = useRouter();
@@ -190,6 +210,7 @@ const userStore = useUserStore();
 const post = ref<Post | null>(null);
 const isLoading = ref(true);
 const newCommentText = ref('');
+const voteVersion = ref(0);
 
 const postId = computed(() => route.params.postId as string);
 const communityId = computed(() => route.params.communityId as string);
@@ -200,21 +221,10 @@ const communityName = computed(() => {
 });
 
 const allComments = computed(() => {
-  const filtered = commentStore.comments.filter(c => {
+  return commentStore.comments.filter(c => {
     const matchesPost = c.postId === postId.value || c.postId === post.value?.id;
-    const isTopLevel = !c.parentId;
-    
-    // Debug logging
-    if (matchesPost && c.parentId) {
-      console.log('🔍 Comment has parentId:', { id: c.id, parentId: c.parentId, content: c.content.substring(0, 30) });
-    }
-    
-    return matchesPost && isTopLevel;
+    return matchesPost && !c.parentId;
   });
-  
-  console.log('Top-level comments:', filtered.length, '| Total comments in store:', commentStore.comments.length);
-  
-  return filtered;
 });
 
 const sortedComments = computed(() => {
@@ -244,12 +254,35 @@ const sortedComments = computed(() => {
   });
 });
 
+const uniqueCommenters = computed(() => {
+  const authorMap = new Map<string, { authorId: string; displayName: string; commentCount: number }>();
+
+  commentStore.comments
+    .filter(c => c.postId === postId.value || c.postId === post.value?.id)
+    .forEach(c => {
+      const existing = authorMap.get(c.authorId);
+      if (existing) {
+        existing.commentCount++;
+      } else {
+        authorMap.set(c.authorId, {
+          authorId: c.authorId,
+          displayName: c.authorId && postId.value ? generatePseudonym(postId.value, c.authorId) : (c.authorName || 'anon'),
+          commentCount: 1,
+        });
+      }
+    });
+
+  return Array.from(authorMap.values()).sort((a, b) => b.commentCount - a.commentCount);
+});
+
 const hasUpvoted = computed(() => {
+  voteVersion.value; // reactive dependency to trigger re-evaluation on vote changes
   const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
   return votedPosts.includes(postId.value);
 });
 
 const hasDownvoted = computed(() => {
+  voteVersion.value; // reactive dependency to trigger re-evaluation on vote changes
   const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
   return votedPosts.includes(postId.value);
 });
@@ -285,15 +318,17 @@ function getIPFSUrl(cid?: string): string {
 
 async function handleUpvote() {
   if (!post.value) return;
-  
+
   try {
     if (hasUpvoted.value) {
-      await postStore.removeUpvote(post.value.id);
-      
+      // Remove from localStorage first (optimistic UI)
       const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
       const filtered = votedPosts.filter((id: string) => id !== post.value!.id);
       localStorage.setItem('upvoted-posts', JSON.stringify(filtered));
-      
+      voteVersion.value++;
+
+      await postStore.removeUpvote(post.value.id);
+
       const toast = await toastController.create({
         message: 'Upvote removed',
         duration: 1500,
@@ -301,19 +336,25 @@ async function handleUpvote() {
       });
       await toast.present();
     } else {
+      // Clear downvote from localStorage first if needed
       const downvotedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
       if (downvotedPosts.includes(post.value.id)) {
-        await postStore.removeDownvote(post.value.id);
         const filtered = downvotedPosts.filter((id: string) => id !== post.value!.id);
         localStorage.setItem('downvoted-posts', JSON.stringify(filtered));
       }
 
-      await postStore.upvotePost(post.value.id);
-
+      // Add to upvoted localStorage
       const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
       votedPosts.push(post.value.id);
       localStorage.setItem('upvoted-posts', JSON.stringify(votedPosts));
-      
+      voteVersion.value++;
+
+      // Clear existing downvote in store if needed
+      if (downvotedPosts.includes(post.value.id)) {
+        await postStore.removeDownvote(post.value.id);
+      }
+      await postStore.upvotePost(post.value.id);
+
       const toast = await toastController.create({
         message: 'Upvoted',
         duration: 1500,
@@ -321,24 +362,26 @@ async function handleUpvote() {
       });
       await toast.present();
     }
-    
+
     await loadPost();
-  } catch (error) {
-    console.error('Error upvoting:', error);
+  } catch (_error) {
+    voteVersion.value++;
   }
 }
 
 async function handleDownvote() {
   if (!post.value) return;
-  
+
   try {
     if (hasDownvoted.value) {
-      await postStore.removeDownvote(post.value.id);
-      
+      // Remove from localStorage first (optimistic UI)
       const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
       const filtered = votedPosts.filter((id: string) => id !== post.value!.id);
       localStorage.setItem('downvoted-posts', JSON.stringify(filtered));
-      
+      voteVersion.value++;
+
+      await postStore.removeDownvote(post.value.id);
+
       const toast = await toastController.create({
         message: 'Downvote removed',
         duration: 1500,
@@ -346,19 +389,25 @@ async function handleDownvote() {
       });
       await toast.present();
     } else {
+      // Clear upvote from localStorage first if needed
       const upvotedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
       if (upvotedPosts.includes(post.value.id)) {
-        await postStore.removeUpvote(post.value.id);
         const filtered = upvotedPosts.filter((id: string) => id !== post.value!.id);
         localStorage.setItem('upvoted-posts', JSON.stringify(filtered));
       }
 
-      await postStore.downvotePost(post.value.id);
-
+      // Add to downvoted localStorage
       const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
       votedPosts.push(post.value.id);
       localStorage.setItem('downvoted-posts', JSON.stringify(votedPosts));
-      
+      voteVersion.value++;
+
+      // Clear existing upvote in store if needed
+      if (upvotedPosts.includes(post.value.id)) {
+        await postStore.removeUpvote(post.value.id);
+      }
+      await postStore.downvotePost(post.value.id);
+
       const toast = await toastController.create({
         message: 'Downvoted',
         duration: 1500,
@@ -366,10 +415,10 @@ async function handleDownvote() {
       });
       await toast.present();
     }
-    
+
     await loadPost();
-  } catch (error) {
-    console.error('Error downvoting:', error);
+  } catch (_error) {
+    voteVersion.value++;
   }
 }
 
@@ -396,9 +445,7 @@ async function submitComment() {
       commentStore.loadCommentsForPost(post.value!.id);
     }, 500);
     
-  } catch (error) {
-    console.error('Error posting comment:', error);
-    
+  } catch (_error) {
     const toast = await toastController.create({
       message: 'Failed to post comment',
       duration: 2000,
@@ -410,31 +457,33 @@ async function submitComment() {
 
 async function handleCommentUpvote(comment: any) {
   try {
+    const wasUpvoted = JSON.parse(localStorage.getItem('upvoted-comments') || '[]').includes(comment.id);
     await commentStore.upvoteComment(comment.id);
-    
+
     const toast = await toastController.create({
-      message: 'Comment upvoted',
+      message: wasUpvoted ? 'Upvote removed' : 'Comment upvoted',
       duration: 1500,
-      color: 'success'
+      color: wasUpvoted ? 'medium' : 'success'
     });
     await toast.present();
-  } catch (error) {
-    console.error('Error upvoting comment:', error);
+  } catch (_error) {
+    // Comment upvote failed
   }
 }
 
 async function handleCommentDownvote(comment: any) {
   try {
+    const wasDownvoted = JSON.parse(localStorage.getItem('downvoted-comments') || '[]').includes(comment.id);
     await commentStore.downvoteComment(comment.id);
-    
+
     const toast = await toastController.create({
-      message: 'Comment downvoted',
+      message: wasDownvoted ? 'Downvote removed' : 'Comment downvoted',
       duration: 1500,
-      color: 'warning'
+      color: wasDownvoted ? 'medium' : 'warning'
     });
     await toast.present();
-  } catch (error) {
-    console.error('Error downvoting comment:', error);
+  } catch (_error) {
+    // Comment downvote failed
   }
 }
 
@@ -491,8 +540,8 @@ async function loadPost() {
     if (post.value) {
       await commentStore.loadCommentsForPost(post.value.id);
     }
-  } catch (error) {
-    console.error('Error loading post:', error);
+  } catch (_error) {
+    // Post loading failed
   } finally {
     isLoading.value = false;
   }
@@ -533,6 +582,7 @@ onMounted(async () => {
 
 .post-detail-card {
   margin: 12px;
+  border-radius: 16px;
 }
 
 .post-meta {
@@ -581,7 +631,7 @@ onMounted(async () => {
   align-items: center;
   margin-top: 20px;
   padding-top: 16px;
-  border-top: 1px solid var(--ion-color-light);
+  border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.06);
 }
 
 .vote-buttons {
@@ -594,20 +644,25 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: none;
-  border: none;
+  background: rgba(var(--ion-card-background-rgb), 0.20);
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
   padding: 8px 12px;
   font-size: 14px;
   color: var(--ion-color-medium);
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: 14px;
   transition: all 0.2s ease;
   font-family: inherit;
   font-weight: 500;
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  box-shadow: var(--glass-highlight);
 }
 
 .vote-button:hover {
-  background: var(--ion-color-light);
+  background: rgba(var(--ion-color-primary-rgb), 0.1);
+  border-color: rgba(var(--ion-color-primary-rgb), 0.2);
 }
 
 .vote-button:active {
@@ -615,9 +670,9 @@ onMounted(async () => {
 }
 
 .vote-button.upvote.active {
-  background: transparent;
+  background: rgba(var(--ion-color-primary-rgb), 0.15);
   color: var(--ion-color-primary);
-  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.5);
+  border-color: rgba(var(--ion-color-primary-rgb), 0.3);
 }
 
 .vote-button.upvote.active ion-icon {
@@ -626,7 +681,8 @@ onMounted(async () => {
 
 .vote-button.downvote.active {
   color: var(--ion-color-danger);
-  background: var(--ion-color-danger-tint);
+  background: rgba(var(--ion-color-danger-rgb), 0.15);
+  border-color: rgba(var(--ion-color-danger-rgb), 0.3);
 }
 
 .vote-button.downvote.active ion-icon {
@@ -646,24 +702,79 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: none;
-  border: none;
+  background: rgba(var(--ion-card-background-rgb), 0.20);
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
   padding: 8px 12px;
   font-size: 14px;
   color: var(--ion-color-medium);
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: 14px;
   transition: all 0.2s ease;
   font-family: inherit;
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  box-shadow: var(--glass-highlight);
 }
 
 .action-button:hover {
-  background: var(--ion-color-light);
+  background: rgba(var(--ion-color-primary-rgb), 0.1);
   color: var(--ion-color-primary);
+  border-color: rgba(var(--ion-color-primary-rgb), 0.2);
 }
 
 .comments-card {
   margin: 12px;
+}
+
+/* ── Commenters Panel ── */
+.commenters-card {
+  margin: 12px;
+}
+
+.commenters-title {
+  font-size: 16px;
+}
+
+.commenters-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.commenter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(var(--ion-card-background-rgb), 0.20);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: var(--glass-highlight);
+}
+
+.commenter-online-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ion-color-success);
+  flex-shrink: 0;
+  box-shadow: 0 0 4px rgba(var(--ion-color-success-rgb), 0.5);
+}
+
+.commenter-name {
+  color: var(--ion-text-color);
+}
+
+.commenter-count {
+  font-size: 10px;
+  --padding-start: 4px;
+  --padding-end: 4px;
 }
 
 .add-comment-form {
@@ -672,12 +783,12 @@ onMounted(async () => {
 
 .comment-textarea {
   margin-bottom: 12px;
-  --background: var(--ion-color-light);
+  --background: rgba(var(--ion-card-background-rgb), 0.3);
   --padding-start: 12px;
   --padding-end: 12px;
   --padding-top: 12px;
   --padding-bottom: 12px;
-  border-radius: 8px;
+  border-radius: 12px;
 }
 
 .comments-list {

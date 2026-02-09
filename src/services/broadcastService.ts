@@ -18,7 +18,7 @@ export class BroadcastService {
       return;
     }
 
-    this.channel = new BroadcastChannel('voting-chain-sync');
+    this.channel = new BroadcastChannel('interpoll-sync');
 
     this.channel.onmessage = (event: MessageEvent) => {
       const message = event.data;

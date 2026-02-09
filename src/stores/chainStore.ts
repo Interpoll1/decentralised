@@ -1,12 +1,14 @@
 // src/stores/chainStore.ts
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { ChainBlock, Vote, Receipt } from '../types/chain';
+import type { ChainBlock, Vote, Receipt, ActionType } from '../types/chain';
 import { ChainService } from '../services/chainService';
+import { CryptoService } from '../services/cryptoService';
 import { StorageService } from '../services/storageService';
 import { BroadcastService } from '../services/broadcastService';
 import { WebSocketService } from '../services/websocketService';
 import { AuditService } from '../services/auditService';
+import { EventService } from '../services/eventService';
 
 export const useChainStore = defineStore('chain', () => {
   const blocks = ref<ChainBlock[]>([]);
@@ -38,9 +40,9 @@ export const useChainStore = defineStore('chain', () => {
 
     setupSyncListeners();
 
-    setInterval(() => {
-      isWebSocketConnected.value = WebSocketService.getConnectionStatus();
-    }, 1000);
+    WebSocketService.onStatusChange(({ connected }) => {
+      isWebSocketConnected.value = connected;
+    });
 
     isInitialized.value = true;
   }
@@ -60,6 +62,10 @@ export const useChainStore = defineStore('chain', () => {
     WebSocketService.subscribe('new-block', handleNewBlock);
     WebSocketService.subscribe('request-sync', handleSyncRequest);
     WebSocketService.subscribe('sync-response', handleSyncResponse);
+
+    // Signed event verification
+    BroadcastService.subscribe('new-event', handleNewEvent);
+    WebSocketService.subscribe('new-event', handleNewEvent);
   }
 
   async function handleNewBlock(block: ChainBlock) {
@@ -73,8 +79,12 @@ export const useChainStore = defineStore('chain', () => {
         blocks.value.push(block);
       }
     } else if (block.index === 0) {
-      await StorageService.saveBlock(block);
-      blocks.value.push(block);
+      // Genesis block: verify hash integrity before accepting
+      const calculatedHash = CryptoService.hashBlock(block);
+      if (block.currentHash === calculatedHash) {
+        await StorageService.saveBlock(block);
+        blocks.value.push(block);
+      }
     }
   }
 
@@ -93,11 +103,26 @@ export const useChainStore = defineStore('chain', () => {
   async function handleSyncResponse(data: any) {
     if (!data?.blocks?.length) return;
 
+    // Sort incoming blocks by index for sequential validation
+    const sorted = [...data.blocks].sort((a: ChainBlock, b: ChainBlock) => a.index - b.index);
     let addedCount = 0;
 
-    for (const block of data.blocks) {
+    for (const block of sorted) {
       const exists = blocks.value.find((b) => b.index === block.index);
-      if (!exists) {
+      if (exists) continue;
+
+      // Find the previous block for validation
+      const previousBlock = blocks.value.find((b) => b.index === block.index - 1);
+
+      if (block.index === 0) {
+        // Genesis block: verify hash integrity
+        const calculatedHash = CryptoService.hashBlock(block);
+        if (block.currentHash === calculatedHash) {
+          await StorageService.saveBlock(block);
+          blocks.value.push(block);
+          addedCount++;
+        }
+      } else if (previousBlock && ChainService.validateBlock(block, previousBlock)) {
         await StorageService.saveBlock(block);
         blocks.value.push(block);
         addedCount++;
@@ -109,13 +134,38 @@ export const useChainStore = defineStore('chain', () => {
     }
   }
 
+  async function handleNewEvent(eventData: any) {
+    // Verify the Nostr event signature before accepting
+    if (!EventService.verifyEvent(eventData)) {
+      console.warn('Rejected event with invalid signature:', eventData.id);
+      return;
+    }
+
+    console.log(
+      'Verified event: kind=%d from pubkey=%s',
+      eventData.kind,
+      eventData.pubkey?.substring(0, 16),
+    );
+  }
+
   async function addVote(vote: Vote): Promise<Receipt> {
+    // Create signed vote event
+    const voteEvent = await EventService.createVoteEvent({
+      pollId: vote.pollId,
+      choice: vote.choice,
+      deviceId: vote.deviceId,
+    });
+
+    // Add vote to blockchain (signed with real Schnorr key)
     const { block, receipt: mnemonic } = await ChainService.addVote(vote);
 
     blocks.value.push(block);
 
+    // Broadcast both the block and the signed event
     BroadcastService.broadcast('new-block', block);
     WebSocketService.broadcast('new-block', block);
+    BroadcastService.broadcast('new-event', voteEvent);
+    WebSocketService.broadcast('new-event', voteEvent);
 
     const receipt: Receipt = {
       blockIndex: block.index,
@@ -135,6 +185,21 @@ export const useChainStore = defineStore('chain', () => {
     });
 
     return receipt;
+  }
+
+  async function addAction(
+    actionType: ActionType,
+    actionData: Record<string, unknown>,
+    actionLabel: string
+  ): Promise<ChainBlock> {
+    const block = await ChainService.addAction(actionType, actionData, actionLabel);
+
+    blocks.value.push(block);
+
+    BroadcastService.broadcast('new-block', block);
+    WebSocketService.broadcast('new-block', block);
+
+    return block;
   }
 
   async function validateChain() {
@@ -169,6 +234,7 @@ export const useChainStore = defineStore('chain', () => {
     initialize,
     loadBlocks,
     addVote,
+    addAction,
     validateChain,
     checkForDowngrade,
     syncBlocks,

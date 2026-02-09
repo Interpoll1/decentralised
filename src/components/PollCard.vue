@@ -1,11 +1,6 @@
 <template>
   <ion-card class="poll-card" @click="$emit('click')">
     <ion-card-content>
-      <!-- Debug Info (remove after testing) -->
-      <div v-if="!poll.question" style="color: red; font-size: 12px; margin-bottom: 8px;">
-        DEBUG: Poll missing data - ID: {{ poll.id }}, Options: {{ poll.options?.length || 0 }}
-      </div>
-
       <!-- Poll Header -->
       <div class="poll-header">
         <div class="poll-badge">
@@ -142,13 +137,8 @@ function getTimeRemaining(): string {
 .poll-card {
   margin: 12px 12px;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
-  border-left: 4px solid var(--ion-color-tertiary);
-}
-
-.poll-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-left: 4px solid var(--ion-color-tertiary) !important;
+  border-radius: 20px;
 }
 
 .poll-header {
@@ -162,12 +152,17 @@ function getTimeRemaining(): string {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 8px;
-
+  padding: 4px 10px;
+  background: rgba(var(--ion-color-tertiary-rgb), 0.08);
+  border: 1px solid rgba(var(--ion-color-tertiary-rgb), 0.18);
+  border-top-color: rgba(var(--ion-color-tertiary-rgb), 0.25);
   color: var(--ion-color-tertiary);
-  border-radius: 4px;
+  border-radius: 12px;
   font-size: 12px;
   font-weight: 600;
+  backdrop-filter: blur(10px) saturate(1.4);
+  -webkit-backdrop-filter: blur(10px) saturate(1.4);
+  box-shadow: var(--glass-highlight);
 }
 
 .poll-badge ion-icon {
@@ -192,12 +187,15 @@ function getTimeRemaining(): string {
 }
 
 .expired-badge {
-  padding: 2px 6px;
-  background: var(--ion-color-medium);
-  color: white;
-  border-radius: 4px;
+  padding: 2px 8px;
+  background: rgba(var(--ion-color-medium-rgb), 0.10);
+  color: var(--ion-color-medium);
+  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.16);
+  border-radius: 12px;
   font-size: 10px;
   font-weight: 600;
+  backdrop-filter: blur(8px) saturate(1.3);
+  -webkit-backdrop-filter: blur(8px) saturate(1.3);
 }
 
 .poll-question {
@@ -225,16 +223,21 @@ function getTimeRemaining(): string {
 
 .option-bar {
   height: 8px;
-  background: var(--ion-color-light);
-  border-radius: 4px;
+  background: rgba(var(--ion-card-background-rgb), 0.22);
+  border-radius: 8px;
   overflow: hidden;
   margin-bottom: 4px;
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
+  backdrop-filter: blur(10px) saturate(1.3);
+  -webkit-backdrop-filter: blur(10px) saturate(1.3);
 }
 
 .option-fill {
   height: 100%;
   background: var(--ion-color-tertiary);
-  transition: width 0.3s;
+  transition: width 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+  border-radius: 8px;
 }
 
 .option-info {
@@ -265,16 +268,21 @@ function getTimeRemaining(): string {
   padding: 16px;
   text-align: center;
   color: var(--ion-color-medium);
-  background: var(--ion-color-light);
-  border-radius: 8px;
+  background: rgba(var(--ion-card-background-rgb), 0.18);
+  border-radius: 14px;
   margin: 12px 0;
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  box-shadow: var(--glass-inner-glow);
 }
 
 .poll-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-top: 1px solid var(--ion-color-light);
+  border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.05);
   padding-top: 12px;
   margin-top: 12px;
 }
@@ -301,11 +309,11 @@ function getTimeRemaining(): string {
   .poll-question {
     font-size: 16px;
   }
-  
+
   .poll-description {
     font-size: 13px;
   }
-  
+
   .poll-stats {
     gap: 8px;
     flex-wrap: wrap;

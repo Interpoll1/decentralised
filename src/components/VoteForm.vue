@@ -1,12 +1,12 @@
 <template>
   <ion-card>
     <!-- Already Voted Warning -->
-    <div v-if="hasAlreadyVoted" class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+    <div v-if="hasAlreadyVoted" class="voted-warning">
       <div class="flex">
         <ion-icon :icon="warningOutline" class="text-yellow-400 text-2xl mr-3"></ion-icon>
         <div>
-          <h3 class="text-sm font-medium text-yellow-800">Already Voted</h3>
-          <p class="mt-1 text-sm text-yellow-700">
+          <h3 class="text-sm font-medium">Already Voted</h3>
+          <p class="mt-1 text-sm opacity-80">
             You've already voted on this poll from this device.
             Each device can only vote once to ensure fair results.
           </p>
@@ -35,10 +35,10 @@
         </ion-item>
       </ion-radio-group>
 
-      <div class="mt-4 bg-blue-50 border border-blue-200 rounded p-3">
-        <p class="text-xs text-blue-800">
+      <div class="mt-4 info-notice">
+        <p class="text-xs">
           <ion-icon :icon="informationCircle" class="align-middle"></ion-icon>
-          <strong>One Vote Per Device:</strong> Your device fingerprint will be recorded 
+          <strong>One Vote Per Device:</strong> Your device fingerprint will be recorded
           to prevent duplicate votes. You'll receive a 12-word receipt to verify your vote later.
         </p>
       </div>
@@ -78,6 +78,7 @@ import { VoteTrackerService } from '../services/voteTrackerService';
 import { Poll, Vote } from '../types/chain';
 import { AuditService } from '../services/auditService';
 import { PollService } from '../services/pollService';
+import { UserService } from '../services/userService';
 
 interface Props {
   poll: Poll;
@@ -114,7 +115,6 @@ onMounted(async () => {
     const thisVote = myVotes.find(v => v.pollId === props.poll.id);
     if (thisVote) {
       // Could store receipt reference in vote record for easy lookup
-      console.log('Found previous vote at block:', thisVote.blockIndex);
     }
   }
 });
@@ -188,6 +188,21 @@ const submitVote = async () => {
 
     // Add vote to blockchain
     const receipt = await chainStore.addVote(vote);
+
+    // Also update Gun poll option counts so results show up everywhere
+    try {
+      const matchedOption = (props.poll.options as any[]).find((o: any) => {
+        if (typeof o === 'string') return false;
+        return o.text === selectedOption.value || o.id === selectedOption.value;
+      });
+      if (matchedOption?.id) {
+        const user = await UserService.getCurrentUser();
+        await PollService.voteOnPoll(props.poll.id, [matchedOption.id], user.id);
+      }
+    } catch (gunErr) {
+      // Non-critical: blockchain vote succeeded, Gun count update is best-effort
+      console.warn('Gun poll count update failed:', gunErr);
+    }
 
     // Record that this device voted
     await VoteTrackerService.recordVote(props.poll.id, receipt.blockIndex);
@@ -264,3 +279,30 @@ function getOptionKey(option: RawOption, index: number): string {
   return option.id || `${index}`;
 }
 </script>
+
+<style scoped>
+.voted-warning {
+  padding: 16px;
+  background: rgba(var(--ion-color-warning-rgb), 0.06);
+  border-left: 4px solid var(--ion-color-warning);
+  border-radius: 0 16px 16px 0;
+  backdrop-filter: blur(16px) saturate(1.5);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  border-top: 1px solid rgba(var(--ion-color-warning-rgb), 0.10);
+  border-right: 1px solid rgba(var(--ion-color-warning-rgb), 0.08);
+  border-bottom: 1px solid rgba(var(--ion-color-warning-rgb), 0.05);
+  box-shadow: var(--glass-inner-glow);
+}
+
+.info-notice {
+  padding: 12px;
+  background: rgba(var(--ion-color-primary-rgb), 0.05);
+  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.10);
+  border-top-color: rgba(var(--ion-color-primary-rgb), 0.16);
+  border-radius: 14px;
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  color: var(--ion-color-primary);
+  box-shadow: var(--glass-highlight);
+}
+</style>

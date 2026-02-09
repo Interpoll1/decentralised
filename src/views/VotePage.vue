@@ -112,6 +112,10 @@ onMounted(async () => {
     const pollId = route.params.pollId as string;
     await pollStore.selectPoll(pollId);
 
+    // Use cached user first for instant UI, then validate against backend
+    const cached = AuditService.getCachedUser();
+    isAuthenticated.value = !!cached;
+
     const user = await AuditService.getCloudUser();
     isAuthenticated.value = !!user;
 
@@ -131,10 +135,10 @@ const handleVoteSubmitted = (mnemonic: string) => {
 };
 
 const loginWithGoogle = () => {
-  window.open('http://localhost:8080/auth/google/start', '_blank', 'noopener,noreferrer');
+  AuditService.login('google');
 };
 
 const loginWithMicrosoft = () => {
-  window.open('http://localhost:8080/auth/microsoft/start', '_blank', 'noopener,noreferrer');
+  AuditService.login('microsoft');
 };
 </script>

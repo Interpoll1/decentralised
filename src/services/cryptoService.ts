@@ -1,5 +1,6 @@
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
+import { schnorr } from '@noble/curves/secp256k1.js';
 import * as bip39 from 'bip39';
 import { Buffer } from 'buffer';
 
@@ -21,16 +22,26 @@ export class CryptoService {
     return this.hash(voteString);
   }
 
-  // Create block hash
-  static hashBlock(block: Omit): string {
-    const blockString = JSON.stringify({
+  // Create block hash (includes pubkey when present for tamper-proofing)
+  static hashBlock(block: Omit<any, 'currentHash'>): string {
+    const blockData: any = {
       index: block.index,
       timestamp: block.timestamp,
       previousHash: block.previousHash,
       voteHash: block.voteHash,
       signature: block.signature,
       nonce: block.nonce || 0
-    });
+    };
+    if (block.pubkey) {
+      blockData.pubkey = block.pubkey;
+    }
+    if (block.actionType) {
+      blockData.actionType = block.actionType;
+    }
+    if (block.actionLabel) {
+      blockData.actionLabel = block.actionLabel;
+    }
+    const blockString = JSON.stringify(blockData);
     return this.hash(blockString);
   }
 
@@ -64,13 +75,20 @@ export class CryptoService {
     return this.hash(data);
   }
 
-  // Simple signature using hash (for demo - in production use proper signing)
+  // Schnorr signature over secp256k1
   static sign(data: string, privateKey: string): string {
-    return this.hash(data + privateKey);
+    const messageHash = this.hash(data);
+    const sig = schnorr.sign(hexToBytes(messageHash), hexToBytes(privateKey));
+    return bytesToHex(sig);
   }
 
-  // Verify signature
-  static verify(data: string, signature: string, privateKey: string): boolean {
-    return this.sign(data, privateKey) === signature;
+  // Verify Schnorr signature using public key
+  static verify(data: string, signature: string, publicKey: string): boolean {
+    try {
+      const messageHash = this.hash(data);
+      return schnorr.verify(hexToBytes(signature), hexToBytes(messageHash), hexToBytes(publicKey));
+    } catch {
+      return false;
+    }
   }
 }

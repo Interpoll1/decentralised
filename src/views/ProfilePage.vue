@@ -94,7 +94,7 @@
             <ion-item>
               <ion-label>
                 <h3>Device ID</h3>
-                <p class="device-id">{{ truncatedDeviceId }}</p>
+                <p class="device-id">{{ fullDeviceId }}</p>
               </ion-label>
               <ion-button slot="end" fill="clear" @click="copyDeviceId">
                 <ion-icon :icon="copyOutline"></ion-icon>
@@ -217,9 +217,8 @@ const bio = ref('');
 const deviceId = ref('');
 const avatarInput = ref<HTMLInputElement | null>(null);
 
-const truncatedDeviceId = computed(() => {
-  if (!deviceId.value) return '';
-  return deviceId.value.substring(0, 16) + '...';
+const fullDeviceId = computed(() => {
+  return deviceId.value || '';
 });
 
 const joinedCommunitiesCount = computed(() => {
@@ -375,12 +374,14 @@ onMounted(async () => {
   width: 120px;
   height: 120px;
   border-radius: 50%;
-  border: 4px solid white;
+  border: 4px solid rgba(255, 255, 255, 0.3);
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--ion-color-light);
+  background: rgba(var(--ion-card-background-rgb), 0.20);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
 }
 
 .avatar img {
@@ -449,6 +450,7 @@ onMounted(async () => {
   font-family: monospace;
   font-size: 12px;
   color: var(--ion-color-medium);
+  word-break: break-all;
 }
 
 .activity-grid {
@@ -462,8 +464,13 @@ onMounted(async () => {
   align-items: center;
   gap: 12px;
   padding: 12px;
-  border-radius: 8px;
-  background: var(--ion-color-light);
+  border-radius: 14px;
+  background: rgba(var(--ion-card-background-rgb), 0.20);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
+  box-shadow: var(--glass-highlight);
 }
 
 .activity-item ion-icon {

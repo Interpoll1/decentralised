@@ -1,4 +1,3 @@
-// src/main.ts
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import { IonicVue } from '@ionic/vue';
@@ -11,7 +10,7 @@ import '@ionic/vue/css/normalize.css';
 import '@ionic/vue/css/structure.css';
 import '@ionic/vue/css/typography.css';
 
-/* Optional CSS utils that can be commented out */
+/* Optional CSS utils */
 import '@ionic/vue/css/padding.css';
 import '@ionic/vue/css/float-elements.css';
 import '@ionic/vue/css/text-alignment.css';
@@ -20,18 +19,20 @@ import '@ionic/vue/css/flex-utils.css';
 import '@ionic/vue/css/display.css';
 
 /* Theme variables */
+import './style.css';
 
 import App from './App.vue';
 import router from './router';
 
-// Import services (but don't initialize yet - let stores handle it)
 import { GunService } from './services/gunService';
 import { IPFSService } from './services/ipfsService';
+import { AuditService } from './services/auditService';
 
-// Pre-initialize Gun (so it's ready when stores need it)
-console.log('Initializing P2P services...');
 GunService.initialize();
 IPFSService.initialize();
+
+// Validate cached auth session against the backend (non-blocking)
+AuditService.getCloudUser();
 
 const app = createApp(App)
   .use(IonicVue)
@@ -40,5 +41,4 @@ const app = createApp(App)
 
 router.isReady().then(() => {
   app.mount('#app');
-  console.log('App mounted');
 });

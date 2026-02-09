@@ -68,10 +68,7 @@ export class PinningService {
 
     if (usageMB < policy.maxStorageMB) return;
 
-    console.log('🧹 Storage limit reached, pruning...');
-    
-    // Unpin old cached posts (keep only recent N)
-    // TODO: Implement pruning logic
+    // Pruning logic reserved for future storage optimization
   }
 
   // Get storage stats

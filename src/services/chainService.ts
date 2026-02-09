@@ -1,12 +1,14 @@
-import { ChainBlock, Vote } from '../types/chain';
+import { ChainBlock, Vote, ActionType } from '../types/chain';
 import { CryptoService } from './cryptoService';
 import { StorageService } from './storageService';
+import { KeyService } from './keyService';
 
 export class ChainService {
   private static readonly GENESIS_HASH = '0'.repeat(64);
-  private static readonly PRIVATE_KEY = 'voting-chain-private-key';
 
-  static createGenesisBlock(): ChainBlock {
+  static async createGenesisBlock(): Promise<ChainBlock> {
+    const keyPair = await KeyService.getKeyPair();
+
     const block: ChainBlock = {
       index: 0,
       timestamp: Date.now(),
@@ -14,22 +16,29 @@ export class ChainService {
       voteHash: this.GENESIS_HASH,
       signature: '',
       currentHash: '',
-      nonce: 0
+      nonce: 0,
+      pubkey: keyPair.publicKey,
     };
 
     block.signature = CryptoService.sign(
       JSON.stringify({ index: block.index, timestamp: block.timestamp }),
-      this.PRIVATE_KEY
+      keyPair.privateKey
     );
-    
+
     block.currentHash = CryptoService.hashBlock(block);
-    
+
     return block;
   }
 
-  static async createBlock(vote: Vote, previousBlock: ChainBlock): Promise {
-    const voteHash = CryptoService.hashVote(vote);
-    
+  static async createBlock(
+    data: Record<string, unknown>,
+    previousBlock: ChainBlock,
+    actionType?: ActionType,
+    actionLabel?: string
+  ): Promise<ChainBlock> {
+    const keyPair = await KeyService.getKeyPair();
+    const voteHash = CryptoService.hashVote(data);
+
     const block: ChainBlock = {
       index: previousBlock.index + 1,
       timestamp: Date.now(),
@@ -37,16 +46,20 @@ export class ChainService {
       voteHash,
       signature: '',
       currentHash: '',
-      nonce: 0
+      nonce: 0,
+      pubkey: keyPair.publicKey,
     };
 
+    if (actionType) block.actionType = actionType;
+    if (actionLabel) block.actionLabel = actionLabel;
+
     block.signature = CryptoService.sign(
-      JSON.stringify({ 
-        index: block.index, 
+      JSON.stringify({
+        index: block.index,
         voteHash: block.voteHash,
-        previousHash: block.previousHash 
+        previousHash: block.previousHash,
       }),
-      this.PRIVATE_KEY
+      keyPair.privateKey
     );
 
     block.currentHash = CryptoService.hashBlock(block);
@@ -71,23 +84,27 @@ export class ChainService {
       return false;
     }
 
-    const dataToVerify = JSON.stringify({
-      index: block.index,
-      voteHash: block.voteHash,
-      previousHash: block.previousHash
-    });
-    
-    if (!CryptoService.verify(dataToVerify, block.signature, this.PRIVATE_KEY)) {
-      console.error('Invalid signature');
-      return false;
+    // Schnorr signature verification (blocks with pubkey)
+    if (block.pubkey) {
+      const dataToVerify = JSON.stringify({
+        index: block.index,
+        voteHash: block.voteHash,
+        previousHash: block.previousHash,
+      });
+
+      if (!CryptoService.verify(dataToVerify, block.signature, block.pubkey)) {
+        console.error('Invalid Schnorr signature');
+        return false;
+      }
     }
+    // Legacy blocks without pubkey: accepted if hash-chain integrity holds
 
     return true;
   }
 
-  static async validateChain(): Promise {
+  static async validateChain(): Promise<boolean> {
     const blocks = await StorageService.getAllBlocks();
-    
+
     if (blocks.length === 0) return true;
 
     blocks.sort((a, b) => a.index - b.index);
@@ -107,14 +124,12 @@ export class ChainService {
     return true;
   }
 
-  static async initializeChain(): Promise {
+  static async initializeChain(): Promise<void> {
     const latestBlock = await StorageService.getLatestBlock();
-    
+
     if (!latestBlock) {
-      const genesis = this.createGenesisBlock();
+      const genesis = await this.createGenesisBlock();
       await StorageService.saveBlock(genesis);
-      
-      console.log('Genesis block created');
     }
   }
 
@@ -130,54 +145,71 @@ export class ChainService {
 
     await tx.done;
 
-    const genesis = this.createGenesisBlock();
+    const genesis = await this.createGenesisBlock();
     await StorageService.saveBlock(genesis);
-
-    console.log('Chain reset: new genesis block created');
   }
 
-  static async getChainHead(): Promise {
+  static async getChainHead(): Promise<{ hash: string; index: number } | null> {
     const latestBlock = await StorageService.getLatestBlock();
-    
+
     if (!latestBlock) return null;
 
     return {
       hash: latestBlock.currentHash,
-      index: latestBlock.index
+      index: latestBlock.index,
     };
   }
 
-  static async addVote(vote: Vote): Promise {
+  static async addVote(vote: Vote): Promise<{ block: ChainBlock; receipt: string }> {
     const previousBlock = await StorageService.getLatestBlock();
-    
+
     if (!previousBlock) {
       throw new Error('Chain not initialized');
     }
 
-    const newBlock = await this.createBlock(vote, previousBlock);
+    const newBlock = await this.createBlock(
+      vote as unknown as Record<string, unknown>,
+      previousBlock,
+      'vote',
+      `Vote on ${vote.pollId}`
+    );
 
     await StorageService.saveBlock(newBlock);
     await StorageService.saveVote(vote);
 
     const mnemonic = CryptoService.generateMnemonic();
 
-    console.log(`Block #${newBlock.index} created`);
-
     return { block: newBlock, receipt: mnemonic };
   }
 
-  static async detectDowngrade(remoteHash: string, remoteIndex: number): Promise {
+  static async addAction(
+    actionType: ActionType,
+    actionData: Record<string, unknown>,
+    actionLabel: string
+  ): Promise<ChainBlock> {
+    const previousBlock = await StorageService.getLatestBlock();
+
+    if (!previousBlock) {
+      throw new Error('Chain not initialized');
+    }
+
+    const newBlock = await this.createBlock(actionData, previousBlock, actionType, actionLabel);
+
+    await StorageService.saveBlock(newBlock);
+
+    return newBlock;
+  }
+
+  static async detectDowngrade(remoteHash: string, remoteIndex: number): Promise<boolean> {
     const localHead = await this.getChainHead();
-    
+
     if (!localHead) return false;
 
     if (remoteIndex < localHead.index) {
-      console.warn('Chain downgrade detected');
       return true;
     }
 
     if (remoteIndex === localHead.index && remoteHash !== localHead.hash) {
-      console.warn('Chain fork detected');
       return true;
     }
 

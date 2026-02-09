@@ -8,6 +8,11 @@ const routes: Array<RouteRecordRaw> = [
     redirect: '/home'
   },
   {
+    path: '/auth/callback',
+    name: 'AuthCallback',
+    component: () => import('../views/AuthCallbackPage.vue')
+  },
+  {
     path: '/home',
     name: 'Home',
     component: () => import('../views/HomePage.vue')
@@ -92,8 +97,7 @@ const router = createRouter({
   routes
 });
 
-router.beforeEach((to, from, next) => {
-  console.log(`Navigating from ${from.path} to ${to.path}`);
+router.beforeEach((_to, _from, next) => {
   next();
 });
 

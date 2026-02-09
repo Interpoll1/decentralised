@@ -77,8 +77,6 @@ export class VoteTrackerService {
     
     voteRecords.push(newRecord);
     await StorageService.setMetadata('vote-records', voteRecords);
-    
-    console.log('Vote recorded for device:', deviceId.substring(0, 8) + '...');
   }
   
   // Get all votes by this device
@@ -94,6 +92,5 @@ export class VoteTrackerService {
   // Clear vote records (admin/testing only)
   static async clearVoteRecords(): Promise<void> {
     await StorageService.setMetadata('vote-records', []);
-    console.log('🗑️ Vote records cleared');
   }
 }

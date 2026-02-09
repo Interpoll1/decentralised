@@ -1,6 +1,3 @@
-// src/services/storageManager.ts
-// Manages storage limits and prunes old data
-
 import { StorageService } from './storageService';
 
 export class StorageManager {
@@ -9,6 +6,23 @@ export class StorageManager {
   private static readonly MAX_BLOCKS = 1000; // Keep last 1000 blocks
   private static readonly MAX_RECEIPTS = 500; // Keep last 500 receipts
   private static readonly POLL_RETENTION_DAYS = 30; // Delete polls older than 30 days
+
+  // Clear all local storage data
+  static async clearAll() {
+    if (window.localStorage) {
+      localStorage.clear();
+    }
+    if (window.indexedDB) {
+      // Delete all IndexedDB databases (best effort)
+      const dbs = await indexedDB.databases?.();
+      if (dbs && Array.isArray(dbs)) {
+        for (const db of dbs) {
+          if (db.name) indexedDB.deleteDatabase(db.name);
+        }
+      }
+    }
+    // Optionally, clear any other storage mechanisms here
+  }
   
   // Check storage usage
   static async getStorageInfo() {
@@ -32,8 +46,6 @@ export class StorageManager {
     blocksDeleted: number;
     receiptsDeleted: number;
   }> {
-    console.log('🧹 Starting storage cleanup...');
-    
     let pollsDeleted = 0;
     let blocksDeleted = 0;
     let receiptsDeleted = 0;
@@ -76,11 +88,7 @@ export class StorageManager {
     // But we could archive them to a separate compressed storage
     
     const info = await this.getStorageInfo();
-    console.log(`Cleanup complete: ${pollsDeleted} polls, ${blocksDeleted} blocks, ${receiptsDeleted} receipts deleted`);
-    if (info) {
-      console.log(`Storage: ${info.usageMB}MB / ${info.quotaMB}MB (${info.usagePercent.toFixed(1)}%)`);
-    }
-    
+
     return { pollsDeleted, blocksDeleted, receiptsDeleted };
   }
   
@@ -89,7 +97,6 @@ export class StorageManager {
     const info = await this.getStorageInfo();
     
     if (info && info.usagePercent > 80) {
-      console.warn('Storage usage high, running cleanup...');
       await this.pruneOldData();
     }
   }
@@ -131,7 +138,5 @@ export class StorageManager {
         await StorageService.saveReceipt(receipt);
       }
     }
-    
-    console.log('Data imported successfully');
   }
 }

@@ -84,25 +84,21 @@ const truncatedContent = computed(() => {
 });
 
 function handleCardClick() {
-  console.log('Card clicked, navigating to post detail:', props.post.id);
   router.push(`/post/${props.post.id}`);
 }
 
 function handleUpvote(event: Event) {
   event.stopPropagation();
-  console.log('Upvote clicked:', props.post.id);
   emit('upvote');
 }
 
 function handleDownvote(event: Event) {
   event.stopPropagation();
-  console.log('Downvote clicked:', props.post.id);
   emit('downvote');
 }
 
 function handleCommentsClick(event: Event) {
   event.stopPropagation();
-  console.log('Comments clicked, navigating to post detail:', props.post.id);
   router.push(`/post/${props.post.id}`);
 }
 
@@ -140,12 +136,7 @@ function getIPFSUrl(cid?: string): string {
 .post-card {
   margin: 12px 12px;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.post-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-radius: 20px;
 }
 
 .post-header {
@@ -194,7 +185,7 @@ function getIPFSUrl(cid?: string): string {
 
 .post-image {
   margin: 12px 0;
-  border-radius: 8px;
+  border-radius: 14px;
   overflow: hidden;
   max-height: 400px;
 }
@@ -206,7 +197,7 @@ function getIPFSUrl(cid?: string): string {
 }
 
 .post-footer {
-  border-top: 1px solid var(--ion-color-light);
+  border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.05);
   padding-top: 12px;
   margin-top: 12px;
 }
@@ -214,25 +205,49 @@ function getIPFSUrl(cid?: string): string {
 .post-stats {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
 }
 
 .stat-button {
   display: flex;
   align-items: center;
   gap: 4px;
-  background: none;
-  border: none;
-  padding: 4px 8px;
-  border-radius: 4px;
+  background: rgba(var(--ion-card-background-rgb), 0.18);
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
+  padding: 5px 11px;
+  border-radius: 12px;
   cursor: pointer;
   font-size: 13px;
   color: var(--ion-color-step-600);
-  transition: background 0.2s;
+  transition: var(--liquid-spring);
+  backdrop-filter: blur(10px) saturate(1.4);
+  -webkit-backdrop-filter: blur(10px) saturate(1.4);
+  box-shadow: var(--glass-highlight);
 }
 
 .stat-button:hover {
-  background: var(--ion-color-light);
+  background: rgba(var(--ion-color-primary-rgb), 0.10);
+  border-color: rgba(var(--ion-color-primary-rgb), 0.22);
+  transform: translateY(-1px);
+}
+
+.stat-button:active {
+  transform: scale(0.96) translateY(0);
+}
+
+.stat-button.upvote.active {
+  background: rgba(var(--ion-color-primary-rgb), 0.14);
+  color: var(--ion-color-primary);
+  border-color: rgba(var(--ion-color-primary-rgb), 0.30);
+  box-shadow: var(--glass-highlight), 0 0 14px rgba(var(--ion-color-primary-rgb), 0.12);
+}
+
+.stat-button.downvote.active {
+  background: rgba(var(--ion-color-danger-rgb), 0.14);
+  color: var(--ion-color-danger);
+  border-color: rgba(var(--ion-color-danger-rgb), 0.30);
+  box-shadow: var(--glass-highlight), 0 0 14px rgba(var(--ion-color-danger-rgb), 0.12);
 }
 
 .stat-button ion-icon {
@@ -260,13 +275,13 @@ function getIPFSUrl(cid?: string): string {
   .post-title {
     font-size: 16px;
   }
-  
+
   .post-content {
     font-size: 13px;
   }
-  
+
   .post-stats {
-    gap: 12px;
+    gap: 10px;
     font-size: 12px;
   }
 }
