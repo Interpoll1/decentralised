@@ -124,11 +124,13 @@ const displayName = computed(() => {
 });
 
 const hasUpvoted = computed(() => {
+  commentStore.voteVersion; // reactive dependency to trigger re-evaluation on vote changes
   const votedComments = JSON.parse(localStorage.getItem('upvoted-comments') || '[]');
   return votedComments.includes(props.comment.id);
 });
 
 const hasDownvoted = computed(() => {
+  commentStore.voteVersion; // reactive dependency to trigger re-evaluation on vote changes
   const votedComments = JSON.parse(localStorage.getItem('downvoted-comments') || '[]');
   return votedComments.includes(props.comment.id);
 });

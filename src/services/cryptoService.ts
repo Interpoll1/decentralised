@@ -35,6 +35,12 @@ export class CryptoService {
     if (block.pubkey) {
       blockData.pubkey = block.pubkey;
     }
+    if (block.actionType) {
+      blockData.actionType = block.actionType;
+    }
+    if (block.actionLabel) {
+      blockData.actionLabel = block.actionLabel;
+    }
     const blockString = JSON.stringify(blockData);
     return this.hash(blockString);
   }

@@ -210,6 +210,7 @@ const userStore = useUserStore();
 const post = ref<Post | null>(null);
 const isLoading = ref(true);
 const newCommentText = ref('');
+const voteVersion = ref(0);
 
 const postId = computed(() => route.params.postId as string);
 const communityId = computed(() => route.params.communityId as string);
@@ -275,11 +276,13 @@ const uniqueCommenters = computed(() => {
 });
 
 const hasUpvoted = computed(() => {
+  voteVersion.value; // reactive dependency to trigger re-evaluation on vote changes
   const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
   return votedPosts.includes(postId.value);
 });
 
 const hasDownvoted = computed(() => {
+  voteVersion.value; // reactive dependency to trigger re-evaluation on vote changes
   const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
   return votedPosts.includes(postId.value);
 });
@@ -315,15 +318,17 @@ function getIPFSUrl(cid?: string): string {
 
 async function handleUpvote() {
   if (!post.value) return;
-  
+
   try {
     if (hasUpvoted.value) {
-      await postStore.removeUpvote(post.value.id);
-      
+      // Remove from localStorage first (optimistic UI)
       const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
       const filtered = votedPosts.filter((id: string) => id !== post.value!.id);
       localStorage.setItem('upvoted-posts', JSON.stringify(filtered));
-      
+      voteVersion.value++;
+
+      await postStore.removeUpvote(post.value.id);
+
       const toast = await toastController.create({
         message: 'Upvote removed',
         duration: 1500,
@@ -331,19 +336,25 @@ async function handleUpvote() {
       });
       await toast.present();
     } else {
+      // Clear downvote from localStorage first if needed
       const downvotedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
       if (downvotedPosts.includes(post.value.id)) {
-        await postStore.removeDownvote(post.value.id);
         const filtered = downvotedPosts.filter((id: string) => id !== post.value!.id);
         localStorage.setItem('downvoted-posts', JSON.stringify(filtered));
       }
 
-      await postStore.upvotePost(post.value.id);
-
+      // Add to upvoted localStorage
       const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
       votedPosts.push(post.value.id);
       localStorage.setItem('upvoted-posts', JSON.stringify(votedPosts));
-      
+      voteVersion.value++;
+
+      // Clear existing downvote in store if needed
+      if (downvotedPosts.includes(post.value.id)) {
+        await postStore.removeDownvote(post.value.id);
+      }
+      await postStore.upvotePost(post.value.id);
+
       const toast = await toastController.create({
         message: 'Upvoted',
         duration: 1500,
@@ -351,24 +362,26 @@ async function handleUpvote() {
       });
       await toast.present();
     }
-    
+
     await loadPost();
   } catch (_error) {
-    // Upvote failed
+    voteVersion.value++;
   }
 }
 
 async function handleDownvote() {
   if (!post.value) return;
-  
+
   try {
     if (hasDownvoted.value) {
-      await postStore.removeDownvote(post.value.id);
-      
+      // Remove from localStorage first (optimistic UI)
       const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
       const filtered = votedPosts.filter((id: string) => id !== post.value!.id);
       localStorage.setItem('downvoted-posts', JSON.stringify(filtered));
-      
+      voteVersion.value++;
+
+      await postStore.removeDownvote(post.value.id);
+
       const toast = await toastController.create({
         message: 'Downvote removed',
         duration: 1500,
@@ -376,19 +389,25 @@ async function handleDownvote() {
       });
       await toast.present();
     } else {
+      // Clear upvote from localStorage first if needed
       const upvotedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
       if (upvotedPosts.includes(post.value.id)) {
-        await postStore.removeUpvote(post.value.id);
         const filtered = upvotedPosts.filter((id: string) => id !== post.value!.id);
         localStorage.setItem('upvoted-posts', JSON.stringify(filtered));
       }
 
-      await postStore.downvotePost(post.value.id);
-
+      // Add to downvoted localStorage
       const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
       votedPosts.push(post.value.id);
       localStorage.setItem('downvoted-posts', JSON.stringify(votedPosts));
-      
+      voteVersion.value++;
+
+      // Clear existing upvote in store if needed
+      if (upvotedPosts.includes(post.value.id)) {
+        await postStore.removeUpvote(post.value.id);
+      }
+      await postStore.downvotePost(post.value.id);
+
       const toast = await toastController.create({
         message: 'Downvoted',
         duration: 1500,
@@ -396,10 +415,10 @@ async function handleDownvote() {
       });
       await toast.present();
     }
-    
+
     await loadPost();
   } catch (_error) {
-    // Downvote failed
+    voteVersion.value++;
   }
 }
 
@@ -438,12 +457,13 @@ async function submitComment() {
 
 async function handleCommentUpvote(comment: any) {
   try {
+    const wasUpvoted = JSON.parse(localStorage.getItem('upvoted-comments') || '[]').includes(comment.id);
     await commentStore.upvoteComment(comment.id);
-    
+
     const toast = await toastController.create({
-      message: 'Comment upvoted',
+      message: wasUpvoted ? 'Upvote removed' : 'Comment upvoted',
       duration: 1500,
-      color: 'success'
+      color: wasUpvoted ? 'medium' : 'success'
     });
     await toast.present();
   } catch (_error) {
@@ -453,12 +473,13 @@ async function handleCommentUpvote(comment: any) {
 
 async function handleCommentDownvote(comment: any) {
   try {
+    const wasDownvoted = JSON.parse(localStorage.getItem('downvoted-comments') || '[]').includes(comment.id);
     await commentStore.downvoteComment(comment.id);
-    
+
     const toast = await toastController.create({
-      message: 'Comment downvoted',
+      message: wasDownvoted ? 'Downvote removed' : 'Comment downvoted',
       duration: 1500,
-      color: 'warning'
+      color: wasDownvoted ? 'medium' : 'warning'
     });
     await toast.present();
   } catch (_error) {

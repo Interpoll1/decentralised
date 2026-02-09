@@ -26,10 +26,23 @@
               class="block-item"
             >
               <div class="block-header">
-                <ion-badge color="primary">Block #{{ block.index }}</ion-badge>
+                <div class="block-header-left">
+                  <ion-badge color="primary">Block #{{ block.index }}</ion-badge>
+                  <ion-badge
+                    v-if="block.actionType"
+                    :color="actionBadgeColor(block.actionType)"
+                    class="action-badge"
+                  >
+                    {{ actionLabel(block.actionType) }}
+                  </ion-badge>
+                </div>
                 <span class="block-timestamp">
                   {{ formatDate(block.timestamp) }}
                 </span>
+              </div>
+
+              <div v-if="block.actionLabel" class="block-action-label">
+                {{ block.actionLabel }}
               </div>
 
               <div class="block-hashes">
@@ -48,7 +61,7 @@
                 </div>
 
                 <div class="hash-row">
-                  <span class="hash-label">Vote Hash:</span>
+                  <span class="hash-label">Data Hash:</span>
                   <code class="hash-value">
                     {{ fullHash(block.voteHash) }}
                   </code>
@@ -153,6 +166,24 @@ const fullHash = (hash: string) => {
 const formatDate = (timestamp: number) => {
   return new Date(timestamp).toLocaleString();
 };
+
+const actionBadgeColor = (actionType: string) => {
+  switch (actionType) {
+    case 'community-create': return 'tertiary';
+    case 'post-create': return 'success';
+    case 'vote': return 'warning';
+    default: return 'medium';
+  }
+};
+
+const actionLabel = (actionType: string) => {
+  switch (actionType) {
+    case 'community-create': return 'Community';
+    case 'post-create': return 'Post';
+    case 'vote': return 'Vote';
+    default: return actionType;
+  }
+};
 </script>
 
 <style scoped>
@@ -178,6 +209,25 @@ const formatDate = (timestamp: number) => {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 8px;
+}
+
+.block-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.action-badge {
+  font-size: 10px;
+}
+
+.block-action-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ion-text-color);
+  margin-bottom: 8px;
+  padding: 0 2px;
 }
 
 .block-timestamp {

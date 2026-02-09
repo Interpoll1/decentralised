@@ -1,4 +1,4 @@
-import { ChainBlock, Vote } from '../types/chain';
+import { ChainBlock, Vote, ActionType } from '../types/chain';
 import { CryptoService } from './cryptoService';
 import { StorageService } from './storageService';
 import { KeyService } from './keyService';
@@ -30,9 +30,14 @@ export class ChainService {
     return block;
   }
 
-  static async createBlock(vote: Vote, previousBlock: ChainBlock): Promise<ChainBlock> {
+  static async createBlock(
+    data: Record<string, unknown>,
+    previousBlock: ChainBlock,
+    actionType?: ActionType,
+    actionLabel?: string
+  ): Promise<ChainBlock> {
     const keyPair = await KeyService.getKeyPair();
-    const voteHash = CryptoService.hashVote(vote);
+    const voteHash = CryptoService.hashVote(data);
 
     const block: ChainBlock = {
       index: previousBlock.index + 1,
@@ -44,6 +49,9 @@ export class ChainService {
       nonce: 0,
       pubkey: keyPair.publicKey,
     };
+
+    if (actionType) block.actionType = actionType;
+    if (actionLabel) block.actionLabel = actionLabel;
 
     block.signature = CryptoService.sign(
       JSON.stringify({
@@ -159,7 +167,12 @@ export class ChainService {
       throw new Error('Chain not initialized');
     }
 
-    const newBlock = await this.createBlock(vote, previousBlock);
+    const newBlock = await this.createBlock(
+      vote as unknown as Record<string, unknown>,
+      previousBlock,
+      'vote',
+      `Vote on ${vote.pollId}`
+    );
 
     await StorageService.saveBlock(newBlock);
     await StorageService.saveVote(vote);
@@ -167,6 +180,24 @@ export class ChainService {
     const mnemonic = CryptoService.generateMnemonic();
 
     return { block: newBlock, receipt: mnemonic };
+  }
+
+  static async addAction(
+    actionType: ActionType,
+    actionData: Record<string, unknown>,
+    actionLabel: string
+  ): Promise<ChainBlock> {
+    const previousBlock = await StorageService.getLatestBlock();
+
+    if (!previousBlock) {
+      throw new Error('Chain not initialized');
+    }
+
+    const newBlock = await this.createBlock(actionData, previousBlock, actionType, actionLabel);
+
+    await StorageService.saveBlock(newBlock);
+
+    return newBlock;
   }
 
   static async detectDowngrade(remoteHash: string, remoteIndex: number): Promise<boolean> {

@@ -201,8 +201,8 @@ body.dark {
 
 	--ion-color-success: #34d399;
 	--ion-color-success-rgb: 52, 211, 153;
-	--ion-color-success-contrast: #000000;
-	--ion-color-success-contrast-rgb: 0, 0, 0;
+	--ion-color-success-contrast: #ffffff;
+	--ion-color-success-contrast-rgb: 255, 255, 255;
 	--ion-color-success-shade: #2dba87;
 	--ion-color-success-tint: #48d7a3;
 
@@ -215,8 +215,8 @@ body.dark {
 
 	--ion-color-danger: #f87171;
 	--ion-color-danger-rgb: 248, 113, 113;
-	--ion-color-danger-contrast: #000000;
-	--ion-color-danger-contrast-rgb: 0, 0, 0;
+	--ion-color-danger-contrast: #ffffff;
+	--ion-color-danger-contrast-rgb: 255, 255, 255;
 	--ion-color-danger-shade: #da6363;
 	--ion-color-danger-tint: #f97f7f;
 
@@ -563,12 +563,25 @@ ion-toggle {
    Liquid Toasts
    ══════════════════════════════════════════════════════════════════ */
 ion-toast::part(container) {
-	backdrop-filter: blur(24px) saturate(1.8);
-	-webkit-backdrop-filter: blur(24px) saturate(1.8);
+	backdrop-filter: blur(28px) saturate(1.8);
+	-webkit-backdrop-filter: blur(28px) saturate(1.8);
+	background: var(--glass-tint, rgba(255, 255, 255, 0.4));
 	border: 1px solid var(--glass-border);
 	border-top-color: var(--glass-border-top);
-	border-radius: 18px;
+	border-radius: 20px;
 	box-shadow: var(--glass-shadow), var(--glass-highlight);
+}
+
+ion-toast.ion-color-success::part(container) {
+	background: rgba(16, 185, 129, 0.15) !important;
+	color: #059669 !important;
+	border-color: rgba(16, 185, 129, 0.4) !important;
+}
+
+ion-toast.ion-color-danger::part(container) {
+	background: rgba(239, 68, 68, 0.15) !important;
+	color: #dc2626 !important;
+	border-color: rgba(239, 68, 68, 0.4) !important;
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -660,10 +673,22 @@ html.dark ion-badge {
 
 /* Toasts, alerts, action sheets: solid dark */
 html.dark ion-toast::part(container) {
-	backdrop-filter: none;
-	-webkit-backdrop-filter: none;
-	background: #0a0a0a;
-	border-color: rgba(255, 255, 255, 0.06);
+	backdrop-filter: blur(24px) saturate(1.8);
+	-webkit-backdrop-filter: blur(24px) saturate(1.8);
+	background: rgba(20, 20, 20, 0.85);
+	border-color: rgba(255, 255, 255, 0.1);
+}
+
+html.dark ion-toast.ion-color-success::part(container) {
+	background: rgba(16, 185, 129, 0.2) !important;
+	color: #34d399 !important;
+	border-color: rgba(52, 211, 153, 0.4) !important;
+}
+
+html.dark ion-toast.ion-color-danger::part(container) {
+	background: rgba(239, 68, 68, 0.2) !important;
+	color: #f87171 !important;
+	border-color: rgba(248, 113, 113, 0.4) !important;
 }
 
 html.dark ion-alert .alert-wrapper,

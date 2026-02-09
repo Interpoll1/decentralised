@@ -1,7 +1,7 @@
 // src/stores/chainStore.ts
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { ChainBlock, Vote, Receipt } from '../types/chain';
+import type { ChainBlock, Vote, Receipt, ActionType } from '../types/chain';
 import { ChainService } from '../services/chainService';
 import { CryptoService } from '../services/cryptoService';
 import { StorageService } from '../services/storageService';
@@ -187,6 +187,21 @@ export const useChainStore = defineStore('chain', () => {
     return receipt;
   }
 
+  async function addAction(
+    actionType: ActionType,
+    actionData: Record<string, unknown>,
+    actionLabel: string
+  ): Promise<ChainBlock> {
+    const block = await ChainService.addAction(actionType, actionData, actionLabel);
+
+    blocks.value.push(block);
+
+    BroadcastService.broadcast('new-block', block);
+    WebSocketService.broadcast('new-block', block);
+
+    return block;
+  }
+
   async function validateChain() {
     isValidating.value = true;
     chainValid.value = await ChainService.validateChain();
@@ -219,6 +234,7 @@ export const useChainStore = defineStore('chain', () => {
     initialize,
     loadBlocks,
     addVote,
+    addAction,
     validateChain,
     checkForDowngrade,
     syncBlocks,

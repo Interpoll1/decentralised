@@ -205,6 +205,7 @@ const isJoined = computed(() => communityStore.isJoined(communityId.value));
 const isLoading = ref(false);
 const contentFilter = ref<'all' | 'posts' | 'polls'>('all');
 const currentUserId = ref('');
+const voteVersion = ref(0);
 
 // Get posts and polls for this community
 const communityPosts = computed(() => {
@@ -263,27 +264,28 @@ const displayedContent = computed(() => {
 });
 
 function hasUpvoted(postId: string): boolean {
+  voteVersion.value; // reactive dependency to trigger re-render on vote changes
   const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
   return votedPosts.includes(postId);
 }
 
 function hasDownvoted(postId: string): boolean {
+  voteVersion.value; // reactive dependency to trigger re-render on vote changes
   const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
   return votedPosts.includes(postId);
 }
 
 async function handleUpvote(post: Post) {
   try {
-    // Check if already upvoted
     if (hasUpvoted(post.id)) {
-      // Remove upvote
-      await postStore.removeUpvote(post.id);
-      
-      // Remove from localStorage
+      // Remove from localStorage first (optimistic UI)
       const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
       const filtered = votedPosts.filter((id: string) => id !== post.id);
       localStorage.setItem('upvoted-posts', JSON.stringify(filtered));
-      
+      voteVersion.value++;
+
+      await postStore.removeUpvote(post.id);
+
       const toast = await toastController.create({
         message: 'Upvote removed',
         duration: 1500,
@@ -291,22 +293,25 @@ async function handleUpvote(post: Post) {
       });
       await toast.present();
     } else {
-      // If previously downvoted, clear that first so we don't override the new upvote
+      // Clear downvote from localStorage first if needed
       const downvotedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
       if (downvotedPosts.includes(post.id)) {
-        await postStore.removeDownvote(post.id);
         const filtered = downvotedPosts.filter((id: string) => id !== post.id);
         localStorage.setItem('downvoted-posts', JSON.stringify(filtered));
       }
 
-      // Add upvote
-      await postStore.upvotePost(post.id);
-      
-      // Add to localStorage
+      // Add to upvoted localStorage
       const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
       votedPosts.push(post.id);
       localStorage.setItem('upvoted-posts', JSON.stringify(votedPosts));
-      
+      voteVersion.value++;
+
+      // Clear existing downvote in store if needed
+      if (downvotedPosts.includes(post.id)) {
+        await postStore.removeDownvote(post.id);
+      }
+      await postStore.upvotePost(post.id);
+
       const toast = await toastController.create({
         message: 'Upvoted',
         duration: 1500,
@@ -315,6 +320,7 @@ async function handleUpvote(post: Post) {
       await toast.present();
     }
   } catch (error) {
+    voteVersion.value++;
     console.error('Error upvoting:', error);
     const toast = await toastController.create({
       message: 'Failed to upvote',
@@ -327,16 +333,15 @@ async function handleUpvote(post: Post) {
 
 async function handleDownvote(post: Post) {
   try {
-    // Check if already downvoted
     if (hasDownvoted(post.id)) {
-      // Remove downvote
-      await postStore.removeDownvote(post.id);
-      
-      // Remove from localStorage
+      // Remove from localStorage first (optimistic UI)
       const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
       const filtered = votedPosts.filter((id: string) => id !== post.id);
       localStorage.setItem('downvoted-posts', JSON.stringify(filtered));
-      
+      voteVersion.value++;
+
+      await postStore.removeDownvote(post.id);
+
       const toast = await toastController.create({
         message: 'Downvote removed',
         duration: 1500,
@@ -344,22 +349,25 @@ async function handleDownvote(post: Post) {
       });
       await toast.present();
     } else {
-      // If previously upvoted, clear that first so we don't override the new downvote
+      // Clear upvote from localStorage first if needed
       const upvotedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
       if (upvotedPosts.includes(post.id)) {
-        await postStore.removeUpvote(post.id);
         const filtered = upvotedPosts.filter((id: string) => id !== post.id);
         localStorage.setItem('upvoted-posts', JSON.stringify(filtered));
       }
 
-      // Add downvote
-      await postStore.downvotePost(post.id);
-      
-      // Add to localStorage
+      // Add to downvoted localStorage
       const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
       votedPosts.push(post.id);
       localStorage.setItem('downvoted-posts', JSON.stringify(votedPosts));
-      
+      voteVersion.value++;
+
+      // Clear existing upvote in store if needed
+      if (upvotedPosts.includes(post.id)) {
+        await postStore.removeUpvote(post.id);
+      }
+      await postStore.downvotePost(post.id);
+
       const toast = await toastController.create({
         message: 'Downvoted',
         duration: 1500,
@@ -368,6 +376,7 @@ async function handleDownvote(post: Post) {
       await toast.present();
     }
   } catch (error) {
+    voteVersion.value++;
     console.error('Error downvoting:', error);
     const toast = await toastController.create({
       message: 'Failed to downvote',

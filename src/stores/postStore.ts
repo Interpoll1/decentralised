@@ -6,6 +6,7 @@ import { UserService } from '../services/userService';
 import { EventService } from '../services/eventService';
 import { BroadcastService } from '../services/broadcastService';
 import { WebSocketService } from '../services/websocketService';
+import { useChainStore } from './chainStore';
 
 export const usePostStore = defineStore('post', () => {
   const posts = ref<Post[]>([]);
@@ -107,6 +108,15 @@ export const usePostStore = defineStore('post', () => {
 
       // Update user stats
       await UserService.incrementPostCount();
+
+      // Record on blockchain
+      const chainStore = useChainStore();
+      await chainStore.addAction('post-create', {
+        postId: post.id,
+        communityId: data.communityId,
+        title: data.title,
+        timestamp: post.createdAt,
+      }, data.title);
 
       // Add to local array immediately if not already present
       const exists = posts.value.find(p => p.id === post.id);

@@ -2,6 +2,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { Community, CommunityService } from '../services/communityService';
+import { useChainStore } from './chainStore';
 
 export const useCommunityStore = defineStore('community', () => {
   const communities = ref<Community[]>([]);
@@ -71,7 +72,16 @@ export const useCommunityStore = defineStore('community', () => {
         ...data,
         creatorId: 'current-user-id',
       });
-      
+
+      // Record on blockchain
+      const chainStore = useChainStore();
+      await chainStore.addAction('community-create', {
+        communityId: community.id,
+        name: community.name,
+        displayName: community.displayName,
+        timestamp: community.createdAt,
+      }, community.displayName);
+
       // Add to local array immediately
       const exists = communities.value.find(c => c.id === community.id);
       if (!exists) {
