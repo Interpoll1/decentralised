@@ -3,6 +3,9 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { Post, PostService } from '../services/postService';
 import { UserService } from '../services/userService';
+import { EventService } from '../services/eventService';
+import { BroadcastService } from '../services/broadcastService';
+import { WebSocketService } from '../services/websocketService';
 
 export const usePostStore = defineStore('post', () => {
   const posts = ref<Post[]>([]);
@@ -109,6 +112,22 @@ export const usePostStore = defineStore('post', () => {
       const exists = posts.value.find(p => p.id === post.id);
       if (!exists) {
         posts.value.unshift(post);
+      }
+
+      // Create and broadcast signed post event
+      try {
+        const postEvent = await EventService.createPostEvent({
+          id: post.id,
+          communityId: data.communityId,
+          title: data.title,
+          content: data.content,
+          imageIPFS: post.imageIPFS,
+        });
+
+        BroadcastService.broadcast('new-event', postEvent);
+        WebSocketService.broadcast('new-event', postEvent);
+      } catch (err) {
+        console.warn('Failed to create signed post event:', err);
       }
 
       return post;

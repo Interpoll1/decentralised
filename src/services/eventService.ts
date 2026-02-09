@@ -166,4 +166,34 @@ export class EventService {
 
     return this.createSignedEvent(unsigned);
   }
+
+  // Create a Post Creation event (kind 103)
+  static async createPostEvent(postData: {
+    id: string;
+    communityId: string;
+    title: string;
+    content: string;
+    imageIPFS?: string;
+  }): Promise<NostrEvent> {
+    const pubkey = await KeyService.getPublicKeyHex();
+
+    const content = JSON.stringify({
+      title: postData.title,
+      content: postData.content,
+      imageIPFS: postData.imageIPFS || '',
+    });
+
+    const unsigned: UnsignedEvent = {
+      pubkey,
+      created_at: Math.floor(Date.now() / 1000),
+      kind: EventKind.POST_CREATION,
+      tags: [
+        ['post_id', postData.id],
+        ['community', postData.communityId],
+      ],
+      content,
+    };
+
+    return this.createSignedEvent(unsigned);
+  }
 }

@@ -5,6 +5,7 @@ export const EventKind = {
   POLL_CREATION: 100,
   VOTE_CAST: 101,
   POLL_UPDATE: 102,
+  POST_CREATION: 103,
 } as const;
 
 export type EventKindValue = (typeof EventKind)[keyof typeof EventKind];
