@@ -8,62 +8,75 @@ import { EventService } from '../services/eventService';
 import { BroadcastService } from '../services/broadcastService';
 import { WebSocketService } from '../services/websocketService';
 
+const PAGE_SIZE = 10;
+
 export const usePollStore = defineStore('poll', () => {
-  const polls = ref<Poll[]>([]);
+  const pollsMap = ref<Map<string, Poll>>(new Map());
   const currentPoll = ref<Poll | null>(null);
   const isLoading = ref(false);
 
+  const visibleCount = ref(PAGE_SIZE);
+
+  const subscribedCommunities = new Set<string>();
+  const unsubscribers = new Map<string, () => void>();
+
+  // ─── Computed ──────────────────────────────────────────────────────────────
+
+  const polls = computed(() => Array.from(pollsMap.value.values()));
+
   const sortedPolls = computed(() =>
-    [...polls.value].sort((a, b) => b.createdAt - a.createdAt)
+    Array.from(pollsMap.value.values()).sort((a, b) => b.createdAt - a.createdAt)
   );
 
-  const activePolls = computed(() =>
-    sortedPolls.value.filter((p) => !p.isExpired)
-  );
+  const activePolls = computed(() => sortedPolls.value.filter((p) => !p.isExpired));
 
-  // ─────────────────────────────────────────────
-  // Loading & subscription
-  // ─────────────────────────────────────────────
+  // Slice shown in feed — only renders PAGE_SIZE at a time
+  const visiblePolls = computed(() => sortedPolls.value.slice(0, visibleCount.value));
 
-  async function loadPollsForCommunity(communityId: string) {
-    if (isLoading.value) return;
-    isLoading.value = true;
+  const hasMorePolls = computed(() => visibleCount.value < sortedPolls.value.length);
 
-    const seen = new Set<string>();
+  // ─── Loading ───────────────────────────────────────────────────────────────
 
-    // Real-time subscription
-    PollService.subscribeToPollsInCommunity(communityId, (poll) => {
-      if (seen.has(poll.id)) return;
-      seen.add(poll.id);
+ function loadPollsForCommunity(communityId: string): Promise<void> {
+  if (subscribedCommunities.has(communityId)) return Promise.resolve();
 
-      const index = polls.value.findIndex((p) => p.id === poll.id);
-      if (index >= 0) {
-        polls.value[index] = poll;
-      } else {
-        polls.value.push(poll);
-      }
-    });
+  return new Promise((resolve) => {
+    const unsub = PollService.subscribeToPollsInCommunity(
+      communityId,
 
-    // One-shot bulk load (helps with initial population & missed early events)
-    try {
-      const fetched = await PollService.getAllPollsInCommunity(communityId);
+      // Phase 1: shell with no options → renders list immediately
+      (poll) => {
+        pollsMap.value.set(poll.id, poll);
+      },
 
-      for (const poll of fetched) {
-        if (seen.has(poll.id)) continue;
-        seen.add(poll.id);
-        polls.value.push(poll);
-      }
-    } catch (err) {
-      console.warn('Failed to perform initial poll fetch', err);
-      // subscription should still keep things alive
-    } finally {
-      isLoading.value = false;
-    }
-  }
+      // Hard time-box done → unblock HomePage
+      () => {
+        subscribedCommunities.add(communityId);
+        resolve();
+      },
 
-  // ─────────────────────────────────────────────
-  // Mutations / Actions
-  // ─────────────────────────────────────────────
+      // Phase 2: options patched in → update vote counts in place
+      (updatedPoll) => {
+        pollsMap.value.set(updatedPoll.id, updatedPoll);
+        if (currentPoll.value?.id === updatedPoll.id) {
+          currentPoll.value = updatedPoll;
+        }
+      },
+    );
+
+    unsubscribers.set(communityId, unsub);
+  });
+}
+
+function loadMorePolls() {
+  visibleCount.value += PAGE_SIZE;
+}
+
+function resetVisibleCount() {
+  visibleCount.value = PAGE_SIZE;
+}
+
+  // ─── Create ────────────────────────────────────────────────────────────────
 
   async function createPoll(data: {
     communityId: string;
@@ -78,106 +91,94 @@ export const usePollStore = defineStore('poll', () => {
     inviteCodeCount?: number;
   }) {
     const user = await UserService.getCurrentUser();
-
     const poll = await PollService.createPoll({
-      ...data,
-      authorId: user.id,
-      authorName: user.username || 'Anonymous',
+      ...data, authorId: user.id, authorName: user.username || 'Anonymous',
     });
-
-    // optimistic insert at top (newest)
-    if (!polls.value.some((p) => p.id === poll.id)) {
-      polls.value.unshift(poll);
-    }
-
-    // Create and broadcast signed poll event
+    pollsMap.value.set(poll.id, poll);
     try {
       const pollEvent = await EventService.createPollEvent({
-        id: poll.id,
-        communityId: data.communityId,
-        question: data.question,
-        description: data.description,
-        options: data.options,
-        durationDays: data.durationDays,
-        allowMultipleChoices: data.allowMultipleChoices,
+        id: poll.id, communityId: data.communityId, question: data.question,
+        description: data.description, options: data.options,
+        durationDays: data.durationDays, allowMultipleChoices: data.allowMultipleChoices,
         showResultsBeforeVoting: data.showResultsBeforeVoting,
-        requireLogin: data.requireLogin,
-        isPrivate: data.isPrivate,
+        requireLogin: data.requireLogin, isPrivate: data.isPrivate,
       });
-
       BroadcastService.broadcast('new-event', pollEvent);
       WebSocketService.broadcast('new-event', pollEvent);
     } catch (err) {
       console.warn('Failed to create signed poll event:', err);
     }
-
     return poll;
   }
 
+  // ─── Vote ──────────────────────────────────────────────────────────────────
+
   async function voteOnPoll(pollId: string, optionIds: string[]) {
     const user = await UserService.getCurrentUser();
-
-    // optimistic update
-    const poll = polls.value.find((p) => p.id === pollId);
-    if (poll) {
-      poll.totalVotes += optionIds.length;
-
-      for (const optionId of optionIds) {
-        const option = poll.options.find((o) => o.id === optionId);
-        if (option) {
-          option.votes += 1;
-        }
-      }
+    const original = pollsMap.value.get(pollId);
+    if (original) {
+      const optimistic: Poll = {
+        ...original,
+        totalVotes: original.totalVotes + optionIds.length,
+        options: original.options.map(opt =>
+          optionIds.includes(opt.id) ? { ...opt, votes: opt.votes + 1 } : opt
+        ),
+      };
+      pollsMap.value.set(pollId, optimistic);
+      if (currentPoll.value?.id === pollId) currentPoll.value = optimistic;
     }
-
     try {
       await PollService.voteOnPoll(pollId, optionIds, user.id);
     } catch (err) {
-      console.warn('Vote failed — local state may be inconsistent', err);
-      // You could add rollback logic here if desired
+      console.warn('Vote failed — rolling back', err);
+      if (original) {
+        pollsMap.value.set(pollId, original);
+        if (currentPoll.value?.id === pollId) currentPoll.value = original;
+      }
       throw err;
     }
   }
 
-  // Load a single poll by id (used on the vote page)
+  // ─── Select ────────────────────────────────────────────────────────────────
+
   async function selectPoll(pollId: string) {
     isLoading.value = true;
     try {
-      const existing = polls.value.find((p) => p.id === pollId);
-      if (existing) {
+      const existing = pollsMap.value.get(pollId);
+      if (existing && existing.options.length > 0) {
         currentPoll.value = existing;
         return;
       }
-
       const poll = await PollService.getPollById(pollId);
       currentPoll.value = poll;
-
-      if (poll && !polls.value.some((p) => p.id === poll.id)) {
-        polls.value.push(poll);
-      }
+      if (poll) pollsMap.value.set(poll.id, poll);
     } finally {
       isLoading.value = false;
     }
   }
 
-  // ─────────────────────────────────────────────
-  // Public API
-  // ─────────────────────────────────────────────
+  // ─── Refresh ───────────────────────────────────────────────────────────────
+
+  async function refreshCommunityPolls(communityId: string) {
+    const unsub = unsubscribers.get(communityId);
+    if (unsub) unsub();
+    unsubscribers.delete(communityId);
+    subscribedCommunities.delete(communityId);
+    for (const [id, poll] of pollsMap.value) {
+      if (poll.communityId === communityId) pollsMap.value.delete(id);
+    }
+    resetVisibleCount();
+    await loadPollsForCommunity(communityId);
+  }
+
+  // ─── Public API ────────────────────────────────────────────────────────────
 
   return {
-    // state
-    polls,
-    currentPoll,
-    isLoading,
-
-    // derived
-    sortedPolls,
-    activePolls,
-
-    // actions
-    loadPollsForCommunity,
-    createPoll,
-    voteOnPoll,
-    selectPoll,
+    polls, pollsMap, currentPoll, isLoading,
+    sortedPolls, activePolls,
+    visiblePolls, hasMorePolls, visibleCount,
+    loadPollsForCommunity, loadMorePolls, resetVisibleCount,
+    createPoll, voteOnPoll, selectPoll,
+    refreshCommunityPolls,
   };
 });

@@ -103,26 +103,28 @@ export class ChainService {
   }
 
   static async validateChain(): Promise<boolean> {
-    const blocks = await StorageService.getAllBlocks();
+  const blocks = await StorageService.getAllBlocks();
 
-    if (blocks.length === 0) return true;
+  if (blocks.length === 0) return true;
 
-    blocks.sort((a, b) => a.index - b.index);
+  // Explicitly type the parameters
+  blocks.sort((a: ChainBlock, b: ChainBlock) => a.index - b.index);
 
-    if (blocks[0].index !== 0 || blocks[0].previousHash !== this.GENESIS_HASH) {
-      console.error('Invalid genesis block');
+  if (blocks[0].index !== 0 || blocks[0].previousHash !== this.GENESIS_HASH) {
+    console.error('Invalid genesis block');
+    return false;
+  }
+
+  for (let i = 1; i < blocks.length; i++) {
+    if (!this.validateBlock(blocks[i], blocks[i - 1])) {
+      console.error(`Invalid block at index ${i}`);
       return false;
     }
-
-    for (let i = 1; i < blocks.length; i++) {
-      if (!this.validateBlock(blocks[i], blocks[i - 1])) {
-        console.error(`Invalid block at index ${i}`);
-        return false;
-      }
-    }
-
-    return true;
   }
+
+  return true;
+}
+
 
   static async initializeChain(): Promise<void> {
     const latestBlock = await StorageService.getLatestBlock();

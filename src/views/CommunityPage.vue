@@ -44,8 +44,8 @@
             {{ isJoined ? 'Joined' : 'Join Community' }}
           </ion-button>
 
-          <div class="button-row">
-            <ion-button 
+          <div class="button-row" >
+            <ion-button  style="background-color: azure;"
               expand="block" 
               fill="outline"
               @click="$router.push(`/community/${communityId}/create-post`)"
@@ -55,7 +55,7 @@
               Create Post
             </ion-button>
 
-            <ion-button 
+            <ion-button style="background-color: azure;"
               expand="block" 
               fill="outline"
               @click="$router.push(`/create-poll?communityId=${communityId}`)"
@@ -132,22 +132,164 @@
         </ion-button>
       </div>
 
-      <!-- Rules Card -->
-      <ion-card v-if="community && community.rules && community.rules.length > 0">
-        <ion-card-header>
-          <ion-card-title>Community Rules</ion-card-title>
-        </ion-card-header>
-        <ion-card-content>
-          <ol class="rules-list">
-            <li v-for="(rule, index) in community.rules" :key="index">
-              {{ rule }}
-            </li>
-          </ol>
-        </ion-card-content>
-      </ion-card>
+      <!-- Rules Section -->
+      <div v-if="community && community.rules && community.rules.length > 0" class="rules-section">
+        <div class="rules-header">
+          <h3>Community Rules</h3>
+        </div>
+        <ol class="rules-list">
+          <li v-for="(rule, index) in community.rules" :key="index">
+            {{ rule }}
+          </li>
+        </ol>
+        <div class="rules-separator"></div>
+      </div>
     </ion-content>
   </ion-page>
 </template>
+
+<style scoped>
+.community-header {
+  padding: 24px 16px;
+  background: linear-gradient(135deg, var(--ion-color-primary) 0%, var(--ion-color-primary-shade) 100%);
+  color: white;
+}
+
+.community-info h1 {
+  margin: 0 0 4px 0;
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.community-id {
+  margin: 0 0 12px 0;
+  opacity: 0.9;
+  font-size: 14px;
+}
+
+.description {
+  margin: 0 0 20px 0;
+  line-height: 1.5;
+  opacity: 0.95;
+}
+
+.community-stats {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 20px;
+}
+
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.stat ion-icon {
+  font-size: 18px;
+}
+
+.action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.button-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.content-filter {
+  padding: 12px 16px;
+  background: rgba(var(--ion-card-background-rgb), 0.22);
+  backdrop-filter: blur(10px) saturate(1.4);
+  -webkit-backdrop-filter: blur(10px) saturate(1.4);
+  border-bottom: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 24px;
+}
+
+.loading-container p {
+  margin-top: 16px;
+  color: var(--ion-color-medium);
+}
+
+.content-feed {
+  padding: 0;
+  margin: 0;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 24px;
+  text-align: center;
+}
+
+.empty-state ion-icon {
+  color: var(--ion-color-medium);
+  margin-bottom: 16px;
+}
+
+.empty-state p {
+  color: var(--ion-color-medium);
+  margin: 8px 0 16px 0;
+}
+
+.rules-section {
+  margin: 24px 0 0 0;
+  padding: 16px 0;
+  background: transparent;
+}
+
+.rules-header {
+  padding: 0 16px 12px 16px;
+  border-bottom: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
+}
+
+.rules-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ion-text-color);
+}
+
+.rules-list {
+  margin: 0;
+  padding: 16px 16px 16px 36px;
+  list-style-position: outside;
+}
+
+.rules-list li {
+  margin-bottom: 12px;
+  line-height: 1.5;
+  color: var(--ion-color-step-600);
+}
+
+.rules-list li:last-child {
+  margin-bottom: 0;
+}
+
+.rules-separator {
+  height: 1px;
+  background: rgba(var(--ion-text-color-rgb), 0.08);
+  margin-top: 16px;
+}
+</style>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
@@ -443,125 +585,3 @@ onMounted(async () => {
 });
 </script>
 
-<style scoped>
-.community-header {
-  padding: 24px;
-  background: linear-gradient(135deg, var(--ion-color-primary) 0%, var(--ion-color-primary-shade) 100%);
-  color: white;
-}
-
-.community-info h1 {
-  margin: 0 0 4px 0;
-  font-size: 28px;
-  font-weight: 600;
-}
-
-.community-id {
-  margin: 0 0 12px 0;
-  opacity: 0.9;
-  font-size: 14px;
-}
-
-.description {
-  margin: 0 0 20px 0;
-  line-height: 1.5;
-  opacity: 0.95;
-}
-
-.community-stats {
-  display: flex;
-  gap: 24px;
-  margin-bottom: 20px;
-}
-
-.stat {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-}
-
-.stat ion-icon {
-  font-size: 18px;
-}
-
-.action-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.button-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.content-filter {
-  padding: 12px;
-  background: rgba(var(--ion-card-background-rgb), 0.22);
-  backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
-  border-bottom: 1px solid var(--glass-border);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  box-shadow: var(--glass-highlight);
-}
-
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 64px 24px;
-}
-
-.loading-container p {
-  margin-top: 16px;
-  color: var(--ion-color-medium);
-}
-
-.content-feed {
-  padding: 12px 0;
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 64px 24px;
-  text-align: center;
-}
-
-.empty-state ion-icon {
-  color: var(--ion-color-medium);
-  margin-bottom: 16px;
-}
-
-.empty-state p {
-  color: var(--ion-color-medium);
-  margin: 8px 0 16px 0;
-}
-
-ion-card {
-  margin: 16px 12px;
-}
-
-.rules-list {
-  margin: 0;
-  padding-left: 20px;
-}
-
-.rules-list li {
-  margin-bottom: 8px;
-  line-height: 1.5;
-}
-
-@media (max-width: 576px) {
-  .button-row {
-    grid-template-columns: 1fr;
-  }
-}
-</style>

@@ -93,7 +93,6 @@ const chainStore = useChainStore();
 const selectedOption = ref('');
 const isSubmitting = ref(false);
 const hasAlreadyVoted = ref(false);
-const myVoteReceipt = ref<string | null>(null);
 
 const displayTitle = computed(() => {
   const anyPoll: any = props.poll as any;

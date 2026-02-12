@@ -1,13 +1,14 @@
+<!-- In PostCard.vue template -->
 <template>
-  <ion-card class="post-card">
+  <div class="post-card" v-if="post">
     <!-- Clickable card content area -->
-    <ion-card-content @click="handleCardClick">
+    <div @click="handleCardClick">
       <!-- Post Header -->
       <div class="post-header">
         <div class="post-meta">
           <span class="community-name">{{ communityName }}</span>
           <span class="separator">•</span>
-          <span class="author">u/{{ post.authorName }}</span>
+          <span class="author">u/{{ post.authorName || 'Unknown' }}</span>
           <span class="separator">•</span>
           <span class="timestamp">{{ formatTime(post.createdAt) }}</span>
         </div>
@@ -42,20 +43,280 @@
             <span>{{ formatNumber(post.commentCount) }}</span>
           </button>
 
-          <div class="stat-item score">
+          <div class="stat-item score" style="margin-right: 15px;">
             <ion-icon :icon="trendingUpOutline"></ion-icon>
             <span>{{ post.score }}</span>
           </div>
         </div>
       </div>
-    </ion-card-content>
-  </ion-card>
+    </div>
+    
+    <!-- Separator line -->
+    <div class="post-separator"></div>
+  </div>
 </template>
+
+<style scoped>
+/* Main Post Card Container */
+.post-card {
+  margin-left: 20px;
+  padding: 16px 0;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+}
+
+.post-separator {
+  height: 1px;
+  background: rgba(var(--ion-text-color-rgb), 0.08);
+  margin-top: 16px;
+}
+
+/* Post Header */
+.post-header {
+  margin-bottom: 8px;
+}
+
+.post-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ion-color-medium);
+  flex-wrap: wrap;
+}
+
+.community-name {
+  color: var(--ion-color-step-600);
+  font-weight: 600;
+}
+
+.separator {
+  color: var(--ion-color-medium-shade);
+}
+
+.author {
+  color: var(--ion-color-step-600);
+  font-weight: 500;
+}
+
+.timestamp {
+  color: var(--ion-color-medium);
+}
+
+/* Post Title */
+.post-title {
+  margin: 8px 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--ion-text-color);
+}
+
+/* Post Content */
+.post-content {
+  margin: 8px 0;
+  font-size: 14px;
+  
+  line-height: 1.5;
+  color: var(--ion-color-step-600);
+}
+
+/* Post Image */
+.post-image {
+  margin: 12px 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(var(--ion-card-background-rgb), 0.3);
+}
+
+.post-image img {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: cover;
+}
+
+/* Post Footer - Voting and Stats */
+.post-footer {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.05);
+}
+
+.post-stats {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Stat Buttons Base Styles */
+.stat-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ion-color-medium);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.stat-button:hover {
+  background: rgba(var(--ion-text-color-rgb), 0.04);
+  border-color: rgba(var(--ion-text-color-rgb), 0.12);
+}
+
+.stat-button:active {
+  transform: scale(0.95);
+}
+
+.stat-button ion-icon {
+  font-size: 16px;
+}
+
+.stat-button span {
+  min-width: 16px;
+  text-align: center;
+}
+
+/* Upvote Button */
+.stat-button.upvote {
+  border-color: rgba(var(--ion-color-success-rgb), 0.15);
+}
+
+.stat-button.upvote:hover {
+  background: rgba(var(--ion-color-success-rgb), 0.08);
+  border-color: rgba(var(--ion-color-success-rgb), 0.25);
+  color: var(--ion-color-success);
+}
+
+.stat-button.upvote.active {
+  background: rgba(var(--ion-color-success-rgb), 0.12);
+  border-color: var(--ion-color-success);
+  color: var(--ion-color-success);
+  font-weight: 600;
+}
+
+.stat-button.upvote.active ion-icon {
+  color: var(--ion-color-success);
+}
+
+/* Downvote Button */
+.stat-button.downvote {
+  border-color: rgba(var(--ion-color-danger-rgb), 0.15);
+}
+
+.stat-button.downvote:hover {
+  background: rgba(var(--ion-color-danger-rgb), 0.08);
+  border-color: rgba(var(--ion-color-danger-rgb), 0.25);
+  color: var(--ion-color-danger);
+}
+
+.stat-button.downvote.active {
+  background: rgba(var(--ion-color-danger-rgb), 0.12);
+  border-color: var(--ion-color-danger);
+  color: var(--ion-color-danger);
+  font-weight: 600;
+}
+
+.stat-button.downvote.active ion-icon {
+  color: var(--ion-color-danger);
+}
+
+/* Comments Button */
+.stat-button.comments {
+  border-color: rgba(var(--ion-color-primary-rgb), 0.15);
+}
+
+.stat-button.comments:hover {
+  background: rgba(var(--ion-color-primary-rgb), 0.08);
+  border-color: rgba(var(--ion-color-primary-rgb), 0.25);
+  color: var(--ion-color-primary);
+}
+
+.stat-button.comments:active {
+  background: rgba(var(--ion-color-primary-rgb), 0.12);
+}
+
+/* Score Display (Non-interactive) */
+.stat-item.score {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: rgba(var(--ion-color-tertiary-rgb), 0.08);
+  border: 1px solid rgba(var(--ion-color-tertiary-rgb), 0.18);
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ion-color-tertiary);
+  margin-left: auto;
+}
+
+.stat-item.score ion-icon {
+  font-size: 16px;
+  color: var(--ion-color-tertiary);
+}
+
+/* Mobile Responsive */
+@media (max-width: 576px) {
+  .post-title {
+    font-size: 16px;
+  }
+
+  .post-content {
+    font-size: 13px;
+  }
+
+  .post-stats {
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .stat-button {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  .stat-button ion-icon {
+    font-size: 14px;
+  }
+
+  .stat-item.score {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+}
+
+/* Dark Mode Enhancements */
+@media (prefers-color-scheme: dark) {
+  .stat-button {
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .stat-button:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+}
+
+/* Accessibility - Focus States */
+.stat-button:focus-visible {
+  outline: 2px solid var(--ion-color-primary);
+  outline-offset: 2px;
+}
+</style>
 
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { IonCard, IonCardContent, IonIcon } from '@ionic/vue';
+import { IonIcon } from '@ionic/vue';
 import { 
   arrowUpOutline, 
   arrowDownOutline, 
@@ -131,158 +392,3 @@ function getIPFSUrl(cid?: string): string {
   return `https://ipfs.io/ipfs/${cid}`;
 }
 </script>
-
-<style scoped>
-.post-card {
-  margin: 12px 12px;
-  cursor: pointer;
-  border-radius: 20px;
-}
-
-.post-header {
-  margin-bottom: 8px;
-}
-
-.post-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--ion-color-medium);
-}
-
-.community-name {
-  font-weight: 600;
-  color: var(--ion-color-primary);
-}
-
-.separator {
-  color: var(--ion-color-medium-shade);
-}
-
-.author {
-  color: var(--ion-color-step-600);
-}
-
-.timestamp {
-  color: var(--ion-color-medium);
-}
-
-.post-title {
-  margin: 0 0 8px 0;
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 1.4;
-  color: var(--ion-text-color);
-}
-
-.post-content {
-  margin: 0 0 12px 0;
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--ion-color-step-600);
-}
-
-.post-image {
-  margin: 12px 0;
-  border-radius: 14px;
-  overflow: hidden;
-  max-height: 400px;
-}
-
-.post-image img {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-
-.post-footer {
-  border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.05);
-  padding-top: 12px;
-  margin-top: 12px;
-}
-
-.post-stats {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.stat-button {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: rgba(var(--ion-card-background-rgb), 0.18);
-  border: 1px solid var(--glass-border);
-  border-top-color: var(--glass-border-top);
-  padding: 5px 11px;
-  border-radius: 12px;
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--ion-color-step-600);
-  transition: var(--liquid-spring);
-  backdrop-filter: blur(10px) saturate(1.4);
-  -webkit-backdrop-filter: blur(10px) saturate(1.4);
-  box-shadow: var(--glass-highlight);
-}
-
-.stat-button:hover {
-  background: rgba(var(--ion-color-primary-rgb), 0.10);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.22);
-  transform: translateY(-1px);
-}
-
-.stat-button:active {
-  transform: scale(0.96) translateY(0);
-}
-
-.stat-button.upvote.active {
-  background: rgba(var(--ion-color-primary-rgb), 0.14);
-  color: var(--ion-color-primary);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.30);
-  box-shadow: var(--glass-highlight), 0 0 14px rgba(var(--ion-color-primary-rgb), 0.12);
-}
-
-.stat-button.downvote.active {
-  background: rgba(var(--ion-color-danger-rgb), 0.14);
-  color: var(--ion-color-danger);
-  border-color: rgba(var(--ion-color-danger-rgb), 0.30);
-  box-shadow: var(--glass-highlight), 0 0 14px rgba(var(--ion-color-danger-rgb), 0.12);
-}
-
-.stat-button ion-icon {
-  font-size: 18px;
-}
-
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 13px;
-  color: var(--ion-color-medium);
-}
-
-.stat-item ion-icon {
-  font-size: 16px;
-}
-
-.stat-item.score {
-  margin-left: auto;
-  font-weight: 500;
-}
-
-@media (max-width: 576px) {
-  .post-title {
-    font-size: 16px;
-  }
-
-  .post-content {
-    font-size: 13px;
-  }
-
-  .post-stats {
-    gap: 10px;
-    font-size: 12px;
-  }
-}
-</style>

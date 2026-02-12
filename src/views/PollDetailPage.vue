@@ -31,231 +31,503 @@
       <!-- Poll Content -->
       <div v-else>
         <!-- Poll Header -->
-        <ion-card>
-          <ion-card-header>
-            <div class="poll-meta">
-              <ion-chip>
-                <ion-icon :icon="statsChartOutline"></ion-icon>
-                <ion-label>Poll</ion-label>
-              </ion-chip>
-              <ion-chip v-if="poll.isPrivate" color="warning">
-                <ion-icon :icon="lockClosedOutline"></ion-icon>
-                <ion-label>Private</ion-label>
-              </ion-chip>
-              <ion-chip v-if="poll.isExpired" color="danger">
-                <ion-label>Ended</ion-label>
-              </ion-chip>
-              <ion-chip v-else color="success">
-                <ion-icon :icon="timeOutline"></ion-icon>
-                <ion-label>{{ getTimeRemaining() }}</ion-label>
-              </ion-chip>
-            </div>
-            <ion-card-title>{{ poll.question }}</ion-card-title>
-            <ion-card-subtitle>
-              Posted by u/{{ poll.authorName }} • {{ formatTime(poll.createdAt) }}
-            </ion-card-subtitle>
-          </ion-card-header>
-
-          <ion-card-content v-if="poll.description">
-            <p class="poll-description">{{ poll.description }}</p>
-          </ion-card-content>
-        </ion-card>
+        <div class="section">
+          <div class="poll-meta">
+            <ion-chip>
+              <ion-icon :icon="statsChartOutline"></ion-icon>
+              <ion-label>Poll</ion-label>
+            </ion-chip>
+            <ion-chip v-if="poll.isPrivate" color="warning">
+              <ion-icon :icon="lockClosedOutline"></ion-icon>
+              <ion-label>Private</ion-label>
+            </ion-chip>
+            <ion-chip v-if="poll.isExpired" color="danger">
+              <ion-label>Ended</ion-label>
+            </ion-chip>
+            <ion-chip v-else color="success">
+              <ion-icon :icon="timeOutline"></ion-icon>
+              <ion-label>{{ getTimeRemaining() }}</ion-label>
+            </ion-chip>
+          </div>
+          <h1 class="poll-title">{{ poll.question }}</h1>
+          <p class="poll-author">
+            Posted by u/{{ poll.authorName }} • {{ formatTime(poll.createdAt) }}
+          </p>
+          <p v-if="poll.description" class="poll-description">{{ poll.description }}</p>
+          <div class="separator"></div>
+        </div>
 
         <!-- Poll Stats -->
-        <ion-card>
-          <ion-card-content>
-            <div class="stats-grid">
-              <div class="stat-item">
-                <ion-icon :icon="peopleOutline" color="primary"></ion-icon>
-                <div>
-                  <strong>{{ actualTotalVotes }}</strong>
-                  <span>Total Votes</span>
-                </div>
-              </div>
-              <div class="stat-item">
-                <ion-icon :icon="timeOutline" color="secondary"></ion-icon>
-                <div>
-                  <strong>{{ poll.isExpired ? 'Ended' : getTimeRemaining() }}</strong>
-                  <span>Time Left</span>
-                </div>
+        <div class="section">
+          <div class="stats-grid">
+            <div class="stat-item">
+              <ion-icon :icon="peopleOutline" color="primary"></ion-icon>
+              <div>
+                <strong>{{ actualTotalVotes }}</strong>
+                <span>Total Votes</span>
               </div>
             </div>
-          </ion-card-content>
-        </ion-card>
+            <div class="stat-item">
+              <ion-icon :icon="timeOutline" color="secondary"></ion-icon>
+              <div>
+                <strong>{{ poll.isExpired ? 'Ended' : getTimeRemaining() }}</strong>
+                <span>Time Left</span>
+              </div>
+            </div>
+          </div>
+          <div class="separator"></div>
+        </div>
 
         <!-- Invite Code Management (author of private poll) -->
-        <ion-card v-if="poll.isPrivate && isAuthor">
-          <ion-card-header>
-            <div class="status-header">
-              <ion-card-title>Invite Links</ion-card-title>
-              <ion-badge color="warning">{{ inviteCodes.length }} codes</ion-badge>
-            </div>
-            <ion-card-subtitle>Share these unique links — each can only be used once</ion-card-subtitle>
-          </ion-card-header>
+        <div v-if="poll.isPrivate && isAuthor" class="section">
+          <div class="section-header">
+            <h3 class="section-title">Invite Links</h3>
+            <ion-badge color="warning">{{ inviteCodes.length }} codes</ion-badge>
+          </div>
+          <p class="section-subtitle">Share these unique links — each can only be used once</p>
 
-          <ion-card-content>
-            <div v-if="inviteCodes.length === 0" class="empty-codes">
-              <ion-spinner v-if="isLoadingCodes"></ion-spinner>
-              <p v-else>No invite codes found</p>
-            </div>
+          <div v-if="inviteCodes.length === 0" class="empty-codes">
+            <ion-spinner v-if="isLoadingCodes"></ion-spinner>
+            <p v-else>No invite codes found</p>
+          </div>
 
-            <div v-else class="invite-code-list">
-              <div
-                v-for="entry in inviteCodes"
-                :key="entry.code"
-                class="invite-code-item"
-                :class="{ used: entry.used }"
-              >
-                <div class="code-info">
-                  <code class="code-value">{{ entry.code }}</code>
-                  <ion-badge :color="entry.used ? 'medium' : 'success'" class="code-status">
-                    {{ entry.used ? 'Used' : 'Available' }}
-                  </ion-badge>
-                </div>
-                <ion-button
-                  v-if="!entry.used"
-                  size="small"
-                  fill="clear"
-                  @click="copyInviteLink(entry.code)"
-                >
-                  <ion-icon :icon="copyOutline"></ion-icon>
-                </ion-button>
+          <div v-else class="invite-code-list">
+            <div
+              v-for="entry in inviteCodes"
+              :key="entry.code"
+              class="invite-code-item"
+              :class="{ used: entry.used }"
+            >
+              <div class="code-info">
+                <code class="code-value">{{ entry.code }}</code>
+                <ion-badge :color="entry.used ? 'medium' : 'success'" class="code-status">
+                  {{ entry.used ? 'Used' : 'Available' }}
+                </ion-badge>
               </div>
+              <ion-button
+                v-if="!entry.used"
+                size="small"
+                fill="clear"
+                @click="copyInviteLink(entry.code)"
+              >
+                <ion-icon :icon="copyOutline"></ion-icon>
+              </ion-button>
             </div>
+          </div>
 
-            <ion-button expand="block" fill="outline" @click="copyAllLinks" class="mt-3">
-              <ion-icon slot="start" :icon="copyOutline"></ion-icon>
-              Copy All Available Links
-            </ion-button>
-          </ion-card-content>
-        </ion-card>
+          <ion-button expand="block" fill="outline" @click="copyAllLinks" class="mt-3">
+            <ion-icon slot="start" :icon="copyOutline"></ion-icon>
+            Copy All Available Links
+          </ion-button>
+          <div class="separator"></div>
+        </div>
 
         <!-- Private poll notice (non-author visitor) -->
-        <ion-card v-if="poll.isPrivate && !isAuthor && !hasVoted && !poll.isExpired">
-          <ion-card-content>
-            <div class="private-notice">
-              <ion-icon :icon="lockClosedOutline" color="warning"></ion-icon>
-              <div>
-                <h3>Private Poll</h3>
-                <p>This poll requires an invite code to vote. Use the unique link you were given.</p>
-                <ion-button
-                  size="small"
-                  fill="outline"
-                  @click="router.push(`/vote/${poll!.id}`)"
-                  class="mt-2"
-                >
-                  Enter Invite Code
-                </ion-button>
-              </div>
+        <div v-if="poll.isPrivate && !isAuthor && !hasVoted && !poll.isExpired" class="section">
+          <div class="private-notice">
+            <ion-icon :icon="lockClosedOutline" color="warning"></ion-icon>
+            <div>
+              <h3>Private Poll</h3>
+              <p>This poll requires an invite code to vote. Use the unique link you were given.</p>
+              <ion-button
+                size="small"
+                fill="outline"
+                @click="router.push(`/vote/${poll!.id}`)"
+                class="mt-2"
+              >
+                Enter Invite Code
+              </ion-button>
             </div>
-          </ion-card-content>
-        </ion-card>
+          </div>
+          <div class="separator"></div>
+        </div>
 
         <!-- Voting Card (public polls only) -->
-        <ion-card v-if="!poll.isPrivate && !hasVoted && !poll.isExpired">
-          <ion-card-header>
-            <ion-card-title>Cast Your Vote</ion-card-title>
-            <ion-card-subtitle v-if="poll.allowMultipleChoices">
-              You can select multiple options
-            </ion-card-subtitle>
-          </ion-card-header>
+        <div v-if="!poll.isPrivate && !hasVoted && !poll.isExpired" class="section">
+          <h3 class="section-title">Cast Your Vote</h3>
+          <p v-if="poll.allowMultipleChoices" class="section-subtitle">
+            You can select multiple options
+          </p>
 
-          <ion-card-content>
-            <!-- Multiple Choice (Checkboxes) -->
-            <ion-list v-if="poll.allowMultipleChoices && poll.options && poll.options.length > 0">
+          <!-- Multiple Choice (Checkboxes) -->
+          <ion-list v-if="poll.allowMultipleChoices && poll.options && poll.options.length > 0">
+            <ion-item v-for="(option, index) in poll.options" :key="`option-${index}-${option.id}`">
+              <ion-checkbox
+                v-model="selectedOptions"
+                :value="option.id"
+                slot="start"
+              ></ion-checkbox>
+              <ion-label>
+                <h3>{{ option.text }}</h3>
+              </ion-label>
+            </ion-item>
+          </ion-list>
+
+          <!-- Single Choice (Radio Buttons) -->
+          <ion-radio-group v-else-if="!poll.allowMultipleChoices && poll.options && poll.options.length > 0" v-model="selectedOption">
+            <ion-list>
               <ion-item v-for="(option, index) in poll.options" :key="`option-${index}-${option.id}`">
-                <ion-checkbox
-                  v-model="selectedOptions"
+                <ion-radio
                   :value="option.id"
                   slot="start"
-                ></ion-checkbox>
+                ></ion-radio>
                 <ion-label>
                   <h3>{{ option.text }}</h3>
                 </ion-label>
               </ion-item>
             </ion-list>
+          </ion-radio-group>
 
-            <!-- Single Choice (Radio Buttons) -->
-            <ion-radio-group v-else-if="!poll.allowMultipleChoices && poll.options && poll.options.length > 0" v-model="selectedOption">
-              <ion-list>
-                <ion-item v-for="(option, index) in poll.options" :key="`option-${index}-${option.id}`">
-                  <ion-radio
-                    :value="option.id"
-                    slot="start"
-                  ></ion-radio>
-                  <ion-label>
-                    <h3>{{ option.text }}</h3>
-                  </ion-label>
-                </ion-item>
-              </ion-list>
-            </ion-radio-group>
+          <div v-else class="empty-options">
+            <p>No options available for this poll</p>
+          </div>
 
-            <div v-else class="empty-options">
-              <p>No options available for this poll</p>
-            </div>
-
-            <ion-button
-              expand="block"
-              @click="submitVote"
-              :disabled="!canSubmitVote || isSubmitting"
-              class="vote-button"
-            >
-              <ion-spinner v-if="isSubmitting" name="crescent" slot="start"></ion-spinner>
-              <ion-icon v-else slot="start" :icon="checkmarkCircleOutline"></ion-icon>
-              {{ isSubmitting ? 'Submitting...' : 'Submit Vote' }}
-            </ion-button>
-          </ion-card-content>
-        </ion-card>
+          <ion-button
+            expand="block"
+            @click="submitVote"
+            :disabled="!canSubmitVote || isSubmitting"
+            class="vote-button"
+          >
+            <ion-spinner v-if="isSubmitting" name="crescent" slot="start"></ion-spinner>
+            <ion-icon v-else slot="start" :icon="checkmarkCircleOutline"></ion-icon>
+            {{ isSubmitting ? 'Submitting...' : 'Submit Vote' }}
+          </ion-button>
+          <div class="separator"></div>
+        </div>
 
         <!-- Already Voted Message -->
-        <ion-card v-else-if="hasVoted && !poll.isExpired">
-          <ion-card-content>
-            <div class="voted-message">
-              <ion-icon :icon="checkmarkCircleOutline" color="success"></ion-icon>
-              <p>You've already voted in this poll!</p>
-            </div>
-          </ion-card-content>
-        </ion-card>
+        <div v-else-if="hasVoted && !poll.isExpired" class="section">
+          <div class="voted-message">
+            <ion-icon :icon="checkmarkCircleOutline" color="success"></ion-icon>
+            <p>You've already voted in this poll!</p>
+          </div>
+          <div class="separator"></div>
+        </div>
 
         <!-- Poll Results -->
-        <ion-card>
-          <ion-card-header>
-            <ion-card-title>Results</ion-card-title>
-          </ion-card-header>
+        <div class="section">
+          <h3 class="section-title">Results</h3>
 
-          <ion-card-content>
-            <div v-if="!poll.showResultsBeforeVoting && !hasVoted && !poll.isExpired" class="results-hidden">
-              <ion-icon :icon="eyeOffOutline" size="large"></ion-icon>
-              <p>Results are hidden until you vote</p>
-            </div>
+          <div v-if="!poll.showResultsBeforeVoting && !hasVoted && !poll.isExpired" class="results-hidden">
+            <ion-icon :icon="eyeOffOutline" size="large"></ion-icon>
+            <p>Results are hidden until you vote</p>
+          </div>
 
-            <div v-else class="poll-results">
-              <div
-                v-for="option in sortedOptions"
-                :key="option.id"
-                class="result-item"
-              >
-                <div class="result-header">
-                  <span class="option-text">{{ option.text }}</span>
-                  <span class="option-percent">{{ getOptionPercent(option) }}%</span>
-                </div>
-                <div class="result-bar">
-                  <div
-                    class="result-fill"
-                    :style="{ width: `${getOptionPercent(option)}%` }"
-                  ></div>
-                </div>
-                <div class="result-votes">
-                  {{ option.votes }} vote{{ option.votes !== 1 ? 's' : '' }}
-                </div>
+          <div v-else class="poll-results">
+            <div
+              v-for="option in sortedOptions"
+              :key="option.id"
+              class="result-item"
+            >
+              <div class="result-header">
+                <span class="option-text">{{ option.text }}</span>
+                <span class="option-percent">{{ getOptionPercent(option) }}%</span>
+              </div>
+              <div class="result-bar">
+                <div
+                  class="result-fill"
+                  :style="{ width: `${getOptionPercent(option)}%` }"
+                ></div>
+              </div>
+              <div class="result-votes">
+                {{ option.votes }} vote{{ option.votes !== 1 ? 's' : '' }}
               </div>
             </div>
-          </ion-card-content>
-        </ion-card>
+          </div>
+        </div>
       </div>
     </ion-content>
   </ion-page>
 </template>
+
+<style scoped>
+.loading-container,
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 24px;
+  text-align: center;
+}
+
+.loading-container p {
+  margin-top: 16px;
+  color: var(--ion-color-medium);
+}
+
+.empty-state ion-icon {
+  color: var(--ion-color-medium);
+  margin-bottom: 16px;
+}
+
+/* Section Layout */
+.section {
+  padding: 16px;
+  background: transparent;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+  color: var(--ion-text-color);
+}
+
+.section-subtitle {
+  font-size: 13px;
+  color: var(--ion-color-medium);
+  margin: 0 0 12px 0;
+}
+
+.separator {
+  height: 1px;
+  background: rgba(var(--ion-text-color-rgb), 0.08);
+  margin: 16px 0;
+}
+
+.mt-2 { margin-top: 8px; }
+.mt-3 { margin-top: 12px; }
+
+/* Poll Header */
+.poll-meta {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.poll-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  line-height: 1.3;
+  color: var(--ion-text-color);
+}
+
+.poll-author {
+  font-size: 13px;
+  color: var(--ion-color-medium);
+  margin: 0 0 12px 0;
+}
+
+.poll-description {
+  margin: 0;
+  line-height: 1.6;
+  color: var(--ion-text-color);
+}
+
+/* Stats */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(var(--ion-text-color-rgb), 0.03);
+  border: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
+  border-radius: 12px;
+}
+
+.stat-item ion-icon {
+  font-size: 20px; /* Reduced from 32px */
+}
+
+.stat-item strong {
+  display: block;
+  font-size: 18px; /* Reduced from 20px */
+  font-weight: 600;
+}
+
+.stat-item span {
+  display: block;
+  font-size: 11px; /* Reduced from 12px */
+  color: var(--ion-color-medium);
+}
+
+/* Voting */
+.vote-button {
+  margin-top: 16px;
+}
+
+.empty-options {
+  padding: 24px;
+  text-align: center;
+  color: var(--ion-color-medium);
+}
+
+.voted-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 0;
+  text-align: center;
+}
+
+.voted-message ion-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+}
+
+.voted-message p {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+/* Results */
+.results-hidden {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 0;
+  text-align: center;
+}
+
+.results-hidden ion-icon {
+  color: var(--ion-color-medium);
+  margin-bottom: 16px;
+}
+
+.results-hidden p {
+  margin: 0;
+  color: var(--ion-color-medium);
+}
+
+.poll-results {
+  padding: 8px 0;
+}
+
+.result-item {
+  margin-bottom: 16px; /* Reduced from 20px */
+}
+
+.result-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px; /* Reduced from 8px */
+}
+
+.option-text {
+  font-weight: 500;
+  font-size: 15px;
+}
+
+.option-percent {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--ion-color-primary);
+}
+
+.result-bar {
+  height: 8px; /* Reduced from 32px */
+  background: rgba(var(--ion-text-color-rgb), 0.05);
+  border: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.result-fill {
+  height: 100%;
+  background: var(--ion-color-primary);
+  transition: width 0.5s ease;
+  border-radius: 8px;
+}
+
+.result-votes {
+  font-size: 12px; /* Reduced from 13px */
+  color: var(--ion-color-medium);
+}
+
+/* Invite Codes */
+.invite-code-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.invite-code-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(var(--ion-text-color-rgb), 0.03);
+  border: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
+  border-radius: 8px;
+}
+
+.invite-code-item.used {
+  opacity: 0.5;
+}
+
+.code-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.code-value {
+  font-size: 13px;
+  font-family: monospace;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.code-status {
+  font-size: 10px;
+}
+
+.empty-codes {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px 0;
+  color: var(--ion-color-medium);
+}
+
+/* Private Poll Notice */
+.private-notice {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 16px;
+  background: rgba(var(--ion-color-warning-rgb), 0.05);
+  border: 1px solid rgba(var(--ion-color-warning-rgb), 0.2);
+  border-radius: 12px;
+}
+
+.private-notice ion-icon {
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.private-notice h3 {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.private-notice p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ion-color-medium);
+  line-height: 1.5;
+}
+</style>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
@@ -583,263 +855,3 @@ onMounted(async () => {
 });
 </script>
 
-<style scoped>
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 64px 24px;
-}
-
-.loading-container p {
-  margin-top: 16px;
-  color: var(--ion-color-medium);
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 64px 24px;
-  text-align: center;
-}
-
-.empty-state ion-icon {
-  color: var(--ion-color-medium);
-  margin-bottom: 16px;
-}
-
-ion-card {
-  margin: 16px 12px;
-}
-
-.poll-meta {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-}
-
-.poll-description {
-  margin: 0;
-  line-height: 1.6;
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  background: rgba(var(--ion-card-background-rgb), 0.20);
-  backdrop-filter: blur(14px) saturate(1.4);
-  -webkit-backdrop-filter: blur(14px) saturate(1.4);
-  border: 1px solid var(--glass-border);
-  border-top-color: var(--glass-border-top);
-  border-radius: 14px;
-  box-shadow: var(--glass-highlight);
-}
-
-.stat-item ion-icon {
-  font-size: 32px;
-}
-
-.stat-item strong {
-  display: block;
-  font-size: 20px;
-  font-weight: 600;
-}
-
-.stat-item span {
-  display: block;
-  font-size: 12px;
-  color: var(--ion-color-medium);
-}
-
-.vote-button {
-  margin-top: 16px;
-}
-
-.empty-options {
-  padding: 24px;
-  text-align: center;
-  color: var(--ion-color-medium);
-}
-
-.voted-message {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 24px;
-  text-align: center;
-}
-
-.voted-message ion-icon {
-  font-size: 64px;
-  margin-bottom: 16px;
-}
-
-.voted-message p {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.results-hidden {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 32px;
-  text-align: center;
-}
-
-.results-hidden ion-icon {
-  color: var(--ion-color-medium);
-  margin-bottom: 16px;
-}
-
-.results-hidden p {
-  margin: 0;
-  color: var(--ion-color-medium);
-}
-
-.poll-results {
-  padding: 8px 0;
-}
-
-.result-item {
-  margin-bottom: 20px;
-}
-
-.result-header {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.option-text {
-  font-weight: 500;
-  font-size: 15px;
-}
-
-.option-percent {
-  font-weight: 600;
-  font-size: 15px;
-  color: var(--ion-color-primary);
-}
-
-.result-bar {
-  height: 32px;
-  background: rgba(var(--ion-card-background-rgb), 0.20);
-  backdrop-filter: blur(14px) saturate(1.4);
-  -webkit-backdrop-filter: blur(14px) saturate(1.4);
-  border: 1px solid var(--glass-border);
-  border-top-color: var(--glass-border-top);
-  border-radius: 14px;
-  overflow: hidden;
-  margin-bottom: 4px;
-  box-shadow: var(--glass-highlight);
-}
-
-.result-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--ion-color-primary), var(--ion-color-primary-shade));
-  transition: width 0.5s;
-}
-
-.result-votes {
-  font-size: 13px;
-  color: var(--ion-color-medium);
-}
-
-/* ── Invite Codes ── */
-.status-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.mt-2 { margin-top: 8px; }
-.mt-3 { margin-top: 12px; }
-
-.invite-code-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.invite-code-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  background: rgba(var(--ion-card-background-rgb), 0.18);
-  backdrop-filter: blur(12px) saturate(1.4);
-  -webkit-backdrop-filter: blur(12px) saturate(1.4);
-  border: 1px solid var(--glass-border);
-  border-top-color: var(--glass-border-top);
-  border-radius: 12px;
-  box-shadow: var(--glass-highlight);
-}
-
-.invite-code-item.used {
-  opacity: 0.5;
-}
-
-.code-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.code-value {
-  font-size: 13px;
-  font-family: monospace;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-}
-
-.code-status {
-  font-size: 10px;
-}
-
-.empty-codes {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 24px;
-  color: var(--ion-color-medium);
-}
-
-/* ── Private Poll Notice ── */
-.private-notice {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
-
-.private-notice ion-icon {
-  font-size: 32px;
-  flex-shrink: 0;
-}
-
-.private-notice h3 {
-  margin: 0 0 4px 0;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.private-notice p {
-  margin: 0;
-  font-size: 14px;
-  color: var(--ion-color-medium);
-  line-height: 1.5;
-}
-</style>

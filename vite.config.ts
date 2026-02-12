@@ -30,6 +30,7 @@ export default defineConfig({
   },
   build: {
     sourcemap: false,
+      assetsDir: 'assets2', // 👈 change folder name here
     commonjsOptions: {
       transformMixedEsModules: true
     },

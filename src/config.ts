@@ -1,13 +1,8 @@
 /**
  * Centralised application configuration.
  *
- * Every value can be overridden at build-time through Vite environment
- * variables (prefixed with VITE_).  Defaults are tuned for local
- * development so the app works out-of-the-box without an .env file.
- *
- * Relay URLs can also be changed at runtime via the Settings page.
- * Runtime overrides are persisted to localStorage and take priority
- * over env-var / default values.
+ * Every value can be overridden at runtime via Settings/localStorage.
+ * Defaults always point to Render deployment URLs.
  *
  * Usage:
  *   import config from '@/config';
@@ -32,10 +27,11 @@ function loadOverrides(): RelayOverrides {
   return {};
 }
 
+// Defaults always point to Render URLs
 const defaults = {
-  websocket: (import.meta.env.VITE_WS_RELAY_URL as string) || 'ws://localhost:8080',
-  gun: (import.meta.env.VITE_GUN_RELAY_URL as string) || 'http://localhost:8765/gun',
-  api: (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8080',
+  websocket: 'wss://interpoll.onrender.com',
+  gun: 'https://interpoll2.onrender.com/gun',
+  api: 'https://interpoll.onrender.com',
 };
 
 let overrides = loadOverrides();

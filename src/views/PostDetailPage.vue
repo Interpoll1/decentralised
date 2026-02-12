@@ -30,9 +30,9 @@
 
       <!-- Post Content -->
       <div v-else>
-        <!-- Post Card -->
-        <ion-card class="post-detail-card">
-          <ion-card-header>
+        <!-- Post Section -->
+        <div class="post-detail-section">
+          <div class="post-header">
             <div class="post-meta">
               <ion-chip @click="$router.push(`/community/${post.communityId}`)">
                 <ion-icon :icon="peopleOutline"></ion-icon>
@@ -43,10 +43,10 @@
               <span class="separator">•</span>
               <span class="timestamp">{{ formatTime(post.createdAt) }}</span>
             </div>
-            <ion-card-title class="post-title">{{ post.title }}</ion-card-title>
-          </ion-card-header>
+            <h1 class="post-title">{{ post.title }}</h1>
+          </div>
 
-          <ion-card-content>
+          <div class="post-body">
             <!-- Post Content -->
             <div v-if="post.content" class="post-content">
               {{ post.content }}
@@ -81,80 +81,328 @@
                 <span>Share</span>
               </button>
             </div>
-          </ion-card-content>
-        </ion-card>
+          </div>
+
+          <div class="section-separator"></div>
+        </div>
 
         <!-- Commenters Panel -->
-        <ion-card v-if="uniqueCommenters.length > 0" class="commenters-card">
-          <ion-card-header>
-            <ion-card-title class="commenters-title">
-              Commenters ({{ uniqueCommenters.length }})
-            </ion-card-title>
-          </ion-card-header>
-          <ion-card-content>
-            <div class="commenters-list">
-              <div v-for="commenter in uniqueCommenters" :key="commenter.authorId" class="commenter-chip">
-                <span class="commenter-online-dot"></span>
-                <span class="commenter-name">u/{{ commenter.displayName }}</span>
-                <ion-badge color="medium" class="commenter-count">{{ commenter.commentCount }}</ion-badge>
-              </div>
+        <div v-if="uniqueCommenters.length > 0" class="commenters-section">
+          <h3 class="section-title">
+            Commenters ({{ uniqueCommenters.length }})
+          </h3>
+          <div class="commenters-list">
+            <div v-for="commenter in uniqueCommenters" :key="commenter.authorId" class="commenter-chip">
+              <span class="commenter-online-dot"></span>
+              <span class="commenter-name">u/{{ commenter.displayName }}</span>
+              <ion-badge color="medium" class="commenter-count">{{ commenter.commentCount }}</ion-badge>
             </div>
-          </ion-card-content>
-        </ion-card>
+          </div>
+          <div class="section-separator"></div>
+        </div>
 
         <!-- Comments Section -->
-        <ion-card class="comments-card">
-          <ion-card-header>
-            <ion-card-title>
-              Comments ({{ allComments.length }})
-            </ion-card-title>
-          </ion-card-header>
+        <div class="comments-section">
+          <h3 class="section-title">
+            Comments ({{ allComments.length }})
+          </h3>
 
-          <ion-card-content>
-            <!-- Add Comment Form -->
-            <div class="add-comment-form">
-              <ion-textarea
-                v-model="newCommentText"
-                placeholder="Add a comment..."
-                :auto-grow="true"
-                :rows="3"
-                class="comment-textarea"
-              ></ion-textarea>
-              <ion-button 
-                expand="block" 
-                @click="submitComment"
-                :disabled="!newCommentText.trim()"
-              >
-                <ion-icon slot="start" :icon="sendOutline"></ion-icon>
-                Post Comment
-              </ion-button>
-            </div>
+          <!-- Add Comment Form -->
+          <div class="add-comment-form">
+            <ion-textarea
+              v-model="newCommentText"
+              placeholder="Add a comment..."
+              :auto-grow="true"
+              :rows="3"
+              class="comment-textarea"
+            ></ion-textarea>
+            <ion-button 
+              expand="block" 
+              @click="submitComment"
+              :disabled="!newCommentText.trim()"
+            >
+              <ion-icon slot="start" :icon="sendOutline"></ion-icon>
+              Post Comment
+            </ion-button>
+          </div>
 
-            <!-- Comments List -->
-            <div v-if="allComments.length > 0" class="comments-list">
-              <CommentCard 
-                v-for="comment in sortedComments" 
-                :key="comment.id"
-                :comment="comment"
-                :post-id="post.id"
-                :community-id="post.communityId"
-                @upvote="handleCommentUpvote(comment)"
-                @downvote="handleCommentDownvote(comment)"
-              />
-            </div>
+          <!-- Comments List -->
+          <div v-if="allComments.length > 0" class="comments-list">
+            <CommentCard 
+              v-for="comment in sortedComments" 
+              :key="comment.id"
+              :comment="comment"
+              :post-id="post.id"
+              :community-id="post.communityId"
+              @upvote="handleCommentUpvote(comment)"
+              @downvote="handleCommentDownvote(comment)"
+            />
+          </div>
 
-            <!-- Empty Comments State -->
-            <div v-else class="empty-comments">
-              <ion-icon :icon="chatbubbleOutline" size="large"></ion-icon>
-              <p>No comments yet</p>
-              <p class="subtitle">Be the first to comment!</p>
-            </div>
-          </ion-card-content>
-        </ion-card>
+          <!-- Empty Comments State -->
+          <div v-else class="empty-comments">
+            <ion-icon :icon="chatbubbleOutline" size="large"></ion-icon>
+            <p>No comments yet</p>
+            <p class="subtitle">Be the first to comment!</p>
+          </div>
+        </div>
       </div>
     </ion-content>
   </ion-page>
 </template>
+
+
+
+<style scoped>
+.loading-container,
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 16px;
+  text-align: center;
+}
+
+.empty-state ion-icon {
+  font-size: 64px;
+  color: var(--ion-color-medium);
+}
+
+.post-detail-section {
+  padding: 16px 0;
+  background: transparent;
+}
+
+.post-header {
+  padding: 0 16px 12px 16px;
+}
+
+.post-meta {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  color: var(--ion-color-medium);
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.separator {
+  margin: 0 4px;
+}
+
+.post-title {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 8px 0 0 0;
+  color: var(--ion-text-color);
+}
+
+.post-body {
+  padding: 0 16px;
+}
+
+.post-content {
+  font-size: 16px;
+  line-height: 1.6;
+  margin: 16px 0;
+  white-space: pre-wrap;
+  color: var(--ion-text-color);
+}
+
+.post-image {
+  margin: 16px 0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.post-image img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.actions-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
+}
+
+.vote-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vote-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(var(--ion-card-background-rgb), 0.20);
+  border: 1px solid rgba(var(--ion-text-color-rgb), 0.1);
+  padding: 8px 12px;
+  font-size: 14px;
+  color: var(--ion-color-medium);
+  cursor: pointer;
+  border-radius: 14px;
+  font-family: inherit;
+  font-weight: 500;
+}
+
+.vote-button.upvote.active {
+  background: rgba(var(--ion-color-primary-rgb), 0.15);
+  color: var(--ion-color-primary);
+  border-color: rgba(var(--ion-color-primary-rgb), 0.3);
+}
+
+.vote-button.upvote.active ion-icon {
+  color: var(--ion-color-primary);
+}
+
+.vote-button.downvote.active {
+  color: var(--ion-color-danger);
+  background: rgba(var(--ion-color-danger-rgb), 0.15);
+  border-color: rgba(var(--ion-color-danger-rgb), 0.3);
+}
+
+.vote-button.downvote.active ion-icon {
+  color: var(--ion-color-danger);
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--ion-color-medium);
+  padding: 0 8px;
+}
+
+.action-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(var(--ion-card-background-rgb), 0.20);
+  border: 1px solid rgba(var(--ion-text-color-rgb), 0.1);
+  padding: 8px 14x;
+  font-size: 14px;
+  color: var(--ion-color-medium);
+  cursor: pointer;
+  border-radius: 14px;
+  font-family: inherit;
+}
+
+.section-separator {
+  height: 1px;
+  background: rgba(var(--ion-text-color-rgb), 0.08);
+  margin: 16px 0;
+}
+
+.commenters-section {
+  padding: 16px 0;
+  background: transparent;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+  padding: 0 16px;
+  color: var(--ion-text-color);
+}
+
+.commenters-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 16px;
+}
+
+.commenter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(var(--ion-card-background-rgb), 0.20);
+  border: 1px solid rgba(var(--ion-text-color-rgb), 0.1);
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.commenter-online-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ion-color-success);
+  flex-shrink: 0;
+}
+
+.commenter-name {
+  color: var(--ion-text-color);
+}
+
+.commenter-count {
+  font-size: 10px;
+  --padding-start: 4px;
+  --padding-end: 4px;
+}
+
+.comments-section {
+  padding: 16px 0;
+  background: transparent;
+}
+
+.add-comment-form {
+  margin-bottom: 24px;
+  padding: 0 16px;
+}
+
+.comment-textarea {
+  margin-bottom: 12px;
+  --background: rgba(var(--ion-card-background-rgb), 0.3);
+  --padding-start: 12px;
+  --padding-end: 12px;
+  --padding-top: 12px;
+  --padding-bottom: 12px;
+  border-radius: 12px;
+}
+
+.comments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0 16px;
+}
+
+.empty-comments {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 20px;
+  gap: 12px;
+}
+
+.empty-comments ion-icon {
+  font-size: 48px;
+  color: var(--ion-color-medium);
+}
+
+.empty-comments p {
+  margin: 0;
+  color: var(--ion-color-medium);
+}
+
+.subtitle {
+  font-size: 14px;
+}
+</style>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
@@ -562,260 +810,3 @@ onMounted(async () => {
   await loadPost();
 });
 </script>
-
-<style scoped>
-.loading-container,
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  gap: 16px;
-  text-align: center;
-}
-
-.empty-state ion-icon {
-  font-size: 64px;
-  color: var(--ion-color-medium);
-}
-
-.post-detail-card {
-  margin: 12px;
-  border-radius: 16px;
-}
-
-.post-meta {
-  display: flex;
-  align-items: center;
-  font-size: 12px;
-  color: var(--ion-color-medium);
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 12px;
-}
-
-.separator {
-  margin: 0 4px;
-}
-
-.post-title {
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 1.3;
-  margin: 8px 0;
-}
-
-.post-content {
-  font-size: 16px;
-  line-height: 1.6;
-  margin: 16px 0;
-  white-space: pre-wrap;
-}
-
-.post-image {
-  margin: 16px 0;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.post-image img {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-
-.actions-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.06);
-}
-
-.vote-buttons {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.vote-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(var(--ion-card-background-rgb), 0.20);
-  border: 1px solid var(--glass-border);
-  border-top-color: var(--glass-border-top);
-  padding: 8px 12px;
-  font-size: 14px;
-  color: var(--ion-color-medium);
-  cursor: pointer;
-  border-radius: 14px;
-  transition: all 0.2s ease;
-  font-family: inherit;
-  font-weight: 500;
-  backdrop-filter: blur(14px) saturate(1.4);
-  -webkit-backdrop-filter: blur(14px) saturate(1.4);
-  box-shadow: var(--glass-highlight);
-}
-
-.vote-button:hover {
-  background: rgba(var(--ion-color-primary-rgb), 0.1);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.2);
-}
-
-.vote-button:active {
-  transform: scale(0.95);
-}
-
-.vote-button.upvote.active {
-  background: rgba(var(--ion-color-primary-rgb), 0.15);
-  color: var(--ion-color-primary);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.3);
-}
-
-.vote-button.upvote.active ion-icon {
-  color: var(--ion-color-primary);
-}
-
-.vote-button.downvote.active {
-  color: var(--ion-color-danger);
-  background: rgba(var(--ion-color-danger-rgb), 0.15);
-  border-color: rgba(var(--ion-color-danger-rgb), 0.3);
-}
-
-.vote-button.downvote.active ion-icon {
-  color: var(--ion-color-danger);
-}
-
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 14px;
-  color: var(--ion-color-medium);
-  padding: 0 8px;
-}
-
-.action-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(var(--ion-card-background-rgb), 0.20);
-  border: 1px solid var(--glass-border);
-  border-top-color: var(--glass-border-top);
-  padding: 8px 12px;
-  font-size: 14px;
-  color: var(--ion-color-medium);
-  cursor: pointer;
-  border-radius: 14px;
-  transition: all 0.2s ease;
-  font-family: inherit;
-  backdrop-filter: blur(14px) saturate(1.4);
-  -webkit-backdrop-filter: blur(14px) saturate(1.4);
-  box-shadow: var(--glass-highlight);
-}
-
-.action-button:hover {
-  background: rgba(var(--ion-color-primary-rgb), 0.1);
-  color: var(--ion-color-primary);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.2);
-}
-
-.comments-card {
-  margin: 12px;
-}
-
-/* ── Commenters Panel ── */
-.commenters-card {
-  margin: 12px;
-}
-
-.commenters-title {
-  font-size: 16px;
-}
-
-.commenters-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.commenter-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: rgba(var(--ion-card-background-rgb), 0.20);
-  backdrop-filter: blur(14px) saturate(1.4);
-  -webkit-backdrop-filter: blur(14px) saturate(1.4);
-  border: 1px solid var(--glass-border);
-  border-top-color: var(--glass-border-top);
-  border-radius: 20px;
-  font-size: 13px;
-  font-weight: 500;
-  box-shadow: var(--glass-highlight);
-}
-
-.commenter-online-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--ion-color-success);
-  flex-shrink: 0;
-  box-shadow: 0 0 4px rgba(var(--ion-color-success-rgb), 0.5);
-}
-
-.commenter-name {
-  color: var(--ion-text-color);
-}
-
-.commenter-count {
-  font-size: 10px;
-  --padding-start: 4px;
-  --padding-end: 4px;
-}
-
-.add-comment-form {
-  margin-bottom: 24px;
-}
-
-.comment-textarea {
-  margin-bottom: 12px;
-  --background: rgba(var(--ion-card-background-rgb), 0.3);
-  --padding-start: 12px;
-  --padding-end: 12px;
-  --padding-top: 12px;
-  --padding-bottom: 12px;
-  border-radius: 12px;
-}
-
-.comments-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.empty-comments {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 40px 20px;
-  gap: 12px;
-}
-
-.empty-comments ion-icon {
-  font-size: 48px;
-  color: var(--ion-color-medium);
-}
-
-.empty-comments p {
-  margin: 0;
-  color: var(--ion-color-medium);
-}
-
-.subtitle {
-  font-size: 14px;
-}
-</style>

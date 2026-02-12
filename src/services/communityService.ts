@@ -14,50 +14,31 @@ export interface Community {
 }
 
 export class CommunityService {
-  private static get gun() {
-    return GunService.getGun();
-  }
+  private static get gun() { return GunService.getGun(); }
+  private static getCommunityNode(id: string) { return this.gun.get('communities').get(id); }
 
-  private static getCommunityNode(id: string) {
-    return this.gun.get('communities').get(id);
-  }
+  // ─── Create ────────────────────────────────────────────────────────────────
 
   static async createCommunity(data: {
-    name: string;
-    displayName: string;
-    description: string;
-    rules: string[];
-    creatorId: string;
+    name: string; displayName: string; description: string;
+    rules: string[]; creatorId: string;
   }): Promise<Community> {
     const id = `c-${data.name.toLowerCase().replace(/\s+/g, '-')}`;
-
     const community: Community = {
-      id,
-      name: data.name,
-      displayName: data.displayName,
-      description: data.description,
-      rules: data.rules,
-      creatorId: data.creatorId,
-      createdAt: Date.now(),
-      memberCount: 1,
-      postCount: 0,
+      id, name: data.name, displayName: data.displayName,
+      description: data.description, rules: data.rules,
+      creatorId: data.creatorId, createdAt: Date.now(), memberCount: 1, postCount: 0,
     };
 
     const gunData = {
-      id: community.id,
-      name: community.name,
-      displayName: community.displayName,
-      description: community.description,
-      creatorId: community.creatorId,
-      createdAt: community.createdAt,
-      memberCount: community.memberCount,
+      id: community.id, name: community.name, displayName: community.displayName,
+      description: community.description, creatorId: community.creatorId,
+      createdAt: community.createdAt, memberCount: community.memberCount,
       postCount: community.postCount,
     };
 
-    // Save core fields
     await this.put(this.getCommunityNode(id), gunData);
 
-    // Save rules as indexed object (Gun-friendly)
     if (community.rules.length > 0) {
       const rulesObj = Object.fromEntries(community.rules.map((rule, i) => [i, rule]));
       await this.put(this.getCommunityNode(id).get('rules'), rulesObj);
@@ -66,77 +47,89 @@ export class CommunityService {
     return community;
   }
 
-  static subscribeToCommunities(callback: (community: Community) => void): void {
+  // ─── Live subscription (replaces subscribeToCommunities) ──────────────────
+
+  /**
+   * Real persistent .on() subscription — fires for EVERY community node
+   * update, both from localStorage cache (immediate) and from relay (delayed).
+   *
+   * The old subscribeToCommunities used .once() which is a snapshot read —
+   * it fires once from whatever Gun has right now and stops. Communities that
+   * haven't synced from the relay yet never arrive, so the communities list
+   * stays partial and loadAllPosts() only subscribes to the cached subset.
+   *
+   * This version keeps listening, so communities arriving late from the relay
+   * still push into the store and trigger the HomePage watcher.
+   */
+  static subscribeToCommunitiesLive(callback: (community: Community) => void): () => void {
     const seen = new Set<string>();
 
-    this.gun
+    const listener = this.gun
       .get('communities')
       .map()
-      .once((data: any, key: string) => {
-        if (!data?.name || !data?.id || seen.has(key) || key.startsWith('_')) {
-          return;
-        }
-
+      .on((data: any, key: string) => {
+        if (!data?.name || !data?.id || seen.has(key) || key.startsWith('_')) return;
         seen.add(key);
 
         this.loadRules(key).then((rules) => {
-          const community = this.mapToCommunity(data, rules);
-          callback(community);
+          callback(this.mapToCommunity(data, rules));
         });
       });
+
+    // Return unsubscribe function
+    return () => { if (listener) listener.off(); };
   }
+
+  /**
+   * @deprecated — used .once() so only fired from localStorage cache snapshot.
+   * Use subscribeToCommunitiesLive instead.
+   */
+  static subscribeToCommunities(callback: (community: Community) => void): void {
+    const seen = new Set<string>();
+    this.gun.get('communities').map().once((data: any, key: string) => {
+      if (!data?.name || !data?.id || seen.has(key) || key.startsWith('_')) return;
+      seen.add(key);
+      this.loadRules(key).then((rules) => callback(this.mapToCommunity(data, rules)));
+    });
+  }
+
+  // ─── Single fetch ──────────────────────────────────────────────────────────
 
   static async getCommunity(communityId: string): Promise<Community | null> {
     const node = this.getCommunityNode(communityId);
-
     const [data, rules] = await Promise.all([
       this.once<any>(node),
       this.loadRules(communityId),
     ]);
-
-    if (!data || !data.name) {
-      return null;
-    }
-
+    if (!data?.name) return null;
     return this.mapToCommunity(data, rules);
   }
 
   static async joinCommunity(communityId: string): Promise<void> {
     const community = await this.getCommunity(communityId);
-    if (!community) {
-      throw new Error('Community not found');
-    }
-
-    const newCount = community.memberCount + 1;
-
+    if (!community) throw new Error('Community not found');
     await this.put(
       this.getCommunityNode(communityId).get('memberCount'),
-      newCount
+      community.memberCount + 1
     );
   }
 
+  /** @deprecated use subscribeToCommunitiesLive */
   static async getAllCommunities(): Promise<Community[]> {
     return new Promise<Community[]>((resolve) => {
       const communities: Community[] = [];
       const seen = new Set<string>();
-
-      this.gun
-        .get('communities')
-        .map()
-        .once(async (data: any, key: string) => {
-          if (!data?.name || !data?.id || seen.has(key) || key.startsWith('_')) return;
-          seen.add(key);
-
-          const rules = await this.loadRules(key);
-          communities.push(this.mapToCommunity(data, rules));
-        });
-
-      // Gun eventual consistency window
+      this.gun.get('communities').map().once(async (data: any, key: string) => {
+        if (!data?.name || !data?.id || seen.has(key) || key.startsWith('_')) return;
+        seen.add(key);
+        const rules = await this.loadRules(key);
+        communities.push(this.mapToCommunity(data, rules));
+      });
       setTimeout(() => resolve(communities), 1200);
     });
   }
 
-  // ─── Helpers ────────────────────────────────────────────────────────────────
+  // ─── Helpers ───────────────────────────────────────────────────────────────
 
   private static put(node: any, value: any): Promise<void> {
     return new Promise((res, rej) =>
@@ -148,32 +141,19 @@ export class CommunityService {
     return new Promise((res) => {
       let done = false;
       node.once((val: any) => {
-        if (!done) {
-          done = true;
-          res(val ?? null);
-        }
+        if (!done) { done = true; res(val ?? null); }
       });
-      setTimeout(() => {
-        if (!done) {
-          done = true;
-          res(null);
-        }
-      }, 800);
+      setTimeout(() => { if (!done) { done = true; res(null); } }, 800);
     });
   }
 
   private static async loadRules(communityId: string): Promise<string[]> {
-    const rulesNode = this.getCommunityNode(communityId).get('rules');
-    const data = await this.once<any>(rulesNode);
-
-    if (!data || typeof data !== 'object') {
-      return [];
-    }
-
+    const data = await this.once<any>(this.getCommunityNode(communityId).get('rules'));
+    if (!data || typeof data !== 'object') return [];
     return Object.keys(data)
-      .filter((k) => !k.startsWith('_'))
+      .filter(k => !k.startsWith('_'))
       .sort((a, b) => Number(a) - Number(b))
-      .map((k) => data[k] as string)
+      .map(k => data[k] as string)
       .filter(Boolean);
   }
 

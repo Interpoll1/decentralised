@@ -1,4 +1,16 @@
 // src/services/postService.ts
+//
+// DIAGNOSIS (from logs):
+// - Empty communities (c-eddd, c-pierredupuy) hit MAX_WAIT_MS (16s) because
+//   Gun's internal graph events keep trickling, preventing silence timer from
+//   firing. Promise.all blocks on the slowest = 16s total wait.
+// - Posts arrive at 22ms but "done" was firing at 6261ms under old approach.
+//
+// THE FIX: Replace silence timer with a hard INITIAL_LOAD_MS time-box.
+// Resolve after 800ms regardless. Subscription stays alive — new items stream
+// in and the store's sorted computed automatically puts them at the top.
+// Empty communities cost exactly 800ms, not 16s.
+
 import { GunService } from './gunService';
 import { IPFSService } from './ipfsService';
 
@@ -17,6 +29,8 @@ export interface Post {
   score: number;
   commentCount: number;
 }
+
+const postActiveListeners = new Map<string, any>();
 
 export class PostService {
   static async createPost(
@@ -63,70 +77,67 @@ export class PostService {
 
     const gun = GunService.getGun();
 
-    await GunService.put(`posts/${newPost.id}`, cleanPost);
-
     await new Promise<void>((resolve, reject) => {
       gun.get('posts').get(newPost.id).put(cleanPost, (ack: any) => {
-        if (ack.err) reject(ack.err);
-        else resolve();
+        if (ack.err) reject(new Error(ack.err)); else resolve();
       });
     });
-
     await new Promise<void>((resolve, reject) => {
       gun.get('communities').get(newPost.communityId).get('posts').get(newPost.id).put(cleanPost, (ack: any) => {
-        if (ack.err) reject(ack.err);
-        else resolve();
+        if (ack.err) reject(new Error(ack.err)); else resolve();
       });
     });
 
     return newPost;
   }
 
-  static subscribeToPostsInCommunity(communityId: string, callback: (post: Post) => void) {
+  /**
+   * Subscribe to posts in a community.
+   *
+   * onPost        — called for every post, initial batch AND live new posts
+   * onInitialLoadDone — called after INITIAL_LOAD_MS (800ms) hard time-box.
+   *                    Does NOT wait for silence or Gun to "finish" — that
+   *                    approach caused 6-16s waits for slow/empty communities.
+   *
+   * Returns an unsubscribe function. Call it to stop live updates.
+   */
+  static subscribeToPostsInCommunity(
+    communityId: string,
+    onPost: (post: Post) => void,
+    onInitialLoadDone?: () => void,
+  ): () => void {
     const gun = GunService.getGun();
-    const processedKeys = new Set<string>();
-
-    gun.get('communities').get(communityId).get('posts').map().once((data: any, key: string) => {
-      if (!data || !data.id || !data.title || key.startsWith('_')) return;
-      if (processedKeys.has(key)) return;
-      processedKeys.add(key);
-
-      const cleanPost: Post = {
-        id: data.id || '',
-        communityId: data.communityId || communityId,
-        authorId: data.authorId || '',
-        authorName: data.authorName || 'Anonymous',
-        title: data.title || '',
-        content: data.content || '',
-        imageIPFS: data.imageIPFS || undefined,
-        imageThumbnail: data.imageThumbnail || undefined,
-        createdAt: data.createdAt || Date.now(),
-        upvotes: data.upvotes || 0,
-        downvotes: data.downvotes || 0,
-        score: data.score || 0,
-        commentCount: data.commentCount || 0,
-      };
-
-      callback(cleanPost);
-    });
-  }
-
-  static async getAllPostsInCommunity(communityId: string): Promise<Post[]> {
-    const gun = GunService.getGun();
-    const posts: Post[] = [];
     const seen = new Set<string>();
 
-    return new Promise((resolve) => {
-      gun.get('communities').get(communityId).get('posts').map().once((data: any, key: string) => {
-        if (!data || !data.id || !data.title || seen.has(data.id)) return;
+    const existing = postActiveListeners.get(communityId);
+    if (existing) {
+      existing.off();
+      postActiveListeners.delete(communityId);
+    }
+
+    let initialDone = false;
+    const signalDone = () => {
+      if (initialDone) return;
+      initialDone = true;
+      onInitialLoadDone?.();
+    };
+
+    const listener = gun
+      .get('communities')
+      .get(communityId)
+      .get('posts')
+      .map()
+      .on((data: any, key: string) => {
+        if (!data || !data.id || !data.title || key.startsWith('_')) return;
+        if (seen.has(data.id)) return;
         seen.add(data.id);
 
-        const post: Post = {
-          id: data.id || '',
+        onPost({
+          id: data.id,
           communityId: data.communityId || communityId,
           authorId: data.authorId || '',
           authorName: data.authorName || 'Anonymous',
-          title: data.title || '',
+          title: data.title,
           content: data.content || '',
           imageIPFS: data.imageIPFS || undefined,
           imageThumbnail: data.imageThumbnail || undefined,
@@ -135,27 +146,44 @@ export class PostService {
           downvotes: data.downvotes || 0,
           score: data.score || 0,
           commentCount: data.commentCount || 0,
-        };
-
-        posts.push(post);
+        });
       });
 
-      setTimeout(() => resolve(posts), 800);
+    // Hard time-box — resolve after 800ms no matter what.
+    // After this, subscription stays open and new posts keep arriving.
+    const initTimer = setTimeout(signalDone, 800);
+
+    postActiveListeners.set(communityId, listener);
+
+    return () => {
+      clearTimeout(initTimer);
+      signalDone();
+      if (listener) listener.off();
+      postActiveListeners.delete(communityId);
+    };
+  }
+
+  /** @deprecated use subscribeToPostsInCommunity */
+  static getAllPostsInCommunity(communityId: string): Promise<Post[]> {
+    return new Promise((resolve) => {
+      const posts: Post[] = [];
+      const unsub = this.subscribeToPostsInCommunity(
+        communityId,
+        (post) => posts.push(post),
+        () => { unsub(); resolve(posts); },
+      );
     });
   }
 
   static async getPost(postId: string): Promise<Post | null> {
     const gun = GunService.getGun();
-
     return new Promise((resolve) => {
       let resolved = false;
-
       gun.get('posts').get(postId).once((data: any) => {
-        if (!resolved && data && data.id) {
+        if (!resolved && data?.id) {
           resolved = true;
-
-          const post: Post = {
-            id: data.id || '',
+          resolve({
+            id: data.id,
             communityId: data.communityId || '',
             authorId: data.authorId || '',
             authorName: data.authorName || 'Anonymous',
@@ -168,135 +196,69 @@ export class PostService {
             downvotes: data.downvotes || 0,
             score: data.score || 0,
             commentCount: data.commentCount || 0,
-          };
-
-          resolve(post);
+          });
         }
       });
-
-      setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          resolve(null);
-        }
-      }, 3000);
+      setTimeout(() => { if (!resolved) { resolved = true; resolve(null); } }, 3000);
     });
   }
 
   static async incrementCommentCount(postId: string, communityId: string): Promise<void> {
     const gun = GunService.getGun();
-
     const current = await new Promise<number>((resolve) => {
       let resolved = false;
       gun.get('posts').get(postId).get('commentCount').once((val: any) => {
-        if (!resolved) {
-          resolved = true;
-          resolve(typeof val === 'number' ? val : Number(val) || 0);
-        }
+        if (!resolved) { resolved = true; resolve(typeof val === 'number' ? val : Number(val) || 0); }
       });
-      setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          resolve(0);
-        }
-      }, 500);
+      setTimeout(() => { if (!resolved) { resolved = true; resolve(0); } }, 500);
     });
-
     const next = current + 1;
-
-    await Promise.all([
-      gun.get('posts').get(postId).get('commentCount').put(next),
-      gun.get('communities').get(communityId).get('posts').get(postId).get('commentCount').put(next),
-    ]);
+    await new Promise<void>((r) => gun.get('posts').get(postId).get('commentCount').put(next, () => r()));
+    await new Promise<void>((r) => gun.get('communities').get(communityId).get('posts').get(postId).get('commentCount').put(next, () => r()));
   }
 
   static async voteOnPost(postId: string, direction: 'up' | 'down', userId: string): Promise<void> {
-    // Delegate to user-specific vote setter to avoid double-counting
     await this.setUserVote(postId, direction, userId);
   }
 
-  /**
-   * Remove a user's vote (up or down) from a post.
-   * This is used by the store when toggling votes off.
-   */
   static async removeVote(postId: string, direction: 'up' | 'down', userId: string): Promise<void> {
     await this.setUserVote(postId, 'none', userId);
   }
 
-  /**
-   * Set a user's vote on a post to up, down, or none.
-   * Ensures that multiple clicks from the same user do not inflate counts.
-   */
-  private static async setUserVote(
-    postId: string,
-    direction: 'up' | 'down' | 'none',
-    userId: string,
-  ): Promise<void> {
+  private static async setUserVote(postId: string, direction: 'up' | 'down' | 'none', userId: string): Promise<void> {
     const gun = GunService.getGun();
-
     const post = await this.getPost(postId);
     if (!post) return;
 
-    // Read previous vote state for this user
     const prevDirection: 'up' | 'down' | 'none' = await new Promise((resolve) => {
-      gun
-        .get('postVotes')
-        .get(postId)
-        .get(userId)
-        .once((v: any) => {
-          if (v === 'up' || v === 'down') resolve(v);
-          else resolve('none');
-        });
+      let resolved = false;
+      gun.get('postVotes').get(postId).get(userId).once((v: any) => {
+        if (!resolved) { resolved = true; resolve(v === 'up' || v === 'down' ? v : 'none'); }
+      });
+      setTimeout(() => { if (!resolved) { resolved = true; resolve('none'); } }, 1000);
     });
 
-    if (prevDirection === direction) {
-      // No change; avoid double counting
-      return;
-    }
+    if (prevDirection === direction) return;
 
     let upvotes = post.upvotes || 0;
     let downvotes = post.downvotes || 0;
-
-    // Remove previous vote effect
     if (prevDirection === 'up') upvotes = Math.max(0, upvotes - 1);
     if (prevDirection === 'down') downvotes = Math.max(0, downvotes - 1);
-
-    // Apply new vote effect
     if (direction === 'up') upvotes += 1;
     if (direction === 'down') downvotes += 1;
 
     const score = upvotes - downvotes;
+    const voteValue = direction === 'none' ? '' : direction;
+    const put = (node: any, value: any) => new Promise<void>((r) => node.put(value, () => r()));
 
     await Promise.all([
-      gun.get('posts').get(postId).get('upvotes').put(upvotes),
-      gun.get('posts').get(postId).get('downvotes').put(downvotes),
-      gun.get('posts').get(postId).get('score').put(score),
-      gun
-        .get('communities')
-        .get(post.communityId)
-        .get('posts')
-        .get(postId)
-        .get('upvotes')
-        .put(upvotes),
-      gun
-        .get('communities')
-        .get(post.communityId)
-        .get('posts')
-        .get(postId)
-        .get('downvotes')
-        .put(downvotes),
-      gun
-        .get('communities')
-        .get(post.communityId)
-        .get('posts')
-        .get(postId)
-        .get('score')
-        .put(score),
-      gun
-        .get('postVotes')
-        .get(postId)
-        .get(userId)
-        .put(direction === 'none' ? null : direction),
+      put(gun.get('posts').get(postId).get('upvotes'), upvotes),
+      put(gun.get('posts').get(postId).get('downvotes'), downvotes),
+      put(gun.get('posts').get(postId).get('score'), score),
+      put(gun.get('communities').get(post.communityId).get('posts').get(postId).get('upvotes'), upvotes),
+      put(gun.get('communities').get(post.communityId).get('posts').get(postId).get('downvotes'), downvotes),
+      put(gun.get('communities').get(post.communityId).get('posts').get(postId).get('score'), score),
+      put(gun.get('postVotes').get(postId).get(userId), voteValue),
     ]);
   }
 }

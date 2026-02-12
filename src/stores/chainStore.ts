@@ -101,38 +101,50 @@ export const useChainStore = defineStore('chain', () => {
   }
 
   async function handleSyncResponse(data: any) {
-    if (!data?.blocks?.length) return;
+  if (!data?.blocks?.length) return;
 
-    // Sort incoming blocks by index for sequential validation
-    const sorted = [...data.blocks].sort((a: ChainBlock, b: ChainBlock) => a.index - b.index);
-    let addedCount = 0;
+  const sorted = [...data.blocks].sort((a: ChainBlock, b: ChainBlock) => a.index - b.index);
+  let addedCount = 0;
 
-    for (const block of sorted) {
-      const exists = blocks.value.find((b) => b.index === block.index);
-      if (exists) continue;
+  for (const block of sorted) {
+    const exists = blocks.value.find((b) => b.index === block.index);
+    if (exists) {
+      // Skip if we already have this exact block
+      if (exists.currentHash === block.currentHash) continue;
+      
+      // Conflict: same index, different hash - ignore remote block
+      continue;
+    }
 
-      // Find the previous block for validation
-      const previousBlock = blocks.value.find((b) => b.index === block.index - 1);
-
-      if (block.index === 0) {
-        // Genesis block: verify hash integrity
+    if (block.index === 0) {
+      // Only accept genesis if we don't have one
+      if (blocks.value.length === 0) {
         const calculatedHash = CryptoService.hashBlock(block);
         if (block.currentHash === calculatedHash) {
           await StorageService.saveBlock(block);
           blocks.value.push(block);
           addedCount++;
         }
-      } else if (previousBlock && ChainService.validateBlock(block, previousBlock)) {
-        await StorageService.saveBlock(block);
-        blocks.value.push(block);
-        addedCount++;
       }
-    }
-
-    if (addedCount > 0) {
-      blocks.value.sort((a, b) => a.index - b.index);
+    } else {
+      // Only add if previous block exists AND matches
+      const previousBlock = blocks.value.find((b) => b.index === block.index - 1);
+      
+      if (previousBlock && previousBlock.currentHash === block.previousHash) {
+        if (ChainService.validateBlock(block, previousBlock)) {
+          await StorageService.saveBlock(block);
+          blocks.value.push(block);
+          addedCount++;
+        }
+      }
+      // If previous block doesn't exist or doesn't match, skip this block
     }
   }
+
+  if (addedCount > 0) {
+    blocks.value.sort((a, b) => a.index - b.index);
+  }
+}
 
   async function handleNewEvent(eventData: any) {
     // Verify the Nostr event signature before accepting

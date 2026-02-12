@@ -10,57 +10,50 @@ export const useCommunityStore = defineStore('community', () => {
   const isLoading = ref(false);
   const joinedCommunities = ref<Set<string>>(new Set());
 
+  // Guard: track whether the live subscription is already running.
+  // loadCommunities() was being called multiple times (onMounted + interval +
+  // tab switch) and each call did communities.value = [] then re-read from
+  // Gun's localStorage cache — blowing away anything that arrived late from
+  // the relay and causing the communities watcher to re-fire with a partial list.
+  let subscriptionStarted = false;
+  const seen = new Set<string>();
+
+  // ─── Load ──────────────────────────────────────────────────────────────────
+
   async function loadCommunities() {
+    // Only start the subscription once. Subsequent calls are no-ops because
+    // the live .on() subscription below already delivers new communities.
+    if (subscriptionStarted) return;
+    subscriptionStarted = true;
     isLoading.value = true;
-    communities.value = [];
-    
-    try {
-      const seen = new Set<string>();
-      let subscriptionActive = true;
-      
-      // Subscribe to real-time updates
-      CommunityService.subscribeToCommunities((community) => {
-        // Prevent duplicates
-        if (!seen.has(community.id)) {
-          seen.add(community.id);
-          communities.value.push(community);
-        } else {
-          // Update existing community
-          const index = communities.value.findIndex(c => c.id === community.id);
-          if (index >= 0) {
-            // Only update if data actually changed
-            const existing = communities.value[index];
-            if (JSON.stringify(existing) !== JSON.stringify(community)) {
-              communities.value[index] = community;
-            }
+
+    // Use a real .on() subscription (not .once()) so communities that arrive
+    // late from the relay (not yet in localStorage cache) still populate the
+    // list and trigger the HomePage communities watcher for post loading.
+    CommunityService.subscribeToCommunitiesLive((community) => {
+      if (seen.has(community.id)) {
+        // Update in place if data changed
+        const index = communities.value.findIndex(c => c.id === community.id);
+        if (index >= 0) {
+          const existing = communities.value[index];
+          if (JSON.stringify(existing) !== JSON.stringify(community)) {
+            communities.value[index] = community;
           }
         }
-      });
-      
-      // Also do a one-time fetch for initial load
-      setTimeout(async () => {
-        if (!subscriptionActive) return;
-        
-        const allCommunities = await CommunityService.getAllCommunities();
-        
-        // Merge with existing
-        allCommunities.forEach(community => {
-          if (!seen.has(community.id)) {
-            seen.add(community.id);
-            communities.value.push(community);
-          }
-        });
-        
-        isLoading.value = false;
-      }, 1000); // Wait 1 second for Gun to sync (faster)
-      
-    } catch (error) {
-      console.error('Error loading communities:', error);
-      isLoading.value = false;
-    }
+      } else {
+        seen.add(community.id);
+        communities.value.push(community);
+      }
+    });
+
+    // Signal loading done after a fixed window — same pattern as postService.
+    // Communities cached in localStorage arrive in <50ms. Relay-only ones
+    // arrive within 1200ms. After that, the live subscription handles the rest.
+    setTimeout(() => { isLoading.value = false; }, 1200);
   }
 
-  // Create new community
+  // ─── Create ────────────────────────────────────────────────────────────────
+
   async function createCommunity(data: {
     name: string;
     displayName: string;
@@ -73,7 +66,6 @@ export const useCommunityStore = defineStore('community', () => {
         creatorId: 'current-user-id',
       });
 
-      // Record on blockchain
       const chainStore = useChainStore();
       await chainStore.addAction('community-create', {
         communityId: community.id,
@@ -82,9 +74,8 @@ export const useCommunityStore = defineStore('community', () => {
         timestamp: community.createdAt,
       }, community.displayName);
 
-      // Add to local array immediately
-      const exists = communities.value.find(c => c.id === community.id);
-      if (!exists) {
+      if (!seen.has(community.id)) {
+        seen.add(community.id);
         communities.value.unshift(community);
       }
 
@@ -95,72 +86,62 @@ export const useCommunityStore = defineStore('community', () => {
     }
   }
 
-  // Select community
+  // ─── Select ────────────────────────────────────────────────────────────────
+
   async function selectCommunity(communityId: string) {
     try {
-      // First check if we have it locally
       const local = communities.value.find(c => c.id === communityId);
-      if (local) {
-        currentCommunity.value = local;
-        return;
-      }
-      
-      // Otherwise fetch from Gun
+      if (local) { currentCommunity.value = local; return; }
+
       currentCommunity.value = await CommunityService.getCommunity(communityId);
-      
-      if (currentCommunity.value) {
-        // Add to communities array if not present
-        const exists = communities.value.find(c => c.id === communityId);
-        if (!exists) {
-          communities.value.push(currentCommunity.value);
-        }
+
+      if (currentCommunity.value && !seen.has(currentCommunity.value.id)) {
+        seen.add(currentCommunity.value.id);
+        communities.value.push(currentCommunity.value);
       }
     } catch (error) {
       console.error('Error selecting community:', error);
     }
   }
 
-  // Join community
+  // ─── Join ──────────────────────────────────────────────────────────────────
+
   async function joinCommunity(communityId: string) {
     try {
       await CommunityService.joinCommunity(communityId);
       joinedCommunities.value.add(communityId);
-      
-      // Save to local storage
-      localStorage.setItem('joined-communities', JSON.stringify(Array.from(joinedCommunities.value)));
-
-      // Refresh the community to get updated member count
+      localStorage.setItem('joined-communities', JSON.stringify(
+        Array.from(joinedCommunities.value)
+      ));
       await selectCommunity(communityId);
     } catch (error) {
       console.error('Error joining community:', error);
     }
   }
 
-  // Check if joined
   function isJoined(communityId: string): boolean {
     return joinedCommunities.value.has(communityId);
   }
 
-  // Load joined communities from storage
   function loadJoinedCommunities() {
     try {
       const stored = localStorage.getItem('joined-communities');
-      if (stored) {
-        const joined = JSON.parse(stored);
-        joinedCommunities.value = new Set(joined);
-      }
+      if (stored) joinedCommunities.value = new Set(JSON.parse(stored));
     } catch (error) {
       console.error('Error loading joined communities:', error);
     }
   }
 
-  // Refresh communities (force reload)
   async function refreshCommunities() {
+    // Full reset — only use for explicit pull-to-refresh, not on tab switch
+    subscriptionStarted = false;
+    seen.clear();
     communities.value = [];
     await loadCommunities();
   }
 
-  // Initialize
+  // ─── Init ──────────────────────────────────────────────────────────────────
+
   loadJoinedCommunities();
 
   return {

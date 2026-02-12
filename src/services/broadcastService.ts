@@ -1,22 +1,10 @@
-// src/services/broadcastService.ts
-import { StorageService } from './storageService';
-import { Poll, ChainBlock } from '../types/chain';
-
-type SyncMessage =
-  | { type: 'new-poll'; data: Poll }
-  | { type: 'new-block'; data: ChainBlock }
-  | { type: 'request-sync'; peerId: string }
-  | { type: 'sync-response'; polls: Poll[]; blocks: ChainBlock[] };
-
 export class BroadcastService {
   private static channel: BroadcastChannel | null = null;
   private static peerId: string = Math.random().toString(36).substring(7);
   private static callbacks: Map<string, (data: any) => void> = new Map();
 
   static initialize() {
-    if (typeof BroadcastChannel === 'undefined') {
-      return;
-    }
+    if (typeof BroadcastChannel === 'undefined') return;
 
     this.channel = new BroadcastChannel('interpoll-sync');
 
@@ -24,14 +12,10 @@ export class BroadcastService {
       const message = event.data;
 
       // Don't process our own messages
-      if ('peerId' in message && message.peerId === this.peerId) {
-        return;
-      }
+      if ('peerId' in message && message.peerId === this.peerId) return;
 
       const callback = this.callbacks.get(message.type);
-      if (callback) {
-        callback(message.data || message);
-      }
+      if (callback) callback(message.data || message);
     };
 
     // Request initial sync from other tabs
@@ -47,7 +31,7 @@ export class BroadcastService {
 
     try {
       this.channel.postMessage(message);
-    } catch (error) {
+    } catch {
       // silently ignore postMessage errors
     }
   }
@@ -61,10 +45,8 @@ export class BroadcastService {
   }
 
   static cleanup() {
-    if (this.channel) {
-      this.channel.close();
-      this.channel = null;
-    }
+    if (this.channel) this.channel.close();
+    this.channel = null;
     this.callbacks.clear();
   }
 }

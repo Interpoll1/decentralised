@@ -1,84 +1,86 @@
 <template>
-  <ion-card class="poll-card" @click="$emit('click')">
-    <ion-card-content>
-      <!-- Poll Header -->
-      <div class="poll-header">
-        <div class="poll-badge">
-          <ion-icon :icon="statsChartOutline"></ion-icon>
-          <span>Poll</span>
+  <div class="poll-card" @click="$emit('click')">
+    <!-- Poll Header -->
+    <div class="poll-header">
+      <div class="poll-badge">
+        <ion-icon :icon="statsChartOutline"></ion-icon>
+        <span>Poll</span>
+      </div>
+      <div class="poll-meta">
+        <span class="author">u/{{ poll.authorName || 'Unknown' }}</span>
+        <span class="separator">•</span>
+        <span class="timestamp">{{ formatTime(poll.createdAt) }}</span>
+        <span v-if="poll.isExpired" class="expired-badge">Ended</span>
+      </div>
+    </div>
+
+    <!-- Poll Question -->
+    <h3 class="poll-question">{{ poll.question || 'Untitled Poll' }}</h3>
+
+    <!-- Poll Description -->
+    <p v-if="poll.description" class="poll-description">{{ poll.description }}</p>
+
+    <!-- Poll Options Preview -->
+    <div v-if="poll.options && poll.options.length > 0" class="poll-options-preview">
+      <div 
+        v-for="(option, index) in poll.options.slice(0, 3)" 
+        :key="option.id || index"
+        class="option-preview"
+      >
+        <div class="option-bar">
+          <div 
+            class="option-fill" 
+            :style="{ width: `${getOptionPercent(option)}%` }"
+          ></div>
         </div>
-        <div class="poll-meta">
-          <span class="author">u/{{ poll.authorName || 'Unknown' }}</span>
-          <span class="separator">•</span>
-          <span class="timestamp">{{ formatTime(poll.createdAt) }}</span>
-          <span v-if="poll.isExpired" class="expired-badge">Ended</span>
+        <div class="option-info">
+          <span class="option-text">{{ option.text || `Option ${index + 1}` }}</span>
+          <span class="option-votes">{{ option.votes || 0 }} votes</span>
+        </div>
+      </div>
+      <div v-if="poll.options.length > 3" class="more-options">
+        +{{ poll.options.length - 3 }} more option{{ poll.options.length - 3 !== 1 ? 's' : '' }}
+      </div>
+    </div>
+
+    <!-- No options message -->
+    <div v-else class="no-options">
+      <p>No poll options available</p>
+    </div>
+
+    <!-- Poll Footer -->
+    <div class="poll-footer">
+      <div class="poll-stats">
+        <div class="stat-item">
+          <ion-icon :icon="peopleOutline"></ion-icon>
+          <span>{{ poll.totalVotes || 0 }} vote{{ (poll.totalVotes || 0) !== 1 ? 's' : '' }}</span>
+        </div>
+        
+        <div class="stat-item">
+          <ion-icon :icon="timeOutline"></ion-icon>
+          <span>{{ getTimeRemaining() }}</span>
+        </div>
+
+        <div v-if="poll.allowMultipleChoices" class="stat-item">
+          <ion-icon :icon="checkmarkDoneOutline"></ion-icon>
+          <span>Multiple choice</span>
         </div>
       </div>
 
-      <!-- Poll Question -->
-      <h3 class="poll-question">{{ poll.question || 'Untitled Poll' }}</h3>
+      <ion-button fill="clear" size="small" @click.stop="$emit('vote')">
+        Vote Now
+        <ion-icon slot="end" :icon="chevronForwardOutline"></ion-icon>
+      </ion-button>
+    </div>
 
-      <!-- Poll Description -->
-      <p v-if="poll.description" class="poll-description">{{ poll.description }}</p>
-
-      <!-- Poll Options Preview -->
-      <div v-if="poll.options && poll.options.length > 0" class="poll-options-preview">
-        <div 
-          v-for="(option, index) in poll.options.slice(0, 3)" 
-          :key="option.id || index"
-          class="option-preview"
-        >
-          <div class="option-bar">
-            <div 
-              class="option-fill" 
-              :style="{ width: `${getOptionPercent(option)}%` }"
-            ></div>
-          </div>
-          <div class="option-info">
-            <span class="option-text">{{ option.text || `Option ${index + 1}` }}</span>
-            <span class="option-votes">{{ option.votes || 0 }} votes</span>
-          </div>
-        </div>
-        <div v-if="poll.options.length > 3" class="more-options">
-          +{{ poll.options.length - 3 }} more option{{ poll.options.length - 3 !== 1 ? 's' : '' }}
-        </div>
-      </div>
-
-      <!-- No options message -->
-      <div v-else class="no-options">
-        <p>No poll options available</p>
-      </div>
-
-      <!-- Poll Footer -->
-      <div class="poll-footer">
-        <div class="poll-stats">
-          <div class="stat-item">
-            <ion-icon :icon="peopleOutline"></ion-icon>
-            <span>{{ poll.totalVotes || 0 }} vote{{ (poll.totalVotes || 0) !== 1 ? 's' : '' }}</span>
-          </div>
-          
-          <div class="stat-item">
-            <ion-icon :icon="timeOutline"></ion-icon>
-            <span>{{ getTimeRemaining() }}</span>
-          </div>
-
-          <div v-if="poll.allowMultipleChoices" class="stat-item">
-            <ion-icon :icon="checkmarkDoneOutline"></ion-icon>
-            <span>Multiple choice</span>
-          </div>
-        </div>
-
-        <ion-button fill="clear" size="small" @click.stop="$emit('vote')">
-          Vote Now
-          <ion-icon slot="end" :icon="chevronForwardOutline"></ion-icon>
-        </ion-button>
-      </div>
-    </ion-card-content>
-  </ion-card>
+    <!-- Separator line -->
+    <div class="poll-separator"></div>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { IonCard, IonCardContent, IonIcon, IonButton } from '@ionic/vue';
+import { IonIcon, IonButton } from '@ionic/vue';
+
 import { 
   statsChartOutline,
   peopleOutline,
@@ -133,12 +135,20 @@ function getTimeRemaining(): string {
 }
 </script>
 
+
 <style scoped>
 .poll-card {
-  margin: 12px 12px;
+  margin-left: 20px;
+  margin-right: 15px;
+  padding: 16px 0;
   cursor: pointer;
-  border-left: 4px solid var(--ion-color-tertiary) !important;
-  border-radius: 20px;
+  background: transparent;
+}
+
+.poll-separator {
+  height: 1px;
+  background: rgba(var(--ion-text-color-rgb), 0.08);
+  margin-top: 16px;
 }
 
 .poll-header {
@@ -265,17 +275,11 @@ function getTimeRemaining(): string {
 }
 
 .no-options {
-  padding: 16px;
+  padding: 12px 0;
   text-align: center;
   color: var(--ion-color-medium);
-  background: rgba(var(--ion-card-background-rgb), 0.18);
-  border-radius: 14px;
+  background: transparent;
   margin: 12px 0;
-  border: 1px solid var(--glass-border);
-  border-top-color: var(--glass-border-top);
-  backdrop-filter: blur(12px) saturate(1.4);
-  -webkit-backdrop-filter: blur(12px) saturate(1.4);
-  box-shadow: var(--glass-inner-glow);
 }
 
 .poll-footer {
@@ -320,3 +324,4 @@ function getTimeRemaining(): string {
   }
 }
 </style>
+

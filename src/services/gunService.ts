@@ -16,7 +16,8 @@ export class GunService {
       this.gun = Gun({
         peers: [config.relay.gun],
         localStorage: true,
-        radisk: false
+        radisk: false,
+        axe: false // Disable excessive logging
       });
 
       this.user = this.gun.user();
@@ -42,14 +43,9 @@ export class GunService {
     return this.user;
   }
 
-  /**
-   * Reconnect Gun to a new relay peer URL.
-   * Creates a fresh Gun instance pointed at the new peer.
-   */
   static reconnect(newPeerUrl?: string) {
     const peerUrl = newPeerUrl || config.relay.gun;
 
-    // Tear down old instance
     this.isInitialized = false;
     this.gun = null;
     this.user = null;
@@ -57,7 +53,8 @@ export class GunService {
     this.gun = Gun({
       peers: [peerUrl],
       localStorage: true,
-      radisk: false
+      radisk: false,
+      axe: false
     });
 
     this.user = this.gun.user();
@@ -134,13 +131,34 @@ export class GunService {
     }
   }
 
+  // Throttled map with batching
   static map(path: string, callback: (data: any) => void): void {
     const gun = this.getGun();
+    const batch: any[] = [];
+    let timer: NodeJS.Timeout | null = null;
+
+    const flush = () => {
+      if (batch.length > 0) {
+        batch.forEach(data => callback(data));
+        batch.length = 0;
+      }
+    };
 
     try {
       gun.get(path).map().on((data: any) => {
         if (data && !data._) {
-          callback(data);
+          batch.push(data);
+
+          if (timer) clearTimeout(timer);
+          
+          // Batch updates every 100ms
+          timer = setTimeout(flush, 100);
+
+          // Force flush if batch gets too large
+          if (batch.length >= 50) {
+            if (timer) clearTimeout(timer);
+            flush();
+          }
         }
       });
     } catch (_error) {
