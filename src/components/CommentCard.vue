@@ -18,18 +18,18 @@
 
     <!-- Comment Actions -->
     <div class="comment-actions">
-      <button 
-        class="action-button upvote" 
-        @click="$emit('upvote')"
+      <button
+        class="action-button upvote"
+        @click="$emit('upvote', comment)"
         :class="{ active: hasUpvoted }"
       >
         <ion-icon :icon="arrowUpOutline"></ion-icon>
         <span>{{ formatNumber(comment.upvotes) }}</span>
       </button>
 
-      <button 
-        class="action-button downvote" 
-        @click="$emit('downvote')"
+      <button
+        class="action-button downvote"
+        @click="$emit('downvote', comment)"
         :class="{ active: hasDownvoted }"
       >
         <ion-icon :icon="arrowDownOutline"></ion-icon>
@@ -83,8 +83,8 @@
         :comment="reply"
         :post-id="postId"
         :community-id="communityId"
-        @upvote="$emit('upvote', reply)"
-        @downvote="$emit('downvote', reply)"
+        @upvote="(c: any) => $emit('upvote', c)"
+        @downvote="(c: any) => $emit('downvote', c)"
       />
     </div>
   </div>

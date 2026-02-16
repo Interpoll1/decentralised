@@ -22,13 +22,17 @@ export class WebSocketService {
   private static callbacks: Map<string, (data: any) => void> = new Map();
   private static isConnected = false;
   private static reconnectAttempts = 0;
-  private static maxReconnectAttempts = 10;
-  private static reconnectDelay = 3000;
+  private static maxReconnectAttempts = Infinity; // Never stop trying
+  private static baseReconnectDelay = 1000;      // Start at 1s
+  private static maxReconnectDelay = 30000;       // Cap at 30s
   private static messageQueue: any[] = [];
   private static peers: Set<string> = new Set();
   private static peerAddresses: Map<string, { peerId: string; relayUrl: string; gunPeers: string[]; joinedAt: number }> = new Map();
   private static statusListeners: Set<(status: { connected: boolean; peerCount: number }) => void> = new Set();
   private static knownServers: Map<string, KnownServer> = new Map();
+  private static keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+  private static reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private static lastConnectUrl: string | null = null;
 
   static initialize() {
     this.loadKnownServers();
@@ -41,8 +45,14 @@ export class WebSocketService {
       try { this.ws.close(); } catch { /* ignore */ }
       this.ws = null;
     }
+    this.stopKeepAlive();
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
 
-    const url = wsUrl || config.relay.websocket;
+    const url = wsUrl || this.lastConnectUrl || config.relay.websocket;
+    this.lastConnectUrl = url;
 
     try {
       this.ws = new WebSocket(url);
@@ -53,6 +63,7 @@ export class WebSocketService {
 
         this.peers.add(this.peerId);
         this.notifyStatus();
+        this.startKeepAlive();
 
         this.sendToRelay('register', { peerId: this.peerId });
         this.sendToRelay('join-room', { roomId: 'default' });
@@ -76,7 +87,7 @@ export class WebSocketService {
         try {
           const message = JSON.parse(event.data);
 
-          if (message.type === 'welcome') {
+          if (message.type === 'welcome' || message.type === 'pong') {
             return;
           }
 
@@ -114,11 +125,17 @@ export class WebSocketService {
         this.isConnected = false;
         this.peers.clear();
         this.peerAddresses.clear();
+        this.stopKeepAlive();
         this.notifyStatus();
 
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
+          // Exponential backoff: 1s, 2s, 4s, 8s... capped at 30s
+          const delay = Math.min(
+            this.baseReconnectDelay * Math.pow(2, this.reconnectAttempts),
+            this.maxReconnectDelay
+          );
           this.reconnectAttempts++;
-          setTimeout(() => this.connect(), this.reconnectDelay);
+          this.reconnectTimer = setTimeout(() => this.connect(), delay);
         }
       };
 
@@ -283,6 +300,11 @@ export class WebSocketService {
   }
 
   static cleanup() {
+    this.stopKeepAlive();
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     if (this.ws) {
       this.ws.close();
       this.ws = null;
@@ -292,6 +314,27 @@ export class WebSocketService {
     this.peers.clear();
     this.peerAddresses.clear();
     this.statusListeners.clear();
+  }
+
+  /** Send periodic pings to keep the WS connection alive (iOS kills idle sockets) */
+  private static startKeepAlive() {
+    this.stopKeepAlive();
+    this.keepAliveTimer = setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        try {
+          this.ws.send(JSON.stringify({ type: 'ping' }));
+        } catch {
+          // Socket may have closed between the check and the send
+        }
+      }
+    }, 25000); // Every 25s - well under typical 30-60s idle timeout
+  }
+
+  private static stopKeepAlive() {
+    if (this.keepAliveTimer) {
+      clearInterval(this.keepAliveTimer);
+      this.keepAliveTimer = null;
+    }
   }
 
   private static notifyStatus() {

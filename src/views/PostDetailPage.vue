@@ -128,14 +128,14 @@
 
           <!-- Comments List -->
           <div v-if="allComments.length > 0" class="comments-list">
-            <CommentCard 
-              v-for="comment in sortedComments" 
+            <CommentCard
+              v-for="comment in sortedComments"
               :key="comment.id"
               :comment="comment"
               :post-id="post.id"
               :community-id="post.communityId"
-              @upvote="handleCommentUpvote(comment)"
-              @downvote="handleCommentDownvote(comment)"
+              @upvote="(c: any) => handleCommentUpvote(c)"
+              @downvote="(c: any) => handleCommentDownvote(c)"
             />
           </div>
 

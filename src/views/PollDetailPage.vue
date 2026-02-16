@@ -792,7 +792,7 @@ async function loadInviteCodes() {
 async function copyInviteLink(code: string) {
   if (!poll.value) return;
   const baseUrl = window.location.origin;
-  const link = `${baseUrl}/vote/${poll.value.id}?code=${code}`;
+  const link = `${baseUrl}/Interpole/vote/${poll.value.id}?code=${code}`;
 
   try {
     await navigator.clipboard.writeText(link);
@@ -828,7 +828,7 @@ async function copyAllLinks() {
   }
 
   const links = availableCodes
-    .map(c => `${baseUrl}/vote/${poll.value!.id}?code=${c.code}`)
+    .map(c => `${baseUrl}/Interpole/vote/${poll.value!.id}?code=${c.code}`)
     .join('\n');
 
   try {

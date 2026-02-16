@@ -274,7 +274,7 @@ async function createPoll() {
     if (isPrivate.value && (poll as any).inviteCodes?.length) {
       const codes = (poll as any).inviteCodes as string[];
       const baseUrl = window.location.origin;
-      const sampleLink = `${baseUrl}/vote/${poll.id}?code=${codes[0]}`;
+      const sampleLink = `${baseUrl}/Interpole/vote/${poll.id}?code=${codes[0]}`;
 
       try {
         if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -299,7 +299,7 @@ async function createPoll() {
       const codesList = `<pre style="text-align:left;white-space:pre-wrap;margin:0">${codes
         .map((c) => `${escapeHtml(c)} — unused`)
         .join('\n')}</pre>`;
-      const linksList = codes.map((c) => `${baseUrl}/vote/${poll.id}?code=${c}`).join('\n');
+      const linksList = codes.map((c) => `${baseUrl}/Interpole/vote/${poll.id}?code=${c}`).join('\n');
 
       const alert = await alertController.create({
         header: 'Invite Codes',
