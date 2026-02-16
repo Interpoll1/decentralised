@@ -129,11 +129,9 @@ When a new block is created, it is broadcast to all connected peers who merge it
 
 Peers can discover and switch between relay servers at runtime from the Settings page. Known servers accumulate as peers share their configurations with each other.
 
-### OAuth login
+### Helping
+You can drop a PR or run peer.js on your laptop to optimise the response time.
 
-Login is optional and only required for polls that have the "require login" flag set.
-
-The flow uses standard OAuth 2.0 authorization code grant. The relay server acts as the OAuth backend -- it redirects the user to Google or Microsoft, exchanges the authorization code for an ID token, extracts the user profile, and sets an HTTP-only session cookie. The frontend caches the authenticated user in localStorage so the login survives page refreshes and works even if the backend becomes temporarily unreachable.
 
 ## Project layout
 
