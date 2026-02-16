@@ -78,39 +78,12 @@
               <span>Karma</span>
               <ion-badge color="primary">{{ userProfile?.karma || 0 }}</ion-badge>
             </div>
-            <div class="info-row" v-if="cloudUser">
-              <span>Cloud login</span>
-              <strong>{{ cloudUser?.email || cloudUser?.name }}</strong>
-            </div>
-            <div class="info-row" v-if="cloudUser">
-              <span>Provider</span>
-              <ion-badge color="secondary">{{ cloudUser?.provider }}</ion-badge>
-            </div>
           </div>
 
           <ion-button expand="block" fill="outline" @click="$router.push('/profile')">
             <ion-icon slot="start" :icon="personCircleOutline"></ion-icon>
             Edit Profile
           </ion-button>
-
-          <template v-if="cloudUser">
-            <ion-button expand="block" class="mt-2" fill="outline" color="danger" @click="handleLogout">
-              <ion-icon slot="start" :icon="logOutOutline"></ion-icon>
-              Sign Out ({{ cloudUser.provider }})
-            </ion-button>
-          </template>
-
-          <template v-else>
-            <ion-button expand="block" class="mt-2" fill="outline" color="dark" @click="loginWithGoogle">
-              <ion-icon slot="start" :icon="logoGoogle"></ion-icon>
-              Sign in with Google
-            </ion-button>
-
-            <ion-button expand="block" class="mt-2" fill="outline" color="tertiary" @click="loginWithMicrosoft">
-              <ion-icon slot="start" :icon="logoMicrosoft"></ion-icon>
-              Sign in with Microsoft
-            </ion-button>
-          </template>
           <div class="separator"></div>
         </div>
 
@@ -1007,12 +980,9 @@ import {
   trashOutline,
   warningOutline,
   personCircleOutline,
-  logoGoogle,
-  logoMicrosoft,
   globeOutline,
   swapHorizontalOutline,
   serverOutline,
-  logOutOutline,
   copyOutline,
   eyeOutline
 } from 'ionicons/icons';
@@ -1020,7 +990,6 @@ import { PinningService } from '../services/pinningService';
 import { StorageManager } from '../services/storageManager';
 import { UserService } from '../services/userService';
 import { VoteTrackerService } from '../services/voteTrackerService';
-import { AuditService, type CloudUser } from '../services/auditService';
 import { WebSocketService, type KnownServer } from '../services/websocketService';
 import { GunService } from '../services/gunService';
 import { KeyService } from '../services/keyService';
@@ -1048,7 +1017,6 @@ const isDarkMode = ref(false);
 const minUserKarma = ref<number>(-1000);
 const userProfile = ref<any>(null);
 const deviceId = ref('');
-const cloudUser = ref<CloudUser | null>(null);
 
 // Crypto identity state
 const publicKeyHex = ref('');
@@ -1278,12 +1246,6 @@ onMounted(async () => {
     // Key generation failed silently
   }
 
-  // Show cached user immediately, then validate against backend
-  cloudUser.value = AuditService.getCachedUser();
-  AuditService.getCloudUser().then(user => {
-    cloudUser.value = user;
-  });
-
   const storedTheme = localStorage.getItem('theme');
   if (storedTheme === 'dark') {
     isDarkMode.value = true;
@@ -1463,25 +1425,5 @@ const confirmClearAll = async () => {
   });
 
   await alert.present();
-};
-
-const loginWithGoogle = () => {
-  AuditService.login('google');
-};
-
-const loginWithMicrosoft = () => {
-  AuditService.login('microsoft');
-};
-
-const handleLogout = async () => {
-  await AuditService.logout();
-  cloudUser.value = null;
-
-  const toast = await toastController.create({
-    message: 'Signed out',
-    duration: 2000,
-    color: 'success'
-  });
-  await toast.present();
 };
 </script>

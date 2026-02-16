@@ -91,11 +91,6 @@
           </ion-toggle>
         </ion-item>
         <ion-item>
-          <ion-toggle v-model="requireLogin">
-            Require login to vote (Google/Microsoft)
-          </ion-toggle>
-        </ion-item>
-        <ion-item>
           <ion-toggle v-model="isPrivate">
             Make this poll private (invite-only)
           </ion-toggle>
@@ -182,7 +177,6 @@ const duration = ref('7');
 const allowMultipleChoices = ref(false);
 const showResultsBeforeVoting = ref(false);
 const description = ref('');
-const requireLogin = ref(false);
 const isPrivate = ref(false);
 const inviteCodeCount = ref(20);
 
@@ -265,7 +259,7 @@ async function createPoll() {
       durationDays: parseInt(duration.value),
       allowMultipleChoices: allowMultipleChoices.value,
       showResultsBeforeVoting: showResultsBeforeVoting.value,
-      requireLogin: requireLogin.value,
+      requireLogin: false,
       isPrivate: isPrivate.value,
       inviteCodeCount: inviteCodeCount.value
     });

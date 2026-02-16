@@ -54,12 +54,6 @@ const config = {
     get api() { return api(); },
   },
 
-  /** OAuth / authentication endpoints (derived from relay.api) */
-  auth: {
-    get googleStart() { return `${api()}/auth/google/start`; },
-    get microsoftStart() { return `${api()}/auth/microsoft/start`; },
-  },
-
   /** Default (build-time) relay URLs */
   defaults,
 

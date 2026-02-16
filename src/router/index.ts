@@ -8,11 +8,6 @@ const routes: Array<RouteRecordRaw> = [
     redirect: '/home'
   },
   {
-    path: '/auth/callback',
-    name: 'AuthCallback',
-    component: () => import('../views/AuthCallbackPage.vue')
-  },
-  {
     path: '/home',
     name: 'Home',
     component: () => import('../views/HomePage.vue')
