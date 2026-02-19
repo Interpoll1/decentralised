@@ -151,6 +151,14 @@ function getTimeRemaining(): string {
   margin-top: 16px;
 }
 
+html.dark .poll-separator {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+html.dark .poll-footer {
+  border-top-color: rgba(255, 255, 255, 0.12);
+}
+
 .poll-header {
   display: flex;
   align-items: center;

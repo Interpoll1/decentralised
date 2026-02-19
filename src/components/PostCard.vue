@@ -72,6 +72,14 @@
   margin-top: 16px;
 }
 
+html.dark .post-separator {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+html.dark .post-footer {
+  border-top-color: rgba(255, 255, 255, 0.12);
+}
+
 /* Post Header */
 .post-header {
   margin-bottom: 8px;
@@ -295,15 +303,13 @@
 }
 
 /* Dark Mode Enhancements */
-@media (prefers-color-scheme: dark) {
-  .stat-button {
-    border-color: rgba(255, 255, 255, 0.1);
-  }
+html.dark .stat-button {
+  border-color: rgba(255, 255, 255, 0.1);
+}
 
-  .stat-button:hover {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.15);
-  }
+html.dark .stat-button:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 /* Accessibility - Focus States */

@@ -24,6 +24,42 @@ const voteRegistry = new Set();
 // Simple append-only log for receipts and audit events
 const RECEIPT_LOG_FILE = new URL('./storage.txt', import.meta.url).pathname;
 
+// ─── Message cache for seeding new clients ──────────────────────────────────
+// Stores recent broadcast messages so new clients don't see an empty site
+// while waiting for GUN to sync.
+const MESSAGE_CACHE_FILE = new URL('./message-cache.json', import.meta.url).pathname;
+
+const MAX_CACHED_MESSAGES = 500;
+let messageCache = [];
+try {
+  if (fs.existsSync(MESSAGE_CACHE_FILE)) {
+    messageCache = JSON.parse(fs.readFileSync(MESSAGE_CACHE_FILE, 'utf8'));
+    console.log(`Loaded ${messageCache.length} cached messages from disk`);
+  }
+} catch { messageCache = []; }
+
+function cacheMessage(msg) {
+  if (!msg || !msg.type) return;
+  // Only cache content-bearing messages
+  const cacheable = ['new-poll', 'new-block', 'sync-response', 'new-event'];
+  const type = msg.type || msg.data?.type;
+  if (!cacheable.includes(type)) return;
+  messageCache.push({ ...msg, _cachedAt: Date.now() });
+  // Cap size
+  while (messageCache.length > MAX_CACHED_MESSAGES) messageCache.shift();
+}
+
+function saveMessageCache() {
+  try {
+    fs.writeFileSync(MESSAGE_CACHE_FILE, JSON.stringify(messageCache));
+  } catch (err) {
+    console.error('Failed to save message cache:', err.message);
+  }
+}
+
+// Persist cache every 30 seconds
+setInterval(saveMessageCache, 30000);
+
 // Minimal in-memory OAuth state & session stores
 const oauthStates = new Map(); // state -> provider
 const sessions = new Map(); // sessionId -> user
@@ -475,12 +511,22 @@ wss.on('connection', (ws, req) => {
           peerId = data.peerId;
           clients.set(peerId, ws);
           console.log(`✅ Peer registered: ${peerId} (Total: ${clients.size})`);
-          
+
           // Send list of active peers
           broadcast({
             type: 'peer-list',
             peers: Array.from(clients.keys())
           });
+
+          // Replay cached messages so new client has content immediately
+          if (messageCache.length > 0) {
+            console.log(`📦 Replaying ${messageCache.length} cached messages to ${peerId}`);
+            for (const msg of messageCache) {
+              try {
+                ws.send(JSON.stringify(msg));
+              } catch {}
+            }
+          }
           break;
           
         case 'join-room':
@@ -496,6 +542,8 @@ wss.on('connection', (ws, req) => {
           // Relay to all other peers
           console.log(`📡 Broadcasting ${data.data?.type || 'message'} from ${peerId}`);
           broadcastToOthers(peerId, data.data);
+          // Cache content messages for seeding new clients
+          cacheMessage(data.data);
           break;
           
         case 'direct':
@@ -513,6 +561,8 @@ wss.on('connection', (ws, req) => {
         case 'sync-response':
           console.log(`📡 Broadcasting ${data.type} from ${peerId}`);
           broadcastToOthers(peerId, data);
+          // Cache content messages for seeding new clients
+          cacheMessage(data);
           break;
           
         default:
@@ -581,6 +631,7 @@ server.listen(PORT, () => {
 // Graceful shutdown
 process.on('SIGINT', () => {
   console.log('\n👋 Shutting down relay server...');
+  saveMessageCache();
   wss.clients.forEach((ws) => {
     ws.close();
   });
