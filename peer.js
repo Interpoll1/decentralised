@@ -10,7 +10,7 @@
 //
 // Usage:
 //   node peer.js
-//   node peer.js --ws ws://myserver:8080 --gun http://myserver:8765/gun
+//   node peer.js --ws ws://myserver:8080 --gun http://myserver:8765/gun --api http://myserver:8080
 //   node peer.js --data /mnt/storage/peer-data
 
 import WebSocket from 'ws';
@@ -19,7 +19,7 @@ import fs from 'fs';
 import path from 'path';
 import http from 'http';
 import { fileURLToPath } from 'url';
-
+console.log('WSS Initialized, this is @thegoodduck and @theendless11, built with love ❤️');
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
@@ -30,6 +30,7 @@ function flag(name, fallback) {
 
 const WS_URL   = flag('--ws',   'wss://interpoll.onrender.com');
 const GUN_URL  = flag('--gun',  'https://interpoll2.onrender.com/gun');
+const API_URL  = flag('--api',  'https://interpoll.onrender.com');
 const DATA_DIR = flag('--data', path.join(path.dirname(fileURLToPath(import.meta.url)), 'peer-data'));
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -155,18 +156,28 @@ function connect() {
     send({ type: 'register', peerId });
     send({ type: 'join-room', roomId: 'default' });
 
-    // Tell other peers about our relay URLs
+    // Tell other peers about our relay URLs and that we're a self-hosted peer
     broadcast('peer-addresses', {
       peerId,
       relayUrl: WS_URL,
       gunPeers: [GUN_URL],
+      selfHosted: true,
       joinedAt: Date.now(),
     });
 
-    // Share known servers
-    if (knownServers.length > 0) {
-      broadcast('server-list', { peerId, servers: knownServers });
-    }
+    // Always include our own address in the server list before sharing
+    const ownServer = {
+      websocket: WS_URL,
+      gun: GUN_URL,
+      api: API_URL,
+      addedBy: peerId,
+      firstSeen: Date.now(),
+      selfHosted: true,
+    };
+    mergeServerList([ownServer], peerId);
+
+    // Share known servers (now always includes ourselves)
+    broadcast('server-list', { peerId, servers: knownServers });
 
     // Ask existing peers for their blocks (like a browser does on startup)
     setTimeout(() => broadcast('request-sync', { peerId }), 1000);
@@ -342,6 +353,7 @@ log('Interpoll headless peer');
 log(`  id       : ${peerId}`);
 log(`  ws relay : ${WS_URL}`);
 log(`  gun relay: ${GUN_URL}`);
+log(`  api      : ${API_URL}`);
 log(`  data     : ${DATA_DIR}`);
 log(`  blocks   : ${blocks.length} on disk`);
 log(`  events   : ${events.length} on disk`);

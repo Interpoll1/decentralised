@@ -757,18 +757,6 @@ ion-header.header-hidden {
   font-weight: 600;
 }
 
-/* Active indicator */
-.nav-item.active::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 32px;
-  height: 3px;
-  background: var(--ion-color-primary);
-  border-radius: 0 0 3px 3px;
-}
 
 ion-list {
   background: transparent;

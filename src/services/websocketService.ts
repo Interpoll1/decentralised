@@ -15,7 +15,7 @@ export interface KnownServer {
   addedBy: string;         // peerId that reported it
   firstSeen: number;
 }
-
+console.log('WSS Initialized, this is @thegoodduck and @theendless11, built with love ❤️');
 export class WebSocketService {
   private static ws: WebSocket | null = null;
   private static peerId: string = Math.random().toString(36).substring(7);
