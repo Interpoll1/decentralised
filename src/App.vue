@@ -119,9 +119,8 @@ onUnmounted(() => {
 /* ─── Expandable dot ─────────────────────────────────────────── */
 .network-dot-wrapper {
   position: fixed;
-  top: calc(6px + env(safe-area-inset-top, 0px));
-  left: 50%;
-  transform: translateX(-50%);
+  bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  left: 12px;
   z-index: 99999;
   display: flex;
   align-items: center;

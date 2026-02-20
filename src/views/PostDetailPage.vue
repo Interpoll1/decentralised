@@ -304,6 +304,10 @@
   margin: 16px 0;
 }
 
+html.dark .section-separator {
+  background: rgba(255, 255, 255, 0.35);
+}
+
 .commenters-section {
   padding: 16px 0;
   background: transparent;
