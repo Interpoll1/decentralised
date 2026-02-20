@@ -32,6 +32,9 @@ export interface Post {
 
 const postActiveListeners = new Map<string, any>();
 
+/** Max posts to deliver during initial load — keeps the UI snappy. */
+const MAX_INITIAL_POSTS = 50;
+
 export class PostService {
   static async createPost(
     post: Omit<Post, 'id' | 'createdAt' | 'upvotes' | 'downvotes' | 'score' | 'commentCount'>,
@@ -94,10 +97,12 @@ export class PostService {
   /**
    * Subscribe to posts in a community.
    *
-   * onPost        — called for every post, initial batch AND live new posts
-   * onInitialLoadDone — called after INITIAL_LOAD_MS (800ms) hard time-box.
-   *                    Does NOT wait for silence or Gun to "finish" — that
-   *                    approach caused 6-16s waits for slow/empty communities.
+   * Phase 1 (initial): .once() snapshot — collects all cached/relay posts,
+   *   sorts by recency, and delivers only the most recent MAX_INITIAL_POSTS.
+   *   This avoids flooding the Vue reactivity system with thousands of items.
+   *
+   * Phase 2 (live): .on() subscription — only fires for genuinely new posts
+   *   that weren't in the initial snapshot (deduplicated via `seen` set).
    *
    * Returns an unsubscribe function. Call it to stop live updates.
    */
@@ -122,44 +127,64 @@ export class PostService {
       onInitialLoadDone?.();
     };
 
-    const listener = gun
+    // Phase 1: snapshot with .once() — collect, sort, cap
+    const initialBatch: Post[] = [];
+    const postsNode = gun
       .get('communities')
       .get(communityId)
-      .get('posts')
-      .map()
-      .on((data: any, key: string) => {
+      .get('posts');
+
+    postsNode.map().once((data: any, key: string) => {
+      if (!data || !data.id || !data.title || key.startsWith('_')) return;
+      if (seen.has(data.id)) return;
+      seen.add(data.id);
+      initialBatch.push(this.mapPost(data, communityId));
+    });
+
+    // After time-box: sort by recency, deliver only top N, then start live sub
+    let liveListener: any = null;
+    const initTimer = setTimeout(() => {
+      // Sort newest-first and deliver only the most recent posts
+      initialBatch.sort((a, b) => b.createdAt - a.createdAt);
+      const toDeliver = initialBatch.slice(0, MAX_INITIAL_POSTS);
+      toDeliver.forEach(onPost);
+
+      signalDone();
+
+      // Phase 2: live subscription for NEW posts only
+      liveListener = postsNode.map().on((data: any, key: string) => {
         if (!data || !data.id || !data.title || key.startsWith('_')) return;
         if (seen.has(data.id)) return;
         seen.add(data.id);
-
-        onPost({
-          id: data.id,
-          communityId: data.communityId || communityId,
-          authorId: data.authorId || '',
-          authorName: data.authorName || 'Anonymous',
-          title: data.title,
-          content: data.content || '',
-          imageIPFS: data.imageIPFS || undefined,
-          imageThumbnail: data.imageThumbnail || undefined,
-          createdAt: data.createdAt || Date.now(),
-          upvotes: data.upvotes || 0,
-          downvotes: data.downvotes || 0,
-          score: data.score || 0,
-          commentCount: data.commentCount || 0,
-        });
+        onPost(this.mapPost(data, communityId));
       });
 
-    // Hard time-box — resolve after 800ms no matter what.
-    // After this, subscription stays open and new posts keep arriving.
-    const initTimer = setTimeout(signalDone, 800);
-
-    postActiveListeners.set(communityId, listener);
+      postActiveListeners.set(communityId, liveListener);
+    }, 800);
 
     return () => {
       clearTimeout(initTimer);
       signalDone();
-      if (listener) listener.off();
+      if (liveListener) liveListener.off();
       postActiveListeners.delete(communityId);
+    };
+  }
+
+  private static mapPost(data: any, communityId: string): Post {
+    return {
+      id: data.id,
+      communityId: data.communityId || communityId,
+      authorId: data.authorId || '',
+      authorName: data.authorName || 'Anonymous',
+      title: data.title,
+      content: data.content || '',
+      imageIPFS: data.imageIPFS || undefined,
+      imageThumbnail: data.imageThumbnail || undefined,
+      createdAt: data.createdAt || Date.now(),
+      upvotes: data.upvotes || 0,
+      downvotes: data.downvotes || 0,
+      score: data.score || 0,
+      commentCount: data.commentCount || 0,
     };
   }
 

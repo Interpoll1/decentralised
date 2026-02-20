@@ -179,8 +179,9 @@ function connect() {
     // Share known servers (now always includes ourselves)
     broadcast('server-list', { peerId, servers: knownServers });
 
-    // Ask existing peers for their blocks (like a browser does on startup)
-    setTimeout(() => broadcast('request-sync', { peerId }), 1000);
+    // Ask existing peers for blocks we're missing
+    const lastIndex = blocks.length > 0 ? blocks[blocks.length - 1].index : -1;
+    setTimeout(() => broadcast('request-sync', { peerId, lastIndex }), 1000);
   });
 
   ws.on('message', (raw) => {
@@ -276,12 +277,22 @@ function onNewEvent(data) {
 
 function onSyncRequest(data) {
   stats.syncRequests++;
-  log(`Sync request from ${data?.peerId || '?'} -> sending ${blocks.length} blocks`);
+  const lastIndex = typeof data?.lastIndex === 'number' ? data.lastIndex : -1;
 
-  // Respond with exactly the same shape the browser's chainStore sends:
-  // { blocks: [...], peerId: '...' }
+  // Only send blocks the requester doesn't have
+  const missingBlocks = lastIndex >= 0
+    ? blocks.filter(b => b.index > lastIndex)
+    : blocks;
+
+  if (missingBlocks.length === 0) {
+    log(`Sync request from ${data?.peerId || '?'} -> up to date, nothing to send`);
+    return;
+  }
+
+  log(`Sync request from ${data?.peerId || '?'} (lastIndex=${lastIndex}) -> sending ${missingBlocks.length} blocks`);
+
   broadcast('sync-response', {
-    blocks,
+    blocks: missingBlocks,
     peerId,
   });
 }

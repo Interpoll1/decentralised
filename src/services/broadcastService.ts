@@ -18,9 +18,9 @@ export class BroadcastService {
       if (callback) callback(message.data || message);
     };
 
-    // Request initial sync from other tabs
+    // Request initial sync from other tabs (lastIndex -1 = send everything)
     setTimeout(() => {
-      this.broadcast('request-sync', { peerId: this.peerId });
+      this.broadcast('request-sync', { peerId: this.peerId, lastIndex: -1 });
     }, 1000);
   }
 

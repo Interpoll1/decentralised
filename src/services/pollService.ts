@@ -34,6 +34,9 @@ export interface Poll {
 
 const pollActiveListeners = new Map<string, any>();
 
+/** Max polls to deliver during initial load. */
+const MAX_INITIAL_POLLS = 30;
+
 export class PollService {
   private static get gun() { return GunService.getGun(); }
   private static getPollPath(pollId: string) { return this.gun.get('polls').get(pollId); }
@@ -46,13 +49,12 @@ export class PollService {
   /**
    * Two-phase subscription with hard time-box:
    *
-   * Phase 1: deliver poll shell (no options) immediately as Gun fires metadata.
-   *          onInitialLoadDone fires after INITIAL_LOAD_MS (1200ms) hard cap —
-   *          NOT when Gun goes quiet. This means empty communities cost 1200ms
-   *          instead of 16s.
+   * Phase 1 (initial): .once() snapshot — collects poll metadata, sorts by
+   *   recency, delivers only the most recent MAX_INITIAL_POLLS, and kicks
+   *   off background option loading for those polls.
    *
-   * Phase 2: loadPollOptions() runs per-poll in background, calls onPollUpdated
-   *          to patch vote counts in-place. Happens after initial load resolves.
+   * Phase 2 (live): .on() subscription — only fires for genuinely new polls
+   *   that weren't in the initial snapshot (deduplicated via `seen` set).
    */
   static subscribeToPollsInCommunity(
     communityId: string,
@@ -75,16 +77,46 @@ export class PollService {
       onInitialLoadDone?.();
     };
 
-    const listener = this.gun
+    // Phase 1: snapshot with .once() — collect, sort, cap
+    const initialBatch: { shell: Poll; pollId: string }[] = [];
+    const pollsNode = this.gun
       .get('communities')
       .get(communityId)
-      .get('polls')
-      .map()
-      .on((data: any, key: string) => {
+      .get('polls');
+
+    pollsNode.map().once((data: any, key: string) => {
+      if (!data?.id || !data?.question || seen.has(data.id) || key.startsWith('_')) return;
+      seen.add(data.id);
+      const shell: Poll = {
+        ...this.mapPollMetadata(data, communityId),
+        options: [],
+        isExpired: Date.now() > (data.expiresAt ?? 0),
+      };
+      initialBatch.push({ shell, pollId: data.id });
+    });
+
+    let liveListener: any = null;
+    const initTimer = setTimeout(() => {
+      // Sort newest-first, deliver only top N
+      initialBatch.sort((a, b) => b.shell.createdAt - a.shell.createdAt);
+      const toDeliver = initialBatch.slice(0, MAX_INITIAL_POLLS);
+
+      for (const { shell, pollId } of toDeliver) {
+        onPoll(shell);
+        // Phase 2a: load options in background
+        this.loadPollOptions(pollId, communityId).then((options) => {
+          if (!options || options.length === 0) return;
+          (onPollUpdated ?? onPoll)({ ...shell, options });
+        });
+      }
+
+      signalDone();
+
+      // Phase 2b: live subscription for NEW polls only
+      liveListener = pollsNode.map().on((data: any, key: string) => {
         if (!data?.id || !data?.question || seen.has(data.id) || key.startsWith('_')) return;
         seen.add(data.id);
 
-        // Phase 1: deliver shell immediately
         const shell: Poll = {
           ...this.mapPollMetadata(data, communityId),
           options: [],
@@ -92,22 +124,19 @@ export class PollService {
         };
         onPoll(shell);
 
-        // Phase 2: load options in background, patch when ready
         this.loadPollOptions(data.id, communityId).then((options) => {
           if (!options || options.length === 0) return;
           (onPollUpdated ?? onPoll)({ ...shell, options });
         });
       });
 
-    // Hard time-box — resolve after 1200ms regardless
-    const initTimer = setTimeout(signalDone, 1200);
-
-    pollActiveListeners.set(communityId, listener);
+      pollActiveListeners.set(communityId, liveListener);
+    }, 1200);
 
     return () => {
       clearTimeout(initTimer);
       signalDone();
-      if (listener) listener.off();
+      if (liveListener) liveListener.off();
       pollActiveListeners.delete(communityId);
     };
   }

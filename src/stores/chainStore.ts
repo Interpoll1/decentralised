@@ -40,6 +40,18 @@ export const useChainStore = defineStore('chain', () => {
 
     setupSyncListeners();
 
+    // Register incremental sync: on every (re)connect, send lastIndex
+    // so peers only respond with blocks we're missing
+    WebSocketService.onConnectSyncRequest(() => {
+      setTimeout(() => {
+        const lastIndex = blocks.value.length > 0
+          ? blocks.value[blocks.value.length - 1].index
+          : -1;
+        BroadcastService.broadcast('request-sync', { peerId: BroadcastService.getPeerId(), lastIndex });
+        WebSocketService.broadcast('request-sync', { peerId: WebSocketService.getPeerId(), lastIndex });
+      }, 1000);
+    });
+
     WebSocketService.onStatusChange(({ connected }) => {
       isWebSocketConnected.value = connected;
     });
@@ -90,9 +102,18 @@ export const useChainStore = defineStore('chain', () => {
 
   async function handleSyncRequest(data: any) {
     const allBlocks = await StorageService.getAllBlocks();
+    const lastIndex = typeof data?.lastIndex === 'number' ? data.lastIndex : -1;
+
+    // Only send blocks the requester doesn't have yet
+    const missingBlocks = lastIndex >= 0
+      ? allBlocks.filter((b) => b.index > lastIndex)
+      : allBlocks;
+
+    // Nothing to send
+    if (missingBlocks.length === 0) return;
 
     const response = {
-      blocks: allBlocks,
+      blocks: missingBlocks,
       peerId: BroadcastService.getPeerId(),
     };
 

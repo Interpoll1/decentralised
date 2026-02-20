@@ -33,6 +33,15 @@ export class WebSocketService {
   private static keepAliveTimer: ReturnType<typeof setInterval> | null = null;
   private static reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private static lastConnectUrl: string | null = null;
+  private static syncRequestCallback: (() => void) | null = null;
+
+  /**
+   * Register a callback that fires on every (re)connect to request incremental sync.
+   * The chain store uses this to include lastIndex in the request.
+   */
+  static onConnectSyncRequest(callback: () => void) {
+    this.syncRequestCallback = callback;
+  }
 
   static initialize() {
     this.loadKnownServers();
@@ -78,9 +87,16 @@ export class WebSocketService {
         // Share our known server list
         this.broadcastServerList();
 
-        setTimeout(() => {
-          this.broadcast('request-sync', { peerId: this.peerId });
-        }, 1000);
+        // Request sync with lastIndex so peers only send missing blocks
+        // If a sync callback was registered, call it to get the current lastIndex
+        if (this.syncRequestCallback) {
+          this.syncRequestCallback();
+        } else {
+          // Fallback: request full sync if no callback registered yet
+          setTimeout(() => {
+            this.broadcast('request-sync', { peerId: this.peerId });
+          }, 1000);
+        }
       };
 
       this.ws.onmessage = (event) => {
@@ -117,11 +133,12 @@ export class WebSocketService {
         }
       };
 
-      this.ws.onerror = () => {
-        // Handled in onclose
+      this.ws.onerror = (event) => {
+        console.error('WebSocket error:', event);
       };
 
-      this.ws.onclose = () => {
+      this.ws.onclose = (event) => {
+        console.warn(`WebSocket closed: code=${event.code} reason=${event.reason || 'none'}`);
         this.isConnected = false;
         this.peers.clear();
         this.peerAddresses.clear();

@@ -507,6 +507,13 @@ wss.on('connection', (ws, req) => {
       const data = JSON.parse(message.toString());
       
       switch (data.type) {
+        case 'ping':
+          // Respond to client heartbeat
+          if (ws.readyState === 1) {
+            ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
+          }
+          break;
+
         case 'register':
           peerId = data.peerId;
           clients.set(peerId, ws);
