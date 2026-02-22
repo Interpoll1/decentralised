@@ -6,114 +6,174 @@
           <ion-back-button :default-href="`/community/${communityId}`"></ion-back-button>
         </ion-buttons>
         <ion-title>Create Post</ion-title>
+        <ion-buttons slot="end">
+          <ion-button
+            @click="submitPost"
+            :disabled="!canSubmit || isSubmitting"
+            color="primary"
+          >
+            <ion-spinner v-if="isSubmitting" name="crescent" style="width:18px;height:18px;margin-right:4px;"></ion-spinner>
+            {{ isSubmitting ? 'Posting...' : 'Post' }}
+          </ion-button>
+        </ion-buttons>
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
-      <ion-card>
-        <ion-card-content>
-          <!-- Community Selection -->
-          <ion-item>
-            <ion-select 
-              v-model="selectedCommunity" 
-              label="Community" 
-              placeholder="Select community"
-            >
-              <ion-select-option 
-                v-for="community in communityStore.communities" 
-                :key="community.id"
-                :value="community.id"
-              >
-                {{ community.displayName }}
-              </ion-select-option>
-            </ion-select>
-          </ion-item>
-
-          <!-- Title -->
-          <ion-item>
-            <ion-input
-              v-model="title"
-              label="Title"
-              label-placement="floating"
-              placeholder="An interesting title"
-              :maxlength="300"
-            ></ion-input>
-          </ion-item>
-
-          <!-- Content -->
-          <ion-item>
-            <ion-textarea
-              v-model="content"
-              label="Text (optional)"
-              label-placement="floating"
-              placeholder="What's on your mind?"
-              :rows="6"
-              :maxlength="10000"
-            ></ion-textarea>
-          </ion-item>
-
-          <!-- Image Upload -->
-          <div class="image-section">
-            <ion-button 
-              expand="block" 
-              fill="outline" 
-              @click="selectImage"
-              v-if="!imagePreview"
-            >
-              <ion-icon slot="start" :icon="imageOutline"></ion-icon>
-              Add Image (Optional)
-            </ion-button>
-
-            <!-- Image Preview -->
-            <div v-if="imagePreview" class="image-preview-container">
-              <img :src="imagePreview" class="image-preview" />
-              <ion-button 
-                fill="clear" 
-                color="danger"
-                class="remove-image"
-                @click="removeImage"
-              >
-                <ion-icon :icon="closeCircle"></ion-icon>
-              </ion-button>
-              <div class="image-info">
-                <ion-badge color="primary">{{ imageSize }}</ion-badge>
-                <ion-badge color="success" v-if="isCompressing">Compressing...</ion-badge>
-              </div>
-            </div>
-          </div>
-
-          <input 
-            ref="fileInput" 
-            type="file" 
-            accept="image/*" 
-            style="display: none"
-            @change="handleImageSelect"
-          />
-
-          <!-- Post Button -->
-          <ion-button
-            expand="block"
-            @click="submitPost"
-            :disabled="!canSubmit || isSubmitting"
-            class="mt-4"
+    <ion-content>
+      <!-- Community Selection -->
+      <ion-item lines="full">
+        <ion-select
+          v-model="selectedCommunity"
+          label="Community"
+          placeholder="Select community"
+        >
+          <ion-select-option
+            v-for="community in communityStore.communities"
+            :key="community.id"
+            :value="community.id"
           >
-            <ion-spinner v-if="isSubmitting" name="crescent" class="mr-2"></ion-spinner>
-            {{ isSubmitting ? 'Uploading...' : 'Post' }}
-          </ion-button>
+            {{ community.displayName }}
+          </ion-select-option>
+        </ion-select>
+      </ion-item>
 
-          <!-- Info Box -->
-          <div class="info-box" v-if="imageFile">
-            <ion-icon :icon="informationCircle"></ion-icon>
-            <p>
-              Image will be compressed to ~200 KB and stored on GunDB (peer-to-peer network).
-              Thumbnail (~15 KB) will be cached locally for fast loading.
-            </p>
+      <!-- Title -->
+      <ion-item lines="full">
+        <ion-input
+          v-model="title"
+          label="Title"
+          label-placement="floating"
+          placeholder="An interesting title"
+          :maxlength="300"
+        ></ion-input>
+      </ion-item>
+
+      <!-- Content -->
+      <ion-item lines="full">
+        <ion-textarea
+          v-model="content"
+          label="Text (optional)"
+          label-placement="floating"
+          placeholder="What's on your mind?"
+          :rows="6"
+          :maxlength="10000"
+          :auto-grow="true"
+        ></ion-textarea>
+      </ion-item>
+
+      <!-- Image Upload -->
+      <div class="image-section">
+        <ion-button
+          fill="clear"
+          size="small"
+          @click="selectImage"
+          v-if="!imagePreview"
+          class="add-image-btn"
+        >
+          <ion-icon slot="start" :icon="imageOutline"></ion-icon>
+          Add Image
+        </ion-button>
+
+        <div v-if="imagePreview" class="image-preview-container">
+          <img :src="imagePreview" class="image-preview" />
+          <ion-button
+            fill="clear"
+            color="danger"
+            class="remove-image"
+            @click="removeImage"
+          >
+            <ion-icon :icon="closeCircle"></ion-icon>
+          </ion-button>
+          <div class="image-info">
+            <ion-badge color="primary">{{ imageSize }}</ion-badge>
+            <ion-badge color="success" v-if="isCompressing">Compressing...</ion-badge>
           </div>
-        </ion-card-content>
-      </ion-card>
+        </div>
+      </div>
+
+      <input
+        ref="fileInput"
+        type="file"
+        accept="image/*"
+        style="display: none"
+        @change="handleImageSelect"
+      />
+
+      <!-- Info Box -->
+      <div class="info-box" v-if="imageFile">
+        <ion-icon :icon="informationCircle"></ion-icon>
+        <p>Image will be compressed to ~200 KB and stored on GunDB. Thumbnail (~15 KB) cached locally for fast loading.</p>
+      </div>
     </ion-content>
   </ion-page>
 </template>
+
+<style scoped>
+.image-section {
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
+}
+
+.add-image-btn {
+  margin: 0;
+  --padding-start: 0;
+}
+
+.image-preview-container {
+  position: relative;
+  margin-top: 8px;
+}
+
+.image-preview {
+  width: 100%;
+  max-height: 360px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid rgba(var(--ion-text-color-rgb), 0.1);
+}
+
+.remove-image {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  --background: rgba(0, 0, 0, 0.55);
+  --border-radius: 50%;
+}
+
+.image-info {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.info-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 16px;
+  padding: 12px;
+  background: rgba(var(--ion-card-background-rgb), 0.20);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
+  border-radius: 12px;
+  font-size: 12px;
+  color: var(--ion-color-medium);
+  box-shadow: var(--glass-highlight);
+}
+
+.info-box ion-icon {
+  flex-shrink: 0;
+  font-size: 18px;
+  margin-top: 1px;
+}
+
+.info-box p {
+  margin: 0;
+  line-height: 1.5;
+}
+</style>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
@@ -251,66 +311,3 @@ const submitPost = async () => {
   }
 };
 </script>
-
-<style scoped>
-.image-section {
-  margin: 16px 0;
-}
-
-.image-preview-container {
-  position: relative;
-  margin-top: 12px;
-}
-
-.image-preview {
-  width: 100%;
-  max-height: 400px;
-  object-fit: cover;
-  border-radius: 14px;
-  border: 2px solid var(--glass-border);
-  border-top-color: var(--glass-border-top);
-}
-
-.remove-image {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  --background: rgba(0, 0, 0, 0.6);
-}
-
-.image-info {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.info-box {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 16px;
-  padding: 12px;
-  background: rgba(var(--ion-card-background-rgb), 0.20);
-  backdrop-filter: blur(14px) saturate(1.4);
-  -webkit-backdrop-filter: blur(14px) saturate(1.4);
-  border: 1px solid var(--glass-border);
-  border-top-color: var(--glass-border-top);
-  border-radius: 14px;
-  font-size: 12px;
-  color: var(--ion-color-medium);
-  box-shadow: var(--glass-highlight);
-}
-
-.info-box ion-icon {
-  flex-shrink: 0;
-  font-size: 20px;
-}
-
-.mt-4 {
-  margin-top: 16px;
-}
-
-.mr-2 {
-  margin-right: 8px;
-}
-</style>

@@ -88,7 +88,7 @@ const routes: Array<RouteRecordRaw> = [
 ];
 
 const router = createRouter({
-  history: createWebHistory('/Interpole'),
+  history: createWebHistory('/'),
   routes
 });
 

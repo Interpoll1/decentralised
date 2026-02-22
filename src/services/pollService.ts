@@ -112,22 +112,30 @@ export class PollService {
 
       signalDone();
 
-      // Phase 2b: live subscription for NEW polls only
-      liveListener = pollsNode.map().on((data: any, key: string) => {
-        if (!data?.id || !data?.question || seen.has(data.id) || key.startsWith('_')) return;
-        seen.add(data.id);
-
-        const shell: Poll = {
-          ...this.mapPollMetadata(data, communityId),
-          options: [],
-          isExpired: Date.now() > (data.expiresAt ?? 0),
-        };
-        onPoll(shell);
-
-        this.loadPollOptions(data.id, communityId).then((options) => {
-          if (!options || options.length === 0) return;
-          (onPollUpdated ?? onPoll)({ ...shell, options });
+      // Phase 2b: live subscription for NEW polls only — throttled
+      const liveBatch: any[] = [];
+      let liveTimer: ReturnType<typeof setTimeout> | null = null;
+      const flushLive = () => {
+        liveBatch.splice(0).forEach(([data, key]) => {
+          if (!data?.id || !data?.question || seen.has(data.id) || key.startsWith('_')) return;
+          seen.add(data.id);
+          const shell: Poll = {
+            ...this.mapPollMetadata(data, communityId),
+            options: [],
+            isExpired: Date.now() > (data.expiresAt ?? 0),
+          };
+          onPoll(shell);
+          this.loadPollOptions(data.id, communityId).then((options) => {
+            if (!options || options.length === 0) return;
+            (onPollUpdated ?? onPoll)({ ...shell, options });
+          });
         });
+      };
+      liveListener = pollsNode.map().on((data: any, key: string) => {
+        liveBatch.push([data, key]);
+        if (liveTimer) clearTimeout(liveTimer);
+        liveTimer = setTimeout(flushLive, 150);
+        if (liveBatch.length >= 20) { if (liveTimer) clearTimeout(liveTimer); flushLive(); }
       });
 
       pollActiveListeners.set(communityId, liveListener);

@@ -60,14 +60,14 @@
 /* Main Post Card Container */
 .post-card {
   margin-left: 20px;
-  padding: 16px 0;
+  padding: 8px 0;
   cursor: pointer;
   background: transparent;
   border: none;
 }
 
 .post-separator {
-  height: 1px;
+  height: 0.5px;
   background: rgba(var(--ion-text-color-rgb), 0.08);
   margin-top: 16px;
 }
@@ -115,6 +115,7 @@ html.dark .post-footer {
 /* Post Title */
 .post-title {
   margin: 8px 0;
+  margin-right: 10px;
   font-size: 18px;
   font-weight: 600;
   line-height: 1.4;
@@ -132,7 +133,7 @@ html.dark .post-footer {
 
 /* Post Image */
 .post-image {
-  margin: 12px 0;
+  margin: 12px 10px;
   border-radius: 12px;
   overflow: hidden;
   background: rgba(var(--ion-card-background-rgb), 0.3);
@@ -147,9 +148,9 @@ html.dark .post-footer {
 
 /* Post Footer - Voting and Stats */
 .post-footer {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.05);
+  margin-top: 1px;
+  padding-top: 4px;
+  
 }
 
 .post-stats {
@@ -163,7 +164,7 @@ html.dark .post-footer {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 12px;
+  padding: 12px 12px;
   background: transparent;
   border: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
   border-radius: 20px;

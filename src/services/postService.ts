@@ -151,12 +151,22 @@ export class PostService {
 
       signalDone();
 
-      // Phase 2: live subscription for NEW posts only
+      // Phase 2: live subscription for NEW posts only — throttled to avoid sync warning
+      const liveBatch: any[] = [];
+      let liveTimer: ReturnType<typeof setTimeout> | null = null;
+      const flushLive = () => {
+        liveBatch.splice(0).forEach(([data, key]) => {
+          if (!data || !data.id || !data.title || key.startsWith('_')) return;
+          if (seen.has(data.id)) return;
+          seen.add(data.id);
+          onPost(this.mapPost(data, communityId));
+        });
+      };
       liveListener = postsNode.map().on((data: any, key: string) => {
-        if (!data || !data.id || !data.title || key.startsWith('_')) return;
-        if (seen.has(data.id)) return;
-        seen.add(data.id);
-        onPost(this.mapPost(data, communityId));
+        liveBatch.push([data, key]);
+        if (liveTimer) clearTimeout(liveTimer);
+        liveTimer = setTimeout(flushLive, 150);
+        if (liveBatch.length >= 20) { if (liveTimer) clearTimeout(liveTimer); flushLive(); }
       });
 
       postActiveListeners.set(communityId, liveListener);
@@ -204,9 +214,12 @@ export class PostService {
     const gun = GunService.getGun();
     return new Promise((resolve) => {
       let resolved = false;
-      gun.get('posts').get(postId).once((data: any) => {
-        if (!resolved && data?.id) {
+      let listener: any;
+      // Use .on() instead of .once() so we catch data arriving from relay after initial empty response
+      listener = gun.get('posts').get(postId).on((data: any) => {
+        if (!resolved && data?.id && data?.title) {
           resolved = true;
+          listener?.off?.();
           resolve({
             id: data.id,
             communityId: data.communityId || '',
@@ -224,7 +237,8 @@ export class PostService {
           });
         }
       });
-      setTimeout(() => { if (!resolved) { resolved = true; resolve(null); } }, 3000);
+      // Give relay up to 5s to respond
+      setTimeout(() => { if (!resolved) { resolved = true; listener?.off?.(); resolve(null); } }, 5000);
     });
   }
 

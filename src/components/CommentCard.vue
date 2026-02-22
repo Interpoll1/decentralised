@@ -2,10 +2,8 @@
   <div class="comment-card">
     <!-- Comment Header -->
     <div class="comment-header">
-      <span class="author-badge">
-        <span class="commenter-dot"></span>
-        <span class="author-name">u/{{ displayName }}</span>
-      </span>
+      <span class="commenter-dot"></span>
+      <span class="author-name">u/{{ displayName }}</span>
       <span class="separator">•</span>
       <span class="timestamp">{{ formatTime(comment.createdAt) }}</span>
       <span v-if="comment.edited" class="edited-label">(edited)</span>
@@ -18,20 +16,12 @@
 
     <!-- Comment Actions -->
     <div class="comment-actions">
-      <button
-        class="action-button upvote"
-        @click="$emit('upvote', comment)"
-        :class="{ active: hasUpvoted }"
-      >
+      <button class="action-button upvote" @click="$emit('upvote', comment)" :class="{ active: hasUpvoted }">
         <ion-icon :icon="arrowUpOutline"></ion-icon>
         <span>{{ formatNumber(comment.upvotes) }}</span>
       </button>
 
-      <button
-        class="action-button downvote"
-        @click="$emit('downvote', comment)"
-        :class="{ active: hasDownvoted }"
-      >
+      <button class="action-button downvote" @click="$emit('downvote', comment)" :class="{ active: hasDownvoted }">
         <ion-icon :icon="arrowDownOutline"></ion-icon>
         <span>{{ formatNumber(comment.downvotes) }}</span>
       </button>
@@ -57,21 +47,11 @@
         class="reply-textarea"
       ></ion-textarea>
       <div class="reply-actions">
-        <ion-button 
-          size="small" 
-          @click="submitReply"
-          :disabled="!replyText.trim()"
-        >
+        <ion-button size="small" @click="submitReply" :disabled="!replyText.trim()">
           <ion-icon slot="start" :icon="sendOutline"></ion-icon>
           Reply
         </ion-button>
-        <ion-button 
-          size="small" 
-          fill="clear" 
-          @click="cancelReply"
-        >
-          Cancel
-        </ion-button>
+        <ion-button size="small" fill="clear" @click="cancelReply">Cancel</ion-button>
       </div>
     </div>
 
@@ -89,6 +69,127 @@
     </div>
   </div>
 </template>
+
+<style scoped>
+.comment-card {
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(var(--ion-text-color-rgb), 0.07);
+}
+
+/* ── Header ─────────────────────────────────────── */
+.comment-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--ion-color-medium);
+}
+
+.commenter-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ion-color-success);
+  flex-shrink: 0;
+}
+
+.author-name {
+  font-weight: 600;
+  color: var(--ion-text-color);
+}
+
+.edited-label {
+  font-size: 11px;
+  color: var(--ion-color-medium);
+}
+
+/* ── Content ─────────────────────────────────────── */
+.comment-content {
+  font-size: 15px;
+  line-height: 1.5;
+  margin-bottom: 10px;
+  white-space: pre-wrap;
+}
+
+.comment-content p {
+  margin: 0;
+}
+
+/* ── Actions ─────────────────────────────────────── */
+.comment-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.action-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 500;
+  color: var(--ion-color-medium);
+  cursor: pointer;
+  border-radius: 8px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.action-button:hover {
+  background: rgba(var(--ion-text-color-rgb), 0.06);
+}
+
+.action-button:active {
+  transform: scale(0.95);
+}
+
+.action-button.upvote.active {
+  color: var(--ion-color-primary);
+}
+
+.action-button.downvote.active {
+  color: var(--ion-color-danger);
+}
+
+.score {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--ion-color-medium);
+  margin-left: auto;
+}
+
+/* ── Reply Form ──────────────────────────────────── */
+.reply-form {
+  margin-top: 10px;
+  padding: 10px;
+  background: rgba(var(--ion-text-color-rgb), 0.04);
+  border-radius: 10px;
+}
+
+.reply-textarea {
+  margin-bottom: 8px;
+}
+
+.reply-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ── Nested Replies ──────────────────────────────── */
+.replies-container {
+  margin-top: 8px;
+  margin-left: 16px;
+  border-left: 2px solid rgba(var(--ion-text-color-rgb), 0.1);
+  padding-left: 4px;
+}
+</style>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
@@ -224,166 +325,3 @@ function formatNumber(num: number | undefined | null): string {
 }
 </script>
 
-<style scoped>
-.comment-card {
-  padding: 16px;
-  background: rgba(var(--ion-card-background-rgb), 0.22);
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  border-radius: 16px;
-  border-left: 3px solid var(--ion-color-primary);
-  border-top: 1px solid var(--glass-border-top);
-  border-right: 1px solid var(--glass-border);
-  border-bottom: 1px solid var(--glass-border-bottom);
-  box-shadow: var(--glass-shadow), var(--glass-highlight), var(--glass-inner-glow);
-  position: relative;
-}
-
-.comment-header {
-  margin-bottom: 12px;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.author-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.commenter-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--ion-color-success);
-  flex-shrink: 0;
-  box-shadow: 0 0 6px rgba(var(--ion-color-success-rgb), 0.5);
-}
-
-.comment-author {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--ion-color-medium);
-}
-
-.comment-author ion-icon {
-  font-size: 18px;
-  color: var(--ion-color-primary);
-}
-
-.username {
-  font-weight: 600;
-  color: var(--ion-color-dark);
-}
-
-.separator {
-  margin: 0 4px;
-}
-
-.comment-content {
-  font-size: 15px;
-  line-height: 1.5;
-  color: var(--ion-color-dark);
-  margin-bottom: 12px;
-  white-space: pre-wrap;
-}
-
-.comment-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.action-button {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: rgba(var(--ion-card-background-rgb), 0.18);
-  border: 1px solid var(--glass-border);
-  border-top-color: var(--glass-border-top);
-  padding: 6px 10px;
-  font-size: 13px;
-  color: var(--ion-color-medium);
-  cursor: pointer;
-  border-radius: 12px;
-  transition: var(--liquid-spring);
-  font-family: inherit;
-  font-weight: 500;
-  backdrop-filter: blur(10px) saturate(1.4);
-  -webkit-backdrop-filter: blur(10px) saturate(1.4);
-  box-shadow: var(--glass-highlight);
-}
-
-.action-button:hover {
-  background: rgba(var(--ion-color-primary-rgb), 0.10);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.22);
-  transform: translateY(-1px);
-}
-
-.action-button:active {
-  transform: scale(0.96) translateY(0);
-}
-
-.action-button.upvote.active {
-  color: var(--ion-color-primary);
-  background: rgba(var(--ion-color-primary-rgb), 0.14);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.28);
-  box-shadow: var(--glass-highlight), 0 0 12px rgba(var(--ion-color-primary-rgb), 0.10);
-}
-
-.action-button.downvote.active {
-  color: var(--ion-color-danger);
-  background: rgba(var(--ion-color-danger-rgb), 0.14);
-  border-color: rgba(var(--ion-color-danger-rgb), 0.28);
-  box-shadow: var(--glass-highlight), 0 0 12px rgba(var(--ion-color-danger-rgb), 0.10);
-}
-
-.action-button.reply:hover {
-  color: var(--ion-color-primary);
-}
-
-.score {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 13px;
-  color: var(--ion-color-medium);
-  padding: 0 6px;
-  margin-left: auto;
-}
-
-.score ion-icon {
-  font-size: 16px;
-}
-
-.reply-form {
-  margin-top: 12px;
-  padding: 12px;
-  background: rgba(var(--ion-card-background-rgb), 0.18);
-  backdrop-filter: blur(16px) saturate(1.5);
-  -webkit-backdrop-filter: blur(16px) saturate(1.5);
-  border-radius: 14px;
-  border: 1px solid var(--glass-border);
-  border-top-color: var(--glass-border-top);
-  box-shadow: var(--glass-inner-glow);
-}
-
-.reply-textarea {
-  margin-bottom: 8px;
-}
-
-.reply-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.replies-container {
-  margin-top: 12px;
-  margin-left: 20px;
-  border-left: 2px solid rgba(var(--ion-color-primary-rgb), 0.18);
-}
-</style>

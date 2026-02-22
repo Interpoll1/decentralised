@@ -12,19 +12,19 @@ export interface KnownServer {
   websocket: string;
   gun: string;
   api: string;
-  addedBy: string;         // peerId that reported it
+  addedBy: string;
   firstSeen: number;
 }
-console.log('WSS Initialized, this is @thegoodduck and @theendless11, built with love ❤️');
+
 export class WebSocketService {
   private static ws: WebSocket | null = null;
   private static peerId: string = Math.random().toString(36).substring(7);
   private static callbacks: Map<string, (data: any) => void> = new Map();
   private static isConnected = false;
   private static reconnectAttempts = 0;
-  private static maxReconnectAttempts = Infinity; // Never stop trying
-  private static baseReconnectDelay = 1000;      // Start at 1s
-  private static maxReconnectDelay = 30000;       // Cap at 30s
+  private static maxReconnectAttempts = Infinity;
+  private static baseReconnectDelay = 1000;
+  private static maxReconnectDelay = 30000;
   private static messageQueue: any[] = [];
   private static peers: Set<string> = new Set();
   private static peerAddresses: Map<string, { peerId: string; relayUrl: string; gunPeers: string[]; joinedAt: number }> = new Map();
@@ -37,7 +37,6 @@ export class WebSocketService {
 
   /**
    * Register a callback that fires on every (re)connect to request incremental sync.
-   * The chain store uses this to include lastIndex in the request.
    */
   static onConnectSyncRequest(callback: () => void) {
     this.syncRequestCallback = callback;
@@ -48,18 +47,30 @@ export class WebSocketService {
     this.connect();
   }
 
+  // Tracks whether we intentionally closed the socket so onclose skips reconnect
+  private static intentionalClose = false;
+
   static connect(wsUrl?: string) {
-    // Close existing connection if any
+    // If a connection attempt is already in progress (CONNECTING), don't close
+    // it — closing a CONNECTING socket fires onclose which triggers another
+    // reconnect, creating an infinite spam loop.
     if (this.ws) {
+      if (this.ws.readyState === WebSocket.CONNECTING) {
+        // Already trying to connect to the same URL — just wait
+        if (!wsUrl || wsUrl === this.lastConnectUrl) return;
+      }
+      this.intentionalClose = true;
       try { this.ws.close(); } catch { /* ignore */ }
       this.ws = null;
     }
+
     this.stopKeepAlive();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
 
+    this.intentionalClose = false;
     const url = wsUrl || this.lastConnectUrl || config.relay.websocket;
     this.lastConnectUrl = url;
 
@@ -82,17 +93,12 @@ export class WebSocketService {
           this.broadcast(msg.type, msg.data);
         }
 
-        // Share our relay addresses with all peers
         this.broadcastAddresses();
-        // Share our known server list
         this.broadcastServerList();
 
-        // Request sync with lastIndex so peers only send missing blocks
-        // If a sync callback was registered, call it to get the current lastIndex
         if (this.syncRequestCallback) {
           this.syncRequestCallback();
         } else {
-          // Fallback: request full sync if no callback registered yet
           setTimeout(() => {
             this.broadcast('request-sync', { peerId: this.peerId });
           }, 1000);
@@ -129,16 +135,25 @@ export class WebSocketService {
             callback(message.data || message);
           }
         } catch (_error) {
-          // Malformed message
+          // Malformed message — ignore
         }
       };
 
-      this.ws.onerror = (event) => {
-        console.error('WebSocket error:', event);
+      this.ws.onerror = (_event) => {
+        // Errors are followed by onclose, which handles reconnect.
+        // Avoid logging here to prevent duplicate/spammy output.
       };
 
       this.ws.onclose = (event) => {
-        console.warn(`WebSocket closed: code=${event.code} reason=${event.reason || 'none'}`);
+        // If we closed intentionally (e.g. switching URLs), don't reconnect
+        if (this.intentionalClose) {
+          this.intentionalClose = false;
+          return;
+        }
+
+        if (event.code !== 1000 && event.code !== 1001) {
+          console.warn(`WebSocket closed: code=${event.code} reason=${event.reason || 'none'}`);
+        }
         this.isConnected = false;
         this.peers.clear();
         this.peerAddresses.clear();
@@ -146,7 +161,6 @@ export class WebSocketService {
         this.notifyStatus();
 
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
-          // Exponential backoff: 1s, 2s, 4s, 8s... capped at 30s
           const delay = Math.min(
             this.baseReconnectDelay * Math.pow(2, this.reconnectAttempts),
             this.maxReconnectDelay
@@ -175,7 +189,7 @@ export class WebSocketService {
         }
       });
     } catch (_error) {
-      // Connection failed
+      // Connection failed — reconnect will be triggered via onclose
     }
   }
 
@@ -198,7 +212,6 @@ export class WebSocketService {
   }
 
   private static broadcastServerList() {
-    // Add our own current server to the list before broadcasting
     this.addKnownServer({
       websocket: config.relay.websocket,
       gun: config.relay.gun,
@@ -224,7 +237,6 @@ export class WebSocketService {
   }
 
   static addKnownServer(server: KnownServer) {
-    // Use the websocket URL as the unique key
     const key = server.websocket;
     if (!this.knownServers.has(key)) {
       this.knownServers.set(key, {
@@ -323,6 +335,7 @@ export class WebSocketService {
       this.reconnectTimer = null;
     }
     if (this.ws) {
+      this.intentionalClose = true;
       this.ws.close();
       this.ws = null;
     }
@@ -333,7 +346,12 @@ export class WebSocketService {
     this.statusListeners.clear();
   }
 
-  /** Send periodic pings to keep the WS connection alive (iOS kills idle sockets) */
+  /**
+   * Send a JSON-level ping every 15s as a fallback for environments where
+   * native WebSocket ping frames aren't surfaced (e.g. some mobile browsers).
+   * The server handles this with a 'pong' reply.
+   * Real keepalive is done server-side via native ws.ping() every 20s.
+   */
   private static startKeepAlive() {
     this.stopKeepAlive();
     this.keepAliveTimer = setInterval(() => {
@@ -341,10 +359,10 @@ export class WebSocketService {
         try {
           this.ws.send(JSON.stringify({ type: 'ping' }));
         } catch {
-          // Socket may have closed between the check and the send
+          // Socket closed between check and send — onclose will trigger reconnect
         }
       }
-    }, 25000); // Every 25s - well under typical 30-60s idle timeout
+    }, 15_000); // Every 15s — server pings at 20s, so we stay well inside the window
   }
 
   private static stopKeepAlive() {

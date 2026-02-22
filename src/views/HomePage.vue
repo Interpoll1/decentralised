@@ -18,155 +18,161 @@
     </ion-header>
 
     <ion-content :scroll-events="true" @ionScroll="handleScroll">
-      <!-- HOME TAB - Random Posts Feed -->
-      <div v-if="activeTab === 'home'" class="home-tab">
-        <!-- Loading Posts -->
-        <div v-if="isLoadingPosts" class="loading-container">
-          <ion-spinner></ion-spinner>
-          <p>Loading content...</p>
-        </div>
+      <div class="page-layout">
 
-        <!-- Combined Feed -->
-        <!-- Combined Feed -->
-<div v-else-if="combinedFeed.length > 0" class="feed-list">
-  <template v-for="item in combinedFeed" :key="`${item.type}-${item.data.id}`">
-    <!-- Post Card -->
-    <PostCard 
-      v-if="item.type === 'post'"
-      :post="item.data"
-      :community-name="getCommunityName(item.data.communityId)"
-      :has-upvoted="hasUpvoted(item.data.id)"
-      :has-downvoted="hasDownvoted(item.data.id)"
-      @click="navigateToPost(item.data)"
-      @upvote="handleUpvote(item.data)"
-      @downvote="handleDownvote(item.data)"
-      @comments="navigateToPost(item.data)"
-    />
-    <!-- Poll Card -->
-    <PollCard 
-      v-else-if="item.type === 'poll'"
-      :poll="item.data"
-      :community-name="getCommunityName(item.data.communityId)"
-      @click="navigateToPoll(item.data)"
-      @vote="navigateToPoll(item.data)"
-    />
-  </template>
-  
-  <!-- ADD INFINITE SCROLL HERE -->
-  <ion-infinite-scroll
-    :disabled="!hasMore"
-    @ionInfinite="onInfiniteScroll"
-  >
-    <ion-infinite-scroll-content loading-spinner="bubbles" />
-  </ion-infinite-scroll>
-</div>
+        <!-- ── LEFT NAV (desktop only) ─────────────────── -->
+        <nav class="side-nav">
+          <button
+            class="side-nav-item"
+            :class="{ active: activeTab === 'home' }"
+            @click="activeTab = 'home'"
+          >
+            <ion-icon :icon="activeTab === 'home' ? home : homeOutline"></ion-icon>
+            <span>Home</span>
+          </button>
+          <button
+            class="side-nav-item"
+            :class="{ active: activeTab === 'communities' }"
+            @click="activeTab = 'communities'"
+          >
+            <ion-icon :icon="activeTab === 'communities' ? people : peopleOutline"></ion-icon>
+            <span>Communities</span>
+          </button>
+          <button
+            class="side-nav-item"
+            :class="{ active: activeTab === 'create' }"
+            @click="activeTab = 'create'"
+          >
+            <ion-icon :icon="activeTab === 'create' ? addCircle : addCircleOutline"></ion-icon>
+            <span>Create</span>
+          </button>
+        </nav>
 
-<!-- Empty State -->
-<div v-else class="empty-state">
-  <ion-icon :icon="documentTextOutline" size="large"></ion-icon>
-  <p>No content yet</p>
-  <p class="subtitle">Join a community and create the first post or poll!</p>
-</div>
-</div>
+        <!-- ── MAIN CONTENT ────────────────────────────── -->
+        <main class="main-content">
 
-      <!-- COMMUNITIES TAB -->
-      <div v-else-if="activeTab === 'communities'" class="communities-tab">
-        <!-- Create Community Button -->
-        <div class="section-padding">
-          <ion-button expand="block" @click="$router.push('/create-community')">
-            <ion-icon slot="start" :icon="addCircleOutline"></ion-icon>
-            Create Community
-          </ion-button>
-        </div>
-
-        <!-- Filter Buttons -->
-        <div class="section-padding">
-          <ion-segment v-model="communityFilter">
-            <ion-segment-button value="all">
-              <ion-label>All</ion-label>
-            </ion-segment-button>
-            <ion-segment-button value="joined">
-              <ion-label>Joined</ion-label>
-            </ion-segment-button>
-          </ion-segment>
-        </div>
-
-        <!-- Loading Communities -->
-        <div v-if="communityStore.isLoading" class="loading-container">
-          <ion-spinner></ion-spinner>
-          <p>Loading communities...</p>
-        </div>
-
-        <!-- Communities List -->
-        <div v-else-if="displayedCommunities.length > 0" class="communities-list">
-          <CommunityCard 
-            v-for="community in displayedCommunities" 
-            :key="community.id"
-            :community="community"
-            @click="$router.push(`/community/${community.id}`)"
-          />
-        </div>
-
-        <!-- Empty State -->
-        <div v-else class="empty-state">
-          <ion-icon :icon="earthOutline" size="large"></ion-icon>
-          <p>{{ communityFilter === 'joined' ? 'No joined communities' : 'No communities yet' }}</p>
-          <ion-button @click="communityFilter === 'joined' ? communityFilter = 'all' : $router.push('/create-community')">
-            {{ communityFilter === 'joined' ? 'Browse All' : 'Create the first one!' }}
-          </ion-button>
-        </div>
-      </div>
-
-      <!-- CREATE TAB -->
-      <div v-else-if="activeTab === 'create'" class="create-tab">
-        <div class="create-layout">
-          <!-- Main Create Options -->
-          <div class="create-main">
-            <div class="section-padding">
-              <h2>Create Content</h2>
-              <p class="subtitle">What would you like to create?</p>
+          <!-- HOME TAB -->
+          <div v-if="activeTab === 'home'" class="home-tab">
+            <div v-if="isLoadingPosts" class="loading-container">
+              <ion-spinner></ion-spinner>
+              <p>Loading content...</p>
             </div>
 
-            <!-- Create Options -->
+            <div v-else-if="combinedFeed.length > 0" class="feed-list">
+              <template v-for="item in combinedFeed" :key="`${item.type}-${item.data.id}`">
+                <PostCard
+                  v-if="item.type === 'post'"
+                  :post="item.data"
+                  :community-name="getCommunityName(item.data.communityId)"
+                  :has-upvoted="hasUpvoted(item.data.id)"
+                  :has-downvoted="hasDownvoted(item.data.id)"
+                  @click="navigateToPost(item.data)"
+                  @upvote="handleUpvote(item.data)"
+                  @downvote="handleDownvote(item.data)"
+                  @comments="navigateToPost(item.data)"
+                />
+                <PollCard
+                  v-else-if="item.type === 'poll'"
+                  :poll="item.data"
+                  :community-name="getCommunityName(item.data.communityId)"
+                  @click="navigateToPoll(item.data)"
+                  @vote="navigateToPoll(item.data)"
+                />
+              </template>
+
+              <ion-infinite-scroll :disabled="!hasMore" @ionInfinite="onInfiniteScroll">
+                <ion-infinite-scroll-content loading-spinner="bubbles" />
+              </ion-infinite-scroll>
+            </div>
+
+            <div v-else class="empty-state">
+              <ion-icon :icon="documentTextOutline" size="large"></ion-icon>
+              <p>No content yet</p>
+              <p class="subtitle">This may take 5–10 seconds on first visit. Join a community and create the first post or poll!</p>
+            </div>
+          </div>
+
+          <!-- COMMUNITIES TAB -->
+          <div v-else-if="activeTab === 'communities'" class="communities-tab">
+            <div class="communities-toolbar">
+              <div class="tab-bar">
+                <button class="tab-btn" :class="{ active: communityFilter === 'all' }" @click="communityFilter = 'all'">All</button>
+                <button class="tab-btn" :class="{ active: communityFilter === 'joined' }" @click="communityFilter = 'joined'">Joined</button>
+              </div>
+              <ion-button size="small" @click="$router.push('/create-community')">
+                <ion-icon slot="start" :icon="addCircleOutline"></ion-icon>
+                New Community
+              </ion-button>
+            </div>
+
+            <div v-if="communityStore.isLoading" class="loading-container">
+              <ion-spinner></ion-spinner>
+              <p>Loading communities...</p>
+            </div>
+
+            <div v-else-if="displayedCommunities.length > 0" class="communities-list">
+              <CommunityCard
+                v-for="community in displayedCommunities"
+                :key="community.id"
+                :community="community"
+                @click="$router.push(`/community/${community.id}`)"
+              />
+            </div>
+
+            <div v-else class="empty-state">
+              <ion-icon :icon="earthOutline" size="large"></ion-icon>
+              <p>{{ communityFilter === 'joined' ? 'No joined communities' : 'No communities yet' }}</p>
+              <ion-button @click="communityFilter === 'joined' ? communityFilter = 'all' : $router.push('/create-community')">
+                {{ communityFilter === 'joined' ? 'Browse All' : 'Create the first one!' }}
+              </ion-button>
+            </div>
+          </div>
+
+          <!-- CREATE TAB -->
+          <div v-else-if="activeTab === 'create'" class="create-tab">
+            <p class="section-label">What would you like to create?</p>
+
             <div class="create-options">
               <div class="create-option-item" @click="$router.push('/create-community')">
-                <ion-icon :icon="peopleOutline" color="primary"></ion-icon>
+                <div class="create-icon-wrap primary">
+                  <ion-icon :icon="peopleOutline"></ion-icon>
+                </div>
                 <div class="option-content">
-                  <h3>Create Community</h3>
-                  <p>Start a new community for discussions</p>
+                  <h3>Community</h3>
+                  <p>Start a space for discussions</p>
                 </div>
                 <ion-icon :icon="chevronForwardOutline" class="chevron"></ion-icon>
               </div>
 
               <div class="create-option-item" @click="showPostOptions">
-                <ion-icon :icon="documentTextOutline" color="secondary"></ion-icon>
+                <div class="create-icon-wrap secondary">
+                  <ion-icon :icon="documentTextOutline"></ion-icon>
+                </div>
                 <div class="option-content">
-                  <h3>Create Post</h3>
+                  <h3>Post</h3>
                   <p>Share content in a community</p>
                 </div>
                 <ion-icon :icon="chevronForwardOutline" class="chevron"></ion-icon>
               </div>
 
               <div class="create-option-item" @click="showPollOptions">
-                <ion-icon :icon="statsChartOutline" color="tertiary"></ion-icon>
+                <div class="create-icon-wrap tertiary">
+                  <ion-icon :icon="statsChartOutline"></ion-icon>
+                </div>
                 <div class="option-content">
-                  <h3>Create Poll</h3>
+                  <h3>Poll</h3>
                   <p>Ask the community a question</p>
                 </div>
                 <ion-icon :icon="chevronForwardOutline" class="chevron"></ion-icon>
               </div>
             </div>
-          </div>
 
-          <!-- Recent Communities Sidebar (Desktop) -->
-          <div v-if="joinedCommunities.length > 0" class="recent-communities-sidebar">
-            <div class="section-padding">
-              <h3>Your Communities</h3>
-              <p class="subtitle">Quick access to post</p>
-              
+            <!-- Quick access chips for joined communities -->
+            <div v-if="joinedCommunities.length > 0" class="quick-post-section">
+              <p class="section-label">Post to a community</p>
               <div class="quick-communities">
-                <ion-chip 
-                  v-for="community in joinedCommunities.slice(0, 10)" 
+                <ion-chip
+                  v-for="community in joinedCommunities.slice(0, 10)"
                   :key="community.id"
                   @click="$router.push(`/community/${community.id}/create-post`)"
                 >
@@ -176,42 +182,70 @@
               </div>
             </div>
           </div>
-        </div>
+
+        </main>
+
+        <!-- ── RIGHT SIDEBAR (desktop only) ───────────── -->
+        <aside class="right-sidebar">
+          <div class="sidebar-section">
+            <div class="sidebar-header">
+              <span>Communities</span>
+              <button class="sidebar-link" @click="activeTab = 'communities'">See all</button>
+            </div>
+
+            <ion-button expand="block" size="small" @click="$router.push('/create-community')" class="sidebar-create-btn">
+              <ion-icon slot="start" :icon="addCircleOutline"></ion-icon>
+              Create Community
+            </ion-button>
+
+            <div class="sidebar-communities">
+              <div
+                v-for="community in communityStore.communities.slice(0, 8)"
+                :key="community.id"
+                class="sidebar-community-item"
+                @click="$router.push(`/community/${community.id}`)"
+              >
+                <div class="sidebar-community-avatar">
+                  {{ community.displayName?.charAt(0)?.toUpperCase() }}
+                </div>
+                <div class="sidebar-community-info">
+                  <span class="sidebar-community-name">{{ community.displayName }}</span>
+                  <span class="sidebar-community-meta">{{ community.memberCount || 0 }} members</span>
+                </div>
+                <ion-icon
+                  v-if="communityStore.isJoined(community.id)"
+                  :icon="checkmarkCircleOutline"
+                  class="joined-check"
+                ></ion-icon>
+              </div>
+            </div>
+          </div>
+
+          <div class="sidebar-section sidebar-about">
+            <p class="sidebar-about-title">Interpoll</p>
+            <p class="sidebar-about-text">A peer-to-peer community platform built on GunDB. Posts and votes sync across all peers.</p>
+          </div>
+        </aside>
+
       </div>
 
-      <!-- Bottom spacing for tab bar -->
       <div class="bottom-spacing"></div>
     </ion-content>
 
-    <!-- Professional Bottom Navigation Bar -->
+    <!-- Bottom Nav (mobile only) -->
     <div class="bottom-nav" :class="{ 'bottom-nav-hidden': isTabBarHidden }">
-      <button 
-        class="nav-item" 
-        :class="{ active: activeTab === 'home' }"
-        @click="activeTab = 'home'"
-      >
+      <button class="nav-item" :class="{ active: activeTab === 'home' }" @click="activeTab = 'home'">
         <ion-icon :icon="activeTab === 'home' ? home : homeOutline"></ion-icon>
         <span>Home</span>
       </button>
-      
-      <button 
-        class="nav-item" 
-        :class="{ active: activeTab === 'communities' }"
-        @click="activeTab = 'communities'"
-      >
+      <button class="nav-item" :class="{ active: activeTab === 'communities' }" @click="activeTab = 'communities'">
         <ion-icon :icon="activeTab === 'communities' ? people : peopleOutline"></ion-icon>
         <span>Communities</span>
       </button>
-      
-      <button 
-        class="nav-item" 
-        :class="{ active: activeTab === 'create' }"
-        @click="activeTab = 'create'"
-      >
+      <button class="nav-item" :class="{ active: activeTab === 'create' }" @click="activeTab = 'create'">
         <ion-icon :icon="activeTab === 'create' ? addCircle : addCircleOutline"></ion-icon>
         <span>Create</span>
       </button>
-
     </div>
 
   </ion-page>
@@ -221,15 +255,16 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonButtons, IonButton, IonIcon, IonCard, IonCardContent,
-  IonSegment, IonSegmentButton, IonLabel, IonSpinner, IonChip,
+  IonButtons, IonButton, IonIcon, IonSegment, IonSegmentButton,
+  IonLabel, IonSpinner, IonChip,
   IonInfiniteScroll, IonInfiniteScrollContent,
   actionSheetController, toastController
 } from '@ionic/vue';
 import {
   cube, personCircleOutline, settingsOutline, addCircleOutline,
   earthOutline, peopleOutline, home, homeOutline, documentTextOutline,
-  refreshOutline, chevronForwardOutline, people, addCircle, statsChartOutline
+  chevronForwardOutline, people, addCircle, statsChartOutline,
+  checkmarkCircleOutline
 } from 'ionicons/icons';
 import { useRouter } from 'vue-router';
 import { useChainStore } from '../stores/chainStore';
@@ -257,8 +292,6 @@ const isTabBarHidden = ref(false);
 let lastScrollTop = 0;
 const scrollThreshold = 50;
 
-// ─── Computed ──────────────────────────────────────────────────────────────
-
 const displayedCommunities = computed(() => {
   if (communityFilter.value === 'joined') {
     return communityStore.communities.filter(c => communityStore.isJoined(c.id));
@@ -268,9 +301,7 @@ const displayedCommunities = computed(() => {
 
 const combinedFeed = computed(() => {
   const items: Array<{ type: 'post' | 'poll'; data: any; createdAt: number }> = [];
-  postStore.visiblePosts.forEach(post => {
-    items.push({ type: 'post', data: post, createdAt: post.createdAt });
-  });
+  postStore.visiblePosts.forEach(post => items.push({ type: 'post', data: post, createdAt: post.createdAt }));
   pollStore.visiblePolls.forEach(poll => {
     if (!poll.isPrivate) items.push({ type: 'poll', data: poll, createdAt: poll.createdAt });
   });
@@ -278,12 +309,7 @@ const combinedFeed = computed(() => {
 });
 
 const hasMore = computed(() => postStore.hasMorePosts || pollStore.hasMorePolls);
-
-const joinedCommunities = computed(() =>
-  communityStore.communities.filter(c => communityStore.isJoined(c.id))
-);
-
-// ─── Scroll ────────────────────────────────────────────────────────────────
+const joinedCommunities = computed(() => communityStore.communities.filter(c => communityStore.isJoined(c.id)));
 
 function handleScroll(event: CustomEvent) {
   const scrollTop = event.detail.scrollTop;
@@ -297,16 +323,12 @@ function handleScroll(event: CustomEvent) {
   lastScrollTop = scrollTop;
 }
 
-// ─── Infinite scroll ───────────────────────────────────────────────────────
-
 async function onInfiniteScroll(event: any) {
   postStore.loadMorePosts();
   pollStore.loadMorePolls();
   await new Promise(r => setTimeout(r, 100));
   event.target.complete();
 }
-
-// ─── Voting ────────────────────────────────────────────────────────────────
 
 function hasUpvoted(postId: string): boolean {
   voteVersion.value;
@@ -321,8 +343,7 @@ function hasDownvoted(postId: string): boolean {
 async function handleUpvote(post: Post) {
   try {
     if (hasUpvoted(post.id)) {
-      const filtered = JSON.parse(localStorage.getItem('upvoted-posts') || '[]')
-        .filter((id: string) => id !== post.id);
+      const filtered = JSON.parse(localStorage.getItem('upvoted-posts') || '[]').filter((id: string) => id !== post.id);
       localStorage.setItem('upvoted-posts', JSON.stringify(filtered));
       voteVersion.value++;
       await postStore.removeUpvote(post.id);
@@ -351,8 +372,7 @@ async function handleUpvote(post: Post) {
 async function handleDownvote(post: Post) {
   try {
     if (hasDownvoted(post.id)) {
-      const filtered = JSON.parse(localStorage.getItem('downvoted-posts') || '[]')
-        .filter((id: string) => id !== post.id);
+      const filtered = JSON.parse(localStorage.getItem('downvoted-posts') || '[]').filter((id: string) => id !== post.id);
       localStorage.setItem('downvoted-posts', JSON.stringify(filtered));
       voteVersion.value++;
       await postStore.removeDownvote(post.id);
@@ -378,8 +398,6 @@ async function handleDownvote(post: Post) {
   }
 }
 
-// ─── Navigation ────────────────────────────────────────────────────────────
-
 function getCommunityName(communityId: string): string {
   return communityStore.communities.find(c => c.id === communityId)?.displayName || communityId;
 }
@@ -392,31 +410,18 @@ function navigateToPoll(poll: Poll) {
   router.push(`/community/${poll.communityId}/poll/${poll.id}`);
 }
 
-// ─── Community subscription management ────────────────────────────────────
-
-// Track which communities have had post/poll subscriptions started here.
-// Separate from postStore/pollStore's own tracking — this lets us detect
-// communities that arrive AFTER the first loadAllPosts() call and subscribe
-// to them incrementally as the live Gun subscription delivers them.
 const subscribedFromHome = new Set<string>();
 
 async function subscribeNewCommunities(communities: typeof communityStore.communities) {
   const newOnes = communities.filter(c => !subscribedFromHome.has(c.id));
   if (newOnes.length === 0) return;
-
-  // Mark immediately to prevent duplicate calls from rapid watcher fires
   newOnes.forEach(c => subscribedFromHome.add(c.id));
-
-  // Only show loading spinner for the very first batch
   if (subscribedFromHome.size === newOnes.length) isLoadingPosts.value = true;
-
   try {
-    await Promise.all(
-      newOnes.flatMap(community => [
-        postStore.loadPostsForCommunity(community.id),
-        pollStore.loadPollsForCommunity(community.id),
-      ])
-    );
+    await Promise.all(newOnes.flatMap(community => [
+      postStore.loadPostsForCommunity(community.id),
+      pollStore.loadPollsForCommunity(community.id),
+    ]));
   } catch (error) {
     console.error('[HomePage] Error subscribing to communities:', error);
   } finally {
@@ -460,27 +465,8 @@ async function showPollOptions() {
   }
 }
 
-// ─── Watchers ──────────────────────────────────────────────────────────────
+watch(() => communityStore.communities, (communities) => { subscribeNewCommunities(communities); }, { deep: true });
 
-// FIX: Watch the entire communities array with deep:true, not just .length.
-//
-// OLD: watch(communities.length, (new, old) => { if (new > 0 && old === 0) })
-//   → fired ONCE when the first community from localStorage cache arrived
-//   → communities arriving later from the relay (not yet cached) were missed
-//   → only c-cars got a subscription; c-programming etc. only got subscribed
-//     when user manually visited CommunityPage, and disappeared on refresh
-//
-// NEW: fires on every array mutation (push from live .on() subscription)
-//   → subscribeNewCommunities() is idempotent — skips already-subscribed ones
-//   → communities arriving 1200ms late from relay still get subscriptions
-watch(
-  () => communityStore.communities,
-  (communities) => { subscribeNewCommunities(communities); },
-  { deep: true }
-);
-
-// When returning to home tab: just reset visible slice.
-// Subscriptions are alive; no reload needed.
 watch(activeTab, (newTab) => {
   if (newTab === 'home') {
     postStore.resetVisibleCount();
@@ -488,52 +474,83 @@ watch(activeTab, (newTab) => {
   }
 });
 
-// ─── Lifecycle ─────────────────────────────────────────────────────────────
-
 onMounted(async () => {
   await chainStore.initialize();
-  // loadCommunities() starts the live Gun .on() subscription (once only).
-  // The communities watcher above then drives subscribeNewCommunities()
-  // for every community that arrives — cached or relay-delayed.
   await communityStore.loadCommunities();
 });
 </script>
 
-
 <style scoped>
-
 @import url('https://fonts.googleapis.com/css2?family=Grand+Hotel&display=swap');
 
+/* ── Logo ─────────────────────────────────────────── */
 .logo-title {
   font-family: 'Grand Hotel', cursive;
-  font-size: 34px;
+  font-size: 32px;
+  margin-left: 20px;
   letter-spacing: 0.5px;
-  
-  
-}
-.home-tab h2 {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 600;
-}
-ion-header {
-  transition: transform 0.3s ease;
+  padding-inline-start: 0;
+  --color: var(--ion-text-color);
 }
 
-ion-header.header-hidden {
-  transform: translateY(-100%);
+/* ── Page Layout ──────────────────────────────────── */
+.page-layout {
+  display: flex;
+  align-items: flex-start;
+  max-width: 1200px;
+  margin: 0 auto;
+  position: relative;
 }
 
-.subtitle {
-  margin: 4px 0 0 0;
-  color: var(--ion-color-medium);
+/* ── Left Side Nav (desktop) ──────────────────────── */
+.side-nav {
+  display: none;
+}
+
+/* ── Main Content ─────────────────────────────────── */
+.main-content {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Right Sidebar (desktop) ──────────────────────── */
+.right-sidebar {
+  display: none;
+}
+
+/* ── Communities toolbar ──────────────────────────── */
+.communities-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
+}
+
+.tab-bar {
+  display: flex;
+  gap: 0;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 14px;
   font-size: 14px;
+  font-weight: 500;
+  color: var(--ion-color-medium);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
 }
 
-.section-padding {
-  padding: 16px;
+.tab-btn.active {
+  color: var(--ion-color-primary);
+  border-bottom-color: var(--ion-color-primary);
+  font-weight: 700;
 }
 
+/* ── Loading / Empty ──────────────────────────────── */
 .loading-container {
   display: flex;
   flex-direction: column;
@@ -545,10 +562,6 @@ ion-header.header-hidden {
 .loading-container p {
   margin-top: 16px;
   color: var(--ion-color-medium);
-}
-
-.communities-list {
-  padding: 0;
 }
 
 .empty-state {
@@ -567,135 +580,77 @@ ion-header.header-hidden {
 
 .empty-state p {
   color: var(--ion-color-medium);
-  margin: 8px 0;
+  margin: 6px 0;
 }
 
-.bottom-spacing {
-  height: 70px;
+.subtitle {
+  color: var(--ion-color-medium);
+  font-size: 13px;
 }
 
-/* Create Tab Layout */
-.create-layout {
-  display: flex;
-  flex-direction: column;
-}
-
-.create-main {
-  flex: 1;
-}
-
-.create-main h2 {
-  margin: 0;
-  font-size: 24px;
+/* ── Create Tab ───────────────────────────────────── */
+.section-label {
+  font-size: 12px;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ion-color-medium);
+  margin: 20px 16px 10px;
 }
 
-/* Create Options - Simplified */
 .create-options {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  padding: 0 16px;
 }
 
 .create-option-item {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 16px 0;
+  gap: 14px;
+  padding: 14px 16px;
   cursor: pointer;
-  border-bottom: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
+  border-bottom: 1px solid rgba(var(--ion-text-color-rgb), 0.07);
+  transition: background 0.15s;
 }
 
-.create-option-item:last-child {
-  border-bottom: none;
+.create-option-item:active {
+  background: rgba(var(--ion-text-color-rgb), 0.04);
 }
 
-.create-option-item > ion-icon:first-child {
-  font-size: 32px;
+.create-icon-wrap {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-}
-
-.option-content {
-  flex: 1;
-}
-
-.option-content h3 {
-  margin: 0 0 4px 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--ion-text-color);
-}
-
-.option-content p {
-  margin: 0;
-  font-size: 13px;
-  color: var(--ion-color-medium);
-}
-
-.create-option-item .chevron {
   font-size: 20px;
-  color: var(--ion-color-medium);
-  flex-shrink: 0;
 }
 
-/* Recent Communities */
-.recent-communities-sidebar {
-  display: none;
-}
+.create-icon-wrap.primary { background: rgba(var(--ion-color-primary-rgb), 0.12); color: var(--ion-color-primary); }
+.create-icon-wrap.secondary { background: rgba(var(--ion-color-secondary-rgb), 0.12); color: var(--ion-color-secondary); }
+.create-icon-wrap.tertiary { background: rgba(var(--ion-color-tertiary-rgb), 0.12); color: var(--ion-color-tertiary); }
+
+.option-content { flex: 1; }
+.option-content h3 { margin: 0 0 2px; font-size: 15px; font-weight: 600; }
+.option-content p { margin: 0; font-size: 13px; color: var(--ion-color-medium); }
+
+.chevron { font-size: 18px; color: var(--ion-color-medium); }
+
+.quick-post-section { margin-top: 8px; }
 
 .quick-communities {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 12px;
+  padding: 0 16px 16px;
 }
 
-.quick-communities h3 {
-  margin: 0 0 4px 0;
-  font-size: 16px;
-  font-weight: 600;
-}
+/* ── Bottom Spacing ───────────────────────────────── */
+.bottom-spacing { height: 80px; }
 
-/* Desktop Layout */
-@media (min-width: 768px) {
-  .create-layout {
-    flex-direction: row;
-    gap: 24px;
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 0 24px;
-  }
-
-  .create-main {
-    flex: 2;
-    max-width: 600px;
-  }
-
-  .recent-communities-sidebar {
-    display: block;
-    flex: 1;
-    max-width: 300px;
-    position: sticky;
-    top: 16px;
-    align-self: flex-start;
-  }
-
-  .recent-communities-sidebar .section-padding {
-    padding: 16px;
-    background: rgba(var(--ion-text-color-rgb), 0.02);
-    border: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
-    border-radius: 12px;
-  }
-
-  .recent-communities-sidebar h3 {
-    margin: 0 0 4px 0;
-    font-size: 16px;
-    font-weight: 600;
-  }
-}
-
-/* Professional Bottom Navigation Bar */
+/* ── Mobile Bottom Nav ────────────────────────────── */
 .bottom-nav {
   position: fixed;
   bottom: 0;
@@ -712,9 +667,7 @@ ion-header.header-hidden {
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
 }
 
-.bottom-nav-hidden {
-  transform: translateY(100%);
-}
+.bottom-nav-hidden { transform: translateY(100%); }
 
 .nav-item {
   display: flex;
@@ -727,50 +680,229 @@ ion-header.header-hidden {
   padding: 2px 4px;
   cursor: pointer;
   color: var(--ion-color-medium);
-  transition: all 0.2s ease;
-  position: relative;
+  transition: color 0.2s;
   flex: 1;
   max-width: 120px;
 }
 
-.nav-item ion-icon {
-  font-size: 18px;
-  transition: all 0.2s ease;
+.nav-item ion-icon { font-size: 22px; }
+.nav-item span { font-size: 11px; font-weight: 500; }
+.nav-item.active { color: var(--ion-color-primary); }
+.nav-item.active span { font-weight: 700; }
+
+ion-header {
+  transition: transform 0.3s ease;
 }
 
-.nav-item span {
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.3px;
-  transition: all 0.2s ease;
+ion-header::after {
+  display: none;
 }
 
-.nav-item.active {
-  color: var(--ion-color-primary);
+ion-header ion-toolbar {
+  --background: var(--ion-background-color);
+  --border-width: 0;
+  --box-shadow: none;
+  border-bottom: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
 }
 
-.nav-item.active ion-icon {
-  transform: scale(1.1);
+/* Constrain toolbar inner content to match page layout on desktop */
+@media (min-width: 768px) {
+  ion-header ion-toolbar {
+    max-width: 100%;
+    padding-inline-start: 32px;
+    padding-inline-end: 32px;
+  }
 }
 
-.nav-item.active span {
-  font-weight: 600;
+ion-header.header-hidden {
+  transform: translateY(-100%);
 }
 
+/* ── Tablet (768px+) ──────────────────────────────── */
+@media (min-width: 768px) {
+  .logo-title{
+    margin-left: 10%;
+  }
+  .bottom-nav { display: none; }
+  .bottom-spacing { height: 24px; }
 
-ion-list {
-  background: transparent;
+  .page-layout {
+    padding: 0 16px;
+    gap: 24px;
+  }
+
+  .side-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 200px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 16px;
+    padding-top: 16px;
+  }
+
+  .side-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: none;
+    border: none;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--ion-color-medium);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    text-align: left;
+    width: 100%;
+  }
+
+  .side-nav-item ion-icon { font-size: 20px; flex-shrink: 0; }
+
+  .side-nav-item:hover {
+    background: rgba(var(--ion-text-color-rgb), 0.06);
+    color: var(--ion-text-color);
+  }
+
+  .side-nav-item.active {
+    background: rgba(var(--ion-color-primary-rgb), 0.1);
+    color: var(--ion-color-primary);
+    font-weight: 700;
+  }
 }
 
-ion-item {
-  --background: transparent;
+/* ── Desktop (1024px+) ────────────────────────────── */
+@media (min-width: 1024px) {
+  .page-layout { gap: 32px; }
+
+  .side-nav { width: 220px; }
+
+  .right-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 280px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 16px;
+    padding-top: 16px;
+    align-self: flex-start;
+  }
+
+  .sidebar-section {
+    border: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px 8px;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ion-color-medium);
+  }
+
+  .sidebar-link {
+    background: none;
+    border: none;
+    font-size: 12px;
+    color: var(--ion-color-primary);
+    cursor: pointer;
+    font-weight: 600;
+    padding: 0;
+  }
+
+  .sidebar-create-btn {
+    margin: 0 10px 10px;
+  }
+
+  .sidebar-communities {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sidebar-community-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.06);
+  }
+
+  .sidebar-community-item:hover {
+    background: rgba(var(--ion-text-color-rgb), 0.04);
+  }
+
+  .sidebar-community-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: rgba(var(--ion-color-primary-rgb), 0.12);
+    color: var(--ion-color-primary);
+    font-size: 14px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .sidebar-community-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .sidebar-community-name {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sidebar-community-meta {
+    display: block;
+    font-size: 12px;
+    color: var(--ion-color-medium);
+  }
+
+  .joined-check {
+    font-size: 16px;
+    color: var(--ion-color-primary);
+    flex-shrink: 0;
+  }
+
+  .sidebar-about {
+    padding: 14px;
+  }
+
+  .sidebar-about-title {
+    font-family: 'Grand Hotel', cursive;
+    font-size: 20px;
+    margin: 0 0 6px;
+  }
+
+  .sidebar-about-text {
+    font-size: 12px;
+    color: var(--ion-color-medium);
+    line-height: 1.5;
+    margin: 0;
+  }
+}
+
+/* ── Large Desktop (1280px+) ──────────────────────── */
+@media (min-width: 1280px) {
+  .side-nav { width: 240px; }
+  .right-sidebar { width: 300px; }
 }
 </style>
-
-
-
-
-
-
-
-

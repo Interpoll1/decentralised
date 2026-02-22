@@ -17,11 +17,23 @@
     <ion-content>
       <!-- Community Header -->
       <div v-if="community" class="community-header">
-        <div class="community-info">
-          <h1>{{ community.displayName }}</h1>
-          <p class="community-id">{{ community.id }}</p>
-          <p class="description">{{ community.description }}</p>
+        <div class="community-top">
+          <div class="community-info">
+            <h1>{{ community.displayName }}</h1>
+            <p class="community-id">{{ community.id }}</p>
+          </div>
+          <ion-button
+            :color="isJoined ? 'medium' : 'primary'"
+            shape="round"
+            size="small"
+            @click="toggleJoin"
+          >
+            <ion-icon slot="start" :icon="isJoined ? checkmarkCircleOutline : addCircleOutline"></ion-icon>
+            {{ isJoined ? 'Joined' : 'Join' }}
+          </ion-button>
         </div>
+
+        <p class="description">{{ community.description }}</p>
 
         <div class="community-stats">
           <div class="stat">
@@ -34,53 +46,42 @@
           </div>
         </div>
 
-        <div class="action-buttons">
-          <ion-button 
-            expand="block" 
-            :color="isJoined ? 'medium' : 'primary'"
-            @click="toggleJoin"
+        <div class="button-row" v-if="isJoined">
+          <ion-button
+            size="small"
+            @click="$router.push(`/community/${communityId}/create-post`)"
           >
-            <ion-icon slot="start" :icon="isJoined ? checkmarkCircleOutline : addCircleOutline"></ion-icon>
-            {{ isJoined ? 'Joined' : 'Join Community' }}
+            <ion-icon slot="start" :icon="createOutline"></ion-icon>
+            Create Post
           </ion-button>
-
-          <div class="button-row" >
-            <ion-button  style="background-color: azure;"
-              expand="block" 
-              fill="outline"
-              @click="$router.push(`/community/${communityId}/create-post`)"
-              :disabled="!isJoined"
-            >
-              <ion-icon slot="start" :icon="createOutline"></ion-icon>
-              Create Post
-            </ion-button>
-
-            <ion-button style="background-color: azure;"
-              expand="block" 
-              fill="outline"
-              @click="$router.push(`/create-poll?communityId=${communityId}`)"
-              :disabled="!isJoined"
-            >
-              <ion-icon slot="start" :icon="statsChartOutline"></ion-icon>
-              Create Poll
-            </ion-button>
-          </div>
+          <ion-button
+            size="small"
+            @click="$router.push(`/create-poll?communityId=${communityId}`)"
+          >
+            <ion-icon slot="start" :icon="statsChartOutline"></ion-icon>
+            Create Poll
+          </ion-button>
         </div>
       </div>
 
+      
       <!-- Content Filter -->
       <div class="content-filter">
-        <ion-segment v-model="contentFilter">
-          <ion-segment-button value="all">
-            <ion-label>All</ion-label>
-          </ion-segment-button>
-          <ion-segment-button value="posts">
-            <ion-label>Posts</ion-label>
-          </ion-segment-button>
-          <ion-segment-button value="polls">
-            <ion-label>Polls</ion-label>
-          </ion-segment-button>
-        </ion-segment>
+        <button
+          class="tab-btn"
+          :class="{ active: contentFilter === 'all' }"
+          @click="contentFilter = 'all'"
+        >All</button>
+        <button
+          class="tab-btn"
+          :class="{ active: contentFilter === 'posts' }"
+          @click="contentFilter = 'posts'"
+        >Posts</button>
+        <button
+          class="tab-btn"
+          :class="{ active: contentFilter === 'polls' }"
+          @click="contentFilter = 'polls'"
+        >Polls</button>
       </div>
 
       <!-- Loading -->
@@ -92,7 +93,6 @@
       <!-- Content Feed -->
       <div v-else-if="displayedContent.length > 0" class="content-feed">
         <template v-for="item in displayedContent" :key="`${item.type}-${item.data.id}`">
-          <!-- Post Card -->
           <PostCard
             v-if="item.type === 'post'"
             :post="item.data"
@@ -104,9 +104,7 @@
             @downvote="handleDownvote(item.data)"
             @comments="navigateToPost(item.data)"
           />
-          
-          <!-- Poll Card -->
-          <PollCard 
+          <PollCard
             v-else-if="item.type === 'poll'"
             :poll="item.data"
             @click="navigateToPoll(item.data)"
@@ -121,7 +119,7 @@
         <p v-if="contentFilter === 'posts'">No posts yet</p>
         <p v-else-if="contentFilter === 'polls'">No polls yet</p>
         <p v-else>No content yet</p>
-        <ion-button 
+        <ion-button
           v-if="isJoined"
           @click="contentFilter === 'polls' ? $router.push(`/create-poll?communityId=${communityId}`) : $router.push(`/community/${communityId}/create-post`)"
         >
@@ -132,105 +130,114 @@
         </ion-button>
       </div>
 
-      <!-- Rules Section -->
-      <div v-if="community && community.rules && community.rules.length > 0" class="rules-section">
-        <div class="rules-header">
-          <h3>Community Rules</h3>
-        </div>
+       <!-- Rules Section -->
+      <div v-if="community?.rules?.length > 0" class="rules-section">
+        <h3>Community Rules</h3>
         <ol class="rules-list">
-          <li v-for="(rule, index) in community.rules" :key="index">
-            {{ rule }}
-          </li>
+          <li v-for="(rule, index) in community.rules" :key="index">{{ rule }}</li>
         </ol>
-        <div class="rules-separator"></div>
       </div>
+     
     </ion-content>
   </ion-page>
 </template>
 
 <style scoped>
+/* ── Header ─────────────────────────────────────── */
 .community-header {
-  padding: 24px 16px;
-  background: linear-gradient(135deg, var(--ion-color-primary) 0%, var(--ion-color-primary-shade) 100%);
-  color: white;
+  padding: 16px 16px 0;
+  border-bottom: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
+}
+
+.community-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
 }
 
 .community-info h1 {
-  margin: 0 0 4px 0;
-  font-size: 28px;
-  font-weight: 600;
+  margin: 0 0 2px;
+  font-size: 22px;
+  font-weight: 700;
 }
 
 .community-id {
-  margin: 0 0 12px 0;
-  opacity: 0.9;
-  font-size: 14px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--ion-color-medium);
 }
 
 .description {
-  margin: 0 0 20px 0;
+  margin: 0 0 12px;
+  font-size: 14px;
   line-height: 1.5;
-  opacity: 0.95;
+  color: var(--ion-color-step-600);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .community-stats {
   display: flex;
-  gap: 24px;
-  margin-bottom: 20px;
+  gap: 20px;
+  margin-bottom: 14px;
 }
 
 .stat {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ion-color-medium);
 }
 
 .stat ion-icon {
-  font-size: 18px;
-}
-
-.action-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  font-size: 16px;
 }
 
 .button-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
 }
 
+/* ── Filter ──────────────────────────────────────── */
 .content-filter {
-  padding: 12px 16px;
+  display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 10;
   background: rgba(var(--ion-card-background-rgb), 0.22);
   backdrop-filter: blur(10px) saturate(1.4);
   -webkit-backdrop-filter: blur(10px) saturate(1.4);
   border-bottom: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
-  position: sticky;
-  top: 0;
-  z-index: 10;
 }
 
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 64px 24px;
-}
-
-.loading-container p {
-  margin-top: 16px;
+.tab-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 12px 0;
+  font-size: 14px;
+  font-weight: 500;
   color: var(--ion-color-medium);
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+  letter-spacing: 0.01em;
 }
 
-.content-feed {
-  padding: 0;
-  margin: 0;
+.tab-btn.active {
+  color: var(--ion-color-primary);
+  border-bottom-color: var(--ion-color-primary);
+  font-weight: 700;
 }
 
+/* ── Loading / Empty ─────────────────────────────── */
+.loading-container,
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -240,54 +247,43 @@
   text-align: center;
 }
 
-.empty-state ion-icon {
-  color: var(--ion-color-medium);
-  margin-bottom: 16px;
-}
-
+.loading-container p,
 .empty-state p {
   color: var(--ion-color-medium);
-  margin: 8px 0 16px 0;
+  margin: 12px 0 16px;
 }
 
+.empty-state ion-icon {
+  color: var(--ion-color-medium);
+}
+
+/* ── Rules ───────────────────────────────────────── */
 .rules-section {
-  margin: 24px 0 0 0;
-  padding: 16px 0;
-  background: transparent;
+  padding: 20px 16px;
+  border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
+  margin-top: 16px;
 }
 
-.rules-header {
-  padding: 0 16px 12px 16px;
-  border-bottom: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
-}
-
-.rules-header h3 {
-  margin: 0;
-  font-size: 18px;
+.rules-section h3 {
+  margin: 0 0 12px;
+  font-size: 16px;
   font-weight: 600;
-  color: var(--ion-text-color);
 }
 
 .rules-list {
   margin: 0;
-  padding: 16px 16px 16px 36px;
-  list-style-position: outside;
+  padding-left: 20px;
 }
 
 .rules-list li {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
+  font-size: 14px;
   line-height: 1.5;
   color: var(--ion-color-step-600);
 }
 
 .rules-list li:last-child {
   margin-bottom: 0;
-}
-
-.rules-separator {
-  height: 1px;
-  background: rgba(var(--ion-text-color-rgb), 0.08);
-  margin-top: 16px;
 }
 </style>
 

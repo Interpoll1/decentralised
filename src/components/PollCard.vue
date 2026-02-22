@@ -139,7 +139,7 @@ function getTimeRemaining(): string {
 <style scoped>
 .poll-card {
   margin-left: 20px;
-  margin-right: 15px;
+  margin-right: 8px;
   padding: 16px 0;
   cursor: pointer;
   background: transparent;
@@ -148,7 +148,7 @@ function getTimeRemaining(): string {
 .poll-separator {
   height: 1px;
   background: rgba(var(--ion-text-color-rgb), 0.08);
-  margin-top: 16px;
+  margin-top: 8px;
 }
 
 html.dark .poll-separator {
@@ -295,8 +295,8 @@ html.dark .poll-footer {
   justify-content: space-between;
   align-items: center;
   border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.05);
-  padding-top: 12px;
-  margin-top: 12px;
+  padding-top: 6px;
+
 }
 
 .poll-stats {

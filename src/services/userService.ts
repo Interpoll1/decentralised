@@ -28,21 +28,39 @@ export class UserService {
   private static currentUser: UserProfile | null = null;
 
   // Initialize or get current user
-  static async getCurrentUser(): Promise<UserProfile> {
-    if (this.currentUser) return this.currentUser;
+  static async getCurrentUser(forceRefresh = false): Promise<UserProfile> {
+    if (this.currentUser && !forceRefresh) return this.currentUser;
 
     const deviceId = await VoteTrackerService.getDeviceId();
     const gun = GunService.getGun();
 
-    // Try to load existing profile
-    const existingProfile = await gun.get('users').get(deviceId).once().then();
+    // Use .on() with timeout so we wait for relay data — .once() fires immediately
+    // with undefined if Gun hasn't synced yet, which would overwrite real profile
+    const existingProfile = await new Promise<any>((resolve) => {
+      let resolved = false;
+      let listener: any;
+      listener = gun.get('users').get(deviceId).on((data: any) => {
+        if (!resolved && data && !data._ && data.id) {
+          resolved = true;
+          listener?.off?.();
+          resolve(data);
+        }
+      });
+      // Wait up to 3s for relay, then resolve null (don't create profile on timeout)
+      setTimeout(() => {
+        if (!resolved) { resolved = true; listener?.off?.(); resolve(null); }
+      }, 3000);
+    });
 
-    if (existingProfile && !existingProfile._) {
+    if (existingProfile) {
       this.currentUser = existingProfile;
       return existingProfile;
     }
 
-    // Create new profile
+    // Only create new profile if we have no cached user either
+    // (true first-time user, not just a slow relay)
+    if (this.currentUser) return this.currentUser;
+
     const newProfile: UserProfile = {
       id: deviceId,
       username: `user_${deviceId.substring(0, 8)}`,
@@ -80,14 +98,14 @@ export class UserService {
 
   // Increment post count
   static async incrementPostCount() {
-    const user = await this.getCurrentUser();
-    await this.updateProfile({ postCount: user.postCount + 1 });
+    const user = await this.getCurrentUser(true); // force fresh from Gun
+    await this.updateProfile({ postCount: (user.postCount || 0) + 1 });
   }
 
   // Increment comment count
   static async incrementCommentCount() {
-    const user = await this.getCurrentUser();
-    await this.updateProfile({ commentCount: user.commentCount + 1 });
+    const user = await this.getCurrentUser(true); // force fresh from Gun
+    await this.updateProfile({ commentCount: (user.commentCount || 0) + 1 });
   }
 
   // Increment karma (when someone upvotes your content)

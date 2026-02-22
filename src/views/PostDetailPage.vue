@@ -151,7 +151,309 @@
   </ion-page>
 </template>
 
+<script setup lang="ts">
+import { ref, computed, onMounted, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import {
+  IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
+  IonButtons, IonBackButton, IonButton, IonIcon, IonCard,
+  IonCardHeader, IonCardTitle, IonCardContent, IonChip,
+  IonLabel, IonSpinner, IonTextarea, IonBadge,
+  toastController, actionSheetController
+} from '@ionic/vue';
+import {
+  peopleOutline, arrowUpOutline, arrowDownOutline,
+  trendingUpOutline, chatbubbleOutline, sendOutline,
+  shareSocialOutline, alertCircleOutline, refreshOutline
+} from 'ionicons/icons';
+import { usePostStore } from '../stores/postStore';
+import { useCommentStore } from '../stores/commentStore';
+import { useCommunityStore } from '../stores/communityStore';
+import { useUserStore } from '../stores/userStore';
+import CommentCard from '../components/CommentCard.vue';
+import { Post } from '../services/postService';
+import { generatePseudonym } from '../utils/pseudonym';
 
+const route = useRoute();
+const router = useRouter();
+const postStore = usePostStore();
+const commentStore = useCommentStore();
+const communityStore = useCommunityStore();
+const userStore = useUserStore();
+
+const post = ref<Post | null>(null);
+const isLoading = ref(true);
+const newCommentText = ref('');
+const voteVersion = ref(0);
+
+const postId = computed(() => route.params.postId as string);
+const communityId = computed(() => route.params.communityId as string);
+
+// Meta tags via watch — avoids @unhead/vue context issues
+watch(post, (p) => {
+  if (!p) return;
+  document.title = `${p.title} - Interpoll`;
+
+  const setMeta = (attr: string, val: string, content: string) => {
+    let el = document.querySelector(`meta[${attr}="${val}"]`);
+    if (!el) {
+      el = document.createElement('meta');
+      el.setAttribute(attr, val);
+      document.head.appendChild(el);
+    }
+    el.setAttribute('content', content);
+  };
+
+  const desc = p.content?.slice(0, 160) ?? '';
+  setMeta('name', 'description', desc);
+  setMeta('property', 'og:title', p.title);
+  setMeta('property', 'og:description', desc);
+  setMeta('property', 'og:url', window.location.href);
+});
+
+const communityName = computed(() => {
+  const community = communityStore.communities.find(c => c.id === communityId.value);
+  return community?.displayName || communityId.value;
+});
+
+const allComments = computed(() =>
+  commentStore.comments.filter(c => {
+    const matchesPost = c.postId === postId.value || c.postId === post.value?.id;
+    return matchesPost && !c.parentId;
+  })
+);
+
+const sortedComments = computed(() => {
+  const minKarma = Number(localStorage.getItem('minUserKarma') || '-1000');
+
+  return allComments.value
+    .filter((c) => {
+      if (minKarma <= -1000) return true;
+      if (!c.authorId) return true;
+      const cached = userStore.getCachedKarma(c.authorId);
+      if (cached !== null) return cached >= minKarma;
+      userStore.getProfile(c.authorId);
+      return true;
+    })
+    .sort((a, b) => b.score !== a.score ? b.score - a.score : b.createdAt - a.createdAt);
+});
+
+const uniqueCommenters = computed(() => {
+  const authorMap = new Map<string, { authorId: string; displayName: string; commentCount: number }>();
+
+  commentStore.comments
+    .filter(c => c.postId === postId.value || c.postId === post.value?.id)
+    .forEach(c => {
+      const existing = authorMap.get(c.authorId);
+      if (existing) {
+        existing.commentCount++;
+      } else {
+        authorMap.set(c.authorId, {
+          authorId: c.authorId,
+          displayName: c.authorId && postId.value
+            ? generatePseudonym(postId.value, c.authorId)
+            : (c.authorName || 'anon'),
+          commentCount: 1,
+        });
+      }
+    });
+
+  return Array.from(authorMap.values()).sort((a, b) => b.commentCount - a.commentCount);
+});
+
+const hasUpvoted = computed(() => {
+  voteVersion.value;
+  return JSON.parse(localStorage.getItem('upvoted-posts') || '[]').includes(postId.value);
+});
+
+const hasDownvoted = computed(() => {
+  voteVersion.value;
+  return JSON.parse(localStorage.getItem('downvoted-posts') || '[]').includes(postId.value);
+});
+
+function formatTime(timestamp: number): string {
+  const diff = Date.now() - timestamp;
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days < 7) return `${days}d ago`;
+  return new Date(timestamp).toLocaleDateString();
+}
+
+function formatNumber(num: number | undefined | null): string {
+  const n = num ?? 0;
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  return n.toString();
+}
+
+function getIPFSUrl(cid?: string): string {
+  return cid ? `https://ipfs.io/ipfs/${cid}` : '';
+}
+
+function toggleLocalStorageItem(key: string, id: string, add: boolean) {
+  const items: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+  const updated = add ? [...items, id] : items.filter(i => i !== id);
+  localStorage.setItem(key, JSON.stringify(updated));
+}
+
+async function handleUpvote() {
+  if (!post.value) return;
+  try {
+    if (hasUpvoted.value) {
+      toggleLocalStorageItem('upvoted-posts', post.value.id, false);
+      // Optimistic update
+      post.value = { ...post.value, upvotes: post.value.upvotes - 1, score: post.value.score - 1 };
+      voteVersion.value++;
+      postStore.removeUpvote(post.value.id); // fire and forget
+      (await toastController.create({ message: 'Upvote removed', duration: 1500, color: 'medium' })).present();
+    } else {
+      const wasDownvoted = hasDownvoted.value;
+      toggleLocalStorageItem('downvoted-posts', post.value.id, false);
+      toggleLocalStorageItem('upvoted-posts', post.value.id, true);
+      // Optimistic update
+      post.value = { ...post.value,
+        upvotes: post.value.upvotes + 1,
+        downvotes: wasDownvoted ? post.value.downvotes - 1 : post.value.downvotes,
+        score: post.value.score + (wasDownvoted ? 2 : 1),
+      };
+      voteVersion.value++;
+      if (wasDownvoted) postStore.removeDownvote(post.value.id); // fire and forget
+      postStore.upvotePost(post.value.id); // fire and forget
+      (await toastController.create({ message: 'Upvoted', duration: 1500, color: 'success' })).present();
+    }
+  } catch {
+    voteVersion.value++;
+  }
+}
+
+async function handleDownvote() {
+  if (!post.value) return;
+  try {
+    if (hasDownvoted.value) {
+      toggleLocalStorageItem('downvoted-posts', post.value.id, false);
+      // Optimistic update
+      post.value = { ...post.value, downvotes: post.value.downvotes - 1, score: post.value.score + 1 };
+      voteVersion.value++;
+      postStore.removeDownvote(post.value.id); // fire and forget
+      (await toastController.create({ message: 'Downvote removed', duration: 1500, color: 'medium' })).present();
+    } else {
+      const wasUpvoted = hasUpvoted.value;
+      toggleLocalStorageItem('upvoted-posts', post.value.id, false);
+      toggleLocalStorageItem('downvoted-posts', post.value.id, true);
+      // Optimistic update
+      post.value = { ...post.value,
+        downvotes: post.value.downvotes + 1,
+        upvotes: wasUpvoted ? post.value.upvotes - 1 : post.value.upvotes,
+        score: post.value.score - (wasUpvoted ? 2 : 1),
+      };
+      voteVersion.value++;
+      if (wasUpvoted) postStore.removeUpvote(post.value.id); // fire and forget
+      postStore.downvotePost(post.value.id); // fire and forget
+      (await toastController.create({ message: 'Downvoted', duration: 1500, color: 'warning' })).present();
+    }
+  } catch {
+    voteVersion.value++;
+  }
+}
+
+async function submitComment() {
+  if (!post.value || !newCommentText.value.trim()) return;
+  try {
+    await commentStore.createComment({
+      postId: post.value.id,
+      communityId: post.value.communityId,
+      content: newCommentText.value.trim()
+    });
+    newCommentText.value = '';
+    (await toastController.create({ message: 'Comment posted', duration: 2000, color: 'success' })).present();
+    setTimeout(() => commentStore.loadCommentsForPost(post.value!.id), 500);
+  } catch {
+    (await toastController.create({ message: 'Failed to post comment', duration: 2000, color: 'danger' })).present();
+  }
+}
+
+async function handleCommentUpvote(comment: any) {
+  try {
+    const wasUpvoted = JSON.parse(localStorage.getItem('upvoted-comments') || '[]').includes(comment.id);
+    await commentStore.upvoteComment(comment.id);
+    (await toastController.create({
+      message: wasUpvoted ? 'Upvote removed' : 'Comment upvoted',
+      duration: 1500,
+      color: wasUpvoted ? 'medium' : 'success'
+    })).present();
+  } catch { /* silent */ }
+}
+
+async function handleCommentDownvote(comment: any) {
+  try {
+    const wasDownvoted = JSON.parse(localStorage.getItem('downvoted-comments') || '[]').includes(comment.id);
+    await commentStore.downvoteComment(comment.id);
+    (await toastController.create({
+      message: wasDownvoted ? 'Downvote removed' : 'Comment downvoted',
+      duration: 1500,
+      color: wasDownvoted ? 'medium' : 'warning'
+    })).present();
+  } catch { /* silent */ }
+}
+
+async function sharePost() {
+  if (!post.value) return;
+  const actionSheet = await actionSheetController.create({
+    header: 'Share Post',
+    buttons: [
+      {
+        text: 'Copy Link',
+        icon: 'link-outline',
+        handler: () => {
+          navigator.clipboard.writeText(window.location.href);
+          toastController.create({ message: 'Link copied to clipboard', duration: 2000, color: 'success' })
+            .then(t => t.present());
+        }
+      },
+      {
+        text: 'Share via...',
+        icon: 'share-social-outline',
+        handler: () => {
+          navigator.share?.({
+            title: post.value!.title,
+            text: post.value!.content,
+            url: window.location.href
+          });
+        }
+      },
+      { text: 'Cancel', role: 'cancel' }
+    ]
+  });
+  await actionSheet.present();
+}
+
+async function loadPost() {
+  isLoading.value = true;
+  try {
+    await postStore.selectPost(postId.value);
+    post.value = postStore.currentPost;
+    if (post.value) {
+      await commentStore.loadCommentsForPost(post.value.id);
+    }
+  } catch { /* silent */ }
+  finally {
+    isLoading.value = false;
+  }
+}
+
+async function refreshPost() {
+  await loadPost();
+  (await toastController.create({ message: 'Post refreshed', duration: 1500, color: 'success' })).present();
+}
+
+onMounted(async () => {
+  await loadPost();
+});
+</script>
 
 <style scoped>
 .loading-container,
@@ -194,7 +496,7 @@
 }
 
 .post-title {
-  font-size: 24px;
+  font-size: 18px;
   font-weight: 700;
   line-height: 1.3;
   margin: 8px 0 0 0;
@@ -206,7 +508,7 @@
 }
 
 .post-content {
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.6;
   margin: 16px 0;
   white-space: pre-wrap;
@@ -309,7 +611,7 @@ html.dark .section-separator {
 }
 
 .commenters-section {
-  padding: 16px 0;
+  padding: 2x 0;
   background: transparent;
 }
 
@@ -408,409 +710,5 @@ html.dark .section-separator {
 }
 </style>
 
-<script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonContent,
-  IonButtons,
-  IonBackButton,
-  IonButton,
-  IonIcon,
-  IonCard,
-  IonCardHeader,
-  IonCardTitle,
-  IonCardContent,
-  IonChip,
-  IonLabel,
-  IonSpinner,
-  IonTextarea,
-  IonBadge,
-  toastController,
-  actionSheetController
-} from '@ionic/vue';
-import {
-  peopleOutline,
-  arrowUpOutline,
-  arrowDownOutline,
-  trendingUpOutline,
-  chatbubbleOutline,
-  sendOutline,
-  shareSocialOutline,
-  alertCircleOutline,
-  refreshOutline
-} from 'ionicons/icons';
-import { usePostStore } from '../stores/postStore';
-import { useCommentStore } from '../stores/commentStore';
-import { useCommunityStore } from '../stores/communityStore';
-import { useUserStore } from '../stores/userStore';
-import CommentCard from '../components/CommentCard.vue';
-import { Post } from '../services/postService';
-import { generatePseudonym } from '../utils/pseudonym';
 
-const route = useRoute();
-const router = useRouter();
-const postStore = usePostStore();
-const commentStore = useCommentStore();
-const communityStore = useCommunityStore();
-const userStore = useUserStore();
 
-const post = ref<Post | null>(null);
-const isLoading = ref(true);
-const newCommentText = ref('');
-const voteVersion = ref(0);
-
-const postId = computed(() => route.params.postId as string);
-const communityId = computed(() => route.params.communityId as string);
-
-const communityName = computed(() => {
-  const community = communityStore.communities.find(c => c.id === communityId.value);
-  return community?.displayName || communityId.value;
-});
-
-const allComments = computed(() => {
-  return commentStore.comments.filter(c => {
-    const matchesPost = c.postId === postId.value || c.postId === post.value?.id;
-    return matchesPost && !c.parentId;
-  });
-});
-
-const sortedComments = computed(() => {
-  const minKarma = Number(localStorage.getItem('minUserKarma') || '-1000');
-
-  const visible = allComments.value.filter((c) => {
-    if (minKarma <= -1000) return true;
-
-    const authorId = c.authorId;
-    if (!authorId) return true;
-
-    const cached = userStore.getCachedKarma(authorId);
-    if (cached !== null) {
-      return cached >= minKarma;
-    }
-
-    // No profile yet: fetch in background and show for now
-    userStore.getProfile(authorId);
-    return true;
-  });
-
-  return visible.sort((a, b) => {
-    if (b.score !== a.score) {
-      return b.score - a.score;
-    }
-    return b.createdAt - a.createdAt;
-  });
-});
-
-const uniqueCommenters = computed(() => {
-  const authorMap = new Map<string, { authorId: string; displayName: string; commentCount: number }>();
-
-  commentStore.comments
-    .filter(c => c.postId === postId.value || c.postId === post.value?.id)
-    .forEach(c => {
-      const existing = authorMap.get(c.authorId);
-      if (existing) {
-        existing.commentCount++;
-      } else {
-        authorMap.set(c.authorId, {
-          authorId: c.authorId,
-          displayName: c.authorId && postId.value ? generatePseudonym(postId.value, c.authorId) : (c.authorName || 'anon'),
-          commentCount: 1,
-        });
-      }
-    });
-
-  return Array.from(authorMap.values()).sort((a, b) => b.commentCount - a.commentCount);
-});
-
-const hasUpvoted = computed(() => {
-  voteVersion.value; // reactive dependency to trigger re-evaluation on vote changes
-  const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
-  return votedPosts.includes(postId.value);
-});
-
-const hasDownvoted = computed(() => {
-  voteVersion.value; // reactive dependency to trigger re-evaluation on vote changes
-  const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
-  return votedPosts.includes(postId.value);
-});
-
-function formatTime(timestamp: number): string {
-  const now = Date.now();
-  const diff = now - timestamp;
-  
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-  
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days < 7) return `${days}d ago`;
-  
-  return new Date(timestamp).toLocaleDateString();
-}
-
-function formatNumber(num: number | undefined | null): string {
-  const n = num ?? 0;
-  
-  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
-  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
-  return n.toString();
-}
-
-function getIPFSUrl(cid?: string): string {
-  if (!cid) return '';
-  return `https://ipfs.io/ipfs/${cid}`;
-}
-
-async function handleUpvote() {
-  if (!post.value) return;
-
-  try {
-    if (hasUpvoted.value) {
-      // Remove from localStorage first (optimistic UI)
-      const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
-      const filtered = votedPosts.filter((id: string) => id !== post.value!.id);
-      localStorage.setItem('upvoted-posts', JSON.stringify(filtered));
-      voteVersion.value++;
-
-      await postStore.removeUpvote(post.value.id);
-
-      const toast = await toastController.create({
-        message: 'Upvote removed',
-        duration: 1500,
-        color: 'medium'
-      });
-      await toast.present();
-    } else {
-      // Clear downvote from localStorage first if needed
-      const downvotedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
-      if (downvotedPosts.includes(post.value.id)) {
-        const filtered = downvotedPosts.filter((id: string) => id !== post.value!.id);
-        localStorage.setItem('downvoted-posts', JSON.stringify(filtered));
-      }
-
-      // Add to upvoted localStorage
-      const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
-      votedPosts.push(post.value.id);
-      localStorage.setItem('upvoted-posts', JSON.stringify(votedPosts));
-      voteVersion.value++;
-
-      // Clear existing downvote in store if needed
-      if (downvotedPosts.includes(post.value.id)) {
-        await postStore.removeDownvote(post.value.id);
-      }
-      await postStore.upvotePost(post.value.id);
-
-      const toast = await toastController.create({
-        message: 'Upvoted',
-        duration: 1500,
-        color: 'success'
-      });
-      await toast.present();
-    }
-
-    await loadPost();
-  } catch (_error) {
-    voteVersion.value++;
-  }
-}
-
-async function handleDownvote() {
-  if (!post.value) return;
-
-  try {
-    if (hasDownvoted.value) {
-      // Remove from localStorage first (optimistic UI)
-      const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
-      const filtered = votedPosts.filter((id: string) => id !== post.value!.id);
-      localStorage.setItem('downvoted-posts', JSON.stringify(filtered));
-      voteVersion.value++;
-
-      await postStore.removeDownvote(post.value.id);
-
-      const toast = await toastController.create({
-        message: 'Downvote removed',
-        duration: 1500,
-        color: 'medium'
-      });
-      await toast.present();
-    } else {
-      // Clear upvote from localStorage first if needed
-      const upvotedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
-      if (upvotedPosts.includes(post.value.id)) {
-        const filtered = upvotedPosts.filter((id: string) => id !== post.value!.id);
-        localStorage.setItem('upvoted-posts', JSON.stringify(filtered));
-      }
-
-      // Add to downvoted localStorage
-      const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
-      votedPosts.push(post.value.id);
-      localStorage.setItem('downvoted-posts', JSON.stringify(votedPosts));
-      voteVersion.value++;
-
-      // Clear existing upvote in store if needed
-      if (upvotedPosts.includes(post.value.id)) {
-        await postStore.removeUpvote(post.value.id);
-      }
-      await postStore.downvotePost(post.value.id);
-
-      const toast = await toastController.create({
-        message: 'Downvoted',
-        duration: 1500,
-        color: 'warning'
-      });
-      await toast.present();
-    }
-
-    await loadPost();
-  } catch (_error) {
-    voteVersion.value++;
-  }
-}
-
-async function submitComment() {
-  if (!post.value || !newCommentText.value.trim()) return;
-  
-  try {
-    await commentStore.createComment({
-      postId: post.value.id,
-      communityId: post.value.communityId,
-      content: newCommentText.value.trim()
-    });
-    
-    newCommentText.value = '';
-    
-    const toast = await toastController.create({
-      message: 'Comment posted',
-      duration: 2000,
-      color: 'success'
-    });
-    await toast.present();
-    
-    setTimeout(() => {
-      commentStore.loadCommentsForPost(post.value!.id);
-    }, 500);
-    
-  } catch (_error) {
-    const toast = await toastController.create({
-      message: 'Failed to post comment',
-      duration: 2000,
-      color: 'danger'
-    });
-    await toast.present();
-  }
-}
-
-async function handleCommentUpvote(comment: any) {
-  try {
-    const wasUpvoted = JSON.parse(localStorage.getItem('upvoted-comments') || '[]').includes(comment.id);
-    await commentStore.upvoteComment(comment.id);
-
-    const toast = await toastController.create({
-      message: wasUpvoted ? 'Upvote removed' : 'Comment upvoted',
-      duration: 1500,
-      color: wasUpvoted ? 'medium' : 'success'
-    });
-    await toast.present();
-  } catch (_error) {
-    // Comment upvote failed
-  }
-}
-
-async function handleCommentDownvote(comment: any) {
-  try {
-    const wasDownvoted = JSON.parse(localStorage.getItem('downvoted-comments') || '[]').includes(comment.id);
-    await commentStore.downvoteComment(comment.id);
-
-    const toast = await toastController.create({
-      message: wasDownvoted ? 'Downvote removed' : 'Comment downvoted',
-      duration: 1500,
-      color: wasDownvoted ? 'medium' : 'warning'
-    });
-    await toast.present();
-  } catch (_error) {
-    // Comment downvote failed
-  }
-}
-
-async function sharePost() {
-  if (!post.value) return;
-  
-  const actionSheet = await actionSheetController.create({
-    header: 'Share Post',
-    buttons: [
-      {
-        text: 'Copy Link',
-        icon: 'link-outline',
-        handler: () => {
-          const url = window.location.href;
-          navigator.clipboard.writeText(url);
-          
-          toastController.create({
-            message: 'Link copied to clipboard',
-            duration: 2000,
-            color: 'success'
-          }).then(toast => toast.present());
-        }
-      },
-      {
-        text: 'Share via...',
-        icon: 'share-social-outline',
-        handler: () => {
-          if (navigator.share) {
-            navigator.share({
-              title: post.value!.title,
-              text: post.value!.content,
-              url: window.location.href
-            });
-          }
-        }
-      },
-      {
-        text: 'Cancel',
-        role: 'cancel'
-      }
-    ]
-  });
-  
-  await actionSheet.present();
-}
-
-async function loadPost() {
-  isLoading.value = true;
-  
-  try {
-    await postStore.selectPost(postId.value);
-    post.value = postStore.currentPost;
-    
-    if (post.value) {
-      await commentStore.loadCommentsForPost(post.value.id);
-    }
-  } catch (_error) {
-    // Post loading failed
-  } finally {
-    isLoading.value = false;
-  }
-}
-
-async function refreshPost() {
-  await loadPost();
-  
-  const toast = await toastController.create({
-    message: 'Post refreshed',
-    duration: 1500,
-    color: 'success'
-  });
-  await toast.present();
-}
-
-onMounted(async () => {
-  await loadPost();
-});
-</script>
