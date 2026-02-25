@@ -54,6 +54,12 @@ const routes: Array<RouteRecordRaw> = [
     component: () => import('../views/ProfilePage.vue')
   },
   {
+    path: '/user/:userId',
+    name: 'UserProfile',
+    component: () => import('../views/UserProfileView.vue'),
+    props: true
+  },
+  {
     path: '/settings',
     name: 'Settings',
     component: () => import('../views/SettingsPage.vue')
@@ -79,6 +85,17 @@ const routes: Array<RouteRecordRaw> = [
     path: '/receipt/:mnemonic?',
     name: 'Receipt',
     component: () => import('../views/ReceiptPage.vue')
+  },
+  {
+    path: '/search',
+    name: 'Search',
+    component: () => import('../views/SearchView.vue')
+  },
+  {
+    path: '/chat/:userId',
+    name: 'Chat',
+    component: () => import('../views/ChatView.vue'),
+    props: true
   },
   // Catch-all route for 404
   {

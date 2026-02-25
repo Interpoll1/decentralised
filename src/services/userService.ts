@@ -1,18 +1,20 @@
 // src/services/userService.ts
 import { GunService } from './gunService';
 import { VoteTrackerService } from './voteTrackerService';
+import { KeyService } from './keyService';
 
 export interface UserProfile {
-  id: string; // Device fingerprint
+  id: string;
   username: string;
   displayName: string;
   avatarIPFS?: string;
   avatarThumbnail?: string;
   bio: string;
   createdAt: number;
-  karma: number; // Total upvotes received
+  karma: number;
   postCount: number;
   commentCount: number;
+  publicKey?: string; // ← Schnorr public key (safe to share)
 }
 
 export interface UserStats {
@@ -27,15 +29,12 @@ export interface UserStats {
 export class UserService {
   private static currentUser: UserProfile | null = null;
 
-  // Initialize or get current user
   static async getCurrentUser(forceRefresh = false): Promise<UserProfile> {
     if (this.currentUser && !forceRefresh) return this.currentUser;
 
     const deviceId = await VoteTrackerService.getDeviceId();
     const gun = GunService.getGun();
 
-    // Use .on() with timeout so we wait for relay data — .once() fires immediately
-    // with undefined if Gun hasn't synced yet, which would overwrite real profile
     const existingProfile = await new Promise<any>((resolve) => {
       let resolved = false;
       let listener: any;
@@ -46,21 +45,27 @@ export class UserService {
           resolve(data);
         }
       });
-      // Wait up to 3s for relay, then resolve null (don't create profile on timeout)
       setTimeout(() => {
         if (!resolved) { resolved = true; listener?.off?.(); resolve(null); }
       }, 3000);
     });
 
+    // Get this device's public key to store/backfill
+    const publicKey = await KeyService.getPublicKeyHex();
+
     if (existingProfile) {
+      // Backfill publicKey if it's missing from an older profile
+      if (!existingProfile.publicKey) {
+        await gun.get('users').get(deviceId).get('publicKey').put(publicKey);
+        existingProfile.publicKey = publicKey;
+      }
       this.currentUser = existingProfile;
       return existingProfile;
     }
 
-    // Only create new profile if we have no cached user either
-    // (true first-time user, not just a slow relay)
     if (this.currentUser) return this.currentUser;
 
+    // Create new profile — include publicKey from the start
     const newProfile: UserProfile = {
       id: deviceId,
       username: `user_${deviceId.substring(0, 8)}`,
@@ -69,7 +74,8 @@ export class UserService {
       createdAt: Date.now(),
       karma: 0,
       postCount: 0,
-      commentCount: 0
+      commentCount: 0,
+      publicKey, // ← stored in GunDB so other users can fetch it
     };
 
     await gun.get('users').get(deviceId).put(newProfile);
@@ -78,7 +84,6 @@ export class UserService {
     return newProfile;
   }
 
-  // Update user profile
   static async updateProfile(updates: Partial<UserProfile>): Promise<UserProfile> {
     const gun = GunService.getGun();
     const currentUser = await this.getCurrentUser();
@@ -90,72 +95,53 @@ export class UserService {
     return updatedProfile;
   }
 
-  // Get user by ID
   static async getUser(userId: string): Promise<UserProfile | null> {
     const gun = GunService.getGun();
     return await gun.get('users').get(userId).once().then();
   }
 
-  // Increment post count
   static async incrementPostCount() {
-    const user = await this.getCurrentUser(true); // force fresh from Gun
+    const user = await this.getCurrentUser(true);
     await this.updateProfile({ postCount: (user.postCount || 0) + 1 });
   }
 
-  // Increment comment count
   static async incrementCommentCount() {
-    const user = await this.getCurrentUser(true); // force fresh from Gun
+    const user = await this.getCurrentUser(true);
     await this.updateProfile({ commentCount: (user.commentCount || 0) + 1 });
   }
 
-  // Increment karma (when someone upvotes your content)
   static async incrementKarma(authorId: string, points: number = 1) {
     const gun = GunService.getGun();
     const user = await this.getUser(authorId);
-    
     if (user) {
       await gun.get('users').get(authorId).get('karma').put(user.karma + points);
     }
   }
 
-  // Get user stats
   static async getUserStats(userId: string): Promise<UserStats> {
     const user = await this.getUser(userId);
-    
     if (!user) {
-      return {
-        totalPosts: 0,
-        totalComments: 0,
-        totalUpvotes: 0,
-        totalDownvotes: 0,
-        karma: 0,
-        joinedCommunities: 0
-      };
+      return { totalPosts: 0, totalComments: 0, totalUpvotes: 0, totalDownvotes: 0, karma: 0, joinedCommunities: 0 };
     }
-
-    // Stats derived from stored user data
     return {
       totalPosts: user.postCount,
       totalComments: user.commentCount,
       totalUpvotes: user.karma,
       totalDownvotes: 0,
       karma: user.karma,
-      joinedCommunities: 0
+      joinedCommunities: 0,
     };
   }
 
-  // Search users by username
   static async searchUsers(query: string): Promise<UserProfile[]> {
     const gun = GunService.getGun();
     const users: UserProfile[] = [];
-
     return new Promise((resolve) => {
       gun.get('users').map().once((user: any) => {
         if (user && !user._ && user.username?.includes(query)) {
           users.push(user);
         }
       });
-
       setTimeout(() => resolve(users), 1000);
     });
   }
