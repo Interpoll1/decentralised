@@ -8,15 +8,37 @@ import { BroadcastService } from '../services/broadcastService';
 import { WebSocketService } from '../services/websocketService';
 import { useChainStore } from './chainStore';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE     = 10;
+const SEEN_POSTS_KEY = 'seen-post-ids';
+
+function loadSeenIds(): Set<string> {
+  try {
+    const stored = localStorage.getItem(SEEN_POSTS_KEY);
+    return stored ? new Set(JSON.parse(stored)) : new Set();
+  } catch { return new Set(); }
+}
+
+function saveSeenIds(ids: Set<string>) {
+  try {
+    // Cap at 500 to avoid unbounded localStorage growth
+    const arr = Array.from(ids).slice(-500);
+    localStorage.setItem(SEEN_POSTS_KEY, JSON.stringify(arr));
+  } catch { /* ignore */ }
+}
 
 export const usePostStore = defineStore('post', () => {
-  const postsMap = ref<Map<string, Post>>(new Map());
-  const currentPost = ref<Post | null>(null);
-  const isLoading = ref(false);
-  const currentFeed = ref<'all' | 'community'>('all');
+  const postsMap           = ref<Map<string, Post>>(new Map());
+  const currentPost        = ref<Post | null>(null);
+  const isLoading          = ref(false);
+  const currentFeed        = ref<'all' | 'community'>('all');
   const currentCommunityId = ref<string | null>(null);
-  const visibleCount = ref(PAGE_SIZE);
+  const visibleCount       = ref(PAGE_SIZE);
+
+  const pendingNewPosts = ref<Post[]>([]);
+  const initialLoadDone = ref(false);
+
+  // Persisted across refreshes so we never re-show the banner for old posts
+  const seenPostIds = loadSeenIds();
 
   const subscribedCommunities = new Set<string>();
   const unsubscribers = new Map<string, () => void>();
@@ -25,8 +47,6 @@ export const usePostStore = defineStore('post', () => {
 
   const posts = computed(() => Array.from(postsMap.value.values()));
 
-  // Sort by createdAt DESC so newest always appears first regardless of score.
-  // Score-based sort was causing "old" posts to stay at top when new ones arrived.
   const sortedPosts = computed(() =>
     Array.from(postsMap.value.values()).sort((a, b) => b.createdAt - a.createdAt)
   );
@@ -38,37 +58,80 @@ export const usePostStore = defineStore('post', () => {
 
   const visiblePosts = computed(() => sortedPosts.value.slice(0, visibleCount.value));
   const hasMorePosts = computed(() => visibleCount.value < sortedPosts.value.length);
+  const newPostCount = computed(() => pendingNewPosts.value.length);
 
   // ─── Loading ───────────────────────────────────────────────────────────────
 
   function loadPostsForCommunity(communityId: string): Promise<void> {
-  // Already subscribed — live subscription is active, data is current.
-  // No need to re-subscribe; Gun delivers new items to the existing listener.
-  if (subscribedCommunities.has(communityId)) return Promise.resolve();
+    if (subscribedCommunities.has(communityId)) return Promise.resolve();
 
-  return new Promise((resolve) => {
-    const unsub = PostService.subscribeToPostsInCommunity(
-      communityId,
-      (post) => {
-        postsMap.value.set(post.id, post);
-      },
-      () => {
-        subscribedCommunities.add(communityId);
-        resolve();
-      },
-    );
+    return new Promise((resolve) => {
+      const unsub = PostService.subscribeToPostsInCommunity(
+        communityId,
+        (post) => {
+          // Always update existing posts in place (vote counts, edits)
+          if (postsMap.value.has(post.id)) {
+            postsMap.value.set(post.id, post);
+            return;
+          }
 
-    unsubscribers.set(communityId, unsub);
-  });
-}
+          if (initialLoadDone.value && !seenPostIds.has(post.id)) {
+            // Truly new post user hasn't seen before → banner
+            pendingNewPosts.value = [post, ...pendingNewPosts.value];
+          } else {
+            // Already seen (in localStorage) or initial load → straight into map
+            postsMap.value.set(post.id, post);
+            seenPostIds.add(post.id);
+          }
+        },
+        () => {
+          subscribedCommunities.add(communityId);
+          initialLoadDone.value = true;
+          // Mark everything currently in map as seen and persist
+          for (const id of postsMap.value.keys()) seenPostIds.add(id);
+          saveSeenIds(seenPostIds);
+          resolve();
+        },
+      );
 
-function loadMorePosts() {
-  visibleCount.value += PAGE_SIZE;
-}
+      unsubscribers.set(communityId, unsub);
+    });
+  }
 
-function resetVisibleCount() {
-  visibleCount.value = PAGE_SIZE;
-}
+  // Called when user taps the "X new posts" banner
+  function flushNewPosts() {
+    for (const post of pendingNewPosts.value) {
+      postsMap.value.set(post.id, post);
+      seenPostIds.add(post.id);
+    }
+    saveSeenIds(seenPostIds);
+    pendingNewPosts.value = [];
+    visibleCount.value = Math.max(visibleCount.value, PAGE_SIZE);
+  }
+
+  // Called by dbWarmup — direct injection, always treated as already seen
+  function injectPost(post: Post) {
+    if (!postsMap.value.has(post.id)) {
+      postsMap.value.set(post.id, post);
+    }
+    seenPostIds.add(post.id);
+    // Don't saveSeenIds here — warmup calls this in a loop,
+    // caller should saveSeenIds once after all injections
+  }
+
+  function saveSeenNow() {
+    saveSeenIds(seenPostIds);
+  }
+
+  function loadMorePosts() {
+    visibleCount.value += PAGE_SIZE;
+  }
+
+  function resetVisibleCount() {
+    visibleCount.value    = PAGE_SIZE;
+    pendingNewPosts.value = [];
+    initialLoadDone.value = false;
+  }
 
   // ─── Create ────────────────────────────────────────────────────────────────
 
@@ -88,6 +151,8 @@ function resetVisibleCount() {
       }, data.title);
 
       postsMap.value.set(post.id, post);
+      seenPostIds.add(post.id);
+      saveSeenIds(seenPostIds);
 
       try {
         const postEvent = await EventService.createPostEvent({
@@ -183,7 +248,7 @@ function resetVisibleCount() {
     } catch (error) { console.error('Error removing downvote:', error); throw error; }
   }
 
-  // ─── Refresh (explicit user action only) ──────────────────────────────────
+  // ─── Refresh ───────────────────────────────────────────────────────────────
 
   async function refreshPosts() {
     if (!currentCommunityId.value) return;
@@ -201,7 +266,9 @@ function resetVisibleCount() {
   return {
     posts, postsMap, currentPost, isLoading, currentFeed,
     sortedPosts, communityPosts, visiblePosts, hasMorePosts, visibleCount,
+    newPostCount, pendingNewPosts,
     loadPostsForCommunity, loadMorePosts, resetVisibleCount,
+    flushNewPosts, injectPost, saveSeenNow,
     createPost, selectPost,
     voteOnPost, upvotePost, downvotePost, removeUpvote, removeDownvote,
     refreshPosts,

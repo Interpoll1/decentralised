@@ -96,6 +96,16 @@
             </div>
 
             <div v-else-if="combinedFeed.length > 0" class="feed-list">
+  <!-- New content banner -->
+  <div
+    v-if="newContentCount > 0"
+    class="new-content-banner"
+    @click="flushNewContent"
+  >
+    ↑ {{ newContentCount }} new
+    {{ postStore.newPostCount > 0 && pollStore.newPollCount > 0 ? 'posts & polls' : postStore.newPostCount > 0 ? 'posts' : 'polls' }}
+    — tap to show
+  </div>
               <template v-for="item in combinedFeed" :key="`${item.type}-${item.data.id}`">
                 <PostCard
                   v-if="item.type === 'post'"
@@ -382,7 +392,438 @@
 </template>
 
 
+
+
+<script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import {
+  IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
+  IonButtons, IonButton, IonIcon, IonSegment, IonSegmentButton,
+  IonLabel, IonSpinner, IonChip, IonSearchbar,
+  IonInfiniteScroll, IonInfiniteScrollContent,
+  actionSheetController, toastController
+} from '@ionic/vue';
+import {
+  cube, personCircleOutline, settingsOutline, addCircleOutline,
+  earthOutline, peopleOutline, home, homeOutline, documentTextOutline,
+  chevronForwardOutline, people, addCircle, statsChartOutline,
+  checkmarkCircleOutline, searchOutline, chatbubble, chatbubbleOutline
+} from 'ionicons/icons';
+import { useRouter } from 'vue-router';
+import { useChainStore } from '../stores/chainStore';
+import { useCommunityStore } from '../stores/communityStore';
+import { usePostStore } from '../stores/postStore';
+import { usePollStore } from '../stores/pollStore';
+import CommunityCard from '../components/CommunityCard.vue';
+import PostCard from '../components/PostCard.vue';
+import PollCard from '../components/PollCard.vue';
+import { Post } from '../services/postService';
+import { Poll } from '../services/pollService';
+import { GunService } from '../services/gunService';
+import { UserService } from '../services/userService';
+import ChatService from '../services/chatService';
+
+import { warmupFromDB } from '../services/dbWarmup';
+
+const router = useRouter();
+const chainStore = useChainStore();
+const communityStore = useCommunityStore();
+const postStore = usePostStore();
+const pollStore = usePollStore();
+
+const activeTab = ref('home');
+const communityFilter = ref('all');
+const isLoadingPosts = ref(false);
+const voteVersion = ref(0);
+const isHeaderHidden = ref(false);
+const isTabBarHidden = ref(false);
+let lastScrollTop = 0;
+const scrollThreshold = 50;
+
+// ── Chat state ────────────────────────────────────────────────────────────────
+
+const chatList = ref<Array<{
+  userId: string;
+  name: string;
+  lastMessage: string;
+  lastMessageTime: number;
+  unreadCount: number;
+  publicKey: string;
+}>>([]);
+
+// Badge shown on Chat nav button
+const totalUnread = computed(() => chatList.value.reduce((sum, c) => sum + c.unreadCount, 0));
+
+let bgChatService: ChatService | null = null;
+let currentUserId = '';
+const gunListeners: Array<() => void> = [];
+
+const userSearchQuery   = ref('');
+const userSearchResults = ref<Array<{ id: string; name: string; username: string; publicKey: string }>>([]);
+const searchingUsers    = ref(false);
+
+// ── Computed ──────────────────────────────────────────────────────────────────
+
+const displayedCommunities = computed(() => {
+  if (communityFilter.value === 'joined') {
+    return communityStore.communities.filter(c => communityStore.isJoined(c.id));
+  }
+  return communityStore.communities;
+});
+
+const combinedFeed = computed(() => {
+  const items: Array<{ type: 'post' | 'poll'; data: any; createdAt: number }> = [];
+
+  // Use ALL posts/polls from store, not just visible slice
+  // visiblePosts/visiblePolls are already sliced — we want the full sorted list
+  // then slice once after merging so pagination works across both types
+  postStore.sortedPosts.forEach(post => 
+    items.push({ type: 'post', data: post, createdAt: post.createdAt })
+  );
+  pollStore.sortedPolls.forEach(poll => {
+    if (!poll.isPrivate) items.push({ type: 'poll', data: poll, createdAt: poll.createdAt });
+  });
+
+  // Sort by publish time, newest first
+  items.sort((a, b) => b.createdAt - a.createdAt);
+
+  // Single pagination slice across the merged feed
+  const pageSize = postStore.visibleCount;
+  return items.slice(0, pageSize);
+});
+
+const hasMore = computed(() => {
+  const totalItems = postStore.sortedPosts.length + pollStore.sortedPolls.filter(p => !p.isPrivate).length;
+  return postStore.visibleCount < totalItems;
+});
+const joinedCommunities = computed(() => communityStore.communities.filter(c => communityStore.isJoined(c.id)));
+
+// ── Chat list ─────────────────────────────────────────────────────────────────
+
+function getRoomId(a: string, b: string) {
+  return [a, b].sort().join(':');
+}
+
+function recomputeUnread(roomId: string, otherUserId: string) {
+  const gun = GunService.getGun();
+  let unread = 0;
+  gun.get('chats').get(roomId).map().once((msg: any) => {
+    if (msg && msg.recipientId === currentUserId && !msg.readAt) unread++;
+  });
+  setTimeout(() => {
+    const entry = chatList.value.find(c => c.userId === otherUserId);
+    if (entry) entry.unreadCount = unread;
+    chatList.value = [...chatList.value].sort((a, b) => b.lastMessageTime - a.lastMessageTime);
+  }, 300);
+}
+
+function subscribeToRoom(otherUserId: string, otherName: string, otherPublicKey: string) {
+  const gun    = GunService.getGun();
+  const roomId = getRoomId(currentUserId, otherUserId);
+
+  if (!chatList.value.find(c => c.userId === otherUserId)) {
+    chatList.value.push({
+      userId: otherUserId, name: otherName,
+      lastMessage: '', lastMessageTime: 0,
+      unreadCount: 0, publicKey: otherPublicKey,
+    });
+  }
+
+  const listener = gun.get('chats').get(roomId).map().on((msg: any) => {
+    if (!msg || !msg.senderId || !msg.timestamp) return;
+    const entry = chatList.value.find(c => c.userId === otherUserId);
+    if (!entry) return;
+    if (msg.timestamp > entry.lastMessageTime) {
+      entry.lastMessageTime = msg.timestamp;
+      entry.lastMessage     = msg.senderId === currentUserId ? 'You: [Encrypted]' : '[Encrypted message]';
+    }
+    recomputeUnread(roomId, otherUserId);
+  });
+
+  gunListeners.push(() => listener?.off?.());
+}
+
+async function loadChatList() {
+  const gun = GunService.getGun();
+  gun.get('chats').once((rooms: any) => {
+    if (!rooms) return;
+    Object.keys(rooms)
+      .filter(k => k !== '_' && k.includes(currentUserId))
+      .forEach((roomId) => {
+        const otherUserId = roomId.split(':').find(id => id !== currentUserId);
+        if (!otherUserId) return;
+        gun.get('users').get(otherUserId).once((userData: any) => {
+          subscribeToRoom(
+            otherUserId,
+            userData?.displayName || userData?.username || otherUserId,
+            userData?.publicKey || '',
+          );
+        });
+      });
+  });
+}
+
+async function initBackgroundChat() {
+  const WS_URL = import.meta.env.VITE_WS_URL || 'wss://your-relay-server.com';
+  bgChatService = new ChatService(WS_URL, currentUserId);
+  bgChatService.onConnectionChange = () => {};
+
+  bgChatService.onMessage = (msg) => {
+    const entry = chatList.value.find(c => c.userId === msg.from);
+
+    if (entry) {
+      entry.lastMessage     = '[Encrypted message]';
+      entry.lastMessageTime = msg.timestamp;
+      if (activeTab.value !== 'chat') entry.unreadCount++;
+      chatList.value = [...chatList.value].sort((a, b) => b.lastMessageTime - a.lastMessageTime);
+    } else {
+      // Brand new conversation
+      chatList.value.unshift({
+        userId: msg.from, name: msg.from,
+        lastMessage: '[Encrypted message]',
+        lastMessageTime: msg.timestamp,
+        unreadCount: activeTab.value === 'chat' ? 0 : 1,
+        publicKey: '',
+      });
+      const gun = GunService.getGun();
+      gun.get('users').get(msg.from).once((userData: any) => {
+        const e = chatList.value.find(c => c.userId === msg.from);
+        if (e && userData) {
+          e.name      = userData.displayName || userData.username || msg.from;
+          e.publicKey = userData.publicKey || '';
+        }
+      });
+      subscribeToRoom(msg.from, msg.from, '');
+    }
+
+    // Toast notification when not on chat tab
+    if (activeTab.value !== 'chat') {
+      const senderName = chatList.value.find(c => c.userId === msg.from)?.name || 'Someone';
+      toastController.create({
+        message:  `💬 New message from ${senderName}`,
+        duration: 3000,
+        color:    'primary',
+        position: 'top',
+        buttons:  [{ text: 'View', handler: () => { activeTab.value = 'chat'; } }],
+      }).then(t => t.present());
+    }
+  };
+
+  await bgChatService.init();
+}
+
+// ── Chat navigation ───────────────────────────────────────────────────────────
+
+function openChat(chat: typeof chatList.value[number]) {
+  const entry = chatList.value.find(c => c.userId === chat.userId);
+  if (entry) entry.unreadCount = 0;
+  router.push({ name: 'Chat', params: { userId: chat.userId }, query: { name: chat.name, publicKey: chat.publicKey } });
+}
+
+function startChatWithUser(user: typeof userSearchResults.value[number]) {
+  router.push({ name: 'Chat', params: { userId: user.id }, query: { name: user.name, publicKey: user.publicKey } });
+}
+
+function formatChatTime(timestamp: number): string {
+  if (!timestamp) return '';
+  const diff = Date.now() - timestamp;
+  if (diff < 60000)     return 'Just now';
+  if (diff < 3600000)   return `${Math.floor(diff / 60000)}m`;
+  if (diff < 86400000)  return `${Math.floor(diff / 3600000)}h`;
+  if (diff < 604800000) return `${Math.floor(diff / 86400000)}d`;
+  return new Date(timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function clearUserSearch() {
+  userSearchQuery.value   = '';
+  userSearchResults.value = [];
+}
+
+async function handleUserSearch() {
+  const query = userSearchQuery.value.trim();
+  if (query.length < 2) { userSearchResults.value = []; return; }
+  searchingUsers.value = true;
+  try {
+    const gun     = GunService.getGun();
+    const results: typeof userSearchResults.value = [];
+    const seen    = new Set<string>();
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => resolve(), 1000);
+      gun.get('users').once((users: any) => {
+        if (!users) { resolve(); return; }
+        const userKeys = Object.keys(users).filter(k => k !== '_');
+        let processed  = 0;
+        userKeys.forEach(userId => {
+          gun.get('users').get(userId).once((userData: any) => {
+            processed++;
+            if (userData && userData.id && !seen.has(userData.id)) {
+              const name     = userData.displayName || userData.username || '';
+              const username = userData.username || '';
+              if (name.toLowerCase().includes(query.toLowerCase()) ||
+                  username.toLowerCase().includes(query.toLowerCase())) {
+                seen.add(userData.id);
+                results.push({ id: userData.id, name: userData.displayName || userData.username || 'Anonymous', username: userData.username || userData.id, publicKey: userData.publicKey || '' });
+              }
+            }
+            if (processed === userKeys.length) { clearTimeout(timeout); resolve(); }
+          });
+        });
+      });
+    });
+    userSearchResults.value = results.slice(0, 10);
+  } catch (err) {
+    console.error('User search error:', err);
+  } finally {
+    searchingUsers.value = false;
+  }
+}
+
+// ── Scroll ────────────────────────────────────────────────────────────────────
+
+function handleScroll(event: CustomEvent) {
+  const scrollTop = event.detail.scrollTop;
+  if (scrollTop > lastScrollTop && scrollTop > scrollThreshold) {
+    isTabBarHidden.value = true; isHeaderHidden.value = true;
+  } else if (scrollTop < lastScrollTop) {
+    isTabBarHidden.value = false; isHeaderHidden.value = false;
+  }
+  lastScrollTop = scrollTop;
+}
+// ── New content flush ─────────────────────────────────────────────────────────
+const newContentCount = computed(() => postStore.newPostCount + pollStore.newPollCount);
+
+function flushNewContent() {
+  postStore.flushNewPosts();
+  pollStore.flushNewPolls();
+}
+// ── Feed / voting ─────────────────────────────────────────────────────────────
+
+async function onInfiniteScroll(event: any) {
+  postStore.loadMorePosts(); // this increments visibleCount which combinedFeed now uses
+  await new Promise(r => setTimeout(r, 100));
+  event.target.complete();
+}
+
+function hasUpvoted(postId: string): boolean {
+  voteVersion.value;
+  return JSON.parse(localStorage.getItem('upvoted-posts') || '[]').includes(postId);
+}
+function hasDownvoted(postId: string): boolean {
+  voteVersion.value;
+  return JSON.parse(localStorage.getItem('downvoted-posts') || '[]').includes(postId);
+}
+
+async function handleUpvote(post: Post) {
+  try {
+    if (hasUpvoted(post.id)) {
+      const filtered = JSON.parse(localStorage.getItem('upvoted-posts') || '[]').filter((id: string) => id !== post.id);
+      localStorage.setItem('upvoted-posts', JSON.stringify(filtered));
+      voteVersion.value++; await postStore.removeUpvote(post.id);
+      (await toastController.create({ message: 'Upvote removed', duration: 1500, color: 'medium' })).present();
+    } else {
+      const downvoted = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
+      if (downvoted.includes(post.id)) { localStorage.setItem('downvoted-posts', JSON.stringify(downvoted.filter((id: string) => id !== post.id))); await postStore.removeDownvote(post.id); }
+      localStorage.setItem('upvoted-posts', JSON.stringify([...JSON.parse(localStorage.getItem('upvoted-posts') || '[]'), post.id]));
+      voteVersion.value++; await postStore.upvotePost(post.id);
+      (await toastController.create({ message: 'Upvoted', duration: 1500, color: 'success' })).present();
+    }
+  } catch {
+    voteVersion.value++;
+    (await toastController.create({ message: 'Failed to upvote', duration: 2000, color: 'danger' })).present();
+  }
+}
+
+async function handleDownvote(post: Post) {
+  try {
+    if (hasDownvoted(post.id)) {
+      const filtered = JSON.parse(localStorage.getItem('downvoted-posts') || '[]').filter((id: string) => id !== post.id);
+      localStorage.setItem('downvoted-posts', JSON.stringify(filtered));
+      voteVersion.value++; await postStore.removeDownvote(post.id);
+      (await toastController.create({ message: 'Downvote removed', duration: 1500, color: 'medium' })).present();
+    } else {
+      const upvoted = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
+      if (upvoted.includes(post.id)) { localStorage.setItem('upvoted-posts', JSON.stringify(upvoted.filter((id: string) => id !== post.id))); await postStore.removeUpvote(post.id); }
+      localStorage.setItem('downvoted-posts', JSON.stringify([...JSON.parse(localStorage.getItem('downvoted-posts') || '[]'), post.id]));
+      voteVersion.value++; await postStore.downvotePost(post.id);
+      (await toastController.create({ message: 'Downvoted', duration: 1500, color: 'warning' })).present();
+    }
+  } catch {
+    voteVersion.value++;
+    (await toastController.create({ message: 'Failed to downvote', duration: 2000, color: 'danger' })).present();
+  }
+}
+
+function getCommunityName(communityId: string): string {
+  return communityStore.communities.find(c => c.id === communityId)?.displayName || communityId;
+}
+function navigateToPost(post: Post) { router.push(`/community/${post.communityId}/post/${post.id}`); }
+function navigateToPoll(poll: Poll) { router.push(`/community/${poll.communityId}/poll/${poll.id}`); }
+
+// ── Community subscriptions ───────────────────────────────────────────────────
+
+const subscribedFromHome = new Set<string>();
+
+async function subscribeNewCommunities(communities: typeof communityStore.communities) {
+  const newOnes = communities.filter(c => !subscribedFromHome.has(c.id));
+  if (newOnes.length === 0) return;
+  newOnes.forEach(c => subscribedFromHome.add(c.id));
+  if (subscribedFromHome.size === newOnes.length) isLoadingPosts.value = true;
+  try {
+    await Promise.all(newOnes.flatMap(c => [postStore.loadPostsForCommunity(c.id), pollStore.loadPollsForCommunity(c.id)]));
+  } catch (error) { console.error('[HomePage] Error subscribing to communities:', error); }
+  finally { isLoadingPosts.value = false; }
+}
+
+async function showPostOptions() {
+  if (joinedCommunities.value.length > 0) {
+    const actionSheet = await actionSheetController.create({ header: 'Select Community', buttons: [...joinedCommunities.value.slice(0, 10).map(c => ({ text: c.displayName, handler: () => router.push(`/community/${c.id}/create-post`) })), { text: 'Cancel', role: 'cancel' }] });
+    await actionSheet.present();
+  } else { activeTab.value = 'communities'; }
+}
+
+async function showPollOptions() {
+  if (joinedCommunities.value.length > 0) {
+    const actionSheet = await actionSheetController.create({ header: 'Select Community', buttons: [...joinedCommunities.value.slice(0, 10).map(c => ({ text: c.displayName, handler: () => router.push(`/create-poll?communityId=${c.id}`) })), { text: 'Cancel', role: 'cancel' }] });
+    await actionSheet.present();
+  } else { activeTab.value = 'communities'; }
+}
+
+// ── Watchers & lifecycle ──────────────────────────────────────────────────────
+
+watch(() => communityStore.communities, (communities) => {
+  subscribeNewCommunities(communities); // already filters seen ones via subscribedFromHome
+}, { deep: true, immediate: true });
+
+watch(activeTab, (tab) => {
+  if (tab === 'home') {
+    postStore.visibleCount = 10;
+    pollStore.visibleCount = 10;
+  }
+});
+
+onMounted(async () => {
+  await chainStore.initialize();
+  await communityStore.loadCommunities();
+
+  const currentUser = await UserService.getCurrentUser();
+  currentUserId = currentUser.id;
+  await loadChatList();
+  await initBackgroundChat();
+
+  await warmupFromDB();
+  await new Promise(r => setTimeout(r, 800));
+  // Subscribe to ALL communities, not just joined ones
+  await subscribeNewCommunities(communityStore.communities);
+});
+
+onUnmounted(() => {
+  bgChatService?.disconnect();
+  gunListeners.forEach(off => off());
+});
+</script>
+
 <style scoped>
+
 @import url('https://fonts.googleapis.com/css2?family=Grand+Hotel&display=swap');
 
 .logo-title {
@@ -407,6 +848,28 @@ ion-header ion-toolbar {
 }
 ion-header.header-hidden {
   transform: translateY(-100%);
+}
+
+.new-content-banner {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--ion-color-primary);
+  color: white;
+  text-align: center;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  animation: slideDown 0.25s ease;
+  user-select: none;
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-100%); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
 }
 
 .page-layout {
@@ -934,399 +1397,3 @@ html.dark .user-search-box ion-searchbar {
   .right-sidebar { width: 300px; }
 }
 </style>
-
-<script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonButtons, IonButton, IonIcon, IonSegment, IonSegmentButton,
-  IonLabel, IonSpinner, IonChip, IonSearchbar,
-  IonInfiniteScroll, IonInfiniteScrollContent,
-  actionSheetController, toastController
-} from '@ionic/vue';
-import {
-  cube, personCircleOutline, settingsOutline, addCircleOutline,
-  earthOutline, peopleOutline, home, homeOutline, documentTextOutline,
-  chevronForwardOutline, people, addCircle, statsChartOutline,
-  checkmarkCircleOutline, searchOutline, chatbubble, chatbubbleOutline
-} from 'ionicons/icons';
-import { useRouter } from 'vue-router';
-import { useChainStore } from '../stores/chainStore';
-import { useCommunityStore } from '../stores/communityStore';
-import { usePostStore } from '../stores/postStore';
-import { usePollStore } from '../stores/pollStore';
-import CommunityCard from '../components/CommunityCard.vue';
-import PostCard from '../components/PostCard.vue';
-import PollCard from '../components/PollCard.vue';
-import { Post } from '../services/postService';
-import { Poll } from '../services/pollService';
-import { GunService } from '../services/gunService';
-import { UserService } from '../services/userService';
-import ChatService from '../services/chatService';
-
-const router = useRouter();
-const chainStore = useChainStore();
-const communityStore = useCommunityStore();
-const postStore = usePostStore();
-const pollStore = usePollStore();
-
-const activeTab = ref('home');
-const communityFilter = ref('all');
-const isLoadingPosts = ref(false);
-const voteVersion = ref(0);
-const isHeaderHidden = ref(false);
-const isTabBarHidden = ref(false);
-let lastScrollTop = 0;
-const scrollThreshold = 50;
-
-// ── Chat state ────────────────────────────────────────────────────────────────
-
-const chatList = ref<Array<{
-  userId: string;
-  name: string;
-  lastMessage: string;
-  lastMessageTime: number;
-  unreadCount: number;
-  publicKey: string;
-}>>([]);
-
-// Badge shown on Chat nav button
-const totalUnread = computed(() => chatList.value.reduce((sum, c) => sum + c.unreadCount, 0));
-
-let bgChatService: ChatService | null = null;
-let currentUserId = '';
-const gunListeners: Array<() => void> = [];
-
-const userSearchQuery   = ref('');
-const userSearchResults = ref<Array<{ id: string; name: string; username: string; publicKey: string }>>([]);
-const searchingUsers    = ref(false);
-
-// ── Computed ──────────────────────────────────────────────────────────────────
-
-const displayedCommunities = computed(() => {
-  if (communityFilter.value === 'joined') {
-    return communityStore.communities.filter(c => communityStore.isJoined(c.id));
-  }
-  return communityStore.communities;
-});
-
-const combinedFeed = computed(() => {
-  const items: Array<{ type: 'post' | 'poll'; data: any; createdAt: number }> = [];
-  postStore.visiblePosts.forEach(post => items.push({ type: 'post', data: post, createdAt: post.createdAt }));
-  pollStore.visiblePolls.forEach(poll => {
-    if (!poll.isPrivate) items.push({ type: 'poll', data: poll, createdAt: poll.createdAt });
-  });
-  return items.sort((a, b) => b.createdAt - a.createdAt);
-});
-
-const hasMore           = computed(() => postStore.hasMorePosts || pollStore.hasMorePolls);
-const joinedCommunities = computed(() => communityStore.communities.filter(c => communityStore.isJoined(c.id)));
-
-// ── Chat list ─────────────────────────────────────────────────────────────────
-
-function getRoomId(a: string, b: string) {
-  return [a, b].sort().join(':');
-}
-
-function recomputeUnread(roomId: string, otherUserId: string) {
-  const gun = GunService.getGun();
-  let unread = 0;
-  gun.get('chats').get(roomId).map().once((msg: any) => {
-    if (msg && msg.recipientId === currentUserId && !msg.readAt) unread++;
-  });
-  setTimeout(() => {
-    const entry = chatList.value.find(c => c.userId === otherUserId);
-    if (entry) entry.unreadCount = unread;
-    chatList.value = [...chatList.value].sort((a, b) => b.lastMessageTime - a.lastMessageTime);
-  }, 300);
-}
-
-function subscribeToRoom(otherUserId: string, otherName: string, otherPublicKey: string) {
-  const gun    = GunService.getGun();
-  const roomId = getRoomId(currentUserId, otherUserId);
-
-  if (!chatList.value.find(c => c.userId === otherUserId)) {
-    chatList.value.push({
-      userId: otherUserId, name: otherName,
-      lastMessage: '', lastMessageTime: 0,
-      unreadCount: 0, publicKey: otherPublicKey,
-    });
-  }
-
-  const listener = gun.get('chats').get(roomId).map().on((msg: any) => {
-    if (!msg || !msg.senderId || !msg.timestamp) return;
-    const entry = chatList.value.find(c => c.userId === otherUserId);
-    if (!entry) return;
-    if (msg.timestamp > entry.lastMessageTime) {
-      entry.lastMessageTime = msg.timestamp;
-      entry.lastMessage     = msg.senderId === currentUserId ? 'You: [Encrypted]' : '[Encrypted message]';
-    }
-    recomputeUnread(roomId, otherUserId);
-  });
-
-  gunListeners.push(() => listener?.off?.());
-}
-
-async function loadChatList() {
-  const gun = GunService.getGun();
-  gun.get('chats').once((rooms: any) => {
-    if (!rooms) return;
-    Object.keys(rooms)
-      .filter(k => k !== '_' && k.includes(currentUserId))
-      .forEach((roomId) => {
-        const otherUserId = roomId.split(':').find(id => id !== currentUserId);
-        if (!otherUserId) return;
-        gun.get('users').get(otherUserId).once((userData: any) => {
-          subscribeToRoom(
-            otherUserId,
-            userData?.displayName || userData?.username || otherUserId,
-            userData?.publicKey || '',
-          );
-        });
-      });
-  });
-}
-
-async function initBackgroundChat() {
-  const WS_URL = import.meta.env.VITE_WS_URL || 'wss://your-relay-server.com';
-  bgChatService = new ChatService(WS_URL, currentUserId);
-  bgChatService.onConnectionChange = () => {};
-
-  bgChatService.onMessage = (msg) => {
-    const entry = chatList.value.find(c => c.userId === msg.from);
-
-    if (entry) {
-      entry.lastMessage     = '[Encrypted message]';
-      entry.lastMessageTime = msg.timestamp;
-      if (activeTab.value !== 'chat') entry.unreadCount++;
-      chatList.value = [...chatList.value].sort((a, b) => b.lastMessageTime - a.lastMessageTime);
-    } else {
-      // Brand new conversation
-      chatList.value.unshift({
-        userId: msg.from, name: msg.from,
-        lastMessage: '[Encrypted message]',
-        lastMessageTime: msg.timestamp,
-        unreadCount: activeTab.value === 'chat' ? 0 : 1,
-        publicKey: '',
-      });
-      const gun = GunService.getGun();
-      gun.get('users').get(msg.from).once((userData: any) => {
-        const e = chatList.value.find(c => c.userId === msg.from);
-        if (e && userData) {
-          e.name      = userData.displayName || userData.username || msg.from;
-          e.publicKey = userData.publicKey || '';
-        }
-      });
-      subscribeToRoom(msg.from, msg.from, '');
-    }
-
-    // Toast notification when not on chat tab
-    if (activeTab.value !== 'chat') {
-      const senderName = chatList.value.find(c => c.userId === msg.from)?.name || 'Someone';
-      toastController.create({
-        message:  `💬 New message from ${senderName}`,
-        duration: 3000,
-        color:    'primary',
-        position: 'top',
-        buttons:  [{ text: 'View', handler: () => { activeTab.value = 'chat'; } }],
-      }).then(t => t.present());
-    }
-  };
-
-  await bgChatService.init();
-}
-
-// ── Chat navigation ───────────────────────────────────────────────────────────
-
-function openChat(chat: typeof chatList.value[number]) {
-  const entry = chatList.value.find(c => c.userId === chat.userId);
-  if (entry) entry.unreadCount = 0;
-  router.push({ name: 'Chat', params: { userId: chat.userId }, query: { name: chat.name, publicKey: chat.publicKey } });
-}
-
-function startChatWithUser(user: typeof userSearchResults.value[number]) {
-  router.push({ name: 'Chat', params: { userId: user.id }, query: { name: user.name, publicKey: user.publicKey } });
-}
-
-function formatChatTime(timestamp: number): string {
-  if (!timestamp) return '';
-  const diff = Date.now() - timestamp;
-  if (diff < 60000)     return 'Just now';
-  if (diff < 3600000)   return `${Math.floor(diff / 60000)}m`;
-  if (diff < 86400000)  return `${Math.floor(diff / 3600000)}h`;
-  if (diff < 604800000) return `${Math.floor(diff / 86400000)}d`;
-  return new Date(timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-function clearUserSearch() {
-  userSearchQuery.value   = '';
-  userSearchResults.value = [];
-}
-
-async function handleUserSearch() {
-  const query = userSearchQuery.value.trim();
-  if (query.length < 2) { userSearchResults.value = []; return; }
-  searchingUsers.value = true;
-  try {
-    const gun     = GunService.getGun();
-    const results: typeof userSearchResults.value = [];
-    const seen    = new Set<string>();
-    await new Promise<void>((resolve) => {
-      const timeout = setTimeout(() => resolve(), 1000);
-      gun.get('users').once((users: any) => {
-        if (!users) { resolve(); return; }
-        const userKeys = Object.keys(users).filter(k => k !== '_');
-        let processed  = 0;
-        userKeys.forEach(userId => {
-          gun.get('users').get(userId).once((userData: any) => {
-            processed++;
-            if (userData && userData.id && !seen.has(userData.id)) {
-              const name     = userData.displayName || userData.username || '';
-              const username = userData.username || '';
-              if (name.toLowerCase().includes(query.toLowerCase()) ||
-                  username.toLowerCase().includes(query.toLowerCase())) {
-                seen.add(userData.id);
-                results.push({ id: userData.id, name: userData.displayName || userData.username || 'Anonymous', username: userData.username || userData.id, publicKey: userData.publicKey || '' });
-              }
-            }
-            if (processed === userKeys.length) { clearTimeout(timeout); resolve(); }
-          });
-        });
-      });
-    });
-    userSearchResults.value = results.slice(0, 10);
-  } catch (err) {
-    console.error('User search error:', err);
-  } finally {
-    searchingUsers.value = false;
-  }
-}
-
-// ── Scroll ────────────────────────────────────────────────────────────────────
-
-function handleScroll(event: CustomEvent) {
-  const scrollTop = event.detail.scrollTop;
-  if (scrollTop > lastScrollTop && scrollTop > scrollThreshold) {
-    isTabBarHidden.value = true; isHeaderHidden.value = true;
-  } else if (scrollTop < lastScrollTop) {
-    isTabBarHidden.value = false; isHeaderHidden.value = false;
-  }
-  lastScrollTop = scrollTop;
-}
-
-// ── Feed / voting ─────────────────────────────────────────────────────────────
-
-async function onInfiniteScroll(event: any) {
-  postStore.loadMorePosts(); pollStore.loadMorePolls();
-  await new Promise(r => setTimeout(r, 100));
-  event.target.complete();
-}
-
-function hasUpvoted(postId: string): boolean {
-  voteVersion.value;
-  return JSON.parse(localStorage.getItem('upvoted-posts') || '[]').includes(postId);
-}
-function hasDownvoted(postId: string): boolean {
-  voteVersion.value;
-  return JSON.parse(localStorage.getItem('downvoted-posts') || '[]').includes(postId);
-}
-
-async function handleUpvote(post: Post) {
-  try {
-    if (hasUpvoted(post.id)) {
-      const filtered = JSON.parse(localStorage.getItem('upvoted-posts') || '[]').filter((id: string) => id !== post.id);
-      localStorage.setItem('upvoted-posts', JSON.stringify(filtered));
-      voteVersion.value++; await postStore.removeUpvote(post.id);
-      (await toastController.create({ message: 'Upvote removed', duration: 1500, color: 'medium' })).present();
-    } else {
-      const downvoted = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
-      if (downvoted.includes(post.id)) { localStorage.setItem('downvoted-posts', JSON.stringify(downvoted.filter((id: string) => id !== post.id))); await postStore.removeDownvote(post.id); }
-      localStorage.setItem('upvoted-posts', JSON.stringify([...JSON.parse(localStorage.getItem('upvoted-posts') || '[]'), post.id]));
-      voteVersion.value++; await postStore.upvotePost(post.id);
-      (await toastController.create({ message: 'Upvoted', duration: 1500, color: 'success' })).present();
-    }
-  } catch {
-    voteVersion.value++;
-    (await toastController.create({ message: 'Failed to upvote', duration: 2000, color: 'danger' })).present();
-  }
-}
-
-async function handleDownvote(post: Post) {
-  try {
-    if (hasDownvoted(post.id)) {
-      const filtered = JSON.parse(localStorage.getItem('downvoted-posts') || '[]').filter((id: string) => id !== post.id);
-      localStorage.setItem('downvoted-posts', JSON.stringify(filtered));
-      voteVersion.value++; await postStore.removeDownvote(post.id);
-      (await toastController.create({ message: 'Downvote removed', duration: 1500, color: 'medium' })).present();
-    } else {
-      const upvoted = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
-      if (upvoted.includes(post.id)) { localStorage.setItem('upvoted-posts', JSON.stringify(upvoted.filter((id: string) => id !== post.id))); await postStore.removeUpvote(post.id); }
-      localStorage.setItem('downvoted-posts', JSON.stringify([...JSON.parse(localStorage.getItem('downvoted-posts') || '[]'), post.id]));
-      voteVersion.value++; await postStore.downvotePost(post.id);
-      (await toastController.create({ message: 'Downvoted', duration: 1500, color: 'warning' })).present();
-    }
-  } catch {
-    voteVersion.value++;
-    (await toastController.create({ message: 'Failed to downvote', duration: 2000, color: 'danger' })).present();
-  }
-}
-
-function getCommunityName(communityId: string): string {
-  return communityStore.communities.find(c => c.id === communityId)?.displayName || communityId;
-}
-function navigateToPost(post: Post) { router.push(`/community/${post.communityId}/post/${post.id}`); }
-function navigateToPoll(poll: Poll) { router.push(`/community/${poll.communityId}/poll/${poll.id}`); }
-
-// ── Community subscriptions ───────────────────────────────────────────────────
-
-const subscribedFromHome = new Set<string>();
-
-async function subscribeNewCommunities(communities: typeof communityStore.communities) {
-  const newOnes = communities.filter(c => !subscribedFromHome.has(c.id));
-  if (newOnes.length === 0) return;
-  newOnes.forEach(c => subscribedFromHome.add(c.id));
-  if (subscribedFromHome.size === newOnes.length) isLoadingPosts.value = true;
-  try {
-    await Promise.all(newOnes.flatMap(c => [postStore.loadPostsForCommunity(c.id), pollStore.loadPollsForCommunity(c.id)]));
-  } catch (error) { console.error('[HomePage] Error subscribing to communities:', error); }
-  finally { isLoadingPosts.value = false; }
-}
-
-async function showPostOptions() {
-  if (joinedCommunities.value.length > 0) {
-    const actionSheet = await actionSheetController.create({ header: 'Select Community', buttons: [...joinedCommunities.value.slice(0, 10).map(c => ({ text: c.displayName, handler: () => router.push(`/community/${c.id}/create-post`) })), { text: 'Cancel', role: 'cancel' }] });
-    await actionSheet.present();
-  } else { activeTab.value = 'communities'; }
-}
-
-async function showPollOptions() {
-  if (joinedCommunities.value.length > 0) {
-    const actionSheet = await actionSheetController.create({ header: 'Select Community', buttons: [...joinedCommunities.value.slice(0, 10).map(c => ({ text: c.displayName, handler: () => router.push(`/create-poll?communityId=${c.id}`) })), { text: 'Cancel', role: 'cancel' }] });
-    await actionSheet.present();
-  } else { activeTab.value = 'communities'; }
-}
-
-// ── Watchers & lifecycle ──────────────────────────────────────────────────────
-
-watch(() => communityStore.communities, (communities) => { subscribeNewCommunities(communities); }, { deep: true });
-
-watch(activeTab, (tab) => {
-  if (tab === 'home') { postStore.resetVisibleCount(); pollStore.resetVisibleCount(); }
-});
-
-onMounted(async () => {
-  await chainStore.initialize();
-  await communityStore.loadCommunities();
-
-  const currentUser = await UserService.getCurrentUser();
-  currentUserId = currentUser.id;
-
-  await loadChatList();
-  await initBackgroundChat();
-});
-
-onUnmounted(() => {
-  bgChatService?.disconnect();
-  gunListeners.forEach(off => off());
-});
-</script>
