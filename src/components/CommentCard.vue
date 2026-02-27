@@ -1,17 +1,28 @@
 <template>
   <div class="comment-card">
-    <!-- Comment Header -->
-    <div class="comment-header">
-      <span class="commenter-dot"></span>
-      <span class="author-name">u/{{ displayName }}</span>
-      <span class="separator">•</span>
-      <span class="timestamp">{{ formatTime(comment.createdAt) }}</span>
-      <span v-if="comment.edited" class="edited-label">(edited)</span>
+    <!-- Flagged content overlay (blur mode) -->
+    <div v-if="flagged && filterAction === 'blur' && !revealed" class="flagged-overlay" @click.stop="revealed = true">
+      <ion-icon :icon="warningOutline"></ion-icon>
+      <span>Comment hidden by word filter — tap to reveal</span>
     </div>
 
-    <!-- Comment Content -->
-    <div class="comment-content">
-      <p>{{ comment.content }}</p>
+    <div :class="{ 'content-blurred': flagged && filterAction === 'blur' && !revealed }">
+      <!-- Comment Header -->
+      <div class="comment-header">
+        <span class="commenter-dot"></span>
+        <span class="author-name">u/{{ displayName }}</span>
+        <span class="separator">•</span>
+        <span class="timestamp">{{ formatTime(comment.createdAt) }}</span>
+        <span v-if="comment.edited" class="edited-label">(edited)</span>
+        <span v-if="flagged && filterAction === 'flag'" class="flag-badge" title="Flagged by word filter">
+          <ion-icon :icon="warningOutline"></ion-icon>
+        </span>
+      </div>
+
+      <!-- Comment Content -->
+      <div class="comment-content">
+        <p>{{ comment.content }}</p>
+      </div>
     </div>
 
     <!-- Comment Actions -->
@@ -63,6 +74,8 @@
         :comment="reply"
         :post-id="postId"
         :community-id="communityId"
+        :flagged="checkReplyFlagged(reply.content)"
+        :filter-action="filterAction"
         @upvote="(c: any) => $emit('upvote', c)"
         @downvote="(c: any) => $emit('downvote', c)"
       />
@@ -189,6 +202,43 @@
   border-left: 2px solid rgba(var(--ion-text-color-rgb), 0.1);
   padding-left: 4px;
 }
+
+/* ── Flagged content ─────────────────────────────── */
+.flagged-overlay {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(var(--ion-color-warning-rgb), 0.10);
+  border: 1px solid rgba(var(--ion-color-warning-rgb), 0.25);
+  border-radius: 8px;
+  color: var(--ion-color-warning-shade);
+  font-size: 13px;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.flagged-overlay ion-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.content-blurred {
+  filter: blur(6px);
+  user-select: none;
+  pointer-events: none;
+}
+
+.flag-badge {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ion-color-warning);
+  margin-left: 4px;
+}
+
+.flag-badge ion-icon {
+  font-size: 13px;
+}
 </style>
 
 <script setup lang="ts">
@@ -200,15 +250,20 @@ import {
   chatbubbleOutline,
   trendingUpOutline,
   sendOutline,
+  warningOutline,
 } from 'ionicons/icons';
 import { useCommentStore } from '../stores/commentStore';
 import { Comment } from '../services/commentService';
 import { generatePseudonym } from '../utils/pseudonym';
+import type { FilterAction } from '../services/moderationService';
+import { ModerationService } from '../services/moderationService';
 
 const props = defineProps<{
   comment: Comment;
   postId: string;
   communityId: string;
+  flagged?: boolean;
+  filterAction?: FilterAction;
 }>();
 
 defineEmits(['upvote', 'downvote']);
@@ -216,6 +271,11 @@ defineEmits(['upvote', 'downvote']);
 const commentStore = useCommentStore();
 const showReplyForm = ref(false);
 const replyText = ref('');
+const revealed = ref(false);
+
+function checkReplyFlagged(content: string): boolean {
+  return ModerationService.checkContent(content || '').flagged;
+}
 
 const displayName = computed(() => {
   if (props.comment?.authorId && props.postId) {

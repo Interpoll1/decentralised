@@ -1,8 +1,14 @@
 <!-- In PostCard.vue template -->
 <template>
   <div class="post-card" v-if="post">
+    <!-- Flagged content overlay (blur mode) -->
+    <div v-if="flagged && filterAction === 'blur' && !revealed" class="flagged-overlay" @click.stop="revealed = true">
+      <ion-icon :icon="warningOutline"></ion-icon>
+      <span>Content hidden by word filter — tap to reveal</span>
+    </div>
+
     <!-- Clickable card content area -->
-    <div @click="handleCardClick">
+    <div @click="handleCardClick" :class="{ 'content-blurred': flagged && filterAction === 'blur' && !revealed }">
       <!-- Post Header -->
       <div class="post-header">
         <div class="post-meta">
@@ -11,6 +17,9 @@
           <span class="author">u/{{ post.authorName || 'Unknown' }}</span>
           <span class="separator">•</span>
           <span class="timestamp">{{ formatTime(post.createdAt) }}</span>
+          <span v-if="flagged && filterAction === 'flag'" class="flag-badge" title="Flagged by word filter">
+            <ion-icon :icon="warningOutline"></ion-icon>
+          </span>
         </div>
       </div>
 
@@ -313,6 +322,43 @@ html.dark .stat-button:hover {
   border-color: rgba(255, 255, 255, 0.15);
 }
 
+/* Flagged content styles */
+.flagged-overlay {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: rgba(var(--ion-color-warning-rgb), 0.10);
+  border: 1px solid rgba(var(--ion-color-warning-rgb), 0.25);
+  border-radius: 10px;
+  color: var(--ion-color-warning-shade);
+  font-size: 13px;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.flagged-overlay ion-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.content-blurred {
+  filter: blur(6px);
+  user-select: none;
+  pointer-events: none;
+}
+
+.flag-badge {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ion-color-warning);
+  margin-left: 4px;
+}
+
+.flag-badge ion-icon {
+  font-size: 14px;
+}
+
 /* Accessibility - Focus States */
 .stat-button:focus-visible {
   outline: 2px solid var(--ion-color-primary);
@@ -321,16 +367,18 @@ html.dark .stat-button:hover {
 </style>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { IonIcon } from '@ionic/vue';
 import { 
   arrowUpOutline, 
   arrowDownOutline, 
   chatbubbleOutline, 
-  trendingUpOutline 
+  trendingUpOutline,
+  warningOutline
 } from 'ionicons/icons';
 import { Post } from '../services/postService';
+import type { FilterAction } from '../services/moderationService';
 
 const router = useRouter();
 
@@ -339,7 +387,11 @@ const props = defineProps<{
   communityName?: string;
   hasUpvoted?: boolean;
   hasDownvoted?: boolean;
+  flagged?: boolean;
+  filterAction?: FilterAction;
 }>();
+
+const revealed = ref(false);
 
 const emit = defineEmits(['upvote', 'downvote']);
 

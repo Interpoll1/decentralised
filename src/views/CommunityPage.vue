@@ -99,6 +99,8 @@
             :community-name="community?.displayName"
             :has-upvoted="hasUpvoted(item.data.id)"
             :has-downvoted="hasDownvoted(item.data.id)"
+            :flagged="item.flagged"
+            :filter-action="currentModSettings.wordFilterAction"
             @click="navigateToPost(item.data)"
             @upvote="handleUpvote(item.data)"
             @downvote="handleDownvote(item.data)"
@@ -107,6 +109,8 @@
           <PollCard
             v-else-if="item.type === 'poll'"
             :poll="item.data"
+            :flagged="item.flagged"
+            :filter-action="currentModSettings.wordFilterAction"
             @click="navigateToPoll(item.data)"
             @vote="navigateToPoll(item.data)"
           />
@@ -288,7 +292,7 @@
 </style>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watchEffect } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage,
@@ -328,6 +332,7 @@ import PostCard from '../components/PostCard.vue';
 import PollCard from '../components/PollCard.vue';
 import { Post } from '../services/postService';
 import { Poll } from '../services/pollService';
+import { ModerationService, moderationVersion } from '../services/moderationService';
 
 const route = useRoute();
 const router = useRouter();
@@ -344,6 +349,11 @@ const isLoading = ref(false);
 const contentFilter = ref<'all' | 'posts' | 'polls'>('all');
 const currentUserId = ref('');
 const voteVersion = ref(0);
+
+const currentModSettings = computed(() => {
+  moderationVersion.value;
+  return ModerationService.getSettings();
+});
 
 // Get posts and polls for this community
 const communityPosts = computed(() => {
@@ -362,43 +372,63 @@ const totalContentCount = computed(() => {
   return communityPosts.value.length + communityPolls.value.length;
 });
 
+// Pre-fetch author profiles outside computed to avoid side-effects
+watchEffect(() => {
+  const authorIds = new Set([
+    ...communityPosts.value.map(p => p.authorId),
+    ...communityPolls.value.map(p => p.authorId),
+  ]);
+  for (const id of authorIds) {
+    if (id && userStore.getCachedKarma(id) === null) {
+      userStore.getProfile(id);
+    }
+  }
+});
+
 // Combined and filtered content
 const displayedContent = computed(() => {
-  const items: Array<{type: 'post' | 'poll', data: any, createdAt: number}> = [];
+  moderationVersion.value; // reactive dependency on moderation settings
+  const items: Array<{type: 'post' | 'poll', data: any, createdAt: number, flagged: boolean}> = [];
+  const settings = ModerationService.getSettings();
   
   if (contentFilter.value === 'all' || contentFilter.value === 'posts') {
     communityPosts.value.forEach(post => {
-      items.push({ type: 'post', data: post, createdAt: post.createdAt });
+      const textToCheck = `${post.title || ''} ${post.content || ''}`;
+      const filterResult = ModerationService.checkContent(textToCheck);
+
+      // Word filter — hide mode removes from list
+      if (filterResult.flagged && settings.wordFilterAction === 'hide') return;
+
+      // Score filter
+      if (post.score !== undefined && post.score < settings.minContentScore) return;
+
+      // Karma filter
+      if (post.authorId) {
+        const cached = userStore.getCachedKarma(post.authorId);
+        if (ModerationService.shouldHideByKarma(cached)) return;
+      }
+
+      items.push({ type: 'post', data: post, createdAt: post.createdAt, flagged: filterResult.flagged });
     });
   }
   
   if (contentFilter.value === 'all' || contentFilter.value === 'polls') {
     communityPolls.value.forEach(poll => {
-      items.push({ type: 'poll', data: poll, createdAt: poll.createdAt });
+      const textToCheck = `${poll.question || ''} ${poll.description || ''}`;
+      const filterResult = ModerationService.checkContent(textToCheck);
+
+      if (filterResult.flagged && settings.wordFilterAction === 'hide') return;
+
+      if (poll.authorId) {
+        const cached = userStore.getCachedKarma(poll.authorId);
+        if (ModerationService.shouldHideByKarma(cached)) return;
+      }
+
+      items.push({ type: 'poll', data: poll, createdAt: poll.createdAt, flagged: filterResult.flagged });
     });
   }
-  
-  // Apply user karma filter (hide low-reputation authors locally)
-  const minKarma = Number(localStorage.getItem('minUserKarma') || '-1000');
 
-  const filteredByKarma = items.filter((item) => {
-    if (minKarma <= -1000) return true; // "Show everyone"
-
-    const authorId = item.data.authorId;
-    if (!authorId) return true;
-
-    const cached = userStore.getCachedKarma(authorId);
-    if (cached !== null) {
-      return cached >= minKarma;
-    }
-
-    // No cached profile yet: optimistically include and fetch in background
-    userStore.getProfile(authorId);
-    return true;
-  });
-
-  // Sort by creation date (newest first)
-  return filteredByKarma.sort((a, b) => b.createdAt - a.createdAt);
+  return items.sort((a, b) => b.createdAt - a.createdAt);
 });
 
 function hasUpvoted(postId: string): boolean {
@@ -533,7 +563,7 @@ function formatNumber(num: number | undefined | null): string {
 }
 
 function navigateToPost(post: Post) {
-  router.push(`/community/${post.communityId}/post/${post.id}`);
+  router.push(`/post/${post.id}`);
 }
 
 function navigateToPoll(poll: Poll) {

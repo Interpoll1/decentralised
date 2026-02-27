@@ -1,24 +1,35 @@
 <template>
   <div class="poll-card" @click="$emit('click')">
-    <!-- Poll Header -->
-    <div class="poll-header">
-      <div class="poll-badge">
-        <ion-icon :icon="statsChartOutline"></ion-icon>
-        <span>Poll</span>
-      </div>
-      <div class="poll-meta">
-        <span class="author">u/{{ poll.authorName || 'Unknown' }}</span>
-        <span class="separator">•</span>
-        <span class="timestamp">{{ formatTime(poll.createdAt) }}</span>
-        <span v-if="poll.isExpired" class="expired-badge">Ended</span>
-      </div>
+    <!-- Flagged content overlay (blur mode) -->
+    <div v-if="flagged && filterAction === 'blur' && !revealed" class="flagged-overlay" @click.stop="revealed = true">
+      <ion-icon :icon="warningOutline"></ion-icon>
+      <span>Poll hidden by word filter — tap to reveal</span>
     </div>
 
-    <!-- Poll Question -->
-    <h3 class="poll-question">{{ poll.question || 'Untitled Poll' }}</h3>
+    <div :class="{ 'content-blurred': flagged && filterAction === 'blur' && !revealed }">
+      <!-- Poll Header -->
+      <div class="poll-header">
+        <div class="poll-badge">
+          <ion-icon :icon="statsChartOutline"></ion-icon>
+          <span>Poll</span>
+        </div>
+        <div class="poll-meta">
+          <span class="author">u/{{ poll.authorName || 'Unknown' }}</span>
+          <span class="separator">•</span>
+          <span class="timestamp">{{ formatTime(poll.createdAt) }}</span>
+          <span v-if="poll.isExpired" class="expired-badge">Ended</span>
+          <span v-if="flagged && filterAction === 'flag'" class="flag-badge" title="Flagged by word filter">
+            <ion-icon :icon="warningOutline"></ion-icon>
+          </span>
+        </div>
+      </div>
 
-    <!-- Poll Description -->
-    <p v-if="poll.description" class="poll-description">{{ poll.description }}</p>
+      <!-- Poll Question -->
+      <h3 class="poll-question">{{ poll.question || 'Untitled Poll' }}</h3>
+
+      <!-- Poll Description -->
+      <p v-if="poll.description" class="poll-description">{{ poll.description }}</p>
+    </div>
 
     <!-- Poll Options Preview -->
     <div v-if="poll.options && poll.options.length > 0" class="poll-options-preview">
@@ -79,6 +90,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue';
 import { IonIcon, IonButton } from '@ionic/vue';
 
 import { 
@@ -86,12 +98,20 @@ import {
   peopleOutline,
   timeOutline,
   checkmarkDoneOutline,
-  chevronForwardOutline
+  chevronForwardOutline,
+  warningOutline
 } from 'ionicons/icons';
 import { Poll } from '../services/pollService';
+import type { FilterAction } from '../services/moderationService';
 
-const props = defineProps<{ poll: Poll }>();
+const props = defineProps<{
+  poll: Poll;
+  flagged?: boolean;
+  filterAction?: FilterAction;
+}>();
 defineEmits(['click', 'vote']);
+
+const revealed = ref(false);
 
 function formatTime(timestamp: number): string {
   const now = Date.now();
@@ -330,6 +350,43 @@ html.dark .poll-footer {
     gap: 8px;
     flex-wrap: wrap;
   }
+}
+
+/* ── Flagged content ─────────────────────────────── */
+.flagged-overlay {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(var(--ion-color-warning-rgb), 0.10);
+  border: 1px solid rgba(var(--ion-color-warning-rgb), 0.25);
+  border-radius: 8px;
+  color: var(--ion-color-warning-shade);
+  font-size: 13px;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.flagged-overlay ion-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.content-blurred {
+  filter: blur(6px);
+  user-select: none;
+  pointer-events: none;
+}
+
+.flag-badge {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ion-color-warning);
+  margin-left: 4px;
+}
+
+.flag-badge ion-icon {
+  font-size: 13px;
 }
 </style>
 

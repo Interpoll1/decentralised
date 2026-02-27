@@ -3,6 +3,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { Comment, CommentService } from '../services/commentService';
 import { generatePseudonym } from '../utils/pseudonym';
+import { UserService } from '../services/userService';
 
 // Helper function to get current user
 function getCurrentUser() {
@@ -187,6 +188,16 @@ export const useCommentStore = defineStore('comment', () => {
 
       // Persist to Gun.js
       await CommentService.voteOnComment(commentId, 'up', currentUser.id);
+
+      // Update author karma
+      if (comment?.authorId && comment.authorId !== currentUser.id) {
+        if (wasUpvoted) {
+          UserService.incrementKarma(comment.authorId, -1).catch(() => {});
+        } else {
+          UserService.incrementKarma(comment.authorId, 1).catch(() => {});
+          if (wasDownvoted) UserService.incrementKarma(comment.authorId, 1).catch(() => {});
+        }
+      }
     } catch (error) {
       voteVersion.value++;
       console.error('Error upvoting comment:', error);
@@ -238,6 +249,16 @@ export const useCommentStore = defineStore('comment', () => {
 
       // Persist to Gun.js
       await CommentService.voteOnComment(commentId, 'down', currentUser.id);
+
+      // Update author karma
+      if (comment?.authorId && comment.authorId !== currentUser.id) {
+        if (wasDownvoted) {
+          UserService.incrementKarma(comment.authorId, 1).catch(() => {});
+        } else {
+          UserService.incrementKarma(comment.authorId, -1).catch(() => {});
+          if (wasUpvoted) UserService.incrementKarma(comment.authorId, -1).catch(() => {});
+        }
+      }
     } catch (error) {
       voteVersion.value++;
       console.error('Error downvoting comment:', error);

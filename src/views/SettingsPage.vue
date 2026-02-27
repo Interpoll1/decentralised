@@ -13,6 +13,9 @@
           <ion-segment-button value="general">
             <ion-label>General</ion-label>
           </ion-segment-button>
+          <ion-segment-button value="moderation">
+            <ion-label>Moderation</ion-label>
+          </ion-segment-button>
           <ion-segment-button value="network">
             <ion-label>Network</ion-label>
           </ion-segment-button>
@@ -39,25 +42,11 @@
           <div class="separator"></div>
         </div>
 
-        <!-- Content Filters -->
+        <!-- Content Filters (moved to Moderation tab) -->
         <div class="section">
           <h3 class="section-title">Content Filters</h3>
-          <p class="section-subtitle">Hide low-reputation users</p>
-          <ion-list>
-            <ion-item>
-              <ion-label>Minimum user karma</ion-label>
-              <ion-select v-model="minUserKarma" @ionChange="saveFilterSettings">
-                <ion-select-option :value="-1000">Show everyone</ion-select-option>
-                <ion-select-option :value="-10">Hide below -10</ion-select-option>
-                <ion-select-option :value="0">Hide below 0</ion-select-option>
-                <ion-select-option :value="10">Hide below 10</ion-select-option>
-                <ion-select-option :value="50">Hide below 50</ion-select-option>
-                <ion-select-option :value="100">Hide below 100</ion-select-option>
-              </ion-select>
-            </ion-item>
-          </ion-list>
           <p class="helper-text">
-            Posts and comments from users with karma below this threshold will be hidden from your feed.
+            Content filtering has moved to the <a href="#" @click.prevent="activeTab = 'moderation'" style="color: var(--ion-color-primary); cursor: pointer;">Moderation</a> tab.
           </p>
           <div class="separator"></div>
         </div>
@@ -122,6 +111,156 @@
               Never share your private key. Anyone with it can sign events as you.
             </p>
           </div>
+        </div>
+      </div>
+
+      <!-- MODERATION TAB -->
+      <div v-if="activeTab === 'moderation'">
+        <!-- Karma Filter -->
+        <div class="section">
+          <h3 class="section-title">Karma Filter</h3>
+          <p class="section-subtitle">Hide posts from low-reputation users</p>
+          <div class="range-row">
+            <span class="range-label">Min karma: <strong>{{ modSettings.minUserKarma <= -1000 ? 'Off' : modSettings.minUserKarma }}</strong></span>
+            <ion-range
+              :min="-100"
+              :max="100"
+              :step="5"
+              :value="modSettings.minUserKarma <= -1000 ? -100 : modSettings.minUserKarma"
+              @ionChange="onKarmaRangeChange"
+              :pin="true"
+            ></ion-range>
+          </div>
+          <p class="helper-text">
+            Drag to −100 to show everyone. Posts and comments from users with karma below this value are hidden.
+          </p>
+          <div class="separator"></div>
+        </div>
+
+        <!-- Score Filter -->
+        <div class="section">
+          <h3 class="section-title">Score Filter</h3>
+          <p class="section-subtitle">Hide heavily downvoted content</p>
+          <div class="range-row">
+            <span class="range-label">Min score: <strong>{{ modSettings.minContentScore }}</strong></span>
+            <ion-range
+              :min="-50"
+              :max="50"
+              :step="1"
+              v-model="modSettings.minContentScore"
+              @ionChange="saveModerationSettings"
+              :pin="true"
+            ></ion-range>
+          </div>
+          <p class="helper-text">
+            Posts and comments with net score (upvotes − downvotes) below this value are hidden.
+          </p>
+          <div class="separator"></div>
+        </div>
+
+        <!-- Word Filter -->
+        <div class="section">
+          <h3 class="section-title">Word Filter</h3>
+          <p class="section-subtitle">Filter content containing specific words</p>
+
+          <ion-list>
+            <ion-item>
+              <ion-toggle v-model="modSettings.wordFilterEnabled" @ionChange="saveModerationSettings">
+                Enable word filter
+              </ion-toggle>
+            </ion-item>
+          </ion-list>
+
+          <div v-if="modSettings.wordFilterEnabled" class="mt-3">
+            <!-- Action -->
+            <ion-list>
+              <ion-item>
+                <ion-label>Action for flagged content</ion-label>
+                <ion-select v-model="modSettings.wordFilterAction" @ionChange="saveModerationSettings">
+                  <ion-select-option value="blur">Blur (reveal on click)</ion-select-option>
+                  <ion-select-option value="hide">Hide completely</ion-select-option>
+                  <ion-select-option value="flag">Show with warning icon</ion-select-option>
+                </ion-select>
+              </ion-item>
+            </ion-list>
+
+            <!-- Category Toggles -->
+            <h4 class="subsection-title mt-3">Categories</h4>
+            <ion-list>
+              <ion-item v-for="cat in wordCategories" :key="cat.id">
+                <ion-toggle
+                  :checked="!modSettings.disabledCategories.includes(cat.id)"
+                  @ionChange="toggleCategory(cat.id, $event)"
+                >
+                  {{ cat.label }} <span class="category-count">({{ cat.count }})</span>
+                </ion-toggle>
+              </ion-item>
+            </ion-list>
+
+            <!-- Custom Blocked Words -->
+            <h4 class="subsection-title mt-3">Custom Blocked Words</h4>
+            <div class="chip-list" v-if="modSettings.customBlockedWords.length">
+              <ion-chip v-for="w in modSettings.customBlockedWords" :key="w" @click="removeCustomBlocked(w)" color="danger" outline>
+                {{ w }}
+                <ion-icon :icon="closeCircleOutline"></ion-icon>
+              </ion-chip>
+            </div>
+            <div class="inline-add">
+              <ion-input
+                v-model="newBlockedWord"
+                placeholder="Add word…"
+                @keyup.enter="addCustomBlocked"
+                class="inline-input"
+              ></ion-input>
+              <ion-button size="small" fill="clear" @click="addCustomBlocked" :disabled="!newBlockedWord.trim()">Add</ion-button>
+            </div>
+
+            <!-- Custom Allowed Words -->
+            <h4 class="subsection-title mt-3">Allowed Words (override defaults)</h4>
+            <div class="chip-list" v-if="modSettings.customAllowedWords.length">
+              <ion-chip v-for="w in modSettings.customAllowedWords" :key="w" @click="removeCustomAllowed(w)" color="success" outline>
+                {{ w }}
+                <ion-icon :icon="closeCircleOutline"></ion-icon>
+              </ion-chip>
+            </div>
+            <div class="inline-add">
+              <ion-input
+                v-model="newAllowedWord"
+                placeholder="Allow word…"
+                @keyup.enter="addCustomAllowed"
+                class="inline-input"
+              ></ion-input>
+              <ion-button size="small" fill="clear" @click="addCustomAllowed" :disabled="!newAllowedWord.trim()">Add</ion-button>
+            </div>
+
+            <!-- Test Preview -->
+            <h4 class="subsection-title mt-3">Test Filter</h4>
+            <ion-input
+              v-model="testText"
+              placeholder="Type text to test…"
+              class="test-input"
+            ></ion-input>
+            <div v-if="testText.trim()" class="test-result" :class="testResult.flagged ? 'flagged' : 'clean'">
+              <template v-if="testResult.flagged">
+                <ion-icon :icon="warningOutline"></ion-icon>
+                <span>Flagged ({{ testResult.severity }}) — matches: {{ testResult.matches.map(m => m.word).join(', ') }}</span>
+              </template>
+              <template v-else>
+                <ion-icon :icon="checkmarkCircleOutline"></ion-icon>
+                <span>Clean — no matches</span>
+              </template>
+            </div>
+          </div>
+
+          <div class="separator"></div>
+        </div>
+
+        <!-- Reset -->
+        <div class="section">
+          <ion-button expand="block" fill="outline" color="medium" @click="resetModerationDefaults">
+            <ion-icon slot="start" :icon="refreshOutline"></ion-icon>
+            Reset Moderation to Defaults
+          </ion-button>
         </div>
       </div>
 
@@ -539,6 +678,86 @@
   color: var(--ion-color-medium);
   margin: 8px 0;
   line-height: 1.5;
+}
+
+/* Moderation Tab */
+.range-row {
+  padding: 8px 0;
+}
+
+.range-label {
+  font-size: 14px;
+  color: var(--ion-text-color);
+  display: block;
+  margin-bottom: 4px;
+}
+
+.subsection-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  color: var(--ion-text-color);
+}
+
+.category-count {
+  font-size: 12px;
+  color: var(--ion-color-medium);
+  font-weight: 400;
+}
+
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.inline-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inline-input {
+  flex: 1;
+  --padding-start: 8px;
+  --padding-end: 8px;
+  border: 1px solid rgba(var(--ion-text-color-rgb), 0.12);
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.test-input {
+  --padding-start: 8px;
+  --padding-end: 8px;
+  border: 1px solid rgba(var(--ion-text-color-rgb), 0.12);
+  border-radius: 8px;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.test-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.test-result.flagged {
+  background: rgba(var(--ion-color-warning-rgb), 0.10);
+  color: var(--ion-color-warning-shade);
+}
+
+.test-result.clean {
+  background: rgba(var(--ion-color-success-rgb), 0.10);
+  color: var(--ion-color-success-shade);
+}
+
+.test-result ion-icon {
+  font-size: 18px;
+  flex-shrink: 0;
 }
 
 /* Storage */
@@ -970,6 +1189,9 @@ import {
   IonBadge,
   IonSegment,
   IonSegmentButton,
+  IonRange,
+  IonChip,
+  IonInput,
   alertController,
   toastController
 } from '@ionic/vue';
@@ -984,7 +1206,9 @@ import {
   swapHorizontalOutline,
   serverOutline,
   copyOutline,
-  eyeOutline
+  eyeOutline,
+  closeCircleOutline,
+  checkmarkCircleOutline
 } from 'ionicons/icons';
 import { PinningService } from '../services/pinningService';
 import { StorageManager } from '../services/storageManager';
@@ -995,6 +1219,7 @@ import { GunService } from '../services/gunService';
 import { KeyService } from '../services/keyService';
 import { useChainStore } from '../stores/chainStore';
 import config from '../config';
+import { ModerationService, moderationVersion, type ModerationSettings, type WordCategory } from '../services/moderationService';
 
 const router = useRouter();
 const chainStore = useChainStore();
@@ -1017,6 +1242,97 @@ const isDarkMode = ref(false);
 const minUserKarma = ref<number>(-1000);
 const userProfile = ref<any>(null);
 const deviceId = ref('');
+
+// Moderation state
+const modSettings = ref<ModerationSettings>(ModerationService.getSettings());
+const newBlockedWord = ref('');
+const newAllowedWord = ref('');
+const testText = ref('');
+
+const wordCategories = computed(() => {
+  const list = ModerationService.getDefaultWordList();
+  const cats: { id: WordCategory; label: string; count: number }[] = [
+    { id: 'profanity', label: 'Profanity', count: 0 },
+    { id: 'slurs', label: 'Slurs & hate speech', count: 0 },
+    { id: 'sexual', label: 'Sexual content', count: 0 },
+    { id: 'threats', label: 'Threats & violence', count: 0 },
+    { id: 'spam', label: 'Spam phrases', count: 0 },
+    { id: 'drugs', label: 'Drug references', count: 0 },
+  ];
+  for (const entry of list) {
+    const cat = cats.find(c => c.id === entry.category);
+    if (cat) cat.count++;
+  }
+  return cats;
+});
+
+const testResult = computed(() => {
+  moderationVersion.value; // re-evaluate when settings change
+  return ModerationService.checkContent(testText.value);
+});
+
+function onKarmaRangeChange(ev: CustomEvent) {
+  const val = ev.detail.value as number;
+  modSettings.value.minUserKarma = val <= -100 ? -1000 : val;
+  saveModerationSettings();
+}
+
+function saveModerationSettings() {
+  ModerationService.saveSettings({ ...modSettings.value });
+  minUserKarma.value = modSettings.value.minUserKarma;
+}
+
+function toggleCategory(catId: WordCategory, ev: CustomEvent) {
+  const enabled = ev.detail.checked;
+  const disabled = [...modSettings.value.disabledCategories];
+  if (enabled) {
+    const idx = disabled.indexOf(catId);
+    if (idx !== -1) disabled.splice(idx, 1);
+  } else {
+    if (!disabled.includes(catId)) disabled.push(catId);
+  }
+  modSettings.value.disabledCategories = disabled;
+  saveModerationSettings();
+}
+
+function addCustomBlocked() {
+  const w = newBlockedWord.value.trim().toLowerCase();
+  if (!w || modSettings.value.customBlockedWords.includes(w)) return;
+  modSettings.value.customBlockedWords.push(w);
+  newBlockedWord.value = '';
+  saveModerationSettings();
+}
+
+function removeCustomBlocked(w: string) {
+  modSettings.value.customBlockedWords = modSettings.value.customBlockedWords.filter(x => x !== w);
+  saveModerationSettings();
+}
+
+function addCustomAllowed() {
+  const w = newAllowedWord.value.trim().toLowerCase();
+  if (!w || modSettings.value.customAllowedWords.includes(w)) return;
+  modSettings.value.customAllowedWords.push(w);
+  newAllowedWord.value = '';
+  saveModerationSettings();
+}
+
+function removeCustomAllowed(w: string) {
+  modSettings.value.customAllowedWords = modSettings.value.customAllowedWords.filter(x => x !== w);
+  saveModerationSettings();
+}
+
+async function resetModerationDefaults() {
+  const defaults = ModerationService.getDefaultSettings();
+  ModerationService.saveSettings(defaults);
+  modSettings.value = ModerationService.getSettings();
+  minUserKarma.value = modSettings.value.minUserKarma;
+  const toast = await toastController.create({
+    message: 'Moderation settings reset to defaults',
+    duration: 1500,
+    color: 'success'
+  });
+  await toast.present();
+}
 
 // Crypto identity state
 const publicKeyHex = ref('');
@@ -1257,6 +1573,10 @@ onMounted(async () => {
     minUserKarma.value = Number(storedMinKarma) || -1000;
   }
 
+  // Load moderation settings (may have migrated legacy minUserKarma)
+  modSettings.value = ModerationService.getSettings();
+  minUserKarma.value = modSettings.value.minUserKarma;
+
   // Network polling
   refreshNetwork();
   statusCleanup = WebSocketService.onStatusChange(() => refreshNetwork());
@@ -1297,17 +1617,6 @@ const toggleDarkMode = () => {
     document.body.classList.remove('dark');
     localStorage.setItem('theme', 'light');
   }
-};
-
-const saveFilterSettings = async () => {
-  localStorage.setItem('minUserKarma', String(minUserKarma.value));
-
-  const toast = await toastController.create({
-    message: 'Content filter updated',
-    duration: 1500,
-    color: 'success'
-  });
-  await toast.present();
 };
 
 const exportData = async () => {

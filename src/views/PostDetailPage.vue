@@ -3,7 +3,7 @@
     <ion-header>
       <ion-toolbar>
         <ion-buttons slot="start">
-          <ion-back-button :default-href="`/community/${post?.communityId || '/home'}`"></ion-back-button>
+          <ion-back-button :default-href="post?.communityId ? `/community/${post.communityId}` : '/home'"></ion-back-button>
         </ion-buttons>
         <ion-title>Post</ion-title>
         <ion-buttons slot="end">
@@ -134,6 +134,8 @@
               :comment="comment"
               :post-id="post.id"
               :community-id="post.communityId"
+              :flagged="isCommentFlagged(comment.content)"
+              :filter-action="modSettings.wordFilterAction"
               @upvote="(c: any) => handleCommentUpvote(c)"
               @downvote="(c: any) => handleCommentDownvote(c)"
             />
@@ -152,7 +154,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, watchEffect } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
@@ -173,6 +175,7 @@ import { useUserStore } from '../stores/userStore';
 import CommentCard from '../components/CommentCard.vue';
 import { Post } from '../services/postService';
 import { generatePseudonym } from '../utils/pseudonym';
+import { ModerationService, moderationVersion } from '../services/moderationService';
 
 const route = useRoute();
 const router = useRouter();
@@ -187,7 +190,6 @@ const newCommentText = ref('');
 const voteVersion = ref(0);
 
 const postId = computed(() => route.params.postId as string);
-const communityId = computed(() => route.params.communityId as string);
 
 // Meta tags via watch — avoids @unhead/vue context issues
 watch(post, (p) => {
@@ -212,8 +214,9 @@ watch(post, (p) => {
 });
 
 const communityName = computed(() => {
-  const community = communityStore.communities.find(c => c.id === communityId.value);
-  return community?.displayName || communityId.value;
+  const cid = post.value?.communityId;
+  const community = communityStore.communities.find(c => c.id === cid);
+  return community?.displayName || cid || 'Community';
 });
 
 const allComments = computed(() =>
@@ -223,20 +226,49 @@ const allComments = computed(() =>
   })
 );
 
+const modSettings = computed(() => {
+  moderationVersion.value; // reactive dependency
+  return ModerationService.getSettings();
+});
+
+// Pre-fetch author profiles outside computed
+watchEffect(() => {
+  for (const c of allComments.value) {
+    if (c.authorId && userStore.getCachedKarma(c.authorId) === null) {
+      userStore.getProfile(c.authorId);
+    }
+  }
+});
+
 const sortedComments = computed(() => {
-  const minKarma = Number(localStorage.getItem('minUserKarma') || '-1000');
+  moderationVersion.value; // reactive dependency
+  const settings = ModerationService.getSettings();
 
   return allComments.value
     .filter((c) => {
-      if (minKarma <= -1000) return true;
-      if (!c.authorId) return true;
-      const cached = userStore.getCachedKarma(c.authorId);
-      if (cached !== null) return cached >= minKarma;
-      userStore.getProfile(c.authorId);
+      // Karma filter
+      if (c.authorId) {
+        const cached = userStore.getCachedKarma(c.authorId);
+        if (ModerationService.shouldHideByKarma(cached)) return false;
+      }
+
+      // Score filter
+      if (c.score < settings.minContentScore) return false;
+
+      // Word filter — hide mode
+      if (settings.wordFilterAction === 'hide') {
+        const result = ModerationService.checkContent(c.content || '');
+        if (result.flagged) return false;
+      }
+
       return true;
     })
     .sort((a, b) => b.score !== a.score ? b.score - a.score : b.createdAt - a.createdAt);
 });
+
+function isCommentFlagged(content: string): boolean {
+  return ModerationService.checkContent(content || '').flagged;
+}
 
 const uniqueCommenters = computed(() => {
   const authorMap = new Map<string, { authorId: string; displayName: string; commentCount: number }>();
@@ -592,7 +624,7 @@ onMounted(async () => {
   gap: 6px;
   background: rgba(var(--ion-card-background-rgb), 0.20);
   border: 1px solid rgba(var(--ion-text-color-rgb), 0.1);
-  padding: 8px 14x;
+  padding: 8px 14px;
   font-size: 14px;
   color: var(--ion-color-medium);
   cursor: pointer;
@@ -611,7 +643,7 @@ html.dark .section-separator {
 }
 
 .commenters-section {
-  padding: 2x 0;
+  padding: 2px 0;
   background: transparent;
 }
 
