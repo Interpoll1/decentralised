@@ -30,8 +30,18 @@
       <p v-if="post.content" class="post-content">{{ truncatedContent }}</p>
 
       <!-- Post Image -->
-      <div v-if="post.imageThumbnail || post.imageIPFS" class="post-image">
-        <img :src="post.imageThumbnail || getIPFSUrl(post.imageIPFS)" :alt="post.title" />
+      <div v-if="post.imageThumbnail || post.imageIPFS" class="post-image" :class="{ 'nsfw-blurred': imageNsfw && !imageRevealed }">
+        <img
+          ref="postImageRef"
+          :src="post.imageThumbnail || getIPFSUrl(post.imageIPFS)"
+          :alt="post.title"
+          crossorigin="anonymous"
+          @load="onImageLoad"
+        />
+        <div v-if="imageNsfw && !imageRevealed" class="nsfw-overlay" @click.stop="imageRevealed = true">
+          <ion-icon :icon="eyeOffOutline"></ion-icon>
+          <span>Sensitive image ({{ nsfwLabel }}) — tap to reveal</span>
+        </div>
       </div>
 
       <!-- Post Footer - Not clickable for card navigation -->
@@ -359,6 +369,35 @@ html.dark .stat-button:hover {
   font-size: 14px;
 }
 
+.nsfw-blurred {
+  position: relative;
+}
+
+.nsfw-blurred img {
+  filter: blur(20px);
+}
+
+.nsfw-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  color: white;
+  font-size: 13px;
+  text-align: center;
+  padding: 8px;
+  border-radius: 12px;
+}
+
+.nsfw-overlay ion-icon {
+  font-size: 28px;
+}
+
 /* Accessibility - Focus States */
 .stat-button:focus-visible {
   outline: 2px solid var(--ion-color-primary);
@@ -375,10 +414,13 @@ import {
   arrowDownOutline, 
   chatbubbleOutline, 
   trendingUpOutline,
-  warningOutline
+  warningOutline,
+  eyeOffOutline
 } from 'ionicons/icons';
 import { Post } from '../services/postService';
 import type { FilterAction } from '../services/moderationService';
+import { moderationVersion } from '../services/moderationService';
+import { NsfwService } from '../services/nsfwService';
 
 const router = useRouter();
 
@@ -392,6 +434,15 @@ const props = defineProps<{
 }>();
 
 const revealed = ref(false);
+const imageNsfwRaw = ref(false);
+const imageRevealed = ref(false);
+const nsfwLabel = ref('');
+const postImageRef = ref<HTMLImageElement | null>(null);
+
+const imageNsfw = computed(() => {
+  moderationVersion.value;
+  return imageNsfwRaw.value && NsfwService.isEnabled();
+});
 
 const emit = defineEmits(['upvote', 'downvote']);
 
@@ -444,6 +495,13 @@ function formatNumber(num: number | undefined | null): string {
   if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
   if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
   return n.toString();
+}
+
+async function onImageLoad() {
+  if (!postImageRef.value) return;
+  const result = await NsfwService.classifyImage(postImageRef.value);
+  imageNsfwRaw.value = !result.safe;
+  nsfwLabel.value = result.classification;
 }
 
 function getIPFSUrl(cid?: string): string {

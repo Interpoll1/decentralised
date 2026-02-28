@@ -53,8 +53,18 @@
             </div>
 
             <!-- Post Image -->
-            <div v-if="post.imageThumbnail || post.imageIPFS" class="post-image">
-              <img :src="post.imageThumbnail || getIPFSUrl(post.imageIPFS)" :alt="post.title" />
+            <div v-if="post.imageThumbnail || post.imageIPFS" class="post-image" :class="{ 'nsfw-blurred': detailImageNsfw && !detailImageRevealed }">
+              <img
+                ref="detailImageRef"
+                :src="post.imageThumbnail || getIPFSUrl(post.imageIPFS)"
+                :alt="post.title"
+                crossorigin="anonymous"
+                @load="onDetailImageLoad"
+              />
+              <div v-if="detailImageNsfw && !detailImageRevealed" class="nsfw-overlay" @click="detailImageRevealed = true">
+                <ion-icon :icon="eyeOffOutline"></ion-icon>
+                <span>Sensitive image ({{ detailNsfwLabel }}) — tap to reveal</span>
+              </div>
             </div>
 
             <!-- Vote & Actions Bar -->
@@ -166,7 +176,8 @@ import {
 import {
   peopleOutline, arrowUpOutline, arrowDownOutline,
   trendingUpOutline, chatbubbleOutline, sendOutline,
-  shareSocialOutline, alertCircleOutline, refreshOutline
+  shareSocialOutline, alertCircleOutline, refreshOutline,
+  eyeOffOutline
 } from 'ionicons/icons';
 import { usePostStore } from '../stores/postStore';
 import { useCommentStore } from '../stores/commentStore';
@@ -176,6 +187,7 @@ import CommentCard from '../components/CommentCard.vue';
 import { Post } from '../services/postService';
 import { generatePseudonym } from '../utils/pseudonym';
 import { ModerationService, moderationVersion } from '../services/moderationService';
+import { NsfwService } from '../services/nsfwService';
 
 const route = useRoute();
 const router = useRouter();
@@ -188,6 +200,15 @@ const post = ref<Post | null>(null);
 const isLoading = ref(true);
 const newCommentText = ref('');
 const voteVersion = ref(0);
+const detailImageNsfwRaw = ref(false);
+const detailImageRevealed = ref(false);
+const detailNsfwLabel = ref('');
+const detailImageRef = ref<HTMLImageElement | null>(null);
+
+const detailImageNsfw = computed(() => {
+  moderationVersion.value;
+  return detailImageNsfwRaw.value && NsfwService.isEnabled();
+});
 
 const postId = computed(() => route.params.postId as string);
 
@@ -322,6 +343,13 @@ function formatNumber(num: number | undefined | null): string {
   return n.toString();
 }
 
+async function onDetailImageLoad() {
+  if (!detailImageRef.value) return;
+  const result = await NsfwService.classifyImage(detailImageRef.value);
+  detailImageNsfwRaw.value = !result.safe;
+  detailNsfwLabel.value = result.classification;
+}
+
 function getIPFSUrl(cid?: string): string {
   return cid ? `https://ipfs.io/ipfs/${cid}` : '';
 }
@@ -402,7 +430,9 @@ async function submitComment() {
     });
     newCommentText.value = '';
     (await toastController.create({ message: 'Comment posted', duration: 2000, color: 'success' })).present();
-    setTimeout(() => commentStore.loadCommentsForPost(post.value!.id), 500);
+    setTimeout(() => {
+      if (post.value) commentStore.loadCommentsForPost(post.value.id);
+    }, 500);
   } catch {
     (await toastController.create({ message: 'Failed to post comment', duration: 2000, color: 'danger' })).present();
   }
@@ -551,6 +581,35 @@ onMounted(async () => {
   margin: 16px 0;
   border-radius: 8px;
   overflow: hidden;
+}
+
+.post-image.nsfw-blurred {
+  position: relative;
+}
+
+.post-image.nsfw-blurred img {
+  filter: blur(20px);
+}
+
+.nsfw-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  color: white;
+  font-size: 13px;
+  text-align: center;
+  padding: 8px;
+  border-radius: 8px;
+}
+
+.nsfw-overlay ion-icon {
+  font-size: 28px;
 }
 
 .post-image img {

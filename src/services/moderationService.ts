@@ -33,6 +33,8 @@ export interface ModerationSettings {
   customBlockedWords: string[];
   customAllowedWords: string[];
   disabledCategories: WordCategory[];
+  imageFilterEnabled: boolean;
+  imageFilterSensitivity: number; // 0.0–1.0, lower = more aggressive
 }
 
 const STORAGE_KEY = 'moderation_settings';
@@ -40,11 +42,13 @@ const STORAGE_KEY = 'moderation_settings';
 const DEFAULT_SETTINGS: ModerationSettings = {
   minUserKarma: -1000,
   minContentScore: -5,
-  wordFilterEnabled: true,
+  wordFilterEnabled: false,
   wordFilterAction: 'blur',
   customBlockedWords: [],
   customAllowedWords: [],
   disabledCategories: [],
+  imageFilterEnabled: true,
+  imageFilterSensitivity: 0.6,
 };
 
 // ── Default word list ──────────────────────────────────────────────────
@@ -143,6 +147,7 @@ export class ModerationService {
     const current = this.getSettings();
     this.settings = { ...current, ...partial };
     this._regex = null; // invalidate compiled regex
+    this.wordList = null; // force word list rebuild with new custom words
     this._regexVersion++;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
 
