@@ -220,7 +220,7 @@ export const usePollStore = defineStore('poll', () => {
         currentPoll.value = existing;
         return;
       }
-      const poll = await PollService.getPollById(pollId);
+      const poll = await PollService.loadPoll(pollId);
       currentPoll.value = poll;
       if (poll) pollsMap.value.set(poll.id, poll);
     } finally {
