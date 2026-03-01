@@ -14,7 +14,7 @@
           <span>Poll</span>
         </div>
         <div class="poll-meta">
-          <span class="author">u/{{ poll.authorName || 'Unknown' }}</span>
+          <span class="author">u/{{ authorDisplayName }}</span>
           <span class="separator">•</span>
           <span class="timestamp">{{ formatTime(poll.createdAt) }}</span>
           <span v-if="poll.isExpired" class="expired-badge">Ended</span>
@@ -29,7 +29,6 @@
 
       <!-- Poll Description -->
       <p v-if="poll.description" class="poll-description">{{ poll.description }}</p>
-    </div>
 
     <!-- Poll Options Preview -->
     <div v-if="poll.options && poll.options.length > 0" class="poll-options-preview">
@@ -83,6 +82,7 @@
         <ion-icon slot="end" :icon="chevronForwardOutline"></ion-icon>
       </ion-button>
     </div>
+    </div>
 
     <!-- Separator line -->
     <div class="poll-separator"></div>
@@ -90,7 +90,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { IonIcon, IonButton } from '@ionic/vue';
 
 import { 
@@ -103,6 +103,7 @@ import {
 } from 'ionicons/icons';
 import { Poll } from '../services/pollService';
 import type { FilterAction } from '../services/moderationService';
+import { generatePseudonym } from '../utils/pseudonym';
 
 const props = defineProps<{
   poll: Poll;
@@ -112,6 +113,16 @@ const props = defineProps<{
 defineEmits(['click', 'vote']);
 
 const revealed = ref(false);
+
+const authorDisplayName = computed(() => {
+  if (props.poll.authorShowRealName) {
+    return props.poll.authorName || 'anon';
+  }
+  if (props.poll.authorId && props.poll.id) {
+    return generatePseudonym(props.poll.id, props.poll.authorId);
+  }
+  return props.poll.authorName || 'anon';
+});
 
 function formatTime(timestamp: number): string {
   const now = Date.now();

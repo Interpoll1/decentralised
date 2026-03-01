@@ -51,7 +51,7 @@
           </div>
           <h1 class="poll-title">{{ poll.question }}</h1>
           <p class="poll-author">
-            Posted by u/{{ poll.authorName }} • {{ formatTime(poll.createdAt) }}
+            Posted by u/{{ pollAuthorDisplayName }} • {{ formatTime(poll.createdAt) }}
           </p>
           <p v-if="poll.description" class="poll-description">{{ poll.description }}</p>
           <div class="separator"></div>
@@ -576,6 +576,7 @@ import { UserService } from '../services/userService';
 import { VoteTrackerService } from '../services/voteTrackerService';
 import { AuditService } from '../services/auditService';
 import type { Vote } from '../types/chain';
+import { generatePseudonym } from '../utils/pseudonym';
 
 const route = useRoute();
 const router = useRouter();
@@ -595,6 +596,17 @@ const isLoadingCodes = ref(false);
 const isAuthor = computed(() => {
   if (!poll.value || !currentUserId.value) return false;
   return poll.value.authorId === currentUserId.value;
+});
+
+const pollAuthorDisplayName = computed(() => {
+  if (!poll.value) return 'anon';
+  if (poll.value.authorShowRealName) {
+    return poll.value.authorName || 'anon';
+  }
+  if (poll.value.authorId && poll.value.id) {
+    return generatePseudonym(poll.value.id, poll.value.authorId);
+  }
+  return poll.value.authorName || 'anon';
 });
 
 const canSubmitVote = computed(() => {

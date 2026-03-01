@@ -14,6 +14,7 @@ export interface Poll {
   communityId: string;
   authorId: string;
   authorName: string;
+  authorShowRealName?: boolean;
   question: string;
   description?: string;
   options: PollOption[];
@@ -187,6 +188,7 @@ export class PollService {
     communityId: string;
     authorId: string;
     authorName: string;
+    authorShowRealName?: boolean;
     question: string;
     description?: string;
     options: string[];
@@ -196,8 +198,8 @@ export class PollService {
     requireLogin: boolean;
     isPrivate: boolean;
     inviteCodeCount?: number;
-  }): Promise<Poll> {
-    const pollId = `poll-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+  }, preGeneratedId?: string): Promise<Poll> {
+    const pollId = preGeneratedId || `poll-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
     const now = Date.now();
     const expiresAt = now + data.durationDays * 86400000;
 
@@ -207,7 +209,8 @@ export class PollService {
 
     const poll: Poll = {
       id: pollId, communityId: data.communityId, authorId: data.authorId,
-      authorName: data.authorName, question: data.question,
+      authorName: data.authorName, authorShowRealName: data.authorShowRealName || false,
+      question: data.question,
       description: data.description || '', options: pollOptions,
       createdAt: now, expiresAt, allowMultipleChoices: data.allowMultipleChoices,
       showResultsBeforeVoting: data.showResultsBeforeVoting,
@@ -217,7 +220,8 @@ export class PollService {
 
     const gunPoll = {
       id: poll.id, communityId: poll.communityId, authorId: poll.authorId,
-      authorName: poll.authorName, question: poll.question,
+      authorName: poll.authorName, authorShowRealName: poll.authorShowRealName,
+      question: poll.question,
       description: poll.description, createdAt: poll.createdAt,
       expiresAt: poll.expiresAt, allowMultipleChoices: poll.allowMultipleChoices,
       showResultsBeforeVoting: poll.showResultsBeforeVoting,

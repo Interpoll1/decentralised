@@ -241,14 +241,14 @@ const communityName = computed(() => {
 });
 
 const postAuthorDisplayName = computed(() => {
-  if (!post.value) return 'Unknown';
+  if (!post.value) return 'anon';
   if (post.value.authorShowRealName) {
-    return post.value.authorName || 'Unknown';
+    return post.value.authorName || 'anon';
   }
   if (post.value.authorId && post.value.id) {
     return generatePseudonym(post.value.id, post.value.authorId);
   }
-  return post.value.authorName || 'Unknown';
+  return post.value.authorName || 'anon';
 });
 
 const allComments = computed(() =>

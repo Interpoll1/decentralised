@@ -30,7 +30,7 @@ All services are **static classes** — never instantiated with `new`. Initializ
 | `communityService.ts` | `CommunityService` | Community CRUD in GunDB. IDs are derived from lowercased name: `c-{slug}`. |
 | `postService.ts` | `PostService` | Post CRUD in GunDB, image upload via `IPFSService`. |
 | `commentService.ts` | `CommentService` | Comment CRUD in GunDB. |
-| `userService.ts` | `UserService` | User profile CRUD in GunDB, keyed by device ID. Exposes Schnorr public key for identity. |
+| `userService.ts` | `UserService` | User profile CRUD in GunDB, keyed by device ID. Exposes Schnorr public key for identity. Supports `customUsername`, `showRealName` toggle, and avatar images (`avatarIPFS`/`avatarThumbnail`). |
 | `chatService.ts` | `ChatService` | **Instance-based** (not static). P2P DM chat over GunDB + WebSocket. Uses RSA-OAEP for message encryption between users. Each chat session needs `new ChatService(wsUrl, userId)`. |
 
 ## Media

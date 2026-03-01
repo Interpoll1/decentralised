@@ -20,7 +20,7 @@ Page-level components. Each maps to a route in `src/router/index.ts`. All routes
 | `ChainExplorerPage.vue` | `/chain-explorer` | Browse local blockchain blocks, validate chain, look up receipts. |
 | `ReceiptPage.vue` | `/receipt/:mnemonic?` | Verify a vote receipt by mnemonic. |
 | `SettingsPage.vue` | `/settings` | Relay URL overrides (saved to localStorage), key management, moderation settings. |
-| `ProfilePage.vue` | `/profile` | Current user's profile, posts, vote history. |
+| `ProfilePage.vue` | `/profile` | Current user's profile. Editable: custom username, display name, bio, avatar (via IPFSService), and "Show username on posts" toggle (anonymous by default). |
 | `UserProfileView.vue` | `/user/:userId` | Another user's public profile. |
 | `SearchView.vue` | `/search` | Full-text search results. Uses `useSearch` composable. |
 | `ChatView.vue` | `/chat/:userId` | P2P encrypted DM chat with a user. Uses `ChatService` instance. |

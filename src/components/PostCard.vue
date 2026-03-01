@@ -449,12 +449,12 @@ const emit = defineEmits(['upvote', 'downvote']);
 
 const authorDisplayName = computed(() => {
   if (props.post.authorShowRealName) {
-    return props.post.authorName || 'Unknown';
+    return props.post.authorName || 'anon';
   }
   if (props.post.authorId && props.post.id) {
     return generatePseudonym(props.post.id, props.post.authorId);
   }
-  return props.post.authorName || 'Unknown';
+  return props.post.authorName || 'anon';
 });
 
 const truncatedContent = computed(() => {

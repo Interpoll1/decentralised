@@ -18,7 +18,7 @@
       <!-- Profile Header -->
       <div class="profile-header">
         <div class="avatar-container" @click="selectAvatar">
-          <img v-if="avatarPreview || userProfile?.avatarThumbnail" :src="avatarPreview || userProfile?.avatarThumbnail" class="avatar-image" />
+          <img v-if="avatarPreview || userProfile?.avatarThumbnail" :src="avatarPreview || userProfile?.avatarThumbnail" class="avatar-image" @error="avatarPreview = null; if (userProfile) userProfile.avatarThumbnail = undefined" />
           <div v-else class="avatar-placeholder">
             <ion-icon :icon="personCircleOutline"></ion-icon>
           </div>
@@ -122,7 +122,7 @@
         <ion-item lines="full">
           <ion-label>
             <p class="item-label">Device ID</p>
-            <p class="device-id">{{ fullDeviceId }}</p>
+            <p class="device-id">{{ deviceId }}</p>
           </ion-label>
           <ion-button slot="end" fill="clear" @click="copyDeviceId">
             <ion-icon :icon="copyOutline"></ion-icon>
@@ -410,8 +410,6 @@ const avatarPreview = ref<string | null>(null);
 const avatarFile = ref<File | null>(null);
 const avatarInput = ref<HTMLInputElement | null>(null);
 
-const fullDeviceId = computed(() => deviceId.value || '');
-
 const joinedCommunitiesCount = computed(() => communityStore.joinedCommunities?.size || 0);
 
 function formatDate(timestamp?: number): string {
@@ -439,7 +437,14 @@ async function handleAvatarSelect(event: Event) {
   avatarFile.value = file;
   const reader = new FileReader();
   reader.onload = (e) => { avatarPreview.value = e.target?.result as string; };
+  reader.onerror = async () => {
+    avatarFile.value = null;
+    const toast = await toastController.create({ message: 'Failed to read image', duration: 3000, color: 'danger' });
+    await toast.present();
+  };
   reader.readAsDataURL(file);
+  // Reset input so same file can be re-selected
+  target.value = '';
 }
 
 async function loadProfile() {
@@ -472,10 +477,11 @@ async function saveProfile() {
       const result = await IPFSService.uploadImage(avatarFile.value);
       updates.avatarIPFS = result.cid;
       updates.avatarThumbnail = result.thumbnail;
-      avatarFile.value = null;
     }
 
     await UserService.updateProfile(updates);
+    avatarFile.value = null;
+    avatarPreview.value = null;
     const toast = await toastController.create({ message: 'Profile updated', duration: 2000, color: 'success' });
     await toast.present();
     await loadProfile();
@@ -493,7 +499,8 @@ async function copyDeviceId() {
     const toast = await toastController.create({ message: 'Device ID copied', duration: 1500, color: 'success' });
     await toast.present();
   } catch {
-    console.error('Error copying device ID');
+    const toast = await toastController.create({ message: 'Could not copy — please copy manually', duration: 2000, color: 'warning' });
+    await toast.present();
   }
 }
 

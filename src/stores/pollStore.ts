@@ -7,6 +7,7 @@ import { UserService } from '../services/userService';
 import { EventService } from '../services/eventService';
 import { BroadcastService } from '../services/broadcastService';
 import { WebSocketService } from '../services/websocketService';
+import { generatePseudonym } from '../utils/pseudonym';
 
 const PAGE_SIZE      = 10;
 const SEEN_POLLS_KEY = 'seen-poll-ids';
@@ -152,9 +153,15 @@ export const usePollStore = defineStore('poll', () => {
     inviteCodeCount?: number;
   }) {
     const user = await UserService.getCurrentUser();
+    const showReal = user.showRealName === true;
+    const pollId = `poll-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+    const authorName = showReal
+      ? (user.customUsername || user.displayName || user.username)
+      : generatePseudonym(pollId, user.id);
+
     const poll = await PollService.createPoll({
-      ...data, authorId: user.id, authorName: user.username || 'Anonymous',
-    });
+      ...data, authorId: user.id, authorName, authorShowRealName: showReal,
+    }, pollId);
 
     pollsMap.value.set(poll.id, poll);
     seenPollIds.add(poll.id);
