@@ -13,6 +13,7 @@ export interface Comment {
   communityId: string;
   authorId: string;
   authorName: string;
+  authorShowRealName?: boolean;
   content: string;
   parentId?: string;
   createdAt: number;
@@ -28,6 +29,7 @@ export interface CreateCommentData {
   communityId: string;
   authorId: string;
   authorName: string;
+  authorShowRealName?: boolean;
   content: string;
   parentId?: string;
 }
@@ -45,6 +47,7 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
     communityId: data.communityId,
     authorId: data.authorId,
     authorName: data.authorName,
+    authorShowRealName: data.authorShowRealName || false,
     content: data.content,
     parentId: data.parentId || undefined,
     createdAt: timestamp,
@@ -63,6 +66,7 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
     commentNode.get('communityId').put(data.communityId);
     commentNode.get('authorId').put(data.authorId);
     commentNode.get('authorName').put(data.authorName);
+    commentNode.get('authorShowRealName').put(data.authorShowRealName || false);
     commentNode.get('content').put(data.content);
     
     if (data.parentId) {

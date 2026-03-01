@@ -14,7 +14,7 @@
         <div class="post-meta">
           <span class="community-name">{{ communityName }}</span>
           <span class="separator">•</span>
-          <span class="author">u/{{ post.authorName || 'Unknown' }}</span>
+          <span class="author">u/{{ authorDisplayName }}</span>
           <span class="separator">•</span>
           <span class="timestamp">{{ formatTime(post.createdAt) }}</span>
           <span v-if="flagged && filterAction === 'flag'" class="flag-badge" title="Flagged by word filter">
@@ -421,6 +421,7 @@ import { Post } from '../services/postService';
 import type { FilterAction } from '../services/moderationService';
 import { moderationVersion } from '../services/moderationService';
 import { NsfwService } from '../services/nsfwService';
+import { generatePseudonym } from '../utils/pseudonym';
 
 const router = useRouter();
 
@@ -445,6 +446,16 @@ const imageNsfw = computed(() => {
 });
 
 const emit = defineEmits(['upvote', 'downvote']);
+
+const authorDisplayName = computed(() => {
+  if (props.post.authorShowRealName) {
+    return props.post.authorName || 'Unknown';
+  }
+  if (props.post.authorId && props.post.id) {
+    return generatePseudonym(props.post.id, props.post.authorId);
+  }
+  return props.post.authorName || 'Unknown';
+});
 
 const truncatedContent = computed(() => {
   const content = props.post.content || '';

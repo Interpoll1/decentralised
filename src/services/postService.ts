@@ -8,6 +8,7 @@ export interface Post {
   communityId: string;
   authorId: string;
   authorName: string;
+  authorShowRealName?: boolean;
   title: string;
   content: string;
   imageIPFS?: string;
@@ -38,7 +39,8 @@ async function indexForSearch(type: 'post' | 'poll', id: string, data: any) {
 export class PostService {
   static async createPost(
     post: Omit<Post, 'id' | 'createdAt' | 'upvotes' | 'downvotes' | 'score' | 'commentCount'>,
-    imageFile?: File
+    imageFile?: File,
+    preGeneratedId?: string
   ): Promise<Post> {
     let imageData;
     if (imageFile) {
@@ -46,10 +48,11 @@ export class PostService {
     }
 
     const newPost: Post = {
-      id: `post-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: preGeneratedId || `post-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       communityId: post.communityId || '',
       authorId: post.authorId || '',
       authorName: post.authorName || 'Anonymous',
+      authorShowRealName: post.authorShowRealName || false,
       title: post.title || '',
       content: post.content || '',
       imageIPFS: imageData?.cid || '',
@@ -66,6 +69,7 @@ export class PostService {
       communityId: newPost.communityId,
       authorId: newPost.authorId,
       authorName: newPost.authorName,
+      authorShowRealName: newPost.authorShowRealName,
       title: newPost.title,
       content: newPost.content,
       createdAt: newPost.createdAt,

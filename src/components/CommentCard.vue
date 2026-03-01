@@ -278,6 +278,9 @@ function checkReplyFlagged(content: string): boolean {
 }
 
 const displayName = computed(() => {
+  if (props.comment?.authorShowRealName) {
+    return props.comment.authorName || 'anon';
+  }
   if (props.comment?.authorId && props.postId) {
     return generatePseudonym(props.postId, props.comment.authorId);
   }

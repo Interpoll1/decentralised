@@ -39,7 +39,7 @@
                 <ion-label>{{ communityName }}</ion-label>
               </ion-chip>
               <span class="separator">•</span>
-              <span class="author">u/{{ post.authorName }}</span>
+              <span class="author">u/{{ postAuthorDisplayName }}</span>
               <span class="separator">•</span>
               <span class="timestamp">{{ formatTime(post.createdAt) }}</span>
             </div>
@@ -240,6 +240,17 @@ const communityName = computed(() => {
   return community?.displayName || cid || 'Community';
 });
 
+const postAuthorDisplayName = computed(() => {
+  if (!post.value) return 'Unknown';
+  if (post.value.authorShowRealName) {
+    return post.value.authorName || 'Unknown';
+  }
+  if (post.value.authorId && post.value.id) {
+    return generatePseudonym(post.value.id, post.value.authorId);
+  }
+  return post.value.authorName || 'Unknown';
+});
+
 const allComments = computed(() =>
   commentStore.comments.filter(c => {
     const matchesPost = c.postId === postId.value || c.postId === post.value?.id;
@@ -301,11 +312,14 @@ const uniqueCommenters = computed(() => {
       if (existing) {
         existing.commentCount++;
       } else {
+        const name = c.authorShowRealName
+          ? (c.authorName || 'anon')
+          : (c.authorId && postId.value
+            ? generatePseudonym(postId.value, c.authorId)
+            : (c.authorName || 'anon'));
         authorMap.set(c.authorId, {
           authorId: c.authorId,
-          displayName: c.authorId && postId.value
-            ? generatePseudonym(postId.value, c.authorId)
-            : (c.authorName || 'anon'),
+          displayName: name,
           commentCount: 1,
         });
       }

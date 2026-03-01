@@ -7,6 +7,8 @@ export interface UserProfile {
   id: string;
   username: string;
   displayName: string;
+  customUsername?: string;
+  showRealName?: boolean;
   avatarIPFS?: string;
   avatarThumbnail?: string;
   bio: string;

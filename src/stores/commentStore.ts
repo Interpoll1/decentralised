@@ -119,12 +119,18 @@ export const useCommentStore = defineStore('comment', () => {
       
       // Get current user
       const currentUser = getCurrentUser();
+      const profile = await UserService.getCurrentUser();
+      const showReal = profile.showRealName === true;
+      const authorName = showReal
+        ? (profile.customUsername || profile.displayName || profile.username)
+        : generatePseudonym(data.postId, currentUser.id);
       
       const commentData = {
         postId: data.postId,
         communityId: data.communityId,
         authorId: currentUser.id,
-        authorName: generatePseudonym(data.postId, currentUser.id),
+        authorName,
+        authorShowRealName: showReal,
         content: data.content,
         parentId: data.parentId
       };

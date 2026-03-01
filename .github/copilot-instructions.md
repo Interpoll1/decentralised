@@ -1,6 +1,7 @@
 # Copilot Instructions — InterPoll
 ## Agent running
 If you edit frontend, please iteratively run the vue-code-reviewer agent until it return no errors or all clear. If you touch the backend, run iteratively the ts-backend-security-auditor
+If there is conflict between the agents use agent-arbitrator for final decision.
 
 ## Submodule Documentation
 

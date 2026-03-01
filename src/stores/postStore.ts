@@ -7,6 +7,7 @@ import { EventService } from '../services/eventService';
 import { BroadcastService } from '../services/broadcastService';
 import { WebSocketService } from '../services/websocketService';
 import { useChainStore } from './chainStore';
+import { generatePseudonym } from '../utils/pseudonym';
 
 const PAGE_SIZE     = 10;
 const SEEN_POSTS_KEY = 'seen-post-ids';
@@ -138,10 +139,17 @@ export const usePostStore = defineStore('post', () => {
   async function createPost(data: { communityId: string; title: string; content: string; imageFile?: File; }) {
     try {
       const currentUser = await UserService.getCurrentUser();
+      const showReal = currentUser.showRealName === true;
+      const postId = `post-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const authorName = showReal
+        ? (currentUser.customUsername || currentUser.displayName || currentUser.username)
+        : generatePseudonym(postId, currentUser.id);
+
       const post = await PostService.createPost({
         communityId: data.communityId, authorId: currentUser.id,
-        authorName: currentUser.username, title: data.title, content: data.content,
-      }, data.imageFile);
+        authorName, authorShowRealName: showReal,
+        title: data.title, content: data.content,
+      }, data.imageFile, postId);
 
       await UserService.incrementPostCount();
       const chainStore = useChainStore();
