@@ -288,6 +288,22 @@ export class PostService {
     });
   }
 
+  static async voteOnPost(postId: string, direction: 'up' | 'down', _userId: string): Promise<void> {
+    const post = await PostService.getPost(postId);
+    if (!post) throw new Error('Post not found');
+    const newUpvotes = (post.upvotes || 0) + (direction === 'up' ? 1 : 0);
+    const newDownvotes = (post.downvotes || 0) + (direction === 'down' ? 1 : 0);
+    await PostService.updatePost(postId, { upvotes: newUpvotes, downvotes: newDownvotes, score: newUpvotes - newDownvotes });
+  }
+
+  static async removeVote(postId: string, direction: 'up' | 'down', _userId: string): Promise<void> {
+    const post = await PostService.getPost(postId);
+    if (!post) throw new Error('Post not found');
+    const newUpvotes = direction === 'up' ? Math.max(0, (post.upvotes || 0) - 1) : (post.upvotes || 0);
+    const newDownvotes = direction === 'down' ? Math.max(0, (post.downvotes || 0) - 1) : (post.downvotes || 0);
+    await PostService.updatePost(postId, { upvotes: newUpvotes, downvotes: newDownvotes, score: newUpvotes - newDownvotes });
+  }
+
   static unsubscribeAll(): void {
     postActiveListeners.forEach(({ subscription, timer }) => {
       clearTimeout(timer);
