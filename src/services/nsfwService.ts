@@ -9,7 +9,7 @@ export interface NsfwResult {
   predictions: Record<string, number>;
 }
 
-const MODEL_URL = 'https://raw.githubusercontent.com/nicedoc/nsfwjs/refs/heads/main/example/nsfw_demo/public/quant_mid/';
+const MODEL_URL = 'MobileNetV2Mid';
 
 export class NsfwService {
   private static model: any = null;
