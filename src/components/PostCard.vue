@@ -33,7 +33,7 @@
       <div v-if="post.imageThumbnail || post.imageIPFS" class="post-image" :class="{ 'nsfw-blurred': imageNsfw && !imageRevealed }">
         <img
           ref="postImageRef"
-          :src="post.imageThumbnail || getIPFSUrl(post.imageIPFS)"
+          :src="fullImageSrc || post.imageThumbnail || getIPFSUrl(post.imageIPFS)"
           :alt="post.title"
           crossorigin="anonymous"
           @load="onImageLoad"
@@ -406,7 +406,7 @@ html.dark .stat-button:hover {
 </style>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { IonIcon } from '@ionic/vue';
 import { 
@@ -422,6 +422,7 @@ import type { FilterAction } from '../services/moderationService';
 import { moderationVersion } from '../services/moderationService';
 import { NsfwService } from '../services/nsfwService';
 import { generatePseudonym } from '../utils/pseudonym';
+import { IPFSService } from '../services/ipfsService';
 
 const router = useRouter();
 
@@ -439,6 +440,20 @@ const imageNsfwRaw = ref(false);
 const imageRevealed = ref(false);
 const nsfwLabel = ref('');
 const postImageRef = ref<HTMLImageElement | null>(null);
+const fullImageSrc = ref<string | null>(null);
+const nsfwChecked = ref(false);
+
+// Load full-res image from GunDB to replace thumbnail
+watch(() => props.post.imageIPFS, (cid) => {
+  fullImageSrc.value = null;
+  nsfwChecked.value = false;
+  imageNsfwRaw.value = false;
+  imageRevealed.value = false;
+  if (!cid) return;
+  IPFSService.downloadImage(cid)
+    .then((data) => { if (data) fullImageSrc.value = data; })
+    .catch(() => { /* fall back to thumbnail */ });
+}, { immediate: true });
 
 const imageNsfw = computed(() => {
   moderationVersion.value;
@@ -509,10 +524,11 @@ function formatNumber(num: number | undefined | null): string {
 }
 
 async function onImageLoad() {
-  if (!postImageRef.value) return;
+  if (nsfwChecked.value || !postImageRef.value) return;
   const result = await NsfwService.classifyImage(postImageRef.value);
   imageNsfwRaw.value = !result.safe;
   nsfwLabel.value = result.classification;
+  nsfwChecked.value = true;
 }
 
 function getIPFSUrl(cid?: string): string {

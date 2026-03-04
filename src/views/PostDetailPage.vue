@@ -56,7 +56,7 @@
             <div v-if="post.imageThumbnail || post.imageIPFS" class="post-image" :class="{ 'nsfw-blurred': detailImageNsfw && !detailImageRevealed }">
               <img
                 ref="detailImageRef"
-                :src="post.imageThumbnail || getIPFSUrl(post.imageIPFS)"
+                :src="fullImageSrc || post.imageThumbnail || getIPFSUrl(post.imageIPFS)"
                 :alt="post.title"
                 crossorigin="anonymous"
                 @load="onDetailImageLoad"
@@ -168,8 +168,8 @@ import { ref, computed, onMounted, watch, watchEffect } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonButtons, IonBackButton, IonButton, IonIcon, IonCard,
-  IonCardHeader, IonCardTitle, IonCardContent, IonChip,
+  IonButtons, IonBackButton, IonButton, IonIcon,
+  IonChip,
   IonLabel, IonSpinner, IonTextarea, IonBadge,
   toastController, actionSheetController
 } from '@ionic/vue';
@@ -188,6 +188,7 @@ import { Post } from '../services/postService';
 import { generatePseudonym } from '../utils/pseudonym';
 import { ModerationService, moderationVersion } from '../services/moderationService';
 import { NsfwService } from '../services/nsfwService';
+import { IPFSService } from '../services/ipfsService';
 
 const route = useRoute();
 const router = useRouter();
@@ -204,6 +205,24 @@ const detailImageNsfwRaw = ref(false);
 const detailImageRevealed = ref(false);
 const detailNsfwLabel = ref('');
 const detailImageRef = ref<HTMLImageElement | null>(null);
+const fullImageSrc = ref<string | null>(null);
+const nsfwChecked = ref(false);
+
+// Load full-res image from GunDB to replace thumbnail
+watch(
+  () => post.value?.imageIPFS,
+  (cid) => {
+    fullImageSrc.value = null;
+    nsfwChecked.value = false;
+    detailImageNsfwRaw.value = false;
+    detailImageRevealed.value = false;
+    if (!cid) return;
+    IPFSService.downloadImage(cid)
+      .then((data) => { if (data) fullImageSrc.value = data; })
+      .catch(() => { /* fall back to thumbnail */ });
+  },
+  { immediate: true }
+);
 
 const detailImageNsfw = computed(() => {
   moderationVersion.value;
@@ -358,10 +377,11 @@ function formatNumber(num: number | undefined | null): string {
 }
 
 async function onDetailImageLoad() {
-  if (!detailImageRef.value) return;
+  if (nsfwChecked.value || !detailImageRef.value) return;
   const result = await NsfwService.classifyImage(detailImageRef.value);
   detailImageNsfwRaw.value = !result.safe;
   detailNsfwLabel.value = result.classification;
+  nsfwChecked.value = true;
 }
 
 function getIPFSUrl(cid?: string): string {

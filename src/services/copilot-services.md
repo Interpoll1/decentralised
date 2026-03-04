@@ -37,7 +37,7 @@ All services are **static classes** — never instantiated with `new`. Initializ
 
 | File | Class | Purpose |
 |---|---|---|
-| `ipfsService.ts` | `IPFSService` | Image compression (`browser-image-compression`) + GunDB storage. Name is historical — no actual IPFS. Full image max 500 KB, thumbnails max 20 KB, both base64. CIDs are `img-{timestamp}-{random}`. |
+| `ipfsService.ts` | `IPFSService` | Image compression (`browser-image-compression`) + GunDB storage. Name is historical — no actual IPFS. Full image max 1 MB / 1920px, thumbnails max 100 KB / 800px, both base64. CIDs are `img-{timestamp}-{random}`. `downloadImage()` retrieves full-res base64 from GunDB with a 10s timeout. |
 | `chatMediaService.ts` | — | Media handling for chat (images in chat messages). |
 
 ## Signing / Events

@@ -20,17 +20,17 @@ export class IPFSService {
   }> {
     if (!this.isReady) await this.initialize();
 
-    // Compress full image (max 500 KB)
+    // Compress full image (max 1 MB)
     const compressed = await imageCompression(file, {
-      maxSizeMB: 0.5,
+      maxSizeMB: 1,
       maxWidthOrHeight: 1920,
       useWebWorker: true
     });
 
-    // Create thumbnail (max 20 KB)
+    // Create thumbnail (max 100 KB, 800px) for fast initial display
     const thumbnail = await imageCompression(file, {
-      maxSizeMB: 0.02,
-      maxWidthOrHeight: 300,
+      maxSizeMB: 0.1,
+      maxWidthOrHeight: 800,
       useWebWorker: true
     });
 
@@ -65,9 +65,11 @@ export class IPFSService {
     const gun = GunService.getGun();
     
     return new Promise((resolve) => {
+      const timeout = setTimeout(() => resolve(null), 10000);
       gun.get('images').get(cid).once((data: any) => {
+        clearTimeout(timeout);
         if (data && data.data) {
-          resolve(data.data); // Returns base64 string
+          resolve(data.data);
         } else {
           resolve(null);
         }
