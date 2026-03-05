@@ -12,7 +12,10 @@ All services are **static classes** — never instantiated with `new`. Initializ
 | `storageService.ts` | `StorageService` | IndexedDB wrapper (`idb`). Stores: `blocks`, `votes`, `receipts`, `polls`, `metadata`. DB name: `interpoll-db` v1. The `metadata` store is a generic key-value bag used by many other services. |
 | `websocketService.ts` | `WebSocketService` | WebSocket peer connection to the relay server. Handles reconnection (exponential backoff, infinite retries), peer discovery, server list sharing, and message queuing when disconnected. Subscribe to message types via `.subscribe(type, callback)`. |
 | `broadcastService.ts` | `BroadcastService` | Cross-tab sync via `BroadcastChannel('interpoll-sync')`. Same message types as WebSocket. Both channels are always wired in parallel in `chainStore`. |
+| `webrtcService.ts` | `WebRTCService` | WebRTC P2P DataChannel service. Uses WebSocket relay only for signaling (`rtc-offer`, `rtc-answer`, `rtc-ice`). Once connected, peers exchange data directly. Opt-in via `localStorage('interpoll_webrtc_enabled')`. Uses Google STUN servers for NAT traversal. Degrades gracefully — app continues via relay if WebRTC fails. |
 | `keyService.ts` | `KeyService` | Persistent secp256k1 Schnorr key pair, stored in IndexedDB metadata under `'nostr-keypair'`. Auto-generates if missing. Used for block signing and Nostr-style event signing. |
+| `relayManager.ts` | `RelayManager` | Multi-relay endpoint manager with auto-failover. Stores relay list in localStorage (`interpoll_relay_list`). Supports health probing (WS + API), priority-sorted failover, and provides Gun peer URLs for all online relays. Uses dynamic imports for `WebSocketService`/`GunService` to avoid circular deps. |
+| `relayHealthService.ts` | `RelayHealthService` | Relay connectivity diagnostics. Probes WebSocket, GunDB, and API endpoints with latency measurement. Includes Tor Browser detection heuristics and censorship analysis (blocked / reachable / torRequired categorization). |
 
 ## Blockchain
 
@@ -57,6 +60,7 @@ All services are **static classes** — never instantiated with `new`. Initializ
 | `pinningService.ts` | `PinningService` | Storage quota and local caching policies for GunDB data. |
 | `storageManager.ts` | — | Higher-level storage orchestration. |
 | `snapshotService.ts` | `SnapshotService` | Full network snapshot export/import. Collects IndexedDB chain data (blocks, votes, receipts, polls) and GunDB data (posts, communities, comments, users, events) into a single `NetworkSnapshot` JSON. Import writes data back to both stores. Includes `downloadSnapshot()` for browser file download and `parseSnapshotFile()` for validated file upload. |
+| `snapshotSyncService.ts` | `SnapshotSyncService` | Peer-to-peer snapshot transfer over WebSocket. Implements a chunked (32 KB) offer→accept→chunks→complete protocol with SHA-256 integrity verification, structural validation, size limits (50 MB), transfer timeout (2 min), and progress callbacks. Uses dynamic imports for `WebSocketService` to avoid circular deps. |
 | `mnemonicService.ts` | — | Mnemonic receipt lookup helpers. |
 | `webrtcService.ts` | — | WebRTC peer connection utilities (direct P2P). |
 | `dbWarmup.ts` | — | Pre-warms IndexedDB on startup to avoid first-access lag. |
