@@ -56,6 +56,7 @@ All services are **static classes** — never instantiated with `new`. Initializ
 | `moderationService.ts` | `ModerationService` | Client-side content word filtering. Settings persisted in localStorage (`moderation_settings`). |
 | `pinningService.ts` | `PinningService` | Storage quota and local caching policies for GunDB data. |
 | `storageManager.ts` | — | Higher-level storage orchestration. |
+| `snapshotService.ts` | `SnapshotService` | Full network snapshot export/import. Collects IndexedDB chain data (blocks, votes, receipts, polls) and GunDB data (posts, communities, comments, users, events) into a single `NetworkSnapshot` JSON. Import writes data back to both stores. Includes `downloadSnapshot()` for browser file download and `parseSnapshotFile()` for validated file upload. |
 | `mnemonicService.ts` | — | Mnemonic receipt lookup helpers. |
 | `webrtcService.ts` | — | WebRTC peer connection utilities (direct P2P). |
 | `dbWarmup.ts` | — | Pre-warms IndexedDB on startup to avoid first-access lag. |
