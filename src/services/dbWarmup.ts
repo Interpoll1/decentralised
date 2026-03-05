@@ -3,6 +3,8 @@
 // Uses injectPost/injectPoll so seen-IDs are tracked and the "new posts" banner
 // never fires for content the user has already loaded before.
 
+import { isVersionEnabled } from '../utils/dataVersionSettings';
+
 const GUN_RELAY_URL = import.meta.env.VITE_GUN_URL?.replace('/gun', '')
   || 'https://interpoll2.onrender.com';
 
@@ -71,12 +73,47 @@ export async function warmupFromDB(): Promise<void> {
           downvotes:      d.downvotes    || 0,
           score:          d.score        || 0,
           commentCount:   d.commentCount || 0,
+          dataVersion:    'v2',
         });
         count++;
       }
       // Persist all seen IDs in one go
       postStore.saveSeenNow();
-      if (count > 0) console.log(`🔥 DB warmup: injected ${count} posts`);
+      if (count > 0) console.log(`🔥 DB warmup: injected ${count} v2 posts`);
+    }
+
+    // ── v1 Posts (legacy, root-level) ────────────────────────────────────
+    if (isVersionEnabled('v1')) {
+      try {
+        const v1PostsRes = await fetch(`${GUN_RELAY_URL}/db/search?prefix=posts&limit=500`);
+        if (v1PostsRes.ok) {
+          const { results } = await v1PostsRes.json();
+          let count = 0;
+          for (const row of results || []) {
+            const d = row.data;
+            if (!d?.id || !d?.title || !d?.communityId) continue;
+            postStore.injectPost({
+              id:             d.id,
+              communityId:    d.communityId,
+              authorId:       d.authorId     || '',
+              authorName:     d.authorName   || 'Anonymous',
+              title:          d.title,
+              content:        d.content      || '',
+              imageIPFS:      d.imageIPFS    || '',
+              imageThumbnail: d.imageThumbnail || '',
+              createdAt:      d.createdAt    || Date.now(),
+              upvotes:        d.upvotes      || 0,
+              downvotes:      d.downvotes    || 0,
+              score:          d.score        || 0,
+              commentCount:   d.commentCount || 0,
+              dataVersion:    'v1',
+            });
+            count++;
+          }
+          postStore.saveSeenNow();
+          if (count > 0) console.log(`🔥 DB warmup: injected ${count} v1 posts`);
+        }
+      } catch { /* v1 warmup non-critical */ }
     }
 
     // ── Polls ────────────────────────────────────────────────────────────────

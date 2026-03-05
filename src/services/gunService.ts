@@ -54,6 +54,12 @@ export class GunService {
     return this.proxiedGun;
   }
 
+  /** Raw gun instance (no v2 namespace proxy) for accessing legacy v1 data */
+  static getRawGun() {
+    if (!this.gun) this.initialize();
+    return this.gun;
+  }
+
   static getUser() {
     if (!this.user) this.initialize();
     return this.user;

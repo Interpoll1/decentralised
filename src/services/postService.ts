@@ -1,5 +1,6 @@
 import { GunService } from './gunService';
 import { IPFSService } from './ipfsService';
+import { isVersionEnabled } from '../utils/dataVersionSettings';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://interpoll.onrender.com';
 
@@ -18,6 +19,8 @@ export interface Post {
   downvotes: number;
   score: number;
   commentCount: number;
+  /** Client-side only — which GunDB namespace this post came from */
+  dataVersion?: 'v1' | 'v2';
 }
 
 const postActiveListeners = new Map<string, any>();
@@ -118,18 +121,26 @@ export class PostService {
     const collectedPosts: Post[] = [];
     let initialLoadDone = false;
     let subscription: any;
+    let v1Subscription: any;
+    let pendingLoads = 1; // v2 always loads
 
     const checkLoadComplete = () => {
       if (initialLoadDone) return;
+      pendingLoads--;
+      if (pendingLoads > 0) return;
       initialLoadDone = true;
       if (onInitialLoadDone) onInitialLoadDone();
     };
 
     const timeboxTimer = setTimeout(() => {
-      checkLoadComplete();
+      if (!initialLoadDone) {
+        pendingLoads = 0;
+        checkLoadComplete();
+      }
     }, 800);
 
-    communityPostsNode.once((allPosts) => {
+    // ── v2 posts (namespaced, current) ───────────────────────────────────
+    communityPostsNode.once((allPosts: any) => {
       if (!allPosts) {
         checkLoadComplete();
         return;
@@ -141,7 +152,7 @@ export class PostService {
           gun.get('posts').get(postId).once((postData: any) => {
             if (postData && postData.id && !seenIds.has(postData.id)) {
               seenIds.add(postData.id);
-              collectedPosts.push(postData);
+              collectedPosts.push({ ...postData, dataVersion: 'v2' });
             }
             resolve();
           });
@@ -155,25 +166,73 @@ export class PostService {
       });
     });
 
-    subscription = communityPostsNode.on((allPosts) => {
+    subscription = communityPostsNode.on((allPosts: any) => {
       if (!allPosts) return;
       Object.keys(allPosts).forEach(postId => {
         if (postId === '_' || seenIds.has(postId)) return;
         gun.get('posts').get(postId).once((postData: any) => {
           if (postData && postData.id && !seenIds.has(postData.id)) {
             seenIds.add(postData.id);
-            onPost(postData);
+            onPost({ ...postData, dataVersion: 'v2' });
           }
         });
       });
     });
 
+    // ── v1 posts (root-level, legacy) ────────────────────────────────────
+    if (isVersionEnabled('v1')) {
+      pendingLoads++;
+      const rawGun = GunService.getRawGun();
+      const v1Node = rawGun.get('communities').get(communityId).get('posts');
+
+      v1Node.once((allPosts: any) => {
+        if (!allPosts) {
+          checkLoadComplete();
+          return;
+        }
+
+        const keys = Object.keys(allPosts).filter(k => k !== '_');
+        const v1Collected: Post[] = [];
+        const promises = keys.slice(0, MAX_INITIAL_POSTS).map(postId =>
+          new Promise<void>((resolve) => {
+            rawGun.get('posts').get(postId).once((postData: any) => {
+              if (postData && postData.id && !seenIds.has(postData.id)) {
+                seenIds.add(postData.id);
+                v1Collected.push({ ...postData, dataVersion: 'v1' });
+              }
+              resolve();
+            });
+          })
+        );
+
+        Promise.all(promises).then(() => {
+          v1Collected.sort((a, b) => b.createdAt - a.createdAt);
+          v1Collected.forEach(p => onPost(p));
+          checkLoadComplete();
+        });
+      });
+
+      v1Subscription = v1Node.on((allPosts: any) => {
+        if (!allPosts) return;
+        Object.keys(allPosts).forEach(postId => {
+          if (postId === '_' || seenIds.has(postId)) return;
+          rawGun.get('posts').get(postId).once((postData: any) => {
+            if (postData && postData.id && !seenIds.has(postData.id)) {
+              seenIds.add(postData.id);
+              onPost({ ...postData, dataVersion: 'v1' });
+            }
+          });
+        });
+      });
+    }
+
     const listenerKey = `${communityId}-posts`;
-    postActiveListeners.set(listenerKey, { subscription, timer: timeboxTimer });
+    postActiveListeners.set(listenerKey, { subscription, v1Subscription, timer: timeboxTimer });
 
     return () => {
       clearTimeout(timeboxTimer);
       if (subscription) subscription.off();
+      if (v1Subscription) v1Subscription.off();
       postActiveListeners.delete(listenerKey);
     };
   }
@@ -189,18 +248,26 @@ export class PostService {
     const collectedPosts: Post[] = [];
     let initialLoadDone = false;
     let subscription: any;
+    let v1Subscription: any;
+    let pendingLoads = 1;
 
     const checkLoadComplete = () => {
       if (initialLoadDone) return;
+      pendingLoads--;
+      if (pendingLoads > 0) return;
       initialLoadDone = true;
       if (onInitialLoadDone) onInitialLoadDone();
     };
 
     const timeboxTimer = setTimeout(() => {
-      checkLoadComplete();
+      if (!initialLoadDone) {
+        pendingLoads = 0;
+        checkLoadComplete();
+      }
     }, 800);
 
-    postsNode.once((allPosts) => {
+    // ── v2 posts ─────────────────────────────────────────────────────────
+    postsNode.once((allPosts: any) => {
       if (!allPosts) {
         checkLoadComplete();
         return;
@@ -212,7 +279,7 @@ export class PostService {
           gun.get('posts').get(postId).once((postData: any) => {
             if (postData && postData.id && !seenIds.has(postData.id)) {
               seenIds.add(postData.id);
-              collectedPosts.push(postData);
+              collectedPosts.push({ ...postData, dataVersion: 'v2' });
             }
             resolve();
           });
@@ -226,25 +293,73 @@ export class PostService {
       });
     });
 
-    subscription = postsNode.on((allPosts) => {
+    subscription = postsNode.on((allPosts: any) => {
       if (!allPosts) return;
       Object.keys(allPosts).forEach(postId => {
         if (postId === '_' || seenIds.has(postId)) return;
         gun.get('posts').get(postId).once((postData: any) => {
           if (postData && postData.id && !seenIds.has(postData.id)) {
             seenIds.add(postData.id);
-            onPost(postData);
+            onPost({ ...postData, dataVersion: 'v2' });
           }
         });
       });
     });
 
+    // ── v1 posts ─────────────────────────────────────────────────────────
+    if (isVersionEnabled('v1')) {
+      pendingLoads++;
+      const rawGun = GunService.getRawGun();
+      const v1PostsNode = rawGun.get('posts');
+
+      v1PostsNode.once((allPosts: any) => {
+        if (!allPosts) {
+          checkLoadComplete();
+          return;
+        }
+
+        const keys = Object.keys(allPosts).filter(k => k !== '_');
+        const v1Collected: Post[] = [];
+        const promises = keys.slice(0, MAX_INITIAL_POSTS).map(postId =>
+          new Promise<void>((resolve) => {
+            rawGun.get('posts').get(postId).once((postData: any) => {
+              if (postData && postData.id && !seenIds.has(postData.id)) {
+                seenIds.add(postData.id);
+                v1Collected.push({ ...postData, dataVersion: 'v1' });
+              }
+              resolve();
+            });
+          })
+        );
+
+        Promise.all(promises).then(() => {
+          v1Collected.sort((a, b) => b.createdAt - a.createdAt);
+          v1Collected.forEach(p => onPost(p));
+          checkLoadComplete();
+        });
+      });
+
+      v1Subscription = v1PostsNode.on((allPosts: any) => {
+        if (!allPosts) return;
+        Object.keys(allPosts).forEach(postId => {
+          if (postId === '_' || seenIds.has(postId)) return;
+          rawGun.get('posts').get(postId).once((postData: any) => {
+            if (postData && postData.id && !seenIds.has(postData.id)) {
+              seenIds.add(postData.id);
+              onPost({ ...postData, dataVersion: 'v1' });
+            }
+          });
+        });
+      });
+    }
+
     const listenerKey = 'all-posts';
-    postActiveListeners.set(listenerKey, { subscription, timer: timeboxTimer });
+    postActiveListeners.set(listenerKey, { subscription, v1Subscription, timer: timeboxTimer });
 
     return () => {
       clearTimeout(timeboxTimer);
       if (subscription) subscription.off();
+      if (v1Subscription) v1Subscription.off();
       postActiveListeners.delete(listenerKey);
     };
   }
@@ -309,9 +424,10 @@ export class PostService {
   }
 
   static unsubscribeAll(): void {
-    postActiveListeners.forEach(({ subscription, timer }) => {
+    postActiveListeners.forEach(({ subscription, v1Subscription, timer }) => {
       clearTimeout(timer);
       if (subscription) subscription.off();
+      if (v1Subscription) v1Subscription.off();
     });
     postActiveListeners.clear();
   }

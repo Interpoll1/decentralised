@@ -8,6 +8,7 @@ import { BroadcastService } from '../services/broadcastService';
 import { WebSocketService } from '../services/websocketService';
 import { useChainStore } from './chainStore';
 import { generatePseudonym } from '../utils/pseudonym';
+import { enabledVersions, type DataVersion } from '../utils/dataVersionSettings';
 
 const PAGE_SIZE     = 10;
 const SEEN_POSTS_KEY = 'seen-post-ids';
@@ -48,8 +49,16 @@ export const usePostStore = defineStore('post', () => {
 
   const posts = computed(() => Array.from(postsMap.value.values()));
 
+  /** Only posts whose dataVersion is in the user's enabled list */
+  function matchesVersion(p: Post): boolean {
+    const v = p.dataVersion || 'v2';
+    return enabledVersions.value.includes(v as DataVersion);
+  }
+
   const sortedPosts = computed(() =>
-    Array.from(postsMap.value.values()).sort((a, b) => b.createdAt - a.createdAt)
+    Array.from(postsMap.value.values())
+      .filter(matchesVersion)
+      .sort((a, b) => b.createdAt - a.createdAt)
   );
 
   const communityPosts = computed(() => {

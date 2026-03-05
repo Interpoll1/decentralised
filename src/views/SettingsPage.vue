@@ -568,6 +568,30 @@
           <div class="separator"></div>
         </div>
 
+        <!-- Data Versions -->
+        <div class="section">
+          <h3 class="section-title">Data Versions</h3>
+          <p class="section-subtitle">Choose which GunDB data versions to display</p>
+
+          <ion-list>
+            <ion-item>
+              <ion-toggle :checked="dataVersionV2" @ionChange="onToggleV2">
+                v2 (current)
+              </ion-toggle>
+            </ion-item>
+            <ion-item>
+              <ion-toggle :checked="dataVersionV1" @ionChange="onToggleV1">
+                v1 (legacy)
+              </ion-toggle>
+            </ion-item>
+          </ion-list>
+
+          <p class="helper-text">
+            Legacy v1 posts were created before the namespace migration. Enable v1 to see older content. Changes take effect on next page load.
+          </p>
+          <div class="separator"></div>
+        </div>
+
         <!-- Storage Policy -->
         <div class="section">
           <h3 class="section-title">Storage Policy</h3>
@@ -1255,6 +1279,7 @@ import { useChainStore } from '../stores/chainStore';
 import config from '../config';
 import { ModerationService, moderationVersion, type ModerationSettings, type WordCategory } from '../services/moderationService';
 import { NsfwService } from '../services/nsfwService';
+import { getEnabledVersions, setEnabledVersions, type DataVersion } from '../utils/dataVersionSettings';
 
 const router = useRouter();
 const chainStore = useChainStore();
@@ -1277,6 +1302,33 @@ const isDarkMode = ref(false);
 const minUserKarma = ref<number>(-1000);
 const userProfile = ref<any>(null);
 const deviceId = ref('');
+
+// Data version toggles
+const dataVersionV1 = ref(getEnabledVersions().includes('v1'));
+const dataVersionV2 = ref(getEnabledVersions().includes('v2'));
+
+function onToggleV1(ev: CustomEvent) {
+  dataVersionV1.value = ev.detail.checked;
+  syncDataVersions();
+}
+
+function onToggleV2(ev: CustomEvent) {
+  dataVersionV2.value = ev.detail.checked;
+  syncDataVersions();
+}
+
+async function syncDataVersions() {
+  const versions: DataVersion[] = [];
+  if (dataVersionV1.value) versions.push('v1');
+  if (dataVersionV2.value) versions.push('v2');
+  setEnabledVersions(versions);
+  const toast = await toastController.create({
+    message: `Showing ${versions.join(' + ')} posts — reload to apply`,
+    duration: 2000,
+    color: 'success',
+  });
+  await toast.present();
+}
 
 // Moderation state
 const modSettings = ref<ModerationSettings>(ModerationService.getSettings());
