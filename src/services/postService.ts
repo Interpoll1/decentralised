@@ -1,4 +1,4 @@
-import { GunService } from './gunService';
+import { GunService, GUN_NAMESPACE } from './gunService';
 import { IPFSService } from './ipfsService';
 import { isVersionEnabled } from '../utils/dataVersionSettings';
 
@@ -20,7 +20,7 @@ export interface Post {
   score: number;
   commentCount: number;
   /** Client-side only — which GunDB namespace this post came from */
-  dataVersion?: 'v1' | 'v2';
+  dataVersion?: string;
 }
 
 const postActiveListeners = new Map<string, any>();
@@ -152,7 +152,7 @@ export class PostService {
           gun.get('posts').get(postId).once((postData: any) => {
             if (postData && postData.id && !seenIds.has(postData.id)) {
               seenIds.add(postData.id);
-              collectedPosts.push({ ...postData, dataVersion: 'v2' });
+              collectedPosts.push({ ...postData, dataVersion: GUN_NAMESPACE });
             }
             resolve();
           });
@@ -173,7 +173,7 @@ export class PostService {
         gun.get('posts').get(postId).once((postData: any) => {
           if (postData && postData.id && !seenIds.has(postData.id)) {
             seenIds.add(postData.id);
-            onPost({ ...postData, dataVersion: 'v2' });
+            onPost({ ...postData, dataVersion: GUN_NAMESPACE });
           }
         });
       });
@@ -279,7 +279,7 @@ export class PostService {
           gun.get('posts').get(postId).once((postData: any) => {
             if (postData && postData.id && !seenIds.has(postData.id)) {
               seenIds.add(postData.id);
-              collectedPosts.push({ ...postData, dataVersion: 'v2' });
+              collectedPosts.push({ ...postData, dataVersion: GUN_NAMESPACE });
             }
             resolve();
           });
@@ -300,7 +300,7 @@ export class PostService {
         gun.get('posts').get(postId).once((postData: any) => {
           if (postData && postData.id && !seenIds.has(postData.id)) {
             seenIds.add(postData.id);
-            onPost({ ...postData, dataVersion: 'v2' });
+            onPost({ ...postData, dataVersion: GUN_NAMESPACE });
           }
         });
       });

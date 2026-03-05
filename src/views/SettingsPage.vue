@@ -574,20 +574,22 @@
           <p class="section-subtitle">Choose which GunDB data versions to display</p>
 
           <ion-list>
-            <ion-item>
-              <ion-toggle :checked="dataVersionV2" @ionChange="onToggleV2">
-                v2 (current)
-              </ion-toggle>
+            <ion-item v-if="isProbing">
+              <ion-spinner name="dots" slot="start"></ion-spinner>
+              <ion-label>Scanning for data versions…</ion-label>
             </ion-item>
-            <ion-item>
-              <ion-toggle :checked="dataVersionV1" @ionChange="onToggleV1">
-                v1 (legacy)
+            <ion-item v-for="ver in availableVersions" :key="ver">
+              <ion-toggle
+                :checked="versionToggles[ver]"
+                @ionChange="onToggleVersion(ver, $event)"
+              >
+                {{ ver }} {{ versionLabel(ver) }}
               </ion-toggle>
             </ion-item>
           </ion-list>
 
           <p class="helper-text">
-            Legacy v1 posts were created before the namespace migration. Enable v1 to see older content. Changes take effect on next page load.
+            Legacy posts were created before the namespace migration. Enable older versions to see that content. Changes take effect on next page load.
           </p>
           <div class="separator"></div>
         </div>
@@ -1250,6 +1252,7 @@ import {
   IonRange,
   IonChip,
   IonInput,
+  IonSpinner,
   alertController,
   toastController
 } from '@ionic/vue';
@@ -1279,7 +1282,8 @@ import { useChainStore } from '../stores/chainStore';
 import config from '../config';
 import { ModerationService, moderationVersion, type ModerationSettings, type WordCategory } from '../services/moderationService';
 import { NsfwService } from '../services/nsfwService';
-import { getEnabledVersions, setEnabledVersions, type DataVersion } from '../utils/dataVersionSettings';
+import { getEnabledVersions, setEnabledVersions, probeForVersions, availableVersions, type DataVersion } from '../utils/dataVersionSettings';
+import { GUN_NAMESPACE } from '../services/gunService';
 
 const router = useRouter();
 const chainStore = useChainStore();
@@ -1303,27 +1307,51 @@ const minUserKarma = ref<number>(-1000);
 const userProfile = ref<any>(null);
 const deviceId = ref('');
 
-// Data version toggles
-const dataVersionV1 = ref(getEnabledVersions().includes('v1'));
-const dataVersionV2 = ref(getEnabledVersions().includes('v2'));
+// Data version toggles — dynamic, based on GunDB probe
+const currentNamespace = GUN_NAMESPACE;
+const isProbing = ref(true);
+const versionToggles = ref<Record<string, boolean>>({});
 
-function onToggleV1(ev: CustomEvent) {
-  dataVersionV1.value = ev.detail.checked;
-  syncDataVersions();
+function versionLabel(ver: string): string {
+  if (ver === currentNamespace) return '(current)';
+  const verNum = parseInt(ver.replace('v', ''), 10);
+  const curNum = parseInt(currentNamespace.replace('v', ''), 10);
+  return verNum > curNum ? '(newer)' : '(legacy)';
 }
 
-function onToggleV2(ev: CustomEvent) {
-  dataVersionV2.value = ev.detail.checked;
+function initVersionToggles() {
+  const enabled = getEnabledVersions();
+  const toggles: Record<string, boolean> = {};
+  for (const v of availableVersions.value) {
+    toggles[v] = enabled.includes(v);
+  }
+  versionToggles.value = toggles;
+}
+
+function onToggleVersion(ver: string, ev: CustomEvent) {
+  versionToggles.value = {
+    ...versionToggles.value,
+    [ver]: ev.detail.checked,
+  };
   syncDataVersions();
 }
 
 async function syncDataVersions() {
-  const versions: DataVersion[] = [];
-  if (dataVersionV1.value) versions.push('v1');
-  if (dataVersionV2.value) versions.push('v2');
+  const versions: DataVersion[] = Object.entries(versionToggles.value)
+    .filter(([, on]) => on)
+    .map(([v]) => v);
   setEnabledVersions(versions);
+
+  // Re-sync in case setEnabledVersions applied a fallback
+  const actual = getEnabledVersions();
+  const synced: Record<string, boolean> = {};
+  for (const v of availableVersions.value) {
+    synced[v] = actual.includes(v);
+  }
+  versionToggles.value = synced;
+
   const toast = await toastController.create({
-    message: `Showing ${versions.join(' + ')} posts — reload to apply`,
+    message: `Showing ${actual.join(' + ')} posts — reload to apply`,
     duration: 2000,
     color: 'success',
   });
@@ -1650,6 +1678,17 @@ onMounted(async () => {
   await loadPolicy();
   userProfile.value = await UserService.getCurrentUser();
   deviceId.value = await VoteTrackerService.getDeviceId();
+
+  // Probe GunDB for available data versions
+  try {
+    const rawGun = GunService.getRawGun();
+    await probeForVersions(rawGun, currentNamespace);
+  } catch (err) {
+    console.warn('Version probe failed:', err);
+    availableVersions.value = [currentNamespace];
+  }
+  initVersionToggles();
+  isProbing.value = false;
 
   // Load crypto keypair
   try {

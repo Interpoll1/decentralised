@@ -9,6 +9,7 @@ import { WebSocketService } from '../services/websocketService';
 import { useChainStore } from './chainStore';
 import { generatePseudonym } from '../utils/pseudonym';
 import { enabledVersions, type DataVersion } from '../utils/dataVersionSettings';
+import { GUN_NAMESPACE } from '../services/gunService';
 
 const PAGE_SIZE     = 10;
 const SEEN_POSTS_KEY = 'seen-post-ids';
@@ -51,7 +52,7 @@ export const usePostStore = defineStore('post', () => {
 
   /** Only posts whose dataVersion is in the user's enabled list */
   function matchesVersion(p: Post): boolean {
-    const v = p.dataVersion || 'v2';
+    const v = p.dataVersion || GUN_NAMESPACE;
     return enabledVersions.value.includes(v as DataVersion);
   }
 

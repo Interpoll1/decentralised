@@ -22,3 +22,13 @@ BIP-39 mnemonic utilities: `validate()`, `format()` (trim + lowercase), `toWords
 ## `pseudonym.ts` — `generatePseudonym(postId, authorId)`
 
 Generates a deterministic 3-word pseudonym (`adjective-landscape-animal`) for a `(postId, authorId)` pair using FNV-1a hashing. The same user gets a different name in each post, providing context-local anonymity. Used by post/comment cards — **not stored in GunDB**.
+
+## `dataVersionSettings.ts` — Data version management
+
+Reactive settings for which GunDB data versions (v1, v2, …) the user wants to see. Depends on `GUN_NAMESPACE` from `gunService.ts`.
+
+- `enabledVersions` — reactive `ref<string[]>` of currently enabled versions (persisted in localStorage)
+- `availableVersions` — reactive `ref<string[]>` populated by `probeForVersions()`
+- `getEnabledVersions()` / `setEnabledVersions(versions)` — read/write helpers
+- `isVersionEnabled(v)` — check if a specific version is enabled
+- `probeForVersions(rawGun, currentNamespace)` — scans GunDB for which namespaces (v1 root-level, v2+ namespaced) actually contain post data; updates `availableVersions`

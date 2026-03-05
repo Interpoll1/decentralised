@@ -3,7 +3,7 @@ import 'gun/sea';
 import config from '../config';
 
 // ⚡ Bump this to wipe all data and start fresh (orphans old data on user devices)
-const GUN_NAMESPACE = 'v2';
+export const GUN_NAMESPACE = 'v2';
 
 // Root paths that should be namespaced
 const NAMESPACED_ROOTS = new Set(['posts', 'communities', 'polls', 'postVotes', 'users', 'comments', 'events']);

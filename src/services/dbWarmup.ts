@@ -4,6 +4,7 @@
 // never fires for content the user has already loaded before.
 
 import { isVersionEnabled } from '../utils/dataVersionSettings';
+import { GUN_NAMESPACE } from './gunService';
 
 const GUN_RELAY_URL = import.meta.env.VITE_GUN_URL?.replace('/gun', '')
   || 'https://interpoll2.onrender.com';
@@ -73,7 +74,7 @@ export async function warmupFromDB(): Promise<void> {
           downvotes:      d.downvotes    || 0,
           score:          d.score        || 0,
           commentCount:   d.commentCount || 0,
-          dataVersion:    'v2',
+          dataVersion:    GUN_NAMESPACE,
         });
         count++;
       }
