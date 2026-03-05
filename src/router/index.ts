@@ -97,6 +97,11 @@ const routes: Array<RouteRecordRaw> = [
     component: () => import('../views/ChatView.vue'),
     props: true
   },
+  {
+    path: '/resilience',
+    name: 'Resilience',
+    component: () => import('../views/ResiliencePage.vue')
+  },
   // Catch-all route for 404
   {
     path: '/:pathMatch(.*)*',

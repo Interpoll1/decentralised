@@ -25,6 +25,7 @@ Single file: `index.ts`. Uses `@ionic/vue-router` (`createRouter` from Ionic for
 | `/receipt/:mnemonic?` | `Receipt` | `ReceiptPage` | — |
 | `/search` | `Search` | `SearchView` | — |
 | `/chat/:userId` | `Chat` | `ChatView` | `true` |
+| `/resilience` | `Resilience` | `ResiliencePage` | — |
 | `/:pathMatch(.*)*` | — | redirect → `/home` | — |
 
 ## Notes

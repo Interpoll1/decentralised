@@ -24,6 +24,7 @@ Page-level components. Each maps to a route in `src/router/index.ts`. All routes
 | `UserProfileView.vue` | `/user/:userId` | Another user's public profile. |
 | `SearchView.vue` | `/search` | Full-text search results. Uses `useSearch` composable. |
 | `ChatView.vue` | `/chat/:userId` | P2P encrypted DM chat with a user. Uses `ChatService` instance. |
+| `ResiliencePage.vue` | `/resilience` | Anti-censorship tools: relay health scanning, relay management, snapshot export/import/P2P share, Tor support, guides. |
 | `AuthCallbackPage.vue` | (OAuth redirect) | Handles Google/Microsoft OAuth redirect, exchanges code for session. |
 
 ## Routing Notes

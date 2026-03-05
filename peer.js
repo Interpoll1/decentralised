@@ -12,6 +12,7 @@
 //   node peer.js
 //   node peer.js --ws ws://myserver:8080 --gun http://myserver:8765/gun --api http://myserver:8080
 //   node peer.js --data /mnt/storage/peer-data
+//   node peer.js --proxy socks5h://127.0.0.1:9050
 
 import WebSocket from 'ws';
 import Gun from 'gun';
@@ -28,10 +29,29 @@ function flag(name, fallback) {
   return i !== -1 && args[i + 1] ? args[i + 1] : fallback;
 }
 
-const WS_URL   = flag('--ws',   'wss://interpoll.onrender.com');
-const GUN_URL  = flag('--gun',  'https://interpoll2.onrender.com/gun');
-const API_URL  = flag('--api',  'https://interpoll.onrender.com');
-const DATA_DIR = flag('--data', path.join(path.dirname(fileURLToPath(import.meta.url)), 'peer-data'));
+const WS_URL    = flag('--ws',    'wss://interpoll.onrender.com');
+const GUN_URL   = flag('--gun',   'https://interpoll2.onrender.com/gun');
+const API_URL   = flag('--api',   'https://interpoll.onrender.com');
+const DATA_DIR  = flag('--data',  path.join(path.dirname(fileURLToPath(import.meta.url)), 'peer-data'));
+const PROXY_URL = flag('--proxy', '');
+
+// ─── Optional SOCKS5 proxy agent ─────────────────────────────────────────────
+
+let proxyAgent = null;
+if (PROXY_URL) {
+  try {
+    const { SocksProxyAgent } = await import('socks-proxy-agent');
+    proxyAgent = new SocksProxyAgent(PROXY_URL);
+  } catch {
+    console.error('❌ Install socks-proxy-agent to use --proxy: npm i socks-proxy-agent');
+    process.exit(1);
+  }
+}
+
+// WebSocket subclass that injects the proxy agent (used by Gun)
+const ProxiedWebSocket = proxyAgent
+  ? class extends WebSocket { constructor(url, protocols) { super(url, protocols, { agent: proxyAgent }); } }
+  : WebSocket;
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
@@ -87,6 +107,7 @@ const gun = Gun({
   localStorage: false,
   file: path.join(DATA_DIR, 'gun-data'),
   multicast: false,
+  WebSocket: ProxiedWebSocket,
 });
 
 // Periodic sweep: touch every collection with .once() so Gun replicates data
@@ -140,7 +161,7 @@ function connect() {
   log(`Connecting to relay ${WS_URL} ...`);
 
   try {
-    ws = new WebSocket(WS_URL);
+    ws = new WebSocket(WS_URL, proxyAgent ? { agent: proxyAgent } : undefined);
   } catch (err) {
     log(`WebSocket creation failed: ${err.message}`);
     scheduleReconnect();
@@ -366,6 +387,7 @@ log(`  ws relay : ${WS_URL}`);
 log(`  gun relay: ${GUN_URL}`);
 log(`  api      : ${API_URL}`);
 log(`  data     : ${DATA_DIR}`);
+log(`  proxy    : ${PROXY_URL ? '🧅 ' + PROXY_URL : '🔗 none (direct connection)'}`);
 log(`  blocks   : ${blocks.length} on disk`);
 log(`  events   : ${events.length} on disk`);
 log('');

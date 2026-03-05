@@ -83,6 +83,10 @@
             <ion-icon :icon="cube"></ion-icon>
             <span>Chain Explorer</span>
           </button>
+          <button class="side-nav-item side-nav-util" @click="$router.push('/resilience')">
+            <ion-icon :icon="shieldOutline"></ion-icon>
+            <span>Resilience</span>
+          </button>
         </nav>
 
         <!-- ── MAIN CONTENT ────────────────────────────── -->
@@ -407,7 +411,8 @@ import {
   cube, personCircleOutline, settingsOutline, addCircleOutline,
   earthOutline, peopleOutline, home, homeOutline, documentTextOutline,
   chevronForwardOutline, people, addCircle, statsChartOutline,
-  checkmarkCircleOutline, searchOutline, chatbubble, chatbubbleOutline
+  checkmarkCircleOutline, searchOutline, chatbubble, chatbubbleOutline,
+  shieldOutline
 } from 'ionicons/icons';
 import { useRouter } from 'vue-router';
 import { useChainStore } from '../stores/chainStore';
