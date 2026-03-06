@@ -48,15 +48,19 @@
               <tbody>
                 <tr v-for="r in probeResults" :key="r.relayId" class="border-t border-gray-700/30">
                   <td class="py-2">{{ relayLabelById(r.relayId) }}</td>
-                  <td>{{ r.ws.reachable ? '🟢' : '🔴' }}</td>
-                  <td>{{ r.gun.reachable ? '🟢' : '🔴' }}</td>
-                  <td>{{ r.api.reachable ? '🟢' : '🔴' }}</td>
-                  <td>{{ avgLatency(r) }}{{ avgLatency(r) !== '—' ? 'ms' : '' }}</td>
+                  <td><ion-icon :icon="ellipse" :color="r.ws.reachable ? 'success' : 'danger'" size="small" /></td>
+                  <td><ion-icon :icon="ellipse" :color="r.gun.reachable ? 'success' : 'danger'" size="small" /></td>
+                  <td><ion-icon :icon="ellipse" :color="r.api.reachable ? 'success' : 'danger'" size="small" /></td>
+                  <td>{{ latencyDisplay(r) }}</td>
                   <td>
-                    <span v-if="r.overall === 'online'">🟢</span>
-                    <span v-else-if="r.overall === 'degraded'">🟡</span>
-                    <span v-else>🔴</span>
-                    {{ r.overall }}
+                    <div class="flex items-center gap-1">
+                      <ion-icon
+                        :icon="ellipse"
+                        :color="r.overall === 'online' ? 'success' : r.overall === 'degraded' ? 'warning' : 'danger'"
+                        size="small"
+                      />
+                      {{ r.overall }}
+                    </div>
                   </td>
                 </tr>
               </tbody>
@@ -64,15 +68,15 @@
           </div>
 
           <!-- Censorship detection -->
-          <div v-if="censorship" class="mt-3 p-3 rounded-lg bg-red-900/20 text-sm">
-            <p v-if="censorship.blocked.length" class="text-red-400">
-              ⚠️ {{ censorship.blocked.length }} relay(s) appear blocked from your network.
+          <div v-if="censorship" class="mt-3 p-3 rounded-xl text-sm glass-inset">
+            <p v-if="censorship.blocked.length" class="text-red-400 flex items-center gap-1">
+              <ion-icon :icon="warningOutline" /> {{ censorship.blocked.length }} relay(s) appear blocked from your network.
             </p>
-            <p v-if="censorship.torRequired.length" class="text-yellow-400">
-              🧅 {{ censorship.torRequired.length }} relay(s) require Tor to reach.
+            <p v-if="censorship.torRequired.length" class="text-yellow-400 flex items-center gap-1">
+              <ion-icon :icon="lockClosedOutline" /> {{ censorship.torRequired.length }} relay(s) require Tor to reach.
             </p>
-            <p v-if="!censorship.blocked.length && !censorship.torRequired.length" class="text-green-400">
-              ✅ No censorship detected — all relays reachable.
+            <p v-if="!censorship.blocked.length && !censorship.torRequired.length" class="text-green-400 flex items-center gap-1">
+              <ion-icon :icon="checkmarkCircleOutline" /> No censorship detected -- all relays reachable.
             </p>
           </div>
         </ion-card-content>
@@ -93,7 +97,7 @@
               <ion-label>
                 <h2 class="flex items-center gap-2">
                   {{ relay.label }}
-                  <ion-badge v-if="relay.isTor" color="dark" class="text-xs">🧅 Tor</ion-badge>
+                  <ion-badge v-if="relay.isTor" color="dark" class="text-xs"><ion-icon :icon="lockClosedOutline" class="mr-1" />Tor</ion-badge>
                   <ion-badge :color="statusColor(relay.status)">{{ relay.status }}</ion-badge>
                 </h2>
                 <p class="text-xs opacity-60">{{ relay.ws }}</p>
@@ -132,7 +136,7 @@
           </ion-item>
 
           <!-- Add Relay form -->
-          <div class="mt-4 p-3 rounded-lg" style="background: var(--ion-color-step-50)">
+          <div class="mt-4 p-3 glass-inset">
             <h3 class="font-semibold mb-2">Add Relay</h3>
             <ion-input
               v-model="newRelay.label"
@@ -187,6 +191,10 @@
           <!-- Import -->
           <div class="mb-4">
             <h3 class="font-semibold mb-2">Import</h3>
+            <div class="mb-2 p-2 glass-inset text-xs opacity-70 border border-yellow-500/20">
+              <ion-icon :icon="shieldCheckmarkOutline" class="mr-1 align-middle" />
+              Only import snapshots from people you trust. A malicious snapshot could inject harmful content into your local data.
+            </div>
             <input
               ref="fileInputRef"
               type="file"
@@ -196,7 +204,7 @@
             />
             <ion-button expand="block" :disabled="importing" fill="outline" @click="triggerFileInput">
               <ion-icon :icon="cloudUploadOutline" class="mr-2"></ion-icon>
-              {{ importing ? 'Importing…' : 'Import Snapshot File' }}
+              {{ importing ? 'Importing...' : 'Import Snapshot File' }}
             </ion-button>
             <div v-if="importProgress" class="mt-2">
               <div class="w-full bg-gray-700 rounded-full h-2">
@@ -220,8 +228,8 @@
             </ion-button>
 
             <!-- Incoming offer -->
-            <div v-if="incomingOffer" class="mt-3 p-3 rounded-lg border border-blue-500/50 bg-blue-900/20">
-              <p class="font-semibold mb-1">📥 Incoming Snapshot Offer</p>
+            <div v-if="incomingOffer" class="mt-3 p-3 glass-inset border border-blue-500/30">
+              <p class="font-semibold mb-1 flex items-center gap-1"><ion-icon :icon="downloadOutline" /> Incoming Snapshot Offer</p>
               <p class="text-sm opacity-70">
                 {{ incomingOffer.meta.communityCount }} communities ·
                 {{ incomingOffer.meta.postCount }} posts ·
@@ -264,7 +272,7 @@
             Enable relay-mediated peer-to-peer snapshot sharing (experimental).
           </p>
 
-          <div class="mt-4 p-3 rounded-lg" style="background: var(--ion-color-step-50)">
+          <div class="mt-4 p-3 glass-inset">
             <p class="text-sm">
               <strong>Tor headless peer:</strong> Run a relay peer through the Tor network:
             </p>
@@ -288,7 +296,7 @@
               lines="none"
               @click="expandedGuide = expandedGuide === 'tor' ? null : 'tor'"
             >
-              <ion-label class="font-semibold">🧅 Using Tor Browser</ion-label>
+              <ion-label class="font-semibold"><ion-icon :icon="lockClosedOutline" class="mr-2 align-middle" />Using Tor Browser</ion-label>
               <ion-icon
                 :icon="expandedGuide === 'tor' ? chevronUpOutline : chevronDownOutline"
                 slot="end"
@@ -300,7 +308,7 @@
                 <li>Open InterPoll in Tor Browser using the app URL.</li>
                 <li>Go to <strong>Settings → Network</strong> and add a <code>.onion</code> relay address.</li>
                 <li>The app will automatically detect Tor Browser and route traffic accordingly.</li>
-                <li>Verify the 🧅 badge appears in the Network Status card above.</li>
+                <li>Verify the Tor badge appears in the Network Status card above.</li>
               </ol>
             </div>
           </div>
@@ -312,7 +320,7 @@
               lines="none"
               @click="expandedGuide = expandedGuide === 'relay' ? null : 'relay'"
             >
-              <ion-label class="font-semibold">🖥️ Self-Hosting a Relay</ion-label>
+              <ion-label class="font-semibold"><ion-icon :icon="serverOutline" class="mr-2 align-middle" />Self-Hosting a Relay</ion-label>
               <ion-icon
                 :icon="expandedGuide === 'relay' ? chevronUpOutline : chevronDownOutline"
                 slot="end"
@@ -336,7 +344,7 @@
               lines="none"
               @click="expandedGuide = expandedGuide === 'peer' ? null : 'peer'"
             >
-              <ion-label class="font-semibold">🤖 Running a Headless Peer</ion-label>
+              <ion-label class="font-semibold"><ion-icon :icon="hardwareChipOutline" class="mr-2 align-middle" />Running a Headless Peer</ion-label>
               <ion-icon
                 :icon="expandedGuide === 'peer' ? chevronUpOutline : chevronDownOutline"
                 slot="end"
@@ -370,6 +378,8 @@ import {
 import {
   refreshOutline, downloadOutline, cloudUploadOutline,
   trashOutline, fingerPrintOutline, chevronDownOutline, chevronUpOutline,
+  ellipse, warningOutline, lockClosedOutline, checkmarkCircleOutline,
+  serverOutline, hardwareChipOutline, shieldCheckmarkOutline,
 } from 'ionicons/icons';
 import { RelayManager } from '../services/relayManager';
 import { RelayHealthService } from '../services/relayHealthService';
@@ -407,6 +417,8 @@ const webrtcEnabled = ref(localStorage.getItem('interpoll_webrtc_enabled') === '
 const expandedGuide = ref<string | null>(null);
 
 const cleanups: (() => void)[] = [];
+const syncCleanups: (() => void)[] = [];
+let importClearTimer: ReturnType<typeof setTimeout> | null = null;
 
 // --- Computed ---
 const canAddRelay = computed(() => {
@@ -425,6 +437,11 @@ function relayLabelById(id: string): string {
 function avgLatency(r: RelayProbeResult): string {
   const vals = [r.ws, r.gun, r.api].filter(v => v.reachable).map(v => v.latencyMs);
   return vals.length ? String(Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)) : '—';
+}
+
+function latencyDisplay(r: RelayProbeResult): string {
+  const avg = avgLatency(r);
+  return avg !== '—' ? `${avg}ms` : '—';
 }
 
 function statusColor(status: string): string {
@@ -536,15 +553,16 @@ async function handleFileSelect(event: Event) {
   importProgress.value = null;
   try {
     const snapshot = await SnapshotService.parseSnapshotFile(file);
-    await SnapshotService.import(snapshot, (phase, current, total) => {
+    const result = await SnapshotService.import(snapshot, (phase, current, total) => {
       importProgress.value = { phase: String(phase), current, total, percent: total > 0 ? Math.round((current / total) * 100) : 0 };
     });
-    await showToast('Snapshot imported successfully');
+    const { blocks, posts, communities, comments, users, events } = result.imported;
+    await showToast(`Imported ${posts} posts, ${communities} communities, ${blocks} blocks, ${comments} comments, ${users} users, ${events} events`);
   } catch (e: unknown) {
     await showToast(e instanceof Error ? e.message : 'Import failed', 'danger');
   } finally {
     importing.value = false;
-    importProgress.value = null;
+    importClearTimer = setTimeout(() => { importProgress.value = null; }, 1200);
     target.value = '';
   }
 }
@@ -582,18 +600,22 @@ watch(webrtcEnabled, async (val) => {
     try { await SnapshotSyncService.initialize(); } catch { /* unavailable */ }
     registerSyncCallbacks();
   } else {
+    syncCleanups.forEach(fn => fn());
+    syncCleanups.length = 0;
     SnapshotSyncService.cleanup();
   }
 });
 
 function registerSyncCallbacks() {
-  cleanups.push(SnapshotSyncService.onOffer((offer) => {
+  syncCleanups.forEach(fn => fn());
+  syncCleanups.length = 0;
+  syncCleanups.push(SnapshotSyncService.onOffer((offer) => {
     incomingOffer.value = offer;
   }));
-  cleanups.push(SnapshotSyncService.onProgress((progress) => {
+  syncCleanups.push(SnapshotSyncService.onProgress((progress) => {
     transferProgress.value = progress;
   }));
-  cleanups.push(SnapshotSyncService.onComplete(async (snapshot: NetworkSnapshot) => {
+  syncCleanups.push(SnapshotSyncService.onComplete(async (snapshot: NetworkSnapshot) => {
     transferProgress.value = null;
     try {
       await SnapshotService.import(snapshot, (phase, current, total) => {
@@ -609,7 +631,7 @@ function registerSyncCallbacks() {
       await showToast(e instanceof Error ? e.message : 'Import of received snapshot failed', 'danger');
     }
   }));
-  cleanups.push(SnapshotSyncService.onError((error: string) => {
+  syncCleanups.push(SnapshotSyncService.onError((error: string) => {
     transferProgress.value = null;
     showToast(error, 'danger');
   }));
@@ -638,7 +660,9 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  if (importClearTimer) clearTimeout(importClearTimer);
   cleanups.forEach(fn => fn());
+  syncCleanups.forEach(fn => fn());
   SnapshotSyncService.cleanup();
 });
 </script>
@@ -654,6 +678,36 @@ code {
 }
 
 ion-card {
-  --background: var(--ion-card-background, var(--ion-item-background));
+  --background: rgba(var(--ion-color-step-50-rgb, 30, 30, 30), 0.55);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+ion-card-header {
+  --background: transparent;
+}
+
+ion-card-content {
+  --background: transparent;
+}
+
+ion-item {
+  --background: transparent;
+}
+
+ion-list {
+  --ion-item-background: transparent;
+  background: transparent;
+}
+
+.glass-inset {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
 }
 </style>

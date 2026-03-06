@@ -214,6 +214,10 @@ export class SnapshotService {
 
     for (const post of posts) {
       gun.get('posts').get(post.id).put(post);
+      // Also write to community-specific path so subscriptions pick it up
+      if (post.communityId) {
+        gun.get('communities').get(post.communityId).get('posts').get(post.id).put(post);
+      }
       result.imported.posts++;
       gunProgress++;
       onProgress?.('gun', gunProgress, totalGun);
@@ -226,6 +230,10 @@ export class SnapshotService {
     }
     for (const comment of comments) {
       gun.get('comments').get(comment.id).put(comment);
+      // Also write to post-specific path
+      if (comment.postId) {
+        gun.get('posts').get(comment.postId).get('comments').get(comment.id).put(comment);
+      }
       result.imported.comments++;
       gunProgress++;
       onProgress?.('gun', gunProgress, totalGun);
