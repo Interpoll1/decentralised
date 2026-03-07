@@ -83,9 +83,9 @@
             <ion-icon :icon="cube"></ion-icon>
             <span>Chain Explorer</span>
           </button>
-          <button class="side-nav-item side-nav-util" @click="$router.push('/resilience')">
+          <button v-if="betaFeatures.resilience" class="side-nav-item side-nav-util" @click="$router.push('/resilience')">
             <ion-icon :icon="shieldOutline"></ion-icon>
-            <span>Resilience</span>
+            <span>Resilience <ion-badge color="warning" style="font-size: 9px; vertical-align: super; margin-left: 4px;">BETA</ion-badge></span>
           </button>
         </nav>
 
@@ -429,6 +429,7 @@ import { UserService } from '../services/userService';
 import ChatService from '../services/chatService';
 
 import { warmupFromDB } from '../services/dbWarmup';
+import { betaFeatures } from '../utils/betaFeatures';
 
 const router = useRouter();
 const chainStore = useChainStore();

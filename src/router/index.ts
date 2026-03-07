@@ -1,6 +1,7 @@
 // src/router/index.ts
 import { createRouter, createWebHistory } from '@ionic/vue-router';
 import { RouteRecordRaw } from 'vue-router';
+import { isBetaEnabled } from '../utils/betaFeatures';
 
 const routes: Array<RouteRecordRaw> = [
   {
@@ -114,7 +115,11 @@ const router = createRouter({
   routes
 });
 
-router.beforeEach((_to, _from, next) => {
+router.beforeEach((to, _from, next) => {
+  if (to.name === 'Resilience' && !isBetaEnabled('resilience')) {
+    next({ name: 'Home' });
+    return;
+  }
   next();
 });
 

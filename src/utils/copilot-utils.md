@@ -32,3 +32,12 @@ Reactive settings for which GunDB data versions (v1, v2, …) the user wants to 
 - `getEnabledVersions()` / `setEnabledVersions(versions)` — read/write helpers
 - `isVersionEnabled(v)` — check if a specific version is enabled
 - `probeForVersions(rawGun, currentNamespace)` — scans GunDB for which namespaces (v1 root-level, v2+ namespaced) actually contain post data; updates `availableVersions`
+
+## `betaFeatures.ts` — Beta feature flags
+
+Reactive feature-flag system backed by localStorage (`interpoll_beta_features`).
+
+- `betaFeatures` — reactive `ref<Record<BetaFeature, boolean>>` of current toggle states
+- `setBetaFeature(feature, enabled)` — persists a toggle change
+- `isBetaEnabled(feature)` — non-reactive check (for use in router guards)
+- Current flags: `resilience` (default: off)
