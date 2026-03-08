@@ -6,7 +6,8 @@ type SyncMessage =
   | { type: 'request-sync'; peerId: string }
   | { type: 'sync-response'; data: any }
   | { type: 'peer-addresses'; data: any }
-  | { type: 'server-list'; data: any };
+  | { type: 'server-list'; data: any }
+  | { type: 'chatroom-message'; roomId: string; data: any };
 
 export interface KnownServer {
   websocket: string;
@@ -34,6 +35,7 @@ export class WebSocketService {
   private static reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private static lastConnectUrl: string | null = null;
   private static syncRequestCallback: (() => void) | null = null;
+  private static chatRoomListeners: Map<string, Set<(data: any) => void>> = new Map();
 
   /**
    * Register a callback that fires on every (re)connect to request incremental sync.
@@ -90,7 +92,11 @@ export class WebSocketService {
 
         while (this.messageQueue.length > 0) {
           const msg = this.messageQueue.shift();
-          this.broadcast(msg.type, msg.data);
+          if (msg.type === 'chatroom-message') {
+            this.broadcastChatRoomMessage(msg.roomId, msg.data);
+          } else {
+            this.broadcast(msg.type, msg.data);
+          }
         }
 
         this.broadcastAddresses();
@@ -126,6 +132,16 @@ export class WebSocketService {
               this.peers.delete(message.peerId);
               this.peerAddresses.delete(message.peerId);
               this.notifyStatus();
+            }
+            return;
+          }
+
+          if (message.type === 'chatroom-message') {
+            const listeners = this.chatRoomListeners.get(message.roomId);
+            if (listeners) {
+              listeners.forEach((cb) => {
+                try { cb(message.data); } catch { /* ignore listener errors */ }
+              });
             }
             return;
           }
@@ -302,6 +318,46 @@ export class WebSocketService {
     this.callbacks.set(type, callback);
   }
 
+  /**
+   * Broadcast an already-encrypted chat room message via the relay.
+   * The relay forwards the opaque blob to all other connected clients.
+   */
+  static broadcastChatRoomMessage(roomId: string, messageData: any) {
+    const message = { type: 'chatroom-message' as const, roomId, data: messageData };
+
+    if (!this.isConnected) {
+      this.messageQueue.push(message);
+      return;
+    }
+
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(message));
+    } else {
+      this.messageQueue.push(message);
+    }
+  }
+
+  /**
+   * Subscribe to incoming chat room messages for a specific room.
+   * Returns an unsubscribe function.
+   */
+  static subscribeToChatRoom(roomId: string, callback: (data: any) => void): () => void {
+    if (!this.chatRoomListeners.has(roomId)) {
+      this.chatRoomListeners.set(roomId, new Set());
+    }
+    this.chatRoomListeners.get(roomId)!.add(callback);
+
+    return () => {
+      const listeners = this.chatRoomListeners.get(roomId);
+      if (listeners) {
+        listeners.delete(callback);
+        if (listeners.size === 0) {
+          this.chatRoomListeners.delete(roomId);
+        }
+      }
+    };
+  }
+
   static getPeerId(): string {
     return this.peerId;
   }
@@ -340,6 +396,7 @@ export class WebSocketService {
       this.ws = null;
     }
     this.callbacks.clear();
+    this.chatRoomListeners.clear();
     this.isConnected = false;
     this.peers.clear();
     this.peerAddresses.clear();

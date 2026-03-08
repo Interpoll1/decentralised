@@ -24,3 +24,7 @@ Default port: **8765**. Frontend connects to `http://localhost:8765/gun` (or the
 ## GunDB Namespace
 
 All data is under the `v2` namespace (set in `src/services/gunService.ts` as `GUN_NAMESPACE`). Bumping this constant orphans all existing data on user devices and forces a fresh sync from the relay.
+
+## WebSocket Relay (`relay-server.js`)
+
+The WebSocket relay server (root-level `relay-server.js`, port 8080) handles P2P message forwarding, OAuth, vote authorization, and receipt logging. It supports a `chatroom-message` message type that relays encrypted chat room messages to all other connected clients without decrypting — it forwards the opaque blob as-is via `broadcastToOthers`.
