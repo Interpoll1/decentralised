@@ -9,7 +9,7 @@ Page-level components. Each maps to a route in `src/router/index.ts`. All routes
 | File | Route | Purpose |
 |---|---|---|
 | `HomePage.vue` | `/home` | Feed of communities and trending polls. Entry point. |
-| `CommunityPage.vue` | `/community/:communityId` | Community detail: post/poll lists, join button. |
+| `CommunityPage.vue` | `/community/:communityId` | Community detail: post/poll lists, join button. Handles encrypted communities: checks `KeyVaultService.hasKey` for access, decrypts metadata via `CommunityService.decryptCommunityMeta`, decrypts posts/polls via `PostService.decryptPost`/`PollService.decryptPoll`, shows locked state with join link when no key, and offers "Share Invite" button for members with access. |
 | `CreateCommunityPage.vue` | `/create-community` | Form to create a new community. Calls `CommunityService` + `chainStore.addAction`. |
 | `CreatePollPage.vue` | `/create-poll` | Poll creation form. Supports expiry, multiple choice, login gate, private/invite. |
 | `CreatePostPage.vue` | `/community/:communityId/create-post` | Post creation with optional image upload. |
@@ -24,8 +24,11 @@ Page-level components. Each maps to a route in `src/router/index.ts`. All routes
 | `UserProfileView.vue` | `/user/:userId` | Another user's public profile. |
 | `SearchView.vue` | `/search` | Full-text search results. Uses `useSearch` composable. |
 | `ChatView.vue` | `/chat/:userId` | P2P encrypted DM chat with a user. Uses `ChatService` instance. |
+| `ChatRoomPage.vue` | `/chatroom/:roomId` | Encrypted group chat room. Uses `useChatRoomStore` for live messages, `KeyVaultService` for access check, `InviteLinkService` for sharing invite links. |
 | `ResiliencePage.vue` | `/resilience` | Anti-censorship tools: relay health scanning, relay management, snapshot export/import/P2P share, Tor support, guides. |
 | `AuthCallbackPage.vue` | (OAuth redirect) | Handles Google/Microsoft OAuth redirect, exchanges code for session. |
+| `ChatRoomListPage.vue` | `/chatrooms` | List of joined chat rooms. Pull-to-refresh, create-room modal (name, description, optional password), invite-link copy, swipe-to-leave. Navigates to `/chatroom/:roomId`. Uses `useChatRoomStore`, `UserService.getCurrentUser()`. |
+| `JoinPrivatePage.vue` | `/join/:type/:id` | Handles invite links and password-based joining for encrypted communities/chatrooms/servers. Reads base64url AES key from URL fragment for auto-join; falls back to password form. Uses `InviteLinkService`, `CommunityService.joinPrivateCommunity()`, `KeyVaultService`. |
 
 ## Routing Notes
 

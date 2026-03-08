@@ -5,7 +5,7 @@
         <ion-buttons slot="start">
           <ion-back-button default-href="/home"></ion-back-button>
         </ion-buttons>
-        <ion-title>{{ community?.displayName || 'Community' }}</ion-title>
+        <ion-title>{{ displayCommunity?.displayName || 'Community' }}</ion-title>
         <ion-buttons slot="end">
           <ion-button @click="$router.push('/home')">
             <ion-icon :icon="homeOutline"></ion-icon>
@@ -19,7 +19,10 @@
       <div v-if="community" class="community-header">
         <div class="community-top">
           <div class="community-info">
-            <h1>{{ community.displayName }}</h1>
+            <h1>
+              {{ displayCommunity?.displayName }}
+              <EncryptedBadge v-if="community?.isEncrypted" :hint="community?.encryptionHint" />
+            </h1>
             <p class="community-id">{{ community.id }}</p>
           </div>
           <ion-button
@@ -33,7 +36,7 @@
           </ion-button>
         </div>
 
-        <p class="description">{{ community.description }}</p>
+        <p class="description">{{ displayCommunity?.description }}</p>
 
         <div class="community-stats">
           <div class="stat">
@@ -46,7 +49,7 @@
           </div>
         </div>
 
-        <div class="button-row" v-if="isJoined">
+        <div class="button-row" v-if="isJoined && hasAccess">
           <ion-button
             size="small"
             @click="$router.push(`/community/${communityId}/create-post`)"
@@ -61,12 +64,20 @@
             <ion-icon slot="start" :icon="statsChartOutline"></ion-icon>
             Create Poll
           </ion-button>
+          <ion-button
+            v-if="community?.isEncrypted"
+            size="small"
+            color="tertiary"
+            @click="shareInviteLink"
+          >
+            <ion-icon slot="start" :icon="shareSocialOutline"></ion-icon>
+            Share Invite
+          </ion-button>
         </div>
       </div>
 
-      
       <!-- Content Filter -->
-      <div class="content-filter">
+      <div v-if="hasAccess" class="content-filter">
         <button
           class="tab-btn"
           :class="{ active: contentFilter === 'all' }"
@@ -84,6 +95,18 @@
         >Polls</button>
       </div>
 
+      <!-- Locked State (encrypted community, no access) -->
+      <div v-if="!isLoading && community?.isEncrypted && !hasAccess" class="locked-state">
+        <ion-icon :icon="lockClosedOutline" size="large"></ion-icon>
+        <h2>🔒 Private Community</h2>
+        <p>This community is encrypted. Use an invite link or password to access its content.</p>
+        <p v-if="community?.encryptionHint" class="encryption-hint">{{ community.encryptionHint }}</p>
+        <ion-button @click="$router.push(`/join/community/${communityId}`)">
+          <ion-icon slot="start" :icon="keyOutline"></ion-icon>
+          Join Community
+        </ion-button>
+      </div>
+
       <!-- Loading -->
       <div v-if="isLoading" class="loading-container">
         <ion-spinner></ion-spinner>
@@ -91,12 +114,12 @@
       </div>
 
       <!-- Content Feed -->
-      <div v-else-if="displayedContent.length > 0" class="content-feed">
+      <div v-else-if="hasAccess && displayedContent.length > 0" class="content-feed">
         <template v-for="item in displayedContent" :key="`${item.type}-${item.data.id}`">
           <PostCard
             v-if="item.type === 'post'"
             :post="item.data"
-            :community-name="community?.displayName"
+            :community-name="displayCommunity?.displayName"
             :has-upvoted="hasUpvoted(item.data.id)"
             :has-downvoted="hasDownvoted(item.data.id)"
             :flagged="item.flagged"
@@ -118,7 +141,7 @@
       </div>
 
       <!-- Empty State -->
-      <div v-else class="empty-state">
+      <div v-else-if="hasAccess" class="empty-state">
         <ion-icon :icon="documentTextOutline" size="large"></ion-icon>
         <p v-if="contentFilter === 'posts'">No posts yet</p>
         <p v-else-if="contentFilter === 'polls'">No polls yet</p>
@@ -135,10 +158,10 @@
       </div>
 
        <!-- Rules Section -->
-      <div v-if="community?.rules?.length > 0" class="rules-section">
+      <div v-if="hasAccess && displayCommunity?.rules?.length > 0" class="rules-section">
         <h3>Community Rules</h3>
         <ol class="rules-list">
-          <li v-for="(rule, index) in community.rules" :key="index">{{ rule }}</li>
+          <li v-for="(rule, index) in displayCommunity.rules" :key="index">{{ rule }}</li>
         </ol>
       </div>
      
@@ -261,6 +284,40 @@
   color: var(--ion-color-medium);
 }
 
+/* ── Locked State ────────────────────────────────── */
+.locked-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 24px;
+  text-align: center;
+}
+
+.locked-state ion-icon {
+  font-size: 48px;
+  color: var(--ion-color-warning);
+  margin-bottom: 8px;
+}
+
+.locked-state h2 {
+  margin: 8px 0 4px;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.locked-state p {
+  color: var(--ion-color-medium);
+  margin: 4px 0 12px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.encryption-hint {
+  font-style: italic;
+  color: var(--ion-color-warning-shade) !important;
+}
+
 /* ── Rules ───────────────────────────────────────── */
 .rules-section {
   padding: 20px 16px;
@@ -292,7 +349,7 @@
 </style>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watchEffect } from 'vue';
+import { ref, computed, onMounted, watchEffect, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage,
@@ -321,7 +378,10 @@ import {
   checkmarkCircleOutline,
   addCircleOutline,
   createOutline,
-  statsChartOutline
+  statsChartOutline,
+  lockClosedOutline,
+  shareSocialOutline,
+  keyOutline
 } from 'ionicons/icons';
 import { useCommunityStore } from '../stores/communityStore';
 import { usePostStore } from '../stores/postStore';
@@ -330,8 +390,13 @@ import { useUserStore } from '../stores/userStore';
 import { UserService } from '../services/userService';
 import PostCard from '../components/PostCard.vue';
 import PollCard from '../components/PollCard.vue';
-import { Post } from '../services/postService';
-import { Poll } from '../services/pollService';
+import EncryptedBadge from '../components/EncryptedBadge.vue';
+import { Post, PostService } from '../services/postService';
+import { Poll, PollService } from '../services/pollService';
+import { CommunityService, type Community } from '../services/communityService';
+import { KeyVaultService } from '../services/keyVaultService';
+import { EncryptionService } from '../services/encryptionService';
+import { InviteLinkService } from '../services/inviteLinkService';
 import { ModerationService, moderationVersion } from '../services/moderationService';
 
 const route = useRoute();
@@ -345,10 +410,16 @@ const communityId = computed(() => route.params.communityId as string);
 const community = computed(() => communityStore.currentCommunity);
 const isJoined = computed(() => communityStore.isJoined(communityId.value));
 
-const isLoading = ref(false);
+const isLoading = ref(true);
 const contentFilter = ref<'all' | 'posts' | 'polls'>('all');
 const currentUserId = ref('');
 const voteVersion = ref(0);
+
+const hasAccess = ref(true);
+const decryptedMeta = ref<Community | null>(null);
+const displayCommunity = computed(() => decryptedMeta.value || community.value);
+const decryptedPosts = ref<Post[]>([]);
+const decryptedPolls = ref<Poll[]>([]);
 
 const currentModSettings = computed(() => {
   moderationVersion.value;
@@ -385,6 +456,29 @@ watchEffect(() => {
   }
 });
 
+// Decrypt posts/polls reactively when community is encrypted and user has access
+let postDecryptGen = 0;
+watch([communityPosts, () => hasAccess.value], async ([posts]) => {
+  if (!community.value?.isEncrypted || !hasAccess.value) {
+    decryptedPosts.value = posts;
+    return;
+  }
+  const gen = ++postDecryptGen;
+  const result = await Promise.all(posts.map(p => PostService.decryptPost(p)));
+  if (gen === postDecryptGen) decryptedPosts.value = result;
+}, { immediate: true });
+
+let pollDecryptGen = 0;
+watch([communityPolls, () => hasAccess.value], async ([polls]) => {
+  if (!community.value?.isEncrypted || !hasAccess.value) {
+    decryptedPolls.value = polls;
+    return;
+  }
+  const gen = ++pollDecryptGen;
+  const result = await Promise.all(polls.map(p => PollService.decryptPoll(p)));
+  if (gen === pollDecryptGen) decryptedPolls.value = result;
+}, { immediate: true });
+
 // Combined and filtered content
 const displayedContent = computed(() => {
   moderationVersion.value; // reactive dependency on moderation settings
@@ -392,7 +486,7 @@ const displayedContent = computed(() => {
   const settings = ModerationService.getSettings();
   
   if (contentFilter.value === 'all' || contentFilter.value === 'posts') {
-    communityPosts.value.forEach(post => {
+    decryptedPosts.value.forEach(post => {
       const textToCheck = `${post.title || ''} ${post.content || ''}`;
       const filterResult = ModerationService.checkContent(textToCheck);
 
@@ -413,7 +507,7 @@ const displayedContent = computed(() => {
   }
   
   if (contentFilter.value === 'all' || contentFilter.value === 'polls') {
-    communityPolls.value.forEach(poll => {
+    decryptedPolls.value.forEach(poll => {
       const textToCheck = `${poll.question || ''} ${poll.description || ''}`;
       const filterResult = ModerationService.checkContent(textToCheck);
 
@@ -573,13 +667,52 @@ function navigateToPoll(poll: Poll) {
 async function toggleJoin() {
   if (isJoined.value) {
     // Leave is not yet implemented
+  } else if (community.value?.isEncrypted && !hasAccess.value) {
+    router.push(`/join/community/${communityId.value}`);
   } else {
     await communityStore.joinCommunity(communityId.value);
   }
 }
 
+async function shareInviteLink() {
+  try {
+    const storedKey = await KeyVaultService.getKey(communityId.value);
+    if (!storedKey) {
+      const toast = await toastController.create({
+        message: 'Encryption key not found. Rejoin the community to share invites.',
+        duration: 3000,
+        color: 'warning'
+      });
+      await toast.present();
+      return;
+    }
+    const aesKey = await EncryptionService.importKey(storedKey.key);
+    const base64Url = await EncryptionService.exportKeyAsBase64Url(aesKey);
+    const link = InviteLinkService.generateInviteLink(communityId.value, 'community', base64Url);
+    await InviteLinkService.copyToClipboard(link);
+    const toast = await toastController.create({
+      message: 'Invite link copied to clipboard!',
+      duration: 2000,
+      color: 'success'
+    });
+    await toast.present();
+  } catch (error) {
+    console.error('Failed to generate invite link:', error);
+    const toast = await toastController.create({
+      message: 'Failed to generate invite link',
+      duration: 2000,
+      color: 'danger'
+    });
+    await toast.present();
+  }
+}
+
 async function loadCommunityContent() {
   isLoading.value = true;
+  decryptedMeta.value = null;
+  decryptedPosts.value = [];
+  decryptedPolls.value = [];
+  hasAccess.value = true;
 
   try {
     // Load current user for private poll filtering
@@ -593,11 +726,25 @@ async function loadCommunityContent() {
     // Select the community
     await communityStore.selectCommunity(communityId.value);
 
-    // Load posts and polls for this community
-    await Promise.all([
-      postStore.loadPostsForCommunity(communityId.value),
-      pollStore.loadPollsForCommunity(communityId.value)
-    ]);
+    // Check encryption access
+    if (community.value?.isEncrypted) {
+      const canAccess = await KeyVaultService.hasKey(communityId.value);
+      hasAccess.value = canAccess;
+      if (canAccess) {
+        const decrypted = await CommunityService.decryptCommunityMeta(community.value);
+        if (decrypted) decryptedMeta.value = decrypted;
+      }
+    } else {
+      hasAccess.value = true;
+    }
+
+    // Only load content if user has access
+    if (hasAccess.value) {
+      await Promise.all([
+        postStore.loadPostsForCommunity(communityId.value),
+        pollStore.loadPollsForCommunity(communityId.value)
+      ]);
+    }
 
   } catch (error) {
     console.error('Error loading community content:', error);
@@ -608,6 +755,12 @@ async function loadCommunityContent() {
 
 onMounted(async () => {
   await loadCommunityContent();
+});
+
+watch(communityId, async (newId, oldId) => {
+  if (newId && newId !== oldId) {
+    await loadCommunityContent();
+  }
 });
 </script>
 
