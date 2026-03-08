@@ -152,6 +152,39 @@ export const useCommunityStore = defineStore('community', () => {
     }
   }
 
+  async function createPrivateCommunity(data: {
+    name: string;
+    displayName: string;
+    description: string;
+    rules: string[];
+  }, password?: string) {
+    try {
+      const result = await CommunityService.createPrivateCommunity({
+        ...data,
+        creatorId: 'current-user-id',
+      }, password);
+
+      const chainStore = useChainStore();
+      await chainStore.addAction('community-create', {
+        communityId: result.community.id,
+        name: result.community.name,
+        displayName: result.community.displayName,
+        timestamp: result.community.createdAt,
+        isEncrypted: true,
+      }, result.community.displayName);
+
+      if (!seen.has(result.community.id)) {
+        seen.add(result.community.id);
+        communities.value.unshift(result.community);
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Error creating private community:', error);
+      throw error;
+    }
+  }
+
   // ─── Select ────────────────────────────────────────────────────────────────
 
   async function selectCommunity(communityId: string) {
@@ -226,6 +259,7 @@ export const useCommunityStore = defineStore('community', () => {
     joinedCommunities,
     loadCommunities,
     createCommunity,
+    createPrivateCommunity,
     selectCommunity,
     joinCommunity,
     isJoined,

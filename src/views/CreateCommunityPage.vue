@@ -97,6 +97,9 @@
         </div>
       </div>
 
+      <!-- Private Community Toggle -->
+      <PrivateCommunityToggle @update:config="privacyConfig = $event" />
+
       <!-- Create Button -->
       <ion-button
         expand="block"
@@ -209,6 +212,8 @@ import {
 } from '@ionic/vue';
 import { add, closeCircle, informationCircle } from 'ionicons/icons';
 import { useCommunityStore } from '../stores/communityStore';
+import PrivateCommunityToggle from '../components/PrivateCommunityToggle.vue';
+import type { PrivateCommunityConfig } from '../components/PrivateCommunityToggle.vue';
 
 const router = useRouter();
 const communityStore = useCommunityStore();
@@ -219,14 +224,18 @@ const description = ref('');
 const rules = ref(['Be respectful', 'No spam']);
 const isCreating = ref(false);
 const nameError = ref('');
+const privacyConfig = ref<PrivateCommunityConfig>({ isPrivate: false, method: 'invite' });
 
 const canCreate = computed(() => {
-  return (
-    name.value.trim() !== '' &&
+  const baseValid = name.value.trim() !== '' &&
     !nameError.value &&
     displayName.value.trim() !== '' &&
-    description.value.trim() !== ''
-  );
+    description.value.trim() !== '';
+  
+  if (privacyConfig.value.isPrivate && privacyConfig.value.method === 'password') {
+    return baseValid && (privacyConfig.value.password?.trim().length ?? 0) >= 12;
+  }
+  return baseValid;
 });
 
 const validateName = () => {
@@ -268,23 +277,42 @@ const createCommunity = async () => {
 
   try {
     const validRules = rules.value.filter(r => r.trim() !== '');
-
-    const community = await communityStore.createCommunity({
+    const communityData = {
       name: name.value.trim(),
       displayName: displayName.value.trim(),
       description: description.value.trim(),
       rules: validRules
-    });
+    };
 
-    const toast = await toastController.create({
-      message: 'Community created successfully',
-      duration: 2000,
-      color: 'success'
-    });
-    await toast.present();
+    let communityId: string;
 
-    // Navigate to the new community
-    router.push(`/community/${community.id}`);
+    if (privacyConfig.value.isPrivate) {
+      const password = privacyConfig.value.method === 'password' ? privacyConfig.value.password : undefined;
+      const result = await communityStore.createPrivateCommunity(communityData, password);
+      communityId = result.community.id;
+
+      if (result.inviteLink) {
+        const toast = await toastController.create({
+          message: 'Private community created! Invite link copied to clipboard.',
+          duration: 4000,
+          color: 'success'
+        });
+        await toast.present();
+        try { await navigator.clipboard.writeText(result.inviteLink); } catch { /* ignore */ }
+      }
+    } else {
+      const community = await communityStore.createCommunity(communityData);
+      communityId = community.id;
+
+      const toast = await toastController.create({
+        message: 'Community created successfully',
+        duration: 2000,
+        color: 'success'
+      });
+      await toast.present();
+    }
+
+    router.push(`/community/${communityId}`);
   } catch (error) {
     console.error('Error creating community:', error);
     
