@@ -1,0 +1,25 @@
+{
+  "name": "voting-chain-gun-relay",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Self-hosted Gun.js relay server for P2P voting platform",
+  "main": "gun-relay.js",
+  "scripts": {
+    "start": "node gun-relay.js",
+    "dev": "nodemon gun-relay.js"
+  },
+  "keywords": ["gun", "p2p", "relay", "decentralized"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "gun": "^0.2020.1240",
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
