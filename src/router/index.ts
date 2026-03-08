@@ -103,6 +103,22 @@ const routes: Array<RouteRecordRaw> = [
     name: 'Resilience',
     component: () => import('../views/ResiliencePage.vue')
   },
+  {
+    path: '/chatroom/:roomId',
+    name: 'ChatRoom',
+    component: () => import('../views/ChatRoomPage.vue'),
+    props: true,
+  },
+  {
+    path: '/chatrooms',
+    name: 'ChatRoomList',
+    component: () => import('../views/ChatRoomListPage.vue')
+  },
+  {
+    path: '/join/:type/:id',
+    name: 'JoinPrivate',
+    component: () => import('../views/JoinPrivatePage.vue')
+  },
   // Catch-all route for 404
   {
     path: '/:pathMatch(.*)*',

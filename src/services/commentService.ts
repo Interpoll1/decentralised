@@ -1,7 +1,10 @@
 import { GunService } from './gunService';
 import { CryptoService } from './cryptoService';
+import { KeyService } from './keyService';
 import { AuditService } from './auditService';
 import { PostService } from './postService';
+import { EncryptionService } from './encryptionService';
+import { KeyVaultService } from './keyVaultService';
 
 function getGun() {
   return GunService.getGun();
@@ -22,6 +25,11 @@ export interface Comment {
   score: number;
   edited?: boolean;
   editedAt?: number;
+  authorPubkey?: string;
+  contentSignature?: string;
+  isEncrypted?: boolean;
+  encryptedContent?: string;    // AES-GCM encrypted comment data
+  authTag?: string;             // HMAC anti-sabotage tag
 }
 
 export interface CreateCommentData {
@@ -32,6 +40,15 @@ export interface CreateCommentData {
   authorShowRealName?: boolean;
   content: string;
   parentId?: string;
+}
+
+function buildSignablePayload(c: Pick<Comment, 'content' | 'postId' | 'communityId' | 'createdAt'>): string {
+  return JSON.stringify({
+    content: c.content,
+    postId: c.postId,
+    communityId: c.communityId,
+    timestamp: c.createdAt,
+  });
 }
 
 /**
@@ -57,6 +74,37 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
     edited: false
   };
 
+  // Sign content for anti-sabotage verification
+  try {
+    const keyPair = await KeyService.getKeyPair();
+    const contentHash = CryptoService.hash(buildSignablePayload(comment));
+    const signature = CryptoService.sign(contentHash, keyPair.privateKey);
+    comment.authorPubkey = keyPair.publicKey;
+    comment.contentSignature = signature;
+  } catch (err) {
+    console.warn('Failed to sign comment content:', err);
+  }
+
+  // Encrypt content if community is encrypted
+  if (data.communityId) {
+    const storedKey = await KeyVaultService.getKey(data.communityId);
+    if (storedKey) {
+      try {
+        const aesKey = await EncryptionService.importKey(storedKey.key);
+        const encryptableData = {
+          content: comment.content,
+          authorId: comment.authorId,
+          authorName: comment.authorName,
+        };
+        comment.encryptedContent = await EncryptionService.encrypt(JSON.stringify(encryptableData), aesKey);
+        comment.authTag = await EncryptionService.generateAuthTag(aesKey, comment.id, String(comment.createdAt), comment.authorId);
+        comment.isEncrypted = true;
+      } catch (err) {
+        console.warn('Failed to encrypt comment:', err);
+      }
+    }
+  }
+
   return new Promise((resolve, reject) => {
     const commentNode = getGun().get('comments').get(commentId);
     
@@ -78,6 +126,22 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
     commentNode.get('downvotes').put(0);
     commentNode.get('score').put(0);
     commentNode.get('edited').put(false);
+
+    if (comment.authorPubkey) {
+      commentNode.get('authorPubkey').put(comment.authorPubkey);
+    }
+    if (comment.contentSignature) {
+      commentNode.get('contentSignature').put(comment.contentSignature);
+    }
+
+    if (comment.isEncrypted) {
+      commentNode.get('isEncrypted').put(true);
+      commentNode.get('encryptedContent').put(comment.encryptedContent);
+      commentNode.get('authTag').put(comment.authTag);
+      // Replace plaintext with placeholder
+      commentNode.get('content').put('🔒 Encrypted comment');
+      commentNode.get('authorName').put('encrypted');
+    }
 
     // Add to post's comments index
     getGun().get('posts')
@@ -178,7 +242,12 @@ export function subscribeToCommentsInPost(
                 downvotes: commentData.downvotes || 0,
                 score: commentData.score || 0,
                 edited: commentData.edited || false,
-                editedAt: commentData.editedAt
+                editedAt: commentData.editedAt,
+                authorPubkey: commentData.authorPubkey || undefined,
+                contentSignature: commentData.contentSignature || undefined,
+                isEncrypted: commentData.isEncrypted || false,
+                encryptedContent: commentData.encryptedContent || undefined,
+                authTag: commentData.authTag || undefined,
               };
               callback(comment);
             }
@@ -221,7 +290,12 @@ export async function getAllCommentsInPost(postId: string): Promise<Comment[]> {
                   downvotes: commentData.downvotes || 0,
                   score: commentData.score || 0,
                   edited: commentData.edited || false,
-                  editedAt: commentData.editedAt
+                  editedAt: commentData.editedAt,
+                  authorPubkey: commentData.authorPubkey || undefined,
+                  contentSignature: commentData.contentSignature || undefined,
+                  isEncrypted: commentData.isEncrypted || false,
+                  encryptedContent: commentData.encryptedContent || undefined,
+                  authTag: commentData.authTag || undefined,
                 };
                 comments.push(comment);
               }
@@ -353,7 +427,7 @@ export async function editComment(commentId: string, newContent: string): Promis
   return new Promise((resolve, reject) => {
     getGun().get('comments')
       .get(commentId)
-      .once((comment: any) => {
+      .once(async (comment: any) => {
         if (!comment || !comment.id) {
           reject(new Error('Comment not found'));
           return;
@@ -373,6 +447,23 @@ export async function editComment(commentId: string, newContent: string): Promis
           .get(commentId)
           .get('editedAt')
           .put(Date.now());
+
+        // Re-sign with updated content
+        try {
+          const keyPair = await KeyService.getKeyPair();
+          const contentHash = CryptoService.hash(buildSignablePayload({
+            content: newContent,
+            postId: comment.postId,
+            communityId: comment.communityId,
+            createdAt: comment.createdAt,
+          }));
+          const signature = CryptoService.sign(contentHash, keyPair.privateKey);
+          const commentNode = getGun().get('comments').get(commentId);
+          commentNode.get('authorPubkey').put(keyPair.publicKey);
+          commentNode.get('contentSignature').put(signature);
+        } catch (_err) {
+          // Non-fatal: signature update failed
+        }
 
         resolve();
       });
@@ -455,6 +546,48 @@ export async function getCommentCount(postId: string): Promise<number> {
   });
 }
 
+/** Verify the Schnorr signature on a comment for anti-sabotage */
+export function verifyCommentSignature(comment: Comment): 'verified' | 'unverified' | 'unsigned' {
+  if (!comment.authorPubkey || !comment.contentSignature) return 'unsigned';
+  try {
+    const contentHash = CryptoService.hash(buildSignablePayload(comment));
+    const valid = CryptoService.verify(contentHash, comment.contentSignature, comment.authorPubkey);
+    return valid ? 'verified' : 'unverified';
+  } catch {
+    return 'unverified';
+  }
+}
+
+/** Decrypt an encrypted comment using the stored community key */
+export async function decryptComment(comment: Comment): Promise<Comment> {
+  if (!comment.isEncrypted || !comment.encryptedContent) return comment;
+
+  const storedKey = await KeyVaultService.getKey(comment.communityId);
+  if (!storedKey) return comment;
+
+  try {
+    const aesKey = await EncryptionService.importKey(storedKey.key);
+    
+    if (comment.authTag) {
+      const valid = await EncryptionService.verifyAuthTag(aesKey, comment.authTag, comment.id, String(comment.createdAt), comment.authorId);
+      if (!valid) {
+        console.warn(`Comment ${comment.id} failed authTag verification`);
+        return comment;
+      }
+    }
+
+    const decrypted = JSON.parse(await EncryptionService.decrypt(comment.encryptedContent, aesKey));
+    return {
+      ...comment,
+      content: decrypted.content || comment.content,
+      authorId: decrypted.authorId || comment.authorId,
+      authorName: decrypted.authorName || comment.authorName,
+    };
+  } catch {
+    return comment;
+  }
+}
+
 // Export as CommentService object for compatibility
 export const CommentService = {
   createComment,
@@ -466,5 +599,7 @@ export const CommentService = {
   editComment,
   deleteComment,
   getUserVote,
-  getCommentCount
+  getCommentCount,
+  verifyCommentSignature,
+  decryptComment
 };

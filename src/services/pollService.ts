@@ -1,4 +1,6 @@
 import { GunService } from './gunService';
+import { EncryptionService } from './encryptionService';
+import { KeyVaultService } from './keyVaultService';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://interpoll.onrender.com';
 
@@ -26,6 +28,11 @@ export interface Poll {
   isPrivate: boolean;
   totalVotes: number;
   isExpired: boolean;
+  authorPubkey?: string;
+  contentSignature?: string;
+  isEncrypted?: boolean;        // Note: isPrivate already exists, this is different
+  encryptedContent?: string;
+  authTag?: string;
 }
 
 const pollActiveListeners = new Map<string, any>();
@@ -232,12 +239,62 @@ export class PollService {
     const optionsMap: Record<string, any> = {};
     pollOptions.forEach((opt, i) => { optionsMap[i] = { id: opt.id, text: opt.text, votes: 0 }; });
 
+    // Sign poll for anti-sabotage
+    try {
+      const { KeyService } = await import('./keyService');
+      const { CryptoService } = await import('./cryptoService');
+      const keyPair = await KeyService.getKeyPair();
+      const contentHash = CryptoService.hash(JSON.stringify({
+        question: poll.question,
+        communityId: poll.communityId,
+        timestamp: poll.createdAt,
+      }));
+      const signature = CryptoService.sign(contentHash, keyPair.privateKey);
+      poll.authorPubkey = keyPair.publicKey;
+      poll.contentSignature = signature;
+    } catch (err) {
+      console.warn('Failed to sign poll:', err);
+    }
+
+    // Encrypt if community is encrypted
+    if (poll.communityId) {
+      const storedKey = await KeyVaultService.getKey(poll.communityId);
+      if (storedKey) {
+        try {
+          const aesKey = await EncryptionService.importKey(storedKey.key);
+          const encryptableData = {
+            question: poll.question,
+            description: poll.description,
+            options: poll.options,
+            authorName: poll.authorName,
+          };
+          poll.encryptedContent = await EncryptionService.encrypt(JSON.stringify(encryptableData), aesKey);
+          poll.authTag = await EncryptionService.generateAuthTag(aesKey, poll.id, String(poll.createdAt), poll.authorId);
+          poll.isEncrypted = true;
+        } catch (err) {
+          console.warn('Failed to encrypt poll:', err);
+        }
+      }
+    }
+
     await this.putPromise(this.getPollPath(pollId), gunPoll);
     await this.putPromise(this.getPollPath(pollId).get('options'), optionsMap);
 
     const communityPolls = this.gun.get('communities').get(data.communityId).get('polls');
     await this.putPromise(communityPolls.get(pollId), gunPoll);
     await this.putPromise(communityPolls.get(pollId).get('options'), optionsMap);
+
+    if (poll.isEncrypted && poll.encryptedContent) {
+      // Override plaintext fields with placeholders in GunDB
+      const node = this.getPollPath(pollId);
+      node.get('question').put('🔒 Encrypted Poll');
+      node.get('description').put('');
+      node.get('encryptedContent').put(poll.encryptedContent);
+      node.get('authTag').put(poll.authTag);
+      node.get('isEncrypted').put(true);
+      if (poll.authorPubkey) node.get('authorPubkey').put(poll.authorPubkey);
+      if (poll.contentSignature) node.get('contentSignature').put(poll.contentSignature);
+    }
 
     if (poll.isPrivate) {
       const inviteCount = Math.max(1, Math.min(200, Number(data.inviteCodeCount ?? 20)));
@@ -299,6 +356,11 @@ export class PollService {
             isPrivate: !!pollData.isPrivate,
             totalVotes,
             isExpired,
+            isEncrypted: pollData.isEncrypted || false,
+            encryptedContent: pollData.encryptedContent || undefined,
+            authTag: pollData.authTag || undefined,
+            authorPubkey: pollData.authorPubkey || undefined,
+            contentSignature: pollData.contentSignature || undefined,
           };
           resolve(poll);
         });
@@ -395,5 +457,32 @@ export class PollService {
       if (subscription) subscription.off();
     });
     pollActiveListeners.clear();
+  }
+
+  static async decryptPoll(poll: Poll): Promise<Poll> {
+    if (!poll.isEncrypted || !poll.encryptedContent) return poll;
+
+    const storedKey = await KeyVaultService.getKey(poll.communityId);
+    if (!storedKey) return poll;
+
+    try {
+      const aesKey = await EncryptionService.importKey(storedKey.key);
+      
+      if (poll.authTag) {
+        const valid = await EncryptionService.verifyAuthTag(aesKey, poll.authTag, poll.id, String(poll.createdAt), poll.authorId);
+        if (!valid) return poll;
+      }
+
+      const decrypted = JSON.parse(await EncryptionService.decrypt(poll.encryptedContent, aesKey));
+      return {
+        ...poll,
+        question: decrypted.question || poll.question,
+        description: decrypted.description || poll.description,
+        options: decrypted.options || poll.options,
+        authorName: decrypted.authorName || poll.authorName,
+      };
+    } catch {
+      return poll;
+    }
   }
 }

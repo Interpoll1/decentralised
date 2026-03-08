@@ -6,7 +6,7 @@ import config from '../config';
 export const GUN_NAMESPACE = 'v2';
 
 // Root paths that should be namespaced
-const NAMESPACED_ROOTS = new Set(['posts', 'communities', 'polls', 'postVotes', 'users', 'comments', 'events']);
+const NAMESPACED_ROOTS = new Set(['posts', 'communities', 'polls', 'postVotes', 'users', 'comments', 'events', 'chatrooms', 'server-config']);
 
 // Proxy wrapper — intercepts gun.get('posts') and routes to gun.get('v2').get('posts')
 function createNamespacedProxy(gun: any, nsNode: any): any {

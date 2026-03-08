@@ -10,11 +10,18 @@
  */
 
 const STORAGE_KEY = 'interpoll_relay_config';
+const ENCRYPTION_STORAGE_KEY = 'interpoll_encryption_config';
 
 interface RelayOverrides {
   websocket?: string;
   gun?: string;
   api?: string;
+}
+
+interface EncryptionConfig {
+  encryptAll?: boolean;
+  serverPassword?: string;
+  requireInviteToJoin?: boolean;
 }
 
 function loadOverrides(): RelayOverrides {
@@ -34,7 +41,18 @@ const defaults = {
   api: 'https://interpoll.onrender.com',
 };
 
+function loadEncryptionConfig(): EncryptionConfig {
+  try {
+    const raw = localStorage.getItem(ENCRYPTION_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {
+    // Corrupted data; ignore
+  }
+  return {};
+}
+
 let overrides = loadOverrides();
+let encryptionConfig = loadEncryptionConfig();
 
 function ws(): string {
   return overrides.websocket || defaults.websocket;
@@ -52,6 +70,16 @@ const config = {
     get websocket() { return ws(); },
     get gun() { return gun(); },
     get api() { return api(); },
+  },
+
+  /** Server-wide encryption settings (mutable at runtime) */
+  encryption: {
+    /** Whether all content should be encrypted by default */
+    get encryptAll() { return encryptionConfig.encryptAll ?? false; },
+    /** Password for server-wide encryption (used to derive AES key) */
+    get serverPassword() { return encryptionConfig.serverPassword; },
+    /** Whether new users need an invite link to access the server */
+    get requireInviteToJoin() { return encryptionConfig.requireInviteToJoin ?? false; },
   },
 
   /** Default (build-time) relay URLs */
@@ -76,6 +104,31 @@ const config = {
   /** Get current overrides (if any) */
   getRelayOverrides(): RelayOverrides {
     return { ...overrides };
+  },
+
+  /** Check if server-wide encryption is active */
+  isServerEncrypted(): boolean {
+    return this.encryption.encryptAll;
+  },
+
+  /** Update encryption settings */
+  setEncryptionConfig(partial: EncryptionConfig) {
+    encryptionConfig = { ...encryptionConfig, ...partial };
+    for (const key of Object.keys(encryptionConfig) as (keyof EncryptionConfig)[]) {
+      if (encryptionConfig[key] === undefined || encryptionConfig[key] === '') delete encryptionConfig[key];
+    }
+    localStorage.setItem(ENCRYPTION_STORAGE_KEY, JSON.stringify(encryptionConfig));
+  },
+
+  /** Clear encryption settings */
+  resetEncryptionConfig() {
+    encryptionConfig = {};
+    localStorage.removeItem(ENCRYPTION_STORAGE_KEY);
+  },
+
+  /** Get current encryption config */
+  getEncryptionConfig(): EncryptionConfig {
+    return { ...encryptionConfig };
   },
 };
 

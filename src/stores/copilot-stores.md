@@ -50,6 +50,17 @@ Key computed: `polls`, `sortedPolls`
 - Simple profile cache: `profiles: Record<string, UserProfile>`. Fetches from `UserService` on miss.
 - `getCachedKarma(userId)` — used by `useModerationFilter` to hide low-karma content without a network fetch.
 
+## `chatRoomStore.ts` — `useChatRoomStore`
+
+Manages encrypted chat rooms via `ChatRoomService`.
+
+- **Room lifecycle**: `loadRooms()` fetches joined rooms, `createRoom()` / `joinRoom()` add to the list, `leaveRoom()` removes.
+- **Live messaging**: `enterRoom(room)` subscribes to incoming messages via `ChatRoomService.subscribeToMessages`; `leaveCurrentRoom()` unsubscribes and clears state.
+- **Deduplication**: Both `enterRoom` and `sendMessage` guard against duplicate message IDs before pushing.
+
+Key refs: `rooms`, `currentRoom`, `messages`, `loading`, `error`
+Key computed: `sortedMessages` (chronological order)
+
 ## `syncStore.ts`
 
 Currently empty/placeholder.

@@ -84,6 +84,7 @@ const stats = {
   pollsSeen:      0,
   syncRequests:   0,
   messagesIn:     0,
+  chatroomMessages: 0,
   gunUpdates:     0,
   connected:      false,
   startedAt:      Date.now(),
@@ -252,6 +253,9 @@ function handleMessage(msg) {
     case 'new-event':    onNewEvent(data);    break;
     case 'request-sync': onSyncRequest(data); break;
     case 'sync-response':onSyncResponse(data);break;
+    case 'chatroom-message':
+      stats.chatroomMessages++;
+      break;
     case 'server-list':
       if (data?.servers && Array.isArray(data.servers))
         mergeServerList(data.servers, data.peerId || 'unknown');
@@ -373,7 +377,7 @@ setInterval(() => {
   log(
     `ws=${stats.connected ? 'up' : 'down'} | ` +
     `blocks=${stats.blocksStored} events=${stats.eventsStored} polls=${stats.pollsSeen} | ` +
-    `syncs=${stats.syncRequests} msgs=${stats.messagesIn} gun=${stats.gunUpdates} | ` +
+    `syncs=${stats.syncRequests} msgs=${stats.messagesIn} chat=${stats.chatroomMessages} gun=${stats.gunUpdates} | ` +
     `mem=${rss}MB (heap ${heap}MB) | ` +
     `up ${formatUptime(Date.now() - stats.startedAt)}`
   );

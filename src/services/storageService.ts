@@ -1,5 +1,6 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { ChainBlock, Receipt, Vote, Poll } from '../types/chain';
+import type { StoredEncryptionKey } from '../types/encryption';
 
 interface VotingChainDB extends DBSchema {
   blocks: {
@@ -25,6 +26,10 @@ interface VotingChainDB extends DBSchema {
     key: string;
     value: any;
   };
+  'encryption-keys': {
+    key: string;
+    value: StoredEncryptionKey;
+  };
 }
 
 export class StorageService {
@@ -32,25 +37,30 @@ export class StorageService {
 
   static async getDB(): Promise<IDBPDatabase> {
     if (!this.dbPromise) {
-      this.dbPromise = openDB('interpoll-db', 1, {
-        upgrade(db) {
-          // Blocks store
-          const blockStore = db.createObjectStore('blocks', { keyPath: 'index' });
-          blockStore.createIndex('by-hash', 'currentHash');
+      this.dbPromise = openDB('interpoll-db', 2, {
+        upgrade(db, oldVersion) {
+          if (oldVersion < 1) {
+            // Blocks store
+            const blockStore = db.createObjectStore('blocks', { keyPath: 'index' });
+            blockStore.createIndex('by-hash', 'currentHash');
 
-          // Votes store
-          const voteStore = db.createObjectStore('votes', { keyPath: 'timestamp' });
-          voteStore.createIndex('by-poll', 'pollId');
+            // Votes store
+            const voteStore = db.createObjectStore('votes', { keyPath: 'timestamp' });
+            voteStore.createIndex('by-poll', 'pollId');
 
-          // Receipts store
-          const receiptStore = db.createObjectStore('receipts', { keyPath: 'mnemonic' });
-          receiptStore.createIndex('by-block', 'blockIndex');
+            // Receipts store
+            const receiptStore = db.createObjectStore('receipts', { keyPath: 'mnemonic' });
+            receiptStore.createIndex('by-block', 'blockIndex');
 
-          // Polls store
-          db.createObjectStore('polls', { keyPath: 'id' });
+            // Polls store
+            db.createObjectStore('polls', { keyPath: 'id' });
 
-          // Metadata store
-          db.createObjectStore('metadata');
+            // Metadata store
+            db.createObjectStore('metadata');
+          }
+          if (oldVersion < 2) {
+            db.createObjectStore('encryption-keys', { keyPath: 'id' });
+          }
         },
       });
     }
@@ -138,13 +148,14 @@ export class StorageService {
   // Utility
   static async clearAll(): Promise {
     const db = await this.getDB();
-    const tx = db.transaction(['blocks', 'votes', 'receipts', 'polls', 'metadata'], 'readwrite');
+    const tx = db.transaction(['blocks', 'votes', 'receipts', 'polls', 'metadata', 'encryption-keys'], 'readwrite');
     await Promise.all([
       tx.objectStore('blocks').clear(),
       tx.objectStore('votes').clear(),
       tx.objectStore('receipts').clear(),
       tx.objectStore('polls').clear(),
       tx.objectStore('metadata').clear(),
+      tx.objectStore('encryption-keys').clear(),
     ]);
   }
 }

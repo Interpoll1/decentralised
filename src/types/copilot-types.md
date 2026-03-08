@@ -25,6 +25,25 @@ Nostr-compatible event protocol types. Used by `eventService.ts` and `keyService
 | `UnsignedEvent` | Same minus `id` and `sig` |
 | `StoredKeyPair` | `privateKey`, `publicKey` (both 64-char hex), `createdAt` |
 
+## `encryption.ts`
+
+End-to-end encryption types for communities, chat rooms, posts, and server-wide config. Import with `import type { EncryptedBlob, StoredEncryptionKey, ... } from '@/types/encryption'`.
+
+| Type | Notes |
+|---|---|
+| `EncryptedBlob` | String alias — base64-encoded AES-256-GCM payload with IV prepended to ciphertext. |
+| `StoredEncryptionKey` | Persisted in IndexedDB `encryption-keys` store. Fields: `id`, `type` (`'community' \| 'chatroom' \| 'server'`), `key` (base64 AES-256), `method` (`'invite' \| 'password'`), `label`, `joinedAt`. |
+| `InviteLinkData` | Parsed from an invite link URL fragment: `id`, `type`, `key` (base64url-encoded). |
+| `EncryptedCommunityData` | Community with `isEncrypted: true`. Contains `encryptedMeta` (AES-GCM blob of name/description/rules), `encryptionHint`, `creatorId`, `memberCount`. |
+| `DecryptedCommunityMeta` | Plaintext community metadata inside `encryptedMeta`: `name`, `displayName`, `description`, `rules[]`. |
+| `EncryptedChatRoom` | Chat room with `isEncrypted: true`. Contains `encryptedMeta` blob and `encryptionHint`. |
+| `DecryptedChatRoomMeta` | Plaintext chat room metadata: `name`, `description`, `creatorId`. |
+| `ChatRoomMessage` | Encrypted message in GunDB: `encryptedContent` blob + `authTag` (HMAC-SHA256 anti-sabotage). |
+| `DecryptedChatRoomMessageContent` | Plaintext message content: `text`, `senderId`, `senderName`. |
+| `ContentSignature` | Anti-sabotage fields for posts/comments: `authorPubkey` (64 hex), `contentSignature` (128 hex Schnorr). |
+| `EncryptedPostData` | Encrypted post in GunDB: `encryptedContent` blob + `authTag`, scoped to `communityId`. |
+| `ServerEncryptionConfig` | Server-wide encryption settings: `encryptAll`, optional `serverPassword` (PBKDF2 input), `requireInviteToJoin`. |
+
 ## `supabase.ts`
 
 Legacy schema stub (`Database.public.Tables.receipts`). Supabase was removed — this file exists for type compatibility but is not actively used.
