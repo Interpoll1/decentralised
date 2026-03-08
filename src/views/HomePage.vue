@@ -403,7 +403,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonButton, IonIcon, IonSegment, IonSegmentButton,
-  IonLabel, IonSpinner, IonChip, IonSearchbar,
+  IonLabel, IonSpinner, IonChip, IonSearchbar, IonBadge,
   IonInfiniteScroll, IonInfiniteScrollContent,
   actionSheetController, toastController
 } from '@ionic/vue';

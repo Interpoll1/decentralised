@@ -167,7 +167,7 @@ export class WebSocketService {
           return;
         }
 
-        if (event.code !== 1000 && event.code !== 1001) {
+        if (event.code !== 1000 && event.code !== 1001 && this.reconnectAttempts === 0) {
           console.warn(`WebSocket closed: code=${event.code} reason=${event.reason || 'none'}`);
         }
         this.isConnected = false;
