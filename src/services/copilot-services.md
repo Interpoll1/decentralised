@@ -8,8 +8,8 @@ All services are **static classes** — never instantiated with `new`. Initializ
 
 | File | Class | Purpose |
 |---|---|---|
-| `gunService.ts` | `GunService` | GunDB wrapper. `initialize()` called in `main.ts`. All data roots (`posts`, `polls`, `communities`, `users`, `comments`, `events`) are transparently namespaced under `v2` via a Proxy. Use `GunService.getGun()` to get the proxied instance. Adding a new root requires adding it to `NAMESPACED_ROOTS`. |
-| `storageService.ts` | `StorageService` | IndexedDB wrapper (`idb`). Stores: `blocks`, `votes`, `receipts`, `polls`, `metadata`. DB name: `interpoll-db` v1. The `metadata` store is a generic key-value bag used by many other services. |
+| `gunService.ts` | `GunService` | GunDB wrapper. `initialize()` called in `main.ts`. All data roots (`posts`, `polls`, `communities`, `users`, `comments`, `events`, `chatrooms`, `server-config`) are transparently namespaced under `v2` via a Proxy. Use `GunService.getGun()` to get the proxied instance. Adding a new root requires adding it to `NAMESPACED_ROOTS`. |
+| `storageService.ts` | `StorageService` | IndexedDB wrapper (`idb`). Stores: `blocks`, `votes`, `receipts`, `polls`, `metadata`, `encryption-keys`. DB name: `interpoll-db` v2. The `metadata` store is a generic key-value bag used by many other services. The `encryption-keys` store holds `StoredEncryptionKey` entries keyed by `id`. |
 | `websocketService.ts` | `WebSocketService` | WebSocket peer connection to the relay server. Handles reconnection (exponential backoff, infinite retries), peer discovery, server list sharing, and message queuing when disconnected. Subscribe to message types via `.subscribe(type, callback)`. |
 | `broadcastService.ts` | `BroadcastService` | Cross-tab sync via `BroadcastChannel('interpoll-sync')`. Same message types as WebSocket. Both channels are always wired in parallel in `chainStore`. |
 | `webrtcService.ts` | `WebRTCService` | WebRTC P2P DataChannel service. Uses WebSocket relay only for signaling (`rtc-offer`, `rtc-answer`, `rtc-ice`). Once connected, peers exchange data directly. Opt-in via `localStorage('interpoll_webrtc_enabled')`. Uses Google STUN servers for NAT traversal. Degrades gracefully — app continues via relay if WebRTC fails. |
@@ -30,9 +30,9 @@ All services are **static classes** — never instantiated with `new`. Initializ
 | File | Class | Purpose |
 |---|---|---|
 | `pollService.ts` | `PollService` | Poll CRUD, invite code generation/validation, vote recording in GunDB. Also calls `indexForSearch()` to push data to relay for full-text search. |
-| `communityService.ts` | `CommunityService` | Community CRUD in GunDB. IDs are derived from lowercased name: `c-{slug}`. |
-| `postService.ts` | `PostService` | Post CRUD in GunDB, image upload via `IPFSService`. |
-| `commentService.ts` | `CommentService` | Comment CRUD in GunDB. |
+| `communityService.ts` | `CommunityService` | Community CRUD in GunDB. IDs are derived from lowercased name: `c-{slug}`. Signs community creation with Schnorr (via `CryptoService`/`KeyService`) for anti-sabotage; includes `verifyCommunitySignature()` to check integrity. |
+| `postService.ts` | `PostService` | Post CRUD in GunDB, image upload via `IPFSService`. Signs post content with Schnorr (via `CryptoService`/`KeyService`) for anti-sabotage verification; exposes `verifyPostSignature()` returning `'verified' | 'unverified' | 'unsigned'`. |
+| `commentService.ts` | `CommentService` | Comment CRUD in GunDB. Schnorr-signs comment content on create/edit for anti-sabotage verification (`authorPubkey`, `contentSignature`). `verifyCommentSignature()` returns `'verified' | 'unverified' | 'unsigned'`. |
 | `userService.ts` | `UserService` | User profile CRUD in GunDB, keyed by device ID. Exposes Schnorr public key for identity. Supports `customUsername`, `showRealName` toggle, and avatar images (`avatarIPFS`/`avatarThumbnail`). |
 | `chatService.ts` | `ChatService` | **Instance-based** (not static). P2P DM chat over GunDB + WebSocket. Uses RSA-OAEP for message encryption between users. Each chat session needs `new ChatService(wsUrl, userId)`. |
 
@@ -42,6 +42,12 @@ All services are **static classes** — never instantiated with `new`. Initializ
 |---|---|---|
 | `ipfsService.ts` | `IPFSService` | Image compression (`browser-image-compression`) + GunDB storage. Name is historical — no actual IPFS. Full image max 1 MB / 1920px, thumbnails max 100 KB / 800px, both base64. CIDs are `img-{timestamp}-{random}`. `downloadImage()` retrieves full-res base64 from GunDB with a 10s timeout. |
 | `chatMediaService.ts` | — | Media handling for chat (images in chat messages). |
+
+## Encryption
+
+| File | Class | Purpose |
+|---|---|---|
+| `encryptionService.ts` | `EncryptionService` | AES-256-GCM encryption/decryption via Web Crypto API. Key generation (random or PBKDF2 password-derived), base64/base64url key export/import for storage and invite links, and HMAC-SHA256 auth tags for anti-sabotage verification. No external dependencies. |
 
 ## Signing / Events
 
