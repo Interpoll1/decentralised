@@ -9,6 +9,10 @@ type SyncMessage =
   | { type: 'server-list'; data: any }
   | { type: 'chatroom-message'; roomId: string; data: any };
 
+/** Message types that may require proof-of-work on the relay server.
+ *  Must stay in sync with POW_REQUIRED_TYPES in src/services/powService.ts. */
+const POW_CONTENT_TYPES = new Set(['broadcast', 'new-poll', 'new-block']);
+
 export interface KnownServer {
   websocket: string;
   gun: string;
@@ -79,7 +83,7 @@ export class WebSocketService {
     try {
       this.ws = new WebSocket(url);
 
-      this.ws.onopen = () => {
+      this.ws.onopen = async () => {
         this.isConnected = true;
         this.reconnectAttempts = 0;
 
@@ -90,12 +94,14 @@ export class WebSocketService {
         this.sendToRelay('register', { peerId: this.peerId });
         this.sendToRelay('join-room', { roomId: 'default' });
 
-        while (this.messageQueue.length > 0) {
+        // Snapshot length to avoid infinite loop if broadcast re-queues on PoW failure
+        const pending = this.messageQueue.length;
+        for (let qi = 0; qi < pending; qi++) {
           const msg = this.messageQueue.shift();
           if (msg.type === 'chatroom-message') {
             this.broadcastChatRoomMessage(msg.roomId, msg.data);
           } else {
-            this.broadcast(msg.type, msg.data);
+            await this.broadcast(msg.type, msg.data);
           }
         }
 
@@ -301,17 +307,53 @@ export class WebSocketService {
     }
   }
 
-  static broadcast(type: string, data: any) {
-    const message = { type, data, timestamp: Date.now() };
+  /**
+   * Send a raw message to the relay without broadcast wrapping or PoW.
+   * Used by PowService to request challenges.
+   * Returns true if the message was sent, false if the socket was not open.
+   */
+  static sendRaw(message: Record<string, unknown>): boolean {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      try {
+        this.ws.send(JSON.stringify(message));
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
 
-    if (!this.isConnected) {
+  static async broadcast(type: string, data: any): Promise<void> {
+    const message: any = { type, data, timestamp: Date.now() };
+
+    if (!this.isConnected || this.ws?.readyState !== WebSocket.OPEN) {
       this.messageQueue.push(message);
       return;
     }
 
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.sendToRelay('broadcast', message);
+    // Attach PoW for content messages (dynamic import avoids circular dependency)
+    if (POW_CONTENT_TYPES.has(type)) {
+      try {
+        const { PowService } = await import('@/services/powService');
+        if (PowService.requiresProof(type, data?.actionType)) {
+          const proof = await PowService.getProof(type);
+          message.pow = proof;
+        }
+      } catch (e) {
+        console.warn('[PoW] Failed to get proof, queuing message for retry:', e);
+        this.messageQueue.push(message);
+        return;
+      }
+
+      // Re-check connection after async PoW (may have disconnected during solve)
+      if (this.ws?.readyState !== WebSocket.OPEN) {
+        this.messageQueue.push(message);
+        return;
+      }
     }
+
+    this.sendToRelay('broadcast', message);
   }
 
   static subscribe(type: string, callback: (data: any) => void) {
