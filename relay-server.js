@@ -9,6 +9,10 @@ import https from 'https';
 import fs from 'fs';
 import crypto from 'crypto';
 import { URL } from 'url';
+import { RateLimiter } from './rate-limiter.js';
+import { BotDetector } from './bot-detector.js';
+import { SpamScorer } from './spam-scorer.js';
+import { PowChallenge } from './pow-challenge.js';
 
 const PORT = 8080;
 const server = http.createServer();
@@ -16,6 +20,12 @@ const wss = new WebSocketServer({ server });
 
 const clients = new Map(); // peerId -> WebSocket
 const rooms = new Map();   // roomId -> Set of peerIds
+
+// Anti-spam modules
+const rateLimiter = new RateLimiter();
+const botDetector = new BotDetector();
+const spamScorer = new SpamScorer();
+const powChallenge = new PowChallenge();
 
 // In-memory registry for backend-side vote protection
 // key = `${pollId}:${deviceId}`
@@ -33,13 +43,17 @@ const MAX_CACHED_MESSAGES = 500;
 let messageCache = [];
 try {
   if (fs.existsSync(MESSAGE_CACHE_FILE)) {
-    messageCache = JSON.parse(fs.readFileSync(MESSAGE_CACHE_FILE, 'utf8'));
+    const raw = JSON.parse(fs.readFileSync(MESSAGE_CACHE_FILE, 'utf8'));
+    // Filter out any previously flagged spam so it isn't replayed on restart
+    messageCache = raw.filter(m => !m._flagged && !m.data?._flagged);
     console.log(`Loaded ${messageCache.length} cached messages from disk`);
   }
 } catch { messageCache = []; }
 
 function cacheMessage(msg) {
   if (!msg || !msg.type) return;
+  // Don't cache spam-flagged content — it would be replayed to every new client
+  if (msg._flagged || msg.data?._flagged) return;
   // Only cache content-bearing messages
   const cacheable = ['new-poll', 'new-block', 'sync-response', 'new-event'];
   const type = msg.type || msg.data?.type;
@@ -177,6 +191,15 @@ function decodeJwt(token) {
 }
 
 server.on('request', (req, res) => {
+  // ─── HTTP rate limiting ─────────────────────────────────────────────────
+  const clientIp = req.socket.remoteAddress || 'unknown';
+  const httpCheck = rateLimiter.checkHttp(clientIp);
+  if (!httpCheck.allowed) {
+    res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': String(Math.ceil(httpCheck.retryAfter / 1000)) });
+    res.end(JSON.stringify({ error: 'Too many requests', retryAfter: httpCheck.retryAfter }));
+    return;
+  }
+
   // Basic CORS for the frontend dev server (supports credentials)
   const origin = req.headers.origin || FRONTEND_ORIGIN;
   if (origin) {
@@ -499,12 +522,93 @@ server.on('request', (req, res) => {
 
 wss.on('connection', (ws, req) => {
   let peerId = null;
+  const peerIp = req.socket.remoteAddress || 'unknown';
   
-  console.log('🔌 New connection from', req.socket.remoteAddress);
+  console.log('🔌 New connection from', peerIp);
 
   ws.on('message', (message) => {
     try {
       const data = JSON.parse(message.toString());
+
+      // Skip rate limiting for heartbeat messages
+      if (data.type !== 'ping' && data.type !== 'pong') {
+        // ─── WebSocket rate limiting ────────────────────────────────
+        const wsCheck = rateLimiter.checkWs(peerId || peerIp);
+        if (!wsCheck.allowed) {
+          if (ws.readyState === 1) {
+            ws.send(JSON.stringify({ type: 'error', code: 'RATE_LIMITED', retryAfter: wsCheck.retryAfter }));
+          }
+          return;
+        }
+
+        // ─── Bot detection ──────────────────────────────────────────
+        const msgHash = crypto.createHash('sha256').update(message.toString().slice(0, 1000)).digest('hex');
+        botDetector.recordMessage(peerId || peerIp, msgHash);
+        const botAction = botDetector.getAction(peerId || peerIp);
+        if (botAction.action === 'ban') {
+          console.log(`🤖 Banning peer ${peerId || peerIp} (bot score: ${botAction.score})`);
+          if (ws.readyState === 1) {
+            ws.send(JSON.stringify({ type: 'error', code: 'BANNED', reason: 'Automated behavior detected' }));
+          }
+          ws.close();
+          return;
+        }
+      }
+
+      // ─── PoW verification for content messages ──────────────────
+      const actionType = data.actionType || data.data?.actionType;
+      if (powChallenge.requiresPow(data.type, actionType)) {
+        if (!data.pow || !data.pow.challengeId || data.pow.nonce == null) {
+          if (ws.readyState === 1) {
+            ws.send(JSON.stringify({ type: 'pow-required', reason: 'Proof-of-work required for this action' }));
+          }
+          return;
+        }
+        const powResult = powChallenge.verify(data.pow.challengeId, data.pow.nonce);
+        if (!powResult.valid) {
+          if (ws.readyState === 1) {
+            ws.send(JSON.stringify({ type: 'pow-required', reason: powResult.reason }));
+          }
+          return;
+        }
+      }
+
+      // ─── Spam scoring for content messages ──────────────────────
+      if (data.type === 'broadcast' || data.type === 'new-poll' || data.type === 'new-block') {
+        const payload = data.data || data;
+        const textContent = [payload.title, payload.content, payload.description, payload.question]
+          .filter(Boolean)
+          .join(' ');
+        if (textContent) {
+          const scoreResult = spamScorer.score(textContent);
+          if (spamScorer.shouldFlag(scoreResult)) {
+            console.log(`🚩 Flagged content from ${peerId || peerIp}: ${scoreResult.matchCount} matches [${scoreResult.matches.join(', ')}]`);
+            if (data.data) {
+              data.data._flagged = true;
+            } else {
+              data._flagged = true;
+            }
+          }
+          if (spamScorer.shouldDelay(scoreResult)) {
+            // Delay broadcast by 3 seconds for heavily flagged content
+            const delayedData = JSON.parse(JSON.stringify(data));
+            setTimeout(() => {
+              switch (delayedData.type) {
+                case 'broadcast':
+                  broadcastToOthers(peerId, delayedData.data);
+                  cacheMessage(delayedData.data);
+                  break;
+                case 'new-poll':
+                case 'new-block':
+                  broadcastToOthers(peerId, delayedData);
+                  cacheMessage(delayedData);
+                  break;
+              }
+            }, 3000);
+            return; // Don't process in the switch below
+          }
+        }
+      }
       
       switch (data.type) {
         case 'ping':
@@ -517,6 +621,7 @@ wss.on('connection', (ws, req) => {
         case 'register':
           peerId = data.peerId;
           clients.set(peerId, ws);
+          botDetector.onRegister(peerId);
           console.log(`✅ Peer registered: ${peerId} (Total: ${clients.size})`);
 
           // Send list of active peers
@@ -582,6 +687,17 @@ wss.on('connection', (ws, req) => {
           cacheMessage(data);
           break;
           
+        case 'request-pow': {
+          const deviceId = data.deviceId || peerId;
+          const action = data.action || 'default';
+          const botScore = botDetector.getScore(peerId || peerIp);
+          const challenge = powChallenge.createChallenge(deviceId, action, { botScore, spamPenalty: 0 });
+          if (ws.readyState === 1) {
+            ws.send(JSON.stringify({ type: 'pow-challenge', ...challenge }));
+          }
+          break;
+        }
+
         default:
           console.log('Unknown message type:', data.type);
       }
@@ -593,6 +709,7 @@ wss.on('connection', (ws, req) => {
   ws.on('close', () => {
     if (peerId) {
       clients.delete(peerId);
+      botDetector.onDisconnect(peerId);
       
       // Remove from all rooms
       rooms.forEach((peers, roomId) => {
@@ -649,6 +766,9 @@ server.listen(PORT, () => {
 process.on('SIGINT', () => {
   console.log('\n👋 Shutting down relay server...');
   saveMessageCache();
+  rateLimiter.destroy();
+  botDetector.destroy();
+  powChallenge.destroy();
   wss.clients.forEach((ws) => {
     ws.close();
   });

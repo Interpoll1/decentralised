@@ -4,6 +4,8 @@ const RECALC_INTERVAL = 10;
 const BURST_WINDOW_MS = 5000;
 const CLEANUP_INTERVAL_MS = 2 * 60_000;
 const STALE_THRESHOLD_MS = 10 * 60_000;
+const MAX_IDLE_MS = 2 * 60 * 60_000;   // 2 hours with no messages → stale
+const MAX_CONNECT_MS = 6 * 60 * 60_000; // 6 hours connected → eligible for cleanup
 
 function stddev(values) {
   if (values.length < 2) return 0;
@@ -174,6 +176,16 @@ export class BotDetector {
     for (const [id, state] of this.peers) {
       if (state.disconnectedAt && now - state.disconnectedAt > STALE_THRESHOLD_MS) {
         this.peers.delete(id);
+        continue;
+      }
+      // Remove long-lived idle connections: connected > 6 hours with no messages in last 2 hours
+      if (!state.disconnectedAt && now - state.connectTime > MAX_CONNECT_MS) {
+        const lastMsg = state.timestamps.length
+          ? state.timestamps[state.timestamps.length - 1]
+          : 0;
+        if (!lastMsg || now - lastMsg > MAX_IDLE_MS) {
+          this.peers.delete(id);
+        }
       }
     }
   }
