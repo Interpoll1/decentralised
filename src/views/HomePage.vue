@@ -427,7 +427,6 @@ import { Poll } from '../services/pollService';
 import { GunService } from '../services/gunService';
 import { UserService } from '../services/userService';
 import ChatService from '../services/chatService';
-
 import { warmupFromDB } from '../services/dbWarmup';
 import { betaFeatures } from '../utils/betaFeatures';
 
@@ -443,6 +442,7 @@ const isLoadingPosts = ref(false);
 const voteVersion = ref(0);
 const isHeaderHidden = ref(false);
 const isTabBarHidden = ref(false);
+const warmupComplete = ref(false);
 let lastScrollTop = 0;
 const scrollThreshold = 50;
 
@@ -457,7 +457,6 @@ const chatList = ref<Array<{
   publicKey: string;
 }>>([]);
 
-// Badge shown on Chat nav button
 const totalUnread = computed(() => chatList.value.reduce((sum, c) => sum + c.unreadCount, 0));
 
 let bgChatService: ChatService | null = null;
@@ -480,20 +479,15 @@ const displayedCommunities = computed(() => {
 const combinedFeed = computed(() => {
   const items: Array<{ type: 'post' | 'poll'; data: any; createdAt: number }> = [];
 
-  // Use ALL posts/polls from store, not just visible slice
-  // visiblePosts/visiblePolls are already sliced — we want the full sorted list
-  // then slice once after merging so pagination works across both types
-  postStore.sortedPosts.forEach(post => 
+  postStore.sortedPosts.forEach(post =>
     items.push({ type: 'post', data: post, createdAt: post.createdAt })
   );
   pollStore.sortedPolls.forEach(poll => {
     if (!poll.isPrivate) items.push({ type: 'poll', data: poll, createdAt: poll.createdAt });
   });
 
-  // Sort by publish time, newest first
   items.sort((a, b) => b.createdAt - a.createdAt);
 
-  // Single pagination slice across the merged feed
   const pageSize = postStore.visibleCount;
   return items.slice(0, pageSize);
 });
@@ -502,6 +496,7 @@ const hasMore = computed(() => {
   const totalItems = postStore.sortedPosts.length + pollStore.sortedPolls.filter(p => !p.isPrivate).length;
   return postStore.visibleCount < totalItems;
 });
+
 const joinedCommunities = computed(() => communityStore.communities.filter(c => communityStore.isJoined(c.id)));
 
 // ── Chat list ─────────────────────────────────────────────────────────────────
@@ -583,7 +578,6 @@ async function initBackgroundChat() {
       if (activeTab.value !== 'chat') entry.unreadCount++;
       chatList.value = [...chatList.value].sort((a, b) => b.lastMessageTime - a.lastMessageTime);
     } else {
-      // Brand new conversation
       chatList.value.unshift({
         userId: msg.from, name: msg.from,
         lastMessage: '[Encrypted message]',
@@ -602,7 +596,6 @@ async function initBackgroundChat() {
       subscribeToRoom(msg.from, msg.from, '');
     }
 
-    // Toast notification when not on chat tab
     if (activeTab.value !== 'chat') {
       const senderName = chatList.value.find(c => c.userId === msg.from)?.name || 'Someone';
       toastController.create({
@@ -695,17 +688,20 @@ function handleScroll(event: CustomEvent) {
   }
   lastScrollTop = scrollTop;
 }
+
 // ── New content flush ─────────────────────────────────────────────────────────
+
 const newContentCount = computed(() => postStore.newPostCount + pollStore.newPollCount);
 
 function flushNewContent() {
   postStore.flushNewPosts();
   pollStore.flushNewPolls();
 }
+
 // ── Feed / voting ─────────────────────────────────────────────────────────────
 
 async function onInfiniteScroll(event: any) {
-  postStore.loadMorePosts(); // this increments visibleCount which combinedFeed now uses
+  postStore.loadMorePosts();
   await new Promise(r => setTimeout(r, 100));
   event.target.complete();
 }
@@ -728,7 +724,10 @@ async function handleUpvote(post: Post) {
       (await toastController.create({ message: 'Upvote removed', duration: 1500, color: 'medium' })).present();
     } else {
       const downvoted = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
-      if (downvoted.includes(post.id)) { localStorage.setItem('downvoted-posts', JSON.stringify(downvoted.filter((id: string) => id !== post.id))); await postStore.removeDownvote(post.id); }
+      if (downvoted.includes(post.id)) {
+        localStorage.setItem('downvoted-posts', JSON.stringify(downvoted.filter((id: string) => id !== post.id)));
+        await postStore.removeDownvote(post.id);
+      }
       localStorage.setItem('upvoted-posts', JSON.stringify([...JSON.parse(localStorage.getItem('upvoted-posts') || '[]'), post.id]));
       voteVersion.value++; await postStore.upvotePost(post.id);
       (await toastController.create({ message: 'Upvoted', duration: 1500, color: 'success' })).present();
@@ -748,7 +747,10 @@ async function handleDownvote(post: Post) {
       (await toastController.create({ message: 'Downvote removed', duration: 1500, color: 'medium' })).present();
     } else {
       const upvoted = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
-      if (upvoted.includes(post.id)) { localStorage.setItem('upvoted-posts', JSON.stringify(upvoted.filter((id: string) => id !== post.id))); await postStore.removeUpvote(post.id); }
+      if (upvoted.includes(post.id)) {
+        localStorage.setItem('upvoted-posts', JSON.stringify(upvoted.filter((id: string) => id !== post.id)));
+        await postStore.removeUpvote(post.id);
+      }
       localStorage.setItem('downvoted-posts', JSON.stringify([...JSON.parse(localStorage.getItem('downvoted-posts') || '[]'), post.id]));
       voteVersion.value++; await postStore.downvotePost(post.id);
       (await toastController.create({ message: 'Downvoted', duration: 1500, color: 'warning' })).present();
@@ -782,14 +784,26 @@ async function subscribeNewCommunities(communities: typeof communityStore.commun
 
 async function showPostOptions() {
   if (joinedCommunities.value.length > 0) {
-    const actionSheet = await actionSheetController.create({ header: 'Select Community', buttons: [...joinedCommunities.value.slice(0, 10).map(c => ({ text: c.displayName, handler: () => router.push(`/community/${c.id}/create-post`) })), { text: 'Cancel', role: 'cancel' }] });
+    const actionSheet = await actionSheetController.create({
+      header: 'Select Community',
+      buttons: [
+        ...joinedCommunities.value.slice(0, 10).map(c => ({ text: c.displayName, handler: () => router.push(`/community/${c.id}/create-post`) })),
+        { text: 'Cancel', role: 'cancel' }
+      ]
+    });
     await actionSheet.present();
   } else { activeTab.value = 'communities'; }
 }
 
 async function showPollOptions() {
   if (joinedCommunities.value.length > 0) {
-    const actionSheet = await actionSheetController.create({ header: 'Select Community', buttons: [...joinedCommunities.value.slice(0, 10).map(c => ({ text: c.displayName, handler: () => router.push(`/create-poll?communityId=${c.id}`) })), { text: 'Cancel', role: 'cancel' }] });
+    const actionSheet = await actionSheetController.create({
+      header: 'Select Community',
+      buttons: [
+        ...joinedCommunities.value.slice(0, 10).map(c => ({ text: c.displayName, handler: () => router.push(`/create-poll?communityId=${c.id}`) })),
+        { text: 'Cancel', role: 'cancel' }
+      ]
+    });
     await actionSheet.present();
   } else { activeTab.value = 'communities'; }
 }
@@ -797,8 +811,9 @@ async function showPollOptions() {
 // ── Watchers & lifecycle ──────────────────────────────────────────────────────
 
 watch(() => communityStore.communities, (communities) => {
-  subscribeNewCommunities(communities); // already filters seen ones via subscribedFromHome
-}, { deep: true, immediate: true });
+  if (!warmupComplete.value) return;
+  subscribeNewCommunities(communities);
+}, { deep: true });
 
 watch(activeTab, (tab) => {
   if (tab === 'home') {
@@ -808,18 +823,37 @@ watch(activeTab, (tab) => {
 });
 
 onMounted(async () => {
-  await chainStore.initialize();
-  await communityStore.loadCommunities();
-
-  const currentUser = await UserService.getCurrentUser();
-  currentUserId = currentUser.id;
-  await loadChatList();
-  await initBackgroundChat();
-
+  // ── STEP 1: Show feed instantly from Gun localStorage cache ───────────────
+  // warmupFromDB reads localStorage synchronously — no network, < 5ms
   await warmupFromDB();
-  await new Promise(r => setTimeout(r, 800));
-  // Subscribe to ALL communities, not just joined ones
-  await subscribeNewCommunities(communityStore.communities);
+  warmupComplete.value = true;
+
+  // ── STEP 2: Load communities and subscribe to Gun (needed for live updates)
+  // Run in parallel with everything else — don't block feed display
+  const feedReadyPromise = (async () => {
+    await communityStore.loadCommunities();
+    await subscribeNewCommunities(communityStore.communities);
+    // Retry after 3s for any new communities from MySQL background fetch
+    setTimeout(() => subscribeNewCommunities(communityStore.communities), 3000);
+  })();
+
+  // ── STEP 3: Heavy init — run completely in parallel, never blocks feed ────
+  const heavyInitPromise = (async () => {
+    // Get current user first (needed for chat)
+    const currentUser = await UserService.getCurrentUser();
+    currentUserId = currentUser.id;
+    // Chain + chat in parallel
+    await Promise.all([
+      chainStore.initialize(),
+      loadChatList(),
+      initBackgroundChat(),
+    ]);
+  })();
+
+  // Wait for feed to be ready (communities + Gun subscription)
+  // Heavy init runs in background — we don't await it
+  await feedReadyPromise;
+  heavyInitPromise.catch(err => console.warn('Heavy init error (non-critical):', err));
 });
 
 onUnmounted(() => {
@@ -827,7 +861,6 @@ onUnmounted(() => {
   gunListeners.forEach(off => off());
 });
 </script>
-
 <style scoped>
 
 @import url('https://fonts.googleapis.com/css2?family=Grand+Hotel&display=swap');

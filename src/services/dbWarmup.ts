@@ -1,225 +1,266 @@
 // src/services/dbWarmup.ts
-// Fetches all data from MySQL REST API and injects directly into Pinia stores.
-// Uses injectPost/injectPoll so seen-IDs are tracked and the "new posts" banner
-// never fires for content the user has already loaded before.
+// Strategy:
+//   1. INSTANT  — Gun localStorage cache (< 5ms)
+//   2. BACKGROUND — /api/polls endpoint for options (1.5s, non-blocking)
 
-import { isVersionEnabled } from '../utils/dataVersionSettings';
-import { GUN_NAMESPACE } from './gunService';
+import { isVersionEnabled } from '../utils/dataVersionSettings'
+import { GUN_NAMESPACE } from './gunService'
+import config from '../config'
 
-const GUN_RELAY_URL = import.meta.env.VITE_GUN_URL?.replace('/gun', '')
-  || 'https://interpoll2.onrender.com';
+function getGunRelayBase(): string {
+  return config.relay.gun.replace(/\/gun$/, '')
+}
 
-let warmupDone = false;
+const NUXT_API = 'https://interpoll.endless.sbs'
 
-export async function warmupFromDB(): Promise<void> {
-  if (warmupDone) return;
-  warmupDone = true;
+let warmupDone = false
+
+function readGunLocalCache() {
+  const posts: any[]       = []
+  const polls: any[]       = []
+  const communities: any[] = []
+  const pollOptions: Record<string, any[]> = {}
 
   try {
-    const { useCommunityStore } = await import('../stores/communityStore');
-    const { usePostStore }      = await import('../stores/postStore');
-    const { usePollStore }      = await import('../stores/pollStore');
+    const raw = localStorage.getItem('gun/')
+    if (!raw) return { posts, polls, communities, pollOptions }
+    const graph = JSON.parse(raw)
+    if (!graph || typeof graph !== 'object') return { posts, polls, communities, pollOptions }
 
-    const communityStore = useCommunityStore();
-    const postStore      = usePostStore();
-    const pollStore      = usePollStore();
-
-    // ── Communities ──────────────────────────────────────────────────────────
-    const commRes = await fetch(`${GUN_RELAY_URL}/db/search?prefix=v2/communities&limit=200`);
-    if (commRes.ok) {
-      const { results } = await commRes.json();
-      let count = 0;
-      for (const row of results || []) {
-        const d = row.data;
-        if (!d?.id || !d?.displayName) continue;
-        const exists = communityStore.communities.find((c: any) => c.id === d.id);
-        if (!exists) {
-          communityStore.communities.push({
-            id:          d.id,
-            name:        d.name        || d.id,
-            displayName: d.displayName,
-            description: d.description || '',
-            creatorId:   d.creatorId   || '',
-            memberCount: d.memberCount || 0,
-            postCount:   d.postCount   || 0,
-            createdAt:   d.createdAt   || Date.now(),
-            rules:       Array.isArray(d.rules) ? d.rules : [],
-          });
-          count++;
+    // First pass: collect poll options keyed by bare poll-xxx id
+    for (const [soul, node] of Object.entries(graph)) {
+      if (!node || typeof node !== 'object') continue
+      const d = node as any
+      if (d.text === undefined || !d.id) continue
+      const optMatch = soul.match(/\/(poll-[^/]+)\/options\/\d+$/)
+      if (optMatch) {
+        const pollId = optMatch[1]
+        if (!pollOptions[pollId]) pollOptions[pollId] = []
+        if (!pollOptions[pollId].find((o: any) => o.id === d.id)) {
+          pollOptions[pollId].push({ id: d.id, text: d.text, votes: d.votes || 0, voters: [] })
         }
       }
-      if (count > 0) console.log(`🔥 DB warmup: injected ${count} communities`);
     }
 
-    // ── Posts ────────────────────────────────────────────────────────────────
-    const postsRes = await fetch(`${GUN_RELAY_URL}/db/search?prefix=v2/posts&limit=500`);
-    if (postsRes.ok) {
-      const { results } = await postsRes.json();
-      let count = 0;
-      for (const row of results || []) {
-        const d = row.data;
-        if (!d?.id || !d?.title || !d?.communityId) continue;
-        // injectPost marks the ID as seen so it won't trigger the banner on refresh
-        postStore.injectPost({
-          id:             d.id,
-          communityId:    d.communityId,
-          authorId:       d.authorId     || '',
-          authorName:     d.authorName   || 'Anonymous',
-          title:          d.title,
-          content:        d.content      || '',
-          imageIPFS:      d.imageIPFS    || '',
-          imageThumbnail: d.imageThumbnail || '',
-          createdAt:      d.createdAt    || Date.now(),
-          upvotes:        d.upvotes      || 0,
-          downvotes:      d.downvotes    || 0,
-          score:          d.score        || 0,
-          commentCount:   d.commentCount || 0,
-          dataVersion:    GUN_NAMESPACE,
-        });
-        count++;
-      }
-      // Persist all seen IDs in one go
-      postStore.saveSeenNow();
-      if (count > 0) console.log(`🔥 DB warmup: injected ${count} v2 posts`);
-    }
+    // Second pass: communities, posts, polls
+    for (const [soul, node] of Object.entries(graph)) {
+      if (!node || typeof node !== 'object') continue
+      const d = node as any
 
-    // ── v1 Posts (legacy, root-level) ────────────────────────────────────
-    if (isVersionEnabled('v1')) {
-      try {
-        const v1PostsRes = await fetch(`${GUN_RELAY_URL}/db/search?prefix=posts&limit=500`);
-        if (v1PostsRes.ok) {
-          const { results } = await v1PostsRes.json();
-          let count = 0;
-          for (const row of results || []) {
-            const d = row.data;
-            if (!d?.id || !d?.title || !d?.communityId) continue;
-            postStore.injectPost({
-              id:             d.id,
-              communityId:    d.communityId,
-              authorId:       d.authorId     || '',
-              authorName:     d.authorName   || 'Anonymous',
-              title:          d.title,
-              content:        d.content      || '',
-              imageIPFS:      d.imageIPFS    || '',
-              imageThumbnail: d.imageThumbnail || '',
-              createdAt:      d.createdAt    || Date.now(),
-              upvotes:        d.upvotes      || 0,
-              downvotes:      d.downvotes    || 0,
-              score:          d.score        || 0,
-              commentCount:   d.commentCount || 0,
-              dataVersion:    'v1',
-            });
-            count++;
-          }
-          postStore.saveSeenNow();
-          if (count > 0) console.log(`🔥 DB warmup: injected ${count} v1 posts`);
-        }
-      } catch { /* v1 warmup non-critical */ }
-    }
-
-    // ── Polls ────────────────────────────────────────────────────────────────
-    const pollsRes = await fetch(`${GUN_RELAY_URL}/db/search?prefix=v2/polls&limit=300`);
-    if (pollsRes.ok) {
-      const { results } = await pollsRes.json();
-
-      const pollShells:  Record<string, any>    = {};
-      const pollOptions: Record<string, any[]>  = {};
-
-      for (const row of results || []) {
-        const d    = row.data;
-        const soul = row.soul as string;
-
-        if (d?.id && d?.question && d?.communityId) {
-          pollShells[d.id] = d;
-          continue;
-        }
-
-        const optMatch = soul.match(/\/(poll-[^/]+)\/options\/\d+$/);
-        if (optMatch && d?.id && d?.text !== undefined) {
-          const pollId = optMatch[1];
-          if (!pollOptions[pollId]) pollOptions[pollId] = [];
-          pollOptions[pollId].push({ id: d.id, text: d.text, votes: d.votes || 0, voters: [] });
-        }
+      if (d.displayName && d.id && /c-[^/]+$/.test(soul) && !soul.includes('/posts/') && !soul.includes('/polls/')) {
+        communities.push(d); continue
       }
 
-      let count = 0;
-      for (const [pollId, shell] of Object.entries(pollShells)) {
-        const options    = pollOptions[pollId] || [];
-        const totalVotes = options.reduce((s: number, o: any) => s + (o.votes || 0), 0);
-
-        // injectPoll marks the ID as seen
-        pollStore.injectPoll({
-          id:                      shell.id,
-          communityId:             shell.communityId,
-          authorId:                shell.authorId    || '',
-          authorName:              shell.authorName  || 'Anonymous',
-          question:                shell.question,
-          description:             shell.description || '',
-          options,
-          createdAt:               shell.createdAt   || Date.now(),
-          expiresAt:               shell.expiresAt   || Date.now() + 86400000,
-          allowMultipleChoices:    !!shell.allowMultipleChoices,
-          showResultsBeforeVoting: !!shell.showResultsBeforeVoting,
-          requireLogin:            !!shell.requireLogin,
-          isPrivate:               !!shell.isPrivate,
-          totalVotes,
-          isExpired:               Date.now() > (shell.expiresAt || 0),
-        });
-        count++;
+      if (d.title && d.communityId && d.id && soul.includes('post-') && !soul.includes('/options')) {
+        const isV1 = /^(communities\/[^/]+\/posts\/|posts\/)/.test(soul) && !/^v2\//.test(soul)
+        const isV2 = /^v2\//.test(soul)
+        if (isV1 || isV2) posts.push({ ...d, _isV1: isV1 && !isV2 })
+        continue
       }
-      pollStore.saveSeenNow();
-      if (count > 0) console.log(`🔥 DB warmup: injected ${count} polls`);
+
+      if (d.question && d.communityId && d.id && soul.includes('poll-') && !soul.includes('/options')) {
+        const isV1 = /^(communities\/[^/]+\/polls\/|polls\/)/.test(soul) && !/^v2\//.test(soul)
+        const isV2 = /^v2\//.test(soul)
+        if (isV1 || isV2) polls.push({ ...d, _isV1: isV1 && !isV2 })
+      }
+    }
+  } catch (err) {
+    console.warn('Gun cache read error:', err)
+  }
+
+  return { posts, polls, communities, pollOptions }
+}
+
+export async function warmupFromDB(): Promise<void> {
+  if (warmupDone) return
+  warmupDone = true
+
+  try {
+    const { useCommunityStore } = await import('../stores/communityStore')
+    const { usePostStore }      = await import('../stores/postStore')
+    const { usePollStore }      = await import('../stores/pollStore')
+
+    const communityStore = useCommunityStore()
+    const postStore      = usePostStore()
+    const pollStore      = usePollStore()
+
+    // ── STEP 1: Gun localStorage cache (instant, no network) ─────────────────
+    const cache = readGunLocalCache()
+    let cPost = 0, cPoll = 0, cComm = 0
+
+    for (const d of cache.communities) {
+      if (!d?.id || !d?.displayName) continue
+      if (!communityStore.communities.find((c: any) => c.id === d.id)) {
+        communityStore.communities.push({
+          id: d.id, name: d.name || d.id, displayName: d.displayName,
+          description: d.description || '', creatorId: d.creatorId || '',
+          memberCount: d.memberCount || 0, postCount: d.postCount || 0,
+          createdAt: d.createdAt || Date.now(),
+          rules: Array.isArray(d.rules) ? d.rules : [],
+        })
+        cComm++
+      }
     }
 
-    // Warm Gun graph in background for live updates (fire and forget)
-    warmupGunGraph();
+    for (const d of cache.posts) {
+      if (!d?.id || !d?.title || !d?.communityId) continue
+      if (d._isV1 && !isVersionEnabled('v1')) continue
+      postStore.injectPost({
+        id: d.id, communityId: d.communityId,
+        authorId: d.authorId || '', authorName: d.authorName || 'Anonymous',
+        title: d.title, content: d.content || '',
+        imageIPFS: d.imageIPFS || '', imageThumbnail: d.imageThumbnail || '',
+        createdAt: d.createdAt || Date.now(),
+        upvotes: d.upvotes || 0, downvotes: d.downvotes || 0,
+        score: d.score || 0, commentCount: d.commentCount || 0,
+        dataVersion: d._isV1 ? 'v1' : GUN_NAMESPACE,
+      })
+      cPost++
+    }
+    if (cPost > 0) postStore.saveSeenNow()
+
+    // Inject poll shells from cache (options patched in background)
+    for (const d of cache.polls) {
+      if (!d?.id || !d?.question || !d?.communityId) continue
+      if (d._isV1 && !isVersionEnabled('v1')) continue
+      const options    = cache.pollOptions[d.id] || []
+      const totalVotes = options.reduce((s: number, o: any) => s + (o.votes || 0), 0)
+      pollStore.injectPoll({
+        id: d.id, communityId: d.communityId,
+        authorId: d.authorId || '', authorName: d.authorName || 'Anonymous',
+        question: d.question, description: d.description || '',
+        options, createdAt: d.createdAt || Date.now(),
+        expiresAt: d.expiresAt || Date.now() + 86400000,
+        allowMultipleChoices: !!d.allowMultipleChoices,
+        showResultsBeforeVoting: !!d.showResultsBeforeVoting,
+        requireLogin: !!d.requireLogin, isPrivate: !!d.isPrivate,
+        totalVotes, isExpired: Date.now() > (d.expiresAt || 0),
+      })
+      cPoll++
+    }
+    if (cPoll > 0) pollStore.saveSeenNow()
+
+    console.log(`⚡ Cache: ${cComm} communities, ${cPost} posts, ${cPoll} polls`)
+
+    // ── STEP 2: Background fetches — all non-blocking ─────────────────────────
+    Promise.all([
+      fetchPollsWithOptions(pollStore),
+      fetchPostsFromRelay(communityStore, postStore),
+      fetchCommunitiesFromRelay(communityStore),
+    ]).catch(() => {})
 
   } catch (err) {
-    console.warn('⚠️  DB warmup failed (non-critical):', err);
+    console.warn('⚠️ Warmup failed:', err)
   }
 }
 
-async function warmupGunGraph(): Promise<void> {
+// ── Fetch all polls with options in one fast request ──────────────────────────
+async function fetchPollsWithOptions(pollStore: any) {
   try {
-    const { GunService } = await import('./gunService');
-    const gun = GunService.getGun();
+    const res = await fetch(`${NUXT_API}/api/polls?limit=100`)
+    if (!res.ok) return
+    const { polls } = await res.json()
+    let n = 0
+    for (const p of polls || []) {
+      if (!p?.id || !p?.question) continue
+      const existing = pollStore.pollsMap.get(p.id)
+      // Update if missing or has no options
+      if (!existing || existing.options.length === 0) {
+        pollStore.injectPoll({
+          id: p.id, communityId: p.communityId,
+          authorId: '', authorName: p.authorName || 'Anonymous',
+          question: p.question, description: p.description || '',
+          options: p.options || [],
+          createdAt: p.createdAt || Date.now(),
+          expiresAt: p.expiresAt || Date.now() + 86400000,
+          allowMultipleChoices: !!p.allowMultipleChoices,
+          showResultsBeforeVoting: !!p.showResultsBeforeVoting,
+          requireLogin: false, isPrivate: false,
+          totalVotes: p.totalVotes || 0,
+          isExpired: !!p.isExpired,
+        })
+        n++
+      }
+    }
+    if (n > 0) { pollStore.saveSeenNow(); console.log(`🔥 API: patched options for ${n} polls`) }
+  } catch (err) {
+    console.warn('Poll options fetch failed:', err)
+  }
+}
 
-    const [postsRes, pollsRes, commRes] = await Promise.all([
-      fetch(`${GUN_RELAY_URL}/db/search?prefix=v2/posts&limit=500`),
-      fetch(`${GUN_RELAY_URL}/db/search?prefix=v2/polls&limit=300`),
-      fetch(`${GUN_RELAY_URL}/db/search?prefix=v2/communities&limit=200`),
-    ]);
+// ── Fetch posts from gun relay ────────────────────────────────────────────────
+async function fetchPostsFromRelay(communityStore: any, postStore: any) {
+  const BASE = getGunRelayBase()
+  try {
+    const res = await fetch(`${BASE}/db/search?prefix=v2/posts&limit=500`)
+    if (!res.ok) return
+    const { results } = await res.json()
+    let n = 0
+    for (const row of results || []) {
+      const d = row.data
+      if (!d?.id || !d?.title || !d?.communityId || postStore.postsMap.has(d.id)) continue
+      postStore.injectPost({
+        id: d.id, communityId: d.communityId,
+        authorId: d.authorId || '', authorName: d.authorName || 'Anonymous',
+        title: d.title, content: d.content || '',
+        imageIPFS: d.imageIPFS || '', imageThumbnail: d.imageThumbnail || '',
+        createdAt: d.createdAt || Date.now(),
+        upvotes: d.upvotes || 0, downvotes: d.downvotes || 0,
+        score: d.score || 0, commentCount: d.commentCount || 0,
+        dataVersion: GUN_NAMESPACE,
+      })
+      n++
+    }
+    if (n > 0) { postStore.saveSeenNow(); console.log(`🔥 Relay: +${n} posts`) }
+  } catch {}
 
-    if (commRes.ok) {
-      const { results } = await commRes.json();
+  // v1 posts
+  if (isVersionEnabled('v1')) {
+    try {
+      const res = await fetch(`${BASE}/db/search?prefix=posts&limit=500`)
+      if (!res.ok) return
+      const { results } = await res.json()
       for (const row of results || []) {
-        const d = row.data;
-        if (!d?.id || !d?.displayName) continue;
-        gun.get('communities').get(d.id).put(d);
-        gun.get('communities').put({ [d.id]: { '#': `v2/communities/${d.id}` } });
+        const d = row.data
+        if (!d?.id || !d?.title || !d?.communityId || postStore.postsMap.has(d.id)) continue
+        postStore.injectPost({
+          id: d.id, communityId: d.communityId,
+          authorId: d.authorId || '', authorName: d.authorName || 'Anonymous',
+          title: d.title, content: d.content || '',
+          imageIPFS: d.imageIPFS || '', imageThumbnail: d.imageThumbnail || '',
+          createdAt: d.createdAt || Date.now(),
+          upvotes: d.upvotes || 0, downvotes: d.downvotes || 0,
+          score: d.score || 0, commentCount: d.commentCount || 0,
+          dataVersion: 'v1',
+        })
+      }
+      postStore.saveSeenNow()
+    } catch {}
+  }
+}
+
+// ── Fetch communities from gun relay ──────────────────────────────────────────
+async function fetchCommunitiesFromRelay(communityStore: any) {
+  const BASE = getGunRelayBase()
+  try {
+    const res = await fetch(`${BASE}/db/search?prefix=v2/communities&limit=200`)
+    if (!res.ok) return
+    const { results } = await res.json()
+    let n = 0
+    for (const row of results || []) {
+      const d = row.data
+      if (!d?.id || !d?.displayName) continue
+      if (!communityStore.communities.find((c: any) => c.id === d.id)) {
+        communityStore.communities.push({
+          id: d.id, name: d.name || d.id, displayName: d.displayName,
+          description: d.description || '', creatorId: d.creatorId || '',
+          memberCount: d.memberCount || 0, postCount: d.postCount || 0,
+          createdAt: d.createdAt || Date.now(),
+          rules: Array.isArray(d.rules) ? d.rules : [],
+        })
+        n++
       }
     }
-    if (postsRes.ok) {
-      const { results } = await postsRes.json();
-      for (const row of results || []) {
-        const d = row.data;
-        if (!d?.id || !d?.title || !d?.communityId) continue;
-        gun.get('posts').get(d.id).put(d);
-        gun.get('communities').get(d.communityId).get('posts').get(d.id).put(d);
-        gun.get('communities').get(d.communityId).get('posts')
-          .put({ [d.id]: { '#': `v2/communities/${d.communityId}/posts/${d.id}` } });
-      }
-    }
-    if (pollsRes.ok) {
-      const { results } = await pollsRes.json();
-      for (const row of results || []) {
-        const d = row.data;
-        if (!d?.id || !d?.question || !d?.communityId) continue;
-        gun.get('polls').get(d.id).put(d);
-        gun.get('communities').get(d.communityId).get('polls').get(d.id).put(d);
-        gun.get('communities').get(d.communityId).get('polls')
-          .put({ [d.id]: { '#': `v2/communities/${d.communityId}/polls/${d.id}` } });
-      }
-    }
-  } catch { /* non-critical */ }
+    if (n > 0) console.log(`🔥 Relay: +${n} communities`)
+  } catch {}
 }

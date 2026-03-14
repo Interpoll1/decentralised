@@ -11,8 +11,13 @@ import { generatePseudonym } from '../utils/pseudonym';
 import { enabledVersions, type DataVersion } from '../utils/dataVersionSettings';
 import { GUN_NAMESPACE } from '../services/gunService';
 
-const PAGE_SIZE     = 10;
+const PAGE_SIZE      = 10;
 const SEEN_POSTS_KEY = 'seen-post-ids';
+
+// Timestamp when this app session started.
+// Gun re-delivers ALL posts on every reconnect — we only treat a post
+// as "new" if its createdAt is after this timestamp.
+const APP_START_TIME = Date.now();
 
 function loadSeenIds(): Set<string> {
   try {
@@ -23,10 +28,9 @@ function loadSeenIds(): Set<string> {
 
 function saveSeenIds(ids: Set<string>) {
   try {
-    // Cap at 500 to avoid unbounded localStorage growth
     const arr = Array.from(ids).slice(-500);
     localStorage.setItem(SEEN_POSTS_KEY, JSON.stringify(arr));
-  } catch { /* ignore */ }
+  } catch {}
 }
 
 export const usePostStore = defineStore('post', () => {
@@ -36,13 +40,13 @@ export const usePostStore = defineStore('post', () => {
   const currentFeed        = ref<'all' | 'community'>('all');
   const currentCommunityId = ref<string | null>(null);
   const visibleCount       = ref(PAGE_SIZE);
+  const initialLoadDone    = ref(false);
 
+  // No more banner — kept for backward compat
   const pendingNewPosts = ref<Post[]>([]);
-  const initialLoadDone = ref(false);
+  const newPostCount    = computed(() => 0);
 
-  // Persisted across refreshes so we never re-show the banner for old posts
   const seenPostIds = loadSeenIds();
-
   const subscribedCommunities = new Set<string>();
   const unsubscribers = new Map<string, () => void>();
 
@@ -50,7 +54,6 @@ export const usePostStore = defineStore('post', () => {
 
   const posts = computed(() => Array.from(postsMap.value.values()));
 
-  /** Only posts whose dataVersion is in the user's enabled list */
   function matchesVersion(p: Post): boolean {
     const v = p.dataVersion || GUN_NAMESPACE;
     return enabledVersions.value.includes(v as DataVersion);
@@ -69,7 +72,6 @@ export const usePostStore = defineStore('post', () => {
 
   const visiblePosts = computed(() => sortedPosts.value.slice(0, visibleCount.value));
   const hasMorePosts = computed(() => visibleCount.value < sortedPosts.value.length);
-  const newPostCount = computed(() => pendingNewPosts.value.length);
 
   // ─── Loading ───────────────────────────────────────────────────────────────
 
@@ -80,17 +82,29 @@ export const usePostStore = defineStore('post', () => {
       const unsub = PostService.subscribeToPostsInCommunity(
         communityId,
         (post) => {
-          // Always update existing posts in place (vote counts, edits)
+          // Always update existing posts in-place (vote counts, edits)
           if (postsMap.value.has(post.id)) {
             postsMap.value.set(post.id, post);
             return;
           }
 
-          if (initialLoadDone.value && !seenPostIds.has(post.id)) {
-            // Truly new post user hasn't seen before → banner
-            pendingNewPosts.value = [post, ...pendingNewPosts.value];
+          // Already seen in a previous session → add silently, no banner
+          if (seenPostIds.has(post.id)) {
+            postsMap.value.set(post.id, post);
+            return;
+          }
+
+          // Only genuinely new if created AFTER this session started.
+          // This prevents Gun re-delivering old posts from triggering banner.
+          const isGenuinelyNew = post.createdAt > APP_START_TIME;
+
+          if (initialLoadDone.value && isGenuinelyNew) {
+            // Auto-prepend immediately — no banner, no click required
+            postsMap.value.set(post.id, post);
+            seenPostIds.add(post.id);
+            saveSeenIds(seenPostIds);
           } else {
-            // Already seen (in localStorage) or initial load → straight into map
+            // Initial load or stale Gun re-delivery → add silently
             postsMap.value.set(post.id, post);
             seenPostIds.add(post.id);
           }
@@ -98,45 +112,32 @@ export const usePostStore = defineStore('post', () => {
         () => {
           subscribedCommunities.add(communityId);
           initialLoadDone.value = true;
-          // Mark everything currently in map as seen and persist
           for (const id of postsMap.value.keys()) seenPostIds.add(id);
           saveSeenIds(seenPostIds);
           resolve();
         },
       );
-
       unsubscribers.set(communityId, unsub);
     });
   }
 
-  // Called when user taps the "X new posts" banner
+  // No-op — kept so existing components that call flushNewPosts() don't break
   function flushNewPosts() {
-    for (const post of pendingNewPosts.value) {
-      postsMap.value.set(post.id, post);
-      seenPostIds.add(post.id);
-    }
-    saveSeenIds(seenPostIds);
     pendingNewPosts.value = [];
-    visibleCount.value = Math.max(visibleCount.value, PAGE_SIZE);
   }
 
-  // Called by dbWarmup — direct injection, always treated as already seen
   function injectPost(post: Post) {
     if (!postsMap.value.has(post.id)) {
       postsMap.value.set(post.id, post);
     }
     seenPostIds.add(post.id);
-    // Don't saveSeenIds here — warmup calls this in a loop,
-    // caller should saveSeenIds once after all injections
   }
 
   function saveSeenNow() {
     saveSeenIds(seenPostIds);
   }
 
-  function loadMorePosts() {
-    visibleCount.value += PAGE_SIZE;
-  }
+  function loadMorePosts() { visibleCount.value += PAGE_SIZE; }
 
   function resetVisibleCount() {
     visibleCount.value    = PAGE_SIZE;

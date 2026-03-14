@@ -12,6 +12,9 @@ import { generatePseudonym } from '../utils/pseudonym';
 const PAGE_SIZE      = 10;
 const SEEN_POLLS_KEY = 'seen-poll-ids';
 
+// Same as postStore — filter Gun re-deliveries by session start time
+const APP_START_TIME = Date.now();
+
 function loadSeenIds(): Set<string> {
   try {
     const stored = localStorage.getItem(SEEN_POLLS_KEY);
@@ -23,21 +26,21 @@ function saveSeenIds(ids: Set<string>) {
   try {
     const arr = Array.from(ids).slice(-500);
     localStorage.setItem(SEEN_POLLS_KEY, JSON.stringify(arr));
-  } catch { /* ignore */ }
+  } catch {}
 }
 
 export const usePollStore = defineStore('poll', () => {
-  const pollsMap    = ref<Map<string, Poll>>(new Map());
-  const currentPoll = ref<Poll | null>(null);
-  const isLoading   = ref(false);
+  const pollsMap     = ref<Map<string, Poll>>(new Map());
+  const currentPoll  = ref<Poll | null>(null);
+  const isLoading    = ref(false);
   const visibleCount = ref(PAGE_SIZE);
-
-  const pendingNewPolls = ref<Poll[]>([]);
   const initialLoadDone = ref(false);
 
-  // Persisted across refreshes
-  const seenPollIds = loadSeenIds();
+  // No more banner — kept for backward compat
+  const pendingNewPolls = ref<Poll[]>([]);
+  const newPollCount    = computed(() => 0);
 
+  const seenPollIds = loadSeenIds();
   const subscribedCommunities = new Set<string>();
   const unsubscribers = new Map<string, () => void>();
 
@@ -52,7 +55,6 @@ export const usePollStore = defineStore('poll', () => {
   const activePolls  = computed(() => sortedPolls.value.filter(p => !p.isExpired));
   const visiblePolls = computed(() => sortedPolls.value.slice(0, visibleCount.value));
   const hasMorePolls = computed(() => visibleCount.value < sortedPolls.value.length);
-  const newPollCount = computed(() => pendingNewPolls.value.length);
 
   // ─── Loading ───────────────────────────────────────────────────────────────
 
@@ -63,15 +65,25 @@ export const usePollStore = defineStore('poll', () => {
       const unsub = PollService.subscribeToPollsInCommunity(
         communityId,
 
-        // Phase 1: shell poll
+        // Phase 1: shell poll arrives
         (poll) => {
           if (pollsMap.value.has(poll.id)) {
             pollsMap.value.set(poll.id, poll);
             return;
           }
 
-          if (initialLoadDone.value && !seenPollIds.has(poll.id)) {
-            pendingNewPolls.value = [poll, ...pendingNewPolls.value];
+          if (seenPollIds.has(poll.id)) {
+            pollsMap.value.set(poll.id, poll);
+            return;
+          }
+
+          const isGenuinelyNew = poll.createdAt > APP_START_TIME;
+
+          if (initialLoadDone.value && isGenuinelyNew) {
+            // Auto-add immediately — no banner
+            pollsMap.value.set(poll.id, poll);
+            seenPollIds.add(poll.id);
+            saveSeenIds(seenPollIds);
           } else {
             pollsMap.value.set(poll.id, poll);
             seenPollIds.add(poll.id);
@@ -89,12 +101,8 @@ export const usePollStore = defineStore('poll', () => {
 
         // Phase 2: options patched in
         (updatedPoll) => {
-          const inPending = pendingNewPolls.value.findIndex(p => p.id === updatedPoll.id);
-          if (inPending !== -1) {
-            pendingNewPolls.value[inPending] = updatedPoll;
-          } else {
-            pollsMap.value.set(updatedPoll.id, updatedPoll);
-          }
+          // Always update — options loading in is never "new content"
+          pollsMap.value.set(updatedPoll.id, updatedPoll);
           if (currentPoll.value?.id === updatedPoll.id) {
             currentPoll.value = updatedPoll;
           }
@@ -105,32 +113,25 @@ export const usePollStore = defineStore('poll', () => {
     });
   }
 
-  // Called when user taps the "X new polls" banner
+  // No-op — kept so existing components don't break
   function flushNewPolls() {
-    for (const poll of pendingNewPolls.value) {
-      pollsMap.value.set(poll.id, poll);
-      seenPollIds.add(poll.id);
-    }
-    saveSeenIds(seenPollIds);
     pendingNewPolls.value = [];
-    visibleCount.value = Math.max(visibleCount.value, PAGE_SIZE);
   }
 
-  // Called by dbWarmup — direct injection, always treated as seen
   function injectPoll(poll: Poll) {
-    if (!pollsMap.value.has(poll.id)) {
-      pollsMap.value.set(poll.id, poll);
-    }
-    seenPollIds.add(poll.id);
+  const existing = pollsMap.value.get(poll.id)
+  // Always update if incoming poll has options and existing doesn't
+  if (!existing || (poll.options.length > 0 && existing.options.length === 0)) {
+    pollsMap.value.set(poll.id, poll)
   }
+  seenPollIds.add(poll.id)
+}
 
   function saveSeenNow() {
     saveSeenIds(seenPollIds);
   }
 
-  function loadMorePolls() {
-    visibleCount.value += PAGE_SIZE;
-  }
+  function loadMorePolls() { visibleCount.value += PAGE_SIZE; }
 
   function resetVisibleCount() {
     visibleCount.value    = PAGE_SIZE;

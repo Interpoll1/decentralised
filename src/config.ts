@@ -35,12 +35,18 @@ function loadOverrides(): RelayOverrides {
 }
 
 // Defaults always point to Render URLs
-const defaults = {
-  websocket: 'wss://interpoll.onrender.com',
-  gun: 'https://interpoll2.onrender.com/gun',
-  api: 'https://interpoll.onrender.com',
-};
+//const defaults = {
+//  websocket: 'wss://interpoll.onrender.com',
+ // gun: 'https://interpoll2.onrender.com/gun',
+ // api: 'https://interpoll.onrender.com',
+//};
 
+// Defaults point to VPS
+const defaults = {
+  websocket: 'wss://interpoll.endless.sbs',
+  gun: 'https://interpoll2.endless.sbs/gun',
+  api: 'https://interpoll.endless.sbs',
+};
 function loadEncryptionConfig(): EncryptionConfig {
   try {
     const raw = localStorage.getItem(ENCRYPTION_STORAGE_KEY);
