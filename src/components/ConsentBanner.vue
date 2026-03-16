@@ -1,8 +1,8 @@
 <template>
-  <div v-if="!accepted" class="consent-overlay">
+  <div v-if="!accepted" class="consent-overlay" role="dialog" aria-modal="true" aria-labelledby="consent-title">
     <div class="consent-banner">
-      <div class="consent-icon">⚠️</div>
-      <h2 class="consent-title">Before you continue</h2>
+      <div class="consent-icon" aria-hidden="true">⚠️</div>
+      <h2 id="consent-title" class="consent-title">Before you continue</h2>
       <div class="consent-body">
         <p>
           <strong>InterPoll is fully decentralised.</strong> All posts, polls,
@@ -20,7 +20,7 @@
           accept that data will be stored locally on your device.
         </p>
       </div>
-      <button class="consent-accept" @click="accept">
+      <button ref="acceptBtn" class="consent-accept" @click="accept">
         I understand — continue
       </button>
     </div>
@@ -28,17 +28,37 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, nextTick, watch } from 'vue';
 
 const STORAGE_KEY = 'interpoll_consent_accepted';
-const accepted = ref(true); // start hidden to avoid flash
 
-onMounted(() => {
-  accepted.value = localStorage.getItem(STORAGE_KEY) === '1';
-});
+function readConsent(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeConsent(): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, '1');
+  } catch {
+    // user will see the banner again next visit
+  }
+}
+
+const accepted = ref(readConsent());
+const acceptBtn = ref<HTMLButtonElement | null>(null);
+
+watch(accepted, (val) => {
+  if (!val) {
+    nextTick(() => acceptBtn.value?.focus());
+  }
+}, { immediate: true });
 
 function accept() {
-  localStorage.setItem(STORAGE_KEY, '1');
+  writeConsent();
   accepted.value = true;
 }
 </script>
