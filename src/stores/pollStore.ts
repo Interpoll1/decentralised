@@ -45,6 +45,19 @@ export const usePollStore = defineStore('poll', () => {
   // Per-community initial load tracking to avoid cross-community misclassification
   const initialLoadDoneByCommId = new Map<string, boolean>();
 
+  /** Attempt to decrypt an encrypted poll and update the store */
+  function tryDecryptPoll(poll: Poll) {
+    if (!poll.isEncrypted || !poll.encryptedContent) return;
+    PollService.decryptPoll(poll).then(decrypted => {
+      if (decrypted !== poll && pollsMap.value.get(poll.id) === poll) {
+        pollsMap.value.set(poll.id, decrypted);
+        if (currentPoll.value?.id === poll.id) {
+          currentPoll.value = decrypted;
+        }
+      }
+    }).catch(() => { /* no key or decryption failed — keep encrypted version */ });
+  }
+
   // ─── Computed ──────────────────────────────────────────────────────────────
 
   const polls = computed(() => Array.from(pollsMap.value.values()));
@@ -80,6 +93,7 @@ export const usePollStore = defineStore('poll', () => {
 
           if (pollsMap.value.has(poll.id)) {
             pollsMap.value.set(poll.id, poll);
+            tryDecryptPoll(poll);
             if (currentPoll.value?.id === poll.id) {
               currentPoll.value = poll;
             }
@@ -88,18 +102,21 @@ export const usePollStore = defineStore('poll', () => {
 
           if (seenPollIds.has(poll.id)) {
             pollsMap.value.set(poll.id, poll);
+            tryDecryptPoll(poll);
             return;
           }
 
           const isGenuinelyNew = poll.createdAt > APP_START_TIME;
 
-          if (initialLoadDone.value && isGenuinelyNew) {
+          if (initialLoadDoneByCommId.get(communityId) && isGenuinelyNew) {
             // Auto-add immediately — no banner
             pollsMap.value.set(poll.id, poll);
+            tryDecryptPoll(poll);
             seenPollIds.add(poll.id);
             saveSeenIds(seenPollIds);
           } else {
             pollsMap.value.set(poll.id, poll);
+            tryDecryptPoll(poll);
             seenPollIds.add(poll.id);
           }
           if (currentPoll.value?.id === poll.id) {
@@ -120,6 +137,7 @@ export const usePollStore = defineStore('poll', () => {
         (updatedPoll) => {
           // Always update — options loading in is never "new content"
           pollsMap.value.set(updatedPoll.id, updatedPoll);
+          tryDecryptPoll(updatedPoll);
           if (currentPoll.value?.id === updatedPoll.id) {
             currentPoll.value = updatedPoll;
           }
@@ -140,6 +158,7 @@ export const usePollStore = defineStore('poll', () => {
   // Always update if incoming poll has options and existing doesn't
   if (!existing || (poll.options.length > 0 && existing.options.length === 0)) {
     pollsMap.value.set(poll.id, poll)
+    tryDecryptPoll(poll)
   }
   seenPollIds.add(poll.id)
 }
@@ -241,7 +260,10 @@ export const usePollStore = defineStore('poll', () => {
       }
       const poll = await PollService.loadPoll(pollId);
       currentPoll.value = poll;
-      if (poll) pollsMap.value.set(poll.id, poll);
+      if (poll) {
+        pollsMap.value.set(poll.id, poll);
+        tryDecryptPoll(poll);
+      }
     } finally {
       isLoading.value = false;
     }

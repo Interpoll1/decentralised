@@ -52,6 +52,19 @@ export const usePostStore = defineStore('post', () => {
   // Per-community initial load tracking: ensures no cross-community misclassification
   const communityInitialLoadDone = new Map<string, boolean>();
 
+  /** Attempt to decrypt an encrypted post and update the store */
+  function tryDecryptPost(post: Post) {
+    if (!post.isEncrypted || !post.encryptedContent) return;
+    PostService.decryptPost(post).then(decrypted => {
+      if (decrypted !== post && postsMap.value.get(post.id) === post) {
+        postsMap.value.set(post.id, decrypted);
+        if (currentPost.value?.id === post.id) {
+          currentPost.value = decrypted;
+        }
+      }
+    }).catch(() => { /* no key or decryption failed — keep encrypted version */ });
+  }
+
   // ─── Computed ──────────────────────────────────────────────────────────────
 
   const posts = computed(() => Array.from(postsMap.value.values()));
@@ -90,12 +103,14 @@ export const usePostStore = defineStore('post', () => {
           // Always update existing posts in-place (vote counts, edits)
           if (postsMap.value.has(post.id)) {
             postsMap.value.set(post.id, post);
+            tryDecryptPost(post);
             return;
           }
 
           // Already seen in a previous session → add silently, no banner
           if (seenPostIds.has(post.id)) {
             postsMap.value.set(post.id, post);
+            tryDecryptPost(post);
             return;
           }
 
@@ -106,11 +121,13 @@ export const usePostStore = defineStore('post', () => {
           if (initialLoadDone.value && isGenuinelyNew) {
             // Auto-prepend immediately — no banner, no click required
             postsMap.value.set(post.id, post);
+            tryDecryptPost(post);
             seenPostIds.add(post.id);
             saveSeenIds(seenPostIds);
           } else {
             // Initial load or stale Gun re-delivery → add silently
             postsMap.value.set(post.id, post);
+            tryDecryptPost(post);
             seenPostIds.add(post.id);
           }
         },
@@ -134,6 +151,7 @@ export const usePostStore = defineStore('post', () => {
   function injectPost(post: Post) {
     if (!postsMap.value.has(post.id)) {
       postsMap.value.set(post.id, post);
+      tryDecryptPost(post);
     }
     seenPostIds.add(post.id);
   }
@@ -200,7 +218,10 @@ export const usePostStore = defineStore('post', () => {
       if (local) { currentPost.value = local; return; }
       const fetched = await PostService.getPost(postId);
       currentPost.value = fetched;
-      if (fetched) postsMap.value.set(fetched.id, fetched);
+      if (fetched) {
+        postsMap.value.set(fetched.id, fetched);
+        tryDecryptPost(fetched);
+      }
     } catch (error) { console.error('Error selecting post:', error); }
   }
 
