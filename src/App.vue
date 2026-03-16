@@ -1,6 +1,7 @@
 <template>
   <ion-app>
     <ion-router-outlet />
+    <ConsentBanner />
   </ion-app>
 </template>
 
@@ -10,6 +11,7 @@ import { onMounted, onUnmounted } from 'vue';
 import { useChainStore } from './stores/chainStore';
 import { WebSocketService } from './services/websocketService';
 import { GunService } from './services/gunService';
+import ConsentBanner from './components/ConsentBanner.vue';
 
 const chainStore = useChainStore();
 

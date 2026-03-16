@@ -94,15 +94,20 @@ export class WebSocketService {
         this.sendToRelay('register', { peerId: this.peerId });
         this.sendToRelay('join-room', { roomId: 'default' });
 
-        // Snapshot length to avoid infinite loop if broadcast re-queues on PoW failure
-        const pending = this.messageQueue.length;
-        for (let qi = 0; qi < pending; qi++) {
-          const msg = this.messageQueue.shift();
+        // Drain queued messages: send non-PoW immediately, then PoW messages
+        const pending = this.messageQueue.splice(0, this.messageQueue.length);
+        const powMessages: any[] = [];
+        for (const msg of pending) {
           if (msg.type === 'chatroom-message') {
             this.broadcastChatRoomMessage(msg.roomId, msg.data);
+          } else if (POW_CONTENT_TYPES.has(msg.type)) {
+            powMessages.push(msg);
           } else {
-            await this.broadcast(msg.type, msg.data);
+            this.broadcast(msg.type, msg.data);
           }
+        }
+        for (const msg of powMessages) {
+          await this.broadcast(msg.type, msg.data);
         }
 
         this.broadcastAddresses();
@@ -341,7 +346,13 @@ export class WebSocketService {
           message.pow = proof;
         }
       } catch (e) {
-        console.warn('[PoW] Failed to get proof, queuing message for retry:', e);
+        const retries = (message._retries ?? 0) + 1;
+        if (retries >= 3) {
+          console.error('[PoW] Dropping message after 3 failed attempts:', type, e);
+          return;
+        }
+        message._retries = retries;
+        console.warn(`[PoW] Failed to get proof (attempt ${retries}/3), queuing message for retry:`, e);
         this.messageQueue.push(message);
         return;
       }

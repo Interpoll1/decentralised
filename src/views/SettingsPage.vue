@@ -13,6 +13,9 @@
           <ion-segment-button value="general">
             <ion-label>General</ion-label>
           </ion-segment-button>
+          <ion-segment-button value="feed">
+            <ion-label>Feed</ion-label>
+          </ion-segment-button>
           <ion-segment-button value="moderation">
             <ion-label>Moderation</ion-label>
           </ion-segment-button>
@@ -129,6 +132,210 @@
               Never share your private key. Anyone with it can sign events as you.
             </p>
           </div>
+        </div>
+      </div>
+
+      <!-- FEED TAB -->
+      <div v-if="activeTab === 'feed'">
+        <div class="section">
+          <h3 class="section-title">Feed Mode</h3>
+          <p class="section-subtitle">Switch between chronological and personalized ranking</p>
+          <ion-segment :value="feedPreferences.mode" @ionChange="onFeedModeChange">
+            <ion-segment-button value="for-you">
+              <ion-label>For You</ion-label>
+            </ion-segment-button>
+            <ion-segment-button value="latest">
+              <ion-label>Latest</ion-label>
+            </ion-segment-button>
+          </ion-segment>
+          <p class="helper-text">
+            For You uses keyword and community preferences plus engagement/freshness scoring. Latest keeps chronological order.
+          </p>
+          <div class="separator"></div>
+        </div>
+
+        <div class="section">
+          <h3 class="section-title">Include Keywords</h3>
+          <p class="section-subtitle">Boost content containing these words or phrases</p>
+          <div class="chip-list" v-if="feedPreferences.includeKeywords.length">
+            <ion-chip
+              v-for="keyword in feedPreferences.includeKeywords"
+              :key="`include-${keyword}`"
+              color="success"
+              outline
+              @click="removeFeedIncludeKeyword(keyword)"
+            >
+              {{ keyword }}
+              <ion-icon :icon="closeCircleOutline"></ion-icon>
+            </ion-chip>
+          </div>
+          <div class="inline-add">
+            <ion-input
+              v-model="newFeedIncludeKeyword"
+              placeholder="Add include keyword…"
+              @keyup.enter="addFeedIncludeKeyword"
+              class="inline-input"
+            ></ion-input>
+            <ion-button
+              size="small"
+              fill="clear"
+              @click="addFeedIncludeKeyword"
+              :disabled="!newFeedIncludeKeyword.trim()"
+            >
+              Add
+            </ion-button>
+          </div>
+          <div class="separator"></div>
+        </div>
+
+        <div class="section">
+          <h3 class="section-title">Exclude Keywords</h3>
+          <p class="section-subtitle">Demote content containing these words (it still appears)</p>
+          <div class="chip-list" v-if="feedPreferences.excludeKeywords.length">
+            <ion-chip
+              v-for="keyword in feedPreferences.excludeKeywords"
+              :key="`exclude-${keyword}`"
+              color="warning"
+              outline
+              @click="removeFeedExcludeKeyword(keyword)"
+            >
+              {{ keyword }}
+              <ion-icon :icon="closeCircleOutline"></ion-icon>
+            </ion-chip>
+          </div>
+          <div class="inline-add">
+            <ion-input
+              v-model="newFeedExcludeKeyword"
+              placeholder="Add exclude keyword…"
+              @keyup.enter="addFeedExcludeKeyword"
+              class="inline-input"
+            ></ion-input>
+            <ion-button
+              size="small"
+              fill="clear"
+              @click="addFeedExcludeKeyword"
+              :disabled="!newFeedExcludeKeyword.trim()"
+            >
+              Add
+            </ion-button>
+          </div>
+          <div class="separator"></div>
+        </div>
+
+        <div class="section">
+          <h3 class="section-title">Content Types</h3>
+          <p class="section-subtitle">Choose what can appear in your personalized feed</p>
+          <ion-list>
+            <ion-item>
+              <ion-toggle :checked="feedPreferences.showPosts" @ionChange="onFeedPostsToggle">
+                Show posts
+              </ion-toggle>
+            </ion-item>
+            <ion-item>
+              <ion-toggle :checked="feedPreferences.showPolls" @ionChange="onFeedPollsToggle">
+                Show polls
+              </ion-toggle>
+            </ion-item>
+          </ion-list>
+          <div class="separator"></div>
+        </div>
+
+        <div class="section">
+          <h3 class="section-title">Community Preferences</h3>
+          <p class="section-subtitle">Favorite communities are boosted; muted communities are hidden from feeds</p>
+
+          <div v-if="communityStore.isLoading" class="helper-text">Loading communities…</div>
+          <ion-list v-else-if="feedCommunities.length > 0">
+            <ion-item v-for="community in feedCommunities" :key="community.id">
+              <ion-label>
+                <h3>{{ community.displayName }}</h3>
+                <p class="community-id">{{ community.id }}</p>
+              </ion-label>
+              <div class="community-pref-actions">
+                <ion-button
+                  size="small"
+                  :fill="isFavoriteCommunity(community.id) ? 'solid' : 'outline'"
+                  color="primary"
+                  @click.stop="toggleFavoriteCommunityPreference(community.id)"
+                >
+                  Favorite
+                </ion-button>
+                <ion-button
+                  size="small"
+                  :fill="isMutedCommunity(community.id) ? 'solid' : 'outline'"
+                  color="medium"
+                  @click.stop="toggleMutedCommunityPreference(community.id)"
+                >
+                  Mute
+                </ion-button>
+              </div>
+            </ion-item>
+          </ion-list>
+          <p v-else class="helper-text">No communities loaded yet.</p>
+
+          <div class="separator"></div>
+        </div>
+
+        <div class="section">
+          <h3 class="section-title">Ranking Weights</h3>
+          <p class="section-subtitle">Balanced defaults are applied. Increase what matters most to you.</p>
+
+          <div class="range-row">
+            <span class="range-label">Freshness: <strong>{{ formatWeight(feedPreferences.rankingWeights.freshness) }}</strong></span>
+            <ion-range
+              :min="0"
+              :max="1"
+              :step="0.05"
+              :value="feedPreferences.rankingWeights.freshness"
+              @ionChange="(ev) => onFeedWeightChange('freshness', ev)"
+              :pin="true"
+            ></ion-range>
+          </div>
+
+          <div class="range-row">
+            <span class="range-label">Engagement: <strong>{{ formatWeight(feedPreferences.rankingWeights.engagement) }}</strong></span>
+            <ion-range
+              :min="0"
+              :max="1"
+              :step="0.05"
+              :value="feedPreferences.rankingWeights.engagement"
+              @ionChange="(ev) => onFeedWeightChange('engagement', ev)"
+              :pin="true"
+            ></ion-range>
+          </div>
+
+          <div class="range-row">
+            <span class="range-label">Keywords: <strong>{{ formatWeight(feedPreferences.rankingWeights.keywords) }}</strong></span>
+            <ion-range
+              :min="0"
+              :max="1"
+              :step="0.05"
+              :value="feedPreferences.rankingWeights.keywords"
+              @ionChange="(ev) => onFeedWeightChange('keywords', ev)"
+              :pin="true"
+            ></ion-range>
+          </div>
+
+          <div class="range-row">
+            <span class="range-label">Community affinity: <strong>{{ formatWeight(feedPreferences.rankingWeights.community) }}</strong></span>
+            <ion-range
+              :min="0"
+              :max="1"
+              :step="0.05"
+              :value="feedPreferences.rankingWeights.community"
+              @ionChange="(ev) => onFeedWeightChange('community', ev)"
+              :pin="true"
+            ></ion-range>
+          </div>
+
+          <p class="helper-text">Weights are normalized automatically during ranking.</p>
+          <div class="separator"></div>
+        </div>
+
+        <div class="section">
+          <ion-button expand="block" fill="outline" color="medium" @click="resetFeedPreferencesToDefaults">
+            Reset Feed Preferences
+          </ion-button>
         </div>
       </div>
 
@@ -796,6 +1003,18 @@
   gap: 8px;
 }
 
+.community-pref-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: 8px;
+}
+
+.community-id {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ion-color-medium);
+}
+
 .inline-input {
   flex: 1;
   --padding-start: 8px;
@@ -1297,17 +1516,36 @@ import { WebSocketService, type KnownServer } from '../services/websocketService
 import { GunService } from '../services/gunService';
 import { KeyService } from '../services/keyService';
 import { useChainStore } from '../stores/chainStore';
+import { useCommunityStore } from '../stores/communityStore';
 import config from '../config';
 import { ModerationService, moderationVersion, type ModerationSettings, type WordCategory } from '../services/moderationService';
 import { NsfwService } from '../services/nsfwService';
 import { getEnabledVersions, setEnabledVersions, probeForVersions, availableVersions, type DataVersion } from '../utils/dataVersionSettings';
 import { GUN_NAMESPACE } from '../services/gunService';
 import { betaFeatures, setBetaFeature } from '../utils/betaFeatures';
+import { useFeedPreferences } from '../composables/useFeedPreferences';
+import type { FeedMode, FeedRankingWeights } from '../services/feedPreferencesService';
 
 const router = useRouter();
 const chainStore = useChainStore();
+const communityStore = useCommunityStore();
 const importFileInput = ref<HTMLInputElement | null>(null);
 const activeTab = ref('general');
+const {
+  preferences: feedPreferences,
+  setMode: setFeedMode,
+  setContentTypeVisibility,
+  setRankingWeights,
+  addIncludeKeyword,
+  removeIncludeKeyword,
+  addExcludeKeyword,
+  removeExcludeKeyword,
+  toggleMutedCommunity,
+  toggleFavoriteCommunity,
+  resetPreferences: resetFeedPreferences,
+} = useFeedPreferences();
+const newFeedIncludeKeyword = ref('');
+const newFeedExcludeKeyword = ref('');
 
 function onToggleResilienceBeta(ev: CustomEvent) {
   setBetaFeature('resilience', ev.detail.checked);
@@ -1334,6 +1572,9 @@ const deviceId = ref('');
 const currentNamespace = GUN_NAMESPACE;
 const isProbing = ref(true);
 const versionToggles = ref<Record<string, boolean>>({});
+const feedCommunities = computed(() =>
+  [...communityStore.communities].sort((a, b) => a.displayName.localeCompare(b.displayName)),
+);
 
 function versionLabel(ver: string): string {
   if (ver === currentNamespace) return '(current)';
@@ -1379,6 +1620,95 @@ async function syncDataVersions() {
     color: 'success',
   });
   await toast.present();
+}
+
+function onFeedModeChange(ev: CustomEvent) {
+  const mode = ev.detail.value;
+  if (mode === 'latest' || mode === 'for-you') {
+    setFeedMode(mode as FeedMode);
+  }
+}
+
+function addFeedIncludeKeyword() {
+  const keyword = newFeedIncludeKeyword.value.trim();
+  if (!keyword) return;
+  addIncludeKeyword(keyword);
+  newFeedIncludeKeyword.value = '';
+}
+
+function removeFeedIncludeKeyword(keyword: string) {
+  removeIncludeKeyword(keyword);
+}
+
+function addFeedExcludeKeyword() {
+  const keyword = newFeedExcludeKeyword.value.trim();
+  if (!keyword) return;
+  addExcludeKeyword(keyword);
+  newFeedExcludeKeyword.value = '';
+}
+
+function removeFeedExcludeKeyword(keyword: string) {
+  removeExcludeKeyword(keyword);
+}
+
+function onFeedPostsToggle(ev: CustomEvent) {
+  const checked = Boolean(ev.detail.checked);
+  setContentTypeVisibility(checked, feedPreferences.value.showPolls);
+}
+
+function onFeedPollsToggle(ev: CustomEvent) {
+  const checked = Boolean(ev.detail.checked);
+  setContentTypeVisibility(feedPreferences.value.showPosts, checked);
+}
+
+function onFeedWeightChange(weight: keyof FeedRankingWeights, ev: CustomEvent) {
+  const value = Number(ev.detail.value);
+  if (Number.isNaN(value)) return;
+  setRankingWeights({ [weight]: value });
+}
+
+function formatWeight(weight: number): string {
+  return `${Math.round(weight * 100)}%`;
+}
+
+function isMutedCommunity(communityId: string): boolean {
+  return feedPreferences.value.mutedCommunities.includes(communityId);
+}
+
+function isFavoriteCommunity(communityId: string): boolean {
+  return feedPreferences.value.favoriteCommunities.includes(communityId);
+}
+
+function toggleMutedCommunityPreference(communityId: string) {
+  toggleMutedCommunity(communityId);
+}
+
+function toggleFavoriteCommunityPreference(communityId: string) {
+  toggleFavoriteCommunity(communityId);
+}
+
+async function resetFeedPreferencesToDefaults() {
+  const alert = await alertController.create({
+    header: 'Reset feed preferences?',
+    message: 'This will reset keywords, community preferences, and ranking weights.',
+    buttons: [
+      { text: 'Cancel', role: 'cancel' },
+      {
+        text: 'Reset',
+        role: 'destructive',
+        handler: async () => {
+          resetFeedPreferences();
+          const toast = await toastController.create({
+            message: 'Feed preferences reset',
+            duration: 1500,
+            color: 'success',
+          });
+          await toast.present();
+        },
+      },
+    ],
+  });
+  await alert.present();
 }
 
 // Moderation state
@@ -1701,6 +2031,7 @@ onMounted(async () => {
   await loadPolicy();
   userProfile.value = await UserService.getCurrentUser();
   deviceId.value = await VoteTrackerService.getDeviceId();
+  void communityStore.loadCommunities();
 
   // Probe GunDB for available data versions
   try {

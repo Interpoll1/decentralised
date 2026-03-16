@@ -39,7 +39,9 @@ function canonicalPostPayload(post: { authorId: string; title: string; content: 
 }
 
 const postActiveListeners = new Map<string, any>();
-const MAX_INITIAL_POSTS = 50;
+const INITIAL_LOAD_IDLE_MS = 400;
+const INITIAL_LOAD_HARD_TIMEOUT_MS = 30000;
+const POST_HYDRATION_TIMEOUT_MS = 8000;
 
 async function indexForSearch(type: 'post' | 'poll', id: string, data: any) {
   try {
@@ -196,124 +198,209 @@ export class PostService {
   ): () => void {
     const gun = GunService.getGun();
     const communityPostsNode = gun.get('communities').get(communityId).get('posts');
+    const isV1Enabled = isVersionEnabled('v1');
 
     const seenIds = new Set<string>();
-    const collectedPosts: Post[] = [];
+    const emittedSourceById = new Map<string, 'v1' | 'v2'>();
+    const deferredLivePosts: Post[] = [];
     let initialLoadDone = false;
+    let isActive = true;
     let subscription: any;
     let v1Subscription: any;
-    let pendingLoads = 1; // v2 always loads
+    let pendingLoads = isV1Enabled ? 2 : 1;
+    let pendingHydrationReads = 0;
+    let settleTimer: ReturnType<typeof setTimeout> | undefined;
+    const subscriptionStartTime = Date.now();
 
-    const checkLoadComplete = () => {
-      if (initialLoadDone) return;
-      pendingLoads--;
-      if (pendingLoads > 0) return;
+    const finishInitialLoad = () => {
+      if (!isActive || initialLoadDone) return;
       initialLoadDone = true;
+      if (settleTimer) {
+        clearTimeout(settleTimer);
+        settleTimer = undefined;
+      }
       if (onInitialLoadDone) onInitialLoadDone();
+      if (!isActive) return;
+      if (deferredLivePosts.length > 0) {
+        deferredLivePosts.sort((a, b) => b.createdAt - a.createdAt);
+        deferredLivePosts.forEach(p => onPost(p));
+        deferredLivePosts.length = 0;
+      }
     };
 
-    const timeboxTimer = setTimeout(() => {
-      if (!initialLoadDone) {
-        pendingLoads = 0;
-        checkLoadComplete();
+    const maybeFinishInitialLoad = () => {
+      if (!isActive || initialLoadDone) return;
+      if (pendingLoads > 0 || pendingHydrationReads > 0) return;
+
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        settleTimer = undefined;
+        if (!initialLoadDone && pendingLoads === 0 && pendingHydrationReads === 0) {
+          finishInitialLoad();
+        }
+      }, INITIAL_LOAD_IDLE_MS);
+    };
+
+    const markLoadComplete = () => {
+      if (!isActive || initialLoadDone) return;
+      pendingLoads = Math.max(0, pendingLoads - 1);
+      maybeFinishInitialLoad();
+    };
+
+    const loadPost = (
+      sourceGun: any,
+      postId: string,
+      dataVersion: string,
+      handlePost: (post: Post) => void,
+      source: 'once' | 'on'
+    ): Promise<void> => {
+      const incomingSource: 'v1' | 'v2' = dataVersion === 'v1' ? 'v1' : 'v2';
+      const existingSource = emittedSourceById.get(postId);
+      const canUpgradeFromV1 = incomingSource === 'v2' && existingSource === 'v1';
+
+      if (!isActive || postId === '_') {
+        return Promise.resolve();
       }
-    }, 800);
+      if (seenIds.has(postId) && !canUpgradeFromV1) {
+        return Promise.resolve();
+      }
+
+      const trackForInitialHydration = !initialLoadDone;
+      if (trackForInitialHydration) {
+        pendingHydrationReads++;
+        if (settleTimer) {
+          clearTimeout(settleTimer);
+          settleTimer = undefined;
+        }
+      }
+
+      return new Promise((resolve) => {
+        let settled = false;
+        const finalizeLoad = () => {
+          if (settled) return;
+          settled = true;
+          if (trackForInitialHydration) {
+            pendingHydrationReads = Math.max(0, pendingHydrationReads - 1);
+            maybeFinishInitialLoad();
+          }
+          resolve();
+        };
+
+        const watchdog = setTimeout(() => {
+          finalizeLoad();
+        }, POST_HYDRATION_TIMEOUT_MS);
+
+        sourceGun.get('posts').get(postId).once((postData: any) => {
+          clearTimeout(watchdog);
+          if (!isActive) {
+            finalizeLoad();
+            return;
+          }
+
+          if (postData && postData.id) {
+            const existingPostSource = emittedSourceById.get(postData.id);
+            const canEmit = !existingPostSource || (incomingSource === 'v2' && existingPostSource === 'v1');
+
+            if (!canEmit) {
+              finalizeLoad();
+              return;
+            }
+
+            seenIds.add(postData.id);
+            emittedSourceById.set(postData.id, incomingSource);
+            const hydratedPost = { ...postData, dataVersion } as Post;
+            const createdAt = typeof hydratedPost.createdAt === 'number' ? hydratedPost.createdAt : 0;
+            const isLiveDuringInitial = !initialLoadDone && source === 'on' && createdAt > subscriptionStartTime;
+
+            if (isLiveDuringInitial) deferredLivePosts.push(hydratedPost);
+            else handlePost(hydratedPost);
+          }
+          finalizeLoad();
+        });
+      });
+    };
+
+    const hardLoadTimer = setTimeout(() => {
+      finishInitialLoad();
+    }, INITIAL_LOAD_HARD_TIMEOUT_MS);
 
     // ── v2 posts (namespaced, current) ───────────────────────────────────
     communityPostsNode.once((allPosts: any) => {
-      if (!allPosts) {
-        checkLoadComplete();
-        return;
-      }
-
-      const keys = Object.keys(allPosts).filter(k => k !== '_');
-      const promises = keys.slice(0, MAX_INITIAL_POSTS).map(postId =>
-        new Promise<void>((resolve) => {
-          gun.get('posts').get(postId).once((postData: any) => {
-            if (postData && postData.id && !seenIds.has(postData.id)) {
-              seenIds.add(postData.id);
-              collectedPosts.push({ ...postData, dataVersion: GUN_NAMESPACE });
-            }
-            resolve();
-          });
-        })
-      );
+      if (!isActive) return;
+      const keys = allPosts ? Object.keys(allPosts).filter(k => k !== '_') : [];
+      const promises = keys.map(postId => loadPost(gun, postId, GUN_NAMESPACE, onPost, 'once'));
 
       Promise.all(promises).then(() => {
-        collectedPosts.sort((a, b) => b.createdAt - a.createdAt);
-        collectedPosts.forEach(p => onPost(p));
-        checkLoadComplete();
+        if (!isActive) return;
+        markLoadComplete();
       });
     });
 
     subscription = communityPostsNode.on((allPosts: any) => {
-      if (!allPosts) return;
+      if (!isActive || !allPosts) return;
       Object.keys(allPosts).forEach(postId => {
-        if (postId === '_' || seenIds.has(postId)) return;
-        gun.get('posts').get(postId).once((postData: any) => {
-          if (postData && postData.id && !seenIds.has(postData.id)) {
-            seenIds.add(postData.id);
-            onPost({ ...postData, dataVersion: GUN_NAMESPACE });
-          }
-        });
+        void loadPost(gun, postId, GUN_NAMESPACE, onPost, 'on');
       });
     });
 
     // ── v1 posts (root-level, legacy) ────────────────────────────────────
-    if (isVersionEnabled('v1')) {
-      pendingLoads++;
+    if (isV1Enabled) {
       const rawGun = GunService.getRawGun();
       const v1Node = rawGun.get('communities').get(communityId).get('posts');
 
       v1Node.once((allPosts: any) => {
-        if (!allPosts) {
-          checkLoadComplete();
-          return;
-        }
-
-        const keys = Object.keys(allPosts).filter(k => k !== '_');
-        const v1Collected: Post[] = [];
-        const promises = keys.slice(0, MAX_INITIAL_POSTS).map(postId =>
-          new Promise<void>((resolve) => {
-            rawGun.get('posts').get(postId).once((postData: any) => {
-              if (postData && postData.id && !seenIds.has(postData.id)) {
-                seenIds.add(postData.id);
-                v1Collected.push({ ...postData, dataVersion: 'v1' });
-              }
-              resolve();
-            });
-          })
-        );
+        if (!isActive) return;
+        const keys = allPosts ? Object.keys(allPosts).filter(k => k !== '_') : [];
+        const promises = keys.map(postId => loadPost(rawGun, postId, 'v1', onPost, 'once'));
 
         Promise.all(promises).then(() => {
-          v1Collected.sort((a, b) => b.createdAt - a.createdAt);
-          v1Collected.forEach(p => onPost(p));
-          checkLoadComplete();
+          if (!isActive) return;
+          markLoadComplete();
         });
       });
 
       v1Subscription = v1Node.on((allPosts: any) => {
-        if (!allPosts) return;
+        if (!isActive || !allPosts) return;
         Object.keys(allPosts).forEach(postId => {
-          if (postId === '_' || seenIds.has(postId)) return;
-          rawGun.get('posts').get(postId).once((postData: any) => {
-            if (postData && postData.id && !seenIds.has(postData.id)) {
-              seenIds.add(postData.id);
-              onPost({ ...postData, dataVersion: 'v1' });
-            }
-          });
+          void loadPost(rawGun, postId, 'v1', onPost, 'on');
         });
       });
     }
 
-    const listenerKey = `${communityId}-posts`;
-    postActiveListeners.set(listenerKey, { subscription, v1Subscription, timer: timeboxTimer });
+    const clearTimers = () => {
+      clearTimeout(hardLoadTimer);
+      if (settleTimer) {
+        clearTimeout(settleTimer);
+        settleTimer = undefined;
+      }
+    };
 
-    return () => {
-      clearTimeout(timeboxTimer);
+    const dispose = () => {
+      if (!isActive) return;
+      isActive = false;
+      clearTimers();
       if (subscription) subscription.off();
       if (v1Subscription) v1Subscription.off();
-      postActiveListeners.delete(listenerKey);
+    };
+
+    const listenerKey = `${communityId}-posts`;
+    const existingListener = postActiveListeners.get(listenerKey);
+    if (existingListener) {
+      if (typeof existingListener.dispose === 'function') existingListener.dispose();
+      else {
+        if (typeof existingListener.clearTimers === 'function') existingListener.clearTimers();
+        if (existingListener.subscription) existingListener.subscription.off();
+        if (existingListener.v1Subscription) existingListener.v1Subscription.off();
+      }
+    }
+    const listenerRecord = { subscription, v1Subscription, clearTimers, dispose };
+    postActiveListeners.set(listenerKey, listenerRecord);
+
+    return () => {
+      dispose();
+      if (postActiveListeners.get(listenerKey) === listenerRecord) {
+        postActiveListeners.delete(listenerKey);
+      }
     };
   }
 
@@ -323,124 +410,209 @@ export class PostService {
   ): () => void {
     const gun = GunService.getGun();
     const postsNode = gun.get('posts');
+    const isV1Enabled = isVersionEnabled('v1');
 
     const seenIds = new Set<string>();
-    const collectedPosts: Post[] = [];
+    const emittedSourceById = new Map<string, 'v1' | 'v2'>();
+    const deferredLivePosts: Post[] = [];
     let initialLoadDone = false;
+    let isActive = true;
     let subscription: any;
     let v1Subscription: any;
-    let pendingLoads = 1;
+    let pendingLoads = isV1Enabled ? 2 : 1;
+    let pendingHydrationReads = 0;
+    let settleTimer: ReturnType<typeof setTimeout> | undefined;
+    const subscriptionStartTime = Date.now();
 
-    const checkLoadComplete = () => {
-      if (initialLoadDone) return;
-      pendingLoads--;
-      if (pendingLoads > 0) return;
+    const finishInitialLoad = () => {
+      if (!isActive || initialLoadDone) return;
       initialLoadDone = true;
+      if (settleTimer) {
+        clearTimeout(settleTimer);
+        settleTimer = undefined;
+      }
       if (onInitialLoadDone) onInitialLoadDone();
+      if (!isActive) return;
+      if (deferredLivePosts.length > 0) {
+        deferredLivePosts.sort((a, b) => b.createdAt - a.createdAt);
+        deferredLivePosts.forEach(p => onPost(p));
+        deferredLivePosts.length = 0;
+      }
     };
 
-    const timeboxTimer = setTimeout(() => {
-      if (!initialLoadDone) {
-        pendingLoads = 0;
-        checkLoadComplete();
+    const maybeFinishInitialLoad = () => {
+      if (!isActive || initialLoadDone) return;
+      if (pendingLoads > 0 || pendingHydrationReads > 0) return;
+
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        settleTimer = undefined;
+        if (!initialLoadDone && pendingLoads === 0 && pendingHydrationReads === 0) {
+          finishInitialLoad();
+        }
+      }, INITIAL_LOAD_IDLE_MS);
+    };
+
+    const markLoadComplete = () => {
+      if (!isActive || initialLoadDone) return;
+      pendingLoads = Math.max(0, pendingLoads - 1);
+      maybeFinishInitialLoad();
+    };
+
+    const loadPost = (
+      sourceGun: any,
+      postId: string,
+      dataVersion: string,
+      handlePost: (post: Post) => void,
+      source: 'once' | 'on'
+    ): Promise<void> => {
+      const incomingSource: 'v1' | 'v2' = dataVersion === 'v1' ? 'v1' : 'v2';
+      const existingSource = emittedSourceById.get(postId);
+      const canUpgradeFromV1 = incomingSource === 'v2' && existingSource === 'v1';
+
+      if (!isActive || postId === '_') {
+        return Promise.resolve();
       }
-    }, 800);
+      if (seenIds.has(postId) && !canUpgradeFromV1) {
+        return Promise.resolve();
+      }
+
+      const trackForInitialHydration = !initialLoadDone;
+      if (trackForInitialHydration) {
+        pendingHydrationReads++;
+        if (settleTimer) {
+          clearTimeout(settleTimer);
+          settleTimer = undefined;
+        }
+      }
+
+      return new Promise((resolve) => {
+        let settled = false;
+        const finalizeLoad = () => {
+          if (settled) return;
+          settled = true;
+          if (trackForInitialHydration) {
+            pendingHydrationReads = Math.max(0, pendingHydrationReads - 1);
+            maybeFinishInitialLoad();
+          }
+          resolve();
+        };
+
+        const watchdog = setTimeout(() => {
+          finalizeLoad();
+        }, POST_HYDRATION_TIMEOUT_MS);
+
+        sourceGun.get('posts').get(postId).once((postData: any) => {
+          clearTimeout(watchdog);
+          if (!isActive) {
+            finalizeLoad();
+            return;
+          }
+
+          if (postData && postData.id) {
+            const existingPostSource = emittedSourceById.get(postData.id);
+            const canEmit = !existingPostSource || (incomingSource === 'v2' && existingPostSource === 'v1');
+
+            if (!canEmit) {
+              finalizeLoad();
+              return;
+            }
+
+            seenIds.add(postData.id);
+            emittedSourceById.set(postData.id, incomingSource);
+            const hydratedPost = { ...postData, dataVersion } as Post;
+            const createdAt = typeof hydratedPost.createdAt === 'number' ? hydratedPost.createdAt : 0;
+            const isLiveDuringInitial = !initialLoadDone && source === 'on' && createdAt > subscriptionStartTime;
+
+            if (isLiveDuringInitial) deferredLivePosts.push(hydratedPost);
+            else handlePost(hydratedPost);
+          }
+          finalizeLoad();
+        });
+      });
+    };
+
+    const hardLoadTimer = setTimeout(() => {
+      finishInitialLoad();
+    }, INITIAL_LOAD_HARD_TIMEOUT_MS);
 
     // ── v2 posts ─────────────────────────────────────────────────────────
     postsNode.once((allPosts: any) => {
-      if (!allPosts) {
-        checkLoadComplete();
-        return;
-      }
-
-      const keys = Object.keys(allPosts).filter(k => k !== '_');
-      const promises = keys.slice(0, MAX_INITIAL_POSTS).map(postId =>
-        new Promise<void>((resolve) => {
-          gun.get('posts').get(postId).once((postData: any) => {
-            if (postData && postData.id && !seenIds.has(postData.id)) {
-              seenIds.add(postData.id);
-              collectedPosts.push({ ...postData, dataVersion: GUN_NAMESPACE });
-            }
-            resolve();
-          });
-        })
-      );
+      if (!isActive) return;
+      const keys = allPosts ? Object.keys(allPosts).filter(k => k !== '_') : [];
+      const promises = keys.map(postId => loadPost(gun, postId, GUN_NAMESPACE, onPost, 'once'));
 
       Promise.all(promises).then(() => {
-        collectedPosts.sort((a, b) => b.createdAt - a.createdAt);
-        collectedPosts.forEach(p => onPost(p));
-        checkLoadComplete();
+        if (!isActive) return;
+        markLoadComplete();
       });
     });
 
     subscription = postsNode.on((allPosts: any) => {
-      if (!allPosts) return;
+      if (!isActive || !allPosts) return;
       Object.keys(allPosts).forEach(postId => {
-        if (postId === '_' || seenIds.has(postId)) return;
-        gun.get('posts').get(postId).once((postData: any) => {
-          if (postData && postData.id && !seenIds.has(postData.id)) {
-            seenIds.add(postData.id);
-            onPost({ ...postData, dataVersion: GUN_NAMESPACE });
-          }
-        });
+        void loadPost(gun, postId, GUN_NAMESPACE, onPost, 'on');
       });
     });
 
     // ── v1 posts ─────────────────────────────────────────────────────────
-    if (isVersionEnabled('v1')) {
-      pendingLoads++;
+    if (isV1Enabled) {
       const rawGun = GunService.getRawGun();
       const v1PostsNode = rawGun.get('posts');
 
       v1PostsNode.once((allPosts: any) => {
-        if (!allPosts) {
-          checkLoadComplete();
-          return;
-        }
-
-        const keys = Object.keys(allPosts).filter(k => k !== '_');
-        const v1Collected: Post[] = [];
-        const promises = keys.slice(0, MAX_INITIAL_POSTS).map(postId =>
-          new Promise<void>((resolve) => {
-            rawGun.get('posts').get(postId).once((postData: any) => {
-              if (postData && postData.id && !seenIds.has(postData.id)) {
-                seenIds.add(postData.id);
-                v1Collected.push({ ...postData, dataVersion: 'v1' });
-              }
-              resolve();
-            });
-          })
-        );
+        if (!isActive) return;
+        const keys = allPosts ? Object.keys(allPosts).filter(k => k !== '_') : [];
+        const promises = keys.map(postId => loadPost(rawGun, postId, 'v1', onPost, 'once'));
 
         Promise.all(promises).then(() => {
-          v1Collected.sort((a, b) => b.createdAt - a.createdAt);
-          v1Collected.forEach(p => onPost(p));
-          checkLoadComplete();
+          if (!isActive) return;
+          markLoadComplete();
         });
       });
 
       v1Subscription = v1PostsNode.on((allPosts: any) => {
-        if (!allPosts) return;
+        if (!isActive || !allPosts) return;
         Object.keys(allPosts).forEach(postId => {
-          if (postId === '_' || seenIds.has(postId)) return;
-          rawGun.get('posts').get(postId).once((postData: any) => {
-            if (postData && postData.id && !seenIds.has(postData.id)) {
-              seenIds.add(postData.id);
-              onPost({ ...postData, dataVersion: 'v1' });
-            }
-          });
+          void loadPost(rawGun, postId, 'v1', onPost, 'on');
         });
       });
     }
 
-    const listenerKey = 'all-posts';
-    postActiveListeners.set(listenerKey, { subscription, v1Subscription, timer: timeboxTimer });
+    const clearTimers = () => {
+      clearTimeout(hardLoadTimer);
+      if (settleTimer) {
+        clearTimeout(settleTimer);
+        settleTimer = undefined;
+      }
+    };
 
-    return () => {
-      clearTimeout(timeboxTimer);
+    const dispose = () => {
+      if (!isActive) return;
+      isActive = false;
+      clearTimers();
       if (subscription) subscription.off();
       if (v1Subscription) v1Subscription.off();
-      postActiveListeners.delete(listenerKey);
+    };
+
+    const listenerKey = 'all-posts';
+    const existingListener = postActiveListeners.get(listenerKey);
+    if (existingListener) {
+      if (typeof existingListener.dispose === 'function') existingListener.dispose();
+      else {
+        if (typeof existingListener.clearTimers === 'function') existingListener.clearTimers();
+        if (existingListener.subscription) existingListener.subscription.off();
+        if (existingListener.v1Subscription) existingListener.v1Subscription.off();
+      }
+    }
+    const listenerRecord = { subscription, v1Subscription, clearTimers, dispose };
+    postActiveListeners.set(listenerKey, listenerRecord);
+
+    return () => {
+      dispose();
+      if (postActiveListeners.get(listenerKey) === listenerRecord) {
+        postActiveListeners.delete(listenerKey);
+      }
     };
   }
 
@@ -562,8 +734,14 @@ export class PostService {
   }
 
   static unsubscribeAll(): void {
-    postActiveListeners.forEach(({ subscription, v1Subscription, timer }) => {
-      clearTimeout(timer);
+    postActiveListeners.forEach((listener) => {
+      if (typeof listener.dispose === 'function') {
+        listener.dispose();
+        return;
+      }
+      const { subscription, v1Subscription, timer, clearTimers } = listener;
+      if (typeof clearTimers === 'function') clearTimers();
+      else clearTimeout(timer);
       if (subscription) subscription.off();
       if (v1Subscription) v1Subscription.off();
     });

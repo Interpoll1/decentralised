@@ -34,7 +34,6 @@ export const usePollStore = defineStore('poll', () => {
   const currentPoll  = ref<Poll | null>(null);
   const isLoading    = ref(false);
   const visibleCount = ref(PAGE_SIZE);
-  const initialLoadDone = ref(false);
 
   // No more banner — kept for backward compat
   const pendingNewPolls = ref<Poll[]>([]);
@@ -43,6 +42,8 @@ export const usePollStore = defineStore('poll', () => {
   const seenPollIds = loadSeenIds();
   const subscribedCommunities = new Set<string>();
   const unsubscribers = new Map<string, () => void>();
+  // Per-community initial load tracking to avoid cross-community misclassification
+  const initialLoadDoneByCommId = new Map<string, boolean>();
 
   // ─── Computed ──────────────────────────────────────────────────────────────
 
@@ -59,16 +60,29 @@ export const usePollStore = defineStore('poll', () => {
   // ─── Loading ───────────────────────────────────────────────────────────────
 
   function loadPollsForCommunity(communityId: string): Promise<void> {
-    if (subscribedCommunities.has(communityId)) return Promise.resolve();
+    if (subscribedCommunities.has(communityId) || unsubscribers.has(communityId)) return Promise.resolve();
 
     return new Promise((resolve) => {
+      initialLoadDoneByCommId.set(communityId, false);
       const unsub = PollService.subscribeToPollsInCommunity(
         communityId,
 
         // Phase 1: shell poll arrives
         (poll) => {
+          const inPending = pendingNewPolls.value.findIndex(p => p.id === poll.id);
+          if (inPending !== -1) {
+            pendingNewPolls.value[inPending] = poll;
+            if (currentPoll.value?.id === poll.id) {
+              currentPoll.value = poll;
+            }
+            return;
+          }
+
           if (pollsMap.value.has(poll.id)) {
             pollsMap.value.set(poll.id, poll);
+            if (currentPoll.value?.id === poll.id) {
+              currentPoll.value = poll;
+            }
             return;
           }
 
@@ -88,12 +102,15 @@ export const usePollStore = defineStore('poll', () => {
             pollsMap.value.set(poll.id, poll);
             seenPollIds.add(poll.id);
           }
+          if (currentPoll.value?.id === poll.id) {
+            currentPoll.value = poll;
+          }
         },
 
         // Initial batch done
         () => {
           subscribedCommunities.add(communityId);
-          initialLoadDone.value = true;
+          initialLoadDoneByCommId.set(communityId, true);
           for (const id of pollsMap.value.keys()) seenPollIds.add(id);
           saveSeenIds(seenPollIds);
           resolve();
@@ -136,7 +153,8 @@ export const usePollStore = defineStore('poll', () => {
   function resetVisibleCount() {
     visibleCount.value    = PAGE_SIZE;
     pendingNewPolls.value = [];
-    initialLoadDone.value = false;
+    // Note: initialLoadDoneByCommId is NOT reset here—it persists per community
+    // across refreshes, so truly new polls after refresh correctly trigger banner
   }
 
   // ─── Create ────────────────────────────────────────────────────────────────
@@ -200,7 +218,7 @@ export const usePollStore = defineStore('poll', () => {
       if (currentPoll.value?.id === pollId) currentPoll.value = optimistic;
     }
     try {
-      await PollService.voteOnPoll(pollId, optionIds, user.id);
+      await PollService.vote(pollId, optionIds, user.id);
     } catch (err) {
       console.warn('Vote failed — rolling back', err);
       if (original) {

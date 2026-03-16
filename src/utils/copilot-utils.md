@@ -41,3 +41,14 @@ Reactive feature-flag system backed by localStorage (`interpoll_beta_features`).
 - `setBetaFeature(feature, enabled)` — persists a toggle change
 - `isBetaEnabled(feature)` — non-reactive check (for use in router guards)
 - Current flags: `resilience` (default: off)
+
+## `feedRanking.ts` — Personalized feed ranking helpers
+
+Pure ranking/filtering utilities for Home and Community feed personalization.
+
+- `rankFeedItems(items, preferences, joinedCommunityIds?)` — applies:
+  - hard filters (muted communities, disabled content types)
+  - scoring (freshness, engagement, keyword relevance, community affinity)
+  - excluded-keyword demotion (keeps content visible but lowers rank)
+  - deterministic ordering fallback by `createdAt`
+- Works with `FeedPreferencesService` settings (mode, keywords, community preferences, ranking weights).

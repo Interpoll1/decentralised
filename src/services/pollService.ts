@@ -36,7 +36,6 @@ export interface Poll {
 }
 
 const pollActiveListeners = new Map<string, any>();
-const MAX_INITIAL_POLLS = 30;
 
 async function indexForSearch(type: 'post' | 'poll', id: string, data: any) {
   try {
@@ -64,62 +63,130 @@ export class PollService {
     onInitialLoadDone?: () => void
   ): () => void {
     const communityPollsNode = this.gun.get('communities').get(communityId).get('polls');
+    const listenerKey = `${communityId}-polls-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const seenIds = new Set<string>();
-    const collectedPolls: Poll[] = [];
+    const deferredLivePolls = new Map<string, Poll>();
+    const loading = new Map<string, Promise<Poll | null>>();
+    const pendingHydrationIds = new Set<string>();
     let initialLoadDone = false;
+    let snapshotHandled = false;
+    let hydrating = true;
+    let disposed = false;
     let subscription: any;
+    let hardTimeoutFired = false;
+    const subscriptionStartTime = Date.now();
 
     const checkLoadComplete = () => {
-      if (initialLoadDone) return;
+      if (initialLoadDone || disposed) return;
       initialLoadDone = true;
       if (onInitialLoadDone) onInitialLoadDone();
     };
 
-    const timeboxTimer = setTimeout(() => {
-      checkLoadComplete();
-    }, 1200);
+    const loadPollById = (pollId: string): Promise<Poll | null> => {
+      if (disposed || !pollId || pollId === '_' || (hydrating && seenIds.has(pollId))) return Promise.resolve(null);
+      const inFlight = loading.get(pollId);
+      if (inFlight) return inFlight;
 
-    communityPollsNode.once((allPolls) => {
-      if (!allPolls) {
-        checkLoadComplete();
+      const task = this.loadPoll(pollId)
+        .finally(() => {
+          loading.delete(pollId);
+        });
+
+      loading.set(pollId, task);
+      return task;
+    };
+
+    const emitPoll = (poll: Poll | null) => {
+      if (disposed || !poll) return;
+      const createdAt = typeof poll.createdAt === 'number' ? poll.createdAt : 0;
+      const isLiveDuringHydration = hydrating && createdAt > subscriptionStartTime;
+      if (isLiveDuringHydration) {
+        seenIds.add(poll.id);
+        deferredLivePolls.set(poll.id, poll);
         return;
       }
+      if (!seenIds.has(poll.id)) {
+        seenIds.add(poll.id);
+        onPoll(poll);
+        return;
+      }
+      if (!hydrating) onPoll(poll);
+    };
 
-      const keys = Object.keys(allPolls).filter(k => k !== '_');
-      const promises = keys.slice(0, MAX_INITIAL_POLLS).map(pollId =>
-        this.loadPoll(pollId).then(poll => {
-          if (poll && !seenIds.has(poll.id)) {
-            seenIds.add(poll.id);
-            collectedPolls.push(poll);
-          }
-        })
-      );
-
-      Promise.all(promises).then(() => {
-        collectedPolls.sort((a, b) => b.createdAt - a.createdAt);
-        collectedPolls.forEach(p => onPoll(p));
-        checkLoadComplete();
+    const loadAndEmitById = (pollId: string): Promise<void> => {
+      return loadPollById(pollId).then(poll => {
+        emitPoll(poll);
       });
-    });
+    };
 
-    subscription = communityPollsNode.on((allPolls) => {
-      if (!allPolls) return;
-      Object.keys(allPolls).forEach(pollId => {
-        if (pollId === '_' || seenIds.has(pollId)) return;
-        this.loadPoll(pollId).then(poll => {
-          if (poll && !seenIds.has(poll.id)) {
-            seenIds.add(poll.id);
-            onPoll(poll);
+    const finalizeHydration = () => {
+      if (disposed || !hydrating) return;
+      hydrating = false;
+      checkLoadComplete();
+      if (deferredLivePolls.size > 0) {
+        Array.from(deferredLivePolls.values())
+          .sort((a, b) => b.createdAt - a.createdAt)
+          .forEach(p => onPoll(p));
+        deferredLivePolls.clear();
+      }
+    };
+
+    const flushHydrationIds = () => {
+      return (async () => {
+        const batchSize = 40;
+        while (!disposed && !hardTimeoutFired) {
+          const ids = Array.from(pendingHydrationIds);
+          if (ids.length === 0) break;
+          pendingHydrationIds.clear();
+          for (let i = 0; i < ids.length; i += batchSize) {
+            const batch = ids.slice(i, i + batchSize);
+            await Promise.all(batch.map(pollId => loadAndEmitById(pollId)));
           }
+        }
+      })();
+    };
+
+    const hydrationTimer = setTimeout(() => {
+      if (disposed || snapshotHandled) return;
+      snapshotHandled = true;
+      flushHydrationIds().finally(() => {
+        finalizeHydration();
+      });
+    }, 15000);
+
+    // Hard timeout to prevent indefinite hangs in initial load
+    const hardTimeout = setTimeout(() => {
+      if (disposed || !hydrating) return;
+      hardTimeoutFired = true;
+      finalizeHydration();
+    }, 30000);
+
+    subscription = communityPollsNode.map().on((_: any, pollId: string) => {
+      if (disposed || !pollId || pollId === '_') return;
+      if (hydrating) {
+        if (!seenIds.has(pollId)) pendingHydrationIds.add(pollId);
+        return;
+      }
+      void loadAndEmitById(pollId);
+    });
+    pollActiveListeners.set(listenerKey, { subscription, timer: hydrationTimer, hardTimeout });
+
+    communityPollsNode.once((allPolls) => {
+      if (disposed || snapshotHandled) return;
+      snapshotHandled = true;
+      clearTimeout(hydrationTimer);
+      const keys = allPolls ? Object.keys(allPolls).filter(k => k !== '_') : [];
+      keys.forEach(pollId => pendingHydrationIds.add(pollId));
+      flushHydrationIds()
+        .finally(() => {
+          finalizeHydration();
         });
-      });
     });
-
-    const listenerKey = `${communityId}-polls`;
-    pollActiveListeners.set(listenerKey, { subscription, timer: timeboxTimer });
 
     return () => {
-      clearTimeout(timeboxTimer);
+      disposed = true;
+      clearTimeout(hydrationTimer);
+      clearTimeout(hardTimeout);
       if (subscription) subscription.off();
       pollActiveListeners.delete(listenerKey);
     };
@@ -130,62 +197,130 @@ export class PollService {
     onInitialLoadDone?: () => void
   ): () => void {
     const pollsNode = this.gun.get('polls');
+    const listenerKey = `all-polls-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const seenIds = new Set<string>();
-    const collectedPolls: Poll[] = [];
+    const deferredLivePolls = new Map<string, Poll>();
+    const loading = new Map<string, Promise<Poll | null>>();
+    const pendingHydrationIds = new Set<string>();
     let initialLoadDone = false;
+    let snapshotHandled = false;
+    let hydrating = true;
+    let disposed = false;
     let subscription: any;
+    let hardTimeoutFired = false;
+    const subscriptionStartTime = Date.now();
 
     const checkLoadComplete = () => {
-      if (initialLoadDone) return;
+      if (initialLoadDone || disposed) return;
       initialLoadDone = true;
       if (onInitialLoadDone) onInitialLoadDone();
     };
 
-    const timeboxTimer = setTimeout(() => {
-      checkLoadComplete();
-    }, 1200);
+    const loadPollById = (pollId: string): Promise<Poll | null> => {
+      if (disposed || !pollId || pollId === '_' || (hydrating && seenIds.has(pollId))) return Promise.resolve(null);
+      const inFlight = loading.get(pollId);
+      if (inFlight) return inFlight;
 
-    pollsNode.once((allPolls) => {
-      if (!allPolls) {
-        checkLoadComplete();
+      const task = this.loadPoll(pollId)
+        .finally(() => {
+          loading.delete(pollId);
+        });
+
+      loading.set(pollId, task);
+      return task;
+    };
+
+    const emitPoll = (poll: Poll | null) => {
+      if (disposed || !poll) return;
+      const createdAt = typeof poll.createdAt === 'number' ? poll.createdAt : 0;
+      const isLiveDuringHydration = hydrating && createdAt > subscriptionStartTime;
+      if (isLiveDuringHydration) {
+        seenIds.add(poll.id);
+        deferredLivePolls.set(poll.id, poll);
         return;
       }
+      if (!seenIds.has(poll.id)) {
+        seenIds.add(poll.id);
+        onPoll(poll);
+        return;
+      }
+      if (!hydrating) onPoll(poll);
+    };
 
-      const keys = Object.keys(allPolls).filter(k => k !== '_');
-      const promises = keys.slice(0, MAX_INITIAL_POLLS).map(pollId =>
-        this.loadPoll(pollId).then(poll => {
-          if (poll && !seenIds.has(poll.id)) {
-            seenIds.add(poll.id);
-            collectedPolls.push(poll);
-          }
-        })
-      );
-
-      Promise.all(promises).then(() => {
-        collectedPolls.sort((a, b) => b.createdAt - a.createdAt);
-        collectedPolls.forEach(p => onPoll(p));
-        checkLoadComplete();
+    const loadAndEmitById = (pollId: string): Promise<void> => {
+      return loadPollById(pollId).then(poll => {
+        emitPoll(poll);
       });
-    });
+    };
 
-    subscription = pollsNode.on((allPolls) => {
-      if (!allPolls) return;
-      Object.keys(allPolls).forEach(pollId => {
-        if (pollId === '_' || seenIds.has(pollId)) return;
-        this.loadPoll(pollId).then(poll => {
-          if (poll && !seenIds.has(poll.id)) {
-            seenIds.add(poll.id);
-            onPoll(poll);
+    const finalizeHydration = () => {
+      if (disposed || !hydrating) return;
+      hydrating = false;
+      checkLoadComplete();
+      if (deferredLivePolls.size > 0) {
+        Array.from(deferredLivePolls.values())
+          .sort((a, b) => b.createdAt - a.createdAt)
+          .forEach(p => onPoll(p));
+        deferredLivePolls.clear();
+      }
+    };
+
+    const flushHydrationIds = () => {
+      return (async () => {
+        const batchSize = 40;
+        while (!disposed && !hardTimeoutFired) {
+          const ids = Array.from(pendingHydrationIds);
+          if (ids.length === 0) break;
+          pendingHydrationIds.clear();
+          for (let i = 0; i < ids.length; i += batchSize) {
+            const batch = ids.slice(i, i + batchSize);
+            await Promise.all(batch.map(pollId => loadAndEmitById(pollId)));
           }
+        }
+      })();
+    };
+
+    const hydrationTimer = setTimeout(() => {
+      if (disposed || snapshotHandled) return;
+      snapshotHandled = true;
+      flushHydrationIds().finally(() => {
+        finalizeHydration();
+      });
+    }, 15000);
+
+    // Hard timeout to prevent indefinite hangs in initial load
+    const hardTimeout = setTimeout(() => {
+      if (disposed || !hydrating) return;
+      hardTimeoutFired = true;
+      finalizeHydration();
+    }, 30000);
+
+    subscription = pollsNode.map().on((_: any, pollId: string) => {
+      if (disposed || !pollId || pollId === '_') return;
+      if (hydrating) {
+        if (!seenIds.has(pollId)) pendingHydrationIds.add(pollId);
+        return;
+      }
+      void loadAndEmitById(pollId);
+    });
+    pollActiveListeners.set(listenerKey, { subscription, timer: hydrationTimer, hardTimeout });
+
+    pollsNode.once((allPolls) => {
+      if (disposed || snapshotHandled) return;
+      snapshotHandled = true;
+      clearTimeout(hydrationTimer);
+      const keys = allPolls ? Object.keys(allPolls).filter(k => k !== '_') : [];
+      keys.forEach(pollId => pendingHydrationIds.add(pollId));
+      flushHydrationIds()
+        .finally(() => {
+          finalizeHydration();
         });
-      });
     });
-
-    const listenerKey = 'all-polls';
-    pollActiveListeners.set(listenerKey, { subscription, timer: timeboxTimer });
 
     return () => {
-      clearTimeout(timeboxTimer);
+      disposed = true;
+      clearTimeout(hydrationTimer);
+      clearTimeout(hardTimeout);
       if (subscription) subscription.off();
       pollActiveListeners.delete(listenerKey);
     };
@@ -452,8 +587,9 @@ export class PollService {
   }
 
   static unsubscribeAll(): void {
-    pollActiveListeners.forEach(({ subscription, timer }) => {
+    pollActiveListeners.forEach(({ subscription, timer, hardTimeout }) => {
       clearTimeout(timer);
+      clearTimeout(hardTimeout);
       if (subscription) subscription.off();
     });
     pollActiveListeners.clear();

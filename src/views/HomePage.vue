@@ -94,6 +94,23 @@
 
           <!-- HOME TAB -->
           <div v-if="activeTab === 'home'" class="home-tab">
+            <div class="feed-mode-toggle">
+              <button
+                class="mode-btn"
+                :class="{ active: feedMode === 'for-you' }"
+                @click="setFeedMode('for-you')"
+              >
+                For You
+              </button>
+              <button
+                class="mode-btn"
+                :class="{ active: feedMode === 'latest' }"
+                @click="setFeedMode('latest')"
+              >
+                Latest
+              </button>
+            </div>
+
             <div v-if="isLoadingPosts" class="loading-container">
               <ion-spinner></ion-spinner>
               <p>Loading content...</p>
@@ -427,6 +444,10 @@ import { Poll } from '../services/pollService';
 import { GunService } from '../services/gunService';
 import { UserService } from '../services/userService';
 import ChatService from '../services/chatService';
+import { useFeedPreferences } from '../composables/useFeedPreferences';
+import type { FeedMode } from '../services/feedPreferencesService';
+import { rankFeedItems } from '../utils/feedRanking';
+
 import { warmupFromDB } from '../services/dbWarmup';
 import { betaFeatures } from '../utils/betaFeatures';
 
@@ -435,6 +456,7 @@ const chainStore = useChainStore();
 const communityStore = useCommunityStore();
 const postStore = usePostStore();
 const pollStore = usePollStore();
+const { preferences: feedPreferences, setMode } = useFeedPreferences();
 
 const activeTab = ref('home');
 const communityFilter = ref('all');
@@ -476,28 +498,92 @@ const displayedCommunities = computed(() => {
   return communityStore.communities;
 });
 
-const combinedFeed = computed(() => {
-  const items: Array<{ type: 'post' | 'poll'; data: any; createdAt: number }> = [];
+const joinedCommunities = computed(() => communityStore.communities.filter(c => communityStore.isJoined(c.id)));
+const joinedCommunityIds = computed(() => new Set(joinedCommunities.value.map(c => c.id)));
+const feedMode = computed(() => feedPreferences.value.mode);
 
-  postStore.sortedPosts.forEach(post =>
-    items.push({ type: 'post', data: post, createdAt: post.createdAt })
-  );
-  pollStore.sortedPolls.forEach(poll => {
-    if (!poll.isPrivate) items.push({ type: 'poll', data: poll, createdAt: poll.createdAt });
+function setFeedMode(mode: FeedMode) {
+  setMode(mode);
+}
+
+type HomeFeedEntry = {
+  type: 'post';
+  data: Post;
+  createdAt: number;
+} | {
+  type: 'poll';
+  data: Poll;
+  createdAt: number;
+};
+
+const orderedFeed = computed<HomeFeedEntry[]>(() => {
+  const preferences = feedPreferences.value;
+  const items: HomeFeedEntry[] = [];
+
+  postStore.sortedPosts.forEach((post) => {
+    items.push({ type: 'post', data: post, createdAt: post.createdAt });
   });
 
-  items.sort((a, b) => b.createdAt - a.createdAt);
+  pollStore.sortedPolls.forEach((poll) => {
+    if (!poll.isPrivate) {
+      items.push({ type: 'poll', data: poll, createdAt: poll.createdAt });
+    }
+  });
 
+  const mutedCommunities = new Set(preferences.mutedCommunities);
+  const filteredItems = items.filter((item) => {
+    if (item.type === 'post' && !preferences.showPosts) return false;
+    if (item.type === 'poll' && !preferences.showPolls) return false;
+    return !mutedCommunities.has(item.data.communityId);
+  });
+
+  if (feedMode.value === 'latest') {
+    return filteredItems.sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  const rankInput = filteredItems.map((item) => {
+    if (item.type === 'post') {
+      const post = item.data as Post;
+      return {
+        id: `post:${post.id}`,
+        type: 'post' as const,
+        createdAt: post.createdAt,
+        communityId: post.communityId,
+        title: post.title || '',
+        content: post.content || '',
+        engagementScore: Math.max(0, post.score) + post.commentCount * 0.7 + post.upvotes * 0.25,
+      };
+    }
+
+    const poll = item.data as Poll;
+    const options = Array.isArray(poll.options) ? poll.options : [];
+    const optionText = options.map((option) => option?.text ?? '').join(' ');
+    return {
+      id: `poll:${poll.id}`,
+      type: 'poll' as const,
+      createdAt: poll.createdAt,
+      communityId: poll.communityId,
+      title: poll.question || '',
+      content: `${poll.description || ''} ${optionText}`.trim(),
+      engagementScore: Math.max(0, poll.totalVotes) + (poll.isExpired ? 0 : 2),
+    };
+  });
+
+  const ranked = rankFeedItems(rankInput, preferences, joinedCommunityIds.value);
+  const itemById = new Map(filteredItems.map((item) => [`${item.type}:${item.data.id}`, item]));
+
+  return ranked
+    .map((entry) => itemById.get(entry.id))
+    .filter((entry): entry is HomeFeedEntry => Boolean(entry));
+});
+
+
+const combinedFeed = computed(() => {
   const pageSize = postStore.visibleCount;
-  return items.slice(0, pageSize);
+  return orderedFeed.value.slice(0, pageSize);
 });
 
-const hasMore = computed(() => {
-  const totalItems = postStore.sortedPosts.length + pollStore.sortedPolls.filter(p => !p.isPrivate).length;
-  return postStore.visibleCount < totalItems;
-});
-
-const joinedCommunities = computed(() => communityStore.communities.filter(c => communityStore.isJoined(c.id)));
+const hasMore = computed(() => postStore.visibleCount < orderedFeed.value.length);
 
 // ── Chat list ─────────────────────────────────────────────────────────────────
 
@@ -887,6 +973,35 @@ ion-header ion-toolbar {
 }
 ion-header.header-hidden {
   transform: translateY(-100%);
+}
+
+.feed-mode-toggle {
+  display: inline-flex;
+  gap: 6px;
+  margin: 12px 16px 8px;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: rgba(var(--ion-card-background-rgb), 0.22);
+  backdrop-filter: blur(10px) saturate(1.3);
+  -webkit-backdrop-filter: blur(10px) saturate(1.3);
+}
+
+.mode-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ion-color-medium);
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mode-btn.active {
+  color: #fff;
+  background: var(--ion-color-primary);
 }
 
 .new-content-banner {

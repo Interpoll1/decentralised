@@ -8,8 +8,8 @@ Page-level components. Each maps to a route in `src/router/index.ts`. All routes
 
 | File | Route | Purpose |
 |---|---|---|
-| `HomePage.vue` | `/home` | Feed of communities and trending polls. Entry point. |
-| `CommunityPage.vue` | `/community/:communityId` | Community detail: post/poll lists, join button. Handles encrypted communities: checks `KeyVaultService.hasKey` for access, decrypts metadata via `CommunityService.decryptCommunityMeta`, decrypts posts/polls via `PostService.decryptPost`/`PollService.decryptPoll`, shows locked state with join link when no key, and offers "Share Invite" button for members with access. |
+| `HomePage.vue` | `/home` | Main feed entry point. Merges posts + polls and supports personalized ranking (`For You`) vs chronological mode (`Latest`) using `useFeedPreferences` + `feedRanking` utilities. |
+| `CommunityPage.vue` | `/community/:communityId` | Community detail: post/poll lists, join button, and mode-aware personalized ordering (same `For You`/`Latest` preference model as Home) layered on top of moderation filters. Handles encrypted communities: checks `KeyVaultService.hasKey` for access, decrypts metadata via `CommunityService.decryptCommunityMeta`, decrypts posts/polls via `PostService.decryptPost`/`PollService.decryptPoll`, shows locked state with join link when no key, and offers "Share Invite" button for members with access. |
 | `CreateCommunityPage.vue` | `/create-community` | Form to create a new community. Calls `CommunityService` + `chainStore.addAction`. |
 | `CreatePollPage.vue` | `/create-poll` | Poll creation form. Supports expiry, multiple choice, login gate, private/invite. |
 | `CreatePostPage.vue` | `/community/:communityId/create-post` | Post creation with optional image upload. |
@@ -19,7 +19,7 @@ Page-level components. Each maps to a route in `src/router/index.ts`. All routes
 | `ResultsPage.vue` | `/results/:pollId` | Poll results with charts. |
 | `ChainExplorerPage.vue` | `/chain-explorer` | Browse local blockchain blocks, validate chain, look up receipts. |
 | `ReceiptPage.vue` | `/receipt/:mnemonic?` | Verify a vote receipt by mnemonic. |
-| `SettingsPage.vue` | `/settings` | Relay URL overrides (saved to localStorage), key management, moderation settings. |
+| `SettingsPage.vue` | `/settings` | Multi-tab settings hub for general, feed personalization, moderation, relay/network config, and local data controls. Feed tab manages keywords, muted/favorite communities, feed mode, and ranking weights (local-only). |
 | `ProfilePage.vue` | `/profile` | Current user's profile. Editable: custom username, display name, bio, avatar (via IPFSService), and "Show username on posts" toggle (anonymous by default). |
 | `UserProfileView.vue` | `/user/:userId` | Another user's public profile. |
 | `SearchView.vue` | `/search` | Full-text search results. Uses `useSearch` composable. |

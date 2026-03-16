@@ -12,10 +12,6 @@ export function useProofOfWork() {
   const error = ref<string | null>(null);
 
   async function getProof(action: string): Promise<PowProof | null> {
-    if (solving.value) {
-      error.value = 'Already solving a PoW challenge';
-      return null;
-    }
     solving.value = true;
     error.value = null;
     try {

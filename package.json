@@ -34,6 +34,7 @@
     "ionicons": "^7.2.1",
     "ipfs-core": "^0.18.1",
     "libp2p-webrtc-star": "^0.25.0",
+    "naughty-words": "^1.2.0",
     "nsfwjs": "^4.2.1",
     "os-browserify": "^0.3.0",
     "path-browserify": "^1.0.1",

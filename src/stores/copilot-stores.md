@@ -23,6 +23,8 @@ Manages polls loaded from GunDB.
 
 - Polls are keyed in a `Map<string, Poll>` for O(1) lookups.
 - Subscribes to GunDB per community. Subscription lifecycle managed with `subscribedCommunities` + `unsubscribers` map — call `unsubscribe(communityId)` to clean up.
+- Uses per-community initial-load tracking (`initialLoadDoneByCommId`) to avoid cross-community false "new poll" classification.
+- `pendingNewPolls` only contains truly new arrivals after initial hydration; `flushNewPolls()` moves them into `pollsMap` and persists seen IDs in localStorage.
 - Pagination: `visibleCount` incremented by `PAGE_SIZE` (10).
 - `createPoll()` checks the current user's `showRealName` preference. Same pseudonym-vs-real-name logic as posts.
 
@@ -38,6 +40,8 @@ Key computed: `polls`, `sortedPolls`
 ## `postStore.ts` — `usePostStore`
 
 - Similar structure to `pollStore`: map-based, per-community subscriptions, pagination.
+- Uses per-community initial-load tracking (`communityInitialLoadDone`) plus subscription timestamps to avoid false "new post" banners from startup hydration.
+- `pendingNewPosts` is banner-only state; accepted posts live in `postsMap` and seen IDs are persisted (`seen-post-ids`) so accepted content survives refresh.
 - `createPost()` checks the current user's `showRealName` preference. If false (default), generates a pseudonym from the pre-generated postId + authorId as the `authorName`. If true, uses the user's `customUsername`.
 
 ## `commentStore.ts` — `useCommentStore`

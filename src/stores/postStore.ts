@@ -49,6 +49,8 @@ export const usePostStore = defineStore('post', () => {
   const seenPostIds = loadSeenIds();
   const subscribedCommunities = new Set<string>();
   const unsubscribers = new Map<string, () => void>();
+  // Per-community initial load tracking: ensures no cross-community misclassification
+  const communityInitialLoadDone = new Map<string, boolean>();
 
   // ─── Computed ──────────────────────────────────────────────────────────────
 
@@ -76,9 +78,12 @@ export const usePostStore = defineStore('post', () => {
   // ─── Loading ───────────────────────────────────────────────────────────────
 
   function loadPostsForCommunity(communityId: string): Promise<void> {
-    if (subscribedCommunities.has(communityId)) return Promise.resolve();
+    if (subscribedCommunities.has(communityId) || unsubscribers.has(communityId)) return Promise.resolve();
 
     return new Promise((resolve) => {
+      communityInitialLoadDone.set(communityId, false);
+      const subscriptionStartTime = Date.now();
+
       const unsub = PostService.subscribeToPostsInCommunity(
         communityId,
         (post) => {
@@ -111,7 +116,7 @@ export const usePostStore = defineStore('post', () => {
         },
         () => {
           subscribedCommunities.add(communityId);
-          initialLoadDone.value = true;
+          communityInitialLoadDone.set(communityId, true);
           for (const id of postsMap.value.keys()) seenPostIds.add(id);
           saveSeenIds(seenPostIds);
           resolve();
@@ -142,7 +147,8 @@ export const usePostStore = defineStore('post', () => {
   function resetVisibleCount() {
     visibleCount.value    = PAGE_SIZE;
     pendingNewPosts.value = [];
-    initialLoadDone.value = false;
+    // Note: communityInitialLoadDone is NOT reset here—it persists per community
+    // across refreshes, so truly new posts after refresh correctly trigger banner
   }
 
   // ─── Create ────────────────────────────────────────────────────────────────

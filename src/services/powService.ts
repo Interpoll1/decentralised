@@ -43,6 +43,12 @@ function countLeadingZeroBits(hexHash: string): number {
 }
 
 function validateChallenge(c: PowChallenge): void {
+  if (typeof c.challengeId !== 'string' || c.challengeId.length === 0) {
+    throw new Error('PoW challenge missing challengeId');
+  }
+  if (typeof c.prefix !== 'string' || c.prefix.length === 0) {
+    throw new Error('PoW challenge missing prefix');
+  }
   if (!Number.isFinite(c.difficulty) || c.difficulty < 1) {
     throw new Error(`PoW difficulty invalid: ${c.difficulty}`);
   }
@@ -94,7 +100,7 @@ export class PowService {
   /**
    * Request a PoW challenge from the relay server via WebSocket.
    */
-  static async requestChallenge(action: string): Promise<PowChallenge> {
+  private static async requestChallenge(action: string): Promise<PowChallenge> {
     this.initialize();
 
     const deviceId = await VoteTrackerService.getDeviceId();
@@ -135,7 +141,7 @@ export class PowService {
    * has at least `difficulty` leading zero bits.
    * Yields to the event loop every SOLVER_BATCH_SIZE iterations to avoid UI freeze.
    */
-  static async solve(challenge: PowChallenge): Promise<number> {
+  private static async solve(challenge: PowChallenge): Promise<number> {
     validateChallenge(challenge);
     const { prefix, difficulty, expiresAt } = challenge;
     let nonce = 0;

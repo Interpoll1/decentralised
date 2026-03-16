@@ -398,6 +398,8 @@ import { KeyVaultService } from '../services/keyVaultService';
 import { EncryptionService } from '../services/encryptionService';
 import { InviteLinkService } from '../services/inviteLinkService';
 import { ModerationService, moderationVersion } from '../services/moderationService';
+import { useFeedPreferences } from '../composables/useFeedPreferences';
+import { rankFeedItems } from '../utils/feedRanking';
 
 const route = useRoute();
 const router = useRouter();
@@ -405,6 +407,7 @@ const communityStore = useCommunityStore();
 const postStore = usePostStore();
 const pollStore = usePollStore();
 const userStore = useUserStore();
+const { preferences: feedPreferences } = useFeedPreferences();
 
 const communityId = computed(() => route.params.communityId as string);
 const community = computed(() => communityStore.currentCommunity);
@@ -425,6 +428,7 @@ const currentModSettings = computed(() => {
   moderationVersion.value;
   return ModerationService.getSettings();
 });
+const joinedCommunityIds = computed(() => new Set(Array.from(communityStore.joinedCommunities)));
 
 // Get posts and polls for this community
 const communityPosts = computed(() => {
@@ -484,8 +488,10 @@ const displayedContent = computed(() => {
   moderationVersion.value; // reactive dependency on moderation settings
   const items: Array<{type: 'post' | 'poll', data: any, createdAt: number, flagged: boolean}> = [];
   const settings = ModerationService.getSettings();
+  const allowPosts = contentFilter.value === 'all' || contentFilter.value === 'posts';
+  const allowPolls = contentFilter.value === 'all' || contentFilter.value === 'polls';
   
-  if (contentFilter.value === 'all' || contentFilter.value === 'posts') {
+  if (allowPosts) {
     decryptedPosts.value.forEach(post => {
       const textToCheck = `${post.title || ''} ${post.content || ''}`;
       const filterResult = ModerationService.checkContent(textToCheck);
@@ -506,7 +512,7 @@ const displayedContent = computed(() => {
     });
   }
   
-  if (contentFilter.value === 'all' || contentFilter.value === 'polls') {
+  if (allowPolls) {
     decryptedPolls.value.forEach(poll => {
       const textToCheck = `${poll.question || ''} ${poll.description || ''}`;
       const filterResult = ModerationService.checkContent(textToCheck);
@@ -522,7 +528,50 @@ const displayedContent = computed(() => {
     });
   }
 
-  return items.sort((a, b) => b.createdAt - a.createdAt);
+  if (feedPreferences.value.mode === 'latest') {
+    return items.sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  const rankInput = items.map((item) => {
+    if (item.type === 'post') {
+      const post = item.data as Post;
+      return {
+        id: `post:${post.id}`,
+        type: 'post' as const,
+        createdAt: post.createdAt,
+        communityId: post.communityId,
+        title: post.title || '',
+        content: post.content || '',
+        engagementScore: Math.max(0, post.score) + post.commentCount * 0.7 + post.upvotes * 0.25,
+      };
+    }
+
+    const poll = item.data as Poll;
+    const options = Array.isArray(poll.options) ? poll.options : [];
+    const optionText = options.map((option) => option?.text ?? '').join(' ');
+    return {
+      id: `poll:${poll.id}`,
+      type: 'poll' as const,
+      createdAt: poll.createdAt,
+      communityId: poll.communityId,
+      title: poll.question || '',
+      content: `${poll.description || ''} ${optionText}`.trim(),
+      engagementScore: Math.max(0, poll.totalVotes) + (poll.isExpired ? 0 : 2),
+    };
+  });
+
+  const rankingPrefs = {
+    ...feedPreferences.value,
+    mutedCommunities: [],
+    showPosts: true,
+    showPolls: true,
+  };
+  const ranked = rankFeedItems(rankInput, rankingPrefs, joinedCommunityIds.value);
+  const itemById = new Map(items.map((item) => [`${item.type}:${item.data.id}`, item]));
+
+  return ranked
+    .map((entry) => itemById.get(entry.id))
+    .filter((entry): entry is {type: 'post' | 'poll', data: any, createdAt: number, flagged: boolean} => Boolean(entry));
 });
 
 function hasUpvoted(postId: string): boolean {
@@ -763,4 +812,3 @@ watch(communityId, async (newId, oldId) => {
   }
 });
 </script>
-
