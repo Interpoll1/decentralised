@@ -6,7 +6,7 @@ import { isVersionEnabled } from '../utils/dataVersionSettings';
 import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://interpoll.onrender.com';
+const API_URL = import.meta.env.VITE_API_URL || 'https://interpoll.endless.sbs';
 
 export interface Post {
   id: string;

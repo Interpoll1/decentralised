@@ -485,7 +485,7 @@ import {
 import { useSearch } from '../composables/useSearch';
 
 const router  = useRouter();
-const API_URL = import.meta.env.VITE_API_URL || 'https://interpoll.onrender.com';
+const API_URL = import.meta.env.VITE_API_URL || 'https://interpoll.endless.sbs';
 
 const {
   results,

@@ -1898,13 +1898,6 @@ function refreshNetwork() {
   peerList.value = Array.from(peerAddresses.values());
   myPeerId.value = WebSocketService.getPeerId();
   knownServers.value = WebSocketService.getKnownServers();
-
-  // Keep edit fields in sync with current config
-  editRelay.value = {
-    websocket: config.relay.websocket,
-    gun: config.relay.gun,
-    api: config.relay.api
-  };
 }
 
 async function applyRelayConfig() {

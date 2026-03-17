@@ -29,9 +29,9 @@ function flag(name, fallback) {
   return i !== -1 && args[i + 1] ? args[i + 1] : fallback;
 }
 
-const WS_URL    = flag('--ws',    'wss://interpoll.onrender.com');
-const GUN_URL   = flag('--gun',   'https://interpoll2.onrender.com/gun');
-const API_URL   = flag('--api',   'https://interpoll.onrender.com');
+const WS_URL    = flag('--ws',    'wss://interpoll.endless.sbs');
+const GUN_URL   = flag('--gun',   'https://interpoll2.endless.sbs/gun');
+const API_URL   = flag('--api',   'https://interpoll.endless.sbs');
 const DATA_DIR  = flag('--data',  path.join(path.dirname(fileURLToPath(import.meta.url)), 'peer-data'));
 const PROXY_URL = flag('--proxy', '');
 

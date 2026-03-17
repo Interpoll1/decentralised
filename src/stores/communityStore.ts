@@ -4,8 +4,8 @@ import { ref } from 'vue';
 import { Community, CommunityService } from '../services/communityService';
 import { useChainStore } from './chainStore';
 
-const GUN_RELAY_URL = import.meta.env.VITE_GUN_URL?.replace('/gun', '') || 'https://interpoll2.onrender.com';
-const API_URL       = import.meta.env.VITE_API_URL || 'https://interpoll.onrender.com';
+const GUN_RELAY_URL = import.meta.env.VITE_GUN_URL?.replace('/gun', '') || 'https://interpoll2.endless.sbs';
+const API_URL       = import.meta.env.VITE_API_URL || 'https://interpoll.endless.sbs';
 
 export const useCommunityStore = defineStore('community', () => {
   const communities       = ref<Community[]>([]);
