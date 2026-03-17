@@ -91,7 +91,15 @@ export const usePostStore = defineStore('post', () => {
   // ─── Loading ───────────────────────────────────────────────────────────────
 
   function loadPostsForCommunity(communityId: string): Promise<void> {
-    if (subscribedCommunities.has(communityId) || unsubscribers.has(communityId)) return Promise.resolve();
+    // Allow re-subscription if previous attempt yielded zero posts (GunDB was offline/slow)
+    if (subscribedCommunities.has(communityId) || unsubscribers.has(communityId)) {
+      const hasPosts = Array.from(postsMap.value.values()).some(p => p.communityId === communityId);
+      if (hasPosts) return Promise.resolve();
+      // Clean up stale subscription state before re-subscribing
+      const oldUnsub = unsubscribers.get(communityId);
+      if (oldUnsub) { oldUnsub(); unsubscribers.delete(communityId); }
+      subscribedCommunities.delete(communityId);
+    }
 
     return new Promise((resolve) => {
       communityInitialLoadDone.set(communityId, false);
@@ -118,7 +126,7 @@ export const usePostStore = defineStore('post', () => {
           // This prevents Gun re-delivering old posts from triggering banner.
           const isGenuinelyNew = post.createdAt > APP_START_TIME;
 
-          if (initialLoadDone.value && isGenuinelyNew) {
+          if (communityInitialLoadDone.get(communityId) && isGenuinelyNew) {
             // Auto-prepend immediately — no banner, no click required
             postsMap.value.set(post.id, post);
             tryDecryptPost(post);

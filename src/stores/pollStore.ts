@@ -73,7 +73,15 @@ export const usePollStore = defineStore('poll', () => {
   // ─── Loading ───────────────────────────────────────────────────────────────
 
   function loadPollsForCommunity(communityId: string): Promise<void> {
-    if (subscribedCommunities.has(communityId) || unsubscribers.has(communityId)) return Promise.resolve();
+    // Allow re-subscription if previous attempt yielded zero polls (GunDB was offline/slow)
+    if (subscribedCommunities.has(communityId) || unsubscribers.has(communityId)) {
+      const hasPolls = Array.from(pollsMap.value.values()).some(p => p.communityId === communityId);
+      if (hasPolls) return Promise.resolve();
+      // Clean up stale subscription state before re-subscribing
+      const oldUnsub = unsubscribers.get(communityId);
+      if (oldUnsub) { oldUnsub(); unsubscribers.delete(communityId); }
+      subscribedCommunities.delete(communityId);
+    }
 
     return new Promise((resolve) => {
       initialLoadDoneByCommId.set(communityId, false);

@@ -77,7 +77,7 @@
       </div>
 
       <!-- Content Filter -->
-      <div v-if="hasAccess" class="content-filter">
+      <div class="content-filter">
         <button
           class="tab-btn"
           :class="{ active: contentFilter === 'all' }"
@@ -95,15 +95,14 @@
         >Polls</button>
       </div>
 
-      <!-- Locked State (encrypted community, no access) -->
-      <div v-if="!isLoading && community?.isEncrypted && !hasAccess" class="locked-state">
-        <ion-icon :icon="lockClosedOutline" size="large"></ion-icon>
-        <h2>🔒 Private Community</h2>
-        <p>This community is encrypted. Use an invite link or password to access its content.</p>
-        <p v-if="community?.encryptionHint" class="encryption-hint">{{ community.encryptionHint }}</p>
-        <ion-button @click="$router.push(`/join/community/${communityId}`)">
+      <!-- Encrypted community hint (shown inline, does not block content feed) -->
+      <div v-if="!isLoading && community?.isEncrypted && !hasAccess" class="locked-hint">
+        <ion-icon :icon="lockClosedOutline" size="small"></ion-icon>
+        <span>This community is encrypted.</span>
+        <span v-if="community?.encryptionHint" class="encryption-hint">{{ community.encryptionHint }}</span>
+        <ion-button size="small" fill="outline" @click="$router.push(`/join/community/${communityId}`)">
           <ion-icon slot="start" :icon="keyOutline"></ion-icon>
-          Join Community
+          Unlock
         </ion-button>
       </div>
 
@@ -114,7 +113,7 @@
       </div>
 
       <!-- Content Feed -->
-      <div v-else-if="hasAccess && displayedContent.length > 0" class="content-feed">
+      <div v-else-if="displayedContent.length > 0" class="content-feed">
         <template v-for="item in displayedContent" :key="`${item.type}-${item.data.id}`">
           <PostCard
             v-if="item.type === 'post'"
@@ -141,18 +140,18 @@
       </div>
 
       <!-- Empty State -->
-      <div v-else-if="hasAccess" class="empty-state">
+      <div v-else-if="!isLoading" class="empty-state">
         <ion-icon :icon="documentTextOutline" size="large"></ion-icon>
         <p v-if="contentFilter === 'posts'">No posts yet</p>
         <p v-else-if="contentFilter === 'polls'">No polls yet</p>
         <p v-else>No content yet</p>
         <ion-button
-          v-if="isJoined"
+          v-if="isJoined && hasAccess"
           @click="contentFilter === 'polls' ? $router.push(`/create-poll?communityId=${communityId}`) : $router.push(`/community/${communityId}/create-post`)"
         >
           Create the first {{ contentFilter === 'polls' ? 'poll' : 'post' }}!
         </ion-button>
-        <ion-button v-else @click="toggleJoin">
+        <ion-button v-else-if="!isJoined" @click="toggleJoin">
           Join to create content
         </ion-button>
       </div>
@@ -284,38 +283,28 @@
   color: var(--ion-color-medium);
 }
 
-/* ── Locked State ────────────────────────────────── */
-.locked-state {
+/* ── Locked Hint (inline banner for encrypted communities) ─── */
+.locked-hint {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 64px 24px;
-  text-align: center;
+  gap: 8px;
+  padding: 10px 16px;
+  margin: 0 12px 12px;
+  background: rgba(var(--ion-color-warning-rgb), 0.12);
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--ion-color-warning-shade);
+  flex-wrap: wrap;
 }
 
-.locked-state ion-icon {
-  font-size: 48px;
+.locked-hint ion-icon {
+  font-size: 18px;
   color: var(--ion-color-warning);
-  margin-bottom: 8px;
+  flex-shrink: 0;
 }
 
-.locked-state h2 {
-  margin: 8px 0 4px;
-  font-size: 20px;
-  font-weight: 700;
-}
-
-.locked-state p {
-  color: var(--ion-color-medium);
-  margin: 4px 0 12px;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.encryption-hint {
+.locked-hint .encryption-hint {
   font-style: italic;
-  color: var(--ion-color-warning-shade) !important;
 }
 
 /* ── Rules ───────────────────────────────────────── */
@@ -349,7 +338,7 @@
 </style>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watchEffect, watch } from 'vue';
+import { ref, computed, watchEffect, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage,
@@ -369,7 +358,8 @@ import {
   IonSegmentButton,
   IonLabel,
   IonSpinner,
-  toastController
+  toastController,
+  onIonViewWillEnter
 } from '@ionic/vue';
 import {
   homeOutline,
@@ -756,7 +746,10 @@ async function shareInviteLink() {
   }
 }
 
+let loadGeneration = 0;
+
 async function loadCommunityContent() {
+  const gen = ++loadGeneration;
   isLoading.value = true;
   decryptedMeta.value = null;
   decryptedPosts.value = [];
@@ -772,8 +765,12 @@ async function loadCommunityContent() {
       // Not critical
     }
 
+    if (gen !== loadGeneration) return;
+
     // Select the community
     await communityStore.selectCommunity(communityId.value);
+
+    if (gen !== loadGeneration) return;
 
     // Check encryption access
     if (community.value?.isEncrypted) {
@@ -787,22 +784,24 @@ async function loadCommunityContent() {
       hasAccess.value = true;
     }
 
-    // Only load content if user has access
-    if (hasAccess.value) {
-      await Promise.all([
-        postStore.loadPostsForCommunity(communityId.value),
-        pollStore.loadPollsForCommunity(communityId.value)
-      ]);
-    }
+    if (gen !== loadGeneration) return;
+
+    // Always load posts/polls — encrypted content loads as placeholders
+    // and gets decrypted reactively if user has the key
+    await Promise.all([
+      postStore.loadPostsForCommunity(communityId.value),
+      pollStore.loadPollsForCommunity(communityId.value)
+    ]);
 
   } catch (error) {
     console.error('Error loading community content:', error);
   } finally {
-    isLoading.value = false;
+    if (gen === loadGeneration) isLoading.value = false;
   }
 }
 
-onMounted(async () => {
+// Re-load when Ionic enters (or re-enters) the page — covers first mount and cache re-entry
+onIonViewWillEnter(async () => {
   await loadCommunityContent();
 });
 
