@@ -2,11 +2,10 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { Community, CommunityService } from '../services/communityService';
+import { KeyVaultService } from '../services/keyVaultService';
 import { useChainStore } from './chainStore';
 
 const GUN_RELAY_URL = import.meta.env.VITE_GUN_URL?.replace('/gun', '') || 'https://interpoll2.endless.sbs';
-const API_URL       = import.meta.env.VITE_API_URL || 'https://interpoll.endless.sbs';
-
 export const useCommunityStore = defineStore('community', () => {
   const communities       = ref<Community[]>([]);
   const currentCommunity  = ref<Community | null>(null);
@@ -15,6 +14,85 @@ export const useCommunityStore = defineStore('community', () => {
 
   let subscriptionStarted = false;
   const seen = new Set<string>();
+
+  function persistJoinedCommunities() {
+    localStorage.setItem('joined-communities', JSON.stringify(Array.from(joinedCommunities.value)));
+  }
+
+  function markJoined(communityId: string) {
+    if (joinedCommunities.value.has(communityId)) return;
+    const next = new Set(joinedCommunities.value);
+    next.add(communityId);
+    joinedCommunities.value = next;
+    persistJoinedCommunities();
+  }
+
+  function unmarkJoined(communityId: string) {
+    if (!joinedCommunities.value.has(communityId)) return;
+    const next = new Set(joinedCommunities.value);
+    next.delete(communityId);
+    joinedCommunities.value = next;
+    persistJoinedCommunities();
+  }
+
+  async function syncJoinedPrivateCommunitiesFromKeys() {
+    try {
+      const keys = await KeyVaultService.listKeysByType('community');
+      let changed = false;
+      const next = new Set(joinedCommunities.value);
+      for (const key of keys) {
+        if (!next.has(key.id)) {
+          next.add(key.id);
+          changed = true;
+        }
+      }
+      if (changed) {
+        joinedCommunities.value = next;
+        persistJoinedCommunities();
+      }
+    } catch (error) {
+      console.error('Error syncing joined private communities:', error);
+    }
+  }
+
+  async function resolveAccessibleCommunity(community: Community): Promise<Community> {
+    if (!community.isEncrypted) return community;
+    if (!joinedCommunities.value.has(community.id) && !await KeyVaultService.hasKey(community.id)) {
+      return community;
+    }
+    return await CommunityService.decryptCommunityMeta(community) ?? community;
+  }
+
+  async function upsertCommunity(community: Community) {
+    const resolved = await resolveAccessibleCommunity(community);
+    seen.add(resolved.id);
+    const index = communities.value.findIndex(c => c.id === resolved.id);
+    if (index >= 0) {
+      communities.value[index] = resolved;
+    } else {
+      communities.value.push(resolved);
+    }
+
+    if (currentCommunity.value?.id === resolved.id) {
+      currentCommunity.value = resolved;
+    }
+  }
+
+  function adjustMemberCount(communityId: string, delta: number) {
+    const updateCount = (community: Community): Community => ({
+      ...community,
+      memberCount: Math.max(1, (community.memberCount || 0) + delta),
+    });
+
+    const index = communities.value.findIndex(c => c.id === communityId);
+    if (index >= 0) {
+      communities.value[index] = updateCount(communities.value[index]);
+    }
+
+    if (currentCommunity.value?.id === communityId) {
+      currentCommunity.value = updateCount(currentCommunity.value);
+    }
+  }
 
   // ─── MySQL REST fallback ───────────────────────────────────────────────────
   // When Gun returns nothing (cold relay), fetch directly from MySQL via the
@@ -31,7 +109,6 @@ export const useCommunityStore = defineStore('community', () => {
         const d = row.data;
         // Only leaf community nodes have an `id` field — skip index nodes
         if (!d?.id || !d?.displayName) continue;
-        if (seen.has(d.id)) continue;
 
         const community: Community = {
           id:          d.id,
@@ -43,11 +120,14 @@ export const useCommunityStore = defineStore('community', () => {
           postCount:   d.postCount   || 0,
           createdAt:   d.createdAt   || Date.now(),
           rules:       Array.isArray(d.rules) ? d.rules : [],
+          isEncrypted: !!d.isEncrypted,
+          encryptionHint: d.encryptionHint || undefined,
+          encryptedMeta: d.encryptedMeta || undefined,
         };
 
-        seen.add(community.id);
-        communities.value.push(community);
-        added++;
+        const previousCount = communities.value.length;
+        await upsertCommunity(community);
+        if (communities.value.length > previousCount) added++;
       }
 
       if (added > 0) {
@@ -87,22 +167,12 @@ export const useCommunityStore = defineStore('community', () => {
     if (subscriptionStarted) return;
     subscriptionStarted = true;
     isLoading.value = true;
+    await syncJoinedPrivateCommunitiesFromKeys();
 
     // 1. Start Gun live subscription — gets data from localStorage cache
     //    instantly and from relay as it arrives
     CommunityService.subscribeToCommunitiesLive((community) => {
-      if (seen.has(community.id)) {
-        const index = communities.value.findIndex(c => c.id === community.id);
-        if (index >= 0) {
-          const existing = communities.value[index];
-          if (JSON.stringify(existing) !== JSON.stringify(community)) {
-            communities.value[index] = community;
-          }
-        }
-      } else {
-        seen.add(community.id);
-        communities.value.push(community);
-      }
+      void upsertCommunity(community);
     });
 
     // 2. After 1.5s, if Gun gave us nothing (cold relay), fall back to MySQL
@@ -140,10 +210,8 @@ export const useCommunityStore = defineStore('community', () => {
         timestamp: community.createdAt,
       }, community.displayName);
 
-      if (!seen.has(community.id)) {
-        seen.add(community.id);
-        communities.value.unshift(community);
-      }
+      markJoined(community.id);
+      await upsertCommunity(community);
 
       return community;
     } catch (error) {
@@ -173,10 +241,8 @@ export const useCommunityStore = defineStore('community', () => {
         isEncrypted: true,
       }, result.community.displayName);
 
-      if (!seen.has(result.community.id)) {
-        seen.add(result.community.id);
-        communities.value.unshift(result.community);
-      }
+      markJoined(result.community.id);
+      await upsertCommunity(result.community);
 
       return result;
     } catch (error) {
@@ -190,7 +256,13 @@ export const useCommunityStore = defineStore('community', () => {
   async function selectCommunity(communityId: string) {
     try {
       const local = communities.value.find(c => c.id === communityId);
-      if (local) { currentCommunity.value = local; return; }
+      if (local) {
+        currentCommunity.value = await resolveAccessibleCommunity(local);
+        if (currentCommunity.value !== local) {
+          await upsertCommunity(currentCommunity.value);
+        }
+        return;
+      }
 
       // Try Gun first
       currentCommunity.value = await CommunityService.getCommunity(communityId);
@@ -200,13 +272,28 @@ export const useCommunityStore = defineStore('community', () => {
         const res  = await fetch(`${GUN_RELAY_URL}/db/soul?soul=v2/communities/${communityId}`);
         if (res.ok) {
           const json = await res.json();
-          if (json?.data?.id) currentCommunity.value = json.data as Community;
+          if (json?.data?.id) {
+            currentCommunity.value = {
+              id: json.data.id,
+              name: json.data.name || json.data.id,
+              displayName: json.data.displayName || json.data.name || json.data.id,
+              description: json.data.description || '',
+              creatorId: json.data.creatorId || '',
+              memberCount: json.data.memberCount || 0,
+              postCount: json.data.postCount || 0,
+              createdAt: json.data.createdAt || Date.now(),
+              rules: Array.isArray(json.data.rules) ? json.data.rules : [],
+              isEncrypted: !!json.data.isEncrypted,
+              encryptionHint: json.data.encryptionHint || undefined,
+              encryptedMeta: json.data.encryptedMeta || undefined,
+            };
+          }
         }
       }
 
-      if (currentCommunity.value && !seen.has(currentCommunity.value.id)) {
-        seen.add(currentCommunity.value.id);
-        communities.value.push(currentCommunity.value);
+      if (currentCommunity.value) {
+        currentCommunity.value = await resolveAccessibleCommunity(currentCommunity.value);
+        await upsertCommunity(currentCommunity.value);
       }
     } catch (error) {
       console.error('Error selecting community:', error);
@@ -216,15 +303,36 @@ export const useCommunityStore = defineStore('community', () => {
   // ─── Join ──────────────────────────────────────────────────────────────────
 
   async function joinCommunity(communityId: string) {
+    await syncJoinedPrivateCommunitiesFromKeys();
+    if (isJoined(communityId)) {
+      if (!currentCommunity.value || currentCommunity.value.id !== communityId) {
+        await selectCommunity(communityId);
+      }
+      return;
+    }
+    if (await KeyVaultService.hasKey(communityId)) {
+      markJoined(communityId);
+      if (!currentCommunity.value || currentCommunity.value.id !== communityId) {
+        await selectCommunity(communityId);
+      }
+      return;
+    }
+    markJoined(communityId);
+    adjustMemberCount(communityId, 1);
     try {
       await CommunityService.joinCommunity(communityId);
-      joinedCommunities.value.add(communityId);
-      localStorage.setItem('joined-communities', JSON.stringify(
-        Array.from(joinedCommunities.value)
-      ));
-      await selectCommunity(communityId);
+      const refreshed = await CommunityService.getCommunity(communityId);
+      if (refreshed) {
+        await upsertCommunity(refreshed);
+      }
+      if (!currentCommunity.value || currentCommunity.value.id !== communityId) {
+        await selectCommunity(communityId);
+      }
     } catch (error) {
+      unmarkJoined(communityId);
+      adjustMemberCount(communityId, -1);
       console.error('Error joining community:', error);
+      throw error;
     }
   }
 
@@ -245,6 +353,7 @@ export const useCommunityStore = defineStore('community', () => {
     subscriptionStarted = false;
     seen.clear();
     communities.value = [];
+    await syncJoinedPrivateCommunitiesFromKeys();
     await loadCommunities();
   }
 
@@ -262,6 +371,8 @@ export const useCommunityStore = defineStore('community', () => {
     createPrivateCommunity,
     selectCommunity,
     joinCommunity,
+    markJoined,
+    syncJoinedPrivateCommunitiesFromKeys,
     isJoined,
     refreshCommunities,
   };

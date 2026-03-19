@@ -29,14 +29,25 @@
             :color="isJoined ? 'medium' : 'primary'"
             shape="round"
             size="small"
+            :disabled="isJoining"
             @click="toggleJoin"
           >
-            <ion-icon slot="start" :icon="isJoined ? checkmarkCircleOutline : addCircleOutline"></ion-icon>
-            {{ isJoined ? 'Joined' : 'Join' }}
+            <ion-spinner v-if="isJoining" slot="start" name="crescent"></ion-spinner>
+            <ion-icon v-else slot="start" :icon="isJoined ? checkmarkCircleOutline : addCircleOutline"></ion-icon>
+            {{ isJoining ? 'Joining...' : isJoined ? 'Joined' : 'Join' }}
           </ion-button>
         </div>
 
-        <p class="description">{{ displayCommunity?.description }}</p>
+        <p class="description" :class="{ expanded: descriptionExpanded }">{{ displayCommunity?.description }}</p>
+        <button
+          v-if="showDescriptionToggle"
+          class="description-toggle"
+          type="button"
+          @click="descriptionExpanded = !descriptionExpanded"
+        >
+          {{ descriptionExpanded ? 'Show less' : 'Read more' }}
+        </button>
+        <ConsentBanner />
 
         <div class="community-stats">
           <div class="stat">
@@ -96,7 +107,7 @@
       </div>
 
       <!-- Encrypted community hint (shown inline, does not block content feed) -->
-      <div v-if="!isLoading && community?.isEncrypted && !hasAccess" class="locked-hint">
+      <div v-if="!showBlockingLoader && community?.isEncrypted && !hasAccess" class="locked-hint">
         <ion-icon :icon="lockClosedOutline" size="small"></ion-icon>
         <span>This community is encrypted.</span>
         <span v-if="community?.encryptionHint" class="encryption-hint">{{ community.encryptionHint }}</span>
@@ -107,13 +118,21 @@
       </div>
 
       <!-- Loading -->
-      <div v-if="isLoading" class="loading-container">
+      <div v-if="showBlockingLoader" class="loading-container">
         <ion-spinner></ion-spinner>
         <p>Loading content...</p>
       </div>
 
+      <div v-else-if="showInlineSyncStatus" class="sync-status">
+        <ion-spinner name="dots"></ion-spinner>
+        <div class="sync-status-copy">
+          <strong>Showing what is ready.</strong>
+          <span>{{ syncStatusText }}</span>
+        </div>
+      </div>
+
       <!-- Content Feed -->
-      <div v-else-if="displayedContent.length > 0" class="content-feed">
+      <div v-if="displayedContent.length > 0" class="content-feed">
         <template v-for="item in displayedContent" :key="`${item.type}-${item.data.id}`">
           <PostCard
             v-if="item.type === 'post'"
@@ -139,8 +158,13 @@
         </template>
       </div>
 
+      <div v-else-if="showPartialSyncStatus" class="partial-loading-state">
+        <ion-spinner name="dots"></ion-spinner>
+        <p>{{ partialLoadText }}</p>
+      </div>
+
       <!-- Empty State -->
-      <div v-else-if="!isLoading" class="empty-state">
+      <div v-else-if="!showProgressiveSyncState" class="empty-state">
         <ion-icon :icon="documentTextOutline" size="large"></ion-icon>
         <p v-if="contentFilter === 'posts'">No posts yet</p>
         <p v-else-if="contentFilter === 'polls'">No polls yet</p>
@@ -200,10 +224,18 @@
   font-size: 14px;
   line-height: 1.5;
   color: var(--ion-color-step-600);
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+}
+
+.description-toggle {
+  display: none;
+  margin: -4px 0 12px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--ion-color-primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .community-stats {
@@ -228,6 +260,25 @@
   display: flex;
   gap: 8px;
   margin-bottom: 14px;
+}
+
+@media (max-width: 768px) {
+  .description {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .description.expanded {
+    display: block;
+    overflow: visible;
+  }
+
+  .description-toggle {
+    display: inline-flex;
+    align-items: center;
+  }
 }
 
 /* ── Filter ──────────────────────────────────────── */
@@ -281,6 +332,37 @@
 
 .empty-state ion-icon {
   color: var(--ion-color-medium);
+}
+
+.sync-status,
+.partial-loading-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(var(--ion-color-primary-rgb), 0.08);
+  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.14);
+  color: var(--ion-color-step-700);
+}
+
+.sync-status-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+
+.sync-status-copy strong {
+  color: var(--ion-text-color);
+}
+
+.sync-status-copy span,
+.partial-loading-state p {
+  color: var(--ion-color-step-600);
+  margin: 0;
+  line-height: 1.4;
 }
 
 /* ── Locked Hint (inline banner for encrypted communities) ─── */
@@ -338,7 +420,7 @@
 </style>
 
 <script setup lang="ts">
-import { ref, computed, watchEffect, watch } from 'vue';
+import { ref, computed, watchEffect, watch, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage,
@@ -381,6 +463,7 @@ import { UserService } from '../services/userService';
 import PostCard from '../components/PostCard.vue';
 import PollCard from '../components/PollCard.vue';
 import EncryptedBadge from '../components/EncryptedBadge.vue';
+import ConsentBanner from '../components/ConsentBanner.vue';
 import { Post, PostService } from '../services/postService';
 import { Poll, PollService } from '../services/pollService';
 import { CommunityService, type Community } from '../services/communityService';
@@ -404,9 +487,17 @@ const community = computed(() => communityStore.currentCommunity);
 const isJoined = computed(() => communityStore.isJoined(communityId.value));
 
 const isLoading = ref(true);
+const isJoining = ref(false);
 const contentFilter = ref<'all' | 'posts' | 'polls'>('all');
 const currentUserId = ref('');
 const voteVersion = ref(0);
+const descriptionExpanded = ref(false);
+type LoadStatus = 'idle' | 'loading' | 'loaded' | 'timed-out' | 'error';
+const postLoadStatus = ref<LoadStatus>('idle');
+const pollLoadStatus = ref<LoadStatus>('idle');
+const isBackgroundSyncing = ref(false);
+const BACKGROUND_SYNC_IDLE_MS = 15000;
+let backgroundSyncIdleTimer: ReturnType<typeof setTimeout> | null = null;
 
 const hasAccess = ref(true);
 const decryptedMeta = ref<Community | null>(null);
@@ -435,6 +526,74 @@ const communityPolls = computed(() => {
 
 const totalContentCount = computed(() => {
   return communityPosts.value.length + communityPolls.value.length;
+});
+
+const totalLoadedContentCount = computed(() => decryptedPosts.value.length + decryptedPolls.value.length);
+
+const showProgressiveSyncState = computed(() => isLoading.value || isBackgroundSyncing.value);
+
+const showBlockingLoader = computed(() => isLoading.value && !isBackgroundSyncing.value && totalLoadedContentCount.value === 0);
+
+const showInlineSyncStatus = computed(() => showProgressiveSyncState.value && totalLoadedContentCount.value > 0);
+
+const showPartialSyncStatus = computed(() => showProgressiveSyncState.value && totalLoadedContentCount.value === 0);
+
+const syncStatusText = computed(() => {
+  const segments: string[] = [];
+
+  if (decryptedPosts.value.length > 0) {
+    segments.push(`${decryptedPosts.value.length} post${decryptedPosts.value.length === 1 ? '' : 's'} loaded`);
+  }
+
+  if (decryptedPolls.value.length > 0) {
+    segments.push(`${decryptedPolls.value.length} poll${decryptedPolls.value.length === 1 ? '' : 's'} loaded`);
+  }
+
+  if (postLoadStatus.value === 'loading') {
+    segments.push('posts still syncing');
+  } else if (postLoadStatus.value === 'timed-out') {
+    segments.push('posts continuing in background');
+  }
+
+  if (pollLoadStatus.value === 'loading') {
+    segments.push('polls still syncing');
+  } else if (pollLoadStatus.value === 'timed-out') {
+    segments.push('polls continuing in background');
+  }
+
+  return segments.join(' · ');
+});
+
+const partialLoadText = computed(() => {
+  if (contentFilter.value === 'posts') {
+    return 'Posts are still syncing. Loaded content will appear here as soon as it arrives.';
+  }
+  if (contentFilter.value === 'polls') {
+    return 'Polls are still syncing. Loaded content will appear here as soon as it arrives.';
+  }
+  return 'Loaded content will appear here progressively while the rest syncs.';
+});
+
+function clearBackgroundSyncIdleTimer() {
+  if (backgroundSyncIdleTimer) {
+    clearTimeout(backgroundSyncIdleTimer);
+    backgroundSyncIdleTimer = null;
+  }
+}
+
+function keepBackgroundSyncVisible() {
+  isBackgroundSyncing.value = true;
+  clearBackgroundSyncIdleTimer();
+  backgroundSyncIdleTimer = setTimeout(() => {
+    if (!isLoading.value && (postLoadStatus.value === 'timed-out' || pollLoadStatus.value === 'timed-out')) {
+      isBackgroundSyncing.value = false;
+    }
+  }, BACKGROUND_SYNC_IDLE_MS);
+}
+
+const showDescriptionToggle = computed(() => {
+  const description = displayCommunity.value?.description ?? '';
+  return description.length > 140;
 });
 
 // Pre-fetch author profiles outside computed to avoid side-effects
@@ -709,7 +868,20 @@ async function toggleJoin() {
   } else if (community.value?.isEncrypted && !hasAccess.value) {
     router.push(`/join/community/${communityId.value}`);
   } else {
-    await communityStore.joinCommunity(communityId.value);
+    isJoining.value = true;
+    try {
+      await communityStore.joinCommunity(communityId.value);
+    } catch (error) {
+      console.error('Error joining community:', error);
+      const toast = await toastController.create({
+        message: 'Failed to join community',
+        duration: 2000,
+        color: 'danger'
+      });
+      await toast.present();
+    } finally {
+      isJoining.value = false;
+    }
   }
 }
 
@@ -748,9 +920,47 @@ async function shareInviteLink() {
 
 let loadGeneration = 0;
 
+function waitForInitialContent(promise: Promise<void>, timeoutMs: number): Promise<'loaded' | 'timed-out'> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve('timed-out'), timeoutMs);
+    promise
+      .then(() => {
+        clearTimeout(timer);
+        resolve('loaded');
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
+async function trackInitialLoad(
+  loadPromise: Promise<void>,
+  statusRef: typeof postLoadStatus,
+  gen: number,
+): Promise<'loaded' | 'timed-out' | 'error'> {
+  try {
+    const result = await waitForInitialContent(loadPromise, 7000);
+    if (gen === loadGeneration) {
+      statusRef.value = result === 'loaded' ? 'loaded' : 'timed-out';
+    }
+    return result;
+  } catch (error) {
+    if (gen === loadGeneration) {
+      statusRef.value = 'error';
+    }
+    console.error('Community content stream failed:', error);
+    return 'error';
+  }
+}
+
 async function loadCommunityContent() {
   const gen = ++loadGeneration;
   isLoading.value = true;
+  descriptionExpanded.value = false;
+  postLoadStatus.value = 'loading';
+  pollLoadStatus.value = 'loading';
   decryptedMeta.value = null;
   decryptedPosts.value = [];
   decryptedPolls.value = [];
@@ -788,13 +998,37 @@ async function loadCommunityContent() {
 
     // Always load posts/polls — encrypted content loads as placeholders
     // and gets decrypted reactively if user has the key
-    await Promise.all([
-      postStore.loadPostsForCommunity(communityId.value),
-      pollStore.loadPollsForCommunity(communityId.value)
+    const loadStates = await Promise.all([
+      trackInitialLoad(postStore.loadPostsForCommunity(communityId.value), postLoadStatus, gen),
+      trackInitialLoad(pollStore.loadPollsForCommunity(communityId.value), pollLoadStatus, gen),
     ]);
+
+    if (gen === loadGeneration && loadStates.includes('timed-out')) {
+      const toast = await toastController.create({
+        message: 'Content is still syncing in the background.',
+        duration: 2500,
+        color: 'warning'
+      });
+      await toast.present();
+    }
+
+    if (gen === loadGeneration && loadStates.includes('error')) {
+      const toast = await toastController.create({
+        message: 'Some content failed to load. The page will keep retrying in the background.',
+        duration: 2800,
+        color: 'danger'
+      });
+      await toast.present();
+    }
 
   } catch (error) {
     console.error('Error loading community content:', error);
+    const toast = await toastController.create({
+      message: 'Failed to load community content',
+      duration: 2500,
+      color: 'danger'
+    });
+    await toast.present();
   } finally {
     if (gen === loadGeneration) isLoading.value = false;
   }
@@ -809,5 +1043,26 @@ watch(communityId, async (newId, oldId) => {
   if (newId && newId !== oldId) {
     await loadCommunityContent();
   }
+});
+
+watch([postLoadStatus, pollLoadStatus], ([nextPostStatus, nextPollStatus]) => {
+  if (nextPostStatus === 'timed-out' || nextPollStatus === 'timed-out') {
+    keepBackgroundSyncVisible();
+    return;
+  }
+
+  if (!isLoading.value) {
+    isBackgroundSyncing.value = false;
+    clearBackgroundSyncIdleTimer();
+  }
+});
+
+watch(totalLoadedContentCount, (nextCount, previousCount) => {
+  if (!isBackgroundSyncing.value || nextCount === previousCount) return;
+  keepBackgroundSyncVisible();
+});
+
+onUnmounted(() => {
+  clearBackgroundSyncIdleTimer();
 });
 </script>

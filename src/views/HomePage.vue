@@ -166,6 +166,7 @@
               <div class="tab-bar">
                 <button class="tab-btn" :class="{ active: communityFilter === 'all' }" @click="communityFilter = 'all'">All</button>
                 <button class="tab-btn" :class="{ active: communityFilter === 'joined' }" @click="communityFilter = 'joined'">Joined</button>
+                <button class="tab-btn" :class="{ active: communityFilter === 'private' }" @click="communityFilter = 'private'">Private</button>
               </div>
               <ion-button size="small" @click="$router.push('/create-community')">
                 <ion-icon slot="start" :icon="addCircleOutline"></ion-icon>
@@ -189,9 +190,9 @@
 
             <div v-else class="empty-state">
               <ion-icon :icon="earthOutline" size="large"></ion-icon>
-              <p>{{ communityFilter === 'joined' ? 'No joined communities' : 'No communities yet' }}</p>
-              <ion-button @click="communityFilter === 'joined' ? communityFilter = 'all' : $router.push('/create-community')">
-                {{ communityFilter === 'joined' ? 'Browse All' : 'Create the first one!' }}
+              <p>{{ communityFilter === 'private' ? 'No joined private communities' : communityFilter === 'joined' ? 'No joined communities' : 'No public communities yet' }}</p>
+              <ion-button @click="communityFilter === 'private' ? communityFilter = 'joined' : communityFilter === 'joined' ? communityFilter = 'all' : $router.push('/create-community')">
+                {{ communityFilter === 'private' ? 'Show Joined' : communityFilter === 'joined' ? 'Browse All' : 'Create the first one!' }}
               </ion-button>
             </div>
           </div>
@@ -352,13 +353,13 @@
               Create Community
             </ion-button>
 
-            <div class="sidebar-communities">
-              <div
-                v-for="community in communityStore.communities.slice(0, 8)"
-                :key="community.id"
-                class="sidebar-community-item"
-                @click="$router.push(`/community/${community.id}`)"
-              >
+             <div class="sidebar-communities">
+               <div
+                 v-for="community in sidebarCommunities"
+                 :key="community.id"
+                 class="sidebar-community-item"
+                 @click="$router.push(`/community/${community.id}`)"
+               >
                 <div class="sidebar-community-avatar">
                   {{ community.displayName?.charAt(0)?.toUpperCase() }}
                 </div>
@@ -432,7 +433,6 @@ import {
   shieldOutline
 } from 'ionicons/icons';
 import { useRouter } from 'vue-router';
-import { useChainStore } from '../stores/chainStore';
 import { useCommunityStore } from '../stores/communityStore';
 import { usePostStore } from '../stores/postStore';
 import { usePollStore } from '../stores/pollStore';
@@ -452,14 +452,13 @@ import { warmupFromDB } from '../services/dbWarmup';
 import { betaFeatures } from '../utils/betaFeatures';
 
 const router = useRouter();
-const chainStore = useChainStore();
 const communityStore = useCommunityStore();
 const postStore = usePostStore();
 const pollStore = usePollStore();
 const { preferences: feedPreferences, setMode } = useFeedPreferences();
 
 const activeTab = ref('home');
-const communityFilter = ref('all');
+const communityFilter = ref<'all' | 'joined' | 'private'>('all');
 const isLoadingPosts = ref(false);
 const voteVersion = ref(0);
 const isHeaderHidden = ref(false);
@@ -492,13 +491,23 @@ const searchingUsers    = ref(false);
 // ── Computed ──────────────────────────────────────────────────────────────────
 
 const displayedCommunities = computed(() => {
-  if (communityFilter.value === 'joined') {
-    return communityStore.communities.filter(c => communityStore.isJoined(c.id));
+  if (communityFilter.value === 'private') {
+    return joinedPrivateCommunities.value;
   }
-  return communityStore.communities;
+  if (communityFilter.value === 'joined') {
+    return joinedCommunities.value;
+  }
+  return publicCommunities.value;
 });
 
+const publicCommunities = computed(() => communityStore.communities.filter(c => !c.isEncrypted));
 const joinedCommunities = computed(() => communityStore.communities.filter(c => communityStore.isJoined(c.id)));
+const joinedPrivateCommunities = computed(() => joinedCommunities.value.filter(c => c.isEncrypted));
+const accessibleCommunities = computed(() =>
+  communityStore.communities.filter(c => !c.isEncrypted || communityStore.isJoined(c.id))
+);
+const accessibleCommunityIds = computed(() => new Set(accessibleCommunities.value.map(c => c.id)));
+const sidebarCommunities = computed(() => publicCommunities.value.slice(0, 8));
 const joinedCommunityIds = computed(() => new Set(joinedCommunities.value.map(c => c.id)));
 const feedMode = computed(() => feedPreferences.value.mode);
 
@@ -521,11 +530,12 @@ const orderedFeed = computed<HomeFeedEntry[]>(() => {
   const items: HomeFeedEntry[] = [];
 
   postStore.sortedPosts.forEach((post) => {
+    if (!accessibleCommunityIds.value.has(post.communityId)) return;
     items.push({ type: 'post', data: post, createdAt: post.createdAt });
   });
 
   pollStore.sortedPolls.forEach((poll) => {
-    if (!poll.isPrivate) {
+    if (!poll.isPrivate && accessibleCommunityIds.value.has(poll.communityId)) {
       items.push({ type: 'poll', data: poll, createdAt: poll.createdAt });
     }
   });
@@ -858,7 +868,9 @@ function navigateToPoll(poll: Poll) { router.push(`/community/${poll.communityId
 const subscribedFromHome = new Set<string>();
 
 async function subscribeNewCommunities(communities: typeof communityStore.communities) {
-  const newOnes = communities.filter(c => !subscribedFromHome.has(c.id));
+  const newOnes = communities.filter(c =>
+    accessibleCommunityIds.value.has(c.id) && !subscribedFromHome.has(c.id)
+  );
   if (newOnes.length === 0) return;
   newOnes.forEach(c => subscribedFromHome.add(c.id));
   if (subscribedFromHome.size === newOnes.length) isLoadingPosts.value = true;
@@ -896,7 +908,7 @@ async function showPollOptions() {
 
 // ── Watchers & lifecycle ──────────────────────────────────────────────────────
 
-watch(() => communityStore.communities, (communities) => {
+watch(accessibleCommunities, (communities) => {
   if (!warmupComplete.value) return;
   subscribeNewCommunities(communities);
 }, { deep: true });
@@ -913,14 +925,15 @@ onMounted(async () => {
   // warmupFromDB reads localStorage synchronously — no network, < 5ms
   await warmupFromDB();
   warmupComplete.value = true;
+  await subscribeNewCommunities(accessibleCommunities.value);
 
   // ── STEP 2: Load communities and subscribe to Gun (needed for live updates)
   // Run in parallel with everything else — don't block feed display
   const feedReadyPromise = (async () => {
     await communityStore.loadCommunities();
-    await subscribeNewCommunities(communityStore.communities);
+    await subscribeNewCommunities(accessibleCommunities.value);
     // Retry after 3s for any new communities from MySQL background fetch
-    setTimeout(() => subscribeNewCommunities(communityStore.communities), 3000);
+    setTimeout(() => subscribeNewCommunities(accessibleCommunities.value), 3000);
   })();
 
   // ── STEP 3: Heavy init — run completely in parallel, never blocks feed ────
@@ -928,9 +941,8 @@ onMounted(async () => {
     // Get current user first (needed for chat)
     const currentUser = await UserService.getCurrentUser();
     currentUserId = currentUser.id;
-    // Chain + chat in parallel
+    // Chat bootstrap can happen in the background without blocking feed paint
     await Promise.all([
-      chainStore.initialize(),
       loadChatList(),
       initBackgroundChat(),
     ]);

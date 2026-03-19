@@ -1,8 +1,13 @@
 import { GunService } from './gunService';
 import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
+import config from '../config';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://interpoll.endless.sbs';
+
+function getGunRelayBase(): string {
+  return config.relay.gun.replace(/\/gun$/, '');
+}
 
 export interface PollOption {
   id: string;
@@ -55,6 +60,138 @@ export class PollService {
   private static getPollPath(pollId: string) { return this.gun.get('polls').get(pollId); }
   private static getCommunityPollPath(communityId: string, pollId: string) {
     return this.gun.get('communities').get(communityId).get('polls').get(pollId);
+  }
+
+  private static onceNode<T = any>(node: any, timeoutMs = 1200): Promise<T | null> {
+    return new Promise((resolve) => {
+      let settled = false;
+      node.once((value: T | null) => {
+        if (settled) return;
+        settled = true;
+        resolve(value ?? null);
+      });
+      setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        resolve(null);
+      }, timeoutMs);
+    });
+  }
+
+  private static waitForNode<T = any>(
+    node: any,
+    predicate: (value: T | null) => boolean,
+    timeoutMs = 3500,
+  ): Promise<T | null> {
+    return new Promise((resolve) => {
+      let settled = false;
+      const subscription = node.on((value: T | null) => {
+        if (settled || !predicate(value)) return;
+        settled = true;
+        subscription?.off?.();
+        resolve(value ?? null);
+      });
+
+      setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        subscription?.off?.();
+        resolve(null);
+      }, timeoutMs);
+    });
+  }
+
+  private static parsePollOptions(optionsData: any): PollOption[] {
+    if (!optionsData || typeof optionsData !== 'object') return [];
+
+    const options: PollOption[] = [];
+    Object.keys(optionsData).forEach(key => {
+      if (key === '_') return;
+      const opt = optionsData[key];
+      if (opt && opt.id) {
+        options.push({
+          id: opt.id,
+          text: opt.text || '',
+          votes: opt.votes || 0,
+          voters: opt.voters || [],
+        });
+      }
+    });
+    return options;
+  }
+
+  private static buildOptionsMap(options: PollOption[]): Record<string, any> {
+    return Object.fromEntries(options.map((option, index) => [index, {
+      id: option.id,
+      text: option.text,
+      votes: option.votes || 0,
+      voters: option.voters || [],
+    }]));
+  }
+
+  private static normalizeSearchResults(payload: any): Array<{ data: any }> {
+    if (Array.isArray(payload)) {
+      return payload.map((item) => ({ data: item?.data ?? item }));
+    }
+    if (Array.isArray(payload?.results)) {
+      return payload.results.map((item: any) => ({ data: item?.data ?? item }));
+    }
+    return [];
+  }
+
+  private static async loadPollSubtreeFromSearch(pollId: string): Promise<{ pollData: any | null; options: PollOption[] }> {
+    try {
+      const prefix = encodeURIComponent(`v2/polls/${pollId}`);
+      const res = await fetch(`${getGunRelayBase()}/db/search?prefix=${prefix}&limit=50`);
+      if (!res.ok) return { pollData: null, options: [] };
+      const json = await res.json();
+      const rows = this.normalizeSearchResults(json);
+
+      let pollData: any | null = null;
+      const options: PollOption[] = [];
+
+      for (const row of rows) {
+        const data = row.data;
+        if (!data || typeof data !== 'object') continue;
+
+        if (!pollData && data.id === pollId && (data.question !== undefined || data.communityId !== undefined)) {
+          pollData = data;
+          continue;
+        }
+
+        if (data.id && typeof data.text === 'string') {
+          options.push({
+            id: data.id,
+            text: data.text || '',
+            votes: data.votes || 0,
+            voters: data.voters || [],
+          });
+        }
+      }
+
+      return { pollData, options };
+    } catch (error) {
+      console.warn('Relay poll search fallback failed:', error);
+      return { pollData: null, options: [] };
+    }
+  }
+
+  private static warmPollCache(pollData: any, optionsData?: any) {
+    if (!pollData?.id) return;
+
+    const pollNode = this.getPollPath(pollData.id);
+    pollNode.put(pollData);
+    if (optionsData && typeof optionsData === 'object') {
+      pollNode.get('options').put(optionsData);
+    }
+
+    if (pollData.communityId) {
+      const communityNode = this.getCommunityPollPath(pollData.communityId, pollData.id);
+      communityNode.put(pollData);
+      if (optionsData && typeof optionsData === 'object') {
+        communityNode.get('options').put(optionsData);
+      }
+    }
   }
 
   static subscribeToPollsInCommunity(
@@ -464,70 +601,94 @@ export class PollService {
   }
 
   static async loadPoll(pollId: string): Promise<Poll | null> {
-    return new Promise((resolve) => {
-      this.getPollPath(pollId).once((pollData: any) => {
-        if (!pollData || !pollData.id) {
-          resolve(null);
-          return;
-        }
+    const pollNode = this.getPollPath(pollId);
+    let pollData = await this.onceNode<any>(pollNode, 500);
 
-        this.loadPollOptions(pollId).then(options => {
-          const totalVotes = options.reduce((sum, opt) => sum + (opt.votes || 0), 0);
-          const isExpired = Date.now() > (pollData.expiresAt || 0);
+    if (!pollData?.id) {
+      pollData = await this.waitForNode<any>(pollNode, (value) => !!value?.id, 3500);
+    }
 
-          const poll: Poll = {
-            id: pollData.id,
-            communityId: pollData.communityId || '',
-            authorId: pollData.authorId || '',
-            authorName: pollData.authorName || 'Anonymous',
-            question: pollData.question || '',
-            description: pollData.description || '',
-            options,
-            createdAt: pollData.createdAt || Date.now(),
-            expiresAt: pollData.expiresAt || 0,
-            allowMultipleChoices: !!pollData.allowMultipleChoices,
-            showResultsBeforeVoting: !!pollData.showResultsBeforeVoting,
-            requireLogin: !!pollData.requireLogin,
-            isPrivate: !!pollData.isPrivate,
-            totalVotes,
-            isExpired,
-            isEncrypted: pollData.isEncrypted || false,
-            encryptedContent: pollData.encryptedContent || undefined,
-            authTag: pollData.authTag || undefined,
-            authorPubkey: pollData.authorPubkey || undefined,
-            contentSignature: pollData.contentSignature || undefined,
-          };
-          resolve(poll);
-        });
-      });
-    });
+    let options = await this.loadPollOptions(pollId);
+    let warmedFromSearch = false;
+
+    if ((!pollData?.id || options.length === 0)) {
+      const searchFallback = await this.loadPollSubtreeFromSearch(pollId);
+      if (!pollData?.id && searchFallback.pollData) {
+        pollData = searchFallback.pollData;
+      }
+      if (options.length === 0 && searchFallback.options.length > 0) {
+        options = searchFallback.options;
+      }
+      if (searchFallback.pollData || searchFallback.options.length > 0) {
+        this.warmPollCache(
+          searchFallback.pollData ?? pollData,
+          searchFallback.options.length > 0 ? this.buildOptionsMap(searchFallback.options) : undefined,
+        );
+        warmedFromSearch = true;
+      }
+    }
+
+    if (!pollData?.id) {
+      return null;
+    }
+
+    const totalVotes = options.reduce((sum, opt) => sum + (opt.votes || 0), 0);
+    const isExpired = Date.now() > (pollData.expiresAt || 0);
+
+    if (!warmedFromSearch && options.length > 0) {
+      this.warmPollCache(pollData, this.buildOptionsMap(options));
+    }
+
+    return {
+      id: pollData.id,
+      communityId: pollData.communityId || '',
+      authorId: pollData.authorId || '',
+      authorName: pollData.authorName || 'Anonymous',
+      question: pollData.question || '',
+      description: pollData.description || '',
+      options,
+      createdAt: pollData.createdAt || Date.now(),
+      expiresAt: pollData.expiresAt || 0,
+      allowMultipleChoices: !!pollData.allowMultipleChoices,
+      showResultsBeforeVoting: !!pollData.showResultsBeforeVoting,
+      requireLogin: !!pollData.requireLogin,
+      isPrivate: !!pollData.isPrivate,
+      totalVotes,
+      isExpired,
+      isEncrypted: pollData.isEncrypted || false,
+      encryptedContent: pollData.encryptedContent || undefined,
+      authTag: pollData.authTag || undefined,
+      authorPubkey: pollData.authorPubkey || undefined,
+      contentSignature: pollData.contentSignature || undefined,
+    };
   }
 
   static async loadPollOptions(pollId: string): Promise<PollOption[]> {
-    return new Promise((resolve) => {
-      this.getPollPath(pollId).get('options').once((optionsData: any) => {
-        if (!optionsData) {
-          resolve([]);
-          return;
-        }
+    const optionsNode = this.getPollPath(pollId).get('options');
+    const optionsData = await this.onceNode<any>(optionsNode, 500);
+    const parsed = this.parsePollOptions(optionsData);
+    if (parsed.length > 0) {
+      return parsed;
+    }
 
-        const options: PollOption[] = [];
-        Object.keys(optionsData).forEach(key => {
-          if (key !== '_') {
-            const opt = optionsData[key];
-            if (opt && opt.id) {
-              options.push({
-                id: opt.id,
-                text: opt.text || '',
-                votes: opt.votes || 0,
-                voters: opt.voters || [],
-              });
-            }
-          }
-        });
-        resolve(options);
-      });
-    });
+    const liveOptions = await this.waitForNode<any>(
+      optionsNode,
+      (value) => this.parsePollOptions(value).length > 0,
+      3500,
+    );
+    const liveParsed = this.parsePollOptions(liveOptions);
+    if (liveParsed.length > 0) {
+      return liveParsed;
+    }
+
+    const searchFallback = await this.loadPollSubtreeFromSearch(pollId);
+    if (searchFallback.options.length > 0) {
+      const rawOptions = this.buildOptionsMap(searchFallback.options);
+      optionsNode.put(rawOptions);
+      return searchFallback.options;
+    }
+
+    return [];
   }
 
   static async vote(pollId: string, optionIds: string[], voterId: string): Promise<void> {

@@ -1,10 +1,46 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import path from 'path';
+import fs from 'fs/promises';
+
+function spaRouteFallbackPlugin() {
+  const blockedPrefixes = ['/src/', '/node_modules/', '/@vite/', '/@fs/', '/assets', '/public/'];
+
+  return {
+    name: 'spa-route-fallback',
+    configureServer(server: any) {
+      server.middlewares.use(async (req: any, res: any, next: any) => {
+        const url = req.url?.split('?')[0] ?? '/';
+        const accepts = String(req.headers?.accept || '');
+        if (
+          !url ||
+          url === '/' ||
+          req.method !== 'GET' ||
+          !accepts.includes('text/html') ||
+          blockedPrefixes.some((prefix) => url.startsWith(prefix)) ||
+          path.extname(url)
+        ) {
+          next();
+          return;
+        }
+
+        try {
+          const html = await fs.readFile(path.resolve(__dirname, 'index.html'), 'utf8');
+          const transformed = await server.transformIndexHtml(url, html, req.originalUrl);
+          res.setHeader('Content-Type', 'text/html');
+          res.statusCode = 200;
+          res.end(transformed);
+        } catch (error) {
+          next(error);
+        }
+      });
+    },
+  };
+}
 
 export default defineConfig({
   base: '/',
-  plugins: [vue()],
+  plugins: [vue(), spaRouteFallbackPlugin()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

@@ -488,12 +488,21 @@
           <ion-list>
             <ion-item>
               <ion-toggle v-model="modSettings.imageFilterEnabled" @ionChange="saveModerationSettings">
-                Enable image filter
+                Enable local image filter
               </ion-toggle>
             </ion-item>
           </ion-list>
 
           <div v-if="modSettings.imageFilterEnabled" class="mt-3">
+            <ion-item>
+              <ion-label>Scan mode</ion-label>
+              <ion-select v-model="modSettings.imageFilterMode" @ionChange="saveModerationSettings">
+                <ion-select-option value="manual">Only when I tap Scan</ion-select-option>
+                <ion-select-option value="detail-auto">Auto-scan opened post/detail pages</ion-select-option>
+                <ion-select-option value="all-auto">Auto-scan feed and detail images</ion-select-option>
+              </ion-select>
+            </ion-item>
+
             <div class="range-row">
               <span class="range-label">Sensitivity: <strong>{{ sensitivityLabel }}</strong></span>
               <ion-range
@@ -507,7 +516,7 @@
               ></ion-range>
             </div>
             <p class="helper-text">
-              Lower sensitivity catches more images but may have false positives. The AI model (~3 MB) loads on first image encounter. All detection runs locally in your browser — no images are sent to any server.
+              Lower sensitivity catches more images but may have false positives. The AI model stays unloaded until your chosen scan mode actually needs it. All detection runs locally in your browser — no images are sent to any server.
             </p>
           </div>
 

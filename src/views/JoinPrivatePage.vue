@@ -96,12 +96,14 @@ import {
 import { InviteLinkService } from '@/services/inviteLinkService';
 import { CommunityService } from '@/services/communityService';
 import { KeyVaultService } from '@/services/keyVaultService';
+import { useCommunityStore } from '@/stores/communityStore';
 import config from '@/config';
 
 const SUPPORTED_TYPES = ['community', 'server'] as const;
 
 const router = useRouter();
 const route = useRoute();
+const communityStore = useCommunityStore();
 
 // Check hash synchronously so we show the spinner from the very first frame
 const hashKey = InviteLinkService.getKeyFromCurrentUrl();
@@ -157,6 +159,10 @@ async function dispatchJoin(keyOrPassword: string, method: 'invite' | 'password'
   }
   if (type === 'community' || type === 'server') {
     await CommunityService.joinPrivateCommunity(targetId.value, keyOrPassword, method);
+    if (type === 'community') {
+      communityStore.markJoined(targetId.value);
+      await communityStore.selectCommunity(targetId.value);
+    }
   } else {
     throw new Error(`Unsupported type: ${type}`);
   }
@@ -198,6 +204,11 @@ onMounted(async () => {
 
   // Already have a key → redirect immediately
   if (await KeyVaultService.hasKey(targetId.value)) {
+    if (targetType.value === 'community') {
+      await communityStore.syncJoinedPrivateCommunitiesFromKeys();
+      communityStore.markJoined(targetId.value);
+      await communityStore.selectCommunity(targetId.value);
+    }
     navigateToTarget();
     return;
   }

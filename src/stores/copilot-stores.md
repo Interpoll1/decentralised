@@ -35,7 +35,10 @@ Key computed: `polls`, `sortedPolls`
 
 - Has a **MySQL REST fallback** via the gun-relay's `/db/search?prefix=v2/communities` endpoint. Called when GunDB returns nothing (cold relay). This is the only store that hits the gun-relay's database endpoint directly.
 - Deduplicates with a `seen: Set<string>`.
-- `joinedCommunities` is a `Set<string>` persisted in GunDB under the user's node.
+- `joinedCommunities` is a `Set<string>` persisted in localStorage (`joined-communities`), then backfilled from the key vault so private invite/password joins survive refresh.
+- Joined state is also synced from stored community encryption keys, so invite/password-joined private communities behave like normal joined communities after refresh.
+- Encrypted communities are decrypted before surfacing when the user already has access, so joined private communities show their real names/descriptions instead of the public placeholder metadata.
+- `joinCommunity()` is optimistic locally for normal joins, but first checks existing key-vault access and short-circuits without incrementing member counts when the user already holds the private-community key.
 
 ## `postStore.ts` — `usePostStore`
 

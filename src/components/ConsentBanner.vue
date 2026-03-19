@@ -1,29 +1,12 @@
 <template>
-  <div v-if="!accepted" class="consent-overlay" role="dialog" aria-modal="true" aria-labelledby="consent-title">
-    <div class="consent-banner">
-      <div class="consent-icon" aria-hidden="true">⚠️</div>
-      <h2 id="consent-title" class="consent-title">Before you continue</h2>
-      <div class="consent-body">
-        <p>
-          <strong>InterPoll is fully decentralised.</strong> All posts, polls,
-          and community data are stored directly on your device. There is no
-          central server moderating content.
-        </p>
-        <p>
-          Because content is user-generated and replicated peer-to-peer,
-          <strong>you may encounter material that is offensive, inaccurate, or
-          illegal in your jurisdiction.</strong> InterPoll cannot filter or
-          remove such content before it reaches your device.
-        </p>
-        <p>
-          By continuing you acknowledge that you understand these risks and
-          accept that data will be stored locally on your device.
-        </p>
-      </div>
-      <button ref="acceptBtn" class="consent-accept" @click="accept">
-        I understand — continue
-      </button>
+  <div v-if="!accepted" class="consent-inline" role="note" aria-labelledby="consent-title">
+    <div class="consent-copy">
+      <p id="consent-title" class="consent-title">Decentralized network notice</p>
+      <p class="consent-body">
+        InterPoll stores data locally and syncs peer-to-peer, so content may be unmoderated and subject to your local laws.
+      </p>
     </div>
+    <button ref="acceptBtn" class="consent-accept" @click="accept">Got it</button>
   </div>
 </template>
 
@@ -64,63 +47,37 @@ function accept() {
 </script>
 
 <style scoped>
-.consent-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 99999;
+.consent-inline {
   display: flex;
   align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(4px);
-  padding: 1rem;
-}
-
-.consent-banner {
-  max-width: 460px;
-  width: 100%;
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 2rem 1.5rem 1.5rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
-  text-align: center;
-}
-
-html.dark .consent-banner {
-  background: #1e1e1e;
-  color: #e0e0e0;
-}
-
-.consent-icon {
-  font-size: 2.5rem;
-  margin-bottom: 0.5rem;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(var(--ion-color-warning-rgb), 0.1);
+  border: 1px solid rgba(var(--ion-color-warning-rgb), 0.18);
 }
 
 .consent-title {
-  margin: 0 0 1rem;
-  font-size: 1.25rem;
+  margin: 0 0 4px;
+  font-size: 12px;
   font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .consent-body {
-  text-align: left;
-  font-size: 0.9rem;
-  line-height: 1.5;
-}
-
-.consent-body p {
-  margin: 0 0 0.75rem;
-}
-
-.consent-body p:last-child {
-  margin-bottom: 0;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ion-color-step-600);
 }
 
 .consent-accept {
-  margin-top: 1.25rem;
-  width: 100%;
-  padding: 0.75rem 1rem;
-  font-size: 1rem;
+  flex-shrink: 0;
+  padding: 0.55rem 0.85rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: #fff;
   background: var(--ion-color-primary, #3880ff);
@@ -136,5 +93,11 @@ html.dark .consent-banner {
 
 .consent-accept:active {
   transform: scale(0.98);
+}
+
+@media (min-width: 769px) {
+  .consent-inline {
+    display: none;
+  }
 }
 </style>

@@ -1,6 +1,6 @@
 // Browser-side NSFW image detection using nsfwjs + TensorFlow.js
 
-import { ModerationService } from './moderationService';
+import { ModerationService, type ImageFilterMode } from './moderationService';
 
 export interface NsfwResult {
   safe: boolean;
@@ -45,6 +45,17 @@ export class NsfwService {
 
   static isEnabled(): boolean {
     return ModerationService.getSettings().imageFilterEnabled ?? false;
+  }
+
+  static getMode(): ImageFilterMode {
+    return ModerationService.getSettings().imageFilterMode ?? 'manual';
+  }
+
+  static shouldAutoScan(scope: 'feed' | 'detail'): boolean {
+    if (!this.isEnabled()) return false;
+    const mode = this.getMode();
+    if (mode === 'all-auto') return true;
+    return mode === 'detail-auto' && scope === 'detail';
   }
 
   static getSensitivity(): number {

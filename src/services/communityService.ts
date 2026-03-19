@@ -290,14 +290,11 @@ export class CommunityService {
    * still push into the store and trigger the HomePage watcher.
    */
   static subscribeToCommunitiesLive(callback: (community: Community) => void): () => void {
-    const seen = new Set<string>();
-
     const listener = this.gun
       .get('communities')
       .map()
       .on((data: any, key: string) => {
-        if (!data?.name || !data?.id || seen.has(key) || key.startsWith('_')) return;
-        seen.add(key);
+        if (!data?.id || key.startsWith('_')) return;
 
         this.loadRules(key).then((rules) => {
           callback(this.mapToCommunity(data, rules));

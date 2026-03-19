@@ -8,18 +8,18 @@ Page-level components. Each maps to a route in `src/router/index.ts`. All routes
 
 | File | Route | Purpose |
 |---|---|---|
-| `HomePage.vue` | `/home` | Main feed entry point. Merges posts + polls and supports personalized ranking (`For You`) vs chronological mode (`Latest`) using `useFeedPreferences` + `feedRanking` utilities. |
-| `CommunityPage.vue` | `/community/:communityId` | Community detail: post/poll lists, join button, and mode-aware personalized ordering (same `For You`/`Latest` preference model as Home) layered on top of moderation filters. Handles encrypted communities: checks `KeyVaultService.hasKey` for access, decrypts metadata via `CommunityService.decryptCommunityMeta`, decrypts posts/polls via `PostService.decryptPost`/`PollService.decryptPoll`, shows locked state with join link when no key, and offers "Share Invite" button for members with access. |
+| `HomePage.vue` | `/home` | Main feed entry point. Merges posts + polls and supports personalized ranking (`For You`) vs chronological mode (`Latest`) using `useFeedPreferences` + `feedRanking` utilities. Community discovery now separates public communities (`All`) from member-only private communities (`Private`), while `Joined` includes both public and private memberships. Home subscriptions and feed rendering are gated to accessible communities only (public + joined private), so hidden private communities do not leak placeholder content into the home feed. |
+| `CommunityPage.vue` | `/community/:communityId` | Community detail: post/poll lists, join button, and mode-aware personalized ordering (same `For You`/`Latest` preference model as Home) layered on top of moderation filters. Handles encrypted communities: checks `KeyVaultService.hasKey` for access, decrypts metadata via `CommunityService.decryptCommunityMeta`, decrypts posts/polls via `PostService.decryptPost`/`PollService.decryptPoll`, shows locked state with join link when no key, offers "Share Invite" for members with access, adds an inline mobile description expander, and renders the compact mobile decentralization notice under the description until dismissed. Initial content now renders progressively and keeps a background-sync state after soft timeouts so the page does not drop to a false empty state while Gun continues syncing. |
 | `CreateCommunityPage.vue` | `/create-community` | Form to create a new community. Calls `CommunityService` + `chainStore.addAction`. |
 | `CreatePollPage.vue` | `/create-poll` | Poll creation form. Supports expiry, multiple choice, login gate, private/invite. |
 | `CreatePostPage.vue` | `/community/:communityId/create-post` | Post creation with optional image upload. |
-| `PollDetailPage.vue` | `/community/:communityId/poll/:pollId` | Full poll view with results and `VoteForm`. |
-| `PostDetailPage.vue` | `/post/:postId` | Post with comments. |
+| `PollDetailPage.vue` | `/community/:communityId/poll/:pollId` | Full poll view with results and `VoteForm`. Relies on `PollService` cold-start fallback so direct poll links can hydrate without a prior HomePage visit. |
+| `PostDetailPage.vue` | `/post/:postId` | Post with comments. When image scanning is enabled, detail-page scans prefer the full Gun-stored image and await the high-res upgrade instead of locking moderation state to the thumbnail. |
 | `VotePage.vue` | `/vote/:pollId` | Standalone voting page (used for direct-link voting). |
-| `ResultsPage.vue` | `/results/:pollId` | Poll results with charts. |
+| `ResultsPage.vue` | `/results/:pollId` | Poll results with charts. Direct-link reliability depends on the same `PollService` fallback path used by poll detail/vote routes. |
 | `ChainExplorerPage.vue` | `/chain-explorer` | Browse local blockchain blocks, validate chain, look up receipts. |
 | `ReceiptPage.vue` | `/receipt/:mnemonic?` | Verify a vote receipt by mnemonic. |
-| `SettingsPage.vue` | `/settings` | Multi-tab settings hub for general, feed personalization, moderation, relay/network config, and local data controls. Feed tab manages keywords, muted/favorite communities, feed mode, and ranking weights (local-only). |
+| `SettingsPage.vue` | `/settings` | Multi-tab settings hub for general, feed personalization, moderation, relay/network config, and local data controls. Feed tab manages keywords, muted/favorite communities, feed mode, and ranking weights (local-only). Moderation now exposes disabled-by-default image filtering with selectable scan modes. |
 | `ProfilePage.vue` | `/profile` | Current user's profile. Editable: custom username, display name, bio, avatar (via IPFSService), and "Show username on posts" toggle (anonymous by default). |
 | `UserProfileView.vue` | `/user/:userId` | Another user's public profile. |
 | `SearchView.vue` | `/search` | Full-text search results. Uses `useSearch` composable. |
@@ -28,7 +28,7 @@ Page-level components. Each maps to a route in `src/router/index.ts`. All routes
 | `ResiliencePage.vue` | `/resilience` | Anti-censorship tools: relay health scanning, relay management, snapshot export/import/P2P share, Tor support, guides. |
 | `AuthCallbackPage.vue` | (OAuth redirect) | Handles Google/Microsoft OAuth redirect, exchanges code for session. |
 | `ChatRoomListPage.vue` | `/chatrooms` | List of joined chat rooms. Pull-to-refresh, create-room modal (name, description, optional password), invite-link copy, swipe-to-leave. Navigates to `/chatroom/:roomId`. Uses `useChatRoomStore`, `UserService.getCurrentUser()`. |
-| `JoinPrivatePage.vue` | `/join/:type/:id` | Handles invite links and password-based joining for encrypted communities/chatrooms/servers. Reads base64url AES key from URL fragment for auto-join; falls back to password form. Uses `InviteLinkService`, `CommunityService.joinPrivateCommunity()`, `KeyVaultService`. |
+| `JoinPrivatePage.vue` | `/join/:type/:id` | Handles invite links and password-based joining for encrypted communities/chatrooms/servers. Reads base64url AES key from URL fragment for auto-join; falls back to password form. Uses `InviteLinkService`, `CommunityService.joinPrivateCommunity()`, `KeyVaultService`, and now syncs private-community joined state even on the fast-path where the decryption key is already stored locally before redirecting into the community. |
 
 ## Routing Notes
 

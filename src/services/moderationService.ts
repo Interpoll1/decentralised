@@ -5,6 +5,7 @@ import { ref } from 'vue';
 export type Severity = 'low' | 'medium' | 'high';
 export type FilterAction = 'blur' | 'hide' | 'flag';
 export type WordCategory = 'profanity' | 'slurs' | 'sexual' | 'threats' | 'spam' | 'drugs';
+export type ImageFilterMode = 'manual' | 'detail-auto' | 'all-auto';
 
 export interface WordEntry {
   word: string;
@@ -34,6 +35,7 @@ export interface ModerationSettings {
   customAllowedWords: string[];
   disabledCategories: WordCategory[];
   imageFilterEnabled: boolean;
+  imageFilterMode: ImageFilterMode;
   imageFilterSensitivity: number; // 0.0–1.0, lower = more aggressive
 }
 
@@ -47,7 +49,8 @@ const DEFAULT_SETTINGS: ModerationSettings = {
   customBlockedWords: [],
   customAllowedWords: [],
   disabledCategories: [],
-  imageFilterEnabled: true,
+  imageFilterEnabled: false,
+  imageFilterMode: 'manual',
   imageFilterSensitivity: 0.6,
 };
 

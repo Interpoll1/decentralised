@@ -11,7 +11,7 @@ Reusable UI components built with Vue 3 Composition API + Ionic + Tailwind.
 | `VoteForm.vue` | Full voting form for a poll. Handles option selection, duplicate-vote checking, and calls `chainStore.addVote()`. | `pollId`, emits `voted` |
 | `VoteButtons.vue` | Lightweight vote action buttons (up/down or option buttons). Used inside `VoteForm` and `PollCard`. | `options`, `selectedOption`, emits `select` |
 | `PollCard.vue` | Summary card for a poll shown in community/home feed. Links to `PollDetailPage`. Shows live vote counts. | `poll: Poll` |
-| `PostCard.vue` | Summary card for a community post. Shows title, author pseudonym, vote score, comment count. | `post: Post` |
+| `PostCard.vue` | Summary card for a community post. Shows title, author pseudonym, vote score, comment count, keeps feed cards on thumbnails, and only runs NSFW scanning automatically when the chosen moderation mode allows it. Manual/auto scan paths fetch the full Gun-stored image on demand so classification is based on the high-res asset instead of the thumbnail. | `post: Post` |
 | `CommentCard.vue` | Single comment with author pseudonym, vote controls, and nested replies. | `comment`, `postId` |
 | `CommunityCard.vue` | Community listing card with name, description, member count. | `community: Community` |
 | `ChainStatus.vue` | Badge/indicator showing blockchain sync state (valid/invalid, block count, WebSocket connected). Uses `useChainStore`. | — |
@@ -24,7 +24,7 @@ Reusable UI components built with Vue 3 Composition API + Ionic + Tailwind.
 | `ContentVerificationBadge.vue` | Inline badge showing Schnorr-signature verification status (verified/unverified/unsigned) with appropriate icon and color. | `status: 'verified'\|'unverified'\|'unsigned'`, `showLabel?: boolean`, `showUnsigned?: boolean` |
 | `KeyManagementSection.vue` | Settings section for managing stored encryption keys. Lists keys with type/method badges, supports delete with confirmation, export (JSON download), and import (file picker). Calls `KeyVaultService` directly. | — |
 | `PrivateCommunityToggle.vue` | Toggle + config UI for creating encrypted communities. Offers invite-link (random AES key) or password-derived key methods. Used in `CreateCommunityPage`. | emits `update:config` with `PrivateCommunityConfig` |
-| `ConsentBanner.vue` | Full-screen overlay shown on first visit. Warns that data is stored locally and content is unmoderated. Persists acceptance in `localStorage` (`interpoll_consent_accepted`). | — |
+| `ConsentBanner.vue` | Compact inline mobile notice shown under the community description until dismissed. Warns that data is stored locally and content is unmoderated. Persists acceptance in `localStorage` (`interpoll_consent_accepted`). | — |
 
 ## Conventions
 
