@@ -413,15 +413,12 @@
   </ion-page>
 </template>
 
-
-
-
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
+  IonPage, IonHeader, IonToolbar, IonTitle, IonContent,IonBadge,  
   IonButtons, IonButton, IonIcon, IonSegment, IonSegmentButton,
-  IonLabel, IonSpinner, IonChip, IonSearchbar, IonBadge,
+  IonLabel, IonSpinner, IonChip, IonSearchbar,
   IonInfiniteScroll, IonInfiniteScrollContent,
   actionSheetController, toastController
 } from '@ionic/vue';
@@ -433,6 +430,7 @@ import {
   shieldOutline
 } from 'ionicons/icons';
 import { useRouter } from 'vue-router';
+import { useChainStore } from '../stores/chainStore';
 import { useCommunityStore } from '../stores/communityStore';
 import { usePostStore } from '../stores/postStore';
 import { usePollStore } from '../stores/pollStore';
@@ -444,21 +442,18 @@ import { Poll } from '../services/pollService';
 import { GunService } from '../services/gunService';
 import { UserService } from '../services/userService';
 import ChatService from '../services/chatService';
-import { useFeedPreferences } from '../composables/useFeedPreferences';
-import type { FeedMode } from '../services/feedPreferencesService';
-import { rankFeedItems } from '../utils/feedRanking';
-
 import { warmupFromDB } from '../services/dbWarmup';
 import { betaFeatures } from '../utils/betaFeatures';
+import config from '../config';
 
 const router = useRouter();
+const chainStore = useChainStore();
 const communityStore = useCommunityStore();
 const postStore = usePostStore();
 const pollStore = usePollStore();
-const { preferences: feedPreferences, setMode } = useFeedPreferences();
 
 const activeTab = ref('home');
-const communityFilter = ref<'all' | 'joined' | 'private'>('all');
+const communityFilter = ref('all');
 const isLoadingPosts = ref(false);
 const voteVersion = ref(0);
 const isHeaderHidden = ref(false);
@@ -466,6 +461,12 @@ const isTabBarHidden = ref(false);
 const warmupComplete = ref(false);
 let lastScrollTop = 0;
 const scrollThreshold = 50;
+
+// Add after the activeTab ref
+const feedMode = ref<'for-you' | 'latest'>('for-you')
+function setFeedMode(mode: 'for-you' | 'latest') {
+  feedMode.value = mode
+}
 
 // ── Chat state ────────────────────────────────────────────────────────────────
 
@@ -488,112 +489,86 @@ const userSearchQuery   = ref('');
 const userSearchResults = ref<Array<{ id: string; name: string; username: string; publicKey: string }>>([]);
 const searchingUsers    = ref(false);
 
+// ── Vote cache ────────────────────────────────────────────────────────────────
+
+const upvotedCache   = ref<Set<string>>(new Set(JSON.parse(localStorage.getItem('upvoted-posts')   || '[]')));
+const downvotedCache = ref<Set<string>>(new Set(JSON.parse(localStorage.getItem('downvoted-posts') || '[]')));
+
 // ── Computed ──────────────────────────────────────────────────────────────────
 
 const displayedCommunities = computed(() => {
-  if (communityFilter.value === 'private') {
-    return joinedPrivateCommunities.value;
-  }
   if (communityFilter.value === 'joined') {
-    return joinedCommunities.value;
+    return communityStore.communities.filter(c => communityStore.isJoined(c.id));
   }
-  return publicCommunities.value;
+  return communityStore.communities;
 });
 
-const publicCommunities = computed(() => communityStore.communities.filter(c => !c.isEncrypted));
-const joinedCommunities = computed(() => communityStore.communities.filter(c => communityStore.isJoined(c.id)));
-const joinedPrivateCommunities = computed(() => joinedCommunities.value.filter(c => c.isEncrypted));
-const accessibleCommunities = computed(() =>
-  communityStore.communities.filter(c => !c.isEncrypted || communityStore.isJoined(c.id))
-);
-const accessibleCommunityIds = computed(() => new Set(accessibleCommunities.value.map(c => c.id)));
-const sidebarCommunities = computed(() => publicCommunities.value.slice(0, 8));
-const joinedCommunityIds = computed(() => new Set(joinedCommunities.value.map(c => c.id)));
-const feedMode = computed(() => feedPreferences.value.mode);
+const sessionSeed = Math.floor(Math.random() * 10000)
 
-function setFeedMode(mode: FeedMode) {
-  setMode(mode);
+function seededRandom(index: number): number {
+  const x = Math.sin(index + sessionSeed) * 10000
+  return x - Math.floor(x)
 }
 
-type HomeFeedEntry = {
-  type: 'post';
-  data: Post;
-  createdAt: number;
-} | {
-  type: 'poll';
-  data: Poll;
-  createdAt: number;
-};
+const combinedFeed = computed(() => {
+  const items: Array<{ type: 'post' | 'poll'; data: any; createdAt: number }> = []
 
-const orderedFeed = computed<HomeFeedEntry[]>(() => {
-  const preferences = feedPreferences.value;
-  const items: HomeFeedEntry[] = [];
-
-  postStore.sortedPosts.forEach((post) => {
-    if (!accessibleCommunityIds.value.has(post.communityId)) return;
-    items.push({ type: 'post', data: post, createdAt: post.createdAt });
-  });
-
-  pollStore.sortedPolls.forEach((poll) => {
-    if (!poll.isPrivate && accessibleCommunityIds.value.has(poll.communityId)) {
-      items.push({ type: 'poll', data: poll, createdAt: poll.createdAt });
-    }
-  });
-
-  const mutedCommunities = new Set(preferences.mutedCommunities);
-  const filteredItems = items.filter((item) => {
-    if (item.type === 'post' && !preferences.showPosts) return false;
-    if (item.type === 'poll' && !preferences.showPolls) return false;
-    return !mutedCommunities.has(item.data.communityId);
-  });
+  postStore.sortedPosts.forEach(post =>
+    items.push({ type: 'post', data: post, createdAt: post.createdAt })
+  )
+  pollStore.sortedPolls.forEach(poll => {
+    if (!poll.isPrivate) items.push({ type: 'poll', data: poll, createdAt: poll.createdAt })
+  })
 
   if (feedMode.value === 'latest') {
-    return filteredItems.sort((a, b) => b.createdAt - a.createdAt);
+    items.sort((a, b) => b.createdAt - a.createdAt)
+  } else {
+    const now = Date.now()
+    const maxAge = 30 * 24 * 60 * 60 * 1000
+
+    items.sort((a, b) => {
+      const scoreA = a.type === 'post' ? (a.data.score ?? 0) : (a.data.totalVotes ?? 0)
+      const scoreB = b.type === 'post' ? (b.data.score ?? 0) : (b.data.totalVotes ?? 0)
+
+      const idxA = items.indexOf(a)
+      const idxB = items.indexOf(b)
+      const rand = seededRandom(idxA * 31 + idxB)
+
+      // ~20% of comparisons: pure discovery slot, ignore score/age entirely
+      if (rand < 0.2) return seededRandom(idxA) - seededRandom(idxB)
+
+      const ageA = Math.max(0, 1 - (now - a.createdAt) / maxAge)
+      const ageB = Math.max(0, 1 - (now - b.createdAt) / maxAge)
+
+      // Low engagement boost: score < 5 gets a flat bump
+      const engBoostA = scoreA < 5 ? 0.15 : 0
+      const engBoostB = scoreB < 5 ? 0.15 : 0
+
+      // Old content boost: older than 7 days gets a random per-session lift
+      const oldBoostA = (now - a.createdAt) > 7 * 24 * 60 * 60 * 1000 ? seededRandom(idxA + 999) * 0.2 : 0
+      const oldBoostB = (now - b.createdAt) > 7 * 24 * 60 * 60 * 1000 ? seededRandom(idxB + 999) * 0.2 : 0
+
+      const weightA = ageA * 0.4 + Math.min(scoreA / 20, 1) * 0.25 + seededRandom(idxA) * 0.15 + engBoostA + oldBoostA
+      const weightB = ageB * 0.4 + Math.min(scoreB / 20, 1) * 0.25 + seededRandom(idxB) * 0.15 + engBoostB + oldBoostB
+
+      return weightB - weightA
+    })
   }
 
-  const rankInput = filteredItems.map((item) => {
-    if (item.type === 'post') {
-      const post = item.data as Post;
-      return {
-        id: `post:${post.id}`,
-        type: 'post' as const,
-        createdAt: post.createdAt,
-        communityId: post.communityId,
-        title: post.title || '',
-        content: post.content || '',
-        engagementScore: Math.max(0, post.score) + post.commentCount * 0.7 + post.upvotes * 0.25,
-      };
-    }
+  return items.slice(0, postStore.visibleCount)
+})
 
-    const poll = item.data as Poll;
-    const options = Array.isArray(poll.options) ? poll.options : [];
-    const optionText = options.map((option) => option?.text ?? '').join(' ');
-    return {
-      id: `poll:${poll.id}`,
-      type: 'poll' as const,
-      createdAt: poll.createdAt,
-      communityId: poll.communityId,
-      title: poll.question || '',
-      content: `${poll.description || ''} ${optionText}`.trim(),
-      engagementScore: Math.max(0, poll.totalVotes) + (poll.isExpired ? 0 : 2),
-    };
-  });
 
-  const ranked = rankFeedItems(rankInput, preferences, joinedCommunityIds.value);
-  const itemById = new Map(filteredItems.map((item) => [`${item.type}:${item.data.id}`, item]));
-
-  return ranked
-    .map((entry) => itemById.get(entry.id))
-    .filter((entry): entry is HomeFeedEntry => Boolean(entry));
+const hasMore = computed(() => {
+  const totalItems = postStore.sortedPosts.length + pollStore.sortedPolls.filter(p => !p.isPrivate).length;
+  return postStore.visibleCount < totalItems;
 });
 
+const joinedCommunities = computed(() => communityStore.communities.filter(c => communityStore.isJoined(c.id)));
 
-const combinedFeed = computed(() => {
-  const pageSize = postStore.visibleCount;
-  return orderedFeed.value.slice(0, pageSize);
-});
-
-const hasMore = computed(() => postStore.visibleCount < orderedFeed.value.length);
+const sidebarCommunities = computed(() =>
+  communityStore.communities.slice(0, 8)
+)
 
 // ── Chat list ─────────────────────────────────────────────────────────────────
 
@@ -601,17 +576,24 @@ function getRoomId(a: string, b: string) {
   return [a, b].sort().join(':');
 }
 
+const unreadDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 function recomputeUnread(roomId: string, otherUserId: string) {
-  const gun = GunService.getGun();
-  let unread = 0;
-  gun.get('chats').get(roomId).map().once((msg: any) => {
-    if (msg && msg.recipientId === currentUserId && !msg.readAt) unread++;
-  });
-  setTimeout(() => {
-    const entry = chatList.value.find(c => c.userId === otherUserId);
-    if (entry) entry.unreadCount = unread;
-    chatList.value = [...chatList.value].sort((a, b) => b.lastMessageTime - a.lastMessageTime);
-  }, 300);
+  // Debounce per room — only compute after 500ms of no new messages
+  const existing = unreadDebounceTimers.get(roomId);
+  if (existing) clearTimeout(existing);
+  unreadDebounceTimers.set(roomId, setTimeout(() => {
+    const gun = GunService.getGun();
+    let unread = 0;
+    gun.get('chats').get(roomId).map().once((msg: any) => {
+      if (msg && msg.recipientId === currentUserId && !msg.readAt) unread++;
+    });
+    setTimeout(() => {
+      const entry = chatList.value.find(c => c.userId === otherUserId);
+      if (entry) entry.unreadCount = unread;
+      chatList.value = [...chatList.value].sort((a, b) => b.lastMessageTime - a.lastMessageTime);
+    }, 300);
+  }, 500));
 }
 
 function subscribeToRoom(otherUserId: string, otherName: string, otherPublicKey: string) {
@@ -661,7 +643,7 @@ async function loadChatList() {
 }
 
 async function initBackgroundChat() {
-  const WS_URL = import.meta.env.VITE_WS_URL || 'wss://your-relay-server.com';
+  const WS_URL = config.relay.websocket;
   bgChatService = new ChatService(WS_URL, currentUserId);
   bgChatService.onConnectionChange = () => {};
 
@@ -803,29 +785,32 @@ async function onInfiniteScroll(event: any) {
 }
 
 function hasUpvoted(postId: string): boolean {
-  voteVersion.value;
-  return JSON.parse(localStorage.getItem('upvoted-posts') || '[]').includes(postId);
+  voteVersion.value; // reactive dependency
+  return upvotedCache.value.has(postId);
 }
 function hasDownvoted(postId: string): boolean {
   voteVersion.value;
-  return JSON.parse(localStorage.getItem('downvoted-posts') || '[]').includes(postId);
+  return downvotedCache.value.has(postId);
 }
 
 async function handleUpvote(post: Post) {
   try {
     if (hasUpvoted(post.id)) {
-      const filtered = JSON.parse(localStorage.getItem('upvoted-posts') || '[]').filter((id: string) => id !== post.id);
-      localStorage.setItem('upvoted-posts', JSON.stringify(filtered));
-      voteVersion.value++; await postStore.removeUpvote(post.id);
+      upvotedCache.value.delete(post.id);
+      localStorage.setItem('upvoted-posts', JSON.stringify([...upvotedCache.value]));
+      voteVersion.value++;
+      await postStore.removeUpvote(post.id);
       (await toastController.create({ message: 'Upvote removed', duration: 1500, color: 'medium' })).present();
     } else {
-      const downvoted = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
-      if (downvoted.includes(post.id)) {
-        localStorage.setItem('downvoted-posts', JSON.stringify(downvoted.filter((id: string) => id !== post.id)));
+      if (downvotedCache.value.has(post.id)) {
+        downvotedCache.value.delete(post.id);
+        localStorage.setItem('downvoted-posts', JSON.stringify([...downvotedCache.value]));
         await postStore.removeDownvote(post.id);
       }
-      localStorage.setItem('upvoted-posts', JSON.stringify([...JSON.parse(localStorage.getItem('upvoted-posts') || '[]'), post.id]));
-      voteVersion.value++; await postStore.upvotePost(post.id);
+      upvotedCache.value.add(post.id);
+      localStorage.setItem('upvoted-posts', JSON.stringify([...upvotedCache.value]));
+      voteVersion.value++;
+      await postStore.upvotePost(post.id);
       (await toastController.create({ message: 'Upvoted', duration: 1500, color: 'success' })).present();
     }
   } catch {
@@ -837,18 +822,21 @@ async function handleUpvote(post: Post) {
 async function handleDownvote(post: Post) {
   try {
     if (hasDownvoted(post.id)) {
-      const filtered = JSON.parse(localStorage.getItem('downvoted-posts') || '[]').filter((id: string) => id !== post.id);
-      localStorage.setItem('downvoted-posts', JSON.stringify(filtered));
-      voteVersion.value++; await postStore.removeDownvote(post.id);
+      downvotedCache.value.delete(post.id);
+      localStorage.setItem('downvoted-posts', JSON.stringify([...downvotedCache.value]));
+      voteVersion.value++;
+      await postStore.removeDownvote(post.id);
       (await toastController.create({ message: 'Downvote removed', duration: 1500, color: 'medium' })).present();
     } else {
-      const upvoted = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
-      if (upvoted.includes(post.id)) {
-        localStorage.setItem('upvoted-posts', JSON.stringify(upvoted.filter((id: string) => id !== post.id)));
+      if (upvotedCache.value.has(post.id)) {
+        upvotedCache.value.delete(post.id);
+        localStorage.setItem('upvoted-posts', JSON.stringify([...upvotedCache.value]));
         await postStore.removeUpvote(post.id);
       }
-      localStorage.setItem('downvoted-posts', JSON.stringify([...JSON.parse(localStorage.getItem('downvoted-posts') || '[]'), post.id]));
-      voteVersion.value++; await postStore.downvotePost(post.id);
+      downvotedCache.value.add(post.id);
+      localStorage.setItem('downvoted-posts', JSON.stringify([...downvotedCache.value]));
+      voteVersion.value++;
+      await postStore.downvotePost(post.id);
       (await toastController.create({ message: 'Downvoted', duration: 1500, color: 'warning' })).present();
     }
   } catch {
@@ -868,9 +856,7 @@ function navigateToPoll(poll: Poll) { router.push(`/community/${poll.communityId
 const subscribedFromHome = new Set<string>();
 
 async function subscribeNewCommunities(communities: typeof communityStore.communities) {
-  const newOnes = communities.filter(c =>
-    accessibleCommunityIds.value.has(c.id) && !subscribedFromHome.has(c.id)
-  );
+  const newOnes = communities.filter(c => !subscribedFromHome.has(c.id));
   if (newOnes.length === 0) return;
   newOnes.forEach(c => subscribedFromHome.add(c.id));
   if (subscribedFromHome.size === newOnes.length) isLoadingPosts.value = true;
@@ -908,10 +894,11 @@ async function showPollOptions() {
 
 // ── Watchers & lifecycle ──────────────────────────────────────────────────────
 
-watch(accessibleCommunities, (communities) => {
+watch(() => communityStore.communities.length, (newLen, oldLen) => {
   if (!warmupComplete.value) return;
-  subscribeNewCommunities(communities);
-}, { deep: true });
+  if (newLen <= oldLen) return; // only subscribe when new communities added
+  subscribeNewCommunities(communityStore.communities);
+});
 
 watch(activeTab, (tab) => {
   if (tab === 'home') {
@@ -921,44 +908,42 @@ watch(activeTab, (tab) => {
 });
 
 onMounted(async () => {
-  // ── STEP 1: Show feed instantly from Gun localStorage cache ───────────────
-  // warmupFromDB reads localStorage synchronously — no network, < 5ms
+  // STEP 1: Fetch posts/polls/communities from API instantly
   await warmupFromDB();
-  warmupComplete.value = true;
-  await subscribeNewCommunities(accessibleCommunities.value);
+  warmupComplete.value = true; // set immediately — unblocks the watcher
 
-  // ── STEP 2: Load communities and subscribe to Gun (needed for live updates)
-  // Run in parallel with everything else — don't block feed display
-  const feedReadyPromise = (async () => {
-    await communityStore.loadCommunities();
-    await subscribeNewCommunities(accessibleCommunities.value);
-    // Retry after 3s for any new communities from MySQL background fetch
-    setTimeout(() => subscribeNewCommunities(accessibleCommunities.value), 3000);
+  // STEP 2: Feed communities — watcher handles subscribeNewCommunities
+  const feedPromise = (async () => {
+    await communityStore.loadCommunities()
   })();
 
-  // ── STEP 3: Heavy init — run completely in parallel, never blocks feed ────
-  const heavyInitPromise = (async () => {
-    // Get current user first (needed for chat)
-    const currentUser = await UserService.getCurrentUser();
-    currentUserId = currentUser.id;
-    // Chat bootstrap can happen in the background without blocking feed paint
-    await Promise.all([
-      loadChatList(),
-      initBackgroundChat(),
-    ]);
+  // STEP 3: User + chat + chain — all parallel, never block feed
+  ;(async () => {
+    try {
+      const currentUser = await UserService.getCurrentUser();
+      currentUserId = currentUser.id;
+      // All three in parallel — if chat fails, chain still works
+      await Promise.allSettled([
+        chainStore.initialize(),
+        loadChatList(),
+        initBackgroundChat(),
+      ]);
+    } catch (err) {
+      console.warn('Heavy init error (non-critical):', err);
+    }
   })();
 
-  // Wait for feed to be ready (communities + Gun subscription)
-  // Heavy init runs in background — we don't await it
-  await feedReadyPromise;
-  heavyInitPromise.catch(err => console.warn('Heavy init error (non-critical):', err));
+  await feedPromise;
 });
 
 onUnmounted(() => {
   bgChatService?.disconnect();
   gunListeners.forEach(off => off());
+  unreadDebounceTimers.forEach(t => clearTimeout(t));
+  unreadDebounceTimers.clear();
 });
 </script>
+
 <style scoped>
 
 @import url('https://fonts.googleapis.com/css2?family=Grand+Hotel&display=swap');

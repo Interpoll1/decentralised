@@ -2,13 +2,13 @@ import Gun from 'gun';
 import 'gun/sea';
 import config from '../config';
 
-// ⚡ Bump this to wipe all data and start fresh (orphans old data on user devices)
 export const GUN_NAMESPACE = 'v2';
 
-// Root paths that should be namespaced
+// Roots that get namespaced under GUN_NAMESPACE — Gun is now live-updates only,
+// not the initial load source. These namespaced paths are still written to on
+// createPost/createPoll so Gun relay peers can pick up new content in real time.
 const NAMESPACED_ROOTS = new Set(['posts', 'communities', 'polls', 'postVotes', 'users', 'comments', 'events', 'chatrooms', 'server-config']);
 
-// Proxy wrapper — intercepts gun.get('posts') and routes to gun.get('v2').get('posts')
 function createNamespacedProxy(gun: any, nsNode: any): any {
   return new Proxy(gun, {
     get(target, prop) {
@@ -40,6 +40,11 @@ export class GunService {
       localStorage: true,
       radisk: false,
       axe: false,
+      // ── Increased batching — Gun is live-updates only now, less urgency ──
+      // wait: buffer writes for 250ms before flushing (was 150ms)
+      // chunk: max 150 records per WS message (was 100)
+      wait: 250,
+      chunk: 150,
     });
 
     const nsNode = this.gun.get(GUN_NAMESPACE);
@@ -54,7 +59,6 @@ export class GunService {
     return this.proxiedGun;
   }
 
-  /** Raw gun instance (no v2 namespace proxy) for accessing legacy v1 data */
   static getRawGun() {
     if (!this.gun) this.initialize();
     return this.gun;
@@ -71,7 +75,14 @@ export class GunService {
     this.gun = null;
     this.proxiedGun = null;
     this.user = null;
-    this.gun = Gun({ peers: [peerUrl], localStorage: true, radisk: false, axe: false });
+    this.gun = Gun({
+      peers: [peerUrl],
+      localStorage: true,
+      radisk: false,
+      axe: false,
+      wait: 250,
+      chunk: 150,
+    });
     const nsNode = this.gun.get(GUN_NAMESPACE);
     this.proxiedGun = createNamespacedProxy(this.gun, nsNode);
     this.user = this.gun.user();
@@ -115,7 +126,7 @@ export class GunService {
   static subscribe(path: string, callback: (data: any) => void): void {
     try {
       this.getGun().get(path).on(callback);
-    } catch { /* subscription failed */ }
+    } catch { }
   }
 
   // Throttled map — prevents 1K+ records/sec DOM warning
@@ -135,7 +146,7 @@ export class GunService {
         timer = setTimeout(flush, 100);
         if (batch.length >= 50) { if (timer) clearTimeout(timer); flush(); }
       });
-    } catch { /* map failed */ }
+    } catch { }
   }
 
   static cleanup(): void {

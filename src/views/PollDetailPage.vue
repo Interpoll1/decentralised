@@ -1,3 +1,4 @@
+
 <template>
   <ion-page>
     <ion-header>
@@ -239,6 +240,413 @@
     </ion-content>
   </ion-page>
 </template>
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import {
+  IonPage,
+  IonHeader,
+  IonToolbar,
+  IonTitle,
+  IonContent,
+  IonButtons,
+  IonBackButton,
+  IonCard,
+  IonCardHeader,
+  IonCardTitle,
+  IonCardSubtitle,
+  IonCardContent,
+  IonList,
+  IonItem,
+  IonLabel,
+  IonCheckbox,
+  IonRadio,
+  IonRadioGroup,
+  IonButton,
+  IonIcon,
+  IonChip,
+  IonBadge,
+  IonSpinner,
+  toastController
+} from '@ionic/vue';
+import {
+  statsChartOutline,
+  timeOutline,
+  peopleOutline,
+  checkmarkCircleOutline,
+  alertCircleOutline,
+  eyeOffOutline,
+  lockClosedOutline,
+  shareOutline,
+  copyOutline
+} from 'ionicons/icons';
+import { usePollStore } from '../stores/pollStore';
+import { useChainStore } from '../stores/chainStore';
+import { PollService, Poll } from '../services/pollService';
+import { UserService } from '../services/userService';
+import { VoteTrackerService } from '../services/voteTrackerService';
+import { AuditService } from '../services/auditService';
+import type { Vote } from '../types/chain';
+import { generatePseudonym } from '../utils/pseudonym';
+
+const route = useRoute();
+const router = useRouter();
+const pollStore = usePollStore();
+const chainStore = useChainStore();
+
+const poll = ref<Poll | null>(null);
+const isLoading = ref(true);
+const isSubmitting = ref(false);
+const selectedOption = ref<string>('');
+const selectedOptions = ref<string[]>([]);
+const hasVoted = ref(false);
+const currentUserId = ref('');
+const inviteCodes = ref<{ code: string; used: boolean }[]>([]);
+const isLoadingCodes = ref(false);
+
+const isAuthor = computed(() => {
+  if (!poll.value || !currentUserId.value) return false;
+  return poll.value.authorId === currentUserId.value;
+});
+
+const pollAuthorDisplayName = computed(() => {
+  if (!poll.value) return 'anon';
+  if (poll.value.authorShowRealName) {
+    return poll.value.authorName || 'anon';
+  }
+  if (poll.value.authorId && poll.value.id) {
+    return generatePseudonym(poll.value.id, poll.value.authorId);
+  }
+  return poll.value.authorName || 'anon';
+});
+
+const canSubmitVote = computed(() => {
+  if (poll.value?.allowMultipleChoices) {
+    return selectedOptions.value.length > 0;
+  }
+  return selectedOption.value !== '';
+});
+
+const sortedOptions = computed(() => {
+  if (!poll.value) return [];
+  return [...poll.value.options].sort((a, b) => b.votes - a.votes);
+});
+
+const actualTotalVotes = computed(() => {
+  if (!poll.value || !poll.value.options) return 0;
+  return poll.value.options.reduce((sum, option) => sum + (option.votes || 0), 0);
+});
+
+function formatTime(timestamp: number): string {
+  const now = Date.now();
+  const diff = now - timestamp;
+
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days < 7) return `${days}d ago`;
+
+  return new Date(timestamp).toLocaleDateString();
+}
+
+function getTimeRemaining(): string {
+  if (!poll.value || poll.value.isExpired) {
+    return 'Ended';
+  }
+
+  const now = Date.now();
+  const remaining = poll.value.expiresAt - now;
+
+  const days = Math.floor(remaining / 86400000);
+  const hours = Math.floor((remaining % 86400000) / 3600000);
+  const minutes = Math.floor((remaining % 3600000) / 60000);
+
+  if (days > 0) return `${days}d ${hours}h left`;
+  if (hours > 0) return `${hours}h ${minutes}m left`;
+  if (minutes > 0) return `${minutes}m left`;
+  return 'Ending soon';
+}
+
+function getOptionPercent(option: { votes: number }): number {
+  const total = actualTotalVotes.value;
+  if (total === 0) return 0;
+  return Math.round((option.votes / total) * 100);
+}
+
+async function submitVote() {
+  if (!poll.value || !canSubmitVote.value || isSubmitting.value) return
+  isSubmitting.value = true
+
+  const timeout = setTimeout(() => { isSubmitting.value = false }, 15000)
+
+  try {
+    const deviceId = await VoteTrackerService.getDeviceId()
+
+    if (await VoteTrackerService.hasVoted(poll.value.id)) {
+      hasVoted.value = true
+      return
+    }
+
+    const allowedByBackend = await AuditService.authorizeVote(poll.value.id, deviceId)
+    if (!allowedByBackend) {
+      hasVoted.value = true;
+      (await toastController.create({ message: 'Already voted on this poll', duration: 3000, color: 'danger' })).present()
+      return
+    }
+
+    const optionIds = poll.value.allowMultipleChoices
+      ? selectedOptions.value
+      : [selectedOption.value]
+
+    const choiceText = optionIds
+      .map(id => poll.value!.options.find(o => o.id === id)?.text || id)
+      .join(', ')
+
+    // Chain init with timeout
+    await Promise.race([
+      chainStore.initialize(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('chain timeout')), 5000))
+    ]).catch(() => {})
+
+    const vote: Vote = {
+      pollId: poll.value.id,
+      choice: choiceText,
+      timestamp: Date.now(),
+      deviceId
+    }
+    const receipt = await chainStore.addVote(vote)
+
+    // ── Update vote counts immediately in MySQL via relay ─────────────────
+    const updatedOptions = poll.value.options.map((opt, i) => ({
+      ...opt,
+      votes: optionIds.includes(opt.id) ? (opt.votes || 0) + 1 : (opt.votes || 0)
+    }))
+    const newTotalVotes = updatedOptions.reduce((s, o) => s + o.votes, 0)
+
+    // Write each option vote count directly to MySQL (non-blocking)
+    Promise.all(
+      updatedOptions.map((opt, i) =>
+        fetch('https://interpoll2.endless.sbs/db/write', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            soul: `v2/communities/${poll.value!.communityId}/polls/${poll.value!.id}/options/${i}`,
+            data: { id: opt.id, text: opt.text, votes: opt.votes }
+          })
+        }).catch(() => {})
+      )
+    ).then(() => {
+      // Also update totalVotes on poll node
+      fetch('https://interpoll2.endless.sbs/db/write', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          soul: `v2/communities/${poll.value!.communityId}/polls/${poll.value!.id}`,
+          data: { totalVotes: newTotalVotes }
+        })
+      }).catch(() => {})
+    })
+
+    // Update local display immediately — don't wait for API
+    poll.value = {
+      ...poll.value!,
+      options: updatedOptions,
+      totalVotes: newTotalVotes
+    }
+
+    // Gun vote update — non-blocking
+    UserService.getCurrentUser().then(u => {
+      PollService.voteOnPoll(poll.value!.id, optionIds, u.id).catch(() => {})
+    })
+
+    await VoteTrackerService.recordVote(poll.value.id, receipt.blockIndex)
+
+    hasVoted.value = true
+    const votedPolls = JSON.parse(localStorage.getItem('voted-polls') || '[]')
+    votedPolls.push(poll.value.id)
+    localStorage.setItem('voted-polls', JSON.stringify(votedPolls));
+
+    (await toastController.create({ message: 'Vote submitted!', duration: 2000, color: 'success' })).present()
+
+    // Reload from Nuxt API after short delay (let MySQL write settle)
+    setTimeout(async () => {
+      try {
+        const res = await fetch(`https://interpoll.endless.sbs/api/poll/${poll.value!.id}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data?.id && data.options?.length > 0) {
+            pollStore.injectPoll({
+              id: data.id, communityId: data.communityId,
+              authorId: poll.value!.authorId || '',
+              authorName: data.authorName || 'Anonymous',
+              question: data.question, description: data.description || '',
+              options: data.options,
+              createdAt: data.createdAt || Date.now(),
+              expiresAt: data.expiresAt || Date.now() + 86400000,
+              allowMultipleChoices: !!data.allowMultipleChoices,
+              showResultsBeforeVoting: !!data.showResultsBeforeVoting,
+              requireLogin: false, isPrivate: !!data.isPrivate,
+              totalVotes: data.totalVotes || 0,
+              isExpired: !!data.isExpired,
+            })
+            poll.value = pollStore.pollsMap.get(poll.value!.id) || data
+          }
+        }
+      } catch {}
+    }, 1500)
+
+  } catch (error) {
+    console.error('Vote error:', error);
+    (await toastController.create({ message: 'Failed to submit vote', duration: 2000, color: 'danger' })).present()
+  } finally {
+    clearTimeout(timeout)
+    isSubmitting.value = false
+  }
+}
+
+async function loadPoll() {
+  const pollId = route.params.pollId as string
+  // Check local vote state first (fast, no network)
+  const votedPolls = JSON.parse(localStorage.getItem('voted-polls') || '[]')
+  const votedLocally = votedPolls.includes(pollId)
+  hasVoted.value = votedLocally
+  // ── Step 1: Show from store immediately if available with options ──────────
+  const cached = pollStore.pollsMap.get(pollId)
+  if (cached && cached.options.length > 0) {
+    poll.value = cached
+    isLoading.value = false
+    // Still check device vote in background
+    VoteTrackerService.hasVoted(pollId).then(v => { if (v) hasVoted.value = true })
+  }
+  // ── Step 2: If no options in cache, fetch from Nuxt API (fast, ~300ms) ────
+  if (!poll.value || poll.value.options.length === 0) {
+    try {
+      const res = await fetch(`https://interpoll.endless.sbs/api/poll/${pollId}`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data?.id && data.options?.length > 0) {
+          // Patch into store
+          pollStore.injectPoll({
+            id: data.id, communityId: data.communityId,
+            authorId: '', authorName: data.authorName || 'Anonymous',
+            question: data.question, description: data.description || '',
+            options: data.options,
+            createdAt: data.createdAt || Date.now(),
+            expiresAt: data.expiresAt || Date.now() + 86400000,
+            allowMultipleChoices: !!data.allowMultipleChoices,
+            showResultsBeforeVoting: !!data.showResultsBeforeVoting,
+            requireLogin: false, isPrivate: !!data.isPrivate,
+            totalVotes: data.totalVotes || 0,
+            isExpired: !!data.isExpired,
+          })
+          poll.value = pollStore.pollsMap.get(pollId) || data
+          isLoading.value = false
+        }
+      }
+    } catch { /* fall through to Gun */ }
+  }
+  // ── Step 3: Gun fetch only if still no data (last resort) ────────────────
+  if (!poll.value) {
+    await pollStore.selectPoll(pollId)
+    poll.value = pollStore.currentPoll
+    isLoading.value = false
+  }
+  // ── Step 4: Background tasks (non-blocking) ───────────────────────────────
+  Promise.all([
+    UserService.getCurrentUser().then(u => { currentUserId.value = u.id }),
+    VoteTrackerService.hasVoted(pollId).then(v => { if (v) hasVoted.value = true }),
+  ]).catch(() => {})
+  if (poll.value?.isPrivate && isAuthor.value) {
+    loadInviteCodes()
+  }
+  isLoading.value = false
+}
+
+async function loadInviteCodes() {
+  if (!poll.value) return;
+  isLoadingCodes.value = true;
+  try {
+    inviteCodes.value = await PollService.getInviteCodes(poll.value.id);
+  } catch (err) {
+    console.warn('Failed to load invite codes:', err);
+  } finally {
+    isLoadingCodes.value = false;
+  }
+}
+
+async function copyInviteLink(code: string) {
+  if (!poll.value) return;
+  const baseUrl = window.location.origin;
+  const link = `${baseUrl}/Interpole/vote/${poll.value.id}?code=${code}`;
+
+  try {
+    await navigator.clipboard.writeText(link);
+    const toast = await toastController.create({
+      message: 'Invite link copied',
+      duration: 1500,
+      color: 'success'
+    });
+    await toast.present();
+  } catch {
+    const toast = await toastController.create({
+      message: link,
+      duration: 4000,
+      color: 'medium'
+    });
+    await toast.present();
+  }
+}
+
+async function copyAllLinks() {
+  if (!poll.value) return;
+  const baseUrl = window.location.origin;
+  const availableCodes = inviteCodes.value.filter(c => !c.used);
+
+  if (availableCodes.length === 0) {
+    const toast = await toastController.create({
+      message: 'No available codes left',
+      duration: 2000,
+      color: 'warning'
+    });
+    await toast.present();
+    return;
+  }
+
+  const links = availableCodes
+    .map(c => `${baseUrl}/Interpole/vote/${poll.value!.id}?code=${c.code}`)
+    .join('\n');
+
+  try {
+    await navigator.clipboard.writeText(links);
+    const toast = await toastController.create({
+      message: `${availableCodes.length} invite links copied`,
+      duration: 2000,
+      color: 'success'
+    });
+    await toast.present();
+  } catch {
+    const toast = await toastController.create({
+      message: 'Failed to copy links',
+      duration: 2000,
+      color: 'danger'
+    });
+    await toast.present();
+  }
+}
+
+onMounted(() => {
+  // Don't await chainStore.initialize() — it's slow and not needed to show the poll
+  // Chain is initialized lazily when user votes
+  loadPoll()
+  // Init chain in background
+  chainStore.initialize().catch(() => {})
+})
+</script>
+
 
 <style scoped>
 .loading-container,
@@ -528,342 +936,3 @@
   line-height: 1.5;
 }
 </style>
-
-<script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonContent,
-  IonButtons,
-  IonBackButton,
-  IonCard,
-  IonCardHeader,
-  IonCardTitle,
-  IonCardSubtitle,
-  IonCardContent,
-  IonList,
-  IonItem,
-  IonLabel,
-  IonCheckbox,
-  IonRadio,
-  IonRadioGroup,
-  IonButton,
-  IonIcon,
-  IonChip,
-  IonBadge,
-  IonSpinner,
-  toastController
-} from '@ionic/vue';
-import {
-  statsChartOutline,
-  timeOutline,
-  peopleOutline,
-  checkmarkCircleOutline,
-  alertCircleOutline,
-  eyeOffOutline,
-  lockClosedOutline,
-  shareOutline,
-  copyOutline
-} from 'ionicons/icons';
-import { usePollStore } from '../stores/pollStore';
-import { useChainStore } from '../stores/chainStore';
-import { PollService, Poll } from '../services/pollService';
-import { UserService } from '../services/userService';
-import { VoteTrackerService } from '../services/voteTrackerService';
-import { AuditService } from '../services/auditService';
-import type { Vote } from '../types/chain';
-import { generatePseudonym } from '../utils/pseudonym';
-
-const route = useRoute();
-const router = useRouter();
-const pollStore = usePollStore();
-const chainStore = useChainStore();
-
-const poll = ref<Poll | null>(null);
-const isLoading = ref(true);
-const isSubmitting = ref(false);
-const selectedOption = ref<string>('');
-const selectedOptions = ref<string[]>([]);
-const hasVoted = ref(false);
-const currentUserId = ref('');
-const inviteCodes = ref<{ code: string; used: boolean }[]>([]);
-const isLoadingCodes = ref(false);
-
-const isAuthor = computed(() => {
-  if (!poll.value || !currentUserId.value) return false;
-  return poll.value.authorId === currentUserId.value;
-});
-
-const pollAuthorDisplayName = computed(() => {
-  if (!poll.value) return 'anon';
-  if (poll.value.authorShowRealName) {
-    return poll.value.authorName || 'anon';
-  }
-  if (poll.value.authorId && poll.value.id) {
-    return generatePseudonym(poll.value.id, poll.value.authorId);
-  }
-  return poll.value.authorName || 'anon';
-});
-
-const canSubmitVote = computed(() => {
-  if (poll.value?.allowMultipleChoices) {
-    return selectedOptions.value.length > 0;
-  }
-  return selectedOption.value !== '';
-});
-
-const sortedOptions = computed(() => {
-  if (!poll.value) return [];
-  return [...poll.value.options].sort((a, b) => b.votes - a.votes);
-});
-
-const actualTotalVotes = computed(() => {
-  if (!poll.value || !poll.value.options) return 0;
-  return poll.value.options.reduce((sum, option) => sum + (option.votes || 0), 0);
-});
-
-function formatTime(timestamp: number): string {
-  const now = Date.now();
-  const diff = now - timestamp;
-
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days < 7) return `${days}d ago`;
-
-  return new Date(timestamp).toLocaleDateString();
-}
-
-function getTimeRemaining(): string {
-  if (!poll.value || poll.value.isExpired) {
-    return 'Ended';
-  }
-
-  const now = Date.now();
-  const remaining = poll.value.expiresAt - now;
-
-  const days = Math.floor(remaining / 86400000);
-  const hours = Math.floor((remaining % 86400000) / 3600000);
-  const minutes = Math.floor((remaining % 3600000) / 60000);
-
-  if (days > 0) return `${days}d ${hours}h left`;
-  if (hours > 0) return `${hours}h ${minutes}m left`;
-  if (minutes > 0) return `${minutes}m left`;
-  return 'Ending soon';
-}
-
-function getOptionPercent(option: { votes: number }): number {
-  const total = actualTotalVotes.value;
-  if (total === 0) return 0;
-  return Math.round((option.votes / total) * 100);
-}
-
-async function submitVote() {
-  if (!poll.value || !canSubmitVote.value) return;
-
-  isSubmitting.value = true;
-
-  try {
-    const deviceId = await VoteTrackerService.getDeviceId();
-
-    // Check local vote tracker
-    if (await VoteTrackerService.hasVoted(poll.value.id)) {
-      const toast = await toastController.create({
-        message: 'You have already voted on this poll',
-        duration: 3000,
-        color: 'danger'
-      });
-      await toast.present();
-      hasVoted.value = true;
-      return;
-    }
-
-    // Check backend authorization
-    const allowedByBackend = await AuditService.authorizeVote(poll.value.id, deviceId);
-    if (!allowedByBackend) {
-      const toast = await toastController.create({
-        message: 'This device has already voted on this poll',
-        duration: 3000,
-        color: 'danger'
-      });
-      await toast.present();
-      hasVoted.value = true;
-      return;
-    }
-
-    const optionIds = poll.value.allowMultipleChoices
-      ? selectedOptions.value
-      : [selectedOption.value];
-
-    // Initialize chain if needed
-    await chainStore.initialize();
-
-    // Find option text for the blockchain record
-    const choiceText = optionIds
-      .map(id => poll.value!.options.find(o => o.id === id)?.text || id)
-      .join(', ');
-
-    // Record on blockchain
-    const vote: Vote = {
-      pollId: poll.value.id,
-      choice: choiceText,
-      timestamp: Date.now(),
-      deviceId
-    };
-    const receipt = await chainStore.addVote(vote);
-
-    // Update Gun poll option counts
-    try {
-      const user = await UserService.getCurrentUser();
-      await PollService.voteOnPoll(poll.value.id, optionIds, user.id);
-    } catch (gunErr) {
-      console.warn('Gun poll count update failed:', gunErr);
-    }
-
-    // Record device vote
-    await VoteTrackerService.recordVote(poll.value.id, receipt.blockIndex);
-
-    hasVoted.value = true;
-
-    // Track locally
-    const votedPolls = JSON.parse(localStorage.getItem('voted-polls') || '[]');
-    votedPolls.push(poll.value.id);
-    localStorage.setItem('voted-polls', JSON.stringify(votedPolls));
-
-    const toast = await toastController.create({
-      message: 'Vote submitted successfully',
-      duration: 2000,
-      color: 'success'
-    });
-    await toast.present();
-
-    // Reload poll to get updated counts
-    await loadPoll();
-  } catch (error) {
-    console.error('Error submitting vote:', error);
-    const toast = await toastController.create({
-      message: 'Failed to submit vote',
-      duration: 2000,
-      color: 'danger'
-    });
-    await toast.present();
-  } finally {
-    isSubmitting.value = false;
-  }
-}
-
-async function loadPoll() {
-  const pollId = route.params.pollId as string;
-
-  // Check local vote state
-  const votedPolls = JSON.parse(localStorage.getItem('voted-polls') || '[]');
-  const votedLocally = votedPolls.includes(pollId);
-  const votedByDevice = await VoteTrackerService.hasVoted(pollId);
-  hasVoted.value = votedLocally || votedByDevice;
-
-  // Fetch from Gun via pollStore (not just local store)
-  await pollStore.selectPoll(pollId);
-  poll.value = pollStore.currentPoll;
-
-  // Load current user for author check
-  try {
-    const user = await UserService.getCurrentUser();
-    currentUserId.value = user.id;
-  } catch {
-    // Not critical
-  }
-
-  // Load invite codes if author of private poll
-  if (poll.value?.isPrivate && isAuthor.value) {
-    await loadInviteCodes();
-  }
-
-  isLoading.value = false;
-}
-
-async function loadInviteCodes() {
-  if (!poll.value) return;
-  isLoadingCodes.value = true;
-  try {
-    inviteCodes.value = await PollService.getInviteCodes(poll.value.id);
-  } catch (err) {
-    console.warn('Failed to load invite codes:', err);
-  } finally {
-    isLoadingCodes.value = false;
-  }
-}
-
-async function copyInviteLink(code: string) {
-  if (!poll.value) return;
-  const baseUrl = window.location.origin;
-  const link = `${baseUrl}/Interpole/vote/${poll.value.id}?code=${code}`;
-
-  try {
-    await navigator.clipboard.writeText(link);
-    const toast = await toastController.create({
-      message: 'Invite link copied',
-      duration: 1500,
-      color: 'success'
-    });
-    await toast.present();
-  } catch {
-    const toast = await toastController.create({
-      message: link,
-      duration: 4000,
-      color: 'medium'
-    });
-    await toast.present();
-  }
-}
-
-async function copyAllLinks() {
-  if (!poll.value) return;
-  const baseUrl = window.location.origin;
-  const availableCodes = inviteCodes.value.filter(c => !c.used);
-
-  if (availableCodes.length === 0) {
-    const toast = await toastController.create({
-      message: 'No available codes left',
-      duration: 2000,
-      color: 'warning'
-    });
-    await toast.present();
-    return;
-  }
-
-  const links = availableCodes
-    .map(c => `${baseUrl}/Interpole/vote/${poll.value!.id}?code=${c.code}`)
-    .join('\n');
-
-  try {
-    await navigator.clipboard.writeText(links);
-    const toast = await toastController.create({
-      message: `${availableCodes.length} invite links copied`,
-      duration: 2000,
-      color: 'success'
-    });
-    await toast.present();
-  } catch {
-    const toast = await toastController.create({
-      message: 'Failed to copy links',
-      duration: 2000,
-      color: 'danger'
-    });
-    await toast.present();
-  }
-}
-
-onMounted(async () => {
-  await chainStore.initialize();
-  await loadPoll();
-});
-</script>
-
