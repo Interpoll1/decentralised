@@ -193,7 +193,7 @@ import CommentCard from '../components/CommentCard.vue';
 import { Post } from '../services/postService';
 import { generatePseudonym } from '../utils/pseudonym';
 import { ModerationService, moderationVersion } from '../services/moderationService';
-import { NsfwService } from '../services/nsfwService';
+
 import { IPFSService } from '../services/ipfsService';
 
 const route = useRoute();

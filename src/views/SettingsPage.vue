@@ -1528,7 +1528,6 @@ import { useChainStore } from '../stores/chainStore';
 import { useCommunityStore } from '../stores/communityStore';
 import config from '../config';
 import { ModerationService, moderationVersion, type ModerationSettings, type WordCategory } from '../services/moderationService';
-import { NsfwService } from '../services/nsfwService';
 import { getEnabledVersions, setEnabledVersions, probeForVersions, availableVersions, type DataVersion } from '../utils/dataVersionSettings';
 import { GUN_NAMESPACE } from '../services/gunService';
 import { betaFeatures, setBetaFeature } from '../utils/betaFeatures';

@@ -459,7 +459,6 @@ import {
 import { Post } from '../services/postService';
 import type { FilterAction } from '../services/moderationService';
 import { moderationVersion } from '../services/moderationService';
-import { NsfwService } from '../services/nsfwService';
 import { IPFSService } from '../services/ipfsService';
 import { generatePseudonym } from '../utils/pseudonym';
 

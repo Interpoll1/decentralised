@@ -1,0 +1,1759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interpoll — UI Design Explorations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&family=Fraunces:ital,wght@0,300;0,700;1,300&family=Space+Mono:wght@400;700&family=Unbounded:wght@300;400;700&family=Instrument+Serif:ital@0;1&family=Bricolage+Grotesque:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ─── PAGE SHELL ─────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: #0a0a0a;
+  color: #fff;
+  font-family: 'DM Sans', sans-serif;
+  overflow-x: hidden;
+}
+
+.section-label {
+  text-align: center;
+  padding: 60px 20px 40px;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: #666;
+}
+.section-label span {
+  color: #fff;
+  font-size: 28px;
+  display: block;
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  letter-spacing: -1px;
+  margin-bottom: 8px;
+}
+.section-nav {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  padding: 0 20px 50px;
+  flex-wrap: wrap;
+}
+.section-nav a {
+  padding: 8px 20px;
+  border: 1px solid #333;
+  border-radius: 100px;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #999;
+  text-decoration: none;
+  transition: all .2s;
+}
+.section-nav a:hover { border-color: #fff; color: #fff; }
+.divider { height: 1px; background: #1a1a1a; margin: 40px 0; }
+
+/* ═══════════════════════════════════════════════════════════════
+   DESIGN 1 — "ZINE"
+   Tactile editorial, torn-paper meets brutalism
+   Palette: cream / ink black / hot coral
+   Font: Fraunces (display) + Bricolage Grotesque (body)
+   ═══════════════════════════════════════════════════════════════ */
+#design1 {
+  background: #f5f0e8;
+  padding: 0;
+  overflow: hidden;
+}
+
+.zine-shell {
+  max-width: 420px;
+  margin: 0 auto;
+  background: #f5f0e8;
+  min-height: 100vh;
+  position: relative;
+}
+
+.zine-header {
+  padding: 20px 24px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 3px solid #111;
+}
+.zine-logo {
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-weight: 700;
+  font-size: 30px;
+  color: #111;
+  letter-spacing: -1px;
+}
+.zine-logo span { color: #e8390e; }
+.zine-header-icons { display: flex; gap: 14px; }
+.zine-header-icons svg { width: 22px; height: 22px; color: #111; }
+
+.zine-tabs {
+  display: flex;
+  border-bottom: 3px solid #111;
+  background: #111;
+}
+.zine-tab {
+  flex: 1;
+  padding: 12px;
+  text-align: center;
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #999;
+  cursor: pointer;
+  background: #111;
+  border: none;
+  transition: all .2s;
+}
+.zine-tab.active {
+  color: #f5f0e8;
+  background: #e8390e;
+}
+
+.zine-feed { padding: 0; }
+
+/* Post card — ZINE style */
+.zine-post {
+  border-bottom: 2px solid #111;
+  padding: 22px 24px 18px;
+  position: relative;
+  cursor: pointer;
+  transition: background .15s;
+}
+.zine-post:hover { background: #ede8df; }
+
+.zine-post-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #e8390e;
+  background: #111;
+  padding: 4px 10px;
+  margin-bottom: 12px;
+}
+.zine-post-tag.community { color: #f5f0e8; background: #111; }
+
+.zine-post-title {
+  font-family: 'Fraunces', serif;
+  font-weight: 700;
+  font-size: 20px;
+  line-height: 1.2;
+  color: #111;
+  margin-bottom: 10px;
+  letter-spacing: -0.3px;
+}
+
+.zine-post-excerpt {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #444;
+  margin-bottom: 14px;
+}
+
+.zine-post-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  color: #888;
+  margin-bottom: 16px;
+}
+.zine-author-chip {
+  background: #111;
+  color: #f5f0e8;
+  padding: 3px 8px;
+  font-size: 10px;
+}
+
+.zine-post-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.zine-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 2px solid #111;
+  background: transparent;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #111;
+  cursor: pointer;
+  transition: all .15s;
+}
+.zine-action-btn:hover, .zine-action-btn.active { background: #111; color: #f5f0e8; }
+.zine-action-btn.up.active { background: #2a9d3a; border-color: #2a9d3a; color: #fff; }
+.zine-action-btn.down.active { background: #e8390e; border-color: #e8390e; color: #fff; }
+.zine-score {
+  margin-left: auto;
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-weight: 700;
+  font-size: 22px;
+  color: #111;
+}
+
+/* POLL card — ZINE style */
+.zine-poll {
+  border-bottom: 2px solid #111;
+  padding: 22px 24px 18px;
+  cursor: pointer;
+  transition: background .15s;
+  position: relative;
+}
+.zine-poll:hover { background: #ede8df; }
+
+.zine-poll-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  background: #e8390e;
+  color: #f5f0e8;
+  padding: 4px 10px;
+  margin-bottom: 12px;
+}
+
+.zine-poll-q {
+  font-family: 'Fraunces', serif;
+  font-weight: 700;
+  font-size: 19px;
+  line-height: 1.3;
+  color: #111;
+  margin-bottom: 6px;
+}
+.zine-poll-desc {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 16px;
+  font-style: italic;
+  font-family: 'Bricolage Grotesque', sans-serif;
+}
+
+.zine-options { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.zine-option {
+  position: relative;
+  border: 2px solid #111;
+  overflow: hidden;
+  cursor: pointer;
+}
+.zine-option-bar {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  background: #111;
+  transition: width .6s cubic-bezier(.16,1,.3,1);
+}
+.zine-option-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 12px;
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+}
+.zine-option.leading .zine-option-content { color: #f5f0e8; }
+.zine-option:not(.leading) .zine-option-bar { background: #ddd; }
+.zine-option-pct {
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.zine-poll-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  color: #888;
+}
+.zine-vote-btn {
+  padding: 7px 16px;
+  background: #e8390e;
+  border: 2px solid #e8390e;
+  color: #f5f0e8;
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.zine-vote-btn.ended {
+  background: #111;
+  border-color: #111;
+}
+
+/* ─ corner accent ─ */
+.zine-post::before, .zine-poll::before {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 0; height: 0;
+  border-left: 24px solid transparent;
+  border-top: 24px solid #e8390e;
+  opacity: .35;
+}
+
+/* Zine bottom nav */
+.zine-bottom-nav {
+  display: flex;
+  border-top: 3px solid #111;
+  background: #f5f0e8;
+  position: sticky;
+  bottom: 0;
+}
+.zine-nav-item {
+  flex: 1;
+  padding: 14px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #888;
+  cursor: pointer;
+  background: none;
+  border: none;
+  transition: all .15s;
+}
+.zine-nav-item.active { color: #e8390e; }
+.zine-nav-item svg { width: 20px; height: 20px; }
+
+
+/* ═══════════════════════════════════════════════════════════════
+   DESIGN 2 — "COSMOS"
+   Dark, glass-morphic, floating cards, neon accents
+   Palette: deep navy / electric indigo / mint green
+   Font: Unbounded (display) + DM Sans (body)
+   ═══════════════════════════════════════════════════════════════ */
+#design2 {
+  background: #050812;
+  padding: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.cosmos-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.cosmos-bg::before {
+  content: '';
+  position: absolute;
+  width: 600px; height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(99,60,255,.18) 0%, transparent 70%);
+  top: -200px; left: -200px;
+}
+.cosmos-bg::after {
+  content: '';
+  position: absolute;
+  width: 400px; height: 400px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0,255,163,.1) 0%, transparent 70%);
+  bottom: 0; right: -100px;
+}
+/* Star dots */
+.cosmos-stars {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle, rgba(255,255,255,.7) 1px, transparent 1px),
+    radial-gradient(circle, rgba(255,255,255,.4) 1px, transparent 1px),
+    radial-gradient(circle, rgba(255,255,255,.5) 1px, transparent 1px);
+  background-size: 200px 200px, 150px 150px, 300px 300px;
+  background-position: 0 0, 75px 75px, 150px 50px;
+  opacity: .25;
+}
+
+.cosmos-shell {
+  max-width: 420px;
+  margin: 0 auto;
+  min-height: 100vh;
+  position: relative;
+  z-index: 1;
+}
+
+.cosmos-header {
+  padding: 20px 20px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  background: rgba(255,255,255,.03);
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.cosmos-logo {
+  font-family: 'Unbounded', sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  color: #fff;
+  letter-spacing: -0.5px;
+}
+.cosmos-logo span {
+  background: linear-gradient(135deg, #6b3cff, #00ffa3);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.cosmos-header-icons { display: flex; gap: 8px; }
+.cosmos-icon-btn {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.1);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  transition: all .2s;
+}
+.cosmos-icon-btn:hover { background: rgba(107,60,255,.3); border-color: rgba(107,60,255,.5); }
+.cosmos-icon-btn svg { width: 16px; height: 16px; color: #aaa; }
+
+.cosmos-tabs {
+  display: flex;
+  padding: 16px 20px 0;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.cosmos-tab {
+  padding: 7px 16px;
+  border-radius: 100px;
+  border: 1px solid rgba(255,255,255,.1);
+  background: transparent;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  color: #777;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .2s;
+}
+.cosmos-tab.active {
+  background: rgba(107,60,255,.25);
+  border-color: rgba(107,60,255,.6);
+  color: #c4b5ff;
+}
+
+.cosmos-feed { padding: 16px 16px 100px; display: flex; flex-direction: column; gap: 12px; }
+
+/* Post card — COSMOS style */
+.cosmos-post {
+  background: rgba(255,255,255,.04);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 16px;
+  padding: 18px;
+  cursor: pointer;
+  transition: all .25s;
+  position: relative;
+  overflow: hidden;
+}
+.cosmos-post::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(107,60,255,.05) 0%, transparent 60%);
+  pointer-events: none;
+}
+.cosmos-post:hover {
+  border-color: rgba(107,60,255,.3);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(107,60,255,.15);
+}
+
+.cosmos-post-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.cosmos-community-pill {
+  padding: 3px 10px;
+  border-radius: 100px;
+  background: rgba(107,60,255,.2);
+  border: 1px solid rgba(107,60,255,.4);
+  font-size: 11px;
+  font-weight: 500;
+  color: #c4b5ff;
+}
+.cosmos-dot { color: rgba(255,255,255,.2); font-size: 10px; }
+.cosmos-author { font-size: 12px; color: rgba(255,255,255,.4); }
+.cosmos-time { font-size: 11px; color: rgba(255,255,255,.3); margin-left: auto; }
+
+.cosmos-post-title {
+  font-family: 'Unbounded', sans-serif;
+  font-weight: 400;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: rgba(255,255,255,.9);
+  margin-bottom: 8px;
+  letter-spacing: -0.2px;
+}
+.cosmos-post-excerpt {
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(255,255,255,.4);
+  margin-bottom: 16px;
+}
+
+.cosmos-post-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cosmos-vote-group {
+  display: flex;
+  align-items: center;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 100px;
+  overflow: hidden;
+}
+.cosmos-vote-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,.5);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+}
+.cosmos-vote-btn:hover { color: #fff; }
+.cosmos-vote-btn.up:hover, .cosmos-vote-btn.up.active { color: #00ffa3; }
+.cosmos-vote-btn.down:hover, .cosmos-vote-btn.down.active { color: #ff6b6b; }
+.cosmos-vote-btn svg { width: 13px; height: 13px; }
+.cosmos-vdivide { width: 1px; height: 20px; background: rgba(255,255,255,.1); }
+
+.cosmos-comments-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 100px;
+  color: rgba(255,255,255,.4);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.cosmos-comments-btn:hover { color: #fff; border-color: rgba(255,255,255,.2); }
+.cosmos-comments-btn svg { width: 13px; height: 13px; }
+.cosmos-score-badge {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'Unbounded', sans-serif;
+  font-size: 11px;
+  color: rgba(0,255,163,.7);
+}
+.cosmos-score-badge svg { width: 12px; height: 12px; }
+
+/* Poll card — COSMOS style */
+.cosmos-poll {
+  background: rgba(255,255,255,.04);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(0,255,163,.12);
+  border-radius: 16px;
+  padding: 18px;
+  cursor: pointer;
+  transition: all .25s;
+  position: relative;
+  overflow: hidden;
+}
+.cosmos-poll::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(0,255,163,.04) 0%, transparent 60%);
+}
+.cosmos-poll:hover {
+  border-color: rgba(0,255,163,.3);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(0,255,163,.08);
+}
+.cosmos-poll-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 100px;
+  background: rgba(0,255,163,.12);
+  border: 1px solid rgba(0,255,163,.3);
+  font-size: 10px;
+  font-weight: 600;
+  color: #00ffa3;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+}
+.cosmos-poll-q {
+  font-family: 'Unbounded', sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #fff;
+  margin-bottom: 6px;
+}
+.cosmos-poll-desc {
+  font-size: 12.5px;
+  color: rgba(255,255,255,.35);
+  margin-bottom: 16px;
+}
+.cosmos-poll-options { display: flex; flex-direction: column; gap: 7px; margin-bottom: 14px; }
+.cosmos-option {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.07);
+}
+.cosmos-option-fill {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  background: linear-gradient(90deg, rgba(0,255,163,.2), rgba(107,60,255,.1));
+  border-radius: 7px;
+  transition: width .7s cubic-bezier(.16,1,.3,1);
+}
+.cosmos-option.leading .cosmos-option-fill {
+  background: linear-gradient(90deg, rgba(0,255,163,.3), rgba(0,255,163,.1));
+}
+.cosmos-option-row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 12px;
+  font-size: 13px;
+  color: rgba(255,255,255,.8);
+}
+.cosmos-option-pct { font-size: 11px; color: rgba(0,255,163,.8); font-weight: 600; }
+
+.cosmos-poll-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.cosmos-poll-meta { display: flex; gap: 12px; }
+.cosmos-poll-stat { display: flex; align-items: center; gap: 4px; font-size: 11px; color: rgba(255,255,255,.35); }
+.cosmos-poll-stat svg { width: 12px; height: 12px; }
+.cosmos-poll-action {
+  padding: 6px 14px;
+  border-radius: 100px;
+  background: linear-gradient(135deg, rgba(0,255,163,.2), rgba(107,60,255,.2));
+  border: 1px solid rgba(0,255,163,.3);
+  color: #00ffa3;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .2s;
+  letter-spacing: .5px;
+}
+.cosmos-poll-action:hover { background: linear-gradient(135deg, rgba(0,255,163,.35), rgba(107,60,255,.3)); }
+.cosmos-poll-action.ended {
+  color: rgba(255,255,255,.4);
+  border-color: rgba(255,255,255,.1);
+  background: rgba(255,255,255,.04);
+}
+
+/* Cosmos bottom nav */
+.cosmos-bottom-nav {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  background: rgba(5,8,18,.85);
+  backdrop-filter: blur(30px);
+  border-top: 1px solid rgba(255,255,255,.07);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.cosmos-nav-item {
+  flex: 1;
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: rgba(255,255,255,.3);
+  cursor: pointer;
+  background: none;
+  border: none;
+  transition: all .2s;
+}
+.cosmos-nav-item.active { color: #c4b5ff; }
+.cosmos-nav-item svg { width: 20px; height: 20px; }
+.cosmos-unread {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #00ffa3;
+  position: absolute;
+  top: 8px;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   DESIGN 3 — "BULLETIN"
+   Physical notice board / community corkboard energy
+   Palette: warm white / deep teal / amber
+   Font: Instrument Serif (display) + Bricolage Grotesque (body)
+   ═══════════════════════════════════════════════════════════════ */
+#design3 {
+  background: #1a1a14;
+  padding: 0;
+}
+
+.bulletin-shell {
+  max-width: 420px;
+  margin: 0 auto;
+  background: #e8e4d4;
+  min-height: 100vh;
+  position: relative;
+}
+
+.bulletin-header {
+  background: #1c3a35;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.bulletin-logo {
+  font-family: 'Instrument Serif', serif;
+  font-size: 26px;
+  color: #f0ead0;
+  letter-spacing: -0.5px;
+}
+.bulletin-logo span { color: #f0c040; }
+.bulletin-header-icons { display: flex; gap: 10px; }
+.bulletin-icon-btn {
+  width: 34px; height: 34px;
+  border-radius: 4px;
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.12);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.bulletin-icon-btn svg { width: 16px; height: 16px; color: rgba(255,255,255,.6); }
+
+.bulletin-tabs {
+  background: #1c3a35;
+  display: flex;
+  gap: 0;
+  border-top: 1px solid rgba(255,255,255,.08);
+}
+.bulletin-tab {
+  flex: 1;
+  padding: 10px;
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.4);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: all .2s;
+  position: relative;
+}
+.bulletin-tab.active {
+  color: #f0ead0;
+}
+.bulletin-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 20%; right: 20%;
+  height: 3px;
+  background: #f0c040;
+  border-radius: 2px 2px 0 0;
+}
+
+.bulletin-feed { padding: 14px 14px 100px; display: flex; flex-direction: column; gap: 10px; }
+
+/* Post card — BULLETIN style */
+.bulletin-post {
+  background: #faf8f0;
+  border-radius: 4px;
+  padding: 0;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+  transition: all .2s;
+  position: relative;
+  overflow: hidden;
+}
+.bulletin-post:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,.12);
+}
+.bulletin-post-stripe {
+  height: 4px;
+  background: linear-gradient(90deg, #1c3a35, #2a5449);
+}
+.bulletin-post-body { padding: 16px 18px 14px; }
+
+.bulletin-post-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.bulletin-community {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #1c3a35;
+}
+.bulletin-sep { color: #bbb; font-size: 10px; }
+.bulletin-author {
+  font-size: 12px;
+  color: #888;
+  font-family: 'Bricolage Grotesque', sans-serif;
+}
+.bulletin-time {
+  font-size: 11px;
+  color: #aaa;
+  margin-left: auto;
+  font-family: 'Bricolage Grotesque', sans-serif;
+}
+
+.bulletin-post-title {
+  font-family: 'Instrument Serif', serif;
+  font-size: 18px;
+  line-height: 1.3;
+  color: #1a1a14;
+  margin-bottom: 8px;
+  letter-spacing: -0.2px;
+}
+.bulletin-post-excerpt {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #666;
+  margin-bottom: 14px;
+}
+
+.bulletin-post-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid #e8e4d4;
+}
+.bulletin-action {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  background: transparent;
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: #666;
+  cursor: pointer;
+  transition: all .15s;
+}
+.bulletin-action:hover { background: #f0ead0; border-color: #bbb; }
+.bulletin-action.up.active { background: #e8f5e9; border-color: #4caf50; color: #2e7d32; }
+.bulletin-action.down.active { background: #fbe9e7; border-color: #ef5350; color: #c62828; }
+.bulletin-action svg { width: 13px; height: 13px; }
+.bulletin-score {
+  margin-left: auto;
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 20px;
+  color: #1c3a35;
+  line-height: 1;
+}
+.bulletin-score span { font-family: 'Bricolage Grotesque', sans-serif; font-size: 10px; color: #999; font-style: normal; margin-left: 3px; }
+
+/* Poll card — BULLETIN style */
+.bulletin-poll {
+  background: #faf8f0;
+  border-radius: 4px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,.08);
+  transition: all .2s;
+  overflow: hidden;
+}
+.bulletin-poll:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,.12);
+}
+.bulletin-poll-stripe {
+  height: 4px;
+  background: linear-gradient(90deg, #f0c040, #e8a800);
+}
+.bulletin-poll-body { padding: 16px 18px 14px; }
+.bulletin-poll-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: #a07800;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  padding: 3px 9px;
+  border-radius: 3px;
+  margin-bottom: 12px;
+}
+.bulletin-poll-q {
+  font-family: 'Instrument Serif', serif;
+  font-size: 18px;
+  line-height: 1.3;
+  color: #1a1a14;
+  margin-bottom: 6px;
+}
+.bulletin-poll-desc {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 13px;
+  color: #888;
+  margin-bottom: 14px;
+  font-style: italic;
+}
+
+.bulletin-options { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.bulletin-option {
+  position: relative;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #f0ead0;
+  border: 1px solid #e0d8c0;
+  cursor: pointer;
+  transition: border-color .15s;
+}
+.bulletin-option:hover { border-color: #f0c040; }
+.bulletin-option-bar {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  background: linear-gradient(90deg, #fde68a, #fbbf24);
+  border-radius: 3px;
+  transition: width .7s cubic-bezier(.16,1,.3,1);
+  opacity: .6;
+}
+.bulletin-option.leading .bulletin-option-bar { opacity: 1; }
+.bulletin-option-row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 12px;
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 13px;
+  color: #333;
+  font-weight: 500;
+}
+.bulletin-option-pct {
+  font-size: 12px;
+  font-weight: 600;
+  color: #a07800;
+}
+
+.bulletin-poll-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 12px;
+  border-top: 1px solid #e8e4d4;
+}
+.bulletin-poll-stats {
+  display: flex;
+  gap: 12px;
+}
+.bulletin-poll-stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 11px;
+  color: #888;
+}
+.bulletin-poll-stat svg { width: 12px; height: 12px; }
+.bulletin-vote-btn {
+  padding: 6px 14px;
+  background: #1c3a35;
+  border: none;
+  border-radius: 4px;
+  color: #f0ead0;
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .2s;
+}
+.bulletin-vote-btn:hover { background: #2a5449; }
+.bulletin-vote-btn.ended { background: #888; cursor: default; }
+
+/* Bulletin bottom nav */
+.bulletin-bottom-nav {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  background: #1c3a35;
+}
+.bulletin-nav-item {
+  flex: 1;
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: rgba(255,255,255,.35);
+  cursor: pointer;
+  background: none;
+  border: none;
+  transition: all .2s;
+}
+.bulletin-nav-item.active { color: #f0c040; }
+.bulletin-nav-item svg { width: 20px; height: 20px; }
+
+
+/* ─ Design preview wrapper ─ */
+.design-preview {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 0 20px 60px;
+}
+.design-title-block {
+  padding: 50px 0 30px;
+  border-top: 1px solid #1a1a1a;
+}
+.design-number {
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #555;
+  margin-bottom: 6px;
+}
+.design-name {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 36px;
+  letter-spacing: -1.5px;
+  color: #fff;
+  margin-bottom: 6px;
+}
+.design-desc {
+  font-size: 14px;
+  color: #555;
+  line-height: 1.5;
+}
+.phone-frame {
+  border-radius: 36px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.06),
+    0 30px 80px rgba(0,0,0,.5),
+    0 0 0 8px #111;
+  max-height: 820px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.phone-frame::-webkit-scrollbar { display: none; }
+
+/* SVG icon helper */
+svg { display: inline-block; vertical-align: middle; }
+</style>
+</head>
+<body>
+
+<div class="section-label">
+  <span>Interpoll</span>
+  UI Design Explorations — 3 Directions
+</div>
+<div class="section-nav">
+  <a href="#d1">01 — Zine</a>
+  <a href="#d2">02 — Cosmos</a>
+  <a href="#d3">03 — Bulletin</a>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════
+     DESIGN 1 — ZINE
+     ══════════════════════════════════════════════════════ -->
+<div class="design-preview" id="d1">
+  <div class="design-title-block">
+    <div class="design-number">Direction 01</div>
+    <div class="design-name">"Zine"</div>
+    <div class="design-desc">Tactile editorial brutalism. Ink on paper. Coral accents. Bold serif titles. Zero decoration — pure information design.</div>
+  </div>
+  <div class="phone-frame" id="design1">
+    <div class="zine-shell">
+      <!-- Header -->
+      <div class="zine-header">
+        <div class="zine-logo">Inter<span>poll</span></div>
+        <div class="zine-header-icons">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </div>
+      </div>
+      <!-- Tabs -->
+      <div class="zine-tabs">
+        <button class="zine-tab active">For You</button>
+        <button class="zine-tab">Latest</button>
+      </div>
+
+      <!-- Feed -->
+      <div class="zine-feed">
+
+        <!-- POST 1 -->
+        <div class="zine-post">
+          <div class="zine-post-tag community">Midnight Thoughts</div>
+          <div class="zine-post-meta">
+            <span class="zine-author-chip">u/rusty-vista-antelope</span>
+            <span>·</span>
+            <span>24 Feb</span>
+          </div>
+          <h3 class="zine-post-title">The version of yourself you're embarrassed about from 5 years ago was doing their best</h3>
+          <p class="zine-post-excerpt">I was going through old messages tonight. From 2019. The things I said, the opinions I had — some of it made me cringe so hard I put my phone face down.</p>
+          <div class="zine-post-actions">
+            <button class="zine-action-btn up active">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="18 15 12 9 6 15"/></svg>
+              11
+            </button>
+            <button class="zine-action-btn down">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+              7
+            </button>
+            <button class="zine-action-btn">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              0
+            </button>
+            <span class="zine-score">+4</span>
+          </div>
+        </div>
+
+        <!-- POLL 1 (ended) -->
+        <div class="zine-poll">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+            <div class="zine-poll-badge">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              Poll
+            </div>
+            <div class="zine-post-tag community" style="margin:0;">wild-stream-rabbit</div>
+            <span style="font-family:'Space Mono',monospace;font-size:10px;color:#aaa;margin-left:auto;">Ended</span>
+          </div>
+          <h3 class="zine-poll-q">How do you actually feel when plans get cancelled?</h3>
+          <p class="zine-poll-desc">Be honest. Nobody can see you.</p>
+          <div class="zine-options">
+            <div class="zine-option leading">
+              <div class="zine-option-bar" style="width:60%"></div>
+              <div class="zine-option-content">
+                <span>Secretly relieved but say 'oh no that's such a shame'</span>
+                <span class="zine-option-pct">60%</span>
+              </div>
+            </div>
+            <div class="zine-option">
+              <div class="zine-option-bar" style="width:25%"></div>
+              <div class="zine-option-content">
+                <span>Genuinely disappointed</span>
+                <span class="zine-option-pct">25%</span>
+              </div>
+            </div>
+            <div class="zine-option">
+              <div class="zine-option-bar" style="width:15%"></div>
+              <div class="zine-option-content">
+                <span>Depends entirely on the plans</span>
+                <span class="zine-option-pct">15%</span>
+              </div>
+            </div>
+          </div>
+          <div class="zine-poll-footer">
+            <span>57 votes</span>
+            <button class="zine-vote-btn ended">Results</button>
+          </div>
+        </div>
+
+        <!-- POST 2 -->
+        <div class="zine-post">
+          <div class="zine-post-tag community">Philosophy Corner</div>
+          <div class="zine-post-meta">
+            <span class="zine-author-chip">u/cedar-moon-fox</span>
+            <span>·</span>
+            <span>3h ago</span>
+          </div>
+          <h3 class="zine-post-title">The concept of "being present" is overrated and here's why</h3>
+          <p class="zine-post-excerpt">Every self-help influencer tells you to live in the moment. But humans are the only species that can plan a future. Why are we treating our superpower as a problem?</p>
+          <div class="zine-post-actions">
+            <button class="zine-action-btn up">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="18 15 12 9 6 15"/></svg>
+              34
+            </button>
+            <button class="zine-action-btn down">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+              12
+            </button>
+            <button class="zine-action-btn">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              8
+            </button>
+            <span class="zine-score">+22</span>
+          </div>
+        </div>
+
+        <!-- POLL 2 (active) -->
+        <div class="zine-poll">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+            <div class="zine-poll-badge">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              Poll
+            </div>
+            <div class="zine-post-tag community" style="margin:0;">Tech Opinions</div>
+            <span style="font-family:'Space Mono',monospace;font-size:10px;color:#2a9d3a;margin-left:auto;">2d left</span>
+          </div>
+          <h3 class="zine-poll-q">Tabs vs spaces — end this debate now</h3>
+          <p class="zine-poll-desc">We're settling this democratically.</p>
+          <div class="zine-options">
+            <div class="zine-option leading">
+              <div class="zine-option-bar" style="width:52%"></div>
+              <div class="zine-option-content">
+                <span>Spaces (2)</span>
+                <span class="zine-option-pct">52%</span>
+              </div>
+            </div>
+            <div class="zine-option">
+              <div class="zine-option-bar" style="width:28%"></div>
+              <div class="zine-option-content">
+                <span>Tabs</span>
+                <span class="zine-option-pct">28%</span>
+              </div>
+            </div>
+            <div class="zine-option">
+              <div class="zine-option-bar" style="width:20%"></div>
+              <div class="zine-option-content">
+                <span>Spaces (4)</span>
+                <span class="zine-option-pct">20%</span>
+              </div>
+            </div>
+          </div>
+          <div class="zine-poll-footer">
+            <span>129 votes · 2 days left</span>
+            <button class="zine-vote-btn">Vote →</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Bottom Nav -->
+      <div class="zine-bottom-nav">
+        <button class="zine-nav-item active">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+          Home
+        </button>
+        <button class="zine-nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Groups
+        </button>
+        <button class="zine-nav-item" style="position:relative;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Chat
+        </button>
+        <button class="zine-nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          Create
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════
+     DESIGN 2 — COSMOS
+     ══════════════════════════════════════════════════════ -->
+<div class="design-preview" id="d2">
+  <div class="design-title-block">
+    <div class="design-number">Direction 02</div>
+    <div class="design-name">"Cosmos"</div>
+    <div class="design-desc">Deep space glass-morphism. Floating cards in a star field. Electric indigo + mint neon. Unbounded type.</div>
+  </div>
+  <div class="phone-frame" id="design2">
+    <div class="cosmos-bg">
+      <div class="cosmos-stars"></div>
+    </div>
+    <div class="cosmos-shell">
+      <!-- Header -->
+      <div class="cosmos-header">
+        <div class="cosmos-logo">inter<span>poll</span></div>
+        <div class="cosmos-header-icons">
+          <div class="cosmos-icon-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          </div>
+          <div class="cosmos-icon-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <div class="cosmos-icon-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="6" height="4"/><rect x="9" y="3" width="6" height="4"/><rect x="16" y="3" width="6" height="4"/><rect x="2" y="10" width="6" height="4"/><rect x="9" y="10" width="6" height="4"/><rect x="16" y="10" width="6" height="4"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="cosmos-tabs">
+        <button class="cosmos-tab active">For You</button>
+        <button class="cosmos-tab">Latest</button>
+        <button class="cosmos-tab">Following</button>
+      </div>
+
+      <!-- Feed -->
+      <div class="cosmos-feed">
+
+        <!-- POST 1 -->
+        <div class="cosmos-post">
+          <div class="cosmos-post-top">
+            <span class="cosmos-community-pill">Midnight Thoughts</span>
+            <span class="cosmos-dot">·</span>
+            <span class="cosmos-author">u/rusty-vista-antelope</span>
+            <span class="cosmos-time">24 Feb</span>
+          </div>
+          <div class="cosmos-post-title">The version of yourself you're embarrassed about from 5 years ago was doing their best</div>
+          <div class="cosmos-post-excerpt">From 2019. The things I said, the opinions I had — some of it made me cringe so hard I put my phone face down. But that person was 22, figuring it out...</div>
+          <div class="cosmos-post-footer">
+            <div class="cosmos-vote-group">
+              <button class="cosmos-vote-btn up active">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
+                11
+              </button>
+              <div class="cosmos-vdivide"></div>
+              <button class="cosmos-vote-btn down">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                7
+              </button>
+            </div>
+            <button class="cosmos-comments-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              0
+            </button>
+            <div class="cosmos-score-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+              +4
+            </div>
+          </div>
+        </div>
+
+        <!-- POLL 1 -->
+        <div class="cosmos-poll">
+          <div class="cosmos-poll-badge">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            Poll · Ended
+          </div>
+          <div class="cosmos-post-top" style="margin-bottom:10px;">
+            <span class="cosmos-community-pill" style="background:rgba(0,255,163,.1);border-color:rgba(0,255,163,.2);color:#00ffa3;">wild-stream-rabbit</span>
+            <span class="cosmos-time" style="margin-left:0;">25 Feb</span>
+          </div>
+          <div class="cosmos-poll-q">How do you actually feel when plans get cancelled?</div>
+          <div class="cosmos-poll-desc">Be honest. Nobody can see you.</div>
+          <div class="cosmos-poll-options">
+            <div class="cosmos-option leading">
+              <div class="cosmos-option-fill" style="width:60%"></div>
+              <div class="cosmos-option-row">
+                <span>Secretly relieved but say 'oh no'</span>
+                <span class="cosmos-option-pct">60%</span>
+              </div>
+            </div>
+            <div class="cosmos-option">
+              <div class="cosmos-option-fill" style="width:25%"></div>
+              <div class="cosmos-option-row">
+                <span>Genuinely disappointed</span>
+                <span class="cosmos-option-pct" style="color:rgba(0,255,163,.5);">25%</span>
+              </div>
+            </div>
+            <div class="cosmos-option">
+              <div class="cosmos-option-fill" style="width:15%"></div>
+              <div class="cosmos-option-row">
+                <span>Depends on the plans</span>
+                <span class="cosmos-option-pct" style="color:rgba(0,255,163,.4);">15%</span>
+              </div>
+            </div>
+          </div>
+          <div class="cosmos-poll-footer">
+            <div class="cosmos-poll-meta">
+              <div class="cosmos-poll-stat">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                57 votes
+              </div>
+              <div class="cosmos-poll-stat">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Ended
+              </div>
+            </div>
+            <button class="cosmos-poll-action ended">Results</button>
+          </div>
+        </div>
+
+        <!-- POST 2 -->
+        <div class="cosmos-post">
+          <div class="cosmos-post-top">
+            <span class="cosmos-community-pill">Philosophy Corner</span>
+            <span class="cosmos-dot">·</span>
+            <span class="cosmos-author">u/cedar-moon-fox</span>
+            <span class="cosmos-time">3h ago</span>
+          </div>
+          <div class="cosmos-post-title">The concept of "being present" is overrated and here's why</div>
+          <div class="cosmos-post-excerpt">Every self-help influencer tells you to live in the moment. But humans are the only species that can plan a future...</div>
+          <div class="cosmos-post-footer">
+            <div class="cosmos-vote-group">
+              <button class="cosmos-vote-btn up">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
+                34
+              </button>
+              <div class="cosmos-vdivide"></div>
+              <button class="cosmos-vote-btn down">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                12
+              </button>
+            </div>
+            <button class="cosmos-comments-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              8
+            </button>
+            <div class="cosmos-score-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+              +22
+            </div>
+          </div>
+        </div>
+
+        <!-- POLL 2 active -->
+        <div class="cosmos-poll">
+          <div class="cosmos-poll-badge" style="color:#c4b5ff;background:rgba(107,60,255,.15);border-color:rgba(107,60,255,.35);">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            Poll · 2 days left
+          </div>
+          <div class="cosmos-post-top" style="margin-bottom:10px;">
+            <span class="cosmos-community-pill">Tech Opinions</span>
+            <span class="cosmos-time">1h ago</span>
+          </div>
+          <div class="cosmos-poll-q">Tabs vs spaces — end this debate democratically</div>
+          <div class="cosmos-poll-options">
+            <div class="cosmos-option leading">
+              <div class="cosmos-option-fill" style="width:52%"></div>
+              <div class="cosmos-option-row"><span>Spaces (2)</span><span class="cosmos-option-pct">52%</span></div>
+            </div>
+            <div class="cosmos-option">
+              <div class="cosmos-option-fill" style="width:28%"></div>
+              <div class="cosmos-option-row"><span>Tabs</span><span class="cosmos-option-pct" style="color:rgba(0,255,163,.5);">28%</span></div>
+            </div>
+            <div class="cosmos-option">
+              <div class="cosmos-option-fill" style="width:20%"></div>
+              <div class="cosmos-option-row"><span>Spaces (4)</span><span class="cosmos-option-pct" style="color:rgba(0,255,163,.4);">20%</span></div>
+            </div>
+          </div>
+          <div class="cosmos-poll-footer">
+            <div class="cosmos-poll-meta">
+              <div class="cosmos-poll-stat">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                129 votes
+              </div>
+            </div>
+            <button class="cosmos-poll-action">Vote Now</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Bottom Nav -->
+      <div class="cosmos-bottom-nav">
+        <button class="cosmos-nav-item active">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+          Home
+        </button>
+        <button class="cosmos-nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Groups
+        </button>
+        <button class="cosmos-nav-item" style="position:relative;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <div class="cosmos-unread"></div>
+          Chat
+        </button>
+        <button class="cosmos-nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          Create
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════
+     DESIGN 3 — BULLETIN
+     ══════════════════════════════════════════════════════ -->
+<div class="design-preview" id="d3">
+  <div class="design-title-block">
+    <div class="design-number">Direction 03</div>
+    <div class="design-name">"Bulletin"</div>
+    <div class="design-desc">Community notice board. Warm parchment cards. Deep teal chrome. Amber vote accents. Serif headlines feel like real writing.</div>
+  </div>
+  <div class="phone-frame" id="design3">
+    <div class="bulletin-shell">
+      <!-- Header -->
+      <div class="bulletin-header">
+        <div class="bulletin-logo">Inter<span>poll</span></div>
+        <div class="bulletin-header-icons">
+          <div class="bulletin-icon-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          </div>
+          <div class="bulletin-icon-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+        </div>
+      </div>
+      <div class="bulletin-tabs">
+        <button class="bulletin-tab active">For You</button>
+        <button class="bulletin-tab">Latest</button>
+        <button class="bulletin-tab">Communities</button>
+      </div>
+
+      <!-- Feed -->
+      <div class="bulletin-feed">
+
+        <!-- POST 1 -->
+        <div class="bulletin-post">
+          <div class="bulletin-post-stripe"></div>
+          <div class="bulletin-post-body">
+            <div class="bulletin-post-top">
+              <span class="bulletin-community">Midnight Thoughts</span>
+              <span class="bulletin-sep">·</span>
+              <span class="bulletin-author">u/rusty-vista-antelope</span>
+              <span class="bulletin-time">24 Feb</span>
+            </div>
+            <h3 class="bulletin-post-title">The version of yourself you're embarrassed about from 5 years ago was doing their best</h3>
+            <p class="bulletin-post-excerpt">I was going through old messages tonight. From 2019. The things I said — some made me cringe so hard I put my phone face down. But that person was figuring it out.</p>
+            <div class="bulletin-post-footer">
+              <button class="bulletin-action up active">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
+                11
+              </button>
+              <button class="bulletin-action down">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                7
+              </button>
+              <button class="bulletin-action">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                0
+              </button>
+              <div class="bulletin-score">+4 <span>score</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- POLL 1 ended -->
+        <div class="bulletin-poll">
+          <div class="bulletin-poll-stripe"></div>
+          <div class="bulletin-poll-body">
+            <div class="bulletin-poll-tag">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              Poll — Ended
+            </div>
+            <div class="bulletin-post-top" style="margin-bottom:10px;">
+              <span class="bulletin-community">wild-stream-rabbit</span>
+              <span class="bulletin-sep">·</span>
+              <span class="bulletin-time" style="margin-left:0;">25 Feb 2026</span>
+            </div>
+            <h3 class="bulletin-poll-q">How do you actually feel when plans get cancelled?</h3>
+            <p class="bulletin-poll-desc">Be honest. Nobody can see you.</p>
+            <div class="bulletin-options">
+              <div class="bulletin-option leading">
+                <div class="bulletin-option-bar" style="width:60%"></div>
+                <div class="bulletin-option-row">
+                  <span>Secretly relieved but say 'oh no that's a shame'</span>
+                  <span class="bulletin-option-pct">60%</span>
+                </div>
+              </div>
+              <div class="bulletin-option">
+                <div class="bulletin-option-bar" style="width:25%"></div>
+                <div class="bulletin-option-row">
+                  <span>Genuinely disappointed</span>
+                  <span class="bulletin-option-pct">25%</span>
+                </div>
+              </div>
+              <div class="bulletin-option">
+                <div class="bulletin-option-bar" style="width:15%"></div>
+                <div class="bulletin-option-row">
+                  <span>Depends on the plans</span>
+                  <span class="bulletin-option-pct">15%</span>
+                </div>
+              </div>
+            </div>
+            <div class="bulletin-poll-footer">
+              <div class="bulletin-poll-stats">
+                <div class="bulletin-poll-stat">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                  57 votes
+                </div>
+                <div class="bulletin-poll-stat">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  Ended
+                </div>
+              </div>
+              <button class="bulletin-vote-btn ended">Results</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- POST 2 -->
+        <div class="bulletin-post">
+          <div class="bulletin-post-stripe"></div>
+          <div class="bulletin-post-body">
+            <div class="bulletin-post-top">
+              <span class="bulletin-community">Philosophy Corner</span>
+              <span class="bulletin-sep">·</span>
+              <span class="bulletin-author">u/cedar-moon-fox</span>
+              <span class="bulletin-time">3h ago</span>
+            </div>
+            <h3 class="bulletin-post-title">The concept of "being present" is overrated and here's why</h3>
+            <p class="bulletin-post-excerpt">Every self-help influencer tells you to live in the moment. But humans are the only species that can plan a future. Why are we treating our superpower as a problem?</p>
+            <div class="bulletin-post-footer">
+              <button class="bulletin-action up">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
+                34
+              </button>
+              <button class="bulletin-action down">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                12
+              </button>
+              <button class="bulletin-action">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                8
+              </button>
+              <div class="bulletin-score">+22 <span>score</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- POLL 2 active -->
+        <div class="bulletin-poll">
+          <div class="bulletin-poll-stripe"></div>
+          <div class="bulletin-poll-body">
+            <div class="bulletin-poll-tag" style="color:#1c3a35;background:#d4edda;border-color:#a8d5b5;">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              Poll — 2 days left
+            </div>
+            <div class="bulletin-post-top" style="margin-bottom:10px;">
+              <span class="bulletin-community">Tech Opinions</span>
+              <span class="bulletin-sep">·</span>
+              <span class="bulletin-time" style="margin-left:0;">1h ago</span>
+            </div>
+            <h3 class="bulletin-poll-q">Tabs vs spaces — end this debate democratically</h3>
+            <div class="bulletin-options">
+              <div class="bulletin-option leading">
+                <div class="bulletin-option-bar" style="width:52%"></div>
+                <div class="bulletin-option-row"><span>Spaces (2)</span><span class="bulletin-option-pct">52%</span></div>
+              </div>
+              <div class="bulletin-option">
+                <div class="bulletin-option-bar" style="width:28%"></div>
+                <div class="bulletin-option-row"><span>Tabs</span><span class="bulletin-option-pct">28%</span></div>
+              </div>
+              <div class="bulletin-option">
+                <div class="bulletin-option-bar" style="width:20%"></div>
+                <div class="bulletin-option-row"><span>Spaces (4)</span><span class="bulletin-option-pct">20%</span></div>
+              </div>
+            </div>
+            <div class="bulletin-poll-footer">
+              <div class="bulletin-poll-stats">
+                <div class="bulletin-poll-stat">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                  129 votes
+                </div>
+                <div class="bulletin-poll-stat">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  2 days left
+                </div>
+              </div>
+              <button class="bulletin-vote-btn">Cast Vote →</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Bottom Nav -->
+      <div class="bulletin-bottom-nav">
+        <button class="bulletin-nav-item active">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+          Home
+        </button>
+        <button class="bulletin-nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Groups
+        </button>
+        <button class="bulletin-nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Chat
+        </button>
+        <button class="bulletin-nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          Create
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="height:60px;"></div>
+
+</body>
+</html>
