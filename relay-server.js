@@ -13,10 +13,17 @@ import { RateLimiter } from './rate-limiter.js';
 import { BotDetector } from './bot-detector.js';
 import { SpamScorer } from './spam-scorer.js';
 import { PowChallenge } from './pow-challenge.js';
+import {
+  sanitizeId, sanitizeLogString, sanitizeString,
+  parseBodyWithLimit, setCorsHeaders, setSecurityHeaders, isOriginAllowed,
+  sendError, ALLOWED_ORIGINS,
+} from './security-utils.js';
+import { validateWsMessage } from './ws-validators.js';
 
 const PORT = 8080;
 const server = http.createServer();
-const wss = new WebSocketServer({ server });
+const WS_MAX_PAYLOAD = 262144; // 256KB
+const wss = new WebSocketServer({ server, maxPayload: WS_MAX_PAYLOAD });
 
 const clients = new Map(); // peerId -> WebSocket
 const rooms = new Map();   // roomId -> Set of peerIds
@@ -75,8 +82,17 @@ function saveMessageCache() {
 setInterval(saveMessageCache, 30000);
 
 // Minimal in-memory OAuth state & session stores
-const oauthStates = new Map(); // state -> provider
+const OAUTH_STATE_TTL_MS = 10 * 60_000; // 10 minutes
+const oauthStates = new Map(); // state -> { provider, createdAt }
 const sessions = new Map(); // sessionId -> user
+
+// Cleanup expired OAuth states every 2 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [state, entry] of oauthStates) {
+    if (now - entry.createdAt > OAUTH_STATE_TTL_MS) oauthStates.delete(state);
+  }
+}, 2 * 60_000);
 
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
 
@@ -93,7 +109,9 @@ function generateRandomId(bytes = 16) {
 function setSessionCookie(res, user) {
   const sessionId = generateRandomId(16);
   sessions.set(sessionId, user);
-  const cookie = `sessionId=${sessionId}; HttpOnly; Path=/; SameSite=Lax`;
+  const isProduction = process.env.NODE_ENV === 'production';
+  const securePart = isProduction ? ' Secure;' : '';
+  const cookie = `sessionId=${sessionId}; HttpOnly; Path=/; SameSite=Lax;${securePart}`;
   res.setHeader('Set-Cookie', cookie);
 }
 
@@ -191,27 +209,29 @@ function decodeJwt(token) {
 }
 
 server.on('request', (req, res) => {
+  // ─── Security headers ───────────────────────────────────────────────────
+  setSecurityHeaders(res);
+  setCorsHeaders(req, res);
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  // ─── CORS origin check for mutating requests ───────────────────────────
+  if ((req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE') && !isOriginAllowed(req)) {
+    res.writeHead(403, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Origin not allowed' }));
+    return;
+  }
+
   // ─── HTTP rate limiting ─────────────────────────────────────────────────
   const clientIp = req.socket.remoteAddress || 'unknown';
   const httpCheck = rateLimiter.checkHttp(clientIp);
   if (!httpCheck.allowed) {
     res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': String(Math.ceil(httpCheck.retryAfter / 1000)) });
     res.end(JSON.stringify({ error: 'Too many requests', retryAfter: httpCheck.retryAfter }));
-    return;
-  }
-
-  // Basic CORS for the frontend dev server (supports credentials)
-  const origin = req.headers.origin || FRONTEND_ORIGIN;
-  if (origin) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204);
-    res.end();
     return;
   }
 
@@ -237,7 +257,7 @@ server.on('request', (req, res) => {
     }
 
     const state = generateRandomId(16);
-    oauthStates.set(state, 'google');
+    oauthStates.set(state, { provider: 'google', createdAt: Date.now() });
 
     const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     authUrl.searchParams.set('client_id', clientId);
@@ -256,7 +276,7 @@ server.on('request', (req, res) => {
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state');
 
-    if (!code || !state || oauthStates.get(state) !== 'google') {
+    if (!code || !state || oauthStates.get(state)?.provider !== 'google') {
       res.writeHead(400, { 'Content-Type': 'text/plain' });
       res.end('Invalid OAuth state');
       return;
@@ -275,7 +295,7 @@ server.on('request', (req, res) => {
       grant_type: 'authorization_code',
     })
       .then((tokenResponse) => {
-        console.log('Google token response:', tokenResponse);
+        console.log('Google token response received (id_token present:', !!tokenResponse.id_token, ')');
 
         const idToken = tokenResponse.id_token;
         if (idToken) {
@@ -349,7 +369,7 @@ server.on('request', (req, res) => {
     }
 
     const state = generateRandomId(16);
-    oauthStates.set(state, 'microsoft');
+    oauthStates.set(state, { provider: 'microsoft', createdAt: Date.now() });
 
     const authUrl = new URL(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize`);
     authUrl.searchParams.set('client_id', clientId);
@@ -368,7 +388,7 @@ server.on('request', (req, res) => {
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state');
 
-    if (!code || !state || oauthStates.get(state) !== 'microsoft') {
+    if (!code || !state || oauthStates.get(state)?.provider !== 'microsoft') {
       res.writeHead(400, { 'Content-Type': 'text/plain' });
       res.end('Invalid OAuth state');
       return;
@@ -441,19 +461,15 @@ server.on('request', (req, res) => {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/vote-authorize') {
-    let body = '';
-    req.on('data', (chunk) => {
-      body += chunk.toString();
-    });
-    req.on('end', () => {
+    parseBodyWithLimit(req, res, 4096).then((data) => {
+      if (!data) return; // parseBodyWithLimit already sent error response
       try {
-        const data = JSON.parse(body || '{}');
-        const pollId = String(data.pollId || '');
-        const deviceId = String(data.deviceId || '');
+        const pollId = sanitizeId(String(data.pollId || ''), 128);
+        const deviceId = sanitizeId(String(data.deviceId || ''), 128);
 
         if (!pollId || !deviceId) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ allowed: false, reason: 'missing pollId or deviceId' }));
+          res.end(JSON.stringify({ allowed: false, reason: 'missing or invalid pollId or deviceId' }));
           return;
         }
 
@@ -477,22 +493,19 @@ server.on('request', (req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ allowed: !alreadyVoted, reason: alreadyVoted ? 'already voted' : undefined }));
       } catch (error) {
-        console.error('Error in /api/vote-authorize:', error);
+        // SECURITY FIX: Return allowed: false on error (was: true)
+        console.error('Error in /api/vote-authorize:', error.message);
         res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ allowed: true }));
+        res.end(JSON.stringify({ allowed: false, reason: 'internal error' }));
       }
     });
     return;
   }
 
   if (req.method === 'POST' && url.pathname === '/api/receipts') {
-    let body = '';
-    req.on('data', (chunk) => {
-      body += chunk.toString();
-    });
-    req.on('end', () => {
+    parseBodyWithLimit(req, res, 16384).then((data) => {
+      if (!data) return;
       try {
-        const data = JSON.parse(body || '{}');
         const logEntry = {
           type: 'receipt',
           payload: data,
@@ -500,16 +513,14 @@ server.on('request', (req, res) => {
         };
         fs.appendFile(RECEIPT_LOG_FILE, JSON.stringify(logEntry) + '\n', (err) => {
           if (err) {
-            console.error('Failed to write receipt log:', err);
+            console.error('Failed to write receipt log:', err.message);
           }
         });
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       } catch (error) {
-        console.error('Error in /api/receipts:', error);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: false }));
+        sendError(res, 500, 'Receipt processing failed', error, '/api/receipts');
       }
     });
     return;
@@ -524,11 +535,19 @@ wss.on('connection', (ws, req) => {
   let peerId = null;
   const peerIp = req.socket.remoteAddress || 'unknown';
   
-  console.log('🔌 New connection from', peerIp);
+  console.log('🔌 New connection from', sanitizeLogString(peerIp));
 
   ws.on('message', (message) => {
     try {
-      const data = JSON.parse(message.toString());
+      // ─── Message validation ───────────────────────────────────────
+      const validation = validateWsMessage(message);
+      if (!validation.valid) {
+        if (ws.readyState === 1) {
+          ws.send(JSON.stringify({ type: 'error', code: 'INVALID_MESSAGE', reason: validation.reason }));
+        }
+        return;
+      }
+      const data = validation.data;
 
       // Skip rate limiting for heartbeat messages
       if (data.type !== 'ping' && data.type !== 'pong') {
@@ -619,10 +638,18 @@ wss.on('connection', (ws, req) => {
           break;
 
         case 'register':
-          peerId = data.peerId;
+          peerId = data.peerId; // Already sanitized by ws-validators
+          if (clients.has(peerId)) {
+            // Reject duplicate peerId registration
+            if (ws.readyState === 1) {
+              ws.send(JSON.stringify({ type: 'error', code: 'PEER_ID_TAKEN', reason: 'Peer ID already registered' }));
+            }
+            peerId = null;
+            break;
+          }
           clients.set(peerId, ws);
           botDetector.onRegister(peerId);
-          console.log(`✅ Peer registered: ${peerId} (Total: ${clients.size})`);
+          console.log(`✅ Peer registered: ${sanitizeLogString(peerId)} (Total: ${clients.size})`);
 
           // Send list of active peers
           broadcast({
@@ -647,12 +674,12 @@ wss.on('connection', (ws, req) => {
             rooms.set(roomId, new Set());
           }
           rooms.get(roomId).add(peerId);
-          console.log(`🚪 ${peerId} joined room: ${roomId}`);
+          console.log(`🚪 ${sanitizeLogString(peerId)} joined room: ${sanitizeLogString(roomId)}`);
           break;
           
         case 'broadcast':
           // Relay to all other peers
-          console.log(`📡 Broadcasting ${data.data?.type || 'message'} from ${peerId}`);
+          console.log(`📡 Broadcasting ${sanitizeLogString(data.data?.type || 'message')} from ${sanitizeLogString(peerId)}`);
           broadcastToOthers(peerId, data.data);
           // Cache content messages for seeding new clients
           cacheMessage(data.data);
@@ -681,7 +708,7 @@ wss.on('connection', (ws, req) => {
         case 'new-block':
         case 'request-sync':
         case 'sync-response':
-          console.log(`📡 Broadcasting ${data.type} from ${peerId}`);
+          console.log(`📡 Broadcasting ${sanitizeLogString(data.type)} from ${sanitizeLogString(peerId)}`);
           broadcastToOthers(peerId, data);
           // Cache content messages for seeding new clients
           cacheMessage(data);
@@ -699,7 +726,7 @@ wss.on('connection', (ws, req) => {
         }
 
         default:
-          console.log('Unknown message type:', data.type);
+          console.log('Unknown message type:', sanitizeLogString(data.type));
       }
     } catch (error) {
       console.error('Error handling message:', error);
@@ -719,7 +746,7 @@ wss.on('connection', (ws, req) => {
         }
       });
       
-      console.log(`❌ Peer disconnected: ${peerId} (Total: ${clients.size})`);
+      console.log(`❌ Peer disconnected: ${sanitizeLogString(peerId)} (Total: ${clients.size})`);
       
       // Notify others
       broadcast({
@@ -730,7 +757,7 @@ wss.on('connection', (ws, req) => {
   });
 
   ws.on('error', (error) => {
-    console.error('WebSocket error:', error);
+    console.error('WebSocket error:', error.message);
   });
   
   // Send welcome message
