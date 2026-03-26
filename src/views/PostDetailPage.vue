@@ -482,7 +482,7 @@ async function handleUpvote() {
       post.value = { ...post.value, upvotes: post.value.upvotes - 1, score: post.value.score - 1 };
       voteVersion.value++;
       postStore.removeUpvote(post.value.id); // fire and forget
-      (await toastController.create({ message: 'Upvote removed', duration: 1500, color: 'medium' })).present();
+      (await toastController.create({ message: 'Upvote removed', duration: 1500 })).present();
     } else {
       const wasDownvoted = hasDownvoted.value;
       toggleLocalStorageItem('downvoted-posts', post.value.id, false);
@@ -496,7 +496,7 @@ async function handleUpvote() {
       voteVersion.value++;
       if (wasDownvoted) postStore.removeDownvote(post.value.id); // fire and forget
       postStore.upvotePost(post.value.id); // fire and forget
-      (await toastController.create({ message: 'Upvoted', duration: 1500, color: 'success' })).present();
+      (await toastController.create({ message: 'Upvoted', duration: 1500 })).present();
     }
   } catch {
     voteVersion.value++;
@@ -512,7 +512,7 @@ async function handleDownvote() {
       post.value = { ...post.value, downvotes: post.value.downvotes - 1, score: post.value.score + 1 };
       voteVersion.value++;
       postStore.removeDownvote(post.value.id); // fire and forget
-      (await toastController.create({ message: 'Downvote removed', duration: 1500, color: 'medium' })).present();
+      (await toastController.create({ message: 'Downvote removed', duration: 1500 })).present();
     } else {
       const wasUpvoted = hasUpvoted.value;
       toggleLocalStorageItem('upvoted-posts', post.value.id, false);
@@ -526,7 +526,7 @@ async function handleDownvote() {
       voteVersion.value++;
       if (wasUpvoted) postStore.removeUpvote(post.value.id); // fire and forget
       postStore.downvotePost(post.value.id); // fire and forget
-      (await toastController.create({ message: 'Downvoted', duration: 1500, color: 'warning' })).present();
+      (await toastController.create({ message: 'Downvoted', duration: 1500 })).present();
     }
   } catch {
     voteVersion.value++;
@@ -542,12 +542,12 @@ async function submitComment() {
       content: newCommentText.value.trim()
     });
     newCommentText.value = '';
-    (await toastController.create({ message: 'Comment posted', duration: 2000, color: 'success' })).present();
+    (await toastController.create({ message: 'Comment posted', duration: 2000 })).present();
     setTimeout(() => {
       if (post.value) commentStore.loadCommentsForPost(post.value.id);
     }, 500);
   } catch {
-    (await toastController.create({ message: 'Failed to post comment', duration: 2000, color: 'danger' })).present();
+    (await toastController.create({ message: 'Failed to post comment', duration: 2000 })).present();
   }
 }
 
@@ -558,7 +558,6 @@ async function handleCommentUpvote(comment: any) {
     (await toastController.create({
       message: wasUpvoted ? 'Upvote removed' : 'Comment upvoted',
       duration: 1500,
-      color: wasUpvoted ? 'medium' : 'success'
     })).present();
   } catch { /* silent */ }
 }
@@ -570,7 +569,6 @@ async function handleCommentDownvote(comment: any) {
     (await toastController.create({
       message: wasDownvoted ? 'Downvote removed' : 'Comment downvoted',
       duration: 1500,
-      color: wasDownvoted ? 'medium' : 'warning'
     })).present();
   } catch { /* silent */ }
 }
@@ -585,7 +583,7 @@ async function sharePost() {
         icon: 'link-outline',
         handler: () => {
           navigator.clipboard.writeText(window.location.href);
-          toastController.create({ message: 'Link copied to clipboard', duration: 2000, color: 'success' })
+          toastController.create({ message: 'Link copied to clipboard', duration: 2000 })
             .then(t => t.present());
         }
       },
@@ -622,7 +620,7 @@ async function loadPost() {
 
 async function refreshPost() {
   await loadPost();
-  (await toastController.create({ message: 'Post refreshed', duration: 1500, color: 'success' })).present();
+  (await toastController.create({ message: 'Post refreshed', duration: 1500 })).present();
 }
 
 onMounted(async () => {

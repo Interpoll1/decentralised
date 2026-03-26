@@ -394,7 +394,7 @@ async function submitVote() {
     const allowedByBackend = await AuditService.authorizeVote(poll.value.id, deviceId)
     if (!allowedByBackend) {
       hasVoted.value = true;
-      (await toastController.create({ message: 'Already voted on this poll', duration: 3000, color: 'danger' })).present()
+      (await toastController.create({ message: 'Already voted on this poll', duration: 3000 })).present()
       return
     }
 
@@ -470,7 +470,7 @@ async function submitVote() {
     votedPolls.push(poll.value.id)
     localStorage.setItem('voted-polls', JSON.stringify(votedPolls));
 
-    (await toastController.create({ message: 'Vote submitted!', duration: 2000, color: 'success' })).present()
+    (await toastController.create({ message: 'Vote submitted!', duration: 2000 })).present()
 
     // Reload from Nuxt API after short delay (let MySQL write settle)
     setTimeout(async () => {
@@ -501,7 +501,7 @@ async function submitVote() {
 
   } catch (error) {
     console.error('Vote error:', error);
-    (await toastController.create({ message: 'Failed to submit vote', duration: 2000, color: 'danger' })).present()
+    (await toastController.create({ message: 'Failed to submit vote', duration: 2000 })).present()
   } finally {
     clearTimeout(timeout)
     isSubmitting.value = false
@@ -588,14 +588,12 @@ async function copyInviteLink(code: string) {
     const toast = await toastController.create({
       message: 'Invite link copied',
       duration: 1500,
-      color: 'success'
     });
     await toast.present();
   } catch {
     const toast = await toastController.create({
       message: link,
       duration: 4000,
-      color: 'medium'
     });
     await toast.present();
   }
@@ -610,7 +608,6 @@ async function copyAllLinks() {
     const toast = await toastController.create({
       message: 'No available codes left',
       duration: 2000,
-      color: 'warning'
     });
     await toast.present();
     return;
@@ -625,14 +622,12 @@ async function copyAllLinks() {
     const toast = await toastController.create({
       message: `${availableCodes.length} invite links copied`,
       duration: 2000,
-      color: 'success'
     });
     await toast.present();
   } catch {
     const toast = await toastController.create({
       message: 'Failed to copy links',
       duration: 2000,
-      color: 'danger'
     });
     await toast.present();
   }

@@ -164,7 +164,7 @@
       </div>
 
       <!-- Empty State -->
-      <div v-else-if="!showProgressiveSyncState" class="empty-state">
+      <div v-else-if="!showProgressiveSyncState && !hasVisibleContent" class="empty-state">
         <ion-icon :icon="documentTextOutline" size="large"></ion-icon>
         <p v-if="contentFilter === 'posts'">No posts yet</p>
         <p v-else-if="contentFilter === 'polls'">No polls yet</p>
@@ -178,6 +178,11 @@
         <ion-button v-else-if="!isJoined" @click="toggleJoin">
           Join to create content
         </ion-button>
+      </div>
+
+      <div v-else-if="showHydratingContentState" class="partial-loading-state">
+        <ion-spinner name="dots"></ion-spinner>
+        <p>Content is loading. It will appear here as soon as it finishes decrypting.</p>
       </div>
 
        <!-- Rules Section -->
@@ -441,7 +446,8 @@ import {
   IonLabel,
   IonSpinner,
   toastController,
-  onIonViewWillEnter
+  onIonViewWillEnter,
+  onIonViewDidLeave
 } from '@ionic/vue';
 import {
   homeOutline,
@@ -534,9 +540,19 @@ const showProgressiveSyncState = computed(() => isLoading.value || isBackgroundS
 
 const showBlockingLoader = computed(() => isLoading.value && !isBackgroundSyncing.value && totalLoadedContentCount.value === 0);
 
-const showInlineSyncStatus = computed(() => showProgressiveSyncState.value && totalLoadedContentCount.value > 0);
+const hasVisibleContent = computed(() => displayedContent.value.length > 0);
 
-const showPartialSyncStatus = computed(() => showProgressiveSyncState.value && totalLoadedContentCount.value === 0);
+const showHydratingContentState = computed(() => {
+  return !showProgressiveSyncState.value && totalContentCount.value > 0 && displayedContent.value.length === 0;
+});
+
+const showPartialSyncStatus = computed(() => {
+  return (showProgressiveSyncState.value && !hasVisibleContent.value) || showHydratingContentState.value;
+});
+
+const showInlineSyncStatus = computed(() => {
+  return showProgressiveSyncState.value && hasVisibleContent.value;
+});
 
 const syncStatusText = computed(() => {
   const segments: string[] = [];
@@ -749,7 +765,6 @@ async function handleUpvote(post: Post) {
       const toast = await toastController.create({
         message: 'Upvote removed',
         duration: 1500,
-        color: 'medium'
       });
       await toast.present();
     } else {
@@ -775,7 +790,6 @@ async function handleUpvote(post: Post) {
       const toast = await toastController.create({
         message: 'Upvoted',
         duration: 1500,
-        color: 'success'
       });
       await toast.present();
     }
@@ -785,7 +799,6 @@ async function handleUpvote(post: Post) {
     const toast = await toastController.create({
       message: 'Failed to upvote',
       duration: 2000,
-      color: 'danger'
     });
     await toast.present();
   }
@@ -805,7 +818,6 @@ async function handleDownvote(post: Post) {
       const toast = await toastController.create({
         message: 'Downvote removed',
         duration: 1500,
-        color: 'medium'
       });
       await toast.present();
     } else {
@@ -831,7 +843,6 @@ async function handleDownvote(post: Post) {
       const toast = await toastController.create({
         message: 'Downvoted',
         duration: 1500,
-        color: 'warning'
       });
       await toast.present();
     }
@@ -841,7 +852,6 @@ async function handleDownvote(post: Post) {
     const toast = await toastController.create({
       message: 'Failed to downvote',
       duration: 2000,
-      color: 'danger'
     });
     await toast.present();
   }
@@ -876,7 +886,6 @@ async function toggleJoin() {
       const toast = await toastController.create({
         message: 'Failed to join community',
         duration: 2000,
-        color: 'danger'
       });
       await toast.present();
     } finally {
@@ -892,7 +901,6 @@ async function shareInviteLink() {
       const toast = await toastController.create({
         message: 'Encryption key not found. Rejoin the community to share invites.',
         duration: 3000,
-        color: 'warning'
       });
       await toast.present();
       return;
@@ -904,7 +912,6 @@ async function shareInviteLink() {
     const toast = await toastController.create({
       message: 'Invite link copied to clipboard!',
       duration: 2000,
-      color: 'success'
     });
     await toast.present();
   } catch (error) {
@@ -912,13 +919,41 @@ async function shareInviteLink() {
     const toast = await toastController.create({
       message: 'Failed to generate invite link',
       duration: 2000,
-      color: 'danger'
     });
     await toast.present();
   }
 }
 
 let loadGeneration = 0;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleRetryIfEmpty() {
+  if (retryTimer) clearTimeout(retryTimer);
+  retryTimer = null;
+  const shouldRetry =
+    postLoadStatus.value === 'timed-out' ||
+    pollLoadStatus.value === 'timed-out';
+  if (
+    !isLoading.value &&
+    shouldRetry &&
+    !hasVisibleContent.value &&
+    !isBackgroundSyncing.value &&
+    hasAccess.value
+  ) {
+    const gen = loadGeneration;
+    retryTimer = setTimeout(async () => {
+      retryTimer = null;
+      if (
+        gen === loadGeneration &&
+        (postLoadStatus.value === 'timed-out' || pollLoadStatus.value === 'timed-out') &&
+        !hasVisibleContent.value &&
+        !isLoading.value
+      ) {
+        await loadCommunityContent();
+      }
+    }, 3000);
+  }
+}
 
 function waitForInitialContent(promise: Promise<void>, timeoutMs: number): Promise<'loaded' | 'timed-out'> {
   return new Promise((resolve, reject) => {
@@ -1007,7 +1042,6 @@ async function loadCommunityContent() {
       const toast = await toastController.create({
         message: 'Content is still syncing in the background.',
         duration: 2500,
-        color: 'warning'
       });
       await toast.present();
     }
@@ -1016,7 +1050,6 @@ async function loadCommunityContent() {
       const toast = await toastController.create({
         message: 'Some content failed to load. The page will keep retrying in the background.',
         duration: 2800,
-        color: 'danger'
       });
       await toast.present();
     }
@@ -1026,7 +1059,6 @@ async function loadCommunityContent() {
     const toast = await toastController.create({
       message: 'Failed to load community content',
       duration: 2500,
-      color: 'danger'
     });
     await toast.present();
   } finally {
@@ -1036,12 +1068,22 @@ async function loadCommunityContent() {
 
 // Re-load when Ionic enters (or re-enters) the page — covers first mount and cache re-entry
 onIonViewWillEnter(async () => {
-  await loadCommunityContent();
+  const isCurrentCommunity = community.value?.id === communityId.value;
+  if (!isCurrentCommunity || totalContentCount.value === 0) {
+    await loadCommunityContent();
+  }
+  scheduleRetryIfEmpty();
+});
+
+onIonViewDidLeave(() => {
+  if (retryTimer) clearTimeout(retryTimer);
+  retryTimer = null;
 });
 
 watch(communityId, async (newId, oldId) => {
   if (newId && newId !== oldId) {
     await loadCommunityContent();
+    scheduleRetryIfEmpty();
   }
 });
 
@@ -1064,5 +1106,6 @@ watch(totalLoadedContentCount, (nextCount, previousCount) => {
 
 onUnmounted(() => {
   clearBackgroundSyncIdleTimer();
+  if (retryTimer) clearTimeout(retryTimer);
 });
 </script>

@@ -453,8 +453,8 @@ function statusColor(status: string): string {
   }
 }
 
-async function showToast(message: string, color: 'success' | 'danger' | 'warning' = 'success') {
-  const toast = await toastController.create({ message, duration: 2500, color, position: 'bottom' });
+async function showToast(message: string) {
+  const toast = await toastController.create({ message, duration: 2500, position: 'bottom' });
   await toast.present();
 }
 
@@ -475,7 +475,7 @@ async function scanAllRelays() {
     censorship.value = RelayHealthService.detectCensorship(results, relays.value);
     await showToast(`Scanned ${results.length} relay(s)`);
   } catch (e: unknown) {
-    await showToast(e instanceof Error ? e.message : 'Scan failed', 'danger');
+    await showToast(e instanceof Error ? e.message : 'Scan failed');
   } finally {
     scanning.value = false;
   }
@@ -487,7 +487,7 @@ async function switchRelay(id: string) {
     refreshStatus();
     await showToast('Switched relay');
   } catch (e: unknown) {
-    await showToast(e instanceof Error ? e.message : 'Switch failed', 'danger');
+    await showToast(e instanceof Error ? e.message : 'Switch failed');
   }
 }
 
@@ -497,13 +497,13 @@ async function probeSingle(relay: RelayEndpoint) {
     refreshStatus();
     await showToast(`${relay.label}: probed`);
   } catch (e: unknown) {
-    await showToast(e instanceof Error ? e.message : 'Probe failed', 'danger');
+    await showToast(e instanceof Error ? e.message : 'Probe failed');
   }
 }
 
 async function removeRelay(id: string) {
   if (activeRelay.value?.id === id) {
-    await showToast('Cannot remove the active relay — switch first.', 'warning');
+    await showToast('Cannot remove the active relay — switch first.');
     return;
   }
   RelayManager.removeRelay(id);
@@ -535,7 +535,7 @@ async function exportSnapshot() {
     SnapshotService.downloadSnapshot(snapshot);
     await showToast('Snapshot exported');
   } catch (e: unknown) {
-    await showToast(e instanceof Error ? e.message : 'Export failed', 'danger');
+    await showToast(e instanceof Error ? e.message : 'Export failed');
   } finally {
     exporting.value = false;
   }
@@ -559,7 +559,7 @@ async function handleFileSelect(event: Event) {
     const { blocks, posts, communities, comments, users, events } = result.imported;
     await showToast(`Imported ${posts} posts, ${communities} communities, ${blocks} blocks, ${comments} comments, ${users} users, ${events} events`);
   } catch (e: unknown) {
-    await showToast(e instanceof Error ? e.message : 'Import failed', 'danger');
+    await showToast(e instanceof Error ? e.message : 'Import failed');
   } finally {
     importing.value = false;
     importClearTimer = setTimeout(() => { importProgress.value = null; }, 1200);
@@ -574,7 +574,7 @@ async function shareWithPeers() {
     await SnapshotSyncService.offerSnapshot(snapshot);
     await showToast('Snapshot offered to peers');
   } catch (e: unknown) {
-    await showToast(e instanceof Error ? e.message : 'Share failed', 'danger');
+    await showToast(e instanceof Error ? e.message : 'Share failed');
   } finally {
     sharing.value = false;
   }
@@ -586,7 +586,7 @@ async function acceptOffer() {
     await SnapshotSyncService.acceptOffer(incomingOffer.value.peerId);
     incomingOffer.value = null;
   } catch (e: unknown) {
-    await showToast(e instanceof Error ? e.message : 'Accept failed', 'danger');
+    await showToast(e instanceof Error ? e.message : 'Accept failed');
   }
 }
 
@@ -628,12 +628,12 @@ function registerSyncCallbacks() {
       await showToast('Snapshot received and imported from peer');
     } catch (e: unknown) {
       importProgress.value = null;
-      await showToast(e instanceof Error ? e.message : 'Import of received snapshot failed', 'danger');
+      await showToast(e instanceof Error ? e.message : 'Import of received snapshot failed');
     }
   }));
   syncCleanups.push(SnapshotSyncService.onError((error: string) => {
     transferProgress.value = null;
-    showToast(error, 'danger');
+    showToast(error);
   }));
 }
 

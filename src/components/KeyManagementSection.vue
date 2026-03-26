@@ -92,8 +92,8 @@ const deleteAlertButtons = computed(() => [
   },
 ]);
 
-async function showToast(message: string, color: string) {
-  const toast = await toastController.create({ message, duration: 3000, color });
+async function showToast(message: string) {
+  const toast = await toastController.create({ message, duration: 3000 });
   await toast.present();
 }
 
@@ -107,7 +107,7 @@ async function loadKeys() {
   } catch (err) {
     console.error('Failed to load keys:', err);
     keys.value = [];
-    await showToast('Failed to load encryption keys.', 'danger');
+    await showToast('Failed to load encryption keys.');
   }
 }
 
@@ -126,7 +126,7 @@ async function deleteKey(id: string) {
     await loadKeys();
   } catch (err) {
     console.error('Failed to delete key:', err);
-    await showToast('Failed to delete key.', 'danger');
+    await showToast('Failed to delete key.');
   }
 }
 
@@ -144,7 +144,7 @@ async function exportKeys() {
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   } catch (err) {
     console.error('Failed to export keys:', err);
-    await showToast('Failed to export keys.', 'danger');
+    await showToast('Failed to export keys.');
   }
 }
 
@@ -169,7 +169,7 @@ async function handleImport(event: Event) {
     );
   } catch (err) {
     console.error('Failed to import keys:', err);
-    await showToast('Import failed — the file may be invalid or corrupt.', 'danger');
+    await showToast('Import failed — the file may be invalid or corrupt.');
   } finally {
     input.value = '';
   }

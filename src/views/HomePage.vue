@@ -679,7 +679,6 @@ async function initBackgroundChat() {
       toastController.create({
         message:  `💬 New message from ${senderName}`,
         duration: 3000,
-        color:    'primary',
         position: 'top',
         buttons:  [{ text: 'View', handler: () => { activeTab.value = 'chat'; } }],
       }).then(t => t.present());
@@ -800,7 +799,7 @@ async function handleUpvote(post: Post) {
       localStorage.setItem('upvoted-posts', JSON.stringify([...upvotedCache.value]));
       voteVersion.value++;
       await postStore.removeUpvote(post.id);
-      (await toastController.create({ message: 'Upvote removed', duration: 1500, color: 'medium' })).present();
+      (await toastController.create({ message: 'Upvote removed', duration: 1500 })).present();
     } else {
       if (downvotedCache.value.has(post.id)) {
         downvotedCache.value.delete(post.id);
@@ -811,11 +810,11 @@ async function handleUpvote(post: Post) {
       localStorage.setItem('upvoted-posts', JSON.stringify([...upvotedCache.value]));
       voteVersion.value++;
       await postStore.upvotePost(post.id);
-      (await toastController.create({ message: 'Upvoted', duration: 1500, color: 'success' })).present();
+      (await toastController.create({ message: 'Upvoted', duration: 1500 })).present();
     }
   } catch {
     voteVersion.value++;
-    (await toastController.create({ message: 'Failed to upvote', duration: 2000, color: 'danger' })).present();
+    (await toastController.create({ message: 'Failed to upvote', duration: 2000 })).present();
   }
 }
 
@@ -826,7 +825,7 @@ async function handleDownvote(post: Post) {
       localStorage.setItem('downvoted-posts', JSON.stringify([...downvotedCache.value]));
       voteVersion.value++;
       await postStore.removeDownvote(post.id);
-      (await toastController.create({ message: 'Downvote removed', duration: 1500, color: 'medium' })).present();
+      (await toastController.create({ message: 'Downvote removed', duration: 1500 })).present();
     } else {
       if (upvotedCache.value.has(post.id)) {
         upvotedCache.value.delete(post.id);
@@ -837,11 +836,11 @@ async function handleDownvote(post: Post) {
       localStorage.setItem('downvoted-posts', JSON.stringify([...downvotedCache.value]));
       voteVersion.value++;
       await postStore.downvotePost(post.id);
-      (await toastController.create({ message: 'Downvoted', duration: 1500, color: 'warning' })).present();
+      (await toastController.create({ message: 'Downvoted', duration: 1500 })).present();
     }
   } catch {
     voteVersion.value++;
-    (await toastController.create({ message: 'Failed to downvote', duration: 2000, color: 'danger' })).present();
+    (await toastController.create({ message: 'Failed to downvote', duration: 2000 })).present();
   }
 }
 

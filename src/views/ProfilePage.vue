@@ -429,7 +429,7 @@ async function handleAvatarSelect(event: Event) {
   if (!file) return;
 
   if (file.size > 10 * 1024 * 1024) {
-    const toast = await toastController.create({ message: 'Image too large (max 10 MB)', duration: 3000, color: 'danger' });
+    const toast = await toastController.create({ message: 'Image too large (max 10 MB)', duration: 3000 });
     await toast.present();
     return;
   }
@@ -439,7 +439,7 @@ async function handleAvatarSelect(event: Event) {
   reader.onload = (e) => { avatarPreview.value = e.target?.result as string; };
   reader.onerror = async () => {
     avatarFile.value = null;
-    const toast = await toastController.create({ message: 'Failed to read image', duration: 3000, color: 'danger' });
+    const toast = await toastController.create({ message: 'Failed to read image', duration: 3000 });
     await toast.present();
   };
   reader.readAsDataURL(file);
@@ -482,11 +482,11 @@ async function saveProfile() {
     await UserService.updateProfile(updates);
     avatarFile.value = null;
     avatarPreview.value = null;
-    const toast = await toastController.create({ message: 'Profile updated', duration: 2000, color: 'success' });
+    const toast = await toastController.create({ message: 'Profile updated', duration: 2000 });
     await toast.present();
     await loadProfile();
   } catch {
-    const toast = await toastController.create({ message: 'Failed to update profile', duration: 2000, color: 'danger' });
+    const toast = await toastController.create({ message: 'Failed to update profile', duration: 2000 });
     await toast.present();
   } finally {
     isSaving.value = false;
@@ -496,10 +496,10 @@ async function saveProfile() {
 async function copyDeviceId() {
   try {
     await navigator.clipboard.writeText(deviceId.value);
-    const toast = await toastController.create({ message: 'Device ID copied', duration: 1500, color: 'success' });
+    const toast = await toastController.create({ message: 'Device ID copied', duration: 1500 });
     await toast.present();
   } catch {
-    const toast = await toastController.create({ message: 'Could not copy — please copy manually', duration: 2000, color: 'warning' });
+    const toast = await toastController.create({ message: 'Could not copy — please copy manually', duration: 2000 });
     await toast.present();
   }
 }

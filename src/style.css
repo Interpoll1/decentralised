@@ -577,19 +577,7 @@ ion-toast::part(container) {
   border-top-color: var(--glass-border-top);
   border-radius: 20px;
   box-shadow: var(--glass-shadow), var(--glass-highlight);
-}
-
-/* Semantic color overrides for toast */
-ion-toast.ion-color-success::part(container) {
-  background:   rgba( 16, 185, 129, 0.15) !important;
-  color:        #059669                   !important;
-  border-color: rgba( 16, 185, 129, 0.40) !important;
-}
-
-ion-toast.ion-color-danger::part(container) {
-  background:   rgba(239, 68, 68, 0.15)   !important;
-  color:        #dc2626                   !important;
-  border-color: rgba(239, 68, 68, 0.40)   !important;
+  color: var(--ion-text-color, #1a1a1a);
 }
 
 
@@ -669,16 +657,7 @@ html.dark ion-toast::part(container) {
   -webkit-backdrop-filter: blur(24px) saturate(1.8);
   background:   rgba(20, 20, 20, 0.85);
   border-color: rgba(255, 255, 255, 0.10);
-}
-html.dark ion-toast.ion-color-success::part(container) {
-  background:   rgba( 16, 185, 129, 0.20) !important;
-  color:        #34d399                   !important;
-  border-color: rgba( 52, 211, 153, 0.40) !important;
-}
-html.dark ion-toast.ion-color-danger::part(container) {
-  background:   rgba(239, 68, 68, 0.20)   !important;
-  color:        #f87171                   !important;
-  border-color: rgba(248, 113, 113, 0.40) !important;
+  color: #f0f0f0;
 }
 
 /* Alerts & action sheets — solid dark instead of frosted */

@@ -247,8 +247,8 @@ async function showInviteLinkAlert(link: string) {
         text: 'Copy',
         handler: () => {
           navigator.clipboard.writeText(link)
-            .then(() => toastController.create({ message: 'Copied!', duration: 1500, color: 'success' }))
-            .catch(() => toastController.create({ message: 'Could not copy — please copy manually', duration: 2500, color: 'warning' }))
+            .then(() => toastController.create({ message: 'Copied!', duration: 1500 }))
+            .catch(() => toastController.create({ message: 'Could not copy — please copy manually', duration: 2500 }))
             .then(t => t?.present());
           return false;
         },

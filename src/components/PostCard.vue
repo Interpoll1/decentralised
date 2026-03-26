@@ -237,7 +237,6 @@ html.dark .post-footer {
   background: rgba(var(--ion-color-success-rgb), 0.12);
   border-color: var(--ion-color-success);
   color: var(--ion-color-success);
-  font-weight: 600;
 }
 
 .stat-button.upvote.active ion-icon {
@@ -259,7 +258,6 @@ html.dark .post-footer {
   background: rgba(var(--ion-color-danger-rgb), 0.12);
   border-color: var(--ion-color-danger);
   color: var(--ion-color-danger);
-  font-weight: 600;
 }
 
 .stat-button.downvote.active ion-icon {
