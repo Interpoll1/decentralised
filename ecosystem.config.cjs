@@ -1,0 +1,47 @@
+module.exports = {
+  apps: [
+    {
+      name: 'gun-relay',
+      script: './gun-relay/gun-relay-enhanced.js',
+      cwd: '/var/www/interpoll',
+      interpreter: 'node',
+      env: {
+        PORT: 8765,
+        NODE_ENV: 'production',
+        // Add your MySQL env vars here or in a .env file
+        MYSQL_HOST: "127.0.0.1",
+        MYSQL_USER: "interpoll",
+        MYSQL_PASSWORD: "***REMOVED***",
+        MYSQL_DATABASE: "interpoll",
+        MYSQL_PORT: process.env.MYSQL_PORT || '3306',
+      },
+      max_memory_restart: '400M',
+      restart_delay: 3000,
+      error_file: '/var/log/pm2/gun-relay-error.log',
+      out_file: '/var/log/pm2/gun-relay-out.log',
+    },
+    {
+      name: 'relay-server',
+      script: './relay-server/relay-server-enhanced.js',
+      cwd: '/var/www/interpoll',
+      interpreter: 'node',
+      env: {
+        PORT: 3001,
+        NODE_ENV: 'production',
+        DOMAIN: 'https://endless.sbs',
+        FRONTEND_ORIGIN: 'https://endless.sbs',
+        MYSQL_HOST: "127.0.0.1",
+        MYSQL_USER: "interpoll",
+        MYSQL_PASSWORD: "***REMOVED***",
+        MYSQL_DATABASE: "interpoll",
+        MYSQL_PORT: process.env.MYSQL_PORT || '3306',
+        ASSET_JS: '/assets2/index.js',
+        ASSET_CSS: '/assets2/index.css',
+      },
+      max_memory_restart: '400M',
+      restart_delay: 3000,
+      error_file: '/var/log/pm2/relay-server-error.log',
+      out_file: '/var/log/pm2/relay-server-out.log',
+    },
+  ],
+};
