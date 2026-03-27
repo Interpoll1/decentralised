@@ -25,6 +25,7 @@ export const useCommentStore = defineStore('comment', () => {
   const comments = ref<Comment[]>([]);
   const isLoading = ref(false);
   const voteVersion = ref(0);
+  let commentUnsub: (() => void) | null = null;
 
   // Load comments for a post
   async function loadCommentsForPost(postId: string) {
@@ -37,8 +38,10 @@ export const useCommentStore = defineStore('comment', () => {
       const seen = new Set<string>();
       
       try {
+        // Clean up previous subscription before starting a new one
+        if (commentUnsub) { commentUnsub(); commentUnsub = null; }
         // Subscribe to real-time updates
-        CommentService.subscribeToCommentsInPost(postId, (comment) => {
+        commentUnsub = CommentService.subscribeToCommentsInPost(postId, (comment) => {
           if (!seen.has(comment.id)) {
             seen.add(comment.id);
             
@@ -283,8 +286,9 @@ export const useCommentStore = defineStore('comment', () => {
     return votedComments.includes(commentId);
   }
 
-  // Clear comments
+  // Clear comments and unsubscribe from Gun listeners
   function clearComments() {
+    if (commentUnsub) { commentUnsub(); commentUnsub = null; }
     comments.value = [];
   }
 

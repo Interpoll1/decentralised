@@ -170,7 +170,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, watchEffect } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, watchEffect } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
@@ -625,6 +625,10 @@ async function refreshPost() {
 
 onMounted(async () => {
   await loadPost();
+});
+
+onUnmounted(() => {
+  commentStore.clearComments();
 });
 </script>
 

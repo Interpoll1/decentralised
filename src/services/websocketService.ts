@@ -32,6 +32,15 @@ export class WebSocketService {
   private static baseReconnectDelay = 1000;
   private static maxReconnectDelay = 30000;
   private static messageQueue: any[] = [];
+  private static readonly MAX_QUEUE_SIZE = 200;
+
+  private static enqueue(message: any) {
+    if (this.messageQueue.length >= this.MAX_QUEUE_SIZE) {
+      const dropped = this.messageQueue.shift();
+      console.warn('[WS] Queue full, dropping oldest message:', dropped?.type);
+    }
+    this.messageQueue.push(message);
+  }
   private static peers: Set<string> = new Set();
   private static peerAddresses: Map<string, { peerId: string; relayUrl: string; gunPeers: string[]; joinedAt: number }> = new Map();
   private static statusListeners: Set<(status: { connected: boolean; peerCount: number }) => void> = new Set();
@@ -334,7 +343,7 @@ export class WebSocketService {
     const message: any = { type, data, timestamp: Date.now() };
 
     if (!this.isConnected || this.ws?.readyState !== WebSocket.OPEN) {
-      this.messageQueue.push(message);
+      this.enqueue(message);
       return;
     }
 
@@ -354,13 +363,13 @@ export class WebSocketService {
         }
         message._retries = retries;
         console.warn(`[PoW] Failed to get proof (attempt ${retries}/3), queuing message for retry:`, e);
-        this.messageQueue.push(message);
+        this.enqueue(message);
         return;
       }
 
       // Re-check connection after async PoW (may have disconnected during solve)
       if (this.ws?.readyState !== WebSocket.OPEN) {
-        this.messageQueue.push(message);
+        this.enqueue(message);
         return;
       }
     }
@@ -380,14 +389,14 @@ export class WebSocketService {
     const message = { type: 'chatroom-message' as const, roomId, data: messageData };
 
     if (!this.isConnected) {
-      this.messageQueue.push(message);
+      this.enqueue(message);
       return;
     }
 
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
     } else {
-      this.messageQueue.push(message);
+      this.enqueue(message);
     }
   }
 

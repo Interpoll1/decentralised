@@ -209,51 +209,58 @@ export async function getComment(commentId: string): Promise<Comment | null> {
 }
 
 /**
- * Subscribe to real-time updates for comments in a post
+ * Subscribe to real-time updates for comments in a post.
+ * Returns an unsubscribe function to clean up all listeners.
  */
 export function subscribeToCommentsInPost(
   postId: string,
   callback: (comment: Comment) => void
-): void {
-  getGun().get('posts')
+): () => void {
+  const seenCommentIds = new Set<string>();
+  let active = true;
+
+  const listener = getGun().get('posts')
     .get(postId)
     .get('comments')
     .map()
     .on((data: any) => {
-      if (data && data.commentId) {
-        // Fetch the full comment data
-        getGun().get('comments')
-          .get(data.commentId)
-          .on((commentData: any) => {
-            if (commentData && commentData.id) {
-              // Reconstruct the comment object
-              // Use postId from the function parameter as fallback if Gun.js doesn't return it
-              const comment: Comment = {
-                id: commentData.id,
-                postId: commentData.postId || postId,
-                communityId: commentData.communityId,
-                authorId: commentData.authorId,
-                authorName: commentData.authorName,
-                content: commentData.content,
-                // CRITICAL: Only set parentId if it actually exists (not null, undefined, or empty string)
-                parentId: commentData.parentId && commentData.parentId !== 'null' && commentData.parentId !== '' ? commentData.parentId : undefined,
-                createdAt: commentData.createdAt,
-                upvotes: commentData.upvotes || 0,
-                downvotes: commentData.downvotes || 0,
-                score: commentData.score || 0,
-                edited: commentData.edited || false,
-                editedAt: commentData.editedAt,
-                authorPubkey: commentData.authorPubkey || undefined,
-                contentSignature: commentData.contentSignature || undefined,
-                isEncrypted: commentData.isEncrypted || false,
-                encryptedContent: commentData.encryptedContent || undefined,
-                authTag: commentData.authTag || undefined,
-              };
-              callback(comment);
-            }
-          });
-      }
+      if (!active || !data?.commentId || seenCommentIds.has(data.commentId)) return;
+      seenCommentIds.add(data.commentId);
+      // Use .once() — not .on() — to avoid permanent inner subscriptions
+      getGun().get('comments')
+        .get(data.commentId)
+        .once((commentData: any) => {
+          if (!active) return;
+          if (commentData && commentData.id) {
+            const comment: Comment = {
+              id: commentData.id,
+              postId: commentData.postId || postId,
+              communityId: commentData.communityId,
+              authorId: commentData.authorId,
+              authorName: commentData.authorName,
+              content: commentData.content,
+              parentId: commentData.parentId && commentData.parentId !== 'null' && commentData.parentId !== '' ? commentData.parentId : undefined,
+              createdAt: commentData.createdAt,
+              upvotes: commentData.upvotes || 0,
+              downvotes: commentData.downvotes || 0,
+              score: commentData.score || 0,
+              edited: commentData.edited || false,
+              editedAt: commentData.editedAt,
+              authorPubkey: commentData.authorPubkey || undefined,
+              contentSignature: commentData.contentSignature || undefined,
+              isEncrypted: commentData.isEncrypted || false,
+              encryptedContent: commentData.encryptedContent || undefined,
+              authTag: commentData.authTag || undefined,
+            };
+            callback(comment);
+          }
+        });
     });
+
+  return () => {
+    active = false;
+    if (listener?.off) listener.off();
+  };
 }
 
 /**

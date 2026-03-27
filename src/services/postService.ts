@@ -236,10 +236,13 @@ export class PostService {
       });
     });
 
+    // Only fetch posts we haven't seen yet — prevents re-fetching all N posts
+    // on every Gun update (was creating thousands of closures → OOM).
     subscription = communityPostsNode.on((allPosts: any) => {
       if (!allPosts) return;
       Object.keys(allPosts).forEach(postId => {
-        if (postId === '_') return;
+        if (postId === '_' || initialSeenIds.has(postId)) return;
+        initialSeenIds.add(postId);
         gun.get('posts').get(postId).once((postData: any) => {
           if (postData && postData.id) {
             onPost({ ...postData, dataVersion: GUN_NAMESPACE });
@@ -276,7 +279,8 @@ export class PostService {
       v1Subscription = v1Node.on((allPosts: any) => {
         if (!allPosts) return;
         Object.keys(allPosts).forEach(postId => {
-          if (postId === '_') return;
+          if (postId === '_' || initialSeenIds.has(postId)) return;
+          initialSeenIds.add(postId);
           rawGun.get('posts').get(postId).once((postData: any) => {
             if (postData && postData.id) onPost({ ...postData, dataVersion: 'v1' });
           });
@@ -345,7 +349,8 @@ export class PostService {
     subscription = postsNode.on((allPosts: any) => {
       if (!allPosts) return;
       Object.keys(allPosts).forEach(postId => {
-        if (postId === '_') return;
+        if (postId === '_' || initialSeenIds.has(postId)) return;
+        initialSeenIds.add(postId);
         gun.get('posts').get(postId).once((postData: any) => {
           if (postData && postData.id) onPost({ ...postData, dataVersion: GUN_NAMESPACE });
         });
@@ -380,7 +385,8 @@ export class PostService {
       v1Subscription = v1PostsNode.on((allPosts: any) => {
         if (!allPosts) return;
         Object.keys(allPosts).forEach(postId => {
-          if (postId === '_') return;
+          if (postId === '_' || initialSeenIds.has(postId)) return;
+          initialSeenIds.add(postId);
           rawGun.get('posts').get(postId).once((postData: any) => {
             if (postData && postData.id) onPost({ ...postData, dataVersion: 'v1' });
           });
