@@ -909,9 +909,17 @@ watch(activeTab, (tab) => {
 onMounted(async () => {
   // STEP 1: Fetch posts/polls/communities from API instantly
   await warmupFromDB();
-  warmupComplete.value = true; // set immediately — unblocks the watcher
 
-  // STEP 2: Feed communities — watcher handles subscribeNewCommunities
+  // Warmup loaded communities while warmupComplete was false,
+  // so the length-change watcher missed them. Subscribe before arming
+  // the watcher so the two mechanisms handle strictly separate phases:
+  // explicit call → warmup communities; watcher → later Gun arrivals.
+  if (communityStore.communities.length > 0) {
+    subscribeNewCommunities(communityStore.communities);
+  }
+  warmupComplete.value = true;
+
+  // STEP 2: Feed communities — watcher handles any NEW ones Gun delivers later
   const feedPromise = (async () => {
     await communityStore.loadCommunities()
   })();
