@@ -35,16 +35,9 @@ export class GunService {
   static initialize() {
     if (this.isInitialized && this.gun) return this.proxiedGun;
 
-    // Purge orphaned Gun localStorage from when localStorage was enabled
-    try {
-      Object.keys(localStorage)
-        .filter(k => k.startsWith('gun/') || k.startsWith('rad/'))
-        .forEach(k => localStorage.removeItem(k));
-    } catch { /* localStorage may be unavailable */ }
-
     this.gun = Gun({
       peers: [config.relay.gun],
-      localStorage: false, // API warmup is primary data source; Gun is live-updates only
+      localStorage: true,
       radisk: false,
       axe: false,
       // ── Increased batching — Gun is live-updates only now, less urgency ──
