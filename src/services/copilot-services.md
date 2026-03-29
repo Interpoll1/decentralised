@@ -16,6 +16,7 @@ All services are **static classes** — never instantiated with `new`. Initializ
 | `keyService.ts` | `KeyService` | Persistent secp256k1 Schnorr key pair, stored in IndexedDB metadata under `'nostr-keypair'`. Auto-generates if missing. Used for block signing and Nostr-style event signing. |
 | `relayManager.ts` | `RelayManager` | Multi-relay endpoint manager with auto-failover. Stores relay list in localStorage (`interpoll_relay_list`). Supports health probing (WS + API), priority-sorted failover, and provides Gun peer URLs for all online relays. Uses dynamic imports for `WebSocketService`/`GunService` to avoid circular deps. |
 | `relayHealthService.ts` | `RelayHealthService` | Relay connectivity diagnostics. Probes WebSocket, GunDB, and API endpoints with latency measurement. Includes Tor Browser detection heuristics and censorship analysis (blocked / reachable / torRequired categorization). |
+| `memoryWatchdogService.ts` | `MemoryWatchdogService` | Monitors `performance.memory` every 30s. Three cleanup levels: light (evict Gun nodes > 5K), aggressive (clear Gun localStorage + deep nodes), emergency (full Gun reset). Periodic light cleanup every 2min even without memory API. Stores/services can register cleanup callbacks via `onCleanup()`. |
 
 ## Blockchain
 

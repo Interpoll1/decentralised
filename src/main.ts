@@ -31,8 +31,9 @@ router.isReady().then(() => {
   app.mount('#app')
   // Defer after first paint
   setTimeout(() => {
-    import('./services/gunService').then(({ GunService }) => GunService.initialize())
-    import('./services/ipfsService').then(({ IPFSService }) => IPFSService.initialize())
+    import('./services/gunService').then(({ GunService }) => GunService.initialize()).catch(e => console.error('[Init] GunService failed:', e))
+    import('./services/ipfsService').then(({ IPFSService }) => IPFSService.initialize()).catch(e => console.error('[Init] IPFSService failed:', e))
+    import('./services/memoryWatchdogService').then(({ MemoryWatchdogService }) => MemoryWatchdogService.start()).catch(e => console.error('[Init] MemoryWatchdog failed:', e))
   }, 0)
 })
 

@@ -30,6 +30,7 @@ export class GunService {
   private static gun: any = null;
   private static proxiedGun: any = null;
   private static user: any = null;
+  private static evicting = false;
   private static isInitialized = false;
 
   static initialize() {
@@ -71,6 +72,12 @@ export class GunService {
 
   static reconnect(newPeerUrl?: string) {
     const peerUrl = newPeerUrl || config.relay.gun;
+    // Close existing peer WebSockets before discarding the instance
+    if (this.gun?._.opt?.peers) {
+      for (const peer of Object.values(this.gun._.opt.peers) as any[]) {
+        try { peer?.wire?.close?.(); } catch { /* ignore */ }
+      }
+    }
     this.isInitialized = false;
     this.gun = null;
     this.proxiedGun = null;
@@ -151,5 +158,58 @@ export class GunService {
 
   static cleanup(): void {
     this.isInitialized = false;
+  }
+
+  static evictCache(level: 'light' | 'aggressive' | 'emergency' = 'light'): void {
+    if (!this.gun || this.evicting) return;
+    this.evicting = true;
+
+    try {
+      const graph = this.gun._.graph;
+      if (!graph || typeof graph !== 'object') return;
+
+      const keys = Object.keys(graph);
+      const totalBefore = keys.length;
+
+      const keepPrefixes = ['~', '_'];
+
+      let evictedCount = 0;
+
+      if (level === 'emergency') {
+        const keepRoots = new Set(['v2', 'v2/communities', 'v2/posts', 'v2/polls', 'v2/users']);
+        for (const key of keys) {
+          if (keepRoots.has(key) || keepPrefixes.some(p => key.startsWith(p))) continue;
+          delete graph[key];
+          evictedCount++;
+        }
+      } else if (level === 'aggressive') {
+        const keepRoots = new Set(['v2', 'v2/communities', 'v2/posts', 'v2/polls', 'v2/users']);
+        for (const key of keys) {
+          if (keepRoots.has(key) || keepPrefixes.some(p => key.startsWith(p))) continue;
+          if (key.includes('/')) {
+            delete graph[key];
+            evictedCount++;
+          }
+        }
+      } else {
+        const MAX_NODES = 5000;
+        if (totalBefore > MAX_NODES) {
+          const toEvict = keys.slice(0, totalBefore - MAX_NODES);
+          for (const key of toEvict) {
+            if (keepPrefixes.some(p => key.startsWith(p))) continue;
+            delete graph[key];
+            evictedCount++;
+          }
+        }
+      }
+
+      if (evictedCount > 0) {
+        console.info(`[GunService] Evicted ${evictedCount}/${totalBefore} graph nodes (${level})`);
+      }
+    } catch (e) {
+      console.warn('[GunService] Cache eviction error:', e);
+    } finally {
+      this.evicting = false;
+    }
   }
 }
