@@ -11,7 +11,7 @@ Reusable UI components built with Vue 3 Composition API + Ionic + Tailwind.
 | `VoteForm.vue` | Full voting form for a poll. Handles option selection, duplicate-vote checking, and calls `chainStore.addVote()`. | `pollId`, emits `voted` |
 | `VoteButtons.vue` | Lightweight vote action buttons (up/down or option buttons). Used inside `VoteForm` and `PollCard`. | `options`, `selectedOption`, emits `select` |
 | `PollCard.vue` | Summary card for a poll shown in community/home feed. Links to `PollDetailPage`. Shows live vote counts. | `poll: Poll` |
-| `PostCard.vue` | Summary card for a community post. Shows title, author pseudonym, vote score, comment count, keeps feed cards on thumbnails, and only runs NSFW scanning automatically when the chosen moderation mode allows it. Manual/auto scan paths fetch the full Gun-stored image on demand so classification is based on the high-res asset instead of the thumbnail. | `post: Post` |
+| `PostCard.vue` | Summary card for a community post. Shows title, author pseudonym, vote score, comment count, and image thumbnail. | `post: Post` |
 | `CommentCard.vue` | Single comment with author pseudonym, vote controls, and nested replies. | `comment`, `postId` |
 | `CommunityCard.vue` | Community listing card with name, description, member count. | `community: Community` |
 | `ChainStatus.vue` | Badge/indicator showing blockchain sync state (valid/invalid, block count, WebSocket connected). Uses `useChainStore`. | — |

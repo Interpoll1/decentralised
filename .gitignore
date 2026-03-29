@@ -29,4 +29,6 @@ gun-relay-server/radata/!
 gun-relay
 nuxt-app
 relay-server
-
+shared-validation
+src/components/copilot-components.md
+src/services/copilot-services.md

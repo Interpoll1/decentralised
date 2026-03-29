@@ -44,11 +44,16 @@ const pollActiveListeners = new Map<string, any>();
 
 async function indexForSearch(type: 'post' | 'poll', id: string, data: any) {
   try {
+    const { IntegrityService } = await import('@/services/integrityService');
+    const body = await IntegrityService.seal(
+      { type, id, data } as Record<string, unknown>,
+      'index',
+    );
     await fetch(`${API_URL}/api/index`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ type, id, data })
+      body: JSON.stringify(body)
     });
   } catch (err) {
     console.warn('Search indexing failed:', err);

@@ -77,7 +77,7 @@ const DEFAULT_WORD_LIST: WordEntry[] = [
         'ladyboy', 'trannie'], 'slurs', 'high'),
 
   // Sexual – medium severity
-  ...w(['porn', 'porno', 'pornography', 'hentai', 'xxx', 'nsfw',
+  ...w(['porn', 'porno', 'pornography', 'hentai', 'xxx',
         'blowjob', 'bj', 'handjob', 'rimjob', 'anal', 'orgasm', 'orgy',
         'threesome', 'gangbang', 'creampie', 'cumshot', 'cum', 'jizz',
         'dildo', 'vibrator', 'fleshlight', 'milf', 'gilf', 'bdsm',

@@ -53,24 +53,11 @@
             </div>
 
             <!-- Post Image -->
-            <div v-if="post.imageThumbnail || post.imageIPFS" class="post-image" :class="{ 'nsfw-blurred': detailImageNsfw && !detailImageRevealed }">
+            <div v-if="post.imageThumbnail || post.imageIPFS" class="post-image">
               <img
-                ref="detailImageRef"
                 :src="fullImageSrc || post.imageThumbnail || getIPFSUrl(post.imageIPFS)"
                 :alt="post.title"
-                crossorigin="anonymous"
-                @load="onDetailImageLoad"
               />
-              <div v-if="detailImageNsfw && !detailImageRevealed" class="nsfw-overlay" @click="detailImageRevealed = true">
-                <ion-icon :icon="eyeOffOutline"></ion-icon>
-                <span>Sensitive image ({{ detailNsfwLabel }}) — tap to reveal</span>
-              </div>
-            </div>
-            <div v-if="showDetailScanAction" class="nsfw-actions">
-              <button class="nsfw-scan-button" type="button" @click="scanDetailImage" :disabled="detailScanInProgress">
-                <ion-icon :icon="shieldOutline"></ion-icon>
-                <span>{{ detailScanInProgress ? 'Scanning...' : 'Scan image' }}</span>
-              </button>
             </div>
 
             <!-- Vote & Actions Bar -->
@@ -182,8 +169,7 @@ import {
 import {
   peopleOutline, arrowUpOutline, arrowDownOutline,
   trendingUpOutline, chatbubbleOutline, sendOutline,
-  shareSocialOutline, alertCircleOutline, refreshOutline,
-  eyeOffOutline, shieldOutline
+  shareSocialOutline, alertCircleOutline, refreshOutline
 } from 'ionicons/icons';
 import { usePostStore } from '../stores/postStore';
 import { useCommentStore } from '../stores/commentStore';
@@ -192,7 +178,7 @@ import { useUserStore } from '../stores/userStore';
 import CommentCard from '../components/CommentCard.vue';
 import { Post } from '../services/postService';
 import { generatePseudonym } from '../utils/pseudonym';
-import { ModerationService, moderationVersion } from '../services/moderationService';
+import { ModerationService } from '../services/moderationService';
 
 import { IPFSService } from '../services/ipfsService';
 
@@ -207,13 +193,7 @@ const post = ref<Post | null>(null);
 const isLoading = ref(true);
 const newCommentText = ref('');
 const voteVersion = ref(0);
-const detailImageNsfwRaw = ref(false);
-const detailImageRevealed = ref(false);
-const detailNsfwLabel = ref('');
-const detailImageRef = ref<HTMLImageElement | null>(null);
 const fullImageSrc = ref<string | null>(null);
-const nsfwChecked = ref(false);
-const detailScanInProgress = ref(false);
 let fullImageLoadPromise: Promise<string | null> | null = null;
 
 // Load full-res image from GunDB to replace thumbnail
@@ -222,29 +202,11 @@ watch(
   (cid) => {
     fullImageSrc.value = null;
     fullImageLoadPromise = null;
-    nsfwChecked.value = false;
-    detailImageNsfwRaw.value = false;
-    detailImageRevealed.value = false;
     if (!cid) return;
     fullImageLoadPromise = loadFullImageSrc(cid);
   },
   { immediate: true }
 );
-
-const detailImageNsfw = computed(() => {
-  moderationVersion.value;
-  return detailImageNsfwRaw.value && NsfwService.isEnabled();
-});
-
-const shouldAutoScanDetail = computed(() => {
-  moderationVersion.value;
-  return NsfwService.shouldAutoScan('detail');
-});
-
-const showDetailScanAction = computed(() => {
-  moderationVersion.value;
-  return NsfwService.isEnabled() && !shouldAutoScanDetail.value && !nsfwChecked.value;
-});
 
 const postId = computed(() => route.params.postId as string);
 
@@ -393,43 +355,8 @@ function formatNumber(num: number | undefined | null): string {
   return n.toString();
 }
 
-async function classifyDetailImage() {
-  if (detailScanInProgress.value) return;
-  detailScanInProgress.value = true;
-  try {
-    const targetImage = await getDetailImageForClassification();
-    if (!targetImage) return;
-    const result = await NsfwService.classifyImage(targetImage);
-    detailImageNsfwRaw.value = !result.safe;
-    detailNsfwLabel.value = result.classification;
-    nsfwChecked.value = true;
-  } finally {
-    detailScanInProgress.value = false;
-  }
-}
-
-async function onDetailImageLoad() {
-  if (nsfwChecked.value || !shouldAutoScanDetail.value) return;
-  await classifyDetailImage();
-}
-
-async function scanDetailImage() {
-  if (detailScanInProgress.value || (!detailImageRef.value && !post.value?.imageIPFS)) return;
-  await classifyDetailImage();
-}
-
 function getIPFSUrl(cid?: string): string {
   return cid ? `https://ipfs.io/ipfs/${cid}` : '';
-}
-
-function loadImageElement(src: string): Promise<HTMLImageElement | null> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
-    img.src = src;
-  });
 }
 
 async function loadFullImageSrc(cid: string): Promise<string | null> {
@@ -437,7 +364,6 @@ async function loadFullImageSrc(cid: string): Promise<string | null> {
     const data = await IPFSService.downloadImage(cid);
     if (post.value?.imageIPFS === cid && data) {
       fullImageSrc.value = data;
-      nsfwChecked.value = false;
     }
     return data || null;
   } catch {
@@ -447,24 +373,6 @@ async function loadFullImageSrc(cid: string): Promise<string | null> {
       fullImageLoadPromise = null;
     }
   }
-}
-
-async function ensureFullImageSrc(): Promise<string | null> {
-  if (fullImageSrc.value) return fullImageSrc.value;
-  const cid = post.value?.imageIPFS;
-  if (!cid) return null;
-  if (!fullImageLoadPromise) {
-    fullImageLoadPromise = loadFullImageSrc(cid);
-  }
-  return fullImageLoadPromise;
-}
-
-async function getDetailImageForClassification(): Promise<HTMLImageElement | null> {
-  const fullSrc = await ensureFullImageSrc();
-  if (fullSrc) {
-    return loadImageElement(fullSrc);
-  }
-  return detailImageRef.value;
 }
 
 function toggleLocalStorageItem(key: string, id: string, add: boolean) {
@@ -696,60 +604,6 @@ onUnmounted(() => {
   margin: 16px 0;
   border-radius: 8px;
   overflow: hidden;
-}
-
-.post-image.nsfw-blurred {
-  position: relative;
-}
-
-.post-image.nsfw-blurred img {
-  filter: blur(20px);
-}
-
-.nsfw-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  background: rgba(0, 0, 0, 0.35);
-  cursor: pointer;
-  color: white;
-  font-size: 13px;
-  text-align: center;
-  padding: 8px;
-  border-radius: 8px;
-}
-
-.nsfw-overlay ion-icon {
-  font-size: 28px;
-}
-
-.nsfw-actions {
-  display: flex;
-  justify-content: flex-start;
-  margin: 10px 0 0;
-}
-
-.nsfw-scan-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.18);
-  border-radius: 999px;
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
-  color: var(--ion-color-primary);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.nsfw-scan-button:disabled {
-  opacity: 0.65;
-  cursor: progress;
 }
 
 .post-image img {

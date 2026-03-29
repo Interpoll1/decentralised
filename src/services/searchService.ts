@@ -108,11 +108,16 @@ class SearchService {
 
   async indexContent(type: 'post' | 'poll', id: string, data: any): Promise<{ ok: boolean }> {
     try {
+      const { IntegrityService } = await import('@/services/integrityService');
+      const body = await IntegrityService.seal(
+        { type, id, data } as Record<string, unknown>,
+        'index',
+      );
       const response = await fetch(`${this.apiUrl}/api/index`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ type, id, data }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {

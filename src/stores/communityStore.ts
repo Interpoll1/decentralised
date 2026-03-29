@@ -320,19 +320,17 @@ export const useCommunityStore = defineStore('community', () => {
     markJoined(communityId);
     adjustMemberCount(communityId, 1);
     try {
-      await CommunityService.joinCommunity(communityId);
+      const local = communities.value.find(c => c.id === communityId);
+      await CommunityService.joinCommunity(communityId, local ? { memberCount: local.memberCount } : undefined);
       const refreshed = await CommunityService.getCommunity(communityId);
       if (refreshed) {
         await upsertCommunity(refreshed);
       }
-      if (!currentCommunity.value || currentCommunity.value.id !== communityId) {
-        await selectCommunity(communityId);
-      }
     } catch (error) {
-      unmarkJoined(communityId);
-      adjustMemberCount(communityId, -1);
-      console.error('Error joining community:', error);
-      throw error;
+      console.warn('Join GunDB write failed (non-critical):', error);
+    }
+    if (!currentCommunity.value || currentCommunity.value.id !== communityId) {
+      await selectCommunity(communityId);
     }
   }
 

@@ -1,4 +1,5 @@
 import config from '../config';
+import { IntegrityService } from '@/services/integrityService';
 
 export type ReceiptKind = 'vote' | 'comment';
 
@@ -10,12 +11,16 @@ interface VoteAuthorizeResponse {
 export class AuditService {
   static async logReceipt(type: ReceiptKind, payload: any): Promise<void> {
     try {
+      const body = await IntegrityService.seal(
+        { type, payload } as Record<string, unknown>,
+        'broadcast',
+      );
       await fetch(`${config.relay.api}/api/receipts`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ type, payload }),
+        body: JSON.stringify(body),
       });
     } catch (_error) {
       // Backend is optional; fail silently
@@ -29,12 +34,16 @@ export class AuditService {
    */
   static async authorizeVote(pollId: string, deviceId: string): Promise<boolean> {
     try {
+      const body = await IntegrityService.seal(
+        { pollId, deviceId } as Record<string, unknown>,
+        'vote-authorize',
+      );
       const res = await fetch(`${config.relay.api}/api/vote-authorize`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ pollId, deviceId }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {

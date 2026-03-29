@@ -374,6 +374,23 @@ export class WebSocketService {
       }
     }
 
+    // Seal with integrity fields (hash, signature, hashcash PoW, replay protection)
+    delete message._retries;
+    try {
+      const { IntegrityService } = await import('@/services/integrityService');
+      const sealed = await IntegrityService.seal(message, message.type || 'broadcast');
+      Object.assign(message, sealed);
+    } catch (e) {
+      console.error('[Integrity] Failed to seal broadcast, dropping message:', e);
+      return;
+    }
+
+    // Re-check connection after async integrity sealing
+    if (this.ws?.readyState !== WebSocket.OPEN) {
+      this.enqueue(message);
+      return;
+    }
+
     this.sendToRelay('broadcast', message);
   }
 

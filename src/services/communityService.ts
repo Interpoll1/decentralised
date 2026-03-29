@@ -330,8 +330,12 @@ export class CommunityService {
     return this.mapToCommunity(data, rules);
   }
 
-  static async joinCommunity(communityId: string): Promise<void> {
-    const community = await this.getCommunity(communityId);
+  static async joinCommunity(communityId: string, localFallback?: { memberCount: number }): Promise<void> {
+    let community = await this.getCommunity(communityId);
+    if (!community && localFallback) {
+      // Community exists in API/store but not yet in GunDB — skip remote write
+      return;
+    }
     if (!community) throw new Error('Community not found');
     await this.put(
       this.getCommunityNode(communityId).get('memberCount'),

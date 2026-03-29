@@ -31,25 +31,11 @@
 
       <!-- Post Image -->
       <div v-if="post.imageThumbnail || post.imageIPFS">
-        <div class="post-image" :class="{ 'nsfw-blurred': imageNsfw && !imageRevealed }">
+        <div class="post-image">
           <img
-            ref="postImageRef"
             :src="post.imageThumbnail || getIPFSUrl(post.imageIPFS)"
             :alt="post.title"
-            crossorigin="anonymous"
-            @load="onImageLoad"
           />
-          <div v-if="imageNsfw && !imageRevealed" class="nsfw-overlay" @click.stop="imageRevealed = true">
-            <ion-icon :icon="eyeOffOutline"></ion-icon>
-            <span>Sensitive image ({{ nsfwLabel }}) — tap to reveal</span>
-          </div>
-        </div>
-
-        <div v-if="showScanAction" class="nsfw-actions">
-          <button class="nsfw-scan-button" type="button" @click.stop="scanImage" :disabled="isScanning">
-            <ion-icon :icon="shieldOutline"></ion-icon>
-            <span>{{ isScanning ? 'Scanning...' : 'Scan image' }}</span>
-          </button>
         </div>
       </div>
 
@@ -376,64 +362,6 @@ html.dark .stat-button:hover {
   font-size: 14px;
 }
 
-.nsfw-blurred {
-  position: relative;
-}
-
-.nsfw-blurred img {
-  filter: blur(20px);
-}
-
-.nsfw-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  background: rgba(0, 0, 0, 0.35);
-  cursor: pointer;
-  color: white;
-  font-size: 13px;
-  text-align: center;
-  padding: 8px;
-  border-radius: 12px;
-}
-
-.nsfw-overlay ion-icon {
-  font-size: 28px;
-}
-
-.nsfw-actions {
-  display: flex;
-  justify-content: flex-start;
-  margin: 8px 10px 0;
-}
-
-.nsfw-scan-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.18);
-  border-radius: 999px;
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
-  color: var(--ion-color-primary);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.nsfw-scan-button:disabled {
-  opacity: 0.65;
-  cursor: progress;
-}
-
-.nsfw-scan-button ion-icon {
-  font-size: 15px;
-}
-
 /* Accessibility - Focus States */
 .stat-button:focus-visible {
   outline: 2px solid var(--ion-color-primary);
@@ -442,7 +370,7 @@ html.dark .stat-button:hover {
 </style>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { IonIcon } from '@ionic/vue';
 import {
@@ -450,14 +378,10 @@ import {
   arrowDownOutline, 
   chatbubbleOutline, 
   trendingUpOutline,
-  warningOutline,
-  eyeOffOutline,
-  shieldOutline
+  warningOutline
 } from 'ionicons/icons';
 import { Post } from '../services/postService';
 import type { FilterAction } from '../services/moderationService';
-import { moderationVersion } from '../services/moderationService';
-import { IPFSService } from '../services/ipfsService';
 import { generatePseudonym } from '../utils/pseudonym';
 
 const router = useRouter();
@@ -472,37 +396,6 @@ const props = defineProps<{
 }>();
 
 const revealed = ref(false);
-const imageNsfwRaw = ref(false);
-const imageRevealed = ref(false);
-const nsfwLabel = ref('');
-const postImageRef = ref<HTMLImageElement | null>(null);
-const nsfwChecked = ref(false);
-const isScanning = ref(false);
-const highResScanSrc = ref<string | null>(null);
-let highResScanPromise: Promise<string | null> | null = null;
-
-watch(() => props.post.imageIPFS, () => {
-  nsfwChecked.value = false;
-  imageNsfwRaw.value = false;
-  imageRevealed.value = false;
-  highResScanSrc.value = null;
-  highResScanPromise = null;
-}, { immediate: true });
-
-const imageNsfw = computed(() => {
-  moderationVersion.value;
-  return imageNsfwRaw.value && NsfwService.isEnabled();
-});
-
-const shouldAutoScan = computed(() => {
-  moderationVersion.value;
-  return NsfwService.shouldAutoScan('feed');
-});
-
-const showScanAction = computed(() => {
-  moderationVersion.value;
-  return NsfwService.isEnabled() && !shouldAutoScan.value && !nsfwChecked.value;
-});
 
 const emit = defineEmits(['upvote', 'downvote']);
 
@@ -567,77 +460,8 @@ function formatNumber(num: number | undefined | null): string {
   return n.toString();
 }
 
-async function classifyCurrentImage() {
-  if (isScanning.value) return;
-  isScanning.value = true;
-  try {
-    const targetImage = await getImageForClassification();
-    if (!targetImage) return;
-    const result = await NsfwService.classifyImage(targetImage);
-    imageNsfwRaw.value = !result.safe;
-    nsfwLabel.value = result.classification;
-    nsfwChecked.value = true;
-  } finally {
-    isScanning.value = false;
-  }
-}
-
-async function onImageLoad() {
-  if (nsfwChecked.value || !shouldAutoScan.value) return;
-  await classifyCurrentImage();
-}
-
-async function scanImage() {
-  if (isScanning.value || (!postImageRef.value && !props.post.imageIPFS)) return;
-  await classifyCurrentImage();
-}
-
 function getIPFSUrl(cid?: string): string {
   if (!cid) return '';
   return `https://ipfs.io/ipfs/${cid}`;
-}
-
-function loadImageElement(src: string): Promise<HTMLImageElement | null> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
-    img.src = src;
-  });
-}
-
-async function loadHighResScanSrc(cid: string): Promise<string | null> {
-  try {
-    const data = await IPFSService.downloadImage(cid);
-    if (props.post.imageIPFS === cid && data) {
-      highResScanSrc.value = data;
-    }
-    return data || null;
-  } catch {
-    return null;
-  } finally {
-    if (props.post.imageIPFS === cid) {
-      highResScanPromise = null;
-    }
-  }
-}
-
-async function ensureHighResScanSrc(): Promise<string | null> {
-  if (highResScanSrc.value) return highResScanSrc.value;
-  const cid = props.post.imageIPFS;
-  if (!cid) return null;
-  if (!highResScanPromise) {
-    highResScanPromise = loadHighResScanSrc(cid);
-  }
-  return highResScanPromise;
-}
-
-async function getImageForClassification(): Promise<HTMLImageElement | null> {
-  const fullSrc = await ensureHighResScanSrc();
-  if (fullSrc) {
-    return loadImageElement(fullSrc);
-  }
-  return postImageRef.value;
 }
 </script>

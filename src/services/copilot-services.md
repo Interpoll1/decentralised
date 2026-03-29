@@ -10,7 +10,7 @@ All services are **static classes** — never instantiated with `new`. Initializ
 |---|---|---|
 | `gunService.ts` | `GunService` | GunDB wrapper. `initialize()` called in `main.ts`. All data roots (`posts`, `polls`, `communities`, `users`, `comments`, `events`, `chatrooms`, `server-config`) are transparently namespaced under `v2` via a Proxy. Use `GunService.getGun()` to get the proxied instance. Adding a new root requires adding it to `NAMESPACED_ROOTS`. |
 | `storageService.ts` | `StorageService` | IndexedDB wrapper (`idb`). Stores: `blocks`, `votes`, `receipts`, `polls`, `metadata`, `encryption-keys`. DB name: `interpoll-db` v2. The `metadata` store is a generic key-value bag used by many other services. The `encryption-keys` store holds `StoredEncryptionKey` entries keyed by `id`. |
-| `websocketService.ts` | `WebSocketService` | WebSocket peer connection to the relay server. Handles reconnection (exponential backoff, infinite retries), peer discovery, server list sharing, and message queuing when disconnected. Subscribe to message types via `.subscribe(type, callback)`. Also supports encrypted chat room message relay: `broadcastChatRoomMessage(roomId, data)` sends an opaque encrypted blob via the relay, and `subscribeToChatRoom(roomId, callback)` receives them with per-room multiplexing. `broadcast()` is async and automatically attaches proof-of-work for content messages (via dynamic import of `PowService`). `sendRaw(message)` sends a raw message bypassing PoW/broadcast wrapping. |
+| `websocketService.ts` | `WebSocketService` | WebSocket peer connection to the relay server. Handles reconnection (exponential backoff, infinite retries), peer discovery, server list sharing, and message queuing when disconnected. Subscribe to message types via `.subscribe(type, callback)`. Also supports encrypted chat room message relay: `broadcastChatRoomMessage(roomId, data)` sends an opaque encrypted blob via the relay, and `subscribeToChatRoom(roomId, callback)` receives them with per-room multiplexing. `broadcast()` is async and automatically attaches proof-of-work for content messages (via dynamic import of `PowService`), then seals the message with `IntegrityService.seal()` (hash, signature, hashcash PoW, replay nonce) before sending — seal failure drops the message. `sendRaw(message)` sends a raw message bypassing PoW/broadcast wrapping. |
 | `broadcastService.ts` | `BroadcastService` | Cross-tab sync via `BroadcastChannel('interpoll-sync')`. Same message types as WebSocket. Both channels are always wired in parallel in `chainStore`. |
 | `webrtcService.ts` | `WebRTCService` | WebRTC P2P DataChannel service. Uses WebSocket relay only for signaling (`rtc-offer`, `rtc-answer`, `rtc-ice`). Once connected, peers exchange data directly. Opt-in via `localStorage('interpoll_webrtc_enabled')`. Uses Google STUN servers for NAT traversal. Degrades gracefully — app continues via relay if WebRTC fails. |
 | `keyService.ts` | `KeyService` | Persistent secp256k1 Schnorr key pair, stored in IndexedDB metadata under `'nostr-keypair'`. Auto-generates if missing. Used for block signing and Nostr-style event signing. |
@@ -25,6 +25,7 @@ All services are **static classes** — never instantiated with `new`. Initializ
 | `cryptoService.ts` | `CryptoService` | SHA-256 hashing (`@noble/hashes`), Schnorr sign/verify (`@noble/curves`), BIP-39 mnemonic generation, browser fingerprinting. |
 | `voteTrackerService.ts` | `VoteTrackerService` | Device fingerprint (canvas + browser properties → SHA-256, stored in IndexedDB metadata as `'device-id'`). Tracks `vote-records` in metadata to prevent duplicate votes. |
 | `powService.ts` | `PowService` | Client-side hashcash proof-of-work. Requests a challenge from the relay via WebSocket (`request-pow` → `pow-challenge`), solves it with SHA-256 mining (async loop with event-loop yielding), and returns `{ challengeId, nonce }` ready to attach to content messages. Concurrent calls are serialised via an internal queue. Used automatically by `WebSocketService.broadcast()` for PoW-required message types. |
+| `integrityService.ts` | `IntegrityService` | Seals outgoing state-mutating messages with integrity metadata (`_sig`, `_pub`, `_hash`, `_pow`, `_ts`, `_nonce`). Pipeline: canonicalJSON → Schnorr sign → SHA-256 hash → hashcash PoW → freshness fields. Mirrors backend verification order from `shared-validation/pow.js`. PoW difficulty is per-message-type; exempt types (ping, pong, RTC signaling, etc.) are skipped. |
 
 ## GunDB Domain Services
 
@@ -58,13 +59,13 @@ All services are **static classes** — never instantiated with `new`. Initializ
 | File | Class | Purpose |
 |---|---|---|
 | `eventService.ts` | `EventService` | Nostr-compatible event creation and verification. Canonical serialization → SHA-256 ID → Schnorr sig. Event kinds: `100` poll create, `101` vote cast, `102` poll update, `103` post create. |
-| `auditService.ts` | `AuditService` | Fire-and-forget backend calls: `logReceipt()` and `authorizeVote()`. Both fail silently — the app works offline. Calls `config.relay.api`. |
+| `auditService.ts` | `AuditService` | Fire-and-forget backend calls: `logReceipt()` and `authorizeVote()`. Both seal payloads with `IntegrityService.seal()` before POST. Both fail silently — the app works offline. Calls `config.relay.api`. |
 
 ## Utilities / Support
 
 | File | Class | Purpose |
 |---|---|---|
-| `searchService.ts` | `SearchService` | **Instance-based**. Full-text search via relay API (`/api/search`). 1-minute result cache. |
+| `searchService.ts` | `SearchService` | **Instance-based**. Full-text search via relay API (`/api/search`). 1-minute result cache. `indexContent()` seals payloads with `IntegrityService.seal()` before POST. |
 | `seoService.ts` | `SEOService` | Fetches posts/polls from GunDB for server-side SEO rendering. |
 | `moderationService.ts` | `ModerationService` | Client-side content word filtering plus local image-filter settings. Settings persisted in localStorage (`moderation_settings`). Image filtering is disabled by default and supports `manual`, `detail-auto`, and `all-auto` scan modes. |
 | `feedPreferencesService.ts` | `FeedPreferencesService` | Local-only personalized feed settings (mode, include/exclude keywords, muted/favorite communities, content-type toggles, ranking weights). Persists in localStorage (`interpoll_feed_preferences`). |

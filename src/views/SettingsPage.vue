@@ -480,48 +480,7 @@
           <div class="separator"></div>
         </div>
 
-        <!-- Image Filter -->
-        <div class="section">
-          <h3 class="section-title">Image Filter</h3>
-          <p class="section-subtitle">Detect and blur sensitive images using on-device AI</p>
-
-          <ion-list>
-            <ion-item>
-              <ion-toggle v-model="modSettings.imageFilterEnabled" @ionChange="saveModerationSettings">
-                Enable local image filter
-              </ion-toggle>
-            </ion-item>
-          </ion-list>
-
-          <div v-if="modSettings.imageFilterEnabled" class="mt-3">
-            <ion-item>
-              <ion-label>Scan mode</ion-label>
-              <ion-select v-model="modSettings.imageFilterMode" @ionChange="saveModerationSettings">
-                <ion-select-option value="manual">Only when I tap Scan</ion-select-option>
-                <ion-select-option value="detail-auto">Auto-scan opened post/detail pages</ion-select-option>
-                <ion-select-option value="all-auto">Auto-scan feed and detail images</ion-select-option>
-              </ion-select>
-            </ion-item>
-
-            <div class="range-row">
-              <span class="range-label">Sensitivity: <strong>{{ sensitivityLabel }}</strong></span>
-              <ion-range
-                :min="0.3"
-                :max="0.9"
-                :step="0.05"
-                v-model="modSettings.imageFilterSensitivity"
-                @ionKnobMoveEnd="saveModerationSettings"
-                :pin="true"
-                :pin-formatter="(v: number) => Math.round(v * 100) + '%'"
-              ></ion-range>
-            </div>
-            <p class="helper-text">
-              Lower sensitivity catches more images but may have false positives. The AI model stays unloaded until your chosen scan mode actually needs it. All detection runs locally in your browser — no images are sent to any server.
-            </p>
-          </div>
-
-          <div class="separator"></div>
-        </div>
+        <!-- Word filter categories -->
 
         <!-- Reset -->
         <div class="section">
@@ -1747,15 +1706,6 @@ const testResult = computed(() => {
   return ModerationService.checkContent(testText.value);
 });
 
-const sensitivityLabel = computed(() => {
-  const v = modSettings.value.imageFilterSensitivity;
-  if (v <= 0.4) return 'Very strict';
-  if (v <= 0.55) return 'Strict';
-  if (v <= 0.7) return 'Balanced';
-  if (v <= 0.8) return 'Relaxed';
-  return 'Very relaxed';
-});
-
 function onKarmaRangeChange(ev: CustomEvent) {
   const val = ev.detail.value as number;
   modSettings.value.minUserKarma = val <= -100 ? -1000 : val;
@@ -1764,7 +1714,6 @@ function onKarmaRangeChange(ev: CustomEvent) {
 
 function saveModerationSettings() {
   ModerationService.saveSettings({ ...modSettings.value });
-  NsfwService.clearCache();
   minUserKarma.value = modSettings.value.minUserKarma;
 }
 
