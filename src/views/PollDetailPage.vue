@@ -544,7 +544,8 @@ async function loadPoll() {
   // ── Step 3: Gun fetch only if still no data (last resort) ────────────────
   if (!poll.value) {
     await pollStore.selectPoll(pollId)
-    poll.value = pollStore.currentPoll
+    // Prefer store version (may have options from creation); fall back to currentPoll
+    poll.value = pollStore.pollsMap.get(pollId) || pollStore.currentPoll
     isLoading.value = false
   }
   // ── Step 4: Background tasks (non-blocking) ───────────────────────────────
