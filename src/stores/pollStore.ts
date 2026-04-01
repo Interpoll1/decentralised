@@ -44,6 +44,9 @@ export const usePollStore = defineStore('poll', () => {
   const unsubscribers = new Map<string, () => void>();
   // Per-community initial load tracking to avoid cross-community misclassification
   const initialLoadDoneByCommId = new Map<string, boolean>();
+  // Tracks polls that were just voted on to prevent stale GunDB data from overwriting optimistic updates
+  const recentlyVotedPolls = new Map<string, number>();
+  const VOTE_GUARD_MS = 5000;
 
   /** Attempt to decrypt an encrypted poll and update the store */
   function tryDecryptPoll(poll: Poll) {
@@ -100,6 +103,11 @@ export const usePollStore = defineStore('poll', () => {
           }
 
           if (pollsMap.value.has(poll.id)) {
+            // Skip stale GunDB updates for recently-voted polls
+            const votedAt = recentlyVotedPolls.get(poll.id);
+            if (votedAt && Date.now() - votedAt < VOTE_GUARD_MS) {
+              return;
+            }
             pollsMap.value.set(poll.id, poll);
             tryDecryptPoll(poll);
             if (currentPoll.value?.id === poll.id) {
@@ -163,10 +171,23 @@ export const usePollStore = defineStore('poll', () => {
 
   function injectPoll(poll: Poll) {
   const existing = pollsMap.value.get(poll.id)
-  // Always update if incoming poll has options and existing doesn't
-  if (!existing || (poll.options.length > 0 && existing.options.length === 0)) {
+  if (!existing) {
     pollsMap.value.set(poll.id, poll)
     tryDecryptPoll(poll)
+  } else if (poll.options.length > 0 && existing.options.length === 0) {
+    // Existing has no options yet — take the incoming version
+    pollsMap.value.set(poll.id, poll)
+    tryDecryptPoll(poll)
+  } else if (poll.options.length > 0 && (poll.totalVotes || 0) >= (existing.totalVotes || 0)) {
+    // Accept updates with equal or higher vote counts (avoids reverting votes)
+    const votedAt = recentlyVotedPolls.get(poll.id);
+    if (!votedAt || Date.now() - votedAt >= VOTE_GUARD_MS) {
+      pollsMap.value.set(poll.id, poll)
+      tryDecryptPoll(poll)
+    }
+  }
+  if (currentPoll.value?.id === poll.id) {
+    currentPoll.value = pollsMap.value.get(poll.id) || currentPoll.value
   }
   seenPollIds.add(poll.id)
 }
@@ -233,14 +254,18 @@ export const usePollStore = defineStore('poll', () => {
   async function voteOnPoll(pollId: string, optionIds: string[]) {
     const user     = await UserService.getCurrentUser();
     const original = pollsMap.value.get(pollId);
+    // Guard against stale GunDB subscription data overwriting the optimistic update
+    recentlyVotedPolls.set(pollId, Date.now());
+    setTimeout(() => recentlyVotedPolls.delete(pollId), VOTE_GUARD_MS + 1000);
     if (original) {
       const optimistic: Poll = {
         ...original,
-        totalVotes: original.totalVotes + optionIds.length,
         options: original.options.map(opt =>
           optionIds.includes(opt.id) ? { ...opt, votes: opt.votes + 1 } : opt
         ),
+        totalVotes: 0,
       };
+      optimistic.totalVotes = optimistic.options.reduce((sum, opt) => sum + (opt.votes || 0), 0);
       pollsMap.value.set(pollId, optimistic);
       if (currentPoll.value?.id === pollId) currentPoll.value = optimistic;
     }
@@ -248,6 +273,7 @@ export const usePollStore = defineStore('poll', () => {
       await PollService.vote(pollId, optionIds, user.id);
     } catch (err) {
       console.warn('Vote failed — rolling back', err);
+      recentlyVotedPolls.delete(pollId);
       if (original) {
         pollsMap.value.set(pollId, original);
         if (currentPoll.value?.id === pollId) currentPoll.value = original;

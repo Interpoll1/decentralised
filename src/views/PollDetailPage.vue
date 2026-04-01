@@ -282,12 +282,14 @@ import {
 } from 'ionicons/icons';
 import { usePollStore } from '../stores/pollStore';
 import { useChainStore } from '../stores/chainStore';
-import { PollService, Poll } from '../services/pollService';
+import { PollService } from '../services/pollService';
+import type { Poll } from '../services/pollService';
 import { UserService } from '../services/userService';
 import { VoteTrackerService } from '../services/voteTrackerService';
 import { AuditService } from '../services/auditService';
 import type { Vote } from '../types/chain';
 import { generatePseudonym } from '../utils/pseudonym';
+import config from '../config';
 
 const route = useRoute();
 const router = useRouter();
@@ -420,17 +422,18 @@ async function submitVote() {
     }
     const receipt = await chainStore.addVote(vote)
 
-    // ── Update vote counts immediately in MySQL via relay ─────────────────
-    const updatedOptions = poll.value.options.map((opt, i) => ({
-      ...opt,
-      votes: optionIds.includes(opt.id) ? (opt.votes || 0) + 1 : (opt.votes || 0)
-    }))
-    const newTotalVotes = updatedOptions.reduce((s, o) => s + o.votes, 0)
+    // ── Persist vote via store (optimistic update + GunDB write with rollback) ──
+    await pollStore.voteOnPoll(poll.value.id, optionIds)
+    // Sync local ref with the store's updated data
+    poll.value = pollStore.pollsMap.get(poll.value.id) || poll.value
 
-    // Write each option vote count directly to MySQL (non-blocking)
+    // ── Write to MySQL via relay (non-blocking backup persistence) ──────────
+    const gunRelayBase = config.relay.gun.replace(/\/gun$/, '')
+    const updatedOptions = poll.value.options
+    const newTotalVotes = updatedOptions.reduce((s, o) => s + (o.votes || 0), 0)
     Promise.all(
       updatedOptions.map((opt, i) =>
-        fetch('https://interpoll2.endless.sbs/db/write', {
+        fetch(`${gunRelayBase}/db/write`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -440,8 +443,7 @@ async function submitVote() {
         }).catch(() => {})
       )
     ).then(() => {
-      // Also update totalVotes on poll node
-      fetch('https://interpoll2.endless.sbs/db/write', {
+      fetch(`${gunRelayBase}/db/write`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -449,19 +451,7 @@ async function submitVote() {
           data: { totalVotes: newTotalVotes }
         })
       }).catch(() => {})
-    })
-
-    // Update local display immediately — don't wait for API
-    poll.value = {
-      ...poll.value!,
-      options: updatedOptions,
-      totalVotes: newTotalVotes
-    }
-
-    // Gun vote update — non-blocking
-    UserService.getCurrentUser().then(u => {
-      PollService.voteOnPoll(poll.value!.id, optionIds, u.id).catch(() => {})
-    })
+    }).catch(() => {})
 
     await VoteTrackerService.recordVote(poll.value.id, receipt.blockIndex)
 
@@ -472,13 +462,15 @@ async function submitVote() {
 
     (await toastController.create({ message: 'Vote submitted!', duration: 2000 })).present()
 
-    // Reload from Nuxt API after short delay (let MySQL write settle)
+    // Reload from API after delay — only accept if vote counts haven't regressed
+    const pollIdForReload = poll.value.id
+    const minVotes = newTotalVotes
     setTimeout(async () => {
       try {
-        const res = await fetch(`https://interpoll.endless.sbs/api/poll/${poll.value!.id}`)
+        const res = await fetch(`${config.relay.api}/api/poll/${pollIdForReload}`)
         if (res.ok) {
           const data = await res.json()
-          if (data?.id && data.options?.length > 0) {
+          if (data?.id && data.options?.length > 0 && (data.totalVotes || 0) >= minVotes) {
             pollStore.injectPoll({
               id: data.id, communityId: data.communityId,
               authorId: poll.value!.authorId || '',
@@ -493,11 +485,11 @@ async function submitVote() {
               totalVotes: data.totalVotes || 0,
               isExpired: !!data.isExpired,
             })
-            poll.value = pollStore.pollsMap.get(poll.value!.id) || data
+            poll.value = pollStore.pollsMap.get(pollIdForReload) || poll.value
           }
         }
       } catch {}
-    }, 1500)
+    }, 3000)
 
   } catch (error) {
     console.error('Vote error:', error);
@@ -525,7 +517,7 @@ async function loadPoll() {
   // ── Step 2: If no options in cache, fetch from Nuxt API (fast, ~300ms) ────
   if (!poll.value || poll.value.options.length === 0) {
     try {
-      const res = await fetch(`https://interpoll.endless.sbs/api/poll/${pollId}`)
+      const res = await fetch(`${config.relay.api}/api/poll/${pollId}`)
       if (res.ok) {
         const data = await res.json()
         if (data?.id && data.options?.length > 0) {
