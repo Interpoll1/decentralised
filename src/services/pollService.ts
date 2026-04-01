@@ -516,6 +516,7 @@ export class PollService {
       return {
         id: apiData.id, communityId: apiData.communityId || '',
         authorId: apiData.authorId || '', authorName: apiData.authorName || 'Anonymous',
+        authorShowRealName: !!apiData.authorShowRealName,
         question: apiData.question || '', description: apiData.description || '',
         options: apiOptions, createdAt: apiData.createdAt || Date.now(),
         expiresAt: apiData.expiresAt || 0,
@@ -546,6 +547,7 @@ export class PollService {
     return {
       id: pollData.id, communityId: pollData.communityId || '',
       authorId: pollData.authorId || '', authorName: pollData.authorName || 'Anonymous',
+      authorShowRealName: !!pollData.authorShowRealName,
       question: pollData.question || '', description: pollData.description || '',
       options, createdAt: pollData.createdAt || Date.now(), expiresAt: pollData.expiresAt || 0,
       allowMultipleChoices: !!pollData.allowMultipleChoices,
@@ -585,20 +587,41 @@ export class PollService {
     const poll = await this.loadPoll(pollId);
     if (!poll) throw new Error('Poll not found');
     if (poll.isExpired) throw new Error('Poll has expired');
-    const selectedOptions = poll.options.filter(opt => optionIds.includes(opt.id));
+    const storedOptions = await this.onceNode<any>(this.getPollPath(pollId).get('options'), 300);
+    const selectedOptions = poll.options
+      .map((option, index) => ({ option, index }))
+      .filter(({ option }) => optionIds.includes(option.id));
     if (selectedOptions.length === 0) throw new Error('No valid options selected');
     if (!poll.allowMultipleChoices && selectedOptions.length > 1) throw new Error('Multiple choices not allowed');
-    for (const option of selectedOptions) {
+    for (const { option, index } of selectedOptions) {
       if (!option.voters.includes(voterId)) {
-        await this.putPromise(
-          this.getPollPath(pollId).get('options').get(option.id),
-          { votes: (option.votes || 0) + 1, voters: [...option.voters, voterId] }
-        );
+        // Newly created polls still use positional option keys (`0`, `1`, ...`).
+        // Prefer the existing stored key when present and only fall back to index
+        // to preserve compatibility with that creation-time layout.
+        const optionKey = Object.keys(storedOptions || {}).find((key) =>
+          key !== '_' && storedOptions[key]?.id === option.id,
+        ) ?? String(index);
+        const updatedOption = {
+          id: option.id,
+          text: option.text,
+          votes: (option.votes || 0) + 1,
+          voters: [...option.voters, voterId],
+        };
+        await Promise.all([
+          this.putPromise(this.getPollPath(pollId).get('options').get(optionKey), updatedOption),
+          this.putPromise(
+            this.getCommunityPollPath(poll.communityId, pollId).get('options').get(optionKey),
+            updatedOption,
+          ),
+        ]);
       }
     }
     const updatedOptions = await this.loadPollOptions(pollId);
     const totalVotes     = updatedOptions.reduce((sum, opt) => sum + (opt.votes || 0), 0);
-    await this.putPromise(this.getPollPath(pollId), { totalVotes });
+    await Promise.all([
+      this.putPromise(this.getPollPath(pollId), { totalVotes }),
+      this.putPromise(this.getCommunityPollPath(poll.communityId, pollId), { totalVotes }),
+    ]);
   }
 
   static async voteOnPoll(pollId: string, optionIds: string[], voterId: string): Promise<void> {

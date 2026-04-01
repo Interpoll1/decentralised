@@ -388,22 +388,35 @@ async function persistVoteCountsToRelay(updatedPoll: Poll): Promise<void> {
     fetch(writeUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({
         soul: `v2/communities/${updatedPoll.communityId}/polls/${updatedPoll.id}/options/${index}`,
         data: { id: option.id, text: option.text, votes: option.votes }
       })
+    }).then((response) => {
+      if (!response.ok) {
+        throw new Error(`Option write failed with ${response.status}`);
+      }
     }),
   );
 
-  await Promise.allSettled(optionWrites);
-  await fetch(writeUrl, {
+  const optionResults = await Promise.allSettled(optionWrites);
+  const optionFailure = optionResults.find((result) => result.status === 'rejected');
+  if (optionFailure?.status === 'rejected') {
+    throw optionFailure.reason;
+  }
+  const response = await fetch(writeUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify({
       soul: `v2/communities/${updatedPoll.communityId}/polls/${updatedPoll.id}`,
       data: { totalVotes: updatedPoll.totalVotes }
     })
   });
+  if (!response.ok) {
+    throw new Error(`Poll total write failed with ${response.status}`);
+  }
 }
 
 async function submitVote() {
@@ -524,12 +537,15 @@ async function loadPoll() {
     poll.value = pollStore.currentPoll
     isLoading.value = false
   }
-  // ── Step 4: Background tasks (non-blocking) ───────────────────────────────
-  Promise.all([
-    UserService.getCurrentUser().then(u => { currentUserId.value = u.id }),
-    VoteTrackerService.hasVoted(pollId).then(v => { if (v) hasVoted.value = true }),
-  ]).catch(() => {})
-  if (poll.value?.isPrivate && isAuthor.value) {
+  // ── Step 4: Background tasks ───────────────────────────────────────────────
+  const [currentUser] = await Promise.all([
+    UserService.getCurrentUser().catch(() => null),
+    VoteTrackerService.hasVoted(pollId).then(v => { if (v) hasVoted.value = true }).catch(() => {}),
+  ])
+  if (currentUser) {
+    currentUserId.value = currentUser.id
+  }
+  if (poll.value?.isPrivate && currentUserId.value && poll.value.authorId === currentUserId.value) {
     loadInviteCodes()
   }
   isLoading.value = false

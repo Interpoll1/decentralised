@@ -293,6 +293,7 @@ html.dark .post-footer {
 
   .post-image img {
     height: 100%;
+    object-fit: contain;
   }
 
   .post-title {

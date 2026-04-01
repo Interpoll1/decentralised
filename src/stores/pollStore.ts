@@ -100,17 +100,12 @@ export const usePollStore = defineStore('poll', () => {
           }
 
           if (pollsMap.value.has(poll.id)) {
-            pollsMap.value.set(poll.id, poll);
-            tryDecryptPoll(poll);
-            if (currentPoll.value?.id === poll.id) {
-              currentPoll.value = poll;
-            }
+            injectPoll(poll);
             return;
           }
 
           if (seenPollIds.has(poll.id)) {
-            pollsMap.value.set(poll.id, poll);
-            tryDecryptPoll(poll);
+            injectPoll(poll);
             return;
           }
 
@@ -118,17 +113,12 @@ export const usePollStore = defineStore('poll', () => {
 
           if (initialLoadDoneByCommId.get(communityId) && isGenuinelyNew) {
             // Auto-add immediately — no banner
-            pollsMap.value.set(poll.id, poll);
-            tryDecryptPoll(poll);
+            injectPoll(poll);
             seenPollIds.add(poll.id);
             saveSeenIds(seenPollIds);
           } else {
-            pollsMap.value.set(poll.id, poll);
-            tryDecryptPoll(poll);
+            injectPoll(poll);
             seenPollIds.add(poll.id);
-          }
-          if (currentPoll.value?.id === poll.id) {
-            currentPoll.value = poll;
           }
         },
 
@@ -144,11 +134,7 @@ export const usePollStore = defineStore('poll', () => {
         // Phase 2: options patched in
         (updatedPoll) => {
           // Always update — options loading in is never "new content"
-          pollsMap.value.set(updatedPoll.id, updatedPoll);
-          tryDecryptPoll(updatedPoll);
-          if (currentPoll.value?.id === updatedPoll.id) {
-            currentPoll.value = updatedPoll;
-          }
+          injectPoll(updatedPoll);
         },
       );
 
@@ -163,16 +149,42 @@ export const usePollStore = defineStore('poll', () => {
 
   function injectPoll(poll: Poll) {
     const existing = pollsMap.value.get(poll.id);
-    const shouldUpdate = !existing
-      || (poll.options.length > 0 && existing.options.length === 0)
-      || poll.options.length > existing.options.length
-      || poll.totalVotes !== existing.totalVotes
+    const existingVotesByOptionId = new Map(
+      existing?.options.map((option) => [option.id, option.votes ?? 0]) ?? [],
+    );
+    const incomingMissingOptions = !!existing && poll.options.length < existing.options.length;
+    const incomingVoteRegression = !!existing && (
+      poll.totalVotes < existing.totalVotes
+      || poll.options.some((option) => {
+        const previousVotes = existingVotesByOptionId.get(option.id);
+        return previousVotes !== undefined && (option.votes ?? 0) < previousVotes;
+      })
+    );
+    const voteChanged = !!existing && (
+      poll.totalVotes !== existing.totalVotes
+      || poll.options.length !== existing.options.length
       || poll.options.some((option, index) => {
         const existingOption = existing.options[index];
         return !existingOption
           || existingOption.id !== option.id
-          || existingOption.votes !== option.votes;
-      });
+          || (existingOption.votes ?? 0) !== (option.votes ?? 0);
+      })
+    );
+    const metadataChanged = !!existing && (
+      poll.authorId !== existing.authorId
+      || poll.authorName !== existing.authorName
+      || poll.authorShowRealName !== existing.authorShowRealName
+      || poll.question !== existing.question
+      || poll.description !== existing.description
+      || poll.isExpired !== existing.isExpired
+      || poll.expiresAt !== existing.expiresAt
+      || poll.showResultsBeforeVoting !== existing.showResultsBeforeVoting
+      || poll.isPrivate !== existing.isPrivate
+    );
+    const shouldUpdate = !existing
+      || (poll.options.length > 0 && existing.options.length === 0)
+      || poll.options.length > existing.options.length
+      || (!incomingMissingOptions && !incomingVoteRegression && (voteChanged || metadataChanged));
 
     if (shouldUpdate) {
       pollsMap.value.set(poll.id, poll);
