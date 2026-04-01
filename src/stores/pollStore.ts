@@ -108,6 +108,11 @@ export const usePollStore = defineStore('poll', () => {
             if (votedAt && Date.now() - votedAt < VOTE_GUARD_MS) {
               return;
             }
+            // Don't overwrite a poll that has options with one that has none
+            const existing = pollsMap.value.get(poll.id)!;
+            if (existing.options.length > 0 && poll.options.length === 0) {
+              return;
+            }
             pollsMap.value.set(poll.id, poll);
             tryDecryptPoll(poll);
             if (currentPoll.value?.id === poll.id) {
