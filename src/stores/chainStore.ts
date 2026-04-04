@@ -86,6 +86,7 @@ export const useChainStore = defineStore('chain', () => {
 
     if (blocks.value.length > 0 && block.index === blocks.value.length) {
       const previousBlock = blocks.value[blocks.value.length - 1];
+      if (previousBlock.currentHash !== block.previousHash) return;
       if (ChainService.validateBlock(block, previousBlock)) {
         await StorageService.saveBlock(block);
         blocks.value.push(block);

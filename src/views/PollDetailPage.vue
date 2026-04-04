@@ -133,7 +133,7 @@
               <ion-button
                 size="small"
                 fill="outline"
-                @click="router.push(`/vote/${poll!.id}`)"
+                @click="openInviteCodePage()"
                 class="mt-2"
               >
                 Enter Invite Code
@@ -379,6 +379,25 @@ function getOptionPercent(option: { votes: number }): number {
   return Math.round((option.votes / total) * 100);
 }
 
+function blurActiveElement() {
+  const activeElement = document.activeElement;
+  if (activeElement instanceof HTMLElement) {
+    activeElement.blur();
+  }
+}
+
+async function presentToast(message: string, duration = 2000) {
+  blurActiveElement();
+  const toast = await toastController.create({ message, duration });
+  await toast.present();
+}
+
+function openInviteCodePage() {
+  if (!poll.value?.id) return;
+  blurActiveElement();
+  void router.push(`/vote/${poll.value.id}`);
+}
+
 async function submitVote() {
   if (!poll.value || !canSubmitVote.value || isSubmitting.value) return
   isSubmitting.value = true
@@ -396,7 +415,7 @@ async function submitVote() {
     const allowedByBackend = await AuditService.authorizeVote(poll.value.id, deviceId)
     if (!allowedByBackend) {
       hasVoted.value = true;
-      (await toastController.create({ message: 'Already voted on this poll', duration: 3000 })).present()
+      await presentToast('Already voted on this poll', 3000)
       return
     }
 
@@ -460,7 +479,7 @@ async function submitVote() {
     votedPolls.push(poll.value.id)
     localStorage.setItem('voted-polls', JSON.stringify(votedPolls));
 
-    (await toastController.create({ message: 'Vote submitted!', duration: 2000 })).present()
+    await presentToast('Vote submitted!')
 
     // Reload from API after delay — only accept if vote counts haven't regressed
     const pollIdForReload = poll.value.id
@@ -493,7 +512,7 @@ async function submitVote() {
 
   } catch (error) {
     console.error('Vote error:', error);
-    (await toastController.create({ message: 'Failed to submit vote', duration: 2000 })).present()
+    await presentToast('Failed to submit vote')
   } finally {
     clearTimeout(timeout)
     isSubmitting.value = false

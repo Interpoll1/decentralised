@@ -115,15 +115,46 @@ export class PollService {
       if (key === '_') return;
       const opt = optionsData[key];
       if (opt && opt.id) {
-        options.push({ id: opt.id, text: opt.text || '', votes: opt.votes || 0, voters: opt.voters || [] });
+        options.push({
+          id: opt.id,
+          text: opt.text || '',
+          votes: opt.votes || 0,
+          voters: this.parseVoters(opt.voters),
+        });
       }
     });
     return options;
   }
 
+  private static parseVoters(votersData: any): string[] {
+    if (!votersData) return [];
+    if (Array.isArray(votersData)) {
+      return votersData.filter((voterId): voterId is string => typeof voterId === 'string');
+    }
+    if (typeof votersData !== 'object') return [];
+
+    return Object.entries(votersData)
+      .filter(([key]) => key !== '_')
+      .map(([key, value]) => {
+        if (typeof value === 'string') return value;
+        if (value === true || value === 1) return key;
+        return null;
+      })
+      .filter((voterId): voterId is string => typeof voterId === 'string');
+  }
+
+  private static buildVotersMap(voters: string[]): Record<string, string> {
+    return Object.fromEntries(
+      voters.map((voterId, index) => [index, voterId])
+    );
+  }
+
   private static buildOptionsMap(options: PollOption[]): Record<string, any> {
     return Object.fromEntries(options.map((option, index) => [index, {
-      id: option.id, text: option.text, votes: option.votes || 0, voters: option.voters || [],
+      id: option.id,
+      text: option.text,
+      votes: option.votes || 0,
+      voters: this.buildVotersMap(option.voters || []),
     }]));
   }
 
@@ -434,8 +465,7 @@ export class PollService {
       totalVotes: 0, isExpired: false,
     };
 
-    const optionsMap: Record<string, any> = {};
-    pollOptions.forEach((opt, i) => { optionsMap[i] = { id: opt.id, text: opt.text, votes: 0 }; });
+    const optionsMap = this.buildOptionsMap(pollOptions);
 
     try {
       const { KeyService }    = await import('./keyService');
@@ -586,17 +616,31 @@ export class PollService {
     const selectedOptions = poll.options.filter(opt => optionIds.includes(opt.id));
     if (selectedOptions.length === 0) throw new Error('No valid options selected');
     if (!poll.allowMultipleChoices && selectedOptions.length > 1) throw new Error('Multiple choices not allowed');
-    for (const option of selectedOptions) {
-      if (!option.voters.includes(voterId)) {
-        await this.putPromise(
-          this.getPollPath(pollId).get('options').get(option.id),
-          { votes: (option.votes || 0) + 1, voters: [...option.voters, voterId] }
-        );
+    const updatedOptions = poll.options.map((option) => {
+      if (!optionIds.includes(option.id) || option.voters.includes(voterId)) {
+        return option;
       }
-    }
-    const updatedOptions = await this.loadPollOptions(pollId);
-    const totalVotes     = updatedOptions.reduce((sum, opt) => sum + (opt.votes || 0), 0);
-    await this.putPromise(this.getPollPath(pollId), { totalVotes });
+
+      return {
+        ...option,
+        votes: (option.votes || 0) + 1,
+        voters: [...option.voters, voterId],
+      };
+    });
+    const totalVotes = updatedOptions.reduce((sum, opt) => sum + (opt.votes || 0), 0);
+    const optionsMap = this.buildOptionsMap(updatedOptions);
+    const pollPatch = { totalVotes };
+
+    await Promise.all([
+      this.putPromise(this.getPollPath(pollId).get('options'), optionsMap),
+      this.putPromise(this.getPollPath(pollId), pollPatch),
+      poll.communityId
+        ? this.putPromise(this.getCommunityPollPath(poll.communityId, pollId).get('options'), optionsMap)
+        : Promise.resolve(),
+      poll.communityId
+        ? this.putPromise(this.getCommunityPollPath(poll.communityId, pollId), pollPatch)
+        : Promise.resolve(),
+    ]);
   }
 
   static async voteOnPoll(pollId: string, optionIds: string[], voterId: string): Promise<void> {
