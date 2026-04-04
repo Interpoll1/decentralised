@@ -476,9 +476,8 @@ server.on('request', (req, res) => {
         const key = `${pollId}:${deviceId}`;
         const alreadyVoted = voteRegistry.has(key);
 
-        if (!alreadyVoted) {
-          voteRegistry.add(key);
-        }
+        // CHECK-ONLY: do NOT add to voteRegistry here.
+        // The client must call /api/vote-confirm after the vote succeeds.
 
         // Log the authorization attempt
         const logEntry = {
@@ -497,6 +496,42 @@ server.on('request', (req, res) => {
         console.error('Error in /api/vote-authorize:', error.message);
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ allowed: false, reason: 'internal error' }));
+      }
+    });
+    return;
+  }
+
+  // Two-phase vote: confirm endpoint registers the vote after it succeeds on-chain
+  if (req.method === 'POST' && url.pathname === '/api/vote-confirm') {
+    parseBodyWithLimit(req, res, 4096).then((data) => {
+      if (!data) return;
+      try {
+        const pollId = sanitizeId(String(data.pollId || ''), 128);
+        const deviceId = sanitizeId(String(data.deviceId || ''), 128);
+
+        if (!pollId || !deviceId) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, reason: 'missing or invalid pollId or deviceId' }));
+          return;
+        }
+
+        const key = `${pollId}:${deviceId}`;
+        voteRegistry.add(key);
+
+        const logEntry = {
+          type: 'vote-confirm',
+          pollId,
+          deviceId,
+          timestamp: Date.now(),
+        };
+        fs.appendFile(RECEIPT_LOG_FILE, JSON.stringify(logEntry) + '\n', () => {});
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (error) {
+        console.error('Error in /api/vote-confirm:', error.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, reason: 'internal error' }));
       }
     });
     return;

@@ -461,6 +461,8 @@ async function submitVote() {
     localStorage.setItem('voted-polls', JSON.stringify(votedPolls))
     // Record device fingerprint vote — non-blocking
     VoteTrackerService.recordVote(poll.value.id, receipt.blockIndex).catch((e) => console.warn('[Vote] VoteTracker failed:', e))
+    // Register vote with backend so it blocks future duplicate attempts — non-blocking
+    AuditService.confirmVote(poll.value.id, deviceId).catch((e) => console.warn('[Vote] confirmVote failed:', e))
     console.log('[Vote] Step 6: Vote marked as cast locally')
 
     // ── Persist vote via store (optimistic update + GunDB write) ─────────────

@@ -26,6 +26,8 @@ export class AuditService {
 
   /**
    * Ask backend if this device is allowed to vote on a poll.
+   * CHECK-ONLY: does NOT register the vote. Call confirmVote() after
+   * the vote succeeds on-chain.
    * If the backend is unreachable, times out, or returns an unexpected
    * response, we default to allowing the vote so offline mode still works.
    */
@@ -57,6 +59,31 @@ export class AuditService {
       return true;
     } catch (_error) {
       return true;
+    }
+  }
+
+  /**
+   * Register a successful vote with the backend so it blocks future
+   * duplicate attempts from the same device.
+   * Non-blocking — failure here doesn't affect the vote.
+   */
+  static async confirmVote(pollId: string, deviceId: string): Promise<void> {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), AUTHORIZE_TIMEOUT_MS);
+
+      await fetch(`${config.relay.api}/api/vote-confirm`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ pollId, deviceId }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timer);
+    } catch (_error) {
+      // Backend is optional; fail silently
     }
   }
 }
