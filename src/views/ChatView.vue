@@ -73,13 +73,14 @@ import {
 } from '@ionic/vue';
 import ChatService, { ChatMessage } from '../services/chatService';
 import { UserService } from '../services/userService';
+import config from '@/config';
 
 const route = useRoute();
 
 const recipientId   = ref(route.params.userId as string || '');
 const recipientName = ref(route.query.name as string || 'User');
 
-const WS_URL = import.meta.env.VITE_WS_URL || 'wss://your-relay-server.com';
+const WS_URL = config.relay.websocket;
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const connected      = ref(false);

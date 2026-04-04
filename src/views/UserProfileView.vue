@@ -105,6 +105,7 @@ import { personCircleOutline, chatbubbleOutline } from 'ionicons/icons';
 import PostCard from '../components/PostCard.vue';
 import CommentCard from '../components/CommentCard.vue';
 import { useChat } from '../composables/useChat';
+import config from '@/config';
 
 const router = useRouter();
 const route = useRoute();
@@ -112,7 +113,7 @@ const route = useRoute();
 const userId = route.params.userId as string;
 const currentUserId = ref('current-user-id'); // Get from auth store
 
-const WS_URL = import.meta.env.VITE_WS_URL || 'wss://your-relay-server.com';
+const WS_URL = config.relay.websocket;
 
 // Chat composable
 const { publicKey: chatPublicKey } = useChat(WS_URL, currentUserId.value);

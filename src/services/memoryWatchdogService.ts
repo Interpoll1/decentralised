@@ -7,6 +7,11 @@ const EMERGENCY_THRESHOLD = 0.85;
 const CHECK_INTERVAL_MS = 30_000;
 const PERIODIC_GC_INTERVAL_MS = 120_000;
 
+// Node-count thresholds for heuristic memory pressure detection (when performance.memory unavailable)
+const HEURISTIC_WARN_NODES = 1200;
+const HEURISTIC_CRITICAL_NODES = 1600;
+const HEURISTIC_EMERGENCY_NODES = 2500;
+
 interface MemoryInfo {
   usedJSHeapSize: number;
   totalJSHeapSize: number;
@@ -29,12 +34,12 @@ export class MemoryWatchdogService {
     this.started = true;
 
     if (!this.isMemoryAPIAvailable()) {
-      console.info('[MemoryWatchdog] performance.memory not available, using periodic cleanup only');
-      this.periodicTimer = setInterval(() => this.doCleanup('light'), PERIODIC_GC_INTERVAL_MS);
-      return;
+      console.info('[MemoryWatchdog] performance.memory not available, using heuristic + periodic cleanup');
+    } else {
+      console.info('[MemoryWatchdog] Started monitoring memory usage');
     }
 
-    console.info('[MemoryWatchdog] Started monitoring memory usage');
+    // Always run checks — uses heuristic fallback when performance.memory unavailable
     this.checkTimer = setInterval(() => this.check(), CHECK_INTERVAL_MS);
     this.periodicTimer = setInterval(() => this.doCleanup('light'), PERIODIC_GC_INTERVAL_MS);
   }
@@ -69,19 +74,28 @@ export class MemoryWatchdogService {
 
   private static check(): void {
     const usage = this.getMemoryUsage();
-    if (!usage) return;
 
     let level: CleanupLevel = 'none';
-    if (usage.ratio >= EMERGENCY_THRESHOLD) {
-      level = 'emergency';
-    } else if (usage.ratio >= CRITICAL_THRESHOLD) {
-      level = 'aggressive';
-    } else if (usage.ratio >= WARN_THRESHOLD) {
-      level = 'light';
+
+    if (usage) {
+      // Real memory API available
+      if (usage.ratio >= EMERGENCY_THRESHOLD) {
+        level = 'emergency';
+      } else if (usage.ratio >= CRITICAL_THRESHOLD) {
+        level = 'aggressive';
+      } else if (usage.ratio >= WARN_THRESHOLD) {
+        level = 'light';
+      }
+    } else {
+      // Heuristic: estimate memory pressure from Gun graph size
+      level = this.estimateMemoryPressure();
     }
 
     if (level !== 'none') {
-      console.warn(`[MemoryWatchdog] Memory at ${usage.usedMB}MB / ${usage.limitMB}MB (${(usage.ratio * 100).toFixed(1)}%) → ${level} cleanup`);
+      const usageStr = usage
+        ? `${usage.usedMB}MB / ${usage.limitMB}MB (${(usage.ratio * 100).toFixed(1)}%)`
+        : `heuristic estimate`;
+      console.warn(`[MemoryWatchdog] Memory at ${usageStr} → ${level} cleanup`);
       this.doCleanup(level);
     }
 
@@ -97,6 +111,18 @@ export class MemoryWatchdogService {
     }
 
     this.lastLevel = level;
+  }
+
+  private static estimateMemoryPressure(): CleanupLevel {
+    try {
+      const nodeCount = GunService.getGraphNodeCount();
+      if (nodeCount >= HEURISTIC_EMERGENCY_NODES) return 'emergency';
+      if (nodeCount >= HEURISTIC_CRITICAL_NODES) return 'aggressive';
+      if (nodeCount >= HEURISTIC_WARN_NODES) return 'light';
+    } catch {
+      // GunService not initialized yet
+    }
+    return 'none';
   }
 
   private static doCleanup(level: CleanupLevel): void {

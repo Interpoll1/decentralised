@@ -854,15 +854,34 @@ function navigateToPoll(poll: Poll) { router.push(`/community/${poll.communityId
 
 const subscribedFromHome = new Set<string>();
 
+const GUN_SUBSCRIPTION_TIMEOUT_MS = 8_000;
+
 async function subscribeNewCommunities(communities: typeof communityStore.communities) {
   const newOnes = communities.filter(c => !subscribedFromHome.has(c.id));
   if (newOnes.length === 0) return;
   newOnes.forEach(c => subscribedFromHome.add(c.id));
-  if (subscribedFromHome.size === newOnes.length) isLoadingPosts.value = true;
+  const isFirstBatch = subscribedFromHome.size === newOnes.length;
+
+  // Only show loading spinner if we have NO warmup data yet
+  const didSetLoading = isFirstBatch && combinedFeed.value.length === 0;
+  if (didSetLoading) isLoadingPosts.value = true;
+
+  // Gun subscriptions may hang if relay is down — cap wait
+  const subPromises = newOnes.flatMap(c => [
+    postStore.loadPostsForCommunity(c.id),
+    pollStore.loadPollsForCommunity(c.id),
+  ]);
+  let timerId: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<void>(r => { timerId = setTimeout(r, GUN_SUBSCRIPTION_TIMEOUT_MS); });
+
   try {
-    await Promise.all(newOnes.flatMap(c => [postStore.loadPostsForCommunity(c.id), pollStore.loadPollsForCommunity(c.id)]));
-  } catch (error) { console.error('[HomePage] Error subscribing to communities:', error); }
-  finally { isLoadingPosts.value = false; }
+    await Promise.race([Promise.all(subPromises), timeout]);
+  } catch (error) {
+    console.error('[HomePage] Error subscribing to communities:', error);
+  } finally {
+    clearTimeout(timerId!);
+    if (didSetLoading) isLoadingPosts.value = false;
+  }
 }
 
 async function showPostOptions() {

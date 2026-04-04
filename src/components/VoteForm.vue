@@ -74,11 +74,11 @@ import {
 } from '@ionic/vue';
 import { informationCircle, warningOutline } from 'ionicons/icons';
 import { useChainStore } from '../stores/chainStore';
+import { usePollStore } from '../stores/pollStore';
 import { VoteTrackerService } from '../services/voteTrackerService';
 import { Poll, Vote } from '../types/chain';
 import { AuditService } from '../services/auditService';
 import { PollService } from '../services/pollService';
-import { UserService } from '../services/userService';
 
 interface Props {
   poll: Poll;
@@ -90,6 +90,7 @@ const props = defineProps<Props>();
 const emit = defineEmits(['vote-submitted']);
 
 const chainStore = useChainStore();
+const pollStore = usePollStore();
 const selectedOption = ref('');
 const isSubmitting = ref(false);
 const hasAlreadyVoted = ref(false);
@@ -188,15 +189,14 @@ const submitVote = async () => {
     // Add vote to blockchain
     const receipt = await chainStore.addVote(vote);
 
-    // Also update Gun poll option counts so results show up everywhere
+    // Also update Gun poll option counts via store (optimistic + protected from bounce-back)
     try {
       const matchedOption = (props.poll.options as any[]).find((o: any) => {
         if (typeof o === 'string') return false;
         return o.text === selectedOption.value || o.id === selectedOption.value;
       });
       if (matchedOption?.id) {
-        const user = await UserService.getCurrentUser();
-        await PollService.voteOnPoll(props.poll.id, [matchedOption.id], user.id);
+        await pollStore.voteOnPoll(props.poll.id, [matchedOption.id]);
       }
     } catch (gunErr) {
       // Non-critical: blockchain vote succeeded, Gun count update is best-effort

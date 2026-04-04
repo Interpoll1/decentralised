@@ -1,6 +1,6 @@
 // src/stores/pollStore.ts
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { ref, computed, onScopeDispose } from 'vue';
 import type { Poll } from '../services/pollService';
 import { PollService } from '../services/pollService';
 import { UserService } from '../services/userService';
@@ -44,9 +44,19 @@ export const usePollStore = defineStore('poll', () => {
   const unsubscribers = new Map<string, () => void>();
   // Per-community initial load tracking to avoid cross-community misclassification
   const initialLoadDoneByCommId = new Map<string, boolean>();
-  // Tracks polls that were just voted on to prevent stale GunDB data from overwriting optimistic updates
+  // Recently-voted polls: Gun subscription won't overwrite vote counts during this window
   const recentlyVotedPolls = new Map<string, number>();
-  const VOTE_GUARD_MS = 5000;
+  const VOTE_PROTECTION_MS = 10_000; // 10s protection window after voting
+
+  function isVoteProtected(pollId: string): boolean {
+    const ts = recentlyVotedPolls.get(pollId);
+    if (!ts) return false;
+    if (Date.now() - ts > VOTE_PROTECTION_MS) {
+      recentlyVotedPolls.delete(pollId);
+      return false;
+    }
+    return true;
+  }
 
   /** Attempt to decrypt an encrypted poll and update the store */
   function tryDecryptPoll(poll: Poll) {
@@ -66,7 +76,7 @@ export const usePollStore = defineStore('poll', () => {
   const polls = computed(() => Array.from(pollsMap.value.values()));
 
   const sortedPolls = computed(() =>
-    Array.from(pollsMap.value.values()).sort((a, b) => b.createdAt - a.createdAt)
+    [...polls.value].sort((a, b) => b.createdAt - a.createdAt)
   );
 
   const activePolls  = computed(() => sortedPolls.value.filter(p => !p.isExpired));
@@ -75,7 +85,12 @@ export const usePollStore = defineStore('poll', () => {
 
   // ─── Loading ───────────────────────────────────────────────────────────────
 
+  const pendingLoads = new Map<string, Promise<void>>();
+
   function loadPollsForCommunity(communityId: string): Promise<void> {
+    // If a load is already in-flight, return the same promise to avoid orphaning it
+    if (pendingLoads.has(communityId)) return pendingLoads.get(communityId)!;
+
     // Allow re-subscription if previous attempt yielded zero polls (GunDB was offline/slow)
     if (subscribedCommunities.has(communityId) || unsubscribers.has(communityId)) {
       const hasPolls = Array.from(pollsMap.value.values()).some(p => p.communityId === communityId);
@@ -86,28 +101,18 @@ export const usePollStore = defineStore('poll', () => {
       subscribedCommunities.delete(communityId);
     }
 
-    return new Promise((resolve) => {
+    const p = new Promise<void>((resolve) => {
       initialLoadDoneByCommId.set(communityId, false);
+      // Resolve after 15 s even if GunDB never fires the done callback (graceful degradation)
+      const timeoutId = setTimeout(resolve, 15_000);
       const unsub = PollService.subscribeToPollsInCommunity(
         communityId,
 
         // Phase 1: shell poll arrives
         (poll) => {
-          const inPending = pendingNewPolls.value.findIndex(p => p.id === poll.id);
-          if (inPending !== -1) {
-            pendingNewPolls.value[inPending] = poll;
-            if (currentPoll.value?.id === poll.id) {
-              currentPoll.value = poll;
-            }
-            return;
-          }
-
           if (pollsMap.value.has(poll.id)) {
-            // Skip stale GunDB updates for recently-voted polls
-            const votedAt = recentlyVotedPolls.get(poll.id);
-            if (votedAt && Date.now() - votedAt < VOTE_GUARD_MS) {
-              return;
-            }
+            // Skip Gun re-delivery if this poll was just voted on (prevents bounce-back)
+            if (isVoteProtected(poll.id)) return;
             // Don't overwrite a poll that has options with one that has none
             const existing = pollsMap.value.get(poll.id)!;
             if (existing.options.length > 0 && poll.options.length === 0) {
@@ -129,16 +134,12 @@ export const usePollStore = defineStore('poll', () => {
 
           const isGenuinelyNew = poll.createdAt > APP_START_TIME;
 
+          pollsMap.value.set(poll.id, poll);
+          tryDecryptPoll(poll);
+          seenPollIds.add(poll.id);
+          // Flush persisted seen-IDs immediately for live arrivals
           if (initialLoadDoneByCommId.get(communityId) && isGenuinelyNew) {
-            // Auto-add immediately — no banner
-            pollsMap.value.set(poll.id, poll);
-            tryDecryptPoll(poll);
-            seenPollIds.add(poll.id);
             saveSeenIds(seenPollIds);
-          } else {
-            pollsMap.value.set(poll.id, poll);
-            tryDecryptPoll(poll);
-            seenPollIds.add(poll.id);
           }
           if (currentPoll.value?.id === poll.id) {
             currentPoll.value = poll;
@@ -147,26 +148,20 @@ export const usePollStore = defineStore('poll', () => {
 
         // Initial batch done
         () => {
+          clearTimeout(timeoutId);
           subscribedCommunities.add(communityId);
           initialLoadDoneByCommId.set(communityId, true);
           for (const id of pollsMap.value.keys()) seenPollIds.add(id);
           saveSeenIds(seenPollIds);
           resolve();
         },
-
-        // Phase 2: options patched in
-        (updatedPoll) => {
-          // Always update — options loading in is never "new content"
-          pollsMap.value.set(updatedPoll.id, updatedPoll);
-          tryDecryptPoll(updatedPoll);
-          if (currentPoll.value?.id === updatedPoll.id) {
-            currentPoll.value = updatedPoll;
-          }
-        },
       );
 
       unsubscribers.set(communityId, unsub);
     });
+    pendingLoads.set(communityId, p);
+    p.finally(() => { if (pendingLoads.get(communityId) === p) pendingLoads.delete(communityId); });
+    return p;
   }
 
   // No-op — kept so existing components don't break
@@ -175,27 +170,26 @@ export const usePollStore = defineStore('poll', () => {
   }
 
   function injectPoll(poll: Poll) {
-  const existing = pollsMap.value.get(poll.id)
-  if (!existing) {
-    pollsMap.value.set(poll.id, poll)
-    tryDecryptPoll(poll)
-  } else if (poll.options.length > 0 && existing.options.length === 0) {
-    // Existing has no options yet — take the incoming version
-    pollsMap.value.set(poll.id, poll)
-    tryDecryptPoll(poll)
-  } else if (poll.options.length > 0 && (poll.totalVotes || 0) >= (existing.totalVotes || 0)) {
-    // Accept updates with equal or higher vote counts (avoids reverting votes)
-    const votedAt = recentlyVotedPolls.get(poll.id);
-    if (!votedAt || Date.now() - votedAt >= VOTE_GUARD_MS) {
-      pollsMap.value.set(poll.id, poll)
-      tryDecryptPoll(poll)
+    const existing = pollsMap.value.get(poll.id);
+    if (!existing) {
+      pollsMap.value.set(poll.id, poll);
+      tryDecryptPoll(poll);
+    } else if (poll.options.length > 0 && existing.options.length === 0) {
+      // Existing has no options yet — take the incoming version
+      pollsMap.value.set(poll.id, poll);
+      tryDecryptPoll(poll);
+    } else if (poll.options.length > 0 && (poll.totalVotes || 0) >= (existing.totalVotes || 0)) {
+      // Accept updates with equal or higher vote counts (avoids reverting votes)
+      if (!isVoteProtected(poll.id)) {
+        pollsMap.value.set(poll.id, poll);
+        tryDecryptPoll(poll);
+      }
     }
+    if (currentPoll.value?.id === poll.id) {
+      currentPoll.value = pollsMap.value.get(poll.id) || currentPoll.value;
+    }
+    seenPollIds.add(poll.id);
   }
-  if (currentPoll.value?.id === poll.id) {
-    currentPoll.value = pollsMap.value.get(poll.id) || currentPoll.value
-  }
-  seenPollIds.add(poll.id)
-}
 
   function saveSeenNow() {
     saveSeenIds(seenPollIds);
@@ -259,17 +253,23 @@ export const usePollStore = defineStore('poll', () => {
   async function voteOnPoll(pollId: string, optionIds: string[]) {
     const user     = await UserService.getCurrentUser();
     const original = pollsMap.value.get(pollId);
-    // Guard against stale GunDB subscription data overwriting the optimistic update
-    recentlyVotedPolls.set(pollId, Date.now());
-    setTimeout(() => recentlyVotedPolls.delete(pollId), VOTE_GUARD_MS + 1000);
+
+    // Sweep expired vote-protection entries
+    const now = Date.now();
+    for (const [id, ts] of recentlyVotedPolls) {
+      if (now - ts > VOTE_PROTECTION_MS) recentlyVotedPolls.delete(id);
+    }
+
+    // Mark as vote-protected BEFORE optimistic update to block stale Gun re-deliveries
+    recentlyVotedPolls.set(pollId, now);
+
     if (original) {
       const optimistic: Poll = {
         ...original,
         options: original.options.map(opt =>
           optionIds.includes(opt.id) ? { ...opt, votes: opt.votes + 1 } : opt
         ),
-        totalVotes: 0,
-      };
+      } as Poll;
       optimistic.totalVotes = optimistic.options.reduce((sum, opt) => sum + (opt.votes || 0), 0);
       pollsMap.value.set(pollId, optimistic);
       if (currentPoll.value?.id === pollId) currentPoll.value = optimistic;
@@ -294,14 +294,17 @@ export const usePollStore = defineStore('poll', () => {
     try {
       const existing = pollsMap.value.get(pollId);
       if (existing && existing.options.length > 0) {
+        tryDecryptPoll(existing);
         currentPoll.value = existing;
         return;
       }
       const poll = await PollService.loadPoll(pollId);
-      currentPoll.value = poll;
       if (poll) {
         pollsMap.value.set(poll.id, poll);
         tryDecryptPoll(poll);
+        currentPoll.value = poll;
+      } else {
+        currentPoll.value = null;
       }
     } finally {
       isLoading.value = false;
@@ -315,12 +318,24 @@ export const usePollStore = defineStore('poll', () => {
     if (unsub) unsub();
     unsubscribers.delete(communityId);
     subscribedCommunities.delete(communityId);
-    for (const [id, poll] of pollsMap.value) {
-      if (poll.communityId === communityId) pollsMap.value.delete(id);
+    initialLoadDoneByCommId.delete(communityId);
+    pendingLoads.delete(communityId);
+    const toDelete = [...pollsMap.value.entries()]
+      .filter(([, p]) => p.communityId === communityId)
+      .map(([id]) => id);
+    for (const id of toDelete) {
+      pollsMap.value.delete(id);
+      recentlyVotedPolls.delete(id);
     }
     resetVisibleCount();
     await loadPollsForCommunity(communityId);
   }
+
+  onScopeDispose(() => {
+    for (const unsub of unsubscribers.values()) unsub();
+    initialLoadDoneByCommId.clear();
+    pendingLoads.clear();
+  });
 
   return {
     polls, pollsMap, currentPoll, isLoading,

@@ -160,6 +160,14 @@ export class GunService {
     this.isInitialized = false;
   }
 
+  static getGraphNodeCount(): number {
+    if (!this.gun) return 0;
+    try {
+      const graph = this.gun._.graph;
+      return graph && typeof graph === 'object' ? Object.keys(graph).length : 0;
+    } catch { return 0; }
+  }
+
   static evictCache(level: 'light' | 'aggressive' | 'emergency' = 'light'): void {
     if (!this.gun || this.evicting) return;
     this.evicting = true;
@@ -192,7 +200,7 @@ export class GunService {
           }
         }
       } else {
-        const MAX_NODES = 5000;
+        const MAX_NODES = 2000;
         if (totalBefore > MAX_NODES) {
           const toEvict = keys.slice(0, totalBefore - MAX_NODES);
           for (const key of toEvict) {

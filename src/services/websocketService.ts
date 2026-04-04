@@ -43,8 +43,10 @@ export class WebSocketService {
   }
   private static peers: Set<string> = new Set();
   private static peerAddresses: Map<string, { peerId: string; relayUrl: string; gunPeers: string[]; joinedAt: number }> = new Map();
+  private static readonly MAX_PEER_ADDRESSES = 200;
   private static statusListeners: Set<(status: { connected: boolean; peerCount: number }) => void> = new Set();
   private static knownServers: Map<string, KnownServer> = new Map();
+  private static readonly MAX_KNOWN_SERVERS = 50;
   private static keepAliveTimer: ReturnType<typeof setInterval> | null = null;
   private static reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private static lastConnectUrl: string | null = null;
@@ -210,6 +212,14 @@ export class WebSocketService {
       // Listen for address broadcasts from other peers
       this.subscribe('peer-addresses', (data: any) => {
         if (data?.peerId && data.peerId !== this.peerId) {
+          // Delete first to refresh insertion order (true LRU)
+          if (this.peerAddresses.has(data.peerId)) {
+            this.peerAddresses.delete(data.peerId);
+          } else if (this.peerAddresses.size >= this.MAX_PEER_ADDRESSES) {
+            // Evict oldest entry if at capacity
+            const oldestKey = this.peerAddresses.keys().next().value;
+            if (oldestKey) this.peerAddresses.delete(oldestKey);
+          }
           this.peerAddresses.set(data.peerId, {
             peerId: data.peerId,
             relayUrl: data.relayUrl || '',
@@ -274,8 +284,27 @@ export class WebSocketService {
   }
 
   static addKnownServer(server: KnownServer) {
+    // Validate URLs — reject non-secure or malformed entries
+    try {
+      const wsUrl = new URL(server.websocket);
+      const gunUrl = new URL(server.gun);
+      const apiUrl = new URL(server.api);
+      if (wsUrl.protocol !== 'wss:' || gunUrl.protocol !== 'https:' || apiUrl.protocol !== 'https:') {
+        console.debug('[WS] Rejected non-TLS server:', server.websocket);
+        return;
+      }
+    } catch {
+      console.debug('[WS] Rejected malformed server URL:', server.websocket);
+      return;
+    }
+
     const key = server.websocket;
     if (!this.knownServers.has(key)) {
+      // Evict oldest entry if at capacity
+      if (this.knownServers.size >= this.MAX_KNOWN_SERVERS) {
+        const oldestKey = this.knownServers.keys().next().value;
+        if (oldestKey) this.knownServers.delete(oldestKey);
+      }
       this.knownServers.set(key, {
         ...server,
         firstSeen: server.firstSeen || Date.now(),
@@ -307,7 +336,16 @@ export class WebSocketService {
       const raw = localStorage.getItem('interpoll_known_servers');
       if (raw) {
         const servers: KnownServer[] = JSON.parse(raw);
-        for (const server of servers) {
+        const capped = servers.slice(-this.MAX_KNOWN_SERVERS);
+        for (const server of capped) {
+          // Validate URL format and scheme before loading
+          if (typeof server.websocket !== 'string' || typeof server.gun !== 'string' || typeof server.api !== 'string') continue;
+          try {
+            const wsUrl = new URL(server.websocket);
+            const gunUrl = new URL(server.gun);
+            const apiUrl = new URL(server.api);
+            if (wsUrl.protocol !== 'wss:' || gunUrl.protocol !== 'https:' || apiUrl.protocol !== 'https:') continue;
+          } catch { continue; }
           this.knownServers.set(server.websocket, server);
         }
       }
