@@ -400,18 +400,26 @@ function openInviteCodePage() {
 async function submitVote() {
   if (!poll.value || !canSubmitVote.value || isSubmitting.value) return
   isSubmitting.value = true
+  console.log('[Vote] Starting vote submission for poll:', poll.value.id)
 
   const timeout = setTimeout(() => { isSubmitting.value = false }, 15000)
 
   try {
+    console.log('[Vote] Step 1: Getting device ID...')
     const deviceId = await VoteTrackerService.getDeviceId()
+    console.log('[Vote] Step 1 done. Device ID:', deviceId.substring(0, 8) + '...')
 
+    console.log('[Vote] Step 2: Checking local vote state...')
     if (await VoteTrackerService.hasVoted(poll.value.id)) {
+      console.log('[Vote] Already voted locally — blocking')
       hasVoted.value = true
       return
     }
+    console.log('[Vote] Step 2 done — not voted locally')
 
+    console.log('[Vote] Step 3: Authorizing with backend...')
     const allowedByBackend = await AuditService.authorizeVote(poll.value.id, deviceId)
+    console.log('[Vote] Step 3 done. Allowed:', allowedByBackend)
     if (!allowedByBackend) {
       hasVoted.value = true;
       await presentToast('Already voted on this poll', 3000)
@@ -425,12 +433,15 @@ async function submitVote() {
     const choiceText = optionIds
       .map(id => poll.value!.options.find(o => o.id === id)?.text || id)
       .join(', ')
+    console.log('[Vote] Selected options:', optionIds, 'Choice:', choiceText)
 
     // Chain init with timeout
+    console.log('[Vote] Step 4: Initializing chain...')
     await Promise.race([
       chainStore.initialize(),
       new Promise((_, reject) => setTimeout(() => reject(new Error('chain timeout')), 5000))
     ]).catch(() => {})
+    console.log('[Vote] Step 4 done — chain ready')
 
     const vote: Vote = {
       pollId: poll.value.id,
@@ -438,7 +449,9 @@ async function submitVote() {
       timestamp: Date.now(),
       deviceId
     }
+    console.log('[Vote] Step 5: Adding vote to chain...')
     const receipt = await chainStore.addVote(vote)
+    console.log('[Vote] Step 5 done — block:', receipt.blockIndex)
 
     // ── Mark as voted IMMEDIATELY after chain confirms ────────────────────────
     // Do this BEFORE GunDB write so that if Gun fails the vote is still counted
@@ -447,16 +460,19 @@ async function submitVote() {
     if (!votedPolls.includes(poll.value.id)) votedPolls.push(poll.value.id)
     localStorage.setItem('voted-polls', JSON.stringify(votedPolls))
     // Record device fingerprint vote — non-blocking
-    VoteTrackerService.recordVote(poll.value.id, receipt.blockIndex).catch((e) => console.warn('VoteTracker failed:', e))
+    VoteTrackerService.recordVote(poll.value.id, receipt.blockIndex).catch((e) => console.warn('[Vote] VoteTracker failed:', e))
+    console.log('[Vote] Step 6: Vote marked as cast locally')
 
     // ── Persist vote via store (optimistic update + GunDB write) ─────────────
     // GunDB write is best-effort: failure here does NOT invalidate the vote
+    console.log('[Vote] Step 7: Writing to GunDB...')
     try {
       await pollStore.voteOnPoll(poll.value.id, optionIds)
       // Sync local ref with the store's updated data
       poll.value = pollStore.pollsMap.get(poll.value.id) || poll.value
+      console.log('[Vote] Step 7 done — GunDB write succeeded')
     } catch (gunErr) {
-      console.warn('GunDB vote write failed (vote is still on-chain):', gunErr)
+      console.warn('[Vote] Step 7 — GunDB write failed (vote is still on-chain):', gunErr)
       // Optimistically apply vote counts locally so UI reflects the vote
       if (poll.value) {
         const updatedOpts = poll.value.options.map(opt =>
@@ -496,6 +512,7 @@ async function submitVote() {
       }).catch(() => {})
     }).catch(() => {})
 
+    console.log('[Vote] ✅ Vote submitted successfully — total votes:', newTotalVotes)
     await presentToast('Vote submitted!')
 
     // Reload from API after delay — only accept if vote counts haven't regressed
@@ -528,7 +545,7 @@ async function submitVote() {
     }, 3000)
 
   } catch (error) {
-    console.error('Vote error:', error);
+    console.error('[Vote] ❌ Vote error:', error);
     await presentToast('Failed to submit vote')
   } finally {
     clearTimeout(timeout)
