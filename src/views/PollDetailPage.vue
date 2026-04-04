@@ -26,7 +26,7 @@
       <div v-else-if="!poll" class="empty-state">
         <ion-icon :icon="alertCircleOutline" size="large"></ion-icon>
         <p>Poll not found</p>
-        <ion-button @click="$router.push('/home')">Go Home</ion-button>
+        <ion-button @click="() => { window.location.href = '/home' }">Go Home</ion-button>
       </div>
 
       <!-- Poll Content -->
@@ -242,7 +242,7 @@
 </template>
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import {
   IonPage,
   IonHeader,
@@ -292,7 +292,6 @@ import { generatePseudonym } from '../utils/pseudonym';
 import config from '../config';
 
 const route = useRoute();
-const router = useRouter();
 const pollStore = usePollStore();
 const chainStore = useChainStore();
 
@@ -395,7 +394,7 @@ async function presentToast(message: string, duration = 2000) {
 function openInviteCodePage() {
   if (!poll.value?.id) return;
   blurActiveElement();
-  void router.push(`/vote/${poll.value.id}`);
+  window.location.href = `/vote/${poll.value.id}`;
 }
 
 async function submitVote() {
@@ -441,10 +440,35 @@ async function submitVote() {
     }
     const receipt = await chainStore.addVote(vote)
 
-    // ── Persist vote via store (optimistic update + GunDB write with rollback) ──
-    await pollStore.voteOnPoll(poll.value.id, optionIds)
-    // Sync local ref with the store's updated data
-    poll.value = pollStore.pollsMap.get(poll.value.id) || poll.value
+    // ── Mark as voted IMMEDIATELY after chain confirms ────────────────────────
+    // Do this BEFORE GunDB write so that if Gun fails the vote is still counted
+    hasVoted.value = true
+    const votedPolls = JSON.parse(localStorage.getItem('voted-polls') || '[]')
+    if (!votedPolls.includes(poll.value.id)) votedPolls.push(poll.value.id)
+    localStorage.setItem('voted-polls', JSON.stringify(votedPolls))
+    // Record device fingerprint vote — non-blocking
+    VoteTrackerService.recordVote(poll.value.id, receipt.blockIndex).catch((e) => console.warn('VoteTracker failed:', e))
+
+    // ── Persist vote via store (optimistic update + GunDB write) ─────────────
+    // GunDB write is best-effort: failure here does NOT invalidate the vote
+    try {
+      await pollStore.voteOnPoll(poll.value.id, optionIds)
+      // Sync local ref with the store's updated data
+      poll.value = pollStore.pollsMap.get(poll.value.id) || poll.value
+    } catch (gunErr) {
+      console.warn('GunDB vote write failed (vote is still on-chain):', gunErr)
+      // Optimistically apply vote counts locally so UI reflects the vote
+      if (poll.value) {
+        const updatedOpts = poll.value.options.map(opt =>
+          optionIds.includes(opt.id) ? { ...opt, votes: opt.votes + 1 } : opt
+        )
+        poll.value = {
+          ...poll.value,
+          options: updatedOpts,
+          totalVotes: updatedOpts.reduce((s, o) => s + (o.votes || 0), 0),
+        }
+      }
+    }
 
     // ── Write to MySQL via relay (non-blocking backup persistence) ──────────
     const gunRelayBase = config.relay.gun.replace(/\/gun$/, '')
@@ -471,13 +495,6 @@ async function submitVote() {
         })
       }).catch(() => {})
     }).catch(() => {})
-
-    await VoteTrackerService.recordVote(poll.value.id, receipt.blockIndex)
-
-    hasVoted.value = true
-    const votedPolls = JSON.parse(localStorage.getItem('voted-polls') || '[]')
-    votedPolls.push(poll.value.id)
-    localStorage.setItem('voted-polls', JSON.stringify(votedPolls));
 
     await presentToast('Vote submitted!')
 

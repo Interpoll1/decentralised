@@ -847,8 +847,10 @@ async function handleDownvote(post: Post) {
 function getCommunityName(communityId: string): string {
   return communityStore.communities.find(c => c.id === communityId)?.displayName || communityId;
 }
-function navigateToPost(post: Post) { router.push(`/community/${post.communityId}/post/${post.id}`); }
-function navigateToPoll(poll: Poll) { router.push(`/community/${poll.communityId}/poll/${poll.id}`); }
+// Full-page reload on post/poll navigation ensures fresh GunDB subscriptions
+// and avoids stale-store interference when navigating between content items
+function navigateToPost(post: Post) { window.location.href = `/community/${post.communityId}/post/${post.id}`; }
+function navigateToPoll(poll: Poll) { window.location.href = `/community/${poll.communityId}/poll/${poll.id}`; }
 
 // ── Community subscriptions ───────────────────────────────────────────────────
 

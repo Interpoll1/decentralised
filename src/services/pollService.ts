@@ -3,8 +3,6 @@ import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
 import config from '../config';
 
-const API_URL = 'https://interpoll.endless.sbs';
-
 function getGunRelayBase(): string {
   return config.relay.gun.replace(/\/gun$/, '');
 }
@@ -49,7 +47,7 @@ async function indexForSearch(type: 'post' | 'poll', id: string, data: any) {
       { type, id, data } as Record<string, unknown>,
       'index',
     );
-    await fetch(`${API_URL}/api/index`, {
+    await fetch(`${config.relay.api}/api/index`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -161,7 +159,7 @@ export class PollService {
   // ── API-first poll fetch (replaces Gun-first approach) ───────────────────────
   private static async loadPollFromAPI(pollId: string): Promise<{ pollData: any | null; options: PollOption[] }> {
     try {
-      const res = await fetch(`${API_URL}/api/poll/${pollId}`, {
+      const res = await fetch(`${config.relay.api}/api/poll/${pollId}`, {
         headers: { 'Cache-Control': 'stale-while-revalidate=30' },
       });
       if (!res.ok) return { pollData: null, options: [] };
@@ -673,9 +671,18 @@ export class PollService {
     return codes;
   }
 
-  private static putPromise(node: any, data: any): Promise<void> {
+  private static putPromise(node: any, data: any, timeoutMs = 8000): Promise<void> {
     return new Promise((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        reject(new Error('Gun put timed out'));
+      }, timeoutMs);
       node.put(data, (ack: any) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
         if (ack.err) reject(new Error(ack.err)); else resolve();
       });
     });

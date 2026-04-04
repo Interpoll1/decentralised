@@ -12,14 +12,13 @@
 
 import { isVersionEnabled } from '../utils/dataVersionSettings'
 import { GUN_NAMESPACE } from './gunService'
-
-const NUXT_API = 'https://interpoll.endless.sbs'
+import config from '../config'
 
 let warmupDone = false
 
 // ── Shared fetch with stale-while-revalidate ──────────────────────────────────
 async function apiFetch(path: string): Promise<any> {
-  const res = await fetch(`${NUXT_API}${path}`, {
+  const res = await fetch(`${config.relay.api}${path}`, {
     headers: { 'Cache-Control': 'stale-while-revalidate=30' },
   })
   if (!res.ok) throw new Error(`API ${path} → ${res.status}`)
@@ -151,7 +150,6 @@ export async function warmupFromDB(): Promise<void> {
 // ── v1 legacy posts — Gun relay search, non-blocking ─────────────────────────
 async function fetchV1Posts(postStore: any) {
   try {
-    const { default: config } = await import('../config')
     const base = config.relay.gun.replace(/\/gun$/, '')
     const res = await fetch(`${base}/db/search?prefix=posts&limit=500`)
     if (!res.ok) return
