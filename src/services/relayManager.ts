@@ -1,4 +1,5 @@
 import config from '@/config';
+import type { KnownServer } from './websocketService';
 
 export interface RelayEndpoint {
   id: string;
@@ -9,31 +10,69 @@ export interface RelayEndpoint {
   priority: number;
   isTor: boolean;
   addedAt: number;
+  source?: 'configured' | 'discovered';
+  trusted?: boolean;
   lastSeen?: number;
   latencyMs?: number;
   status: 'unknown' | 'online' | 'offline' | 'degraded';
+}
+
+export interface TransportStrategySettings {
+  preferDecentralized: boolean;
+  allowWssFallback: boolean;
+  allowDiscoveredAutoSwitch: boolean;
+  autoSwitch: boolean;
+  discoveryTtlMs: number;
+  maxFailuresBeforeCooldown: number;
+  cooldownMs: number;
+  healthProbeRequired: boolean;
 }
 
 export interface RelayListConfig {
   relays: RelayEndpoint[];
   activeRelayId: string | null;
   autoFailover: boolean;
+  transport: TransportStrategySettings;
 }
 
 const STORAGE_KEY = 'interpoll_relay_list';
+const LEGACY_AUTO_FAILOVER_KEY = 'interpoll_auto_failover';
 const HEALTH_CHECK_INTERVAL = 60_000;
 const PROBE_TIMEOUT = 8_000;
+const RUNTIME_SWITCH_DEBOUNCE_MS = 1_500;
+const MAX_DISCOVERED_RELAYS = 20;
+
+const DEFAULT_TRANSPORT_SETTINGS: TransportStrategySettings = {
+  preferDecentralized: true,
+  allowWssFallback: true,
+  allowDiscoveredAutoSwitch: false,
+  autoSwitch: true,
+  discoveryTtlMs: 5 * 60_000,
+  maxFailuresBeforeCooldown: 3,
+  cooldownMs: 120_000,
+  healthProbeRequired: true,
+};
+
+interface SwitchFailureState {
+  failures: number;
+  cooldownUntil: number;
+}
 
 export class RelayManager {
   private static config: RelayListConfig = {
     relays: [],
     activeRelayId: null,
     autoFailover: true,
+    transport: { ...DEFAULT_TRANSPORT_SETTINGS },
   };
   private static healthCheckTimer: ReturnType<typeof setTimeout> | null = null;
+  private static runtimeSwitchTimer: ReturnType<typeof setTimeout> | null = null;
+  private static wsStatusUnsubscribe: (() => void) | null = null;
   private static changeListeners: Array<(relays: RelayEndpoint[]) => void> = [];
+  private static switchFailures = new Map<string, SwitchFailureState>();
   private static switching = false;
   private static stopped = false;
+  private static initialized = false;
 
   static initialize(): void {
     this.stopped = false;
@@ -48,6 +87,8 @@ export class RelayManager {
         api: config.relay.api,
         priority: 0,
         isTor: false,
+        source: 'configured',
+        trusted: true,
         addedAt: Date.now(),
         status: 'unknown',
       };
@@ -56,13 +97,17 @@ export class RelayManager {
       this.persist();
     }
 
-    // Fix dangling activeRelayId reference
     if (
       this.config.activeRelayId &&
       !this.config.relays.some((r) => r.id === this.config.activeRelayId)
     ) {
       this.config.activeRelayId = this.config.relays[0]?.id ?? null;
       this.persist();
+    }
+
+    if (!this.initialized) {
+      this.attachWebSocketStatusMonitor();
+      this.initialized = true;
     }
 
     if (this.config.autoFailover) {
@@ -74,10 +119,31 @@ export class RelayManager {
     return [...this.config.relays].sort((a, b) => a.priority - b.priority);
   }
 
+  static getTransportSettings(): TransportStrategySettings {
+    return { ...this.config.transport };
+  }
+
+  static setTransportSettings(partial: Partial<TransportStrategySettings>): void {
+    this.config.transport = {
+      ...this.config.transport,
+      ...partial,
+      discoveryTtlMs: Math.max(30_000, partial.discoveryTtlMs ?? this.config.transport.discoveryTtlMs),
+      maxFailuresBeforeCooldown: Math.max(1, partial.maxFailuresBeforeCooldown ?? this.config.transport.maxFailuresBeforeCooldown),
+      cooldownMs: Math.max(10_000, partial.cooldownMs ?? this.config.transport.cooldownMs),
+    };
+    this.persist();
+  }
+
   static addRelay(relay: Omit<RelayEndpoint, 'id' | 'addedAt' | 'status'>): string {
+    if (!this.isEndpointSetSafe(relay.ws, relay.gun, relay.api)) {
+      throw new Error('Relay endpoints use unsafe or invalid protocols for this environment');
+    }
+
     const id = this.generateId();
     const endpoint: RelayEndpoint = {
       ...relay,
+      source: relay.source ?? 'configured',
+      trusted: relay.trusted ?? true,
       id,
       addedAt: Date.now(),
       status: 'unknown',
@@ -100,6 +166,7 @@ export class RelayManager {
     if (this.config.activeRelayId === id) {
       this.config.activeRelayId = this.getRelayList()[0]?.id ?? null;
     }
+    this.switchFailures.delete(id);
     this.persist();
     this.notifyListeners();
   }
@@ -130,6 +197,24 @@ export class RelayManager {
       return;
     }
 
+    if (this.isInCooldown(id)) {
+      console.warn(`[RelayManager] Relay ${id} is in cooldown; skipping switch`);
+      return;
+    }
+
+    if (!this.isEndpointSetSafe(relay.ws, relay.gun, relay.api)) {
+      this.noteFailure(id);
+      throw new Error(`Unsafe relay endpoint protocols for ${relay.label}`);
+    }
+
+    if (this.config.transport.healthProbeRequired) {
+      const probe = await this.probeRelay(relay);
+      if (probe.status !== 'online') {
+        this.noteFailure(id);
+        throw new Error(`Relay ${relay.label} is not healthy enough to switch (${probe.status})`);
+      }
+    }
+
     this.switching = true;
     const previousId = this.config.activeRelayId;
     const previousOverrides = config.getRelayOverrides();
@@ -146,17 +231,22 @@ export class RelayManager {
       GunService.reconnect(relay.gun);
 
       this.config.activeRelayId = id;
+      this.clearFailure(id);
       this.persist();
       this.notifyListeners();
     } catch (e) {
+      this.noteFailure(id);
       this.config.activeRelayId = previousId;
+      config.resetRelayOverrides();
       config.setRelayOverrides(previousOverrides);
       try {
         const { WebSocketService: WS } = await import('./websocketService');
         const { GunService: GS } = await import('./gunService');
         WS.reconnect(previousOverrides.websocket);
         GS.reconnect(previousOverrides.gun);
-      } catch { /* best-effort rollback */ }
+      } catch {
+        // Best-effort rollback
+      }
       console.error('[RelayManager] Switch failed, rolling back', e);
       throw e;
     } finally {
@@ -167,17 +257,26 @@ export class RelayManager {
   static async probeRelay(relay: RelayEndpoint): Promise<RelayEndpoint> {
     const probe = { ...relay };
     let wsOk = false;
+    let gunOk = false;
     let apiOk = false;
     let latency = Infinity;
 
-    // WebSocket probe
+    if (!this.isEndpointSetSafe(probe.ws, probe.gun, probe.api)) {
+      probe.status = 'offline';
+      return probe;
+    }
+
     try {
       const start = performance.now();
       await new Promise<void>((resolve, reject) => {
         const ws = new WebSocket(probe.ws);
         let settled = false;
         const timer = setTimeout(() => {
-          if (!settled) { settled = true; ws.close(); reject(new Error('timeout')); }
+          if (!settled) {
+            settled = true;
+            ws.close();
+            reject(new Error('timeout'));
+          }
         }, PROBE_TIMEOUT);
         ws.onopen = () => {
           if (settled) return;
@@ -206,7 +305,23 @@ export class RelayManager {
       // WebSocket unreachable
     }
 
-    // API probe
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT);
+      const gunProbeUrl = probe.gun.includes('?')
+        ? `${probe.gun}&relay_probe=1`
+        : `${probe.gun}?relay_probe=1`;
+      const res = await fetch(gunProbeUrl, {
+        method: 'GET',
+        signal: controller.signal,
+        headers: { Accept: '*/*' },
+      });
+      clearTimeout(timer);
+      gunOk = res.ok || res.status === 404;
+    } catch {
+      // Gun endpoint unreachable
+    }
+
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT);
@@ -216,7 +331,6 @@ export class RelayManager {
       if (res.ok) {
         apiOk = true;
       } else if (res.status >= 400 && res.status < 500) {
-        // /health endpoint likely doesn't exist — try base URL
         const controller2 = new AbortController();
         const timer2 = setTimeout(() => controller2.abort(), PROBE_TIMEOUT);
         const res2 = await fetch(probe.api, { signal: controller2.signal });
@@ -227,9 +341,9 @@ export class RelayManager {
       // Network failure — server unreachable
     }
 
-    if (wsOk && apiOk) {
+    if (wsOk && gunOk && apiOk) {
       probe.status = 'online';
-    } else if (wsOk || apiOk) {
+    } else if ((wsOk && gunOk) || (wsOk && apiOk) || (gunOk && apiOk)) {
       probe.status = 'degraded';
     } else {
       probe.status = 'offline';
@@ -240,7 +354,6 @@ export class RelayManager {
       probe.lastSeen = Date.now();
     }
 
-    // Apply results to the managed relay if it exists
     const managed = this.config.relays.find((r) => r.id === relay.id);
     if (managed) {
       managed.status = probe.status;
@@ -260,14 +373,7 @@ export class RelayManager {
   }
 
   static async autoFailover(): Promise<void> {
-    const sorted = this.getRelayList();
-    const candidate = sorted.find((r) => r.status === 'online' && r.id !== this.config.activeRelayId);
-    if (candidate) {
-      console.warn(`[RelayManager] Auto-failover: switching to "${candidate.label}" (${candidate.id})`);
-      await this.switchToRelay(candidate.id);
-    } else {
-      console.warn('[RelayManager] Auto-failover: no online relay available');
-    }
+    await this.orchestrateConnectionSwitch('auto-failover');
   }
 
   static cleanup(): void {
@@ -276,8 +382,17 @@ export class RelayManager {
       clearTimeout(this.healthCheckTimer);
       this.healthCheckTimer = null;
     }
+    if (this.runtimeSwitchTimer) {
+      clearTimeout(this.runtimeSwitchTimer);
+      this.runtimeSwitchTimer = null;
+    }
+    if (this.wsStatusUnsubscribe) {
+      this.wsStatusUnsubscribe();
+      this.wsStatusUnsubscribe = null;
+    }
     this.changeListeners = [];
     this.switching = false;
+    this.initialized = false;
   }
 
   static getGunPeerUrls(): string[] {
@@ -293,7 +408,36 @@ export class RelayManager {
     };
   }
 
-  // -- Private helpers --
+  static isEndpointSetSafe(ws: string, gun: string, api: string): boolean {
+    let wsUrl: URL;
+    let gunUrl: URL;
+    let apiUrl: URL;
+
+    try {
+      wsUrl = new URL(ws);
+      gunUrl = new URL(gun);
+      apiUrl = new URL(api);
+    } catch {
+      return false;
+    }
+
+    if (!['ws:', 'wss:'].includes(wsUrl.protocol)) return false;
+    if (!['http:', 'https:'].includes(gunUrl.protocol)) return false;
+    if (!['http:', 'https:'].includes(apiUrl.protocol)) return false;
+
+    const envSecure = typeof location !== 'undefined' && location.protocol === 'https:';
+    const localhostHosts = new Set(['localhost', '127.0.0.1', '::1']);
+    const isLocal = (u: URL) => localhostHosts.has(u.hostname);
+
+    if (!envSecure) {
+      return true;
+    }
+
+    const wsSafe = wsUrl.protocol === 'wss:' || isLocal(wsUrl);
+    const gunSafe = gunUrl.protocol === 'https:' || isLocal(gunUrl);
+    const apiSafe = apiUrl.protocol === 'https:' || isLocal(apiUrl);
+    return wsSafe && gunSafe && apiSafe;
+  }
 
   private static persist(): void {
     try {
@@ -306,6 +450,7 @@ export class RelayManager {
   private static load(): RelayListConfig {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
+      const legacyAutoFailover = localStorage.getItem(LEGACY_AUTO_FAILOVER_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (
@@ -313,26 +458,42 @@ export class RelayManager {
           parsed.relays.every((r: unknown) => {
             const e = r as Record<string, unknown>;
             return (
-            typeof e.id === 'string' &&
-            typeof e.ws === 'string' &&
-            typeof e.gun === 'string' &&
-            typeof e.api === 'string' &&
-            typeof e.priority === 'number'
-          );
+              typeof e.id === 'string' &&
+              typeof e.ws === 'string' &&
+              typeof e.gun === 'string' &&
+              typeof e.api === 'string' &&
+              typeof e.priority === 'number'
+            );
           }) &&
           (parsed.activeRelayId === null || typeof parsed.activeRelayId === 'string')
         ) {
           return {
-            relays: parsed.relays as RelayEndpoint[],
+             relays: (parsed.relays as RelayEndpoint[]).map((relay) => ({
+               ...relay,
+               source: relay.source ?? 'configured',
+               trusted: relay.trusted ?? (relay.source !== 'discovered'),
+             })),
             activeRelayId: parsed.activeRelayId ?? null,
-            autoFailover: parsed.autoFailover !== false,
+            autoFailover: typeof parsed.autoFailover === 'boolean'
+              ? parsed.autoFailover
+              : legacyAutoFailover !== 'false',
+            transport: {
+              ...DEFAULT_TRANSPORT_SETTINGS,
+              ...(parsed.transport as Partial<TransportStrategySettings> | undefined),
+            },
           };
         }
       }
     } catch {
       // Corrupt data — reset
     }
-    return { relays: [], activeRelayId: null, autoFailover: true };
+
+    return {
+      relays: [],
+      activeRelayId: null,
+      autoFailover: localStorage.getItem(LEGACY_AUTO_FAILOVER_KEY) !== 'false',
+      transport: { ...DEFAULT_TRANSPORT_SETTINGS },
+    };
   }
 
   private static generateId(): string {
@@ -356,8 +517,13 @@ export class RelayManager {
       try {
         await this.probeAllRelays();
         const active = this.getActiveRelay();
-        if (active && (active.status === 'offline' || active.status === 'degraded')) {
-          await this.autoFailover();
+        if (
+          active &&
+          (active.status === 'offline' || active.status === 'degraded') &&
+          this.config.autoFailover &&
+          this.config.transport.autoSwitch
+        ) {
+          await this.orchestrateConnectionSwitch('health-check');
         }
       } catch (e) {
         console.warn('[RelayManager] Health-check cycle failed', e);
@@ -368,6 +534,191 @@ export class RelayManager {
       }
     };
     this.healthCheckTimer = setTimeout(tick, HEALTH_CHECK_INTERVAL);
+  }
+
+  private static attachWebSocketStatusMonitor(): void {
+    void (async () => {
+      try {
+        const { WebSocketService } = await import('./websocketService');
+        this.wsStatusUnsubscribe = WebSocketService.onStatusChange(({ connected }) => {
+          if (connected) {
+            if (this.runtimeSwitchTimer) {
+              clearTimeout(this.runtimeSwitchTimer);
+              this.runtimeSwitchTimer = null;
+            }
+            return;
+          }
+
+          if (!this.config.autoFailover || !this.config.transport.autoSwitch) {
+            return;
+          }
+          if (this.runtimeSwitchTimer) {
+            clearTimeout(this.runtimeSwitchTimer);
+          }
+          this.runtimeSwitchTimer = setTimeout(() => {
+            this.runtimeSwitchTimer = null;
+            void this.orchestrateConnectionSwitch('runtime-disconnect');
+          }, RUNTIME_SWITCH_DEBOUNCE_MS);
+        });
+      } catch (e) {
+        console.warn('[RelayManager] Unable to attach WebSocket monitor', e);
+      }
+    })();
+  }
+
+  private static async orchestrateConnectionSwitch(reason: string): Promise<void> {
+    if (this.switching) return;
+
+    const candidates = await this.getCandidateOrder();
+    for (const candidate of candidates) {
+      if (candidate.id === this.config.activeRelayId) continue;
+      if (this.isInCooldown(candidate.id)) continue;
+
+      const probed = await this.probeRelay(candidate);
+      if (probed.status !== 'online') {
+        this.noteFailure(candidate.id);
+        continue;
+      }
+
+      try {
+        await this.switchToRelay(candidate.id);
+        return;
+      } catch (e) {
+        console.warn(`[RelayManager] Switch attempt failed (${reason}) for ${candidate.id}`, e);
+      }
+    }
+
+    console.warn(`[RelayManager] No candidate passed strategy checks for ${reason}`);
+  }
+
+  private static async getCandidateOrder(): Promise<RelayEndpoint[]> {
+    const configured = this.getRelayList().filter((r) => r.id !== this.config.activeRelayId);
+
+    if (!this.config.transport.preferDecentralized) {
+      return configured;
+    }
+
+    if (!this.config.transport.allowDiscoveredAutoSwitch) {
+      return configured;
+    }
+
+    const discovered = await this.getFreshVerifiedDiscoveredRelays();
+    if (!this.config.transport.allowWssFallback) {
+      return discovered;
+    }
+
+    const discoveredIds = new Set(discovered.map((r) => r.id));
+    const fallbackConfigured = configured.filter((r) => !discoveredIds.has(r.id));
+    return [...discovered, ...fallbackConfigured];
+  }
+
+  private static async getFreshVerifiedDiscoveredRelays(): Promise<RelayEndpoint[]> {
+    try {
+      const { WebSocketService } = await import('./websocketService');
+      const discovered = WebSocketService
+        .getKnownServers()
+        .filter((server) => this.isDiscoveredServerEligible(server))
+        .map((server) => this.upsertDiscoveredRelay(server))
+        .filter((relay): relay is RelayEndpoint => relay !== null)
+        .sort((a, b) => a.priority - b.priority);
+      return discovered;
+    } catch (e) {
+      console.warn('[RelayManager] Failed to load discovered relays', e);
+      return [];
+    }
+  }
+
+  private static isDiscoveredServerEligible(server: KnownServer): boolean {
+    if (!server.signatureValid || server.source !== 'peer') {
+      return false;
+    }
+
+    const now = Date.now();
+    if (typeof server.expiresAt === 'number' && server.expiresAt < now) {
+      return false;
+    }
+
+    const verifiedAt = typeof server.lastVerifiedAt === 'number' ? server.lastVerifiedAt : server.firstSeen;
+    return now - verifiedAt <= this.config.transport.discoveryTtlMs;
+  }
+
+  private static upsertDiscoveredRelay(server: KnownServer): RelayEndpoint | null {
+    if (!this.isEndpointSetSafe(server.websocket, server.gun, server.api)) {
+      return null;
+    }
+
+    const existing = this.config.relays.find((r) => r.ws === server.websocket);
+    if (existing) {
+      existing.source = existing.source ?? (server.source === 'peer' ? 'discovered' : 'configured');
+      if (typeof server.firstSeen === 'number') {
+        existing.lastSeen = server.firstSeen;
+      }
+      return existing;
+    }
+
+    let hostname = 'relay';
+    try {
+      hostname = new URL(server.websocket).hostname;
+    } catch {
+      // keep fallback label
+    }
+
+    const relay: RelayEndpoint = {
+      id: this.generateId(),
+      label: `Discovered (${hostname})`,
+      ws: server.websocket,
+      gun: server.gun,
+      api: server.api,
+      priority: -100,
+      isTor: false,
+      source: 'discovered',
+      trusted: false,
+      addedAt: Date.now(),
+      lastSeen: server.firstSeen,
+      status: 'unknown',
+    };
+
+    const discoveredRelays = this.config.relays.filter((r) => r.source === 'discovered');
+    if (discoveredRelays.length >= MAX_DISCOVERED_RELAYS) {
+      discoveredRelays
+        .sort((a, b) => (a.lastSeen ?? a.addedAt) - (b.lastSeen ?? b.addedAt))
+        .slice(0, discoveredRelays.length - MAX_DISCOVERED_RELAYS + 1)
+        .forEach((oldRelay) => {
+          this.config.relays = this.config.relays.filter((r) => r.id !== oldRelay.id);
+        });
+    }
+
+    this.config.relays.push(relay);
+    this.persist();
+    this.notifyListeners();
+    return relay;
+  }
+
+  private static noteFailure(relayId: string): void {
+    const state = this.switchFailures.get(relayId) ?? { failures: 0, cooldownUntil: 0 };
+    state.failures += 1;
+
+    if (state.failures >= this.config.transport.maxFailuresBeforeCooldown) {
+      state.cooldownUntil = Date.now() + this.config.transport.cooldownMs;
+      state.failures = 0;
+      console.warn(`[RelayManager] Cooldown active for relay ${relayId}`);
+    }
+
+    this.switchFailures.set(relayId, state);
+  }
+
+  private static clearFailure(relayId: string): void {
+    this.switchFailures.delete(relayId);
+  }
+
+  private static isInCooldown(relayId: string): boolean {
+    const state = this.switchFailures.get(relayId);
+    if (!state) return false;
+    if (state.cooldownUntil <= Date.now()) {
+      this.switchFailures.delete(relayId);
+      return false;
+    }
+    return true;
   }
 }
 

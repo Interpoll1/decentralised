@@ -36,3 +36,5 @@ Single file: `index.ts`. Uses `@ionic/vue-router` (`createRouter` from Ionic for
 - All components are lazy-loaded.
 - `router.beforeEach` is a passthrough — add auth guards here if needed.
 - History mode: `createWebHistory('/')` — the server (or `dist/`) must handle SPA fallback.
+- Internal same-origin anchor links are intercepted in `App.vue` and forwarded through Vue Router so `/community/...`, `/chat...`, and `/join/...` links stay in-app instead of forcing a browser reload.
+- `JoinPrivatePage` supports community, chatroom, and server invite routes.

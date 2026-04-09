@@ -241,7 +241,7 @@
   </ion-page>
 </template>
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage,
@@ -402,8 +402,6 @@ async function submitVote() {
   if (!poll.value || !canSubmitVote.value || isSubmitting.value) return
   isSubmitting.value = true
 
-  const timeout = setTimeout(() => { isSubmitting.value = false }, 15000)
-
   try {
     const deviceId = await VoteTrackerService.getDeviceId()
 
@@ -441,86 +439,116 @@ async function submitVote() {
     }
     const receipt = await chainStore.addVote(vote)
 
-    // ── Persist vote via store (optimistic update + GunDB write with rollback) ──
-    await pollStore.voteOnPoll(poll.value.id, optionIds)
-    // Sync local ref with the store's updated data
-    poll.value = pollStore.pollsMap.get(poll.value.id) || poll.value
-
-    // ── Write to MySQL via relay (non-blocking backup persistence) ──────────
-    const gunRelayBase = config.relay.gun.replace(/\/gun$/, '')
-    const updatedOptions = poll.value.options
-    const newTotalVotes = updatedOptions.reduce((s, o) => s + (o.votes || 0), 0)
-    Promise.all(
-      updatedOptions.map((opt, i) =>
-        fetch(`${gunRelayBase}/db/write`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            soul: `v2/communities/${poll.value!.communityId}/polls/${poll.value!.id}/options/${i}`,
-            data: { id: opt.id, text: opt.text, votes: opt.votes }
-          })
-        }).catch(() => {})
-      )
-    ).then(() => {
-      fetch(`${gunRelayBase}/db/write`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          soul: `v2/communities/${poll.value!.communityId}/polls/${poll.value!.id}`,
-          data: { totalVotes: newTotalVotes }
-        })
-      }).catch(() => {})
-    }).catch(() => {})
-
-    await VoteTrackerService.recordVote(poll.value.id, receipt.blockIndex)
-
     hasVoted.value = true
     const votedPolls = JSON.parse(localStorage.getItem('voted-polls') || '[]')
     votedPolls.push(poll.value.id)
     localStorage.setItem('voted-polls', JSON.stringify(votedPolls));
+    try {
+      await VoteTrackerService.recordVote(poll.value.id, receipt.blockIndex)
+    } catch (recordError) {
+      console.warn('Failed to persist local vote record after chain vote:', recordError)
+    }
 
-    await presentToast('Vote submitted!')
-
-    // Reload from API after delay — only accept if vote counts haven't regressed
     const pollIdForReload = poll.value.id
-    const minVotes = newTotalVotes
-    setTimeout(async () => {
+    const pollIdForSync = poll.value.id
+    const communityIdForSync = poll.value.communityId
+    const authorIdForSync = poll.value.authorId || ''
+    const gunRelayBase = config.relay.gun.replace(/\/gun$/, '')
+
+    void (async () => {
       try {
-        const res = await fetch(`${config.relay.api}/api/poll/${pollIdForReload}`)
-        if (res.ok) {
-          const data = await res.json()
-          if (data?.id && data.options?.length > 0 && (data.totalVotes || 0) >= minVotes) {
-            pollStore.injectPoll({
-              id: data.id, communityId: data.communityId,
-              authorId: poll.value!.authorId || '',
-              authorName: data.authorName || 'Anonymous',
-              question: data.question, description: data.description || '',
-              options: data.options,
-              createdAt: data.createdAt || Date.now(),
-              expiresAt: data.expiresAt || Date.now() + 86400000,
-              allowMultipleChoices: !!data.allowMultipleChoices,
-              showResultsBeforeVoting: !!data.showResultsBeforeVoting,
-              requireLogin: false, isPrivate: !!data.isPrivate,
-              totalVotes: data.totalVotes || 0,
-              isExpired: !!data.isExpired,
-            })
-            poll.value = pollStore.pollsMap.get(pollIdForReload) || poll.value
-          }
+        const confirmedByBackend = await AuditService.confirmVote(pollIdForSync, deviceId)
+        if (!confirmedByBackend) {
+          console.warn('Vote confirm request failed after chain vote')
         }
-      } catch {}
-    }, 3000)
+      } catch (confirmError) {
+        console.warn('Vote confirm request failed after chain vote:', confirmError)
+      }
+
+      try {
+        await pollStore.voteOnPoll(pollIdForSync, optionIds)
+        if (poll.value?.id === pollIdForSync) {
+          poll.value = pollStore.pollsMap.get(pollIdForSync) || poll.value
+        }
+      } catch (storeError) {
+        console.warn('Gun poll update failed after successful chain vote:', storeError)
+      }
+
+      const syncedPoll = pollStore.pollsMap.get(pollIdForSync) || (poll.value?.id === pollIdForSync ? poll.value : null)
+      if (!syncedPoll) return
+
+      const updatedOptions = syncedPoll.options
+      const newTotalVotes = updatedOptions.reduce((sum, option) => sum + (option.votes || 0), 0)
+
+      void Promise.all(
+        updatedOptions.map((opt, i) =>
+          fetch(`${gunRelayBase}/db/write`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              soul: `v2/communities/${communityIdForSync}/polls/${pollIdForSync}/options/${i}`,
+              data: { id: opt.id, text: opt.text, votes: opt.votes }
+            })
+          }).catch(() => {})
+        )
+      ).then(() => {
+        return fetch(`${gunRelayBase}/db/write`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            soul: `v2/communities/${communityIdForSync}/polls/${pollIdForSync}`,
+            data: { totalVotes: newTotalVotes }
+          })
+        }).catch(() => {})
+      }).catch(() => {})
+
+      setTimeout(async () => {
+        try {
+          const res = await fetch(`${config.relay.api}/api/poll/${pollIdForReload}`)
+          if (res.ok) {
+            const data = await res.json()
+            if (data?.id && data.options?.length > 0 && (data.totalVotes || 0) >= newTotalVotes) {
+              pollStore.injectPoll({
+                id: data.id, communityId: data.communityId,
+                authorId: authorIdForSync,
+                authorName: data.authorName || 'Anonymous',
+                question: data.question, description: data.description || '',
+                options: data.options,
+                createdAt: data.createdAt || Date.now(),
+                expiresAt: data.expiresAt || Date.now() + 86400000,
+                allowMultipleChoices: !!data.allowMultipleChoices,
+                showResultsBeforeVoting: !!data.showResultsBeforeVoting,
+                requireLogin: false, isPrivate: !!data.isPrivate,
+                totalVotes: data.totalVotes || 0,
+                isExpired: !!data.isExpired,
+              })
+              if (poll.value?.id === pollIdForReload) {
+                poll.value = pollStore.pollsMap.get(pollIdForReload) || poll.value
+              }
+            }
+          }
+        } catch {}
+      }, 3000)
+    })()
+
+    await presentToast('Vote recorded. Network sync will continue in the background.')
+    void router.push(`/receipt/${receipt.mnemonic}`)
 
   } catch (error) {
     console.error('Vote error:', error);
     await presentToast('Failed to submit vote')
   } finally {
-    clearTimeout(timeout)
     isSubmitting.value = false
   }
 }
 
 async function loadPoll() {
   const pollId = route.params.pollId as string
+  poll.value = null
+  selectedOption.value = ''
+  selectedOptions.value = []
+  inviteCodes.value = []
+  isLoading.value = true
   // Check local vote state first (fast, no network)
   const votedPolls = JSON.parse(localStorage.getItem('voted-polls') || '[]')
   const votedLocally = votedPolls.includes(pollId)
@@ -592,8 +620,11 @@ async function loadInviteCodes() {
 
 async function copyInviteLink(code: string) {
   if (!poll.value) return;
-  const baseUrl = window.location.origin;
-  const link = `${baseUrl}/Interpole/vote/${poll.value.id}?code=${code}`;
+  const routeLocation = router.resolve({
+    path: `/vote/${poll.value.id}`,
+    query: { code },
+  });
+  const link = `${window.location.origin}${routeLocation.href}`;
 
   try {
     await navigator.clipboard.writeText(link);
@@ -613,7 +644,6 @@ async function copyInviteLink(code: string) {
 
 async function copyAllLinks() {
   if (!poll.value) return;
-  const baseUrl = window.location.origin;
   const availableCodes = inviteCodes.value.filter(c => !c.used);
 
   if (availableCodes.length === 0) {
@@ -626,7 +656,13 @@ async function copyAllLinks() {
   }
 
   const links = availableCodes
-    .map(c => `${baseUrl}/Interpole/vote/${poll.value!.id}?code=${c.code}`)
+    .map((entry) => {
+      const routeLocation = router.resolve({
+        path: `/vote/${poll.value!.id}`,
+        query: { code: entry.code },
+      });
+      return `${window.location.origin}${routeLocation.href}`;
+    })
     .join('\n');
 
   try {
@@ -652,6 +688,15 @@ onMounted(() => {
   // Init chain in background
   chainStore.initialize().catch(() => {})
 })
+
+watch(
+  () => route.params.pollId,
+  (newPollId, oldPollId) => {
+    if (newPollId && newPollId !== oldPollId) {
+      void loadPoll()
+    }
+  },
+)
 </script>
 
 

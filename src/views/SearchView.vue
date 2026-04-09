@@ -485,7 +485,6 @@ import {
 import { useSearch } from '../composables/useSearch';
 
 const router  = useRouter();
-const API_URL = import.meta.env.VITE_API_URL || 'https://interpoll.endless.sbs';
 
 const {
   results,
@@ -498,7 +497,7 @@ const {
   nextPage,
   previousPage,
   clearResults,
-} = useSearch(API_URL);
+} = useSearch();
 
 const searchQuery     = ref('');
 const filterType      = ref<'post' | 'poll' | ''>('');

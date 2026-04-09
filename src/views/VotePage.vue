@@ -17,7 +17,7 @@
       </div>
 
       <!-- Error State -->
-      <div v-else-if="!pollStore.currentPoll" class="flex flex-col items-center justify-center py-12">
+      <div v-else-if="!displayPoll" class="flex flex-col items-center justify-center py-12">
         <ion-icon :icon="alertCircle" size="large" color="danger"></ion-icon>
         <p class="mt-4 text-gray-600">Poll not found</p>
         <ion-button class="mt-4" @click="router.push('/home')">
@@ -26,8 +26,8 @@
       </div>
 
       <!-- Vote Form -->
-      <div v-else-if="pollStore.currentPoll">
-        <div v-if="pollStore.currentPoll.isPrivate" class="mb-4 space-y-2">
+      <div v-else-if="displayPoll">
+        <div v-if="displayPoll.isPrivate" class="mb-4 space-y-2">
           <ion-item>
             <ion-label position="stacked">Invite Code</ion-label>
             <ion-input
@@ -38,9 +38,9 @@
         </div>
 
         <VoteForm
-          :poll="pollStore.currentPoll"
+          :poll="displayPoll"
           :invite-code="inviteCode"
-          :requires-invite-code="pollStore.currentPoll.isPrivate"
+          :requires-invite-code="displayPoll.isPrivate"
           @vote-submitted="handleVoteSubmitted"
         />
       </div>
@@ -49,7 +49,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+ import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage,
@@ -77,23 +77,33 @@ const pollStore = usePollStore();
 const chainStore = useChainStore();
 const isLoading = ref(true);
 const inviteCode = ref<string>('');
+const displayPoll = computed(() => {
+  const pollId = route.params.pollId as string | undefined;
+  if (!pollId) return null;
+  return pollStore.currentPoll?.id === pollId ? pollStore.currentPoll : null;
+});
 
-onMounted(async () => {
+async function loadVotePage() {
+  isLoading.value = true;
   try {
     await chainStore.initialize();
     const pollId = route.params.pollId as string;
+    inviteCode.value = (route.query.code as string | undefined) || '';
     await pollStore.selectPoll(pollId);
-
-    const initialCode = route.query.code as string | undefined;
-    if (initialCode) {
-      inviteCode.value = initialCode;
-    }
   } catch (error) {
     console.error('Error loading poll:', error);
   } finally {
     isLoading.value = false;
   }
-});
+}
+
+watch(
+  [() => route.params.pollId, () => route.query.code],
+  () => {
+    void loadVotePage();
+  },
+  { immediate: true },
+);
 
 const handleVoteSubmitted = (mnemonic: string) => {
   router.push(`/receipt/${mnemonic}`);

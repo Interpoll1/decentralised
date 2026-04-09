@@ -71,7 +71,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import {
   IonPage,
@@ -94,27 +94,31 @@ import {
   lockClosedOutline,
 } from 'ionicons/icons';
 import { InviteLinkService } from '@/services/inviteLinkService';
+import { ChatRoomService } from '@/services/chatRoomService';
 import { CommunityService } from '@/services/communityService';
 import { KeyVaultService } from '@/services/keyVaultService';
 import { useCommunityStore } from '@/stores/communityStore';
 import config from '@/config';
 
-const SUPPORTED_TYPES = ['community', 'server'] as const;
+const SUPPORTED_TYPES = ['community', 'chatroom', 'server'] as const;
 
 const router = useRouter();
 const route = useRoute();
 const communityStore = useCommunityStore();
 
-// Check hash synchronously so we show the spinner from the very first frame
-const hashKey = InviteLinkService.getKeyFromCurrentUrl();
-const loading = ref(!!hashKey);
+const loading = ref(false);
 const joining = ref(false);
 const success = ref(false);
 const error = ref('');
 const password = ref('');
+let joinGeneration = 0;
 
 const targetType = computed(() => route.params.type as string);
 const targetId = computed(() => route.params.id as string);
+const hashKey = computed(() => {
+  const hash = route.hash || '';
+  return hash.startsWith('#') ? hash.substring(1) : '';
+});
 
 const typeLabel = computed(() => {
   switch (targetType.value) {
@@ -131,7 +135,7 @@ function navigateToTarget() {
       router.replace(`/community/${targetId.value}`);
       break;
     case 'chatroom':
-      router.replace('/home');
+      router.replace(`/chatroom/${encodeURIComponent(targetId.value)}`);
       break;
     case 'server':
       router.replace('/home');
@@ -141,85 +145,138 @@ function navigateToTarget() {
   }
 }
 
+function navigateToResolvedTarget(type: string, id: string) {
+  switch (type) {
+    case 'community':
+      router.replace(`/community/${id}`);
+      break;
+    case 'chatroom':
+      router.replace(`/chatroom/${encodeURIComponent(id)}`);
+      break;
+    case 'server':
+    default:
+      router.replace('/home');
+      break;
+  }
+}
+
 function resetForm() {
   error.value = '';
   password.value = '';
   joining.value = false;
+  success.value = false;
 
   // Re-attempt invite-link join if hash key is still available
-  if (hashKey) {
-    joinWithKey(hashKey);
+  if (hashKey.value) {
+    void initializeJoinPage();
   }
 }
 
-async function dispatchJoin(keyOrPassword: string, method: 'invite' | 'password') {
-  const type = targetType.value;
+async function dispatchJoin(
+  type: string,
+  id: string,
+  keyOrPassword: string,
+  method: 'invite' | 'password',
+) {
   if (type === 'server' && !config.isServerEncrypted()) {
     throw new Error('This server does not use encryption.');
   }
   if (type === 'community' || type === 'server') {
-    await CommunityService.joinPrivateCommunity(targetId.value, keyOrPassword, method);
+    await CommunityService.joinPrivateCommunity(id, keyOrPassword, method);
     if (type === 'community') {
-      communityStore.markJoined(targetId.value);
-      await communityStore.selectCommunity(targetId.value);
+      communityStore.markJoined(id);
+      await communityStore.selectCommunity(id);
     }
+  } else if (type === 'chatroom') {
+    await ChatRoomService.joinRoom(id, keyOrPassword, method);
   } else {
     throw new Error(`Unsupported type: ${type}`);
   }
 }
 
-async function joinWithKey(base64urlKey: string) {
+async function joinWithKey(base64urlKey: string, type: string, id: string, gen: number) {
   loading.value = true;
+  error.value = '';
   try {
-    await dispatchJoin(base64urlKey, 'invite');
+    await dispatchJoin(type, id, base64urlKey, 'invite');
+    if (gen !== joinGeneration) return;
     success.value = true;
   } catch (e: unknown) {
+    if (gen !== joinGeneration) return;
     error.value = e instanceof Error ? e.message : 'Failed to join with invite link';
   } finally {
-    loading.value = false;
+    if (gen === joinGeneration) {
+      loading.value = false;
+    }
   }
 }
 
 async function joinWithPassword() {
   if (!password.value.trim() || joining.value) return;
+  const gen = ++joinGeneration;
+  const type = targetType.value;
+  const id = targetId.value;
   joining.value = true;
   error.value = '';
   try {
-    await dispatchJoin(password.value, 'password');
+    await dispatchJoin(type, id, password.value, 'password');
+    if (gen !== joinGeneration) return;
     success.value = true;
   } catch (e: unknown) {
+    if (gen !== joinGeneration) return;
     error.value = e instanceof Error ? e.message : 'Wrong password or community not found';
   } finally {
-    joining.value = false;
+    if (gen === joinGeneration) {
+      joining.value = false;
+    }
   }
 }
 
-onMounted(async () => {
+async function initializeJoinPage() {
+  const gen = ++joinGeneration;
+  const type = targetType.value;
+  const id = targetId.value;
+  const inviteKey = hashKey.value;
+
+  error.value = '';
+  success.value = false;
+  joining.value = false;
+  password.value = '';
+
   // Reject unsupported types early
-  if (!SUPPORTED_TYPES.includes(targetType.value as typeof SUPPORTED_TYPES[number])) {
+  if (!SUPPORTED_TYPES.includes(type as typeof SUPPORTED_TYPES[number])) {
     error.value = `Joining a ${typeLabel.value} via this page is not yet supported.`;
     loading.value = false;
     return;
   }
 
   // Already have a key → redirect immediately
-  if (await KeyVaultService.hasKey(targetId.value)) {
-    if (targetType.value === 'community') {
+  if (await KeyVaultService.hasKey(id)) {
+    if (gen !== joinGeneration) return;
+    if (type === 'community') {
       await communityStore.syncJoinedPrivateCommunitiesFromKeys();
-      communityStore.markJoined(targetId.value);
-      await communityStore.selectCommunity(targetId.value);
+      if (gen !== joinGeneration) return;
+      communityStore.markJoined(id);
+      await communityStore.selectCommunity(id);
+      if (gen !== joinGeneration) return;
     }
-    navigateToTarget();
+    navigateToResolvedTarget(type, id);
     return;
   }
 
   // Invite key detected synchronously at init → auto-join
-  if (hashKey) {
-    await joinWithKey(hashKey);
+  if (inviteKey) {
+    await joinWithKey(inviteKey, type, id, gen);
   } else {
-    loading.value = false;
+    if (gen === joinGeneration) {
+      loading.value = false;
+    }
   }
-});
+}
+
+watch([targetType, targetId, hashKey], async () => {
+  await initializeJoinPage();
+}, { immediate: true });
 </script>
 
 <style scoped>

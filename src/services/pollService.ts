@@ -3,7 +3,9 @@ import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
 import config from '../config';
 
-const API_URL = 'https://interpoll.endless.sbs';
+function getApiBase(): string {
+  return config.relay.api;
+}
 
 function getGunRelayBase(): string {
   return config.relay.gun.replace(/\/gun$/, '');
@@ -41,6 +43,13 @@ export interface Poll {
 }
 
 const pollActiveListeners = new Map<string, any>();
+const PENDING_INVITE_FINALIZATIONS_KEY = 'interpoll_pending_invite_finalizations';
+
+type PendingInviteFinalization = {
+  pollId: string;
+  code: string;
+  reservationId: string;
+};
 
 async function indexForSearch(type: 'post' | 'poll', id: string, data: any) {
   try {
@@ -49,7 +58,7 @@ async function indexForSearch(type: 'post' | 'poll', id: string, data: any) {
       { type, id, data } as Record<string, unknown>,
       'index',
     );
-    await fetch(`${API_URL}/api/index`, {
+    await fetch(`${getApiBase()}/api/index`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -65,6 +74,27 @@ export class PollService {
   private static getPollPath(pollId: string) { return this.gun.get('polls').get(pollId); }
   private static getCommunityPollPath(communityId: string, pollId: string) {
     return this.gun.get('communities').get(communityId).get('polls').get(pollId);
+  }
+
+  private static buildPollRecord(pollData: any, options: PollOption[]): Poll | null {
+    if (!pollData?.id || options.length === 0) return null;
+    const totalVotes = options.reduce((sum, opt) => sum + (opt.votes || 0), 0);
+    return {
+      id: pollData.id, communityId: pollData.communityId || '',
+      authorId: pollData.authorId || '', authorName: pollData.authorName || 'Anonymous',
+      question: pollData.question || '', description: pollData.description || '',
+      options, createdAt: pollData.createdAt || Date.now(),
+      expiresAt: pollData.expiresAt || 0,
+      allowMultipleChoices: !!pollData.allowMultipleChoices,
+      showResultsBeforeVoting: !!pollData.showResultsBeforeVoting,
+      requireLogin: !!pollData.requireLogin, isPrivate: !!pollData.isPrivate,
+      totalVotes, isExpired: Date.now() > (pollData.expiresAt || 0),
+      isEncrypted: pollData.isEncrypted || false,
+      encryptedContent: pollData.encryptedContent || undefined,
+      authTag: pollData.authTag || undefined,
+      authorPubkey: pollData.authorPubkey || undefined,
+      contentSignature: pollData.contentSignature || undefined,
+    };
   }
 
   // ── Reduced timeouts: 300ms first attempt, 1.5s fallback (was 500ms / 3.5s) ─
@@ -158,23 +188,37 @@ export class PollService {
     }]));
   }
 
-  // ── API-first poll fetch (replaces Gun-first approach) ───────────────────────
+  // ── API poll fetch (metadata fallback only; vote totals are ignored) ─────────
   private static async loadPollFromAPI(pollId: string): Promise<{ pollData: any | null; options: PollOption[] }> {
     try {
-      const res = await fetch(`${API_URL}/api/poll/${pollId}`, {
+      const res = await fetch(`${getApiBase()}/api/poll/${pollId}`, {
         headers: { 'Cache-Control': 'stale-while-revalidate=30' },
       });
       if (!res.ok) return { pollData: null, options: [] };
       const data = await res.json();
       if (!data?.id) return { pollData: null, options: [] };
+      // Never trust API vote totals; they can lag and cause bounce-back regressions.
+      // We only use API for poll shell metadata and option labels.
       const options: PollOption[] = (data.options || []).map((o: any) => ({
-        id: o.id, text: o.text || '', votes: o.votes || 0, voters: [],
+        id: o.id, text: o.text || '', votes: 0, voters: [],
       }));
       return { pollData: data, options };
     } catch (error) {
       console.warn('Poll API fetch failed:', error);
       return { pollData: null, options: [] };
     }
+  }
+
+  private static async loadPollFromGun(pollId: string, allowApiOptionFallback = true): Promise<Poll | null> {
+    const pollNode = this.getPollPath(pollId);
+    let pollData = await this.onceNode<any>(pollNode, 300);
+    if (!pollData?.id) {
+      pollData = await this.waitForNode<any>(pollNode, (value) => !!value?.id, 1500);
+    }
+    if (!pollData?.id) return null;
+
+    const options = await this.loadPollOptions(pollId, allowApiOptionFallback);
+    return this.buildPollRecord(pollData, options);
   }
 
   private static warmPollCache(pollData: any, optionsData?: any) {
@@ -535,60 +579,22 @@ export class PollService {
     return poll;
   }
 
-  // ── API-first loadPoll: try REST first, Gun only as fallback ─────────────────
+  // ── Canonical poll read: Gun/local only (never API vote ingestion) ───────────
   static async loadPoll(pollId: string): Promise<Poll | null> {
-    // 1. Try REST API first — fast and always fresh
-    const { pollData: apiData, options: apiOptions } = await this.loadPollFromAPI(pollId);
-    if (apiData?.id && apiOptions.length > 0) {
-      const totalVotes = apiOptions.reduce((sum, opt) => sum + (opt.votes || 0), 0);
-      return {
-        id: apiData.id, communityId: apiData.communityId || '',
-        authorId: apiData.authorId || '', authorName: apiData.authorName || 'Anonymous',
-        question: apiData.question || '', description: apiData.description || '',
-        options: apiOptions, createdAt: apiData.createdAt || Date.now(),
-        expiresAt: apiData.expiresAt || 0,
-        allowMultipleChoices: !!apiData.allowMultipleChoices,
-        showResultsBeforeVoting: !!apiData.showResultsBeforeVoting,
-        requireLogin: !!apiData.requireLogin, isPrivate: !!apiData.isPrivate,
-        totalVotes, isExpired: Date.now() > (apiData.expiresAt || 0),
-        isEncrypted: apiData.isEncrypted || false,
-        encryptedContent: apiData.encryptedContent || undefined,
-        authTag: apiData.authTag || undefined,
-        authorPubkey: apiData.authorPubkey || undefined,
-        contentSignature: apiData.contentSignature || undefined,
-      };
-    }
-
-    // 2. Fallback to Gun (new polls not yet in API, or API down)
-    const pollNode = this.getPollPath(pollId);
-    let pollData   = await this.onceNode<any>(pollNode, 300);
-    if (!pollData?.id) {
-      pollData = await this.waitForNode<any>(pollNode, (value) => !!value?.id, 1500);
-    }
-    if (!pollData?.id) return null;
-
-    const options    = await this.loadPollOptions(pollId);
-    const totalVotes = options.reduce((sum, opt) => sum + (opt.votes || 0), 0);
-    const isExpired  = Date.now() > (pollData.expiresAt || 0);
-
-    return {
-      id: pollData.id, communityId: pollData.communityId || '',
-      authorId: pollData.authorId || '', authorName: pollData.authorName || 'Anonymous',
-      question: pollData.question || '', description: pollData.description || '',
-      options, createdAt: pollData.createdAt || Date.now(), expiresAt: pollData.expiresAt || 0,
-      allowMultipleChoices: !!pollData.allowMultipleChoices,
-      showResultsBeforeVoting: !!pollData.showResultsBeforeVoting,
-      requireLogin: !!pollData.requireLogin, isPrivate: !!pollData.isPrivate,
-      totalVotes, isExpired,
-      isEncrypted: pollData.isEncrypted || false,
-      encryptedContent: pollData.encryptedContent || undefined,
-      authTag: pollData.authTag || undefined,
-      authorPubkey: pollData.authorPubkey || undefined,
-      contentSignature: pollData.contentSignature || undefined,
-    };
+    return this.loadPollFromGun(pollId, false);
   }
 
-  static async loadPollOptions(pollId: string): Promise<PollOption[]> {
+  // ── UX fallback read: Gun first, then metadata-only API shell ─────────────────
+  static async loadPollWithApiFallback(pollId: string): Promise<Poll | null> {
+    const gunPoll = await this.loadPollFromGun(pollId, true);
+    if (gunPoll) {
+      return gunPoll;
+    }
+    const { pollData: apiData, options: apiOptions } = await this.loadPollFromAPI(pollId);
+    return this.buildPollRecord(apiData, apiOptions);
+  }
+
+  static async loadPollOptions(pollId: string, allowApiFallback = true): Promise<PollOption[]> {
     const optionsNode = this.getPollPath(pollId).get('options');
     const optionsData = await this.onceNode<any>(optionsNode, 300);
     const parsed      = this.parsePollOptions(optionsData);
@@ -600,17 +606,20 @@ export class PollService {
     const liveParsed = this.parsePollOptions(liveOptions);
     if (liveParsed.length > 0) return liveParsed;
 
-    // Last resort: try the API for options only
-    const fallback = await this.loadPollFromAPI(pollId);
-    if (fallback.options.length > 0) {
-      optionsNode.put(this.buildOptionsMap(fallback.options));
-      return fallback.options;
+    // Last resort (read-only): use API option labels/ids only; keep vote totals at zero.
+    // Never write these fallback options into Gun or they can clobber real counts.
+    if (allowApiFallback) {
+      const fallback = await this.loadPollFromAPI(pollId);
+      if (fallback.options.length > 0) {
+        return fallback.options;
+      }
     }
     return [];
   }
 
   static async vote(pollId: string, optionIds: string[], voterId: string): Promise<void> {
-    const poll = await this.loadPoll(pollId);
+    // Voting must use Gun-backed state to avoid API bounce-back or stale zero baselines.
+    const poll = await this.loadPollFromGun(pollId, false);
     if (!poll) throw new Error('Poll not found');
     if (poll.isExpired) throw new Error('Poll has expired');
     const selectedOptions = poll.options.filter(opt => optionIds.includes(opt.id));
@@ -651,10 +660,218 @@ export class PollService {
     const codesNode = this.getPollPath(pollId).get('inviteCodes');
     const data      = await this.onceNode<any>(codesNode, 2000);
     if (!data) return [];
+    const now = Date.now();
     return Object.keys(data)
       .filter(k => k !== '_')
-      .map(k => ({ code: data[k].code, used: data[k].used || false }))
+      .map(k => ({ code: data[k].code, used: Boolean(data[k].used || (data[k].reservedUntil && Number(data[k].reservedUntil) > now)) }))
       .filter(c => c.code);
+  }
+
+  static async validateInviteCode(pollId: string, rawCode: string): Promise<void> {
+    const code = rawCode.trim().toUpperCase();
+    if (!code) throw new Error('Invite code is required');
+
+    const byCodeNode = this.getPollPath(pollId).get('inviteCodesByCode').get(encodeURIComponent(code));
+    const codeState = await this.onceNode<any>(byCodeNode, 1500);
+    if (!codeState) throw new Error('Invalid invite code');
+    if (codeState.used) throw new Error('Invite code already used');
+    if (codeState.reservedUntil && Number(codeState.reservedUntil) > Date.now()) {
+      throw new Error('Invite code is currently reserved by another voter');
+    }
+  }
+
+  static async consumeInviteCode(pollId: string, rawCode: string): Promise<string> {
+    const code = rawCode.trim().toUpperCase();
+    if (!code) throw new Error('Invite code is required');
+
+    const poll = await this.loadPoll(pollId);
+    if (!poll) throw new Error('Poll not found');
+
+    const codeKey = encodeURIComponent(code);
+    const byCodeNode = this.getPollPath(pollId).get('inviteCodesByCode').get(codeKey);
+    const communityByCodeNode = poll.communityId
+      ? this.getCommunityPollPath(poll.communityId, pollId).get('inviteCodesByCode').get(codeKey)
+      : null;
+
+    const inviteCodes = await this.getInviteCodes(pollId);
+    const matchingIndex = inviteCodes.findIndex((entry) => entry.code.trim().toUpperCase() === code);
+    if (matchingIndex === -1) throw new Error('Invalid invite code');
+
+    const currentState = await this.onceNode<any>(byCodeNode, 1500);
+    if (!currentState) throw new Error('Invalid invite code');
+    if (currentState.used) throw new Error('Invite code already used');
+    if (currentState.reservedUntil && Number(currentState.reservedUntil) > Date.now()) {
+      throw new Error('Invite code is currently reserved by another voter');
+    }
+
+    const reservationId = `invite-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const reservedUntil = Date.now() + 30000;
+    const listEntry = { code, used: false, reservedUntil };
+    const mainCodesNode = this.getPollPath(pollId).get('inviteCodes').get(String(matchingIndex));
+    const updates: Promise<void>[] = [
+      this.putPromise(byCodeNode, { code, used: false, reservedBy: reservationId, reservedUntil }),
+      this.putPromise(mainCodesNode, listEntry),
+    ];
+
+    if (communityByCodeNode && poll.communityId) {
+      updates.push(this.putPromise(communityByCodeNode, { code, used: false, reservedBy: reservationId, reservedUntil }));
+      updates.push(
+        this.putPromise(
+          this.getCommunityPollPath(poll.communityId, pollId).get('inviteCodes').get(String(matchingIndex)),
+          listEntry,
+        ),
+      );
+    }
+
+    await Promise.all(updates);
+    const confirmedState = await this.onceNode<any>(byCodeNode, 1500);
+    if (confirmedState?.used || confirmedState?.reservedBy !== reservationId) {
+      throw new Error('Invite code was claimed by another voter');
+    }
+    return reservationId;
+  }
+
+  static async finalizeInviteCode(pollId: string, rawCode: string, reservationId: string): Promise<void> {
+    const code = rawCode.trim().toUpperCase();
+    if (!code || !reservationId) return;
+
+    const poll = await this.loadPoll(pollId);
+    if (!poll) return;
+
+    const codeKey = encodeURIComponent(code);
+    const byCodeNode = this.getPollPath(pollId).get('inviteCodesByCode').get(codeKey);
+    const communityByCodeNode = poll.communityId
+      ? this.getCommunityPollPath(poll.communityId, pollId).get('inviteCodesByCode').get(codeKey)
+      : null;
+
+    const currentState = await this.onceNode<any>(byCodeNode, 1500);
+    if (!currentState) return;
+    if (currentState.used) return;
+    if (currentState.reservedBy !== reservationId) {
+      throw new Error('Invite code reservation no longer belongs to this vote');
+    }
+
+    const inviteCodes = await this.getInviteCodes(pollId);
+    const matchingIndex = inviteCodes.findIndex((entry) => entry.code.trim().toUpperCase() === code);
+    if (matchingIndex === -1) return;
+
+    const listEntry = { code, used: true, reservedUntil: null };
+    const updates: Promise<void>[] = [
+      this.putPromise(byCodeNode, { code, used: true, usedAt: Date.now(), reservedBy: null, reservedUntil: null }),
+      this.putPromise(this.getPollPath(pollId).get('inviteCodes').get(String(matchingIndex)), listEntry),
+    ];
+
+    if (communityByCodeNode && poll.communityId) {
+      updates.push(this.putPromise(communityByCodeNode, { code, used: true, usedAt: Date.now(), reservedBy: null, reservedUntil: null }));
+      updates.push(
+        this.putPromise(
+          this.getCommunityPollPath(poll.communityId, pollId).get('inviteCodes').get(String(matchingIndex)),
+          listEntry,
+        ),
+      );
+    }
+
+    await Promise.all(updates);
+  }
+
+  private static loadPendingInviteFinalizations(): PendingInviteFinalization[] {
+    try {
+      const raw = localStorage.getItem(PENDING_INVITE_FINALIZATIONS_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((entry): entry is PendingInviteFinalization => (
+        entry &&
+        typeof entry.pollId === 'string' &&
+        typeof entry.code === 'string' &&
+        typeof entry.reservationId === 'string'
+      ));
+    } catch {
+      return [];
+    }
+  }
+
+  private static savePendingInviteFinalizations(entries: PendingInviteFinalization[]): void {
+    if (entries.length === 0) {
+      localStorage.removeItem(PENDING_INVITE_FINALIZATIONS_KEY);
+      return;
+    }
+    localStorage.setItem(PENDING_INVITE_FINALIZATIONS_KEY, JSON.stringify(entries));
+  }
+
+  static queueInviteCodeFinalization(pollId: string, rawCode: string, reservationId: string): void {
+    const code = rawCode.trim().toUpperCase();
+    if (!pollId || !code || !reservationId) return;
+
+    const pending = this.loadPendingInviteFinalizations();
+    if (pending.some((entry) => (
+      entry.pollId === pollId &&
+      entry.code === code &&
+      entry.reservationId === reservationId
+    ))) {
+      return;
+    }
+
+    pending.push({ pollId, code, reservationId });
+    this.savePendingInviteFinalizations(pending);
+  }
+
+  static async flushPendingInviteCodeFinalizations(): Promise<void> {
+    const pending = this.loadPendingInviteFinalizations();
+    if (pending.length === 0) return;
+
+    const remaining: PendingInviteFinalization[] = [];
+
+    for (const entry of pending) {
+      try {
+        await this.finalizeInviteCode(entry.pollId, entry.code, entry.reservationId);
+      } catch (error) {
+        console.warn('Failed to finalize queued invite code reservation:', error);
+        remaining.push(entry);
+      }
+    }
+
+    this.savePendingInviteFinalizations(remaining);
+  }
+
+  static async releaseInviteCode(pollId: string, rawCode: string, reservationId?: string): Promise<void> {
+    const code = rawCode.trim().toUpperCase();
+    if (!code) return;
+
+    const poll = await this.loadPoll(pollId);
+    if (!poll) return;
+
+    const codeKey = encodeURIComponent(code);
+    const byCodeNode = this.getPollPath(pollId).get('inviteCodesByCode').get(codeKey);
+    const communityByCodeNode = poll.communityId
+      ? this.getCommunityPollPath(poll.communityId, pollId).get('inviteCodesByCode').get(codeKey)
+      : null;
+
+    const currentState = await this.onceNode<any>(byCodeNode, 1500);
+    if (!currentState || currentState.used) return;
+    if (reservationId && currentState.reservedBy && currentState.reservedBy !== reservationId) return;
+
+    const inviteCodes = await this.getInviteCodes(pollId);
+    const matchingIndex = inviteCodes.findIndex((entry) => entry.code.trim().toUpperCase() === code);
+    if (matchingIndex === -1) return;
+
+    const listEntry = { code, used: false, reservedUntil: null };
+    const updates: Promise<void>[] = [
+      this.putPromise(byCodeNode, { code, used: false, reservedBy: null, reservedUntil: null }),
+      this.putPromise(this.getPollPath(pollId).get('inviteCodes').get(String(matchingIndex)), listEntry),
+    ];
+
+    if (communityByCodeNode && poll.communityId) {
+      updates.push(this.putPromise(communityByCodeNode, { code, used: false, reservedBy: null, reservedUntil: null }));
+      updates.push(
+        this.putPromise(
+          this.getCommunityPollPath(poll.communityId, pollId).get('inviteCodes').get(String(matchingIndex)),
+          listEntry,
+        ),
+      );
+    }
+
+    await Promise.all(updates);
   }
 
   static async deletePoll(pollId: string, communityId: string): Promise<void> {

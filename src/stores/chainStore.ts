@@ -7,6 +7,7 @@ import { CryptoService } from '../services/cryptoService';
 import { StorageService } from '../services/storageService';
 import { BroadcastService } from '../services/broadcastService';
 import { WebSocketService } from '../services/websocketService';
+import RelayManager from '../services/relayManager';
 import { AuditService } from '../services/auditService';
 import { EventService } from '../services/eventService';
 
@@ -33,6 +34,7 @@ export const useChainStore = defineStore('chain', () => {
     if (isInitialized.value) return;
 
     BroadcastService.initialize();
+    RelayManager.initialize();
     WebSocketService.initialize();
 
     await ChainService.initializeChain();
@@ -102,12 +104,12 @@ export const useChainStore = defineStore('chain', () => {
   }
 
   async function handleSyncRequest(data: any) {
-    const allBlocks = await StorageService.getAllBlocks();
+    const allBlocks: ChainBlock[] = await StorageService.getAllBlocks();
     const lastIndex = typeof data?.lastIndex === 'number' ? data.lastIndex : -1;
 
     // Only send blocks the requester doesn't have yet
     const missingBlocks = lastIndex >= 0
-      ? allBlocks.filter((b) => b.index > lastIndex)
+      ? allBlocks.filter((b: ChainBlock) => b.index > lastIndex)
       : allBlocks;
 
     // Nothing to send

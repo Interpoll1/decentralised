@@ -110,6 +110,10 @@ Duplicate voting is prevented at multiple levels:
 - **Invite codes.** Private polls generate single-use alphanumeric codes. Each code is marked as consumed atomically in GunDB when used.
 - **OAuth gating.** Polls can optionally require a Google or Microsoft login before accepting a vote.
 
+The production relay (`relay-server/relay-server-enhanced.js` via PM2) uses a two-phase vote flow: `/api/vote-authorize` creates only a short-lived pending reservation, then `/api/vote-record` or `/api/vote-confirm` commits the vote to the persisted registry at `relay-server/data/vote-registry.json`.
+
+When deploying production for this rollout, reset `relay-server/data/vote-registry.json` to `[]` before restarting PM2 so stale persisted entries do not keep previously blocked voters locked out.
+
 ### Data distribution
 
 Poll metadata, communities, user profiles, posts, comments, and images all live in GunDB -- a distributed, eventually-consistent database. Each browser keeps a local copy and syncs with a GunDB relay server. If the relay goes down, data persists locally and syncs when the relay comes back.
@@ -144,7 +148,9 @@ src/
   router/         Vue Router configuration
   config.ts       Centralized config with runtime-mutable relay URLs
 
-relay-server.js   WebSocket relay + OAuth + vote authorization backend
+relay-server.js   Dev WebSocket relay + OAuth + vote authorization backend
+relay-server/
+  relay-server-enhanced.js   Production PM2 relay with persisted vote registry + two-phase vote commit endpoints
 gun-relay-server/
   gun-relay.js    GunDB relay server
 ```

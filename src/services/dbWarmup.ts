@@ -12,14 +12,17 @@
 
 import { isVersionEnabled } from '../utils/dataVersionSettings'
 import { GUN_NAMESPACE } from './gunService'
+import config from '../config'
 
-const NUXT_API = 'https://interpoll.endless.sbs'
+function getApiBase(): string {
+  return config.relay.api
+}
 
 let warmupDone = false
 
 // ── Shared fetch with stale-while-revalidate ──────────────────────────────────
 async function apiFetch(path: string): Promise<any> {
-  const res = await fetch(`${NUXT_API}${path}`, {
+  const res = await fetch(`${getApiBase()}${path}`, {
     headers: { 'Cache-Control': 'stale-while-revalidate=30' },
   })
   if (!res.ok) throw new Error(`API ${path} → ${res.status}`)

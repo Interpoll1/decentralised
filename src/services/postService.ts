@@ -5,8 +5,11 @@ import { KeyService } from './keyService';
 import { isVersionEnabled } from '../utils/dataVersionSettings';
 import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
+import config from '../config';
 
-const API_URL = 'https://interpoll.endless.sbs';
+function getApiBase(): string {
+  return config.relay.api;
+}
 
 export interface Post {
   id: string;
@@ -42,6 +45,40 @@ const MAX_INITIAL_POSTS = 50;
 
 // ── Timebox: 400ms (was 800ms) — Gun is now live-updates only ─────────────────
 const INITIAL_LOAD_TIMEBOX_MS = 400;
+const GUN_ONCE_TIMEOUT_MS = 1500;
+
+function onceWithTimeout(node: any, timeoutMs = GUN_ONCE_TIMEOUT_MS): Promise<any | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      resolve(null);
+    }, timeoutMs);
+
+    node.once((data: any) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(data ?? null);
+    });
+  });
+}
+
+async function loadPostIdsInBatches(
+  postIds: string[],
+  loadById: (postId: string) => Promise<any | null>,
+  onLoaded: (postData: any) => void,
+  batchSize: number,
+): Promise<void> {
+  for (let i = 0; i < postIds.length; i += batchSize) {
+    const batch = postIds.slice(i, i + batchSize);
+    const results = await Promise.all(batch.map(loadById));
+    for (const postData of results) {
+      if (postData) onLoaded(postData);
+    }
+  }
+}
 
 async function indexForSearch(type: 'post' | 'poll', id: string, data: any) {
   try {
@@ -50,7 +87,7 @@ async function indexForSearch(type: 'post' | 'poll', id: string, data: any) {
       { type, id, data } as Record<string, unknown>,
       'index',
     );
-    await fetch(`${API_URL}/api/index`, {
+    await fetch(`${getApiBase()}/api/index`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -201,6 +238,7 @@ export class PostService {
     const communityPostsNode = gun.get('communities').get(communityId).get('posts');
 
     const initialSeenIds = new Set<string>();
+    const inFlightIds = new Set<string>();
     const collectedPosts: Post[] = [];
     let initialLoadDone = false;
     let subscription: any;
@@ -223,36 +261,35 @@ export class PostService {
     communityPostsNode.once((allPosts: any) => {
       if (!allPosts) { checkLoadComplete(); return; }
       const keys = Object.keys(allPosts).filter(k => k !== '_');
-      const promises = keys.slice(0, MAX_INITIAL_POSTS).map(postId =>
-        new Promise<void>((resolve) => {
-          gun.get('posts').get(postId).once((postData: any) => {
-            if (postData && postData.id && !initialSeenIds.has(postData.id)) {
-              initialSeenIds.add(postData.id);
-              collectedPosts.push({ ...postData, dataVersion: GUN_NAMESPACE });
-            }
-            resolve();
-          });
-        })
-      );
-      Promise.all(promises).then(() => {
+      void loadPostIdsInBatches(
+        keys,
+        (postId) => onceWithTimeout(gun.get('posts').get(postId)),
+        (postData) => {
+          if (postData.id && !initialSeenIds.has(postData.id)) {
+            initialSeenIds.add(postData.id);
+            collectedPosts.push({ ...postData, dataVersion: GUN_NAMESPACE });
+          }
+        },
+        100,
+      ).then(() => {
         collectedPosts.sort((a, b) => b.createdAt - a.createdAt);
         collectedPosts.forEach(p => onPost(p));
         checkLoadComplete();
       });
     });
 
-    // Only fetch posts we haven't seen yet — prevents re-fetching all N posts
-    // on every Gun update (was creating thousands of closures → OOM).
-    subscription = communityPostsNode.on((allPosts: any) => {
-      if (!allPosts) return;
-      Object.keys(allPosts).forEach(postId => {
-        if (postId === '_' || initialSeenIds.has(postId)) return;
-        initialSeenIds.add(postId);
-        gun.get('posts').get(postId).once((postData: any) => {
-          if (postData && postData.id) {
-            onPost({ ...postData, dataVersion: GUN_NAMESPACE });
-          }
-        });
+    // Live updates: map().on emits one post-id key at a time, which is more
+    // reliable than parsing full-node patches from .on for large communities.
+    subscription = communityPostsNode.map().on((_: any, postId: string) => {
+      if (!postId || postId === '_' || initialSeenIds.has(postId) || inFlightIds.has(postId)) return;
+      inFlightIds.add(postId);
+      void onceWithTimeout(gun.get('posts').get(postId)).then((postData) => {
+        if (postData && postData.id) {
+          initialSeenIds.add(postData.id);
+          onPost({ ...postData, dataVersion: GUN_NAMESPACE });
+        }
+      }).finally(() => {
+        inFlightIds.delete(postId);
       });
     });
 
@@ -264,36 +301,37 @@ export class PostService {
         if (!allPosts) { checkLoadComplete(); return; }
         const keys = Object.keys(allPosts).filter(k => k !== '_');
         const v1Collected: Post[] = [];
-        const promises = keys.slice(0, MAX_INITIAL_POSTS).map(postId =>
-          new Promise<void>((resolve) => {
-            rawGun.get('posts').get(postId).once((postData: any) => {
-              if (postData && postData.id && !initialSeenIds.has(postData.id)) {
-                initialSeenIds.add(postData.id);
-                v1Collected.push({ ...postData, dataVersion: 'v1' });
-              }
-              resolve();
-            });
-          })
-        );
-        Promise.all(promises).then(() => {
+        void loadPostIdsInBatches(
+          keys,
+          (postId) => onceWithTimeout(rawGun.get('posts').get(postId)),
+          (postData) => {
+            if (postData.id && !initialSeenIds.has(postData.id)) {
+              initialSeenIds.add(postData.id);
+              v1Collected.push({ ...postData, dataVersion: 'v1' });
+            }
+          },
+          100,
+        ).then(() => {
           v1Collected.sort((a, b) => b.createdAt - a.createdAt);
           v1Collected.forEach(p => onPost(p));
           checkLoadComplete();
         });
       });
-      v1Subscription = v1Node.on((allPosts: any) => {
-        if (!allPosts) return;
-        Object.keys(allPosts).forEach(postId => {
-          if (postId === '_' || initialSeenIds.has(postId)) return;
-          initialSeenIds.add(postId);
-          rawGun.get('posts').get(postId).once((postData: any) => {
-            if (postData && postData.id) onPost({ ...postData, dataVersion: 'v1' });
-          });
+      v1Subscription = v1Node.map().on((_: any, postId: string) => {
+        if (!postId || postId === '_' || initialSeenIds.has(postId) || inFlightIds.has(postId)) return;
+        inFlightIds.add(postId);
+        void onceWithTimeout(rawGun.get('posts').get(postId)).then((postData) => {
+          if (postData && postData.id) {
+            initialSeenIds.add(postData.id);
+            onPost({ ...postData, dataVersion: 'v1' });
+          }
+        }).finally(() => {
+          inFlightIds.delete(postId);
         });
       });
     }
 
-    const listenerKey = `${communityId}-posts`;
+    const listenerKey = `${communityId}-posts-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     postActiveListeners.set(listenerKey, { subscription, v1Subscription, timer: timeboxTimer });
 
     return () => {
@@ -311,6 +349,7 @@ export class PostService {
     const gun = GunService.getGun();
     const postsNode = gun.get('posts');
     const initialSeenIds = new Set<string>();
+    const inFlightIds = new Set<string>();
     const collectedPosts: Post[] = [];
     let initialLoadDone = false;
     let subscription: any;
@@ -333,18 +372,17 @@ export class PostService {
     postsNode.once((allPosts: any) => {
       if (!allPosts) { checkLoadComplete(); return; }
       const keys = Object.keys(allPosts).filter(k => k !== '_');
-      const promises = keys.slice(0, MAX_INITIAL_POSTS).map(postId =>
-        new Promise<void>((resolve) => {
-          gun.get('posts').get(postId).once((postData: any) => {
-            if (postData && postData.id && !initialSeenIds.has(postData.id)) {
-              initialSeenIds.add(postData.id);
-              collectedPosts.push({ ...postData, dataVersion: GUN_NAMESPACE });
-            }
-            resolve();
-          });
-        })
-      );
-      Promise.all(promises).then(() => {
+      void loadPostIdsInBatches(
+        keys.slice(0, MAX_INITIAL_POSTS),
+        (postId) => onceWithTimeout(gun.get('posts').get(postId)),
+        (postData) => {
+          if (postData.id && !initialSeenIds.has(postData.id)) {
+            initialSeenIds.add(postData.id);
+            collectedPosts.push({ ...postData, dataVersion: GUN_NAMESPACE });
+          }
+        },
+        50,
+      ).then(() => {
         collectedPosts.sort((a, b) => b.createdAt - a.createdAt);
         collectedPosts.forEach(p => onPost(p));
         checkLoadComplete();
@@ -354,10 +392,15 @@ export class PostService {
     subscription = postsNode.on((allPosts: any) => {
       if (!allPosts) return;
       Object.keys(allPosts).forEach(postId => {
-        if (postId === '_' || initialSeenIds.has(postId)) return;
-        initialSeenIds.add(postId);
-        gun.get('posts').get(postId).once((postData: any) => {
-          if (postData && postData.id) onPost({ ...postData, dataVersion: GUN_NAMESPACE });
+        if (postId === '_' || initialSeenIds.has(postId) || inFlightIds.has(postId)) return;
+        inFlightIds.add(postId);
+        void onceWithTimeout(gun.get('posts').get(postId)).then((postData) => {
+          if (postData && postData.id) {
+            initialSeenIds.add(postData.id);
+            onPost({ ...postData, dataVersion: GUN_NAMESPACE });
+          }
+        }).finally(() => {
+          inFlightIds.delete(postId);
         });
       });
     });
@@ -370,18 +413,17 @@ export class PostService {
         if (!allPosts) { checkLoadComplete(); return; }
         const keys = Object.keys(allPosts).filter(k => k !== '_');
         const v1Collected: Post[] = [];
-        const promises = keys.slice(0, MAX_INITIAL_POSTS).map(postId =>
-          new Promise<void>((resolve) => {
-            rawGun.get('posts').get(postId).once((postData: any) => {
-              if (postData && postData.id && !initialSeenIds.has(postData.id)) {
-                initialSeenIds.add(postData.id);
-                v1Collected.push({ ...postData, dataVersion: 'v1' });
-              }
-              resolve();
-            });
-          })
-        );
-        Promise.all(promises).then(() => {
+        void loadPostIdsInBatches(
+          keys.slice(0, MAX_INITIAL_POSTS),
+          (postId) => onceWithTimeout(rawGun.get('posts').get(postId)),
+          (postData) => {
+            if (postData.id && !initialSeenIds.has(postData.id)) {
+              initialSeenIds.add(postData.id);
+              v1Collected.push({ ...postData, dataVersion: 'v1' });
+            }
+          },
+          50,
+        ).then(() => {
           v1Collected.sort((a, b) => b.createdAt - a.createdAt);
           v1Collected.forEach(p => onPost(p));
           checkLoadComplete();
@@ -390,16 +432,21 @@ export class PostService {
       v1Subscription = v1PostsNode.on((allPosts: any) => {
         if (!allPosts) return;
         Object.keys(allPosts).forEach(postId => {
-          if (postId === '_' || initialSeenIds.has(postId)) return;
-          initialSeenIds.add(postId);
-          rawGun.get('posts').get(postId).once((postData: any) => {
-            if (postData && postData.id) onPost({ ...postData, dataVersion: 'v1' });
+          if (postId === '_' || initialSeenIds.has(postId) || inFlightIds.has(postId)) return;
+          inFlightIds.add(postId);
+          void onceWithTimeout(rawGun.get('posts').get(postId)).then((postData) => {
+            if (postData && postData.id) {
+              initialSeenIds.add(postData.id);
+              onPost({ ...postData, dataVersion: 'v1' });
+            }
+          }).finally(() => {
+            inFlightIds.delete(postId);
           });
         });
       });
     }
 
-    const listenerKey = 'all-posts';
+    const listenerKey = `all-posts-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     postActiveListeners.set(listenerKey, { subscription, v1Subscription, timer: timeboxTimer });
 
     return () => {
@@ -413,7 +460,7 @@ export class PostService {
   // ── API-first getPost with stale-while-revalidate ─────────────────────────
   static async getPost(postId: string): Promise<Post | null> {
     try {
-      const res = await fetch(`${API_URL}/api/post/${postId}`, {
+      const res = await fetch(`${getApiBase()}/api/post/${postId}`, {
         headers: { 'Cache-Control': 'stale-while-revalidate=30' },
       });
       if (res.ok) {
@@ -424,12 +471,9 @@ export class PostService {
 
     // Fallback to Gun (new posts written but not yet indexed)
     const gun = GunService.getGun();
-    return new Promise((resolve) => {
-      gun.get('posts').get(postId).once((postData: any) => {
-        if (postData && postData.id) resolve({ ...postData, dataVersion: GUN_NAMESPACE });
-        else resolve(null);
-      });
-    });
+    const postData = await onceWithTimeout(gun.get('posts').get(postId));
+    if (postData && postData.id) return { ...postData, dataVersion: GUN_NAMESPACE };
+    return null;
   }
 
   static async updatePost(postId: string, updates: Partial<Post>): Promise<void> {

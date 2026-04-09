@@ -1,14 +1,6 @@
 //services/websocketService.ts
 import config from '../config';
-
-type SyncMessage =
-  | { type: 'new-poll'; data: any }
-  | { type: 'new-block'; data: any }
-  | { type: 'request-sync'; peerId: string }
-  | { type: 'sync-response'; data: any }
-  | { type: 'peer-addresses'; data: any }
-  | { type: 'server-list'; data: any }
-  | { type: 'chatroom-message'; roomId: string; data: any };
+import { DiscoveryService } from './discoveryService';
 
 /** Message types that may require proof-of-work on the relay server.
  *  Must stay in sync with POW_REQUIRED_TYPES in src/services/powService.ts. */
@@ -20,12 +12,16 @@ export interface KnownServer {
   api: string;
   addedBy: string;
   firstSeen: number;
+  source: 'local' | 'peer' | 'gun';
+  signatureValid: boolean;
+  lastVerifiedAt?: number;
+  expiresAt?: number;
 }
 
 export class WebSocketService {
   private static ws: WebSocket | null = null;
   private static peerId: string = Math.random().toString(36).substring(7);
-  private static callbacks: Map<string, (data: any) => void> = new Map();
+  private static callbacks: Map<string, Set<(data: any) => void>> = new Map();
   private static isConnected = false;
   private static reconnectAttempts = 0;
   private static maxReconnectAttempts = Infinity;
@@ -47,9 +43,11 @@ export class WebSocketService {
   private static statusListeners: Set<(status: { connected: boolean; peerCount: number }) => void> = new Set();
   private static knownServers: Map<string, KnownServer> = new Map();
   private static readonly MAX_KNOWN_SERVERS = 50;
+  private static readonly DISCOVERY_TTL_MS = 5 * 60_000;
   private static keepAliveTimer: ReturnType<typeof setInterval> | null = null;
   private static reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private static lastConnectUrl: string | null = null;
+  private static connectionEpoch = 0;
   private static syncRequestCallback: (() => void) | null = null;
   private static chatRoomListeners: Map<string, Set<(data: any) => void>> = new Map();
 
@@ -62,22 +60,21 @@ export class WebSocketService {
 
   static initialize() {
     this.loadKnownServers();
+    void this.bootstrapDiscovery();
     this.connect();
   }
 
-  // Tracks whether we intentionally closed the socket so onclose skips reconnect
-  private static intentionalClose = false;
-
   static connect(wsUrl?: string) {
+    const url = wsUrl || this.lastConnectUrl || config.relay.websocket;
+
     // If a connection attempt is already in progress (CONNECTING), don't close
     // it — closing a CONNECTING socket fires onclose which triggers another
     // reconnect, creating an infinite spam loop.
     if (this.ws) {
       if (this.ws.readyState === WebSocket.CONNECTING) {
         // Already trying to connect to the same URL — just wait
-        if (!wsUrl || wsUrl === this.lastConnectUrl) return;
+        if (url === this.lastConnectUrl) return;
       }
-      this.intentionalClose = true;
       try { this.ws.close(); } catch { /* ignore */ }
       this.ws = null;
     }
@@ -88,14 +85,15 @@ export class WebSocketService {
       this.reconnectTimer = null;
     }
 
-    this.intentionalClose = false;
-    const url = wsUrl || this.lastConnectUrl || config.relay.websocket;
+    const epoch = ++this.connectionEpoch;
     this.lastConnectUrl = url;
 
     try {
-      this.ws = new WebSocket(url);
+      const socket = new WebSocket(url);
+      this.ws = socket;
 
-      this.ws.onopen = async () => {
+      socket.onopen = async () => {
+        if (epoch !== this.connectionEpoch || socket !== this.ws) return;
         this.isConnected = true;
         this.reconnectAttempts = 0;
 
@@ -124,6 +122,8 @@ export class WebSocketService {
 
         this.broadcastAddresses();
         this.broadcastServerList();
+        void this.publishDiscoveryAnnouncement();
+        void this.mergeDiscoveryServers();
 
         if (this.syncRequestCallback) {
           this.syncRequestCallback();
@@ -134,7 +134,8 @@ export class WebSocketService {
         }
       };
 
-      this.ws.onmessage = (event) => {
+      socket.onmessage = (event) => {
+        if (epoch !== this.connectionEpoch || socket !== this.ws) return;
         try {
           const message = JSON.parse(event.data);
 
@@ -169,26 +170,52 @@ export class WebSocketService {
             return;
           }
 
-          const callback = this.callbacks.get(message.type);
-          if (callback) {
-            callback(message.data || message);
+          if (message.type === 'server-list') {
+            void this.handleIncomingServerList(message);
+            return;
+          }
+
+          if (message.type === 'peer-addresses') {
+            const data = message.data;
+            if (data?.peerId && data.peerId !== this.peerId) {
+              if (this.peerAddresses.has(data.peerId)) {
+                this.peerAddresses.delete(data.peerId);
+              } else if (this.peerAddresses.size >= this.MAX_PEER_ADDRESSES) {
+                const oldestKey = this.peerAddresses.keys().next().value;
+                if (oldestKey) this.peerAddresses.delete(oldestKey);
+              }
+              this.peerAddresses.set(data.peerId, {
+                peerId: data.peerId,
+                relayUrl: data.relayUrl || '',
+                gunPeers: data.gunPeers || [],
+                joinedAt: data.joinedAt || Date.now(),
+              });
+            }
+          }
+
+          const callbacks = this.callbacks.get(message.type);
+          if (callbacks) {
+            callbacks.forEach((callback) => {
+              try {
+                callback(message.data ?? message);
+              } catch {
+                // Ignore listener errors
+              }
+            });
           }
         } catch (_error) {
           // Malformed message — ignore
         }
       };
 
-      this.ws.onerror = (_event) => {
+      socket.onerror = (_event) => {
+        if (epoch !== this.connectionEpoch || socket !== this.ws) return;
         // Errors are followed by onclose, which handles reconnect.
         // Avoid logging here to prevent duplicate/spammy output.
       };
 
-      this.ws.onclose = (event) => {
-        // If we closed intentionally (e.g. switching URLs), don't reconnect
-        if (this.intentionalClose) {
-          this.intentionalClose = false;
-          return;
-        }
+      socket.onclose = (event) => {
+        if (epoch !== this.connectionEpoch || socket !== this.ws) return;
 
         if (event.code !== 1000 && event.code !== 1001 && this.reconnectAttempts === 0) {
           console.warn(`WebSocket closed: code=${event.code} reason=${event.reason || 'none'}`);
@@ -209,32 +236,6 @@ export class WebSocketService {
         }
       };
 
-      // Listen for address broadcasts from other peers
-      this.subscribe('peer-addresses', (data: any) => {
-        if (data?.peerId && data.peerId !== this.peerId) {
-          // Delete first to refresh insertion order (true LRU)
-          if (this.peerAddresses.has(data.peerId)) {
-            this.peerAddresses.delete(data.peerId);
-          } else if (this.peerAddresses.size >= this.MAX_PEER_ADDRESSES) {
-            // Evict oldest entry if at capacity
-            const oldestKey = this.peerAddresses.keys().next().value;
-            if (oldestKey) this.peerAddresses.delete(oldestKey);
-          }
-          this.peerAddresses.set(data.peerId, {
-            peerId: data.peerId,
-            relayUrl: data.relayUrl || '',
-            gunPeers: data.gunPeers || [],
-            joinedAt: data.joinedAt || Date.now(),
-          });
-        }
-      });
-
-      // Listen for server list broadcasts from other peers
-      this.subscribe('server-list', (data: any) => {
-        if (data?.servers && Array.isArray(data.servers)) {
-          this.mergeServerList(data.servers, data.peerId || 'unknown');
-        }
-      });
     } catch (_error) {
       // Connection failed — reconnect will be triggered via onclose
     }
@@ -259,47 +260,156 @@ export class WebSocketService {
   }
 
   private static broadcastServerList() {
+    const now = Date.now();
     this.addKnownServer({
       websocket: config.relay.websocket,
       gun: config.relay.gun,
       api: config.relay.api,
       addedBy: this.peerId,
-      firstSeen: Date.now(),
+      firstSeen: now,
+      source: 'local',
+      signatureValid: false,
+      lastVerifiedAt: now,
+      expiresAt: now + this.DISCOVERY_TTL_MS,
     });
 
-    const servers = Array.from(this.knownServers.values());
+    const servers = Array.from(this.knownServers.values()).filter((s) => this.isFreshDiscovery(s));
     this.broadcast('server-list', {
       peerId: this.peerId,
       servers,
     });
   }
 
-  private static mergeServerList(servers: KnownServer[], fromPeerId: string) {
+  private static async bootstrapDiscovery() {
+    try {
+      await DiscoveryService.initialize({ maxEntries: this.MAX_KNOWN_SERVERS });
+      await this.mergeDiscoveryServers();
+    } catch {
+      // Discovery is optional; continue with server-list fallback
+    }
+  }
+
+  private static async publishDiscoveryAnnouncement() {
+    try {
+      await DiscoveryService.publishLocalAnnouncement({
+        nodeId: this.peerId,
+        peerId: this.peerId,
+        websocket: config.relay.websocket,
+        gun: config.relay.gun,
+        api: config.relay.api,
+        capabilities: ['ws-sync', 'gun-relay', 'relay-api'],
+      });
+    } catch {
+      // Discovery publish failure should not impact websocket sync
+    }
+  }
+
+  private static async mergeDiscoveryServers() {
+    try {
+      const entries = await DiscoveryService.refreshFromGun();
+      for (const entry of entries) {
+        this.addKnownServer({
+          websocket: entry.websocket,
+          gun: entry.gun,
+          api: entry.api,
+          addedBy: entry.peerId || entry.nodeId,
+          firstSeen: entry.timestamp,
+          source: 'gun',
+          signatureValid: true,
+          lastVerifiedAt: entry.timestamp,
+          expiresAt: entry.expiresAt,
+        });
+      }
+    } catch {
+      // Discovery read failure should not impact websocket sync
+    }
+  }
+
+  private static mergeServerList(servers: KnownServer[], fromPeerId: string, signatureValid: boolean) {
+    const now = Date.now();
     for (const server of servers) {
       this.addKnownServer({
         ...server,
+        source: 'peer',
+        signatureValid,
+        lastVerifiedAt: now,
+        expiresAt: now + this.DISCOVERY_TTL_MS,
         addedBy: server.addedBy || fromPeerId,
       });
     }
   }
 
-  static addKnownServer(server: KnownServer) {
-    // Validate URLs — reject non-secure or malformed entries
+  private static async handleIncomingServerList(message: any) {
+    const payload = message?.data;
+    if (!payload?.servers || !Array.isArray(payload.servers)) return;
+
+    const signatureValid = await this.verifyDiscoverySignature(message);
+    if (!signatureValid) {
+      console.warn('[WS] Ignoring server-list broadcast with invalid signature');
+      return;
+    }
+
+    this.mergeServerList(payload.servers, payload.peerId || 'unknown', true);
+  }
+
+  private static async verifyDiscoverySignature(message: Record<string, unknown>): Promise<boolean> {
     try {
-      const wsUrl = new URL(server.websocket);
-      const gunUrl = new URL(server.gun);
-      const apiUrl = new URL(server.api);
-      if (wsUrl.protocol !== 'wss:' || gunUrl.protocol !== 'https:' || apiUrl.protocol !== 'https:') {
-        console.debug('[WS] Rejected non-TLS server:', server.websocket);
-        return;
-      }
+      const { IntegrityService } = await import('@/services/integrityService');
+      return IntegrityService.verifySealedPayload(message, 'server-list', this.DISCOVERY_TTL_MS);
     } catch {
-      console.debug('[WS] Rejected malformed server URL:', server.websocket);
+      return false;
+    }
+  }
+
+  private static isFreshDiscovery(server: KnownServer): boolean {
+    const now = Date.now();
+    const expiresAt = server.expiresAt ?? (server.firstSeen + this.DISCOVERY_TTL_MS);
+    return expiresAt >= now;
+  }
+
+  private static isEndpointSetSafe(ws: string, gun: string, api: string): boolean {
+    let wsUrl: URL;
+    let gunUrl: URL;
+    let apiUrl: URL;
+
+    try {
+      wsUrl = new URL(ws);
+      gunUrl = new URL(gun);
+      apiUrl = new URL(api);
+    } catch {
+      return false;
+    }
+
+    if (!['ws:', 'wss:'].includes(wsUrl.protocol)) return false;
+    if (!['http:', 'https:'].includes(gunUrl.protocol)) return false;
+    if (!['http:', 'https:'].includes(apiUrl.protocol)) return false;
+
+    const secureContext = typeof location !== 'undefined' && location.protocol === 'https:';
+    if (!secureContext) return true;
+
+    const localhostHosts = new Set(['localhost', '127.0.0.1', '::1']);
+    const isLocal = (u: URL) => localhostHosts.has(u.hostname);
+
+    const wsSafe = wsUrl.protocol === 'wss:' || isLocal(wsUrl);
+    const gunSafe = gunUrl.protocol === 'https:' || isLocal(gunUrl);
+    const apiSafe = apiUrl.protocol === 'https:' || isLocal(apiUrl);
+    return wsSafe && gunSafe && apiSafe;
+  }
+
+  static addKnownServer(server: KnownServer) {
+    if (!this.isEndpointSetSafe(server.websocket, server.gun, server.api)) {
+      console.debug('[WS] Rejected unsafe server URL set:', server.websocket);
+      return;
+    }
+
+    if (server.source === 'peer' && !server.signatureValid) {
+      console.debug('[WS] Rejected unsigned discovered server:', server.websocket);
       return;
     }
 
     const key = server.websocket;
-    if (!this.knownServers.has(key)) {
+    const existing = this.knownServers.get(key);
+    if (!existing) {
       // Evict oldest entry if at capacity
       if (this.knownServers.size >= this.MAX_KNOWN_SERVERS) {
         const oldestKey = this.knownServers.keys().next().value;
@@ -309,8 +419,16 @@ export class WebSocketService {
         ...server,
         firstSeen: server.firstSeen || Date.now(),
       });
-      this.saveKnownServers();
+    } else {
+      this.knownServers.set(key, {
+        ...existing,
+        ...server,
+        firstSeen: existing.firstSeen || server.firstSeen || Date.now(),
+        lastVerifiedAt: server.lastVerifiedAt ?? existing.lastVerifiedAt,
+        signatureValid: server.signatureValid,
+      });
     }
+    this.saveKnownServers();
   }
 
   static removeKnownServer(websocketUrl: string) {
@@ -319,7 +437,9 @@ export class WebSocketService {
   }
 
   static getKnownServers(): KnownServer[] {
-    return Array.from(this.knownServers.values());
+    return Array.from(this.knownServers.values()).filter((server) => (
+      server.source === 'peer' ? this.isFreshDiscovery(server) : true
+    ));
   }
 
   private static saveKnownServers() {
@@ -340,13 +460,20 @@ export class WebSocketService {
         for (const server of capped) {
           // Validate URL format and scheme before loading
           if (typeof server.websocket !== 'string' || typeof server.gun !== 'string' || typeof server.api !== 'string') continue;
-          try {
-            const wsUrl = new URL(server.websocket);
-            const gunUrl = new URL(server.gun);
-            const apiUrl = new URL(server.api);
-            if (wsUrl.protocol !== 'wss:' || gunUrl.protocol !== 'https:' || apiUrl.protocol !== 'https:') continue;
-          } catch { continue; }
-          this.knownServers.set(server.websocket, server);
+          if (!this.isEndpointSetSafe(server.websocket, server.gun, server.api)) continue;
+          const hydrated: KnownServer = {
+            ...server,
+            source: server.source === 'local' || server.source === 'peer' || server.source === 'gun'
+              ? server.source
+              : 'peer',
+            signatureValid: Boolean(server.signatureValid),
+            lastVerifiedAt: server.lastVerifiedAt ?? server.firstSeen,
+            expiresAt: server.source === 'peer'
+              ? (server.expiresAt ?? (server.firstSeen + this.DISCOVERY_TTL_MS))
+              : server.expiresAt,
+          };
+          if (hydrated.source === 'peer' && !this.isFreshDiscovery(hydrated)) continue;
+          this.knownServers.set(server.websocket, hydrated);
         }
       }
     } catch {
@@ -355,9 +482,16 @@ export class WebSocketService {
   }
 
   private static sendToRelay(type: string, data: any) {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type, ...data }));
+    if (this.ws?.readyState !== WebSocket.OPEN) {
+      return;
     }
+
+    if (type === 'broadcast') {
+      this.ws.send(JSON.stringify({ type: 'broadcast', data }));
+      return;
+    }
+
+    this.ws.send(JSON.stringify({ type, ...data }));
   }
 
   /**
@@ -433,7 +567,10 @@ export class WebSocketService {
   }
 
   static subscribe(type: string, callback: (data: any) => void) {
-    this.callbacks.set(type, callback);
+    if (!this.callbacks.has(type)) {
+      this.callbacks.set(type, new Set());
+    }
+    this.callbacks.get(type)?.add(callback);
   }
 
   /**
@@ -484,6 +621,11 @@ export class WebSocketService {
     return this.isConnected;
   }
 
+  static getConnectedUrl(): string | null {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return null;
+    return this.ws.url || this.lastConnectUrl;
+  }
+
   static getPeerCount(): number {
     const totalPeers = this.peers.size || (this.isConnected ? 1 : 0);
     return Math.max(0, totalPeers - 1);
@@ -509,7 +651,6 @@ export class WebSocketService {
       this.reconnectTimer = null;
     }
     if (this.ws) {
-      this.intentionalClose = true;
       this.ws.close();
       this.ws = null;
     }

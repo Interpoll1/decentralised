@@ -57,7 +57,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import {
   IonCard,
   IonCardHeader,
@@ -91,9 +92,12 @@ const emit = defineEmits(['vote-submitted']);
 
 const chainStore = useChainStore();
 const pollStore = usePollStore();
+const router = useRouter();
 const selectedOption = ref('');
 const isSubmitting = ref(false);
 const hasAlreadyVoted = ref(false);
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const displayTitle = computed(() => {
   const anyPoll: any = props.poll as any;
@@ -119,66 +123,65 @@ onMounted(async () => {
   }
 });
 
+watch(
+  () => props.poll.id,
+  async (pollId) => {
+    selectedOption.value = '';
+    isSubmitting.value = false;
+    hasAlreadyVoted.value = await VoteTrackerService.hasVoted(pollId);
+  },
+);
+
 const submitVote = async () => {
-  if (!selectedOption.value) return;
-
-  const deviceId = await VoteTrackerService.getDeviceId();
-
-  // Private poll: require a valid, unused invite code
-  if (props.requiresInviteCode) {
-    const code = (props.inviteCode || '').trim();
-    if (!code) {
-      const toast = await toastController.create({
-        message: 'An invite code is required to vote in this poll',
-        duration: 3000,
-        color: 'danger'
-      });
-      await toast.present();
-      return;
-    }
-
-    try {
-      await PollService.consumeInviteCode(props.poll.id, code);
-    } catch (err: any) {
-      const message = err?.message || 'Invalid or already-used invite code';
-      const toast = await toastController.create({
-        message,
-        duration: 3000,
-        color: 'danger'
-      });
-      await toast.present();
-      return;
-    }
-  }
-
-  // Double-check vote eligibility
-  if (await VoteTrackerService.hasVoted(props.poll.id)) {
-    const toast = await toastController.create({
-      message: 'You have already voted on this poll',
-      duration: 3000,
-      color: 'danger'
-    });
-    await toast.present();
-    hasAlreadyVoted.value = true;
-    return;
-  }
-
-  // Ask backend (if available) to enforce one-vote-per-device
-  const allowedByBackend = await AuditService.authorizeVote(props.poll.id, deviceId);
-  if (!allowedByBackend) {
-    const toast = await toastController.create({
-      message: 'This device has already voted on this poll (server)',
-      duration: 3000,
-      color: 'danger'
-    });
-    await toast.present();
-    hasAlreadyVoted.value = true;
-    return;
-  }
+  if (!selectedOption.value || isSubmitting.value) return;
 
   isSubmitting.value = true;
+  const inviteCode = (props.inviteCode || '').trim();
+  let inviteReservationId: string | null = null;
+  let voteStoredOnChain = false;
 
   try {
+    await PollService.flushPendingInviteCodeFinalizations();
+    const deviceId = await VoteTrackerService.getDeviceId();
+
+    // Private poll: require a valid, unused invite code
+    if (props.requiresInviteCode) {
+      if (!inviteCode) {
+        const toast = await toastController.create({
+          message: 'An invite code is required to vote in this poll',
+          duration: 3000,
+          color: 'danger'
+        });
+        await toast.present();
+        return;
+      }
+    }
+
+    // Double-check vote eligibility
+    if (await VoteTrackerService.hasVoted(props.poll.id)) {
+      const toast = await toastController.create({
+        message: 'You have already voted on this poll',
+        duration: 3000,
+        color: 'danger'
+      });
+      await toast.present();
+      hasAlreadyVoted.value = true;
+      return;
+    }
+
+    // Ask backend (if available) to enforce one-vote-per-device
+    const allowedByBackend = await AuditService.authorizeVote(props.poll.id, deviceId);
+    if (!allowedByBackend) {
+      const toast = await toastController.create({
+        message: 'This device has already voted on this poll (server)',
+        duration: 3000,
+        color: 'danger'
+      });
+      await toast.present();
+      hasAlreadyVoted.value = true;
+      return;
+    }
+
     const vote: Vote = {
       pollId: props.poll.id,
       choice: selectedOption.value,
@@ -186,41 +189,90 @@ const submitVote = async () => {
       deviceId
     };
 
-    // Add vote to blockchain
-    const receipt = await chainStore.addVote(vote);
-
-    // Also update Gun poll option counts via store (optimistic + protected from bounce-back)
-    try {
-      const matchedOption = (props.poll.options as any[]).find((o: any) => {
-        if (typeof o === 'string') return false;
-        return o.text === selectedOption.value || o.id === selectedOption.value;
-      });
-      if (matchedOption?.id) {
-        await pollStore.voteOnPoll(props.poll.id, [matchedOption.id]);
-      }
-    } catch (gunErr) {
-      // Non-critical: blockchain vote succeeded, Gun count update is best-effort
-      console.warn('Gun poll count update failed:', gunErr);
+    if (props.requiresInviteCode && inviteCode) {
+      inviteReservationId = await PollService.consumeInviteCode(props.poll.id, inviteCode);
     }
 
-    // Record that this device voted
-    await VoteTrackerService.recordVote(props.poll.id, receipt.blockIndex);
+    // Add vote to blockchain
+    const receipt = await chainStore.addVote(vote);
+    voteStoredOnChain = true;
+    hasAlreadyVoted.value = true;
+    try {
+      await VoteTrackerService.recordVote(props.poll.id, receipt.blockIndex);
+    } catch (recordError) {
+      console.warn('Failed to persist local vote record after chain vote:', recordError);
+    }
+
+    emit('vote-submitted', receipt.mnemonic);
+    const pollIdForSync = props.poll.id;
+    const inviteCodeForSync = inviteCode;
+    const inviteReservationIdForSync = inviteReservationId;
+    const selectedOptionValue = selectedOption.value;
+    const pollOptionsForSync = [...(props.poll.options as any[])];
+
+    void (async () => {
+      if (props.requiresInviteCode && inviteCodeForSync && inviteReservationIdForSync) {
+        let finalized = false;
+        for (let attempt = 0; attempt < 3 && !finalized; attempt += 1) {
+          try {
+            await PollService.finalizeInviteCode(pollIdForSync, inviteCodeForSync, inviteReservationIdForSync);
+            finalized = true;
+          } catch (finalizeError) {
+            if (attempt === 2) {
+              console.error('Failed to finalize invite code after chain vote:', finalizeError);
+              PollService.queueInviteCodeFinalization(pollIdForSync, inviteCodeForSync, inviteReservationIdForSync);
+            } else {
+              await wait(300 * (attempt + 1));
+            }
+          }
+        }
+      }
+
+      try {
+        const confirmedByBackend = await AuditService.confirmVote(pollIdForSync, deviceId);
+        if (!confirmedByBackend) {
+          console.warn('Vote confirmation request failed after chain vote');
+        }
+      } catch (confirmError) {
+        console.warn('Vote confirmation request failed after chain vote:', confirmError);
+      }
+
+      try {
+        const matchedOption = pollOptionsForSync.find((o: any) => {
+          if (typeof o === 'string') return false;
+          return o.text === selectedOptionValue || o.id === selectedOptionValue;
+        });
+        if (matchedOption?.id) {
+          await pollStore.voteOnPoll(pollIdForSync, [matchedOption.id]);
+        }
+      } catch (gunErr) {
+        console.warn('Gun poll count update failed:', gunErr);
+      }
+    })();
 
     const toast = await toastController.create({
-      message: 'Vote submitted successfully',
-      duration: 2000,
+      message: 'Vote recorded. Network sync will continue in the background.',
+      duration: 3000,
       color: 'success'
     });
     await toast.present();
-
-    // Emit receipt mnemonic to parent
-    emit('vote-submitted', receipt.mnemonic);
   } catch (error) {
+    let releaseFailed = false;
+    if (props.requiresInviteCode && inviteCode && inviteReservationId && !voteStoredOnChain) {
+      try {
+        await PollService.releaseInviteCode(props.poll.id, inviteCode, inviteReservationId);
+      } catch (releaseError) {
+        releaseFailed = true;
+        console.error('Failed to release invite code reservation:', releaseError);
+      }
+    }
     console.error('Error submitting vote:', error);
     
     const toast = await toastController.create({
-      message: 'Failed to submit vote',
-      duration: 3000,
+      message: releaseFailed
+        ? 'Failed to submit vote and release the invite code reservation. Please contact the poll owner.'
+        : 'Failed to submit vote',
+      duration: releaseFailed ? 5000 : 3000,
       color: 'danger'
     });
     await toast.present();
@@ -232,7 +284,7 @@ const submitVote = async () => {
 const viewMyReceipt = () => {
   // Navigate to receipt lookup page
   // Could auto-fill if we stored receipt reference
-  window.location.href = '/receipt';
+  void router.push('/receipt');
 };
 
 // ─── Option Helpers ─────────────────────────────────────────────────────────

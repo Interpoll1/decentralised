@@ -65,20 +65,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
+import { ref, computed, onUnmounted, nextTick, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonButtons, IonBackButton, IonNote
+  IonButtons, IonBackButton, IonNote, onIonViewWillEnter
 } from '@ionic/vue';
 import ChatService, { ChatMessage } from '../services/chatService';
 import { UserService } from '../services/userService';
 import config from '@/config';
 
 const route = useRoute();
+const props = defineProps<{ userId: string }>();
 
-const recipientId   = ref(route.params.userId as string || '');
-const recipientName = ref(route.query.name as string || 'User');
+const recipientId = computed(() => props.userId || (route.params.userId as string) || '');
+const recipientName = computed(() => (route.query.name as string) || 'User');
 
 const WS_URL = config.relay.websocket;
 
@@ -92,83 +93,143 @@ const content        = ref<any>(null);
 const typingTimer    = ref<number | null>(null);
 
 let chatService: ChatService | null = null;
+let initGeneration = 0;
 
 // Computed helpers for template
 const currentMessages = computed(() => messages.value);
 const isTypingState   = computed(() => typingState.value);
 
-// ── Init ──────────────────────────────────────────────────────────────────────
-onMounted(async () => {
-  // 1. Get real device userId
-  const currentUser = await UserService.getCurrentUser();
-  const userId = currentUser.id;
-
-  // 2. Create service and wire callbacks BEFORE calling init()
-  chatService = new ChatService(WS_URL, userId);
-
-  chatService.onConnectionChange = (status) => {
+function bindChatCallbacks(service: ChatService) {
+  service.onConnectionChange = (status) => {
     connected.value = status;
   };
 
-  chatService.onMessage = (msg: ChatMessage) => {
+  service.onMessage = (msg: ChatMessage) => {
     messages.value.push(msg);
     nextTick(() => scrollToBottom());
   };
 
-  chatService.onTyping = ({ from, isTyping }) => {
+  service.onTyping = ({ from, isTyping }) => {
     if (from === recipientId.value) typingState.value = isTyping;
   };
 
-  chatService.onReadReceipt = ({ from }) => {
+  service.onReadReceipt = ({ from }) => {
     if (from === recipientId.value) {
       messages.value.forEach(m => { if (m.sent) m.read = true; });
     }
   };
 
-  chatService.onDelivered = ({ messageId }) => {
+  service.onDelivered = ({ messageId }) => {
     console.log('Delivered:', messageId);
   };
+}
 
-  // 3. init() — generates/loads RSA keypair, publishes chatPublicKey to GunDB, opens WS
-  await chatService.init();
+function resetChatState() {
+  messages.value = [];
+  connected.value = false;
+  chatReady.value = false;
+  messageInput.value = '';
+  typingState.value = false;
+}
 
-  // 4. Wait for WS to actually open
-  await waitForConnection();
+function disconnectChat() {
+  chatService?.disconnect();
+  chatService = null;
+}
 
-  // 5. Now start the encrypted chat session with the recipient
-  //    chatService will fetch recipient's chatPublicKey from GunDB internally
+async function initializeChat() {
+  const targetUserId = recipientId.value;
+  if (!targetUserId) return;
+
+  const gen = ++initGeneration;
+  disconnectChat();
+  resetChatState();
+
+  const currentUser = await UserService.getCurrentUser();
+  if (gen !== initGeneration) return;
+
+  const service = new ChatService(WS_URL, currentUser.id);
+  bindChatCallbacks(service);
+  chatService = service;
+
+  await service.init();
+  if (gen !== initGeneration) {
+    service.disconnect();
+    return;
+  }
+
+  const didConnect = await waitForConnection();
+  if (gen !== initGeneration) {
+    service.disconnect();
+    return;
+  }
+  if (!didConnect) {
+    const stop = watch(connected, (isConnected) => {
+      if (!isConnected || gen !== initGeneration || chatReady.value) return;
+      stop();
+      void initializeChat();
+    });
+    return;
+  }
+
   try {
-    await chatService.startChat({
-      userId: recipientId.value,
+    await service.startChat({
+      userId: targetUserId,
       name: recipientName.value,
     });
 
-    // Load persisted history from GunDB
-    const history = await chatService.loadHistory(recipientId.value);
-    messages.value = history;
+    if (gen !== initGeneration) {
+      service.disconnect();
+      return;
+    }
 
+    const history = await service.loadHistory(targetUserId);
+    if (gen !== initGeneration) {
+      service.disconnect();
+      return;
+    }
+
+    messages.value = history;
     chatReady.value = true;
   } catch (err) {
     console.error('startChat failed:', err);
   }
 
-  chatService.markAsRead(recipientId.value);
+  service.markAsRead(targetUserId);
   scrollToBottom();
+}
+
+watch(recipientId, async (newId, oldId) => {
+  if (newId && newId !== oldId) {
+    await initializeChat();
+  }
+});
+
+onIonViewWillEnter(() => {
+  if (!chatReady.value && recipientId.value) {
+    void initializeChat();
+    return;
+  }
+  chatService?.markAsRead(recipientId.value);
 });
 
 onUnmounted(() => {
-  chatService?.disconnect();
+  initGeneration++;
+  disconnectChat();
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function waitForConnection(): Promise<void> {
+function waitForConnection(): Promise<boolean> {
   return new Promise((resolve) => {
-    if (connected.value) { resolve(); return; }
+    if (connected.value) { resolve(true); return; }
     const stop = watch(connected, (val) => {
-      if (val) { stop(); setTimeout(resolve, 300); }
+      if (val) { stop(); setTimeout(() => resolve(true), 300); }
     });
-    setTimeout(resolve, 10000); // max wait 10s
+    setTimeout(() => {
+      stop();
+      resolve(false);
+    }, 10000);
   });
 }
 

@@ -1,4 +1,5 @@
 // searchService.ts - Full-Text Search Service for Vue
+import config from '@/config';
 
 export interface SearchResult {
   id: string;
@@ -33,13 +34,19 @@ class SearchService {
     this.cache = new Map();
   }
 
+  private getApiBase(): string {
+    return this.apiUrl || config.relay.api;
+  }
+
   async search(query: string, options: SearchOptions = {}): Promise<SearchResponse> {
     if (!query || query.length < 2) {
       throw new Error('Query must be at least 2 characters');
     }
 
+    const apiBase = this.getApiBase();
+
     // Check cache
-    const cacheKey = JSON.stringify({ query, ...options });
+    const cacheKey = JSON.stringify({ apiBase, query, ...options });
     const cached = this.cache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < this.cacheTTL) {
       return cached.data;
@@ -53,7 +60,7 @@ class SearchService {
     if (options.offset) params.append('offset', options.offset.toString());
 
     try {
-      const response = await fetch(`${this.apiUrl}/api/search?${params}`, {
+      const response = await fetch(`${apiBase}/api/search?${params}`, {
         credentials: 'include',
       });
 
@@ -113,7 +120,7 @@ class SearchService {
         { type, id, data } as Record<string, unknown>,
         'index',
       );
-      const response = await fetch(`${this.apiUrl}/api/index`, {
+      const response = await fetch(`${this.getApiBase()}/api/index`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

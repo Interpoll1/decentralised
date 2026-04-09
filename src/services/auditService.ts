@@ -8,6 +8,11 @@ interface VoteAuthorizeResponse {
   reason?: string;
 }
 
+interface VoteConfirmResponse {
+  ok: boolean;
+  alreadyRecorded?: boolean;
+}
+
 export class AuditService {
   static async logReceipt(type: ReceiptKind, payload: any): Promise<void> {
     try {
@@ -58,6 +63,31 @@ export class AuditService {
       return true;
     } catch (_error) {
       return true;
+    }
+  }
+
+  static async confirmVote(pollId: string, deviceId: string): Promise<boolean> {
+    try {
+      const body = await IntegrityService.seal(
+        { pollId, deviceId } as Record<string, unknown>,
+        'vote-confirm',
+      );
+      const res = await fetch(`${config.relay.api}/api/vote-confirm`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        return false;
+      }
+
+      const data = (await res.json()) as VoteConfirmResponse;
+      return data.ok === true;
+    } catch (_error) {
+      return false;
     }
   }
 }

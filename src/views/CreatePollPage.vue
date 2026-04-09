@@ -129,8 +129,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, computed, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage,
   IonHeader,
@@ -167,6 +167,7 @@ import { usePollStore } from '../stores/pollStore';
 import { Community } from '../services/communityService';
 
 const router = useRouter();
+const route = useRoute();
 const communityStore = useCommunityStore();
 const pollStore = usePollStore();
 
@@ -267,8 +268,14 @@ async function createPoll() {
     // If private, copy a ready-to-share invite link and show codes
     if (isPrivate.value && (poll as any).inviteCodes?.length) {
       const codes = (poll as any).inviteCodes as string[];
-      const baseUrl = window.location.origin;
-      const sampleLink = `${baseUrl}/Interpole/vote/${poll.id}?code=${codes[0]}`;
+      const buildVoteLink = (code: string) => {
+        const routeLocation = router.resolve({
+          path: `/vote/${poll.id}`,
+          query: { code },
+        });
+        return `${window.location.origin}${routeLocation.href}`;
+      };
+      const sampleLink = buildVoteLink(codes[0]);
 
       try {
         if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -293,7 +300,7 @@ async function createPoll() {
       const codesList = `<pre style="text-align:left;white-space:pre-wrap;margin:0">${codes
         .map((c) => `${escapeHtml(c)} — unused`)
         .join('\n')}</pre>`;
-      const linksList = codes.map((c) => `${baseUrl}/Interpole/vote/${poll.id}?code=${c}`).join('\n');
+      const linksList = codes.map((code) => buildVoteLink(code)).join('\n');
 
       const alert = await alertController.create({
         header: 'Invite Codes',
@@ -343,15 +350,18 @@ async function createPoll() {
   }
 }
 
-onMounted(() => {
-  // If user came from a specific community, pre-select it
-  const routeCommunityId = router.currentRoute.value.query.communityId as string;
-  if (routeCommunityId) {
-    const community = communityStore.communities.find(c => c.id === routeCommunityId);
-    if (community) {
-      selectedCommunity.value = community;
+watch(
+  [() => route.query.communityId, () => communityStore.communities.length],
+  ([routeCommunityId]) => {
+    const communityId = typeof routeCommunityId === 'string' ? routeCommunityId : '';
+    if (!communityId) {
+      selectedCommunity.value = null;
+      return;
     }
-  }
-});
-</script>
 
+    const community = communityStore.communities.find(c => c.id === communityId) || null;
+    selectedCommunity.value = community;
+  },
+  { immediate: true },
+);
+</script>

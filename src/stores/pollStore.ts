@@ -48,6 +48,16 @@ export const usePollStore = defineStore('poll', () => {
   const recentlyVotedPolls = new Map<string, number>();
   const VOTE_PROTECTION_MS = 10_000; // 10s protection window after voting
 
+  function handlePollSyncUpdate(incomingPoll: Poll) {
+    if (!incomingPoll?.id || !Array.isArray(incomingPoll.options) || incomingPoll.options.length === 0) {
+      return;
+    }
+    injectPoll(incomingPoll);
+  }
+
+  BroadcastService.subscribe('poll-updated', handlePollSyncUpdate);
+  WebSocketService.subscribe('poll-updated', handlePollSyncUpdate);
+
   function isVoteProtected(pollId: string): boolean {
     const ts = recentlyVotedPolls.get(pollId);
     if (!ts) return false;
@@ -56,6 +66,11 @@ export const usePollStore = defineStore('poll', () => {
       return false;
     }
     return true;
+  }
+
+  function getTotalVotes(poll: Poll): number {
+    if (typeof poll.totalVotes === 'number') return poll.totalVotes;
+    return poll.options.reduce((sum, opt) => sum + (opt.votes || 0), 0);
   }
 
   /** Attempt to decrypt an encrypted poll and update the store */
@@ -111,10 +126,10 @@ export const usePollStore = defineStore('poll', () => {
         // Phase 1: shell poll arrives
         (poll) => {
           if (pollsMap.value.has(poll.id)) {
-            // Skip Gun re-delivery if this poll was just voted on (prevents bounce-back)
-            if (isVoteProtected(poll.id)) return;
-            // Don't overwrite a poll that has options with one that has none
             const existing = pollsMap.value.get(poll.id)!;
+            // During vote-protection, block only non-advancing updates.
+            if (isVoteProtected(poll.id) && getTotalVotes(poll) <= getTotalVotes(existing)) return;
+            // Don't overwrite a poll that has options with one that has none
             if (existing.options.length > 0 && poll.options.length === 0) {
               return;
             }
@@ -178,9 +193,10 @@ export const usePollStore = defineStore('poll', () => {
       // Existing has no options yet — take the incoming version
       pollsMap.value.set(poll.id, poll);
       tryDecryptPoll(poll);
-    } else if (poll.options.length > 0 && (poll.totalVotes || 0) >= (existing.totalVotes || 0)) {
+    } else if (poll.options.length > 0 && getTotalVotes(poll) >= getTotalVotes(existing)) {
       // Accept updates with equal or higher vote counts (avoids reverting votes)
-      if (!isVoteProtected(poll.id)) {
+      // During vote-protection, block only non-advancing updates.
+      if (!isVoteProtected(poll.id) || getTotalVotes(poll) > getTotalVotes(existing)) {
         pollsMap.value.set(poll.id, poll);
         tryDecryptPoll(poll);
       }
@@ -276,6 +292,16 @@ export const usePollStore = defineStore('poll', () => {
     }
     try {
       await PollService.vote(pollId, optionIds, user.id);
+      const canonical = await PollService.loadPoll(pollId);
+      if (canonical) {
+        pollsMap.value.set(pollId, canonical);
+        if (currentPoll.value?.id === pollId) currentPoll.value = canonical;
+      }
+      const confirmed = canonical || pollsMap.value.get(pollId);
+      if (confirmed) {
+        BroadcastService.broadcast('poll-updated', confirmed);
+        void WebSocketService.broadcast('poll-updated', confirmed);
+      }
     } catch (err) {
       console.warn('Vote failed — rolling back', err);
       recentlyVotedPolls.delete(pollId);
@@ -298,7 +324,7 @@ export const usePollStore = defineStore('poll', () => {
         currentPoll.value = existing;
         return;
       }
-      const poll = await PollService.loadPoll(pollId);
+      const poll = await PollService.loadPollWithApiFallback(pollId);
       if (poll) {
         pollsMap.value.set(poll.id, poll);
         tryDecryptPoll(poll);

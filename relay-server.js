@@ -37,6 +37,47 @@ const powChallenge = new PowChallenge();
 // In-memory registry for backend-side vote protection
 // key = `${pollId}:${deviceId}`
 const voteRegistry = new Set();
+const pendingVoteReservations = new Map();
+const PENDING_VOTE_TTL_MS = 60_000;
+
+function cleanupPendingVoteReservations(now = Date.now()) {
+  for (const [key, expiresAt] of pendingVoteReservations) {
+    if (expiresAt <= now) pendingVoteReservations.delete(key);
+  }
+}
+
+function hasPendingVoteReservation(key, now = Date.now()) {
+  const expiresAt = pendingVoteReservations.get(key);
+  if (!expiresAt) return false;
+  if (expiresAt <= now) {
+    pendingVoteReservations.delete(key);
+    return false;
+  }
+  return true;
+}
+
+function reserveVoteSlot(key, now = Date.now()) {
+  cleanupPendingVoteReservations(now);
+  if (voteRegistry.has(key) || hasPendingVoteReservation(key, now)) {
+    return { ok: false, reason: 'already voted or vote pending' };
+  }
+  pendingVoteReservations.set(key, now + PENDING_VOTE_TTL_MS);
+  return { ok: true };
+}
+
+function commitVoteSlot(key, now = Date.now()) {
+  cleanupPendingVoteReservations(now);
+  if (voteRegistry.has(key)) {
+    pendingVoteReservations.delete(key);
+    return { ok: true, alreadyRecorded: true };
+  }
+  if (!hasPendingVoteReservation(key, now)) {
+    return { ok: false, reason: 'vote not authorized or authorization expired' };
+  }
+  pendingVoteReservations.delete(key);
+  voteRegistry.add(key);
+  return { ok: true, alreadyRecorded: false };
+}
 
 // Simple append-only log for receipts and audit events
 const RECEIPT_LOG_FILE = new URL('./storage.txt', import.meta.url).pathname;
@@ -474,29 +515,66 @@ server.on('request', (req, res) => {
         }
 
         const key = `${pollId}:${deviceId}`;
-        const alreadyVoted = voteRegistry.has(key);
-
-        if (!alreadyVoted) {
-          voteRegistry.add(key);
-        }
+        const reservation = reserveVoteSlot(key);
+        const allowed = reservation.ok;
 
         // Log the authorization attempt
         const logEntry = {
           type: 'vote-authorize',
           pollId,
           deviceId,
-          allowed: !alreadyVoted,
+          allowed,
           timestamp: Date.now(),
         };
         fs.appendFile(RECEIPT_LOG_FILE, JSON.stringify(logEntry) + '\n', () => {});
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ allowed: !alreadyVoted, reason: alreadyVoted ? 'already voted' : undefined }));
+        res.end(JSON.stringify({ allowed, reason: allowed ? undefined : reservation.reason }));
       } catch (error) {
         // SECURITY FIX: Return allowed: false on error (was: true)
         console.error('Error in /api/vote-authorize:', error.message);
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ allowed: false, reason: 'internal error' }));
+      }
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && (url.pathname === '/api/vote-confirm' || url.pathname === '/api/vote-record')) {
+    parseBodyWithLimit(req, res, 4096).then((data) => {
+      if (!data) return;
+      try {
+        const pollId = sanitizeId(String(data.pollId || ''), 128);
+        const deviceId = sanitizeId(String(data.deviceId || ''), 128);
+
+        if (!pollId || !deviceId) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, reason: 'missing or invalid pollId or deviceId' }));
+          return;
+        }
+
+        const key = `${pollId}:${deviceId}`;
+        const commitResult = commitVoteSlot(key);
+        if (!commitResult.ok) {
+          res.writeHead(409, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, reason: commitResult.reason }));
+          return;
+        }
+
+        const logEntry = {
+          type: url.pathname === '/api/vote-confirm' ? 'vote-confirm' : 'vote-record',
+          pollId,
+          deviceId,
+          timestamp: Date.now(),
+        };
+        fs.appendFile(RECEIPT_LOG_FILE, JSON.stringify(logEntry) + '\n', () => {});
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, alreadyRecorded: commitResult.alreadyRecorded }));
+      } catch (error) {
+        console.error(`Error in ${url.pathname}:`, error.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, reason: 'internal error' }));
       }
     });
     return;

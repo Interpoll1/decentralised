@@ -1,0 +1,25 @@
+# Views — `src/views/`
+
+> **Keep this file updated** whenever you add, remove, or significantly change a view.
+
+Route-level pages built with Vue 3 Composition API + Ionic. Views compose stores, services, and reusable components into complete screens.
+
+## View Inventory
+
+| File | Purpose |
+|---|---|
+| `HomePage.vue` | Mixed home feed that combines communities, posts, and polls with new-content banners and runtime relay-aware loading. |
+| `CommunityPage.vue` | Community detail page with feed, metadata, and join/share actions. |
+| `PollDetailPage.vue` | Full poll page with inline vote submission, results gating, duplicate-vote checks, and receipt-first submission flow. After `chainStore.addVote()` succeeds it marks the vote locally, routes to the receipt immediately, and lets backend confirm plus Gun/MySQL follow-up sync continue in the background so slow or outdated relays do not bounce the user back into a second submission attempt. |
+| `VotePage.vue` | Standalone vote route that loads a poll by id and renders `VoteForm.vue`; used for direct links and receipt-oriented vote flows. |
+| `ReceiptPage.vue` | Displays a previously generated mnemonic receipt and linked vote details from the local chain. |
+| `ResultsPage.vue` | Dedicated poll results page for viewing vote counts without the voting form. |
+| `SearchView.vue` | Search page for posts and polls; now relies on runtime relay config instead of capturing a fixed API base at mount time. |
+| `ChatView.vue` | Route-reactive direct-chat page that reinitializes when the target peer changes without forcing a full page reload. |
+| `JoinPrivatePage.vue` | Invite / private-community entry flow. Supports SPA navigation without a browser reload. |
+| `SettingsPage.vue` | Runtime relay settings, diagnostics, and local app configuration. Network tab includes explicit bootstrap recovery (generate/copy/import bootstrap artifacts, Gun discovery seeding, probe-before-switch confirmation) plus known-server trust/freshness metadata (`local`/`peer`/`gun` source, signature status, TTL when provided). “Signed” reflects explicit verification state, not source labels. Bootstrap invite imports show signature metadata presence in the prompt but remain unsigned unless signature verification is implemented. Relay switching is blocked for offline probe results. “Currently connected” reflects the live open WebSocket URL, not config URL match alone. |
+
+## Notes
+
+- These are route components; internal links should stay inside the SPA router rather than using full-page reloads.
+- Poll voting UX is designed to prioritize the decentralized chain write and receipt generation. Relay-side confirmation and denormalized poll counters are follow-up sync tasks, not the success condition for the vote itself.

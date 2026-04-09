@@ -49,7 +49,7 @@
         <div class="section">
           <h3 class="section-title">Content Filters</h3>
           <p class="helper-text">
-            Content filtering has moved to the <a href="#" @click.prevent="activeTab = 'moderation'" style="color: var(--ion-color-primary); cursor: pointer;">Moderation</a> tab.
+            Content filtering has moved to the <a href="#" class="link-primary" @click.prevent="activeTab = 'moderation'">Moderation</a> tab.
           </p>
           <div class="separator"></div>
         </div>
@@ -113,7 +113,7 @@
               </ion-button>
             </div>
 
-            <div class="info-row" style="margin-top: 12px">
+            <div class="info-row mt-12">
               <span>Private Key</span>
             </div>
             <div v-if="!showPrivateKey" class="key-display">
@@ -603,13 +603,76 @@
           <div class="separator"></div>
         </div>
 
+        <!-- Bootstrap Recovery -->
+        <div class="section">
+          <div class="status-header">
+            <h3 class="section-title">Bootstrap Recovery</h3>
+            <ion-badge color="tertiary">Manual + Gun</ion-badge>
+          </div>
+          <p class="section-subtitle">
+            First-contact flow when centralized relay is down: discover from Gun or exchange a signed bootstrap invite.
+          </p>
+
+          <div class="bootstrap-actions">
+            <ion-button size="small" fill="outline" :disabled="bootstrapDiscovering" @click="discoverBootstrapFromGun">
+              <ion-icon slot="start" :icon="refreshOutline"></ion-icon>
+              {{ bootstrapDiscovering ? 'Discovering…' : 'Discover from Gun' }}
+            </ion-button>
+            <ion-button size="small" fill="outline" @click="generateBootstrapInvite">
+              <ion-icon slot="start" :icon="downloadOutline"></ion-icon>
+              Generate Invite
+            </ion-button>
+            <ion-button
+              size="small"
+              fill="outline"
+              :disabled="!generatedBootstrapInvite"
+              @click="copyGeneratedBootstrapInvite"
+            >
+              <ion-icon slot="start" :icon="copyOutline"></ion-icon>
+              Copy Invite
+            </ion-button>
+          </div>
+
+          <div v-if="generatedBootstrapInvite" class="relay-field mt-2">
+            <label class="relay-label">Generated bootstrap invite</label>
+            <textarea
+              class="relay-input relay-textarea"
+              readonly
+              :value="generatedBootstrapInvite"
+            ></textarea>
+          </div>
+
+          <div class="relay-field mt-2">
+            <label class="relay-label">Import bootstrap invite</label>
+            <textarea
+              v-model="bootstrapInviteInput"
+              class="relay-input relay-textarea"
+              placeholder="Paste interpoll-bootstrap://... or JSON payload"
+            ></textarea>
+          </div>
+
+          <ion-button
+            size="small"
+            expand="block"
+            :disabled="!bootstrapInviteInput.trim() || bootstrapImporting"
+            @click="importBootstrapInvite"
+          >
+            <ion-icon slot="start" :icon="cloudUploadOutline"></ion-icon>
+            {{ bootstrapImporting ? 'Validating…' : 'Validate & Seed from Invite' }}
+          </ion-button>
+          <p class="helper-text">
+            Import never switches silently. We validate format, probe endpoints, then ask before adding or switching.
+          </p>
+          <div class="separator"></div>
+        </div>
+
         <!-- Known Servers -->
         <div class="section">
           <div class="status-header">
             <h3 class="section-title">Known Servers</h3>
             <ion-badge color="primary">{{ knownServers.length }}</ion-badge>
           </div>
-          <p class="section-subtitle">Servers discovered from the network</p>
+          <p class="section-subtitle">Servers learned from peers, Gun discovery, or local bootstrap actions</p>
 
           <div v-if="knownServers.length === 0" class="empty-state">
             <ion-icon :icon="serverOutline" size="large"></ion-icon>
@@ -622,14 +685,22 @@
               v-for="server in knownServers"
               :key="server.websocket"
               class="server-item"
-              :class="{ active: isActiveServer(server.websocket) }"
+              :class="{ active: isCurrentlyConnectedServer(server.websocket) }"
             >
               <div class="server-header">
                 <div class="server-url-badge">
-                  <span class="server-dot" :class="{ active: isActiveServer(server.websocket) }"></span>
+                  <span class="server-dot" :class="{ active: isCurrentlyConnectedServer(server.websocket) }"></span>
                   {{ shortenUrl(server.websocket) }}
                 </div>
-                <span class="server-seen">{{ formatPeerTime(server.firstSeen) }}</span>
+                <div class="server-meta">
+                  <ion-badge :color="server.source === 'peer' ? 'tertiary' : server.source === 'gun' ? 'primary' : 'medium'">
+                    {{ server.source === 'peer' ? 'Peer' : server.source === 'gun' ? 'Gun' : 'Local' }}
+                  </ion-badge>
+                  <ion-badge :color="server.signatureValid ? 'success' : 'warning'">
+                    {{ server.signatureValid ? 'Signed' : 'Unsigned' }}
+                  </ion-badge>
+                  <ion-badge color="light">{{ formatServerTtl(server) }}</ion-badge>
+                </div>
               </div>
               <div class="server-details">
                 <div class="server-detail">
@@ -644,21 +715,29 @@
                   <span class="detail-label">API</span>
                   <code>{{ server.api }}</code>
                 </div>
+                <div class="server-detail">
+                  <span class="detail-label">Discovered</span>
+                  <code>{{ formatPeerTime(server.firstSeen) }} · by {{ server.addedBy }}</code>
+                </div>
               </div>
               <ion-button
-                v-if="!isActiveServer(server.websocket)"
+                v-if="!isConfiguredServer(server.websocket)"
                 expand="block"
                 size="small"
                 fill="outline"
-                @click="switchToServer(server)"
+                @click="probeAndSwitchToServer(server)"
                 class="mt-2"
               >
                 <ion-icon slot="start" :icon="swapHorizontalOutline"></ion-icon>
                 Switch to this server
               </ion-button>
-              <div v-else class="active-badge">Currently connected</div>
+              <div v-else-if="isCurrentlyConnectedServer(server.websocket)" class="active-badge">Currently connected</div>
+              <div v-else class="active-badge reconnecting">Configured (reconnecting)</div>
             </div>
           </div>
+          <p v-if="knownServers.length > 0" class="helper-text mt-2">
+            Auto-switch only promotes fresh signed peer discoveries. Local/manual entries remain available for explicit switching.
+          </p>
           <div class="separator"></div>
         </div>
 
@@ -887,7 +966,7 @@
             ref="importFileInput"
             type="file"
             accept=".json"
-            style="display: none"
+            class="hidden-input"
             @change="handleImportFile"
           />
         </div>
@@ -917,6 +996,11 @@
   margin: 0 0 12px 0;
 }
 
+.link-primary {
+  color: var(--ion-color-primary);
+  cursor: pointer;
+}
+
 .separator {
   height: 1px;
   background: rgba(var(--ion-text-color-rgb), 0.08);
@@ -925,6 +1009,9 @@
 
 .mt-2 { margin-top: 8px; }
 .mt-3 { margin-top: 12px; }
+.mt-12 { margin-top: 12px; }
+
+.hidden-input { display: none; }
 
 .helper-text {
   font-size: 13px;
@@ -1276,6 +1363,17 @@
   border-color: var(--ion-color-primary);
 }
 
+.relay-textarea {
+  min-height: 92px;
+  resize: vertical;
+}
+
+.bootstrap-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* Servers & Peers */
 .empty-state {
   display: flex;
@@ -1320,8 +1418,15 @@
 .peer-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 8px;
+}
+
+.server-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .server-url-badge,
@@ -1346,7 +1451,6 @@
   background: var(--ion-color-success);
 }
 
-.server-seen,
 .peer-joined {
   font-size: 12px;
   color: var(--ion-color-medium);
@@ -1391,6 +1495,10 @@
   color: var(--ion-color-success);
   text-align: center;
   text-transform: uppercase;
+}
+
+.active-badge.reconnecting {
+  color: var(--ion-color-medium);
 }
 
 /* Crypto Keys */
@@ -1483,6 +1591,9 @@ import { VoteTrackerService } from '../services/voteTrackerService';
 import { WebSocketService, type KnownServer } from '../services/websocketService';
 import { GunService } from '../services/gunService';
 import { KeyService } from '../services/keyService';
+import { RelayManager } from '../services/relayManager';
+import { RelayHealthService } from '../services/relayHealthService';
+import { BootstrapInviteService, type BootstrapEndpoint } from '../services/bootstrapInviteService';
 import { useChainStore } from '../stores/chainStore';
 import { useCommunityStore } from '../stores/communityStore';
 import config from '../config';
@@ -1531,7 +1642,6 @@ const policy = ref({
 });
 
 const isDarkMode = ref(false);
-const minUserKarma = ref<number>(-1000);
 const userProfile = ref<any>(null);
 const deviceId = ref('');
 
@@ -1714,7 +1824,6 @@ function onKarmaRangeChange(ev: CustomEvent) {
 
 function saveModerationSettings() {
   ModerationService.saveSettings({ ...modSettings.value });
-  minUserKarma.value = modSettings.value.minUserKarma;
 }
 
 function toggleCategory(catId: WordCategory, ev: CustomEvent) {
@@ -1760,7 +1869,6 @@ async function resetModerationDefaults() {
   const defaults = ModerationService.getDefaultSettings();
   ModerationService.saveSettings(defaults);
   modSettings.value = ModerationService.getSettings();
-  minUserKarma.value = modSettings.value.minUserKarma;
   const toast = await toastController.create({
     message: 'Moderation settings reset to defaults',
     duration: 1500,
@@ -1777,6 +1885,7 @@ const showPrivateKey = ref(false);
 // Network state
 const networkStatus = ref({
   wsConnected: false,
+  connectedWsUrl: '',
   gunConnected: false,
   peerCount: 0,
   gunPeerCount: 0,
@@ -1800,6 +1909,10 @@ const connectionStatusLabel = computed(() => {
 const peerList = ref<Array<{ peerId: string; relayUrl: string; gunPeers: string[]; joinedAt: number }>>([]);
 const myPeerId = ref('');
 const knownServers = ref<KnownServer[]>([]);
+const bootstrapInviteInput = ref('');
+const generatedBootstrapInvite = ref('');
+const bootstrapImporting = ref(false);
+const bootstrapDiscovering = ref(false);
 
 // Relay editing
 const editRelay = ref({
@@ -1825,8 +1938,12 @@ const fullDeviceId = computed(() => {
   return deviceId.value || '';
 });
 
-function isActiveServer(wsUrl: string): boolean {
+function isConfiguredServer(wsUrl: string): boolean {
   return config.relay.websocket === wsUrl;
+}
+
+function isCurrentlyConnectedServer(wsUrl: string): boolean {
+  return networkStatus.value.wsConnected && networkStatus.value.connectedWsUrl === wsUrl;
 }
 
 function shortenUrl(url: string): string {
@@ -1838,13 +1955,292 @@ function shortenUrl(url: string): string {
   }
 }
 
+function endpointToKnownServer(
+  endpoint: BootstrapEndpoint,
+  options: { addedBy: string; source: KnownServer['source']; signatureValid: boolean },
+): KnownServer {
+  return {
+    websocket: endpoint.websocket,
+    gun: endpoint.gun,
+    api: endpoint.api,
+    firstSeen: Date.now(),
+    addedBy: options.addedBy,
+    source: options.source,
+    signatureValid: options.signatureValid,
+    lastVerifiedAt: Date.now(),
+  };
+}
+
+function seedRelayList(endpoint: BootstrapEndpoint): void {
+  const existing = RelayManager.getRelayList().find(
+    (relay) =>
+      relay.ws === endpoint.websocket &&
+      relay.gun === endpoint.gun &&
+      relay.api === endpoint.api,
+  );
+  if (existing) return;
+
+  RelayManager.addRelay({
+    label: endpoint.label?.trim() || shortenUrl(endpoint.websocket),
+    ws: endpoint.websocket,
+    gun: endpoint.gun,
+    api: endpoint.api,
+    isTor: endpoint.isTor ?? endpoint.websocket.includes('.onion'),
+    priority: endpoint.priority ?? 20,
+  });
+}
+
+async function probeCandidate(endpoint: BootstrapEndpoint) {
+  const [ws, gun, api] = await Promise.all([
+    RelayHealthService.probeWebSocket(endpoint.websocket),
+    RelayHealthService.probeGun(endpoint.gun),
+    RelayHealthService.probeApi(endpoint.api),
+  ]);
+  const okCount = [ws.reachable, gun.reachable, api.reachable].filter(Boolean).length;
+  const overall = okCount === 3 ? 'online' : okCount === 0 ? 'offline' : 'degraded';
+  return { ws, gun, api, overall };
+}
+
+async function generateBootstrapInvite() {
+  const endpoint: BootstrapEndpoint = {
+    websocket: editRelay.value.websocket.trim(),
+    gun: editRelay.value.gun.trim(),
+    api: editRelay.value.api.trim(),
+    label: shortenUrl(editRelay.value.websocket),
+  };
+
+  const validation = BootstrapInviteService.validateEndpoint(endpoint);
+  if (!validation.valid) {
+    const toast = await toastController.create({
+      message: validation.errors[0],
+      duration: 2200,
+      color: 'warning',
+    });
+    await toast.present();
+    return;
+  }
+
+  generatedBootstrapInvite.value = BootstrapInviteService.createInvite(endpoint, {
+    createdBy: myPeerId.value || 'local-node',
+    note: 'InterPoll relay bootstrap',
+  });
+}
+
+async function copyGeneratedBootstrapInvite() {
+  if (!generatedBootstrapInvite.value) return;
+  try {
+    await navigator.clipboard.writeText(generatedBootstrapInvite.value);
+    const toast = await toastController.create({
+      message: 'Bootstrap invite copied',
+      duration: 1600,
+      color: 'success',
+    });
+    await toast.present();
+  } catch {
+    const toast = await toastController.create({
+      message: 'Clipboard unavailable',
+      duration: 2000,
+      color: 'warning',
+    });
+    await toast.present();
+  }
+}
+
+async function seedCandidate(
+  endpoint: BootstrapEndpoint,
+  options: { addedBy: string; source: KnownServer['source']; signatureValid: boolean; refresh?: boolean },
+) {
+  WebSocketService.addKnownServer(endpointToKnownServer(endpoint, options));
+  seedRelayList(endpoint);
+  if (options.refresh !== false) refreshNetwork();
+}
+
+async function importBootstrapInvite() {
+  bootstrapImporting.value = true;
+  try {
+    const artifact = BootstrapInviteService.parseInvite(bootstrapInviteInput.value);
+    const validation = BootstrapInviteService.validateEndpoint(artifact.endpoint);
+    if (!validation.valid) {
+      throw new Error(validation.errors.join(', '));
+    }
+
+    const probe = await probeCandidate(artifact.endpoint);
+    const switchDisabled = probe.overall === 'offline';
+    const hasSignatureMetadata = Boolean(artifact.signature?.alg && artifact.signature?.sig);
+    const signatureLabel = hasSignatureMetadata ? 'present' : 'none';
+    const message = [
+      `Probe: ${probe.overall}`,
+      `WS: ${probe.ws.reachable ? 'ok' : 'fail'} · Gun: ${probe.gun.reachable ? 'ok' : 'fail'} · API: ${probe.api.reachable ? 'ok' : 'fail'}`,
+      `Signature metadata: ${signatureLabel}`,
+      'Choose how to proceed:',
+    ].join('\n');
+
+    const alert = await alertController.create({
+      header: 'Bootstrap invite imported',
+      message,
+      buttons: [
+        { text: 'Cancel', role: 'cancel' },
+        {
+          text: 'Seed only',
+          handler: async () => {
+            try {
+              await seedCandidate(artifact.endpoint, {
+                addedBy: 'bootstrap-invite',
+                source: 'local',
+                signatureValid: false,
+              });
+              const toast = await toastController.create({
+                message: 'Server seeded to known servers and relay list',
+                duration: 2000,
+                color: 'success',
+              });
+              await toast.present();
+              return true;
+            } catch (e) {
+              const toast = await toastController.create({
+                message: e instanceof Error ? e.message : 'Seeding failed',
+                duration: 2200,
+                color: 'danger',
+              });
+              await toast.present();
+              return false;
+            }
+          },
+        },
+        ...(!switchDisabled
+          ? [{
+              text: 'Seed + Switch',
+              handler: async () => {
+                try {
+                  await seedCandidate(artifact.endpoint, {
+                    addedBy: 'bootstrap-invite',
+                    source: 'local',
+                    signatureValid: false,
+                    refresh: false,
+                  });
+                  await applyRelayCandidate(artifact.endpoint, false);
+                } catch (e) {
+                  const toast = await toastController.create({
+                    message: e instanceof Error ? e.message : 'Switch failed',
+                    duration: 2200,
+                    color: 'danger',
+                  });
+                  await toast.present();
+                  return false;
+                }
+                return true;
+              },
+            }]
+          : []),
+      ],
+    });
+    await alert.present();
+    await alert.onDidDismiss();
+  } catch (error) {
+    const toast = await toastController.create({
+      message: error instanceof Error ? error.message : 'Invite import failed',
+      duration: 2500,
+      color: 'danger',
+    });
+    await toast.present();
+  } finally {
+    bootstrapImporting.value = false;
+  }
+}
+
+async function discoverBootstrapFromGun() {
+  bootstrapDiscovering.value = true;
+  try {
+    const discovered = await BootstrapInviteService.discoverFromGun();
+    if (discovered.length === 0) {
+      const toast = await toastController.create({
+        message: 'No Gun bootstrap endpoints discovered',
+        duration: 2200,
+      });
+      await toast.present();
+      return;
+    }
+
+    for (const endpoint of discovered) {
+      await seedCandidate(endpoint, {
+        addedBy: 'gun-discovery',
+        source: 'gun',
+        signatureValid: false,
+        refresh: false,
+      });
+    }
+    refreshNetwork();
+    const toast = await toastController.create({
+      message: `Discovered and seeded ${discovered.length} endpoint(s) from Gun`,
+      duration: 2400,
+      color: 'success',
+    });
+    await toast.present();
+  } catch (error) {
+    const toast = await toastController.create({
+      message: error instanceof Error ? error.message : 'Gun discovery failed',
+      duration: 2200,
+      color: 'danger',
+    });
+    await toast.present();
+  } finally {
+    bootstrapDiscovering.value = false;
+  }
+}
+
+async function applyRelayCandidate(endpoint: BootstrapEndpoint, requireProbe = true) {
+  const validation = BootstrapInviteService.validateEndpoint(endpoint);
+  if (!validation.valid) {
+    const toast = await toastController.create({
+      message: validation.errors[0],
+      duration: 2200,
+      color: 'warning',
+    });
+    await toast.present();
+    return false;
+  }
+
+  if (requireProbe) {
+    const probe = await probeCandidate(endpoint);
+    const proceed = probe.overall !== 'offline';
+    if (!proceed) {
+      const toast = await toastController.create({
+        message: 'Candidate endpoints are offline. Switch aborted.',
+        duration: 2400,
+        color: 'danger',
+      });
+      await toast.present();
+      return false;
+    }
+  }
+
+  config.setRelayOverrides({
+    websocket: endpoint.websocket,
+    gun: endpoint.gun,
+    api: endpoint.api,
+  });
+
+  editRelay.value = {
+    websocket: endpoint.websocket,
+    gun: endpoint.gun,
+    api: endpoint.api,
+  };
+
+  WebSocketService.reconnect(endpoint.websocket);
+  GunService.reconnect(endpoint.gun);
+  refreshNetwork();
+  return true;
+}
+
 function refreshNetwork() {
   const wsConnected = WebSocketService.getConnectionStatus();
+  const connectedWsUrl = WebSocketService.getConnectedUrl() || '';
   const gunStats = GunService.getPeerStats();
   const peerAddresses = WebSocketService.getPeerAddresses();
 
   networkStatus.value = {
     wsConnected,
+    connectedWsUrl,
     gunConnected: gunStats.isConnected,
     peerCount: WebSocketService.getPeerCount(),
     gunPeerCount: gunStats.peerCount,
@@ -1858,35 +2254,39 @@ function refreshNetwork() {
 }
 
 async function applyRelayConfig() {
-  const ws = editRelay.value.websocket.trim();
-  const gun = editRelay.value.gun.trim();
-  const api = editRelay.value.api.trim();
+  const endpoint: BootstrapEndpoint = {
+    websocket: editRelay.value.websocket.trim(),
+    gun: editRelay.value.gun.trim(),
+    api: editRelay.value.api.trim(),
+    label: shortenUrl(editRelay.value.websocket),
+  };
 
-  if (!ws || !gun || !api) {
+  if (!endpoint.websocket || !endpoint.gun || !endpoint.api) {
     const toast = await toastController.create({
       message: 'All relay fields are required',
       duration: 2000,
-      color: 'warning'
+      color: 'warning',
     });
     await toast.present();
     return;
   }
 
-  config.setRelayOverrides({ websocket: ws, gun, api });
+  const applied = await applyRelayCandidate(endpoint, true);
+  if (!applied) return;
 
-  // Reconnect both services
-  WebSocketService.reconnect(ws);
-  GunService.reconnect(gun);
-
+  await seedCandidate(endpoint, {
+    addedBy: 'manual-config',
+    source: 'local',
+    signatureValid: false,
+    refresh: false,
+  });
   const toast = await toastController.create({
     message: 'Relay configuration updated, reconnecting...',
     duration: 2000,
-    color: 'success'
+    color: 'success',
   });
   await toast.present();
 
-  // Refresh after a short delay to pick up new connection status
-  setTimeout(refreshNetwork, 2000);
 }
 
 async function resetRelayConfig() {
@@ -1908,33 +2308,75 @@ async function resetRelayConfig() {
   });
   await toast.present();
 
-  setTimeout(refreshNetwork, 2000);
+  refreshNetwork();
 }
 
-async function switchToServer(server: KnownServer) {
-  config.setRelayOverrides({
+async function probeAndSwitchToServer(server: KnownServer) {
+  const endpoint: BootstrapEndpoint = {
     websocket: server.websocket,
     gun: server.gun,
-    api: server.api
-  });
-
-  editRelay.value = {
-    websocket: server.websocket,
-    gun: server.gun,
-    api: server.api
+    api: server.api,
+    label: shortenUrl(server.websocket),
   };
+  let probe: Awaited<ReturnType<typeof probeCandidate>>;
+  try {
+    probe = await probeCandidate(endpoint);
+  } catch (error) {
+    const toast = await toastController.create({
+      message: error instanceof Error ? error.message : 'Probe failed',
+      duration: 2200,
+      color: 'danger',
+    });
+    await toast.present();
+    return;
+  }
 
-  WebSocketService.reconnect(server.websocket);
-  GunService.reconnect(server.gun);
+  if (probe.overall === 'offline') {
+    const toast = await toastController.create({
+      message: 'Candidate endpoints are offline. Switch blocked.',
+      duration: 2400,
+      color: 'danger',
+    });
+    await toast.present();
+    return;
+  }
 
-  const toast = await toastController.create({
-    message: `Switching to ${shortenUrl(server.websocket)}...`,
-    duration: 2000,
-    color: 'success'
+  const alert = await alertController.create({
+    header: `Switch to ${shortenUrl(server.websocket)}?`,
+    message: [
+      `Probe: ${probe.overall}`,
+      `WS: ${probe.ws.reachable ? 'ok' : 'fail'} · Gun: ${probe.gun.reachable ? 'ok' : 'fail'} · API: ${probe.api.reachable ? 'ok' : 'fail'}`,
+      'You must confirm before switching.',
+    ].join('\n'),
+    buttons: [
+      { text: 'Cancel', role: 'cancel' },
+      {
+        text: 'Switch',
+        handler: async () => {
+          try {
+            const applied = await applyRelayCandidate(endpoint, false);
+            if (!applied) return false;
+            const toast = await toastController.create({
+              message: `Switching to ${shortenUrl(server.websocket)}...`,
+              duration: 2000,
+              color: 'success',
+            });
+            await toast.present();
+          } catch (e) {
+            const toast = await toastController.create({
+              message: e instanceof Error ? e.message : 'Switch failed',
+              duration: 2200,
+              color: 'danger',
+            });
+            await toast.present();
+            return false;
+          }
+          return true;
+        },
+      },
+    ],
   });
-  await toast.present();
-
-  setTimeout(refreshNetwork, 2000);
+  await alert.present();
 }
 
 function formatPeerTime(timestamp: number): string {
@@ -1944,6 +2386,15 @@ function formatPeerTime(timestamp: number): string {
   if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
   return `${hours}h ago`;
+}
+
+function formatServerTtl(server: KnownServer): string {
+  if (typeof server.expiresAt !== 'number') return 'TTL n/a';
+  const expiresAt = server.expiresAt;
+  const msLeft = expiresAt - Date.now();
+  if (msLeft <= 0) return 'expired';
+  const minutesLeft = Math.ceil(msLeft / 60_000);
+  return `TTL ${minutesLeft}m`;
 }
 
 async function revealPrivateKey() {
@@ -2005,17 +2456,12 @@ onMounted(async () => {
   const storedTheme = localStorage.getItem('theme');
   if (storedTheme === 'dark') {
     isDarkMode.value = true;
+    document.documentElement.classList.add('dark');
     document.body.classList.add('dark');
-  }
-
-  const storedMinKarma = localStorage.getItem('minUserKarma');
-  if (storedMinKarma !== null) {
-    minUserKarma.value = Number(storedMinKarma) || -1000;
   }
 
   // Load moderation settings (may have migrated legacy minUserKarma)
   modSettings.value = ModerationService.getSettings();
-  minUserKarma.value = modSettings.value.minUserKarma;
 
   // Network polling
   refreshNetwork();
@@ -2117,6 +2563,8 @@ const handleImportFile = async (event: Event) => {
       color: 'danger'
     });
     await toast.present();
+  } finally {
+    target.value = '';
   }
 };
 

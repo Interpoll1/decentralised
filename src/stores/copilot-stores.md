@@ -8,7 +8,7 @@ All stores use the **Composition API form** of Pinia: `defineStore('name', () =>
 
 The most critical store. Owns the local blockchain.
 
-- **Init**: Call `chainStore.initialize()` once on app start. It calls `BroadcastService.initialize()`, `WebSocketService.initialize()`, `ChainService.initializeChain()`, then wires sync listeners for both channels.
+- **Init**: Call `chainStore.initialize()` once on app start. It calls `BroadcastService.initialize()`, `RelayManager.initialize()`, `WebSocketService.initialize()`, `ChainService.initializeChain()`, then wires sync listeners for both channels.
 - **Sync protocol**: On connect, sends `request-sync` with `lastIndex` (incremental — only fetches missing blocks). Responds to `sync-response` by validating and appending blocks. Conflict resolution: same index + different hash → ignore remote block (local chain wins). Live `new-block` deliveries also short-circuit when the parent hash does not match the current local head, avoiding noisy validation failures for competing branches.
 - **Voting**: `addVote(vote)` → creates block → broadcasts on both channels → saves receipt → calls `AuditService.logReceipt`.
 - **Actions**: `addAction(actionType, data, label)` records non-vote events (community creation, post creation) as blocks.
@@ -19,7 +19,7 @@ Key computed: `latestBlock`, `chainHead`
 
 ## `pollStore.ts` — `usePollStore`
 
-Manages polls loaded from GunDB.
+Manages polls loaded from GunDB and cross-tab vote updates.
 
 - Polls are keyed in a `Map<string, Poll>` for O(1) lookups.
 - Subscribes to GunDB per community. Subscription lifecycle managed with `subscribedCommunities` + `unsubscribers` map — call `unsubscribe(communityId)` to clean up.
@@ -27,6 +27,7 @@ Manages polls loaded from GunDB.
 - `pendingNewPolls` only contains truly new arrivals after initial hydration; `flushNewPolls()` moves them into `pollsMap` and persists seen IDs in localStorage.
 - Pagination: `visibleCount` incremented by `PAGE_SIZE` (10).
 - `createPoll()` checks the current user's `showRealName` preference. Same pseudonym-vs-real-name logic as posts.
+- After a successful `voteOnPoll()`, the store reloads the canonical poll from `PollService.loadPoll()` and then broadcasts `poll-updated` over both `BroadcastService` and `WebSocketService` so local tabs and online peers converge on the same Gun-backed totals immediately.
 
 Key refs: `pollsMap`, `currentPoll`, `isLoading`, `visibleCount`  
 Key computed: `polls`, `sortedPolls`

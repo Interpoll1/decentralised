@@ -8,6 +8,8 @@ const POW_DIFFICULTY: Record<string, number> = {
   'new-block': 16,
   'new-event': 16,
   'vote-authorize': 18,
+  'vote-record': 18,
+  'vote-confirm': 18,
   'broadcast': 12,
   'chat-message': 10,
   'chatroom-message': 10,
@@ -23,6 +25,7 @@ const POW_EXEMPT = new Set([
 ]);
 
 const SOLVER_BATCH_SIZE = 5_000;
+const NONCE_CACHE_MAX = 5_000;
 
 export interface IntegrityMeta {
   _hash: string;
@@ -86,6 +89,7 @@ async function solveHashcash(contentHash: string, difficulty: number): Promise<s
 }
 
 export class IntegrityService {
+  private static readonly seenNonces = new Map<string, number>();
   /**
    * Seal a message payload with integrity fields.
    * Pipeline: sign → hash → PoW → freshness
@@ -97,15 +101,15 @@ export class IntegrityService {
     const type = messageType || (payload.type as string) || '';
 
     if (POW_EXEMPT.has(type)) {
-      // Exempt types don't need integrity — return with empty meta to satisfy the type
+      const ts = Date.now();
       return {
         ...payload,
         _sig: '',
         _pub: '',
         _hash: '',
         _pow: '',
-        _ts: Date.now(),
-        _nonce: '',
+        _ts: ts,
+        _nonce: crypto.randomUUID(),
       };
     }
 
@@ -140,5 +144,93 @@ export class IntegrityService {
   /** Check if a message type is exempt from integrity sealing */
   static isExempt(type: string): boolean {
     return POW_EXEMPT.has(type);
+  }
+
+  /**
+   * Verify an incoming sealed payload.
+   * Checks freshness, canonical hash integrity, Schnorr signature, and PoW.
+   */
+  static verifySealedPayload(
+    payload: Record<string, unknown>,
+    messageType?: string,
+    maxAgeMs = 5 * 60_000,
+  ): boolean {
+    const type = messageType || String(payload.type || '');
+    const ts = payload._ts;
+    const nonce = payload._nonce;
+
+    if (typeof ts !== 'number' || typeof nonce !== 'string' || nonce.length === 0) {
+      return false;
+    }
+
+    const now = Date.now();
+    const MAX_FUTURE_SKEW_MS = 30_000;
+    if (ts > now + MAX_FUTURE_SKEW_MS) {
+      return false;
+    }
+
+    if (now - ts > maxAgeMs) {
+      return false;
+    }
+
+    if (this.isExempt(type)) {
+      return this.acceptNonce(nonce, ts, maxAgeMs);
+    }
+
+    const sig = payload._sig;
+    const pub = payload._pub;
+    const hash = payload._hash;
+    const pow = payload._pow;
+
+    if (
+      typeof sig !== 'string' ||
+      typeof pub !== 'string' ||
+      typeof hash !== 'string' ||
+      typeof pow !== 'string'
+    ) {
+      return false;
+    }
+
+    const canonical = canonicalJSON(payload);
+    const calculatedHash = CryptoService.hash(canonical);
+    if (calculatedHash !== hash) {
+      return false;
+    }
+
+    if (!CryptoService.verify(canonical, sig, pub)) {
+      return false;
+    }
+
+    const difficulty = POW_DIFFICULTY[type] || POW_DIFFICULTY.DEFAULT;
+    const powHash = CryptoService.hash(`${hash}:${pow}`);
+    if (!hasLeadingZeroBits(powHash, difficulty)) {
+      return false;
+    }
+
+    return this.acceptNonce(nonce, ts, maxAgeMs);
+  }
+
+  private static acceptNonce(nonce: string, ts: number, maxAgeMs: number): boolean {
+    this.pruneNonceCache(ts - maxAgeMs);
+    if (this.seenNonces.has(nonce)) {
+      return false;
+    }
+
+    this.seenNonces.set(nonce, ts);
+    if (this.seenNonces.size > NONCE_CACHE_MAX) {
+      const oldestKey = this.seenNonces.keys().next().value;
+      if (oldestKey) {
+        this.seenNonces.delete(oldestKey);
+      }
+    }
+    return true;
+  }
+
+  private static pruneNonceCache(minTimestamp: number): void {
+    for (const [nonce, seenAt] of this.seenNonces) {
+      if (seenAt < minTimestamp) {
+        this.seenNonces.delete(nonce);
+      }
+    }
   }
 }
