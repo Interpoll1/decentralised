@@ -11,7 +11,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "node relay-server.js",
-    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore"
+    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore",
+    "test": "vitest run --config unit_tests/vitest.config.ts",
+    "test:watch": "vitest --config unit_tests/vitest.config.ts"
   },
   "dependencies": {
     "@capacitor/app": "^5.0.0",
@@ -52,6 +54,7 @@
     "tailwindcss": "^3.4.0",
     "typescript": "^5.9.3",
     "vite": "^5.0.0",
+    "vitest": "^4.1.4",
     "vue-tsc": "^3.2.4"
   }
 }

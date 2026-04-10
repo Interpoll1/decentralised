@@ -22,7 +22,7 @@ import http from 'http';
 import { fileURLToPath } from 'url';
 console.log('WSS Initialized, this is @thegoodduck and @theendless11, built with love ❤️');
 // ─── Config ──────────────────────────────────────────────────────────────────
-
+// This peer is made to be run absolutely headlessly without the usual client hosted at endless.sbs so yup btw i added the log 2026-04-10 12:52 whilst at school.
 const args = process.argv.slice(2);
 function flag(name, fallback) {
   const i = args.indexOf(name);
@@ -47,7 +47,7 @@ if (PROXY_URL) {
     process.exit(1);
   }
 }
-
+// This websocket class has passed test should be pretty goddamn secure. Anyways lets hope it will not even error because that would be fuckong hell to fix 
 // WebSocket subclass that injects the proxy agent (used by Gun)
 const ProxiedWebSocket = proxyAgent
   ? class extends WebSocket { constructor(url, protocols) { super(url, protocols, { agent: proxyAgent }); } }
