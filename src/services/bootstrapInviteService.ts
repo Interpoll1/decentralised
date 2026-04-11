@@ -17,12 +17,29 @@ export interface BootstrapSignatureMetadata {
   signedFields?: string[];
 }
 
+export interface BootstrapInviteStatus {
+  wsConnected: boolean;
+  gunConnected: boolean;
+  peerCount: number;
+  blockHeight: number;
+  postCount: number;
+  pollCount: number;
+  generatedAt: number;
+}
+
+export interface BootstrapInviteHandoff {
+  sourcePeerId?: string;
+  connectedServer?: BootstrapEndpoint;
+  status?: BootstrapInviteStatus;
+}
+
 export interface BootstrapInviteArtifactV1 {
   kind: 'interpoll-bootstrap';
   version: 1;
   issuedAt: number;
   expiresAt?: number;
   endpoint: BootstrapEndpoint;
+  handoff?: BootstrapInviteHandoff;
   capabilities?: {
     seedsRelayList?: boolean;
     supportsGunDiscovery?: boolean;
@@ -120,7 +137,13 @@ function readGunNodeOnce(node: { once: (cb: (data: unknown) => void) => void }, 
 export class BootstrapInviteService {
   static createInvite(
     endpoint: BootstrapEndpoint,
-    opts?: { expiresAt?: number; signature?: BootstrapSignatureMetadata; note?: string; createdBy?: string },
+    opts?: {
+      expiresAt?: number;
+      signature?: BootstrapSignatureMetadata;
+      note?: string;
+      createdBy?: string;
+      handoff?: BootstrapInviteHandoff;
+    },
   ): string {
     const artifact: BootstrapInviteArtifactV1 = {
       kind: 'interpoll-bootstrap',
@@ -128,6 +151,7 @@ export class BootstrapInviteService {
       issuedAt: Date.now(),
       expiresAt: opts?.expiresAt,
       endpoint,
+      handoff: opts?.handoff,
       capabilities: {
         seedsRelayList: true,
         supportsGunDiscovery: true,
@@ -187,6 +211,42 @@ export class BootstrapInviteService {
       throw new Error('Bootstrap invite is expired');
     }
 
+    const handoffRaw = obj.handoff;
+    const handoff = (handoffRaw && typeof handoffRaw === 'object')
+      ? (() => {
+          const handoffObj = handoffRaw as Record<string, unknown>;
+          const sourcePeerId = typeof handoffObj.sourcePeerId === 'string'
+            ? handoffObj.sourcePeerId
+            : undefined;
+          const connectedServer = handoffObj.connectedServer
+            ? (normalizeEndpoint(handoffObj.connectedServer) ?? undefined)
+            : undefined;
+
+          const statusRaw = handoffObj.status;
+          const hasValidStatus = statusRaw && typeof statusRaw === 'object'
+            && typeof (statusRaw as Record<string, unknown>).wsConnected === 'boolean'
+            && typeof (statusRaw as Record<string, unknown>).gunConnected === 'boolean'
+            && typeof (statusRaw as Record<string, unknown>).peerCount === 'number'
+            && typeof (statusRaw as Record<string, unknown>).blockHeight === 'number'
+            && typeof (statusRaw as Record<string, unknown>).postCount === 'number'
+            && typeof (statusRaw as Record<string, unknown>).pollCount === 'number'
+            && typeof (statusRaw as Record<string, unknown>).generatedAt === 'number';
+          const status = hasValidStatus
+            ? {
+                wsConnected: (statusRaw as Record<string, unknown>).wsConnected as boolean,
+                gunConnected: (statusRaw as Record<string, unknown>).gunConnected as boolean,
+                peerCount: (statusRaw as Record<string, unknown>).peerCount as number,
+                blockHeight: (statusRaw as Record<string, unknown>).blockHeight as number,
+                postCount: (statusRaw as Record<string, unknown>).postCount as number,
+                pollCount: (statusRaw as Record<string, unknown>).pollCount as number,
+                generatedAt: (statusRaw as Record<string, unknown>).generatedAt as number,
+              }
+            : undefined;
+
+          return { sourcePeerId, connectedServer, status };
+        })()
+      : undefined;
+
     const capabilitiesRaw = obj.capabilities;
     const capabilities = (capabilitiesRaw && typeof capabilitiesRaw === 'object')
       ? {
@@ -243,6 +303,7 @@ export class BootstrapInviteService {
       issuedAt,
       expiresAt,
       endpoint,
+      handoff,
       capabilities,
       signature,
       meta,
