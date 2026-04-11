@@ -610,7 +610,7 @@
             <ion-badge color="tertiary">Manual + Gun</ion-badge>
           </div>
           <p class="section-subtitle">
-            First-contact flow when centralized relay is down: discover from Gun or exchange a signed bootstrap invite.
+            First-contact flow when centralized relay is down: discover from Gun or exchange a bootstrap invite with peer status and relay context.
           </p>
 
           <div class="bootstrap-actions">
@@ -1590,6 +1590,7 @@ import { UserService } from '../services/userService';
 import { VoteTrackerService } from '../services/voteTrackerService';
 import { WebSocketService, type KnownServer } from '../services/websocketService';
 import { GunService } from '../services/gunService';
+import { StorageService } from '../services/storageService';
 import { KeyService } from '../services/keyService';
 import { RelayManager } from '../services/relayManager';
 import { RelayHealthService } from '../services/relayHealthService';
@@ -1990,6 +1991,27 @@ function seedRelayList(endpoint: BootstrapEndpoint): void {
   });
 }
 
+function uniqueBootstrapEndpoints(endpoints: Array<BootstrapEndpoint | undefined>): BootstrapEndpoint[] {
+  const deduped = new Map<string, BootstrapEndpoint>();
+  for (const endpoint of endpoints) {
+    if (!endpoint) continue;
+    const key = `${endpoint.websocket}|${endpoint.gun}|${endpoint.api}`;
+    if (!deduped.has(key)) deduped.set(key, endpoint);
+  }
+  return Array.from(deduped.values());
+}
+
+function estimateLocalPostCount(): number {
+  try {
+    const raw = localStorage.getItem('seen-post-ids');
+    if (!raw) return 0;
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
 async function probeCandidate(endpoint: BootstrapEndpoint) {
   const [ws, gun, api] = await Promise.all([
     RelayHealthService.probeWebSocket(endpoint.websocket),
@@ -2020,9 +2042,33 @@ async function generateBootstrapInvite() {
     return;
   }
 
+  const postCount = estimateLocalPostCount();
+  const pollCount = await StorageService.getAllPolls()
+    .then((polls: Array<unknown>) => polls.length)
+    .catch(() => 0);
+  const connectedServer: BootstrapEndpoint = {
+    websocket: networkStatus.value.connectedWsUrl || endpoint.websocket,
+    gun: config.relay.gun,
+    api: config.relay.api,
+    label: shortenUrl(networkStatus.value.connectedWsUrl || endpoint.websocket),
+  };
+
   generatedBootstrapInvite.value = BootstrapInviteService.createInvite(endpoint, {
     createdBy: myPeerId.value || 'local-node',
     note: 'InterPoll relay bootstrap',
+    handoff: {
+      sourcePeerId: myPeerId.value || WebSocketService.getPeerId(),
+      connectedServer,
+      status: {
+        wsConnected: networkStatus.value.wsConnected,
+        gunConnected: networkStatus.value.gunConnected,
+        peerCount: networkStatus.value.peerCount,
+        blockHeight: networkStatus.value.blockHeight,
+        postCount,
+        pollCount,
+        generatedAt: Date.now(),
+      },
+    },
   });
 }
 
@@ -2059,19 +2105,51 @@ async function importBootstrapInvite() {
   bootstrapImporting.value = true;
   try {
     const artifact = BootstrapInviteService.parseInvite(bootstrapInviteInput.value);
-    const validation = BootstrapInviteService.validateEndpoint(artifact.endpoint);
-    if (!validation.valid) {
-      throw new Error(validation.errors.join(', '));
+    const candidateEndpoints = uniqueBootstrapEndpoints([
+      artifact.handoff?.connectedServer,
+      artifact.endpoint,
+    ]);
+    if (candidateEndpoints.length === 0) {
+      throw new Error('Bootstrap invite does not contain any valid endpoint');
     }
 
-    const probe = await probeCandidate(artifact.endpoint);
+    const validatedCandidates = candidateEndpoints.map((endpoint) => ({
+      endpoint,
+      validation: BootstrapInviteService.validateEndpoint(endpoint),
+    }));
+    const validCandidateEndpoints = validatedCandidates
+      .filter((entry) => entry.validation.valid)
+      .map((entry) => entry.endpoint);
+    if (validCandidateEndpoints.length === 0) {
+      const firstInvalidReason = validatedCandidates.find((entry) => !entry.validation.valid)?.validation.errors[0];
+      throw new Error(firstInvalidReason || 'Bootstrap invite endpoints are invalid');
+    }
+    const candidateProbeResults = await Promise.all(
+      validCandidateEndpoints.map(async (endpoint) => ({
+        endpoint,
+        probe: await probeCandidate(endpoint),
+      })),
+    );
+    const selectedProbeResult = candidateProbeResults.find((result) => result.probe.overall === 'online')
+      ?? candidateProbeResults.find((result) => result.probe.overall === 'degraded')
+      ?? candidateProbeResults[0];
+    const primaryEndpoint = selectedProbeResult.endpoint;
+    const probe = selectedProbeResult.probe;
     const switchDisabled = probe.overall === 'offline';
     const hasSignatureMetadata = Boolean(artifact.signature?.alg && artifact.signature?.sig);
     const signatureLabel = hasSignatureMetadata ? 'present' : 'none';
+    const sourcePeerLabel = artifact.handoff?.sourcePeerId || artifact.meta?.createdBy || 'unknown';
+    const status = artifact.handoff?.status;
+    const connectedServerLabel = artifact.handoff?.connectedServer?.websocket || artifact.endpoint.websocket;
     const message = [
       `Probe: ${probe.overall}`,
       `WS: ${probe.ws.reachable ? 'ok' : 'fail'} · Gun: ${probe.gun.reachable ? 'ok' : 'fail'} · API: ${probe.api.reachable ? 'ok' : 'fail'}`,
       `Signature metadata: ${signatureLabel}`,
+      `From peer: ${sourcePeerLabel}`,
+      `Connected server: ${connectedServerLabel}`,
+      ...(status
+        ? [`Shared status: posts ${status.postCount} · polls ${status.pollCount} · chain ${status.blockHeight} · peers ${status.peerCount}`]
+        : []),
       'Choose how to proceed:',
     ].join('\n');
 
@@ -2084,13 +2162,17 @@ async function importBootstrapInvite() {
           text: 'Seed only',
           handler: async () => {
             try {
-              await seedCandidate(artifact.endpoint, {
-                addedBy: 'bootstrap-invite',
-                source: 'local',
-                signatureValid: false,
-              });
+              for (const endpoint of validCandidateEndpoints) {
+                await seedCandidate(endpoint, {
+                  addedBy: 'bootstrap-invite',
+                  source: 'local',
+                  signatureValid: false,
+                  refresh: false,
+                });
+              }
+              refreshNetwork();
               const toast = await toastController.create({
-                message: 'Server seeded to known servers and relay list',
+                message: `Seeded ${validCandidateEndpoints.length} endpoint(s) from invite`,
                 duration: 2000,
                 color: 'success',
               });
@@ -2112,13 +2194,15 @@ async function importBootstrapInvite() {
               text: 'Seed + Switch',
               handler: async () => {
                 try {
-                  await seedCandidate(artifact.endpoint, {
-                    addedBy: 'bootstrap-invite',
-                    source: 'local',
-                    signatureValid: false,
-                    refresh: false,
-                  });
-                  await applyRelayCandidate(artifact.endpoint, false);
+                  for (const endpoint of validCandidateEndpoints) {
+                    await seedCandidate(endpoint, {
+                      addedBy: 'bootstrap-invite',
+                      source: 'local',
+                      signatureValid: false,
+                      refresh: false,
+                    });
+                  }
+                  await applyRelayCandidate(primaryEndpoint, false);
                 } catch (e) {
                   const toast = await toastController.create({
                     message: e instanceof Error ? e.message : 'Switch failed',
