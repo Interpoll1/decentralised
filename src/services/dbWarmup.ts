@@ -14,11 +14,22 @@ import { isVersionEnabled } from '../utils/dataVersionSettings'
 import { GUN_NAMESPACE } from './gunService'
 import config from '../config'
 
+const WARMUP_POST_LIMIT = 50
+const WARMUP_POLL_LIMIT = 50
+const WARMUP_V1_POST_LIMIT = 50
+const WARMUP_DEBUG = localStorage.getItem('interpoll_warmup_debug') === 'true'
+
 function getApiBase(): string {
   return config.relay.api
 }
 
 let warmupDone = false
+
+function warmupLog(label: string, data?: Record<string, unknown>) {
+  if (!WARMUP_DEBUG) return
+  if (data) console.log(`⚡ ${label}`, data)
+  else console.log(`⚡ ${label}`)
+}
 
 // ── Shared fetch with stale-while-revalidate ──────────────────────────────────
 async function apiFetch(path: string): Promise<any> {
@@ -32,6 +43,12 @@ async function apiFetch(path: string): Promise<any> {
 export async function warmupFromDB(): Promise<void> {
   if (warmupDone) return
   warmupDone = true
+  const startedAt = Date.now()
+  warmupLog('Warmup start', {
+    apiBase: getApiBase(),
+    postLimit: WARMUP_POST_LIMIT,
+    pollLimit: WARMUP_POLL_LIMIT,
+  })
 
   try {
     const { useCommunityStore } = await import('../stores/communityStore')
@@ -44,14 +61,15 @@ export async function warmupFromDB(): Promise<void> {
 
     // ── Fetch everything in parallel — no sequential blocking ────────────────
     const [postsResult, pollsResult, communitiesResult] = await Promise.allSettled([
-      apiFetch('/api/posts?limit=500'),
-      apiFetch('/api/polls?limit=100'),
+      apiFetch(`/api/posts?limit=${WARMUP_POST_LIMIT}`),
+      apiFetch(`/api/polls?limit=${WARMUP_POLL_LIMIT}`),
       apiFetch('/api/communities'),
     ])
 
     // ── Communities ───────────────────────────────────────────────────────────
     if (communitiesResult.status === 'fulfilled') {
       const { communities } = communitiesResult.value
+      let communityCount = 0
       for (const d of communities || []) {
         if (!d?.id || !d?.displayName) continue
         const existing = communityStore.communities.find((c: any) => c.id === d.id)
@@ -77,7 +95,11 @@ export async function warmupFromDB(): Promise<void> {
             rules:       Array.isArray(d.rules) ? d.rules : [],
           })
         }
+        communityCount++
       }
+      warmupLog('Warmup communities', { count: communityCount })
+    } else {
+      console.warn('Communities fetch failed:', communitiesResult.reason)
     }
 
     // ── Posts — API always overwrites stale Gun cache ─────────────────────────
@@ -105,7 +127,11 @@ export async function warmupFromDB(): Promise<void> {
         })
         n++
       }
-      if (n > 0) { postStore.saveSeenNow(); console.log(`⚡ API: ${n} posts`) }
+      if (n > 0) { postStore.saveSeenNow(); warmupLog(`API: ${n} posts`) }
+      warmupLog('Warmup posts complete', {
+        fetched: n,
+        storePosts: postStore.postsMap.size,
+      })
     } else {
       console.warn('Posts fetch failed:', postsResult.reason)
     }
@@ -136,7 +162,11 @@ export async function warmupFromDB(): Promise<void> {
         })
         n++
       }
-      if (n > 0) { pollStore.saveSeenNow(); console.log(`⚡ API: ${n} polls`) }
+      if (n > 0) { pollStore.saveSeenNow(); warmupLog(`API: ${n} polls`) }
+      warmupLog('Warmup polls complete', {
+        fetched: n,
+        storePolls: pollStore.pollsMap.size,
+      })
     } else {
       console.warn('Polls fetch failed:', pollsResult.reason)
     }
@@ -145,6 +175,13 @@ export async function warmupFromDB(): Promise<void> {
     if (isVersionEnabled('v1')) {
       fetchV1Posts(postStore).catch(() => {})
     }
+
+    warmupLog('Warmup done', {
+      durationMs: Date.now() - startedAt,
+      postsInStore: postStore.postsMap.size,
+      pollsInStore: pollStore.pollsMap.size,
+      communitiesInStore: communityStore.communities.length,
+    })
 
   } catch (err) {
     console.warn('⚠️ Warmup failed:', err)
@@ -156,7 +193,7 @@ async function fetchV1Posts(postStore: any) {
   try {
     const { default: config } = await import('../config')
     const base = config.relay.gun.replace(/\/gun$/, '')
-    const res = await fetch(`${base}/db/search?prefix=posts&limit=500`)
+    const res = await fetch(`${base}/db/search?prefix=posts&limit=${WARMUP_V1_POST_LIMIT}`)
     if (!res.ok) return
     const { results } = await res.json()
     for (const row of results || []) {

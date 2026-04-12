@@ -13,6 +13,7 @@ import { GUN_NAMESPACE } from '../services/gunService';
 
 const PAGE_SIZE      = 10;
 const SEEN_POSTS_KEY = 'seen-post-ids';
+const POST_DEBUG = localStorage.getItem('interpoll_post_debug') === 'true';
 
 // Timestamp when this app session started.
 // Gun re-delivers ALL posts on every reconnect — we only treat a post
@@ -33,6 +34,12 @@ function saveSeenIds(ids: Set<string>) {
   } catch {}
 }
 
+function postDebug(label: string, data?: Record<string, unknown>) {
+  if (!POST_DEBUG) return;
+  if (data) console.log(`[PostStoreDebug] ${label}`, data);
+  else console.log(`[PostStoreDebug] ${label}`);
+}
+
 export const usePostStore = defineStore('post', () => {
   const postsMap           = ref<Map<string, Post>>(new Map());
   const currentPost        = ref<Post | null>(null);
@@ -51,6 +58,7 @@ export const usePostStore = defineStore('post', () => {
   const unsubscribers = new Map<string, () => void>();
   // Per-community initial load tracking: ensures no cross-community misclassification
   const communityInitialLoadDone = new Map<string, boolean>();
+  const communityArrivalCounts = new Map<string, number>();
 
   /** Attempt to decrypt an encrypted post and update the store */
   function tryDecryptPost(post: Post) {
@@ -91,6 +99,16 @@ export const usePostStore = defineStore('post', () => {
   // ─── Loading ───────────────────────────────────────────────────────────────
 
   function loadPostsForCommunity(communityId: string): Promise<void> {
+    if (POST_DEBUG) {
+      postDebug('load-community-start', {
+        communityId,
+        alreadySubscribed: subscribedCommunities.has(communityId),
+        hasUnsubscriber: unsubscribers.has(communityId),
+        currentPostsInCommunity: Array.from(postsMap.value.values()).filter(p => p.communityId === communityId).length,
+        totalPostsInStore: postsMap.value.size,
+        visibleCount: visibleCount.value,
+      });
+    }
     // Allow re-subscription if previous attempt yielded zero posts (GunDB was offline/slow)
     if (subscribedCommunities.has(communityId) || unsubscribers.has(communityId)) {
       const hasPosts = Array.from(postsMap.value.values()).some(p => p.communityId === communityId);
@@ -104,6 +122,7 @@ export const usePostStore = defineStore('post', () => {
     return new Promise((resolve) => {
       communityInitialLoadDone.set(communityId, false);
       const subscriptionStartTime = Date.now();
+      communityArrivalCounts.set(communityId, 0);
 
       const unsub = PostService.subscribeToPostsInCommunity(
         communityId,
@@ -119,6 +138,8 @@ export const usePostStore = defineStore('post', () => {
           if (seenPostIds.has(post.id)) {
             postsMap.value.set(post.id, post);
             tryDecryptPost(post);
+            const next = (communityArrivalCounts.get(communityId) || 0) + 1;
+            communityArrivalCounts.set(communityId, next);
             return;
           }
 
@@ -132,11 +153,15 @@ export const usePostStore = defineStore('post', () => {
             tryDecryptPost(post);
             seenPostIds.add(post.id);
             saveSeenIds(seenPostIds);
+            const next = (communityArrivalCounts.get(communityId) || 0) + 1;
+            communityArrivalCounts.set(communityId, next);
           } else {
             // Initial load or stale Gun re-delivery → add silently
             postsMap.value.set(post.id, post);
             tryDecryptPost(post);
             seenPostIds.add(post.id);
+            const next = (communityArrivalCounts.get(communityId) || 0) + 1;
+            communityArrivalCounts.set(communityId, next);
           }
         },
         () => {
@@ -144,6 +169,16 @@ export const usePostStore = defineStore('post', () => {
           communityInitialLoadDone.set(communityId, true);
           for (const id of postsMap.value.keys()) seenPostIds.add(id);
           saveSeenIds(seenPostIds);
+          if (POST_DEBUG) {
+            postDebug('load-community-initial-done', {
+              communityId,
+              durationMs: Date.now() - subscriptionStartTime,
+              arrivals: communityArrivalCounts.get(communityId) || 0,
+              totalPostsInStore: postsMap.value.size,
+              communityPosts: Array.from(postsMap.value.values()).filter(p => p.communityId === communityId).length,
+              visibleCount: visibleCount.value,
+            });
+          }
           resolve();
         },
       );
@@ -160,6 +195,14 @@ export const usePostStore = defineStore('post', () => {
     if (!postsMap.value.has(post.id)) {
       postsMap.value.set(post.id, post);
       tryDecryptPost(post);
+      if (POST_DEBUG) {
+        postDebug('inject-post', {
+          postId: post.id,
+          communityId: post.communityId,
+          createdAt: post.createdAt,
+          totalPostsInStore: postsMap.value.size,
+        });
+      }
     }
     seenPostIds.add(post.id);
   }
@@ -168,13 +211,32 @@ export const usePostStore = defineStore('post', () => {
     saveSeenIds(seenPostIds);
   }
 
-  function loadMorePosts() { visibleCount.value += PAGE_SIZE; }
+  function loadMorePosts() {
+    const before = visibleCount.value;
+    visibleCount.value += PAGE_SIZE;
+    if (POST_DEBUG) {
+      postDebug('load-more-posts', {
+        before,
+        after: visibleCount.value,
+        pageSize: PAGE_SIZE,
+        totalSortedPosts: sortedPosts.value.length,
+      });
+    }
+  }
 
   function resetVisibleCount() {
+    const before = visibleCount.value;
     visibleCount.value    = PAGE_SIZE;
     pendingNewPosts.value = [];
     // Note: communityInitialLoadDone is NOT reset here—it persists per community
     // across refreshes, so truly new posts after refresh correctly trigger banner
+    if (POST_DEBUG) {
+      postDebug('reset-visible-count', {
+        before,
+        after: visibleCount.value,
+        pageSize: PAGE_SIZE,
+      });
+    }
   }
 
   // ─── Create ────────────────────────────────────────────────────────────────

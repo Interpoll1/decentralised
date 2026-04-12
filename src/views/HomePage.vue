@@ -452,6 +452,15 @@ const communityStore = useCommunityStore();
 const postStore = usePostStore();
 const pollStore = usePollStore();
 
+const FEED_DEBUG = localStorage.getItem('interpoll_feed_debug') === 'true';
+const FEED_INITIAL_RENDER_TARGET = 50;
+
+function feedDebug(label: string, data?: Record<string, unknown>) {
+  if (!FEED_DEBUG) return;
+  if (data) console.log(`[FeedDebug] ${label}`, data);
+  else console.log(`[FeedDebug] ${label}`);
+}
+
 const activeTab = ref('home');
 const communityFilter = ref('all');
 const isLoadingPosts = ref(false);
@@ -563,6 +572,48 @@ const hasMore = computed(() => {
   const totalItems = postStore.sortedPosts.length + pollStore.sortedPolls.filter(p => !p.isPrivate).length;
   return postStore.visibleCount < totalItems;
 });
+
+function ensureInitialFeedVisible(reason: string) {
+  const totalItems = postStore.sortedPosts.length + pollStore.sortedPolls.filter(p => !p.isPrivate).length;
+  const target = Math.min(FEED_INITIAL_RENDER_TARGET, totalItems);
+  const nextVisible = Math.max(postStore.visibleCount, target);
+  if (nextVisible !== postStore.visibleCount) {
+    const previous = postStore.visibleCount;
+    postStore.visibleCount = nextVisible;
+    pollStore.visibleCount = nextVisible;
+    if (FEED_DEBUG) {
+      feedDebug('expanded-visible-count', {
+        reason,
+        previous,
+        next: nextVisible,
+        totalItems,
+        postCount: postStore.sortedPosts.length,
+        publicPollCount: pollStore.sortedPolls.filter(p => !p.isPrivate).length,
+      });
+    }
+  } else {
+    if (FEED_DEBUG) {
+      feedDebug('visible-count-unchanged', {
+        reason,
+        visibleCount: postStore.visibleCount,
+        totalItems,
+        postCount: postStore.sortedPosts.length,
+        publicPollCount: pollStore.sortedPolls.filter(p => !p.isPrivate).length,
+      });
+    }
+  }
+}
+
+watch(
+  () => [postStore.sortedPosts.length, pollStore.sortedPolls.filter(p => !p.isPrivate).length, activeTab.value, warmupComplete.value] as const,
+  ([postCount, pollCount, tab, isWarm]) => {
+    if (tab !== 'home' || !isWarm) return;
+    const target = Math.min(FEED_INITIAL_RENDER_TARGET, postCount + pollCount);
+    if (postStore.visibleCount < target) {
+      ensureInitialFeedVisible('feed-items-increased');
+    }
+  },
+);
 
 const joinedCommunities = computed(() => communityStore.communities.filter(c => communityStore.isJoined(c.id)));
 
@@ -778,9 +829,23 @@ function flushNewContent() {
 // ── Feed / voting ─────────────────────────────────────────────────────────────
 
 async function onInfiniteScroll(event: any) {
+  if (FEED_DEBUG) {
+    feedDebug('infinite-scroll-start', {
+      visibleCountBefore: postStore.visibleCount,
+      totalItems: postStore.sortedPosts.length + pollStore.sortedPolls.filter(p => !p.isPrivate).length,
+      combinedFeedLength: combinedFeed.value.length,
+    });
+  }
   postStore.loadMorePosts();
   await new Promise(r => setTimeout(r, 100));
   event.target.complete();
+  if (FEED_DEBUG) {
+    feedDebug('infinite-scroll-complete', {
+      visibleCountAfter: postStore.visibleCount,
+      hasMore: hasMore.value,
+      combinedFeedLength: combinedFeed.value.length,
+    });
+  }
 }
 
 function hasUpvoted(postId: string): boolean {
@@ -859,6 +924,13 @@ const GUN_SUBSCRIPTION_TIMEOUT_MS = 8_000;
 async function subscribeNewCommunities(communities: typeof communityStore.communities) {
   const newOnes = communities.filter(c => !subscribedFromHome.has(c.id));
   if (newOnes.length === 0) return;
+  if (FEED_DEBUG) {
+    feedDebug('subscribe-new-communities-start', {
+      newCount: newOnes.length,
+      communityIds: newOnes.map(c => c.id),
+      alreadySubscribed: subscribedFromHome.size,
+    });
+  }
   newOnes.forEach(c => subscribedFromHome.add(c.id));
   const isFirstBatch = subscribedFromHome.size === newOnes.length;
 
@@ -872,7 +944,13 @@ async function subscribeNewCommunities(communities: typeof communityStore.commun
     pollStore.loadPollsForCommunity(c.id),
   ]);
   let timerId: ReturnType<typeof setTimeout>;
-  const timeout = new Promise<void>(r => { timerId = setTimeout(r, GUN_SUBSCRIPTION_TIMEOUT_MS); });
+  let timedOut = false;
+  const timeout = new Promise<void>(r => {
+    timerId = setTimeout(() => {
+      timedOut = true;
+      r();
+    }, GUN_SUBSCRIPTION_TIMEOUT_MS);
+  });
 
   try {
     await Promise.race([Promise.all(subPromises), timeout]);
@@ -881,6 +959,17 @@ async function subscribeNewCommunities(communities: typeof communityStore.commun
   } finally {
     clearTimeout(timerId!);
     if (didSetLoading) isLoadingPosts.value = false;
+    if (FEED_DEBUG) {
+      feedDebug('subscribe-new-communities-complete', {
+        timedOut,
+        subscribedFromHome: subscribedFromHome.size,
+        sortedPosts: postStore.sortedPosts.length,
+        publicPolls: pollStore.sortedPolls.filter(p => !p.isPrivate).length,
+        visibleCount: postStore.visibleCount,
+        combinedFeedLength: combinedFeed.value.length,
+      });
+    }
+    ensureInitialFeedVisible(timedOut ? 'subscription-timeout' : 'subscription-complete');
   }
 }
 
@@ -920,14 +1009,30 @@ watch(() => communityStore.communities.length, (newLen, oldLen) => {
 
 watch(activeTab, (tab) => {
   if (tab === 'home') {
-    postStore.visibleCount = 10;
-    pollStore.visibleCount = 10;
+    ensureInitialFeedVisible('home-tab-selected');
   }
 });
 
 onMounted(async () => {
   // STEP 1: Fetch posts/polls/communities from API instantly
+  const warmupStartedAt = Date.now();
+  if (FEED_DEBUG) {
+    feedDebug('warmup-start', {
+      visibleCount: postStore.visibleCount,
+      feedMode: feedMode.value,
+    });
+  }
   await warmupFromDB();
+  if (FEED_DEBUG) {
+    feedDebug('warmup-finished', {
+      durationMs: Date.now() - warmupStartedAt,
+      sortedPosts: postStore.sortedPosts.length,
+      publicPolls: pollStore.sortedPolls.filter(p => !p.isPrivate).length,
+      combinedFeedLength: combinedFeed.value.length,
+      visibleCount: postStore.visibleCount,
+    });
+  }
+  ensureInitialFeedVisible('warmup-finished');
 
   // Warmup loaded communities while warmupComplete was false,
   // so the length-change watcher missed them. Subscribe before arming
@@ -960,6 +1065,15 @@ onMounted(async () => {
   })();
 
   await feedPromise;
+  if (FEED_DEBUG) {
+    feedDebug('onMounted-feed-ready', {
+      sortedPosts: postStore.sortedPosts.length,
+      publicPolls: pollStore.sortedPolls.filter(p => !p.isPrivate).length,
+      combinedFeedLength: combinedFeed.value.length,
+      hasMore: hasMore.value,
+      visibleCount: postStore.visibleCount,
+    });
+  }
 });
 
 onUnmounted(() => {
@@ -968,6 +1082,25 @@ onUnmounted(() => {
   unreadDebounceTimers.forEach(t => clearTimeout(t));
   unreadDebounceTimers.clear();
 });
+
+if (FEED_DEBUG) {
+  watch(
+    () => [postStore.sortedPosts.length, pollStore.sortedPolls.filter(p => !p.isPrivate).length, postStore.visibleCount, combinedFeed.value.length],
+    ([postCount, pollCount, visibleCount, combinedLength], [prevPostCount, prevPollCount, prevVisibleCount, prevCombinedLength]) => {
+      feedDebug('feed-count-change', {
+        postCount,
+        pollCount,
+        visibleCount,
+        combinedLength,
+        prevPostCount,
+        prevPollCount,
+        prevVisibleCount,
+        prevCombinedLength,
+        hasMore: hasMore.value,
+      });
+    },
+  );
+}
 </script>
 
 <style scoped>
