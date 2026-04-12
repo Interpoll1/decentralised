@@ -35,6 +35,8 @@ Key computed: `polls`, `sortedPolls`
 ## `communityStore.ts` — `useCommunityStore`
 
 - Has a **MySQL REST fallback** via the gun-relay's `/db/search?prefix=v2/communities` endpoint. Called when GunDB returns nothing (cold relay). This is the only store that hits the gun-relay's database endpoint directly.
+- The fallback relay base URL is derived from runtime config (`config.relay.gun`), not hardcoded, so Settings relay overrides and localhost/dev relays are respected.
+- Fallback `/db/search` and `/db/soul` reads are timeboxed to avoid hanging community navigation when fallback relay requests are slow or blocked.
 - Deduplicates with a `seen: Set<string>`.
 - `joinedCommunities` is a `Set<string>` persisted in localStorage (`joined-communities`), then backfilled from the key vault so private invite/password joins survive refresh.
 - Joined state is also synced from stored community encryption keys, so invite/password-joined private communities behave like normal joined communities after refresh.
@@ -47,6 +49,8 @@ Key computed: `polls`, `sortedPolls`
 - Uses per-community initial-load tracking (`communityInitialLoadDone`) plus subscription timestamps to avoid false "new post" banners from startup hydration.
 - `pendingNewPosts` is banner-only state; accepted posts live in `postsMap` and seen IDs are persisted (`seen-post-ids`) so accepted content survives refresh.
 - `createPost()` checks the current user's `showRealName` preference. If false (default), generates a pseudonym from the pre-generated postId + authorId as the `authorName`. If true, uses the user's `customUsername`.
+- `loadMorePosts()` still paginates by `PAGE_SIZE` (10), but Home feed now controls initial visibility separately (up to 50 items) so users do not need an initial scroll to reveal already-fetched content.
+- Debug instrumentation logs `[PostStoreDebug]` entries for community subscription start/initial completion, injected posts, and visible-count changes to help diagnose feed hydration issues (enabled only when `localStorage.interpoll_post_debug === 'true'`).
 
 ## `commentStore.ts` — `useCommentStore`
 

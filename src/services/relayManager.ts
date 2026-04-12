@@ -209,7 +209,7 @@ export class RelayManager {
 
     if (this.config.transport.healthProbeRequired) {
       const probe = await this.probeRelay(relay);
-      if (probe.status !== 'online') {
+      if (probe.status === 'offline') {
         this.noteFailure(id);
         throw new Error(`Relay ${relay.label} is not healthy enough to switch (${probe.status})`);
       }
@@ -258,6 +258,7 @@ export class RelayManager {
     const probe = { ...relay };
     let wsOk = false;
     let gunOk = false;
+    let gunReachable = false;
     let apiOk = false;
     let latency = Infinity;
 
@@ -315,8 +316,11 @@ export class RelayManager {
         method: 'GET',
         signal: controller.signal,
         headers: { Accept: '*/*' },
+        mode: 'no-cors',
+        cache: 'no-store',
       });
       clearTimeout(timer);
+      gunReachable = true;
       gunOk = res.ok || res.status === 404;
     } catch {
       // Gun endpoint unreachable
@@ -343,6 +347,8 @@ export class RelayManager {
 
     if (wsOk && gunOk && apiOk) {
       probe.status = 'online';
+    } else if (wsOk && apiOk && gunReachable) {
+      probe.status = 'degraded';
     } else if ((wsOk && gunOk) || (wsOk && apiOk) || (gunOk && apiOk)) {
       probe.status = 'degraded';
     } else {
@@ -575,7 +581,7 @@ export class RelayManager {
       if (this.isInCooldown(candidate.id)) continue;
 
       const probed = await this.probeRelay(candidate);
-      if (probed.status !== 'online') {
+      if (probed.status === 'offline') {
         this.noteFailure(candidate.id);
         continue;
       }

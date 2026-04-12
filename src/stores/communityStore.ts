@@ -1,11 +1,78 @@
 // src/stores/communityStore.ts
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
+import config from '@/config';
 import { Community, CommunityService } from '../services/communityService';
 import { KeyVaultService } from '../services/keyVaultService';
 import { useChainStore } from './chainStore';
 
-const GUN_RELAY_URL = import.meta.env.VITE_GUN_URL?.replace('/gun', '') || 'https://interpoll2.endless.sbs';
+function getGunRelayBaseUrl(): string {
+  try {
+    const endpoint = new URL(config.relay.gun);
+    endpoint.pathname = endpoint.pathname.replace(/\/gun\/?$/, '');
+    endpoint.search = '';
+    endpoint.hash = '';
+    return endpoint.toString().replace(/\/$/, '');
+  } catch {
+    return config.relay.gun.replace(/\/gun\/?$/, '').replace(/\/$/, '');
+  }
+}
+
+const FALLBACK_SOUL_TIMEOUT_MS = 4000;
+const FALLBACK_COMMUNITY_SEARCH_TIMEOUT_MS = 8000;
+const FALLBACK_POST_SEARCH_TIMEOUT_MS = 12000;
+
+async function fetchJsonWithTimeout<T>(url: string, timeoutMs: number): Promise<T | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) return null;
+    return await res.json() as T;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function asString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function asNumber(value: unknown, fallback = 0): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string => typeof entry === 'string');
+}
+
+function toCommunityRecord(value: unknown): Community | null {
+  if (!value || typeof value !== 'object') return null;
+  const data = value as Record<string, unknown>;
+  const id = asString(data.id);
+  const name = asString(data.name, id);
+  const displayName = asString(data.displayName, name || id);
+  if (!id) return null;
+
+  return {
+    id,
+    name,
+    displayName,
+    description: asString(data.description),
+    creatorId: asString(data.creatorId),
+    memberCount: asNumber(data.memberCount),
+    postCount: asNumber(data.postCount),
+    createdAt: asNumber(data.createdAt, Date.now()),
+    rules: asStringArray(data.rules),
+    isEncrypted: Boolean(data.isEncrypted),
+    encryptionHint: typeof data.encryptionHint === 'string' ? data.encryptionHint : undefined,
+    encryptedMeta: typeof data.encryptedMeta === 'string' ? data.encryptedMeta : undefined,
+  };
+}
+
 export const useCommunityStore = defineStore('community', () => {
   const communities       = ref<Community[]>([]);
   const currentCommunity  = ref<Community | null>(null);
@@ -100,30 +167,17 @@ export const useCommunityStore = defineStore('community', () => {
 
   async function loadCommunitiesFromDB(): Promise<number> {
     try {
-      const res  = await fetch(`${GUN_RELAY_URL}/db/search?prefix=v2/communities&limit=200`);
-      if (!res.ok) return 0;
-      const json = await res.json();
+      const relayBaseUrl = getGunRelayBaseUrl();
+      const json = await fetchJsonWithTimeout<{ results?: Array<{ data?: Record<string, unknown> }> }>(
+        `${relayBaseUrl}/db/search?prefix=v2/communities&limit=200`,
+        FALLBACK_COMMUNITY_SEARCH_TIMEOUT_MS,
+      );
+      if (!json) return 0;
 
       let added = 0;
       for (const row of json.results || []) {
-        const d = row.data;
-        // Only leaf community nodes have an `id` field — skip index nodes
-        if (!d?.id || !d?.displayName) continue;
-
-        const community: Community = {
-          id:          d.id,
-          name:        d.name        || d.id,
-          displayName: d.displayName,
-          description: d.description || '',
-          creatorId:   d.creatorId   || '',
-          memberCount: d.memberCount || 0,
-          postCount:   d.postCount   || 0,
-          createdAt:   d.createdAt   || Date.now(),
-          rules:       Array.isArray(d.rules) ? d.rules : [],
-          isEncrypted: !!d.isEncrypted,
-          encryptionHint: d.encryptionHint || undefined,
-          encryptedMeta: d.encryptedMeta || undefined,
-        };
+        const community = toCommunityRecord(row.data);
+        if (!community) continue;
 
         const previousCount = communities.value.length;
         await upsertCommunity(community);
@@ -144,9 +198,12 @@ export const useCommunityStore = defineStore('community', () => {
   // so postStore can subscribe to communities even on cold relay
   async function loadPostsFromDB(): Promise<void> {
     try {
-      const res  = await fetch(`${GUN_RELAY_URL}/db/search?prefix=v2/posts&limit=500`);
-      if (!res.ok) return;
-      const json = await res.json();
+      const relayBaseUrl = getGunRelayBaseUrl();
+      const json = await fetchJsonWithTimeout<{ results?: Array<{ data?: Record<string, unknown> }> }>(
+        `${relayBaseUrl}/db/search?prefix=v2/posts&limit=500`,
+        FALLBACK_POST_SEARCH_TIMEOUT_MS,
+      );
+      if (!json) return;
 
       // Warm up Gun's local cache by putting data back into it so existing
       // postService subscriptions fire correctly
@@ -269,25 +326,14 @@ export const useCommunityStore = defineStore('community', () => {
 
       // Fallback: fetch from MySQL relay if Gun returned null
       if (!currentCommunity.value) {
-        const res  = await fetch(`${GUN_RELAY_URL}/db/soul?soul=v2/communities/${communityId}`);
-        if (res.ok) {
-          const json = await res.json();
-          if (json?.data?.id) {
-            currentCommunity.value = {
-              id: json.data.id,
-              name: json.data.name || json.data.id,
-              displayName: json.data.displayName || json.data.name || json.data.id,
-              description: json.data.description || '',
-              creatorId: json.data.creatorId || '',
-              memberCount: json.data.memberCount || 0,
-              postCount: json.data.postCount || 0,
-              createdAt: json.data.createdAt || Date.now(),
-              rules: Array.isArray(json.data.rules) ? json.data.rules : [],
-              isEncrypted: !!json.data.isEncrypted,
-              encryptionHint: json.data.encryptionHint || undefined,
-              encryptedMeta: json.data.encryptedMeta || undefined,
-            };
-          }
+        const relayBaseUrl = getGunRelayBaseUrl();
+        const json = await fetchJsonWithTimeout<{ data?: unknown }>(
+          `${relayBaseUrl}/db/soul?soul=v2/communities/${communityId}`,
+          FALLBACK_SOUL_TIMEOUT_MS,
+        );
+        const fallbackCommunity = toCommunityRecord(json?.data);
+        if (fallbackCommunity) {
+          currentCommunity.value = fallbackCommunity;
         }
       }
 

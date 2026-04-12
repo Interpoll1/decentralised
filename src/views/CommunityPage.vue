@@ -612,6 +612,24 @@ const showDescriptionToggle = computed(() => {
   return description.length > 140;
 });
 
+function promotePollVisibility(
+  items: Array<{ type: 'post' | 'poll'; data: any; createdAt: number; flagged: boolean }>,
+): Array<{ type: 'post' | 'poll'; data: any; createdAt: number; flagged: boolean }> {
+  if (contentFilter.value !== 'all') return items;
+  const firstWindowSize = 6;
+  if (!items.some((item) => item.type === 'poll')) return items;
+  if (items.slice(0, firstWindowSize).some((item) => item.type === 'poll')) return items;
+
+  const firstPollIndex = items.findIndex((item) => item.type === 'poll');
+  if (firstPollIndex <= 0) return items;
+
+  const reordered = [...items];
+  const [pollItem] = reordered.splice(firstPollIndex, 1);
+  const insertAt = Math.min(2, reordered.length);
+  reordered.splice(insertAt, 0, pollItem);
+  return reordered;
+}
+
 // Pre-fetch author profiles outside computed to avoid side-effects
 watchEffect(() => {
   const authorIds = new Set([
@@ -694,7 +712,7 @@ const displayedContent = computed(() => {
   }
 
   if (feedPreferences.value.mode === 'latest') {
-    return items.sort((a, b) => b.createdAt - a.createdAt);
+    return promotePollVisibility(items.sort((a, b) => b.createdAt - a.createdAt));
   }
 
   const rankInput = items.map((item) => {
@@ -734,9 +752,11 @@ const displayedContent = computed(() => {
   const ranked = rankFeedItems(rankInput, rankingPrefs, joinedCommunityIds.value);
   const itemById = new Map(items.map((item) => [`${item.type}:${item.data.id}`, item]));
 
-  return ranked
+  return promotePollVisibility(
+    ranked
     .map((entry) => itemById.get(entry.id))
-    .filter((entry): entry is {type: 'post' | 'poll', data: any, createdAt: number, flagged: boolean} => Boolean(entry));
+    .filter((entry): entry is {type: 'post' | 'poll', data: any, createdAt: number, flagged: boolean} => Boolean(entry)),
+  );
 });
 
 function hasUpvoted(postId: string): boolean {
@@ -926,6 +946,18 @@ async function shareInviteLink() {
 
 let loadGeneration = 0;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
+const COMMUNITY_STORE_BOOTSTRAP_TIMEOUT_MS = 2500;
+const COMMUNITY_DEBUG = typeof window !== 'undefined' && localStorage.getItem('interpoll_community_debug') === 'true';
+
+function communityDebug(step: string, payload: Record<string, unknown> = {}) {
+  if (!COMMUNITY_DEBUG) return;
+  console.log('[CommunityDebug]', step, {
+    communityId: communityId.value,
+    generation: loadGeneration,
+    timestamp: Date.now(),
+    ...payload,
+  });
+}
 
 function scheduleRetryIfEmpty() {
   if (retryTimer) clearTimeout(retryTimer);
@@ -952,6 +984,53 @@ function scheduleRetryIfEmpty() {
         await loadCommunityContent();
       }
     }, 3000);
+  }
+}
+
+function shouldRecoverOnFocus(): boolean {
+  return (
+    !hasVisibleContent.value &&
+    !isLoading.value &&
+    hasAccess.value &&
+    (postLoadStatus.value === 'timed-out' || pollLoadStatus.value === 'timed-out')
+  );
+}
+
+function recoverLoadOnFocus() {
+  if (!shouldRecoverOnFocus()) return;
+  communityDebug('focus-recovery-triggered', {
+    postLoadStatus: postLoadStatus.value,
+    pollLoadStatus: pollLoadStatus.value,
+    totalLoadedContentCount: totalLoadedContentCount.value,
+  });
+  void loadCommunityContent();
+}
+
+function handleVisibilityChange() {
+  if (document.visibilityState !== 'visible') return;
+  recoverLoadOnFocus();
+}
+
+function syncDecryptedFromCurrentStoreState() {
+  if (!community.value?.isEncrypted) {
+    decryptedPosts.value = communityPosts.value;
+    decryptedPolls.value = communityPolls.value;
+    return;
+  }
+
+  if (!hasAccess.value) {
+    decryptedPosts.value = communityPosts.value;
+    decryptedPolls.value = communityPolls.value;
+    return;
+  }
+
+  // For encrypted communities with access, seed placeholders only once.
+  // Avoid overwriting already-decrypted watcher output.
+  if (decryptedPosts.value.length === 0) {
+    decryptedPosts.value = communityPosts.value;
+  }
+  if (decryptedPolls.value.length === 0) {
+    decryptedPolls.value = communityPolls.value;
   }
 }
 
@@ -992,6 +1071,10 @@ async function trackInitialLoad(
 
 async function loadCommunityContent() {
   const gen = ++loadGeneration;
+  communityDebug('load-start', {
+    routeCommunityId: communityId.value,
+    knownCommunities: communityStore.communities.length,
+  });
   isLoading.value = true;
   descriptionExpanded.value = false;
   postLoadStatus.value = 'loading';
@@ -1012,8 +1095,25 @@ async function loadCommunityContent() {
 
     if (gen !== loadGeneration) return;
 
+    // On direct reload of a community route, HomePage warmup never ran.
+    // Bootstrap community subscriptions briefly so selects/feeds have data sources.
+    const bootstrapResult = await Promise.race<'loaded' | 'timed-out'>([
+      communityStore.loadCommunities().then(() => 'loaded'),
+      new Promise<'timed-out'>((resolve) => setTimeout(() => resolve('timed-out'), COMMUNITY_STORE_BOOTSTRAP_TIMEOUT_MS)),
+    ]);
+    communityDebug('community-store-bootstrap', {
+      result: bootstrapResult,
+      knownCommunities: communityStore.communities.length,
+    });
+
+    if (gen !== loadGeneration) return;
+
     // Select the community
     await communityStore.selectCommunity(communityId.value);
+    communityDebug('community-selected', {
+      selectedCommunityId: community.value?.id ?? null,
+      isEncrypted: Boolean(community.value?.isEncrypted),
+    });
 
     if (gen !== loadGeneration) return;
 
@@ -1028,6 +1128,7 @@ async function loadCommunityContent() {
     } else {
       hasAccess.value = true;
     }
+    syncDecryptedFromCurrentStoreState();
 
     if (gen !== loadGeneration) return;
 
@@ -1037,6 +1138,16 @@ async function loadCommunityContent() {
       trackInitialLoad(postStore.loadPostsForCommunity(communityId.value), postLoadStatus, gen),
       trackInitialLoad(pollStore.loadPollsForCommunity(communityId.value), pollLoadStatus, gen),
     ]);
+    syncDecryptedFromCurrentStoreState();
+    communityDebug('content-load-complete', {
+      loadStates,
+      postLoadStatus: postLoadStatus.value,
+      pollLoadStatus: pollLoadStatus.value,
+      totalContentCount: totalContentCount.value,
+      totalLoadedContentCount: totalLoadedContentCount.value,
+      displayedCount: displayedContent.value.length,
+      hasAccess: hasAccess.value,
+    });
 
     if (gen === loadGeneration && loadStates.includes('timed-out')) {
       const toast = await toastController.create({
@@ -1055,6 +1166,9 @@ async function loadCommunityContent() {
     }
 
   } catch (error) {
+    communityDebug('load-error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     console.error('Error loading community content:', error);
     const toast = await toastController.create({
       message: 'Failed to load community content',
@@ -1062,12 +1176,20 @@ async function loadCommunityContent() {
     });
     await toast.present();
   } finally {
+    communityDebug('load-finished', {
+      isCurrentGeneration: gen === loadGeneration,
+      isLoading: isLoading.value,
+      postLoadStatus: postLoadStatus.value,
+      pollLoadStatus: pollLoadStatus.value,
+    });
     if (gen === loadGeneration) isLoading.value = false;
   }
 }
 
 // Re-load when Ionic enters (or re-enters) the page — covers first mount and cache re-entry
 onIonViewWillEnter(async () => {
+  window.addEventListener('focus', recoverLoadOnFocus);
+  document.addEventListener('visibilitychange', handleVisibilityChange);
   const isCurrentCommunity = community.value?.id === communityId.value;
   if (!isCurrentCommunity || totalContentCount.value === 0) {
     await loadCommunityContent();
@@ -1076,6 +1198,8 @@ onIonViewWillEnter(async () => {
 });
 
 onIonViewDidLeave(() => {
+  window.removeEventListener('focus', recoverLoadOnFocus);
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
   if (retryTimer) clearTimeout(retryTimer);
   retryTimer = null;
 });

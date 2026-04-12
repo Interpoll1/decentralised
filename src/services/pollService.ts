@@ -217,7 +217,12 @@ export class PollService {
     }
     if (!pollData?.id) return null;
 
-    const options = await this.loadPollOptions(pollId, allowApiOptionFallback);
+    let options = await this.loadPollOptions(pollId, allowApiOptionFallback);
+    // Some relays return poll shells under community scope before global options hydrate.
+    // Fall back to community-scoped options to avoid dropping polls on reload.
+    if (options.length === 0 && pollData.communityId) {
+      options = await this.loadCommunityPollOptions(pollData.communityId, pollId);
+    }
     return this.buildPollRecord(pollData, options);
   }
 
@@ -615,6 +620,19 @@ export class PollService {
       }
     }
     return [];
+  }
+
+  private static async loadCommunityPollOptions(communityId: string, pollId: string): Promise<PollOption[]> {
+    if (!communityId) return [];
+    const optionsNode = this.getCommunityPollPath(communityId, pollId).get('options');
+    const optionsData = await this.onceNode<any>(optionsNode, 300);
+    const parsed = this.parsePollOptions(optionsData);
+    if (parsed.length > 0) return parsed;
+
+    const liveOptions = await this.waitForNode<any>(
+      optionsNode, (value) => this.parsePollOptions(value).length > 0, 1500,
+    );
+    return this.parsePollOptions(liveOptions);
   }
 
   static async vote(pollId: string, optionIds: string[], voterId: string): Promise<void> {

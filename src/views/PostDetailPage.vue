@@ -178,7 +178,7 @@ import { useUserStore } from '../stores/userStore';
 import CommentCard from '../components/CommentCard.vue';
 import { Post } from '../services/postService';
 import { generatePseudonym } from '../utils/pseudonym';
-import { ModerationService } from '../services/moderationService';
+import { ModerationService, moderationVersion } from '../services/moderationService';
 
 import { IPFSService } from '../services/ipfsService';
 
