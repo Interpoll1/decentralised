@@ -18,6 +18,7 @@ Route-level pages built with Vue 3 Composition API + Ionic. Views compose stores
 | `ChatView.vue` | Route-reactive direct-chat page that reinitializes when the target peer changes without forcing a full page reload. |
 | `JoinPrivatePage.vue` | Invite / private-community entry flow. Supports SPA navigation without a browser reload. |
 | `SettingsPage.vue` | Runtime relay settings, diagnostics, and local app configuration. Network tab includes explicit bootstrap recovery (generate/copy/import bootstrap artifacts, Gun discovery seeding, probe-before-switch confirmation) plus known-server trust/freshness metadata (`local`/`peer`/`gun` source, signature status, TTL when provided). “Signed” reflects explicit verification state, not source labels. Generated bootstrap invites now also include optional browser handoff context (source peer id, connected server endpoint, and snapshot status counters such as posts/polls/block height), and import prompts surface that context while still requiring manual confirmation. Relay switching is blocked for offline probe results. “Currently connected” reflects the live open WebSocket URL, not config URL match alone. |
+| `CreatePollPage.vue` | Poll composer route. Post action now exposes an explicit submit-in-progress state (`Posting…`) and validation toast messaging for incomplete form input, so users no longer see a silent no-op when required fields are missing or while the create request is in-flight. |
 
 ## Notes
 

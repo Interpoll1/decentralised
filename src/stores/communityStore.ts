@@ -3,6 +3,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import config from '@/config';
 import { Community, CommunityService } from '../services/communityService';
+import { GUN_NAMESPACE } from '../services/gunService';
 import { KeyVaultService } from '../services/keyVaultService';
 import { useChainStore } from './chainStore';
 
@@ -21,6 +22,16 @@ function getGunRelayBaseUrl(): string {
 const FALLBACK_SOUL_TIMEOUT_MS = 4000;
 const FALLBACK_COMMUNITY_SEARCH_TIMEOUT_MS = 8000;
 const FALLBACK_POST_SEARCH_TIMEOUT_MS = 12000;
+const CLEAN_SLATE_NAMESPACE_VERSION = 3;
+
+function getNamespaceVersion(namespace: string): number {
+  const parsed = Number.parseInt(namespace.replace(/^v/i, ''), 10);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isCleanSlateNamespace(namespace: string): boolean {
+  return getNamespaceVersion(namespace) >= CLEAN_SLATE_NAMESPACE_VERSION;
+}
 
 async function fetchJsonWithTimeout<T>(url: string, timeoutMs: number): Promise<T | null> {
   const controller = new AbortController();
@@ -166,10 +177,11 @@ export const useCommunityStore = defineStore('community', () => {
   // gun-relay's /db/search endpoint and hydrate the store immediately.
 
   async function loadCommunitiesFromDB(): Promise<number> {
+    if (isCleanSlateNamespace(GUN_NAMESPACE)) return 0;
     try {
       const relayBaseUrl = getGunRelayBaseUrl();
       const json = await fetchJsonWithTimeout<{ results?: Array<{ data?: Record<string, unknown> }> }>(
-        `${relayBaseUrl}/db/search?prefix=v2/communities&limit=200`,
+        `${relayBaseUrl}/db/search?prefix=${GUN_NAMESPACE}/communities&limit=200`,
         FALLBACK_COMMUNITY_SEARCH_TIMEOUT_MS,
       );
       if (!json) return 0;
@@ -197,10 +209,11 @@ export const useCommunityStore = defineStore('community', () => {
   // Same thing for posts — scan all community post index nodes from MySQL
   // so postStore can subscribe to communities even on cold relay
   async function loadPostsFromDB(): Promise<void> {
+    if (isCleanSlateNamespace(GUN_NAMESPACE)) return;
     try {
       const relayBaseUrl = getGunRelayBaseUrl();
       const json = await fetchJsonWithTimeout<{ results?: Array<{ data?: Record<string, unknown> }> }>(
-        `${relayBaseUrl}/db/search?prefix=v2/posts&limit=500`,
+        `${relayBaseUrl}/db/search?prefix=${GUN_NAMESPACE}/posts&limit=500`,
         FALLBACK_POST_SEARCH_TIMEOUT_MS,
       );
       if (!json) return;
@@ -232,14 +245,20 @@ export const useCommunityStore = defineStore('community', () => {
       void upsertCommunity(community);
     });
 
-    // 2. After 1.5s, if Gun gave us nothing (cold relay), fall back to MySQL
+    // 2. After 1.5s, if Gun gave us nothing (cold relay), v2 can fall back to MySQL.
+    // v3+ is clean-slate mode; skip API relay fallback so we don't rehydrate legacy data.
     await new Promise(r => setTimeout(r, 1500));
 
     if (communities.value.length === 0) {
-      console.log('⚠️  Gun returned no communities — falling back to MySQL...');
-      await loadCommunitiesFromDB();
-      // Also warm up posts so the feed isn't empty
-      await loadPostsFromDB();
+      const shouldUseFallback = !isCleanSlateNamespace(GUN_NAMESPACE);
+      if (shouldUseFallback) {
+        console.log('⚠️  Gun returned no communities — falling back to MySQL...');
+        await loadCommunitiesFromDB();
+        // Also warm up posts so the feed isn't empty
+        await loadPostsFromDB();
+      } else {
+        console.log('ℹ️  Gun returned no communities in clean-slate mode; skipping MySQL fallback.');
+      }
     }
 
     isLoading.value = false;
@@ -324,11 +343,11 @@ export const useCommunityStore = defineStore('community', () => {
       // Try Gun first
       currentCommunity.value = await CommunityService.getCommunity(communityId);
 
-      // Fallback: fetch from MySQL relay if Gun returned null
-      if (!currentCommunity.value) {
+      // Fallback: fetch from MySQL relay only for v2 and older namespaces.
+      if (!currentCommunity.value && !isCleanSlateNamespace(GUN_NAMESPACE)) {
         const relayBaseUrl = getGunRelayBaseUrl();
         const json = await fetchJsonWithTimeout<{ data?: unknown }>(
-          `${relayBaseUrl}/db/soul?soul=v2/communities/${communityId}`,
+          `${relayBaseUrl}/db/soul?soul=${GUN_NAMESPACE}/communities/${communityId}`,
           FALLBACK_SOUL_TIMEOUT_MS,
         );
         const fallbackCommunity = toCommunityRecord(json?.data);

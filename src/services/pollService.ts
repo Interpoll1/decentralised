@@ -539,12 +539,13 @@ export class PollService {
       }
     }
 
-    await this.putPromise(this.getPollPath(pollId), gunPoll);
-    await this.putPromise(this.getPollPath(pollId).get('options'), optionsMap);
+    const createWriteOptions = { timeoutMs: 6000, resolveOnTimeout: true } as const;
+    await this.putPromise(this.getPollPath(pollId), gunPoll, { ...createWriteOptions, label: 'poll root write' });
+    await this.putPromise(this.getPollPath(pollId).get('options'), optionsMap, { ...createWriteOptions, label: 'poll options write' });
 
     const communityPolls = this.gun.get('communities').get(data.communityId).get('polls');
-    await this.putPromise(communityPolls.get(pollId), gunPoll);
-    await this.putPromise(communityPolls.get(pollId).get('options'), optionsMap);
+    await this.putPromise(communityPolls.get(pollId), gunPoll, { ...createWriteOptions, label: 'community poll write' });
+    await this.putPromise(communityPolls.get(pollId).get('options'), optionsMap, { ...createWriteOptions, label: 'community poll options write' });
 
     if (poll.isEncrypted && poll.encryptedContent) {
       const node = this.getPollPath(pollId);
@@ -562,15 +563,15 @@ export class PollService {
       const inviteCodes = this.generateInviteCodes(inviteCount);
       const codesMap: Record<string, any> = {};
       inviteCodes.forEach((code, i) => { codesMap[i] = { code, used: false }; });
-      await this.putPromise(this.getPollPath(pollId).get('inviteCodes'), codesMap);
-      await this.putPromise(communityPolls.get(pollId).get('inviteCodes'), codesMap);
+      await this.putPromise(this.getPollPath(pollId).get('inviteCodes'), codesMap, { ...createWriteOptions, label: 'invite codes write' });
+      await this.putPromise(communityPolls.get(pollId).get('inviteCodes'), codesMap, { ...createWriteOptions, label: 'community invite codes write' });
       const mainByCode      = this.getPollPath(pollId).get('inviteCodesByCode');
       const communityByCode = communityPolls.get(pollId).get('inviteCodesByCode');
       for (const rawCode of inviteCodes) {
         const codeKey = rawCode.trim().toUpperCase();
         await Promise.all([
-          this.putPromise(mainByCode.get(codeKey), { used: false }),
-          this.putPromise(communityByCode.get(codeKey), { used: false }),
+          this.putPromise(mainByCode.get(codeKey), { used: false }, { ...createWriteOptions, label: `invite by-code write (${codeKey})` }),
+          this.putPromise(communityByCode.get(codeKey), { used: false }, { ...createWriteOptions, label: `community invite by-code write (${codeKey})` }),
         ]);
       }
       (poll as any).inviteCodes = inviteCodes;
@@ -908,10 +909,36 @@ export class PollService {
     return codes;
   }
 
-  private static putPromise(node: any, data: any): Promise<void> {
+  private static putPromise(
+    node: any,
+    data: any,
+    options: { timeoutMs?: number; resolveOnTimeout?: boolean; label?: string } = {},
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
+      const timeoutMs = options.timeoutMs ?? 8000;
+      const resolveOnTimeout = options.resolveOnTimeout === true;
+      const label = options.label || 'Gun write';
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        const timeoutError = new Error(`Timed out waiting for ${label} ACK`);
+        if (resolveOnTimeout) {
+          console.warn('[PollService]', timeoutError.message);
+          resolve();
+          return;
+        }
+        reject(timeoutError);
+      }, timeoutMs);
       node.put(data, (ack: any) => {
-        if (ack.err) reject(new Error(ack.err)); else resolve();
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (ack?.err) {
+          reject(new Error(ack.err));
+        } else {
+          resolve();
+        }
       });
     });
   }

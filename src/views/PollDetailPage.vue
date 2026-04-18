@@ -287,6 +287,7 @@ import type { Poll } from '../services/pollService';
 import { UserService } from '../services/userService';
 import { VoteTrackerService } from '../services/voteTrackerService';
 import { AuditService } from '../services/auditService';
+import { GUN_NAMESPACE } from '../services/gunService';
 import type { Vote } from '../types/chain';
 import { generatePseudonym } from '../utils/pseudonym';
 import config from '../config';
@@ -486,7 +487,7 @@ async function submitVote() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              soul: `v2/communities/${communityIdForSync}/polls/${pollIdForSync}/options/${i}`,
+              soul: `${GUN_NAMESPACE}/communities/${communityIdForSync}/polls/${pollIdForSync}/options/${i}`,
               data: { id: opt.id, text: opt.text, votes: opt.votes }
             })
           }).catch(() => {})
@@ -496,7 +497,7 @@ async function submitVote() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            soul: `v2/communities/${communityIdForSync}/polls/${pollIdForSync}`,
+            soul: `${GUN_NAMESPACE}/communities/${communityIdForSync}/polls/${pollIdForSync}`,
             data: { totalVotes: newTotalVotes }
           })
         }).catch(() => {})
