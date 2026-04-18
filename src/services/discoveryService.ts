@@ -158,13 +158,18 @@ export class DiscoveryService {
   }
 
   private static async putAnnouncement(key: string, announcement: DiscoveryAnnouncement): Promise<void> {
+    const gunAnnouncement: Record<string, unknown> = {
+      ...announcement,
+      // Gun graph writes reject arrays; store deterministic index map instead.
+      capabilities: this.capabilitiesToGunMap(announcement.capabilities),
+    };
     await new Promise<void>((resolve, reject) => {
       try {
         GunService.getGun()
           .get(DISCOVERY_ROOT)
           .get(DISCOVERY_PATH)
           .get(key)
-          .put(announcement, (ack: { err?: string }) => {
+          .put(gunAnnouncement, (ack: { err?: string }) => {
             if (ack?.err) reject(new Error(ack.err));
             else resolve();
           });
@@ -236,15 +241,33 @@ export class DiscoveryService {
   }
 
   private static normalizeCapabilities(raw: unknown): string[] {
-    if (!Array.isArray(raw)) return [];
-    return Array.from(
-      new Set(
-        raw
-          .filter((item): item is string => typeof item === 'string')
-          .map((item) => item.trim())
-          .filter(Boolean),
-      ),
-    ).sort();
+    if (Array.isArray(raw)) {
+      return Array.from(
+        new Set(
+          raw
+            .filter((item): item is string => typeof item === 'string')
+            .map((item) => item.trim())
+            .filter(Boolean),
+        ),
+      ).sort();
+    }
+
+    if (raw && typeof raw === 'object') {
+      return Array.from(
+        new Set(
+          Object.entries(raw as Record<string, unknown>)
+            .sort(([a], [b]) => Number(a) - Number(b))
+            .map(([, value]) => (typeof value === 'string' ? value.trim() : ''))
+            .filter(Boolean),
+        ),
+      ).sort();
+    }
+
+    return [];
+  }
+
+  private static capabilitiesToGunMap(capabilities: string[]): Record<string, string> {
+    return Object.fromEntries(capabilities.map((capability, index) => [String(index), capability]));
   }
 
   private static clampTtl(rawTtl?: number): number {

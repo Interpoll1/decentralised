@@ -27,6 +27,13 @@ export interface Community {
 export class CommunityService {
   private static get gun() { return GunService.getGun(); }
   private static getCommunityNode(id: string) { return this.gun.get('communities').get(id); }
+  private static readonly rulesCache = new Map<string, string[]>();
+  private static readonly rulesLoadPromises = new Map<string, Promise<string[]>>();
+  private static readonly rulesLoaded = new Set<string>();
+  private static readonly rulesSubscriptions = new Map<string, any>();
+  private static readonly communityDataCache = new Map<string, any>();
+  private static readonly liveCallbacks = new Set<(community: Community) => void>();
+  private static liveCommunityListener: any = null;
 
   // ─── Create ────────────────────────────────────────────────────────────────
 
@@ -290,19 +297,15 @@ export class CommunityService {
    * still push into the store and trigger the HomePage watcher.
    */
   static subscribeToCommunitiesLive(callback: (community: Community) => void): () => void {
-    const listener = this.gun
-      .get('communities')
-      .map()
-      .on((data: any, key: string) => {
-        if (!data?.id || key.startsWith('_')) return;
+    this.liveCallbacks.add(callback);
+    this.ensureLiveCommunityListener();
 
-        this.loadRules(key).then((rules) => {
-          callback(this.mapToCommunity(data, rules));
-        });
-      });
-
-    // Return unsubscribe function
-    return () => { if (listener) listener.off(); };
+    return () => {
+      this.liveCallbacks.delete(callback);
+      if (this.liveCallbacks.size === 0) {
+        this.cleanupLiveSubscriptions();
+      }
+    };
   }
 
   /**
@@ -324,9 +327,11 @@ export class CommunityService {
     const node = this.getCommunityNode(communityId);
     const [data, rules] = await Promise.all([
       this.once<any>(node),
-      this.loadRules(communityId),
+      this.loadRulesCached(communityId),
     ]);
     if (!data?.name) return null;
+    this.rulesCache.set(communityId, rules);
+    this.rulesLoaded.add(communityId);
     return this.mapToCommunity(data, rules);
   }
 
@@ -378,12 +383,112 @@ export class CommunityService {
 
   private static async loadRules(communityId: string): Promise<string[]> {
     const data = await this.once<any>(this.getCommunityNode(communityId).get('rules'));
+    return this.parseRules(data);
+  }
+
+  private static loadRulesCached(communityId: string): Promise<string[]> {
+    if (this.rulesLoaded.has(communityId)) {
+      return Promise.resolve(this.rulesCache.get(communityId) ?? []);
+    }
+
+    const inFlight = this.rulesLoadPromises.get(communityId);
+    if (inFlight) return inFlight;
+
+    const loadPromise = this.loadRules(communityId)
+      .then((rules) => {
+        this.rulesCache.set(communityId, rules);
+        this.rulesLoaded.add(communityId);
+        return rules;
+      })
+      .finally(() => {
+        this.rulesLoadPromises.delete(communityId);
+      });
+
+    this.rulesLoadPromises.set(communityId, loadPromise);
+    return loadPromise;
+  }
+
+  private static ensureRulesSubscription(communityId: string): void {
+    if (this.rulesSubscriptions.has(communityId)) return;
+    const listener = this.getCommunityNode(communityId)
+      .get('rules')
+      .on((rulesData: unknown) => {
+        const parsedRules = this.parseRules(rulesData);
+        this.rulesCache.set(communityId, parsedRules);
+        this.rulesLoaded.add(communityId);
+        this.emitCommunityFromCache(communityId, parsedRules);
+      });
+    this.rulesSubscriptions.set(communityId, listener);
+  }
+
+  private static ensureLiveCommunityListener(): void {
+    if (this.liveCommunityListener) return;
+    this.liveCommunityListener = this.gun
+      .get('communities')
+      .map()
+      .on((data: any, key: string) => {
+        if (!data?.id || key.startsWith('_')) return;
+        this.communityDataCache.set(key, data);
+        this.ensureRulesSubscription(key);
+
+        const hasRulesField = Object.prototype.hasOwnProperty.call(data, 'rules');
+        if (hasRulesField) {
+          const inlineRules = this.parseRules(data.rules);
+          this.rulesCache.set(key, inlineRules);
+          this.rulesLoaded.add(key);
+          this.emitCommunity(this.mapToCommunity(data, inlineRules));
+          return;
+        }
+
+        if (this.rulesLoaded.has(key)) {
+          const cachedRules = this.rulesCache.get(key) ?? [];
+          this.emitCommunity(this.mapToCommunity(data, cachedRules));
+          return;
+        }
+
+        this.loadRulesCached(key).then((rules) => {
+          this.emitCommunity(this.mapToCommunity(data, rules));
+        });
+      });
+  }
+
+  private static emitCommunity(community: Community): void {
+    for (const callback of this.liveCallbacks) {
+      callback(community);
+    }
+  }
+
+  private static emitCommunityFromCache(communityId: string, rules: string[]): void {
+    const data = this.communityDataCache.get(communityId);
+    if (!data?.id) return;
+    this.emitCommunity(this.mapToCommunity(data, rules));
+  }
+
+  private static cleanupLiveSubscriptions(): void {
+    if (this.liveCommunityListener) {
+      this.liveCommunityListener.off();
+      this.liveCommunityListener = null;
+    }
+    for (const listener of this.rulesSubscriptions.values()) {
+      listener?.off?.();
+    }
+    this.rulesSubscriptions.clear();
+    this.rulesCache.clear();
+    this.rulesLoadPromises.clear();
+    this.rulesLoaded.clear();
+    this.communityDataCache.clear();
+  }
+
+  private static parseRules(data: unknown): string[] {
+    if (Array.isArray(data)) {
+      return data.filter((value): value is string => typeof value === 'string' && value.length > 0);
+    }
     if (!data || typeof data !== 'object') return [];
-    return Object.keys(data)
-      .filter(k => !k.startsWith('_'))
+    return Object.keys(data as Record<string, unknown>)
+      .filter(k => /^\d+$/.test(k))
       .sort((a, b) => Number(a) - Number(b))
-      .map(k => data[k] as string)
-      .filter(Boolean);
+      .map((k) => (data as Record<string, unknown>)[k])
+      .filter((value): value is string => typeof value === 'string' && value.length > 0);
   }
 
   private static mapToCommunity(data: any, rules: string[]): Community {

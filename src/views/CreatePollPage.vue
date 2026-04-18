@@ -7,8 +7,8 @@
         </ion-buttons>
         <ion-title>Create Poll</ion-title>
         <ion-buttons slot="end">
-          <ion-button @click="createPoll" :disabled="!isValid">
-            Post
+          <ion-button @click="createPoll" :disabled="!isValid || isSubmitting">
+            {{ isSubmitting ? 'Posting…' : 'Post' }}
           </ion-button>
         </ion-buttons>
       </ion-toolbar>
@@ -180,6 +180,7 @@ const showResultsBeforeVoting = ref(false);
 const description = ref('');
 const isPrivate = ref(false);
 const inviteCodeCount = ref(20);
+const isSubmitting = ref(false);
 
 function escapeHtml(input: string): string {
   return input
@@ -245,9 +246,19 @@ function removeOption(index: number) {
 }
 
 async function createPoll() {
-  if (!isValid.value) return;
+  if (isSubmitting.value) return;
+  if (!isValid.value) {
+    const toast = await toastController.create({
+      message: 'Please select a community, add a question, and provide at least two options.',
+      duration: 2500,
+      color: 'warning',
+    });
+    await toast.present();
+    return;
+  }
 
   try {
+    isSubmitting.value = true;
     // Filter out empty options
     const validOptions = options.value.filter(opt => opt.trim().length > 0);
 
@@ -347,6 +358,8 @@ async function createPoll() {
       color: 'danger'
     });
     await toast.present();
+  } finally {
+    isSubmitting.value = false;
   }
 }
 

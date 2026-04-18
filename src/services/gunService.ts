@@ -2,7 +2,7 @@ import Gun from 'gun';
 import 'gun/sea';
 import config from '../config';
 
-export const GUN_NAMESPACE = 'v2';
+export const GUN_NAMESPACE = 'v3';
 
 // Roots that get namespaced under GUN_NAMESPACE — Gun is now live-updates only,
 // not the initial load source. These namespaced paths are still written to on
@@ -184,14 +184,26 @@ export class GunService {
       let evictedCount = 0;
 
       if (level === 'emergency') {
-        const keepRoots = new Set(['v2', 'v2/communities', 'v2/posts', 'v2/polls', 'v2/users']);
+        const keepRoots = new Set([
+          GUN_NAMESPACE,
+          `${GUN_NAMESPACE}/communities`,
+          `${GUN_NAMESPACE}/posts`,
+          `${GUN_NAMESPACE}/polls`,
+          `${GUN_NAMESPACE}/users`,
+        ]);
         for (const key of keys) {
           if (keepRoots.has(key) || keepPrefixes.some(p => key.startsWith(p))) continue;
           delete graph[key];
           evictedCount++;
         }
       } else if (level === 'aggressive') {
-        const keepRoots = new Set(['v2', 'v2/communities', 'v2/posts', 'v2/polls', 'v2/users']);
+        const keepRoots = new Set([
+          GUN_NAMESPACE,
+          `${GUN_NAMESPACE}/communities`,
+          `${GUN_NAMESPACE}/posts`,
+          `${GUN_NAMESPACE}/polls`,
+          `${GUN_NAMESPACE}/users`,
+        ]);
         for (const key of keys) {
           if (keepRoots.has(key) || keepPrefixes.some(p => key.startsWith(p))) continue;
           if (key.includes('/')) {

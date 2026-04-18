@@ -1,14 +1,14 @@
 // src/services/dbWarmup.ts
 // Strategy:
-//   1. INSTANT   — Nuxt API for posts + polls (fast, structured, always fresh)
+//   1. INSTANT   — API warmup for v2 feeds, or clean-slate skip for v3+
 //   2. LIVE      — Gun subscriptions (real-time updates only, not initial load)
 //
 // Key changes from previous version:
 //   - Gun localStorage cache REMOVED — it was the source of stale-data flash
-//   - API is now primary; Gun is live-updates-only
-//   - postsMap/pollsMap overwrite guard flipped: API always wins over stale cache
+//   - v2: API is primary for posts/polls warmup; Gun is live-updates-only
+//   - v3+: posts/polls API warmup is skipped to keep namespace clean slate
 //   - stale-while-revalidate Cache-Control on all fetches
-//   - Communities fetched in parallel with posts+polls (not blocking)
+//   - v3+: communities API warmup is skipped too, so lists come only from Gun
 
 import { isVersionEnabled } from '../utils/dataVersionSettings'
 import { GUN_NAMESPACE } from './gunService'
@@ -21,6 +21,11 @@ const WARMUP_DEBUG = localStorage.getItem('interpoll_warmup_debug') === 'true'
 
 function getApiBase(): string {
   return config.relay.api
+}
+
+function getNamespaceVersion(namespace: string): number {
+  const parsed = Number.parseInt(namespace.replace(/^v/i, ''), 10)
+  return Number.isFinite(parsed) ? parsed : 0
 }
 
 let warmupDone = false
@@ -59,11 +64,20 @@ export async function warmupFromDB(): Promise<void> {
     const postStore      = usePostStore()
     const pollStore      = usePollStore()
 
+    const shouldWarmApiFeeds = getNamespaceVersion(GUN_NAMESPACE) <= 2
+    const shouldWarmApiCommunities = shouldWarmApiFeeds
+
     // ── Fetch everything in parallel — no sequential blocking ────────────────
     const [postsResult, pollsResult, communitiesResult] = await Promise.allSettled([
-      apiFetch(`/api/posts?limit=${WARMUP_POST_LIMIT}`),
-      apiFetch(`/api/polls?limit=${WARMUP_POLL_LIMIT}`),
-      apiFetch('/api/communities'),
+      shouldWarmApiFeeds
+        ? apiFetch(`/api/posts?limit=${WARMUP_POST_LIMIT}`)
+        : Promise.resolve({ posts: [] }),
+      shouldWarmApiFeeds
+        ? apiFetch(`/api/polls?limit=${WARMUP_POLL_LIMIT}`)
+        : Promise.resolve({ polls: [] }),
+      shouldWarmApiCommunities
+        ? apiFetch('/api/communities')
+        : Promise.resolve({ communities: [] }),
     ])
 
     // ── Communities ───────────────────────────────────────────────────────────
@@ -98,11 +112,12 @@ export async function warmupFromDB(): Promise<void> {
         communityCount++
       }
       warmupLog('Warmup communities', { count: communityCount })
+      if (!shouldWarmApiCommunities) warmupLog('API communities warmup skipped for clean-slate namespace')
     } else {
       console.warn('Communities fetch failed:', communitiesResult.reason)
     }
 
-    // ── Posts — API always overwrites stale Gun cache ─────────────────────────
+    // ── Posts — v2 API warmup only; v3+ stays Gun-namespace-only ─────────────
     if (postsResult.status === 'fulfilled') {
       const { posts } = postsResult.value
       let n = 0
@@ -128,6 +143,7 @@ export async function warmupFromDB(): Promise<void> {
         n++
       }
       if (n > 0) { postStore.saveSeenNow(); warmupLog(`API: ${n} posts`) }
+      if (!shouldWarmApiFeeds) warmupLog('API posts warmup skipped for clean-slate namespace')
       warmupLog('Warmup posts complete', {
         fetched: n,
         storePosts: postStore.postsMap.size,
@@ -136,7 +152,7 @@ export async function warmupFromDB(): Promise<void> {
       console.warn('Posts fetch failed:', postsResult.reason)
     }
 
-    // ── Polls — always overwrite, attach options inline ───────────────────────
+    // ── Polls — v2 API warmup only; v3+ stays Gun-namespace-only ─────────────
     if (pollsResult.status === 'fulfilled') {
       const { polls } = pollsResult.value
       let n = 0
@@ -163,6 +179,7 @@ export async function warmupFromDB(): Promise<void> {
         n++
       }
       if (n > 0) { pollStore.saveSeenNow(); warmupLog(`API: ${n} polls`) }
+      if (!shouldWarmApiFeeds) warmupLog('API polls warmup skipped for clean-slate namespace')
       warmupLog('Warmup polls complete', {
         fetched: n,
         storePolls: pollStore.pollsMap.size,
