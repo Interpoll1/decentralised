@@ -36,10 +36,10 @@
 
       <!-- Poll Options -->
       <ion-list>
-        <ion-item v-for="(option, index) in options" :key="index">
+        <ion-item v-for="(option, index) in options" :key="option.id">
           <ion-label position="stacked">Option {{ index + 1 }} *</ion-label>
           <ion-input 
-            v-model="options[index]" 
+            v-model="options[index].text" 
             :placeholder="`Option ${index + 1}`"
             maxlength="100"
           >
@@ -140,10 +140,6 @@ import {
   IonButtons,
   IonBackButton,
   IonButton,
-  IonCard,
-  IonCardHeader,
-  IonCardTitle,
-  IonCardContent,
   IonList,
   IonItem,
   IonLabel,
@@ -166,14 +162,54 @@ import { useCommunityStore } from '../stores/communityStore';
 import { usePollStore } from '../stores/pollStore';
 import { Community } from '../services/communityService';
 
+const POLL_DEBUG_KEY = 'interpoll_poll_debug';
+type PollDebugCategory = 'create' | 'writes' | 'index' | 'ui' | 'all';
+
+function getPollDebugCategories(): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(POLL_DEBUG_KEY);
+    if (!raw) return new Set();
+    const normalized = raw.trim().toLowerCase();
+    if (normalized === 'true') return new Set(['all']);
+    return new Set(
+      normalized
+        .split(',')
+        .map((part) => part.trim())
+        .filter(Boolean),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+function isPollDebugEnabled(category: PollDebugCategory): boolean {
+  const categories = getPollDebugCategories();
+  return categories.has('all') || categories.has(category);
+}
+
+function logPollDebug(category: PollDebugCategory, message: string, meta?: Record<string, unknown>) {
+  if (!isPollDebugEnabled(category)) return;
+  const prefix = `[PollCreateDebug:${category}]`;
+  if (meta) {
+    console.log(prefix, message, meta);
+    return;
+  }
+  console.log(prefix, message);
+}
+
 const router = useRouter();
 const route = useRoute();
 const communityStore = useCommunityStore();
 const pollStore = usePollStore();
+type PollOptionDraft = { id: string; text: string };
+
+function createOptionDraft(): PollOptionDraft {
+  return { id: `opt-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, text: '' };
+}
 
 const selectedCommunity = ref<Community | null>(null);
 const question = ref('');
-const options = ref(['', '']);
+const options = ref<PollOptionDraft[]>([createOptionDraft(), createOptionDraft()]);
 const duration = ref('7');
 const allowMultipleChoices = ref(false);
 const showResultsBeforeVoting = ref(false);
@@ -195,7 +231,7 @@ const isValid = computed(() => {
   return (
     selectedCommunity.value !== null &&
     question.value.trim().length > 0 &&
-    options.value.filter(opt => opt.trim().length > 0).length >= 2
+    options.value.filter(opt => opt.text.trim().length > 0).length >= 2
   );
 });
 
@@ -235,7 +271,7 @@ async function showCommunityPicker() {
 
 function addOption() {
   if (options.value.length < 10) {
-    options.value.push('');
+    options.value.push(createOptionDraft());
   }
 }
 
@@ -246,8 +282,14 @@ function removeOption(index: number) {
 }
 
 async function createPoll() {
+  const submitStartedAt = performance.now();
   if (isSubmitting.value) return;
   if (!isValid.value) {
+    logPollDebug('ui', 'Submit blocked: invalid form', {
+      hasCommunity: selectedCommunity.value !== null,
+      questionLength: question.value.trim().length,
+      validOptionCount: options.value.filter(opt => opt.text.trim().length > 0).length,
+    });
     const toast = await toastController.create({
       message: 'Please select a community, add a question, and provide at least two options.',
       duration: 2500,
@@ -259,8 +301,21 @@ async function createPoll() {
 
   try {
     isSubmitting.value = true;
+    logPollDebug('ui', 'Submit started', {
+      communityId: selectedCommunity.value?.id,
+      isPrivate: isPrivate.value,
+      durationDays: duration.value,
+      optionDraftCount: options.value.length,
+    });
     // Filter out empty options
-    const validOptions = options.value.filter(opt => opt.trim().length > 0);
+    const validOptions = options.value
+      .map(opt => opt.text.trim())
+      .filter(opt => opt.length > 0);
+    logPollDebug('ui', 'Prepared poll payload', {
+      validOptionsCount: validOptions.length,
+      hasDescription: Boolean(description.value.trim()),
+      inviteCodeCount: inviteCodeCount.value,
+    });
 
     // Create poll using pollStore
     const poll = await pollStore.createPoll({
@@ -274,6 +329,10 @@ async function createPoll() {
       requireLogin: false,
       isPrivate: isPrivate.value,
       inviteCodeCount: inviteCodeCount.value
+    });
+    logPollDebug('ui', 'pollStore.createPoll resolved', {
+      pollId: poll.id,
+      durationMs: Math.round(performance.now() - submitStartedAt),
     });
 
     // If private, copy a ready-to-share invite link and show codes
@@ -350,6 +409,10 @@ async function createPoll() {
       router.push(`/community/${selectedCommunity.value?.id}`);
     }
   } catch (error) {
+    logPollDebug('ui', 'Submit failed', {
+      error: error instanceof Error ? error.message : String(error),
+      durationMs: Math.round(performance.now() - submitStartedAt),
+    });
     console.error('Error creating poll:', error);
     
     const toast = await toastController.create({
@@ -359,6 +422,10 @@ async function createPoll() {
     });
     await toast.present();
   } finally {
+    logPollDebug('ui', 'Submit finished', {
+      isSubmittingBeforeReset: isSubmitting.value,
+      durationMs: Math.round(performance.now() - submitStartedAt),
+    });
     isSubmitting.value = false;
   }
 }

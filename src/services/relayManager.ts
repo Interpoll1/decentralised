@@ -321,6 +321,8 @@ export class RelayManager {
       });
       clearTimeout(timer);
       gunReachable = true;
+      // no-cors probes return opaque responses (status 0) in browsers.
+      // Keep those as reachable-but-unverified (degraded), not healthy.
       gunOk = res.ok || res.status === 404;
     } catch {
       // Gun endpoint unreachable

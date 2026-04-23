@@ -23,6 +23,8 @@ Manages polls loaded from GunDB and cross-tab vote updates.
 
 - Polls are keyed in a `Map<string, Poll>` for O(1) lookups.
 - Subscribes to GunDB per community. Subscription lifecycle managed with `subscribedCommunities` + `unsubscribers` map — call `unsubscribe(communityId)` to clean up.
+- During subscription updates, if an incoming poll patch is missing `communityId` but an existing cached poll has it, the store preserves the existing `communityId` to prevent the poll from disappearing from community-filtered views due to partial Gun records.
+- Community poll loads now avoid treating local fallback cache as proof of an active live subscription: stale subscription state is cleaned and re-subscribed unless both subscription bookkeeping and community polls are already live, so network updates/deletes are not missed.
 - Uses per-community initial-load tracking (`initialLoadDoneByCommId`) to avoid cross-community false "new poll" classification.
 - `pendingNewPolls` only contains truly new arrivals after initial hydration; `flushNewPolls()` moves them into `pollsMap` and persists seen IDs in localStorage.
 - Pagination: `visibleCount` incremented by `PAGE_SIZE` (10).

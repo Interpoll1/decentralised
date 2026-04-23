@@ -108,13 +108,22 @@ export const usePollStore = defineStore('poll', () => {
 
     // Allow re-subscription if previous attempt yielded zero polls (GunDB was offline/slow)
     if (subscribedCommunities.has(communityId) || unsubscribers.has(communityId)) {
+      const hasLiveSubscription = subscribedCommunities.has(communityId) && unsubscribers.has(communityId);
       const hasPolls = Array.from(pollsMap.value.values()).some(p => p.communityId === communityId);
-      if (hasPolls) return Promise.resolve();
+      if (hasLiveSubscription && hasPolls) return Promise.resolve();
       // Clean up stale subscription state before re-subscribing
       const oldUnsub = unsubscribers.get(communityId);
       if (oldUnsub) { oldUnsub(); unsubscribers.delete(communityId); }
       subscribedCommunities.delete(communityId);
     }
+
+    void PollService.loadLocalPollsForCommunity(communityId)
+      .then((localPolls) => {
+        localPolls.forEach((poll) => {
+          injectPoll(poll);
+        });
+      })
+      .catch(() => { /* best-effort local fallback */ });
 
     const p = new Promise<void>((resolve) => {
       initialLoadDoneByCommId.set(communityId, false);
@@ -127,16 +136,20 @@ export const usePollStore = defineStore('poll', () => {
         (poll) => {
           if (pollsMap.value.has(poll.id)) {
             const existing = pollsMap.value.get(poll.id)!;
+            const normalizedPoll =
+              existing.communityId && !poll.communityId
+                ? { ...poll, communityId: existing.communityId }
+                : poll;
             // During vote-protection, block only non-advancing updates.
-            if (isVoteProtected(poll.id) && getTotalVotes(poll) <= getTotalVotes(existing)) return;
+            if (isVoteProtected(normalizedPoll.id) && getTotalVotes(normalizedPoll) <= getTotalVotes(existing)) return;
             // Don't overwrite a poll that has options with one that has none
-            if (existing.options.length > 0 && poll.options.length === 0) {
+            if (existing.options.length > 0 && normalizedPoll.options.length === 0) {
               return;
             }
-            pollsMap.value.set(poll.id, poll);
-            tryDecryptPoll(poll);
-            if (currentPoll.value?.id === poll.id) {
-              currentPoll.value = poll;
+            pollsMap.value.set(normalizedPoll.id, normalizedPoll);
+            tryDecryptPoll(normalizedPoll);
+            if (currentPoll.value?.id === normalizedPoll.id) {
+              currentPoll.value = normalizedPoll;
             }
             return;
           }
