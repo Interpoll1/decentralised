@@ -30,6 +30,24 @@ export interface UserStats {
 
 export class UserService {
   private static currentUser: UserProfile | null = null;
+  private static writeQueues = new Map<string, Promise<void>>();
+
+  private static async enqueueWrite<T>(userId: string, task: () => Promise<T>): Promise<T> {
+    const previous = this.writeQueues.get(userId) ?? Promise.resolve();
+    let release!: () => void;
+    const next = new Promise<void>((resolve) => { release = resolve; });
+    this.writeQueues.set(userId, previous.then(() => next));
+
+    try {
+      await previous;
+      return await task();
+    } finally {
+      release();
+      if (this.writeQueues.get(userId) === next) {
+        this.writeQueues.delete(userId);
+      }
+    }
+  }
 
   static async getCurrentUser(forceRefresh = false): Promise<UserProfile> {
     if (this.currentUser && !forceRefresh) return this.currentUser;
@@ -90,11 +108,16 @@ export class UserService {
     const gun = GunService.getGun();
     const currentUser = await this.getCurrentUser();
 
-    const updatedProfile = { ...currentUser, ...updates };
-    await gun.get('users').get(currentUser.id).put(updatedProfile);
+    return this.enqueueWrite(currentUser.id, async () => {
+      const baseProfile = this.currentUser?.id === currentUser.id
+        ? this.currentUser
+        : await this.getUser(currentUser.id) ?? currentUser;
+      const updatedProfile = { ...baseProfile, ...updates };
+      await gun.get('users').get(currentUser.id).put(updatedProfile);
 
-    this.currentUser = updatedProfile;
-    return updatedProfile;
+      this.currentUser = updatedProfile;
+      return updatedProfile;
+    });
   }
 
   static async getUser(userId: string): Promise<UserProfile | null> {
@@ -104,20 +127,41 @@ export class UserService {
 
   static async incrementPostCount() {
     const user = await this.getCurrentUser(true);
-    await this.updateProfile({ postCount: (user.postCount || 0) + 1 });
+    await this.enqueueWrite(user.id, async () => {
+      const latestUser = await this.getUser(user.id) ?? user;
+      const nextPostCount = (latestUser.postCount || 0) + 1;
+      await GunService.getGun().get('users').get(user.id).get('postCount').put(nextPostCount);
+      this.currentUser = {
+        ...(this.currentUser?.id === user.id ? this.currentUser : latestUser),
+        postCount: nextPostCount,
+      };
+    });
   }
 
   static async incrementCommentCount() {
     const user = await this.getCurrentUser(true);
-    await this.updateProfile({ commentCount: (user.commentCount || 0) + 1 });
+    await this.enqueueWrite(user.id, async () => {
+      const latestUser = await this.getUser(user.id) ?? user;
+      const nextCommentCount = (latestUser.commentCount || 0) + 1;
+      await GunService.getGun().get('users').get(user.id).get('commentCount').put(nextCommentCount);
+      this.currentUser = {
+        ...(this.currentUser?.id === user.id ? this.currentUser : latestUser),
+        commentCount: nextCommentCount,
+      };
+    });
   }
 
   static async incrementKarma(authorId: string, points: number = 1) {
-    const gun = GunService.getGun();
-    const user = await this.getUser(authorId);
-    if (user) {
-      await gun.get('users').get(authorId).get('karma').put(user.karma + points);
-    }
+    if (!points) return;
+    await this.enqueueWrite(authorId, async () => {
+      const user = await this.getUser(authorId);
+      if (!user) return;
+      const nextKarma = (user.karma || 0) + points;
+      await GunService.getGun().get('users').get(authorId).get('karma').put(nextKarma);
+      if (this.currentUser?.id === authorId) {
+        this.currentUser = { ...this.currentUser, karma: nextKarma };
+      }
+    });
   }
 
   static async getUserStats(userId: string): Promise<UserStats> {

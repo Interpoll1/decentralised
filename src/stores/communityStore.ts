@@ -221,10 +221,17 @@ export const useCommunityStore = defineStore('community', () => {
       // Warm up Gun's local cache by putting data back into it so existing
       // postService subscriptions fire correctly
       const gun = (await import('../services/gunService')).GunService.getGun();
-      for (const row of json.results || []) {
-        const d = row.data;
-        if (!d?.id || !d?.title) continue; // only full post nodes
-        gun.get('posts').get(d.id).put(d);
+      const writes = (json.results || [])
+        .map((row) => row.data)
+        .filter((d): d is Record<string, unknown> & { id: string; title: string } => Boolean(d?.id && d?.title));
+      const batchSize = 25;
+      for (let index = 0; index < writes.length; index += batchSize) {
+        writes.slice(index, index + batchSize).forEach((d) => {
+          gun.get('posts').get(d.id).put(d);
+        });
+        if (index + batchSize < writes.length) {
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
       }
     } catch (err) {
       console.warn('⚠️  MySQL posts warmup failed:', err);

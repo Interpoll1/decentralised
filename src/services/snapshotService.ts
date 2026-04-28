@@ -60,6 +60,19 @@ function sanitizeObject(data: any): Record<string, any> {
 }
 
 export class SnapshotService {
+  private static async writeGunEntriesInBatches(
+    entries: Array<() => void>,
+    batchSize = 20,
+    pauseMs = 25,
+  ): Promise<void> {
+    for (let index = 0; index < entries.length; index += batchSize) {
+      entries.slice(index, index + batchSize).forEach((write) => write());
+      if (index + batchSize < entries.length) {
+        await new Promise((resolve) => setTimeout(resolve, pauseMs));
+      }
+    }
+  }
+
   private static async enumerateGunNode<T>(rootPath: string, timeout = 5000): Promise<T[]> {
     return new Promise((resolve) => {
       const items: T[] = [];
@@ -212,44 +225,54 @@ export class SnapshotService {
     const totalGun = posts.length + communities.length + comments.length + users.length + events.length;
     let gunProgress = 0;
 
+    const gunWrites: Array<() => void> = [];
     for (const post of posts) {
-      gun.get('posts').get(post.id).put(post);
-      // Also write to community-specific path so subscriptions pick it up
-      if (post.communityId) {
-        gun.get('communities').get(post.communityId).get('posts').get(post.id).put(post);
-      }
+      gunWrites.push(() => {
+        gun.get('posts').get(post.id).put(post);
+        if (post.communityId) {
+          gun.get('communities').get(post.communityId).get('posts').get(post.id).put(post);
+        }
+      });
       result.imported.posts++;
       gunProgress++;
       onProgress?.('gun', gunProgress, totalGun);
     }
     for (const community of communities) {
-      gun.get('communities').get(community.id).put(community);
+      gunWrites.push(() => {
+        gun.get('communities').get(community.id).put(community);
+      });
       result.imported.communities++;
       gunProgress++;
       onProgress?.('gun', gunProgress, totalGun);
     }
     for (const comment of comments) {
-      gun.get('comments').get(comment.id).put(comment);
-      // Also write to post-specific path
-      if (comment.postId) {
-        gun.get('posts').get(comment.postId).get('comments').get(comment.id).put(comment);
-      }
+      gunWrites.push(() => {
+        gun.get('comments').get(comment.id).put(comment);
+        if (comment.postId) {
+          gun.get('posts').get(comment.postId).get('comments').get(comment.id).put(comment);
+        }
+      });
       result.imported.comments++;
       gunProgress++;
       onProgress?.('gun', gunProgress, totalGun);
     }
     for (const user of users) {
-      gun.get('users').get(user.id).put(user);
+      gunWrites.push(() => {
+        gun.get('users').get(user.id).put(user);
+      });
       result.imported.users++;
       gunProgress++;
       onProgress?.('gun', gunProgress, totalGun);
     }
     for (const event of events) {
-      gun.get('events').get(event.id).put(event);
+      gunWrites.push(() => {
+        gun.get('events').get(event.id).put(event);
+      });
       result.imported.events++;
       gunProgress++;
       onProgress?.('gun', gunProgress, totalGun);
     }
+    await this.writeGunEntriesInBatches(gunWrites);
 
     return result;
   }

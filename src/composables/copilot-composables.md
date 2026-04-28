@@ -8,7 +8,7 @@ Vue 3 composables that bridge stores/services with component logic.
 
 | File | Export | Purpose |
 |---|---|---|
-| `useChainSync.ts` | `useChainSync()` | Polls `chainStore.chainHead` every 10 seconds and calls `checkForDowngrade()`. Returns `downgradeDetected` (ref), `lastSync` (ref), `resetDowngradeAlert()`. Mount in `App.vue` or a top-level layout component. |
+| `useChainSync.ts` | `useChainSync()` | Polls `chainStore.chainHead` every 10 seconds and calls `checkForDowngrade()`. The polling interval is created on mount and cleared on unmount so repeated route/component mounts do not leak background sync timers. Returns `downgradeDetected` (ref), `lastSync` (ref), `resetDowngradeAlert()`. Mount in `App.vue` or a top-level layout component. |
 | `useChat.ts` | `useChat()` | Manages a `ChatService` instance for the current user. Handles init, message sending, and reactive message list. |
 | `useFingerprint.ts` | `useFingerprint()` | Wraps `CryptoService.generateFingerprint()`. Returns `fingerprint` (ref), `isLoading` (ref), `generateFingerprint()`. |
 | `useModerationFilter.ts` | `useModerationFilter()` | Exposes moderation settings and filter functions. Uses `ModerationService` + `userStore`. `shouldShow(item)` checks both karma and content score. `getContentAction(text)` returns `blur`/`hide`/`flag`/`show`. |

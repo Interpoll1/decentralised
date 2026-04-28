@@ -33,6 +33,7 @@ export class CommunityService {
   private static readonly rulesSubscriptions = new Map<string, any>();
   private static readonly communityDataCache = new Map<string, any>();
   private static readonly liveCallbacks = new Set<(community: Community) => void>();
+  private static readonly emittedCommunitySignatures = new Map<string, string>();
   private static liveCommunityListener: any = null;
 
   // ─── Create ────────────────────────────────────────────────────────────────
@@ -453,6 +454,24 @@ export class CommunityService {
   }
 
   private static emitCommunity(community: Community): void {
+    const nextSignature = JSON.stringify({
+      id: community.id,
+      name: community.name,
+      displayName: community.displayName,
+      description: community.description,
+      rules: community.rules,
+      creatorId: community.creatorId,
+      createdAt: community.createdAt,
+      memberCount: community.memberCount,
+      postCount: community.postCount ?? 0,
+      creatorPubkey: community.creatorPubkey ?? null,
+      creatorSignature: community.creatorSignature ?? null,
+      isEncrypted: Boolean(community.isEncrypted),
+      encryptionHint: community.encryptionHint ?? null,
+      encryptedMeta: community.encryptedMeta ?? null,
+    });
+    if (this.emittedCommunitySignatures.get(community.id) === nextSignature) return;
+    this.emittedCommunitySignatures.set(community.id, nextSignature);
     for (const callback of this.liveCallbacks) {
       callback(community);
     }
@@ -477,6 +496,7 @@ export class CommunityService {
     this.rulesLoadPromises.clear();
     this.rulesLoaded.clear();
     this.communityDataCache.clear();
+    this.emittedCommunitySignatures.clear();
   }
 
   private static parseRules(data: unknown): string[] {

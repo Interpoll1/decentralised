@@ -130,10 +130,12 @@ export class GunService {
     });
   }
 
-  static subscribe(path: string, callback: (data: any) => void): void {
+  static subscribe(path: string, callback: (data: any) => void): () => void {
+    let listener: any;
     try {
-      this.getGun().get(path).on(callback);
+      listener = this.getGun().get(path).on(callback);
     } catch { }
+    return () => listener?.off?.();
   }
 
   // Throttled map — prevents 1K+ records/sec DOM warning

@@ -107,87 +107,89 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
 
   return new Promise((resolve, reject) => {
     const commentNode = getGun().get('comments').get(commentId);
-    
-    // Set each field individually (Gun.js prefers this approach)
-    commentNode.get('id').put(commentId);
-    commentNode.get('postId').put(data.postId);
-    commentNode.get('communityId').put(data.communityId);
-    commentNode.get('authorId').put(data.authorId);
-    commentNode.get('authorName').put(data.authorName);
-    commentNode.get('authorShowRealName').put(data.authorShowRealName || false);
-    commentNode.get('content').put(data.content);
-    
+    const commentRecord: Record<string, unknown> = {
+      id: commentId,
+      postId: data.postId,
+      communityId: data.communityId,
+      authorId: data.authorId,
+      authorName: data.authorName,
+      authorShowRealName: data.authorShowRealName || false,
+      content: data.content,
+      createdAt: timestamp,
+      upvotes: 0,
+      downvotes: 0,
+      score: 0,
+      edited: false,
+    };
     if (data.parentId) {
-      commentNode.get('parentId').put(data.parentId);
+      commentRecord.parentId = data.parentId;
     }
-    
-    commentNode.get('createdAt').put(timestamp);
-    commentNode.get('upvotes').put(0);
-    commentNode.get('downvotes').put(0);
-    commentNode.get('score').put(0);
-    commentNode.get('edited').put(false);
-
     if (comment.authorPubkey) {
-      commentNode.get('authorPubkey').put(comment.authorPubkey);
+      commentRecord.authorPubkey = comment.authorPubkey;
     }
     if (comment.contentSignature) {
-      commentNode.get('contentSignature').put(comment.contentSignature);
+      commentRecord.contentSignature = comment.contentSignature;
     }
-
     if (comment.isEncrypted) {
-      commentNode.get('isEncrypted').put(true);
-      commentNode.get('encryptedContent').put(comment.encryptedContent);
-      commentNode.get('authTag').put(comment.authTag);
-      // Replace plaintext with placeholder
-      commentNode.get('content').put('🔒 Encrypted comment');
-      commentNode.get('authorName').put('encrypted');
+      commentRecord.isEncrypted = true;
+      commentRecord.encryptedContent = comment.encryptedContent;
+      commentRecord.authTag = comment.authTag;
+      commentRecord.content = '🔒 Encrypted comment';
+      commentRecord.authorName = 'encrypted';
     }
 
-    // Add to post's comments index
-    getGun().get('posts')
-      .get(data.postId)
-      .get('comments')
-      .set({ commentId, createdAt: timestamp });
-    
-    setTimeout(() => {
-      // Audit receipt (fire-and-forget)
-      (async () => {
-        try {
-          const contentHash = CryptoService.hash(
-            JSON.stringify({
-              id: comment.id,
+    commentNode.put(commentRecord, (ack: any) => {
+      if (ack?.err) {
+        reject(ack.err);
+        return;
+      }
+
+      // Add to post's comments index
+      getGun().get('posts')
+        .get(data.postId)
+        .get('comments')
+        .set({ commentId, createdAt: timestamp });
+
+      setTimeout(() => {
+        // Audit receipt (fire-and-forget)
+        (async () => {
+          try {
+            const contentHash = CryptoService.hash(
+              JSON.stringify({
+                id: comment.id,
+                postId: comment.postId,
+                communityId: comment.communityId,
+                authorId: comment.authorId,
+                createdAt: comment.createdAt,
+                content: comment.content,
+              })
+            );
+
+            await AuditService.logReceipt('comment', {
+              commentId: comment.id,
               postId: comment.postId,
               communityId: comment.communityId,
               authorId: comment.authorId,
               createdAt: comment.createdAt,
-              content: comment.content,
-            })
-          );
+              contentHash,
+            });
+          } catch (_error) {
+            // Non-fatal: audit logging failed
+          }
+        })();
 
-          await AuditService.logReceipt('comment', {
-            commentId: comment.id,
-            postId: comment.postId,
-            communityId: comment.communityId,
-            authorId: comment.authorId,
-            createdAt: comment.createdAt,
-            contentHash,
-          });
-        } catch (_error) {
-          // Non-fatal: audit logging failed
-        }
-      })();
+        // Bump comment count on the associated post (best-effort)
+        (async () => {
+          try {
+            await PostService.incrementCommentCount(data.postId, data.communityId);
+          } catch (_err) {
+            // Non-fatal: comment count increment failed
+          }
+        })();
 
-      // Bump comment count on the associated post (best-effort)
-      (async () => {
-        try {
-          await PostService.incrementCommentCount(data.postId, data.communityId);
-        } catch (_err) {
-          // Non-fatal: comment count increment failed
-        }
-      })();
-
-      resolve(comment);
-    }, 100);
+        resolve(comment);
+      }, 100);
+    });
   });
 }
 

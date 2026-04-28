@@ -1,8 +1,9 @@
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { useChainStore } from '../stores/chainStore';
 
 export function useChainSync() {
   const chainStore = useChainStore();
+  let interval: ReturnType<typeof setInterval> | null = null;
 
   const downgradeDetected = ref(false);
   const peerCount = ref(0);
@@ -12,7 +13,7 @@ export function useChainSync() {
     // Since Supabase was removed,
     // this is now local-only chain monitoring.
 
-    const interval = setInterval(async () => {
+    interval = setInterval(async () => {
       const head = chainStore.chainHead;
 
       if (!head) return;
@@ -35,6 +36,13 @@ export function useChainSync() {
 
   onMounted(() => {
     startSync();
+  });
+
+  onUnmounted(() => {
+    if (interval) {
+      clearInterval(interval);
+      interval = null;
+    }
   });
 
   const resetDowngradeAlert = () => {

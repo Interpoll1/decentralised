@@ -485,23 +485,6 @@ export class PollService {
     }
     return null;
   }
-
-  private static warmPollCache(pollData: any, optionsData?: any) {
-    if (!pollData?.id) return;
-    const pollNode = this.getPollPath(pollData.id);
-    pollNode.put(pollData);
-    if (optionsData && typeof optionsData === 'object') {
-      pollNode.get('options').put(optionsData);
-    }
-    if (pollData.communityId) {
-      const communityNode = this.getCommunityPollPath(pollData.communityId, pollData.id);
-      communityNode.put(pollData);
-      if (optionsData && typeof optionsData === 'object') {
-        communityNode.get('options').put(optionsData);
-      }
-    }
-  }
-
   static subscribeToPollsInCommunity(
     communityId: string,
     onPoll: (poll: Poll) => void,
@@ -782,7 +765,7 @@ export class PollService {
 
     const optionsMap = this.buildOptionsMap(pollOptions);
 
-    const gunPoll = {
+    const gunPoll: Record<string, any> = {
       id: poll.id, communityId: poll.communityId, authorId: poll.authorId,
       authorName: poll.authorName, authorShowRealName: poll.authorShowRealName,
       question: poll.question, description: poll.description, createdAt: poll.createdAt,
@@ -801,6 +784,8 @@ export class PollService {
       const signature  = CryptoService.sign(contentHash, keyPair.privateKey);
       poll.authorPubkey      = keyPair.publicKey;
       poll.contentSignature  = signature;
+      gunPoll.authorPubkey = keyPair.publicKey;
+      gunPoll.contentSignature = signature;
       logPollDebug('create', 'Poll signing completed', { pollId });
     } catch (err) { console.warn('Failed to sign poll:', err); }
 
@@ -813,6 +798,11 @@ export class PollService {
           poll.encryptedContent = await EncryptionService.encrypt(JSON.stringify(encryptableData), aesKey);
           poll.authTag          = await EncryptionService.generateAuthTag(aesKey, poll.id, String(poll.createdAt), poll.authorId);
           poll.isEncrypted      = true;
+          gunPoll.question = '🔒 Encrypted Poll';
+          gunPoll.description = '';
+          gunPoll.encryptedContent = poll.encryptedContent;
+          gunPoll.authTag = poll.authTag;
+          gunPoll.isEncrypted = true;
           logPollDebug('create', 'Poll encryption completed', { pollId });
         } catch (err) { console.warn('Failed to encrypt poll:', err); }
       } else {
@@ -905,17 +895,6 @@ export class PollService {
         rootConfirmed: Boolean(rootConfirmed?.id),
         communityConfirmed: Boolean(communityConfirmed?.id),
       });
-    }
-
-    if (poll.isEncrypted && poll.encryptedContent) {
-      const node = this.getPollPath(pollId);
-      node.get('question').put('🔒 Encrypted Poll');
-      node.get('description').put('');
-      node.get('encryptedContent').put(poll.encryptedContent);
-      node.get('authTag').put(poll.authTag);
-      node.get('isEncrypted').put(true);
-      if (poll.authorPubkey)     node.get('authorPubkey').put(poll.authorPubkey);
-      if (poll.contentSignature) node.get('contentSignature').put(poll.contentSignature);
     }
 
     if (poll.isPrivate) {

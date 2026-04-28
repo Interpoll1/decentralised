@@ -28,6 +28,7 @@ class ChatService {
   private recipientKeys: Map<string, CryptoKey> = new Map();
   private connected: boolean = false;
   private reconnectTimer: number | null = null;
+  private pendingReadFlushes: Map<string, number> = new Map();
 
   public onMessage:          ((msg: ChatMessage) => void) | null = null;
   public onTyping:           ((data: { from: string; isTyping: boolean }) => void) | null = null;
@@ -348,20 +349,53 @@ class ChatService {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'chat-read', recipientId }));
     }
-    // Mark in GunDB too
-    const gun    = GunService.getGun();
     const roomId = this.getRoomId(this.userId, recipientId);
-    gun.get('chats').get(roomId).map().once((msg: any, msgId: string) => {
-      if (msg && msg.recipientId === this.userId && !msg.readAt) {
-        gun.get('chats').get(roomId).get(msgId).get('readAt').put(Date.now());
-      }
+    const existingTimer = this.pendingReadFlushes.get(roomId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+    const timer = window.setTimeout(() => {
+      this.pendingReadFlushes.delete(roomId);
+      this.flushReadMarkers(roomId);
+    }, 150);
+    this.pendingReadFlushes.set(roomId, timer);
+  }
+
+  private flushReadMarkers(roomId: string): void {
+    const gun = GunService.getGun();
+    const readAt = Date.now();
+    gun.get('chats').get(roomId).once((room: any) => {
+      if (!room || typeof room !== 'object') return;
+      const unreadIds = Object.entries(room)
+        .filter(([msgId, msg]) => {
+          if (msgId === '_') return false;
+          return Boolean(msg && typeof msg === 'object' && (msg as any).recipientId === this.userId && !(msg as any).readAt);
+        })
+        .map(([msgId]) => msgId);
+      if (unreadIds.length === 0) return;
+      void this.writeReadMarkers(roomId, unreadIds, readAt);
     });
+  }
+
+  private async writeReadMarkers(roomId: string, unreadIds: string[], readAt: number): Promise<void> {
+    const gun = GunService.getGun();
+    const batchSize = 20;
+    for (let index = 0; index < unreadIds.length; index += batchSize) {
+      unreadIds.slice(index, index + batchSize).forEach((msgId) => {
+        gun.get('chats').get(roomId).get(msgId).get('readAt').put(readAt);
+      });
+      if (index + batchSize < unreadIds.length) {
+        await new Promise((resolve) => window.setTimeout(resolve, 25));
+      }
+    }
   }
 
   isConnected(): boolean { return this.connected; }
 
   disconnect(): void {
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+    this.pendingReadFlushes.forEach((timer) => clearTimeout(timer));
+    this.pendingReadFlushes.clear();
     if (this.ws) { this.ws.close(); this.ws = null; }
     this.connected = false;
   }

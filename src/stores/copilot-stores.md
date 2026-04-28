@@ -40,6 +40,7 @@ Key computed: `polls`, `sortedPolls`
 - `selectCommunity()` follows the same rule: `/db/soul` fallback is v2-only, so v3+ does not trigger cross-origin fallback requests when Gun has no matching community yet.
 - The fallback relay base URL is derived from runtime config (`config.relay.gun`), not hardcoded, so Settings relay overrides and localhost/dev relays are respected.
 - Fallback `/db/search` and `/db/soul` reads are timeboxed to avoid hanging community navigation when fallback relay requests are slow or blocked.
+- MySQL post warmup writes are now replayed back into Gun in small batches rather than a single tight loop, reducing startup sync spikes while still waking existing Gun subscriptions on cold relays.
 - Deduplicates with a `seen: Set<string>`.
 - `joinedCommunities` is a `Set<string>` persisted in localStorage (`joined-communities`), then backfilled from the key vault so private invite/password joins survive refresh.
 - Joined state is also synced from stored community encryption keys, so invite/password-joined private communities behave like normal joined communities after refresh.

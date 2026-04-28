@@ -389,19 +389,16 @@ export class PostService {
       });
     });
 
-    subscription = postsNode.on((allPosts: any) => {
-      if (!allPosts) return;
-      Object.keys(allPosts).forEach(postId => {
-        if (postId === '_' || initialSeenIds.has(postId) || inFlightIds.has(postId)) return;
-        inFlightIds.add(postId);
-        void onceWithTimeout(gun.get('posts').get(postId)).then((postData) => {
-          if (postData && postData.id) {
-            initialSeenIds.add(postData.id);
-            onPost({ ...postData, dataVersion: GUN_NAMESPACE });
-          }
-        }).finally(() => {
-          inFlightIds.delete(postId);
-        });
+    subscription = postsNode.map().on((_: any, postId: string) => {
+      if (!postId || postId === '_' || initialSeenIds.has(postId) || inFlightIds.has(postId)) return;
+      inFlightIds.add(postId);
+      void onceWithTimeout(gun.get('posts').get(postId)).then((postData) => {
+        if (postData && postData.id) {
+          initialSeenIds.add(postData.id);
+          onPost({ ...postData, dataVersion: GUN_NAMESPACE });
+        }
+      }).finally(() => {
+        inFlightIds.delete(postId);
       });
     });
 
@@ -429,19 +426,16 @@ export class PostService {
           checkLoadComplete();
         });
       });
-      v1Subscription = v1PostsNode.on((allPosts: any) => {
-        if (!allPosts) return;
-        Object.keys(allPosts).forEach(postId => {
-          if (postId === '_' || initialSeenIds.has(postId) || inFlightIds.has(postId)) return;
-          inFlightIds.add(postId);
-          void onceWithTimeout(rawGun.get('posts').get(postId)).then((postData) => {
-            if (postData && postData.id) {
-              initialSeenIds.add(postData.id);
-              onPost({ ...postData, dataVersion: 'v1' });
-            }
-          }).finally(() => {
-            inFlightIds.delete(postId);
-          });
+      v1Subscription = v1PostsNode.map().on((_: any, postId: string) => {
+        if (!postId || postId === '_' || initialSeenIds.has(postId) || inFlightIds.has(postId)) return;
+        inFlightIds.add(postId);
+        void onceWithTimeout(rawGun.get('posts').get(postId)).then((postData) => {
+          if (postData && postData.id) {
+            initialSeenIds.add(postData.id);
+            onPost({ ...postData, dataVersion: 'v1' });
+          }
+        }).finally(() => {
+          inFlightIds.delete(postId);
         });
       });
     }
