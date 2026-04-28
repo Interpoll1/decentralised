@@ -364,17 +364,37 @@ class ChatService {
   private flushReadMarkers(roomId: string): void {
     const gun = GunService.getGun();
     const readAt = Date.now();
-    gun.get('chats').get(roomId).once((room: any) => {
+    const roomNode = gun.get('chats').get(roomId);
+    roomNode.once((room: any) => {
       if (!room || typeof room !== 'object') return;
-      const unreadIds = Object.entries(room)
-        .filter(([msgId, msg]) => {
-          if (msgId === '_') return false;
-          return Boolean(msg && typeof msg === 'object' && (msg as any).recipientId === this.userId && !(msg as any).readAt);
-        })
-        .map(([msgId]) => msgId);
-      if (unreadIds.length === 0) return;
-      void this.writeReadMarkers(roomId, unreadIds, readAt);
+      const messageIds = Object.keys(room).filter((msgId) => msgId !== '_' && msgId.startsWith('msg-'));
+      if (messageIds.length === 0) return;
+      void this.readMessagesInBatches(roomNode, messageIds).then((messages) => {
+        const unreadIds = messages
+          .filter(([, msg]) => Boolean(msg && msg.recipientId === this.userId && !msg.readAt))
+          .map(([msgId]) => msgId);
+        if (unreadIds.length === 0) return;
+        return this.writeReadMarkers(roomId, unreadIds, readAt);
+      });
     });
+  }
+
+  private async readMessagesInBatches(roomNode: any, messageIds: string[]): Promise<Array<[string, any]>> {
+    const results: Array<[string, any]> = [];
+    const batchSize = 20;
+    for (let index = 0; index < messageIds.length; index += batchSize) {
+      const batch = messageIds.slice(index, index + batchSize);
+      const messages = await Promise.all(batch.map((msgId) => (
+        new Promise<[string, any]>((resolve) => {
+          roomNode.get(msgId).once((msg: any) => resolve([msgId, msg]));
+        })
+      )));
+      results.push(...messages);
+      if (index + batchSize < messageIds.length) {
+        await new Promise((resolve) => window.setTimeout(resolve, 25));
+      }
+    }
+    return results;
   }
 
   private async writeReadMarkers(roomId: string, unreadIds: string[], readAt: number): Promise<void> {

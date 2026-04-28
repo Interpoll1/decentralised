@@ -34,16 +34,13 @@ export class UserService {
 
   private static async enqueueWrite<T>(userId: string, task: () => Promise<T>): Promise<T> {
     const previous = this.writeQueues.get(userId) ?? Promise.resolve();
-    let release!: () => void;
-    const next = new Promise<void>((resolve) => { release = resolve; });
-    this.writeQueues.set(userId, previous.then(() => next));
-
+    const run = previous.then(task, task);
+    const queueTail = run.then(() => undefined, () => undefined);
+    this.writeQueues.set(userId, queueTail);
     try {
-      await previous;
-      return await task();
+      return await run;
     } finally {
-      release();
-      if (this.writeQueues.get(userId) === next) {
+      if (this.writeQueues.get(userId) === queueTail) {
         this.writeQueues.delete(userId);
       }
     }
