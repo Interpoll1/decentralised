@@ -439,7 +439,7 @@ import PostCard from '../components/PostCard.vue';
 import PollCard from '../components/PollCard.vue';
 import { Post } from '../services/postService';
 import { Poll } from '../services/pollService';
-import { GunService } from '../services/gunService';
+import { GunService, GUN_NAMESPACE } from '../services/gunService';
 import { UserService } from '../services/userService';
 import ChatService from '../services/chatService';
 import { warmupFromDB } from '../services/dbWarmup';
@@ -627,40 +627,73 @@ function getRoomId(a: string, b: string) {
   return [a, b].sort().join(':');
 }
 
+function getChatRoots() {
+  const rawGun = GunService.getRawGun();
+  return [
+    rawGun.get('chats'),
+    rawGun.get(GUN_NAMESPACE).get('chats'),
+  ];
+}
+
+function getChatRoomNodes(roomId: string) {
+  return getChatRoots().map((root) => root.get(roomId));
+}
+
 const unreadDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const subscribedChatRooms = new Set<string>();
 
 function recomputeUnread(roomId: string, otherUserId: string) {
   // Debounce per room — only compute after 500ms of no new messages
   const existing = unreadDebounceTimers.get(roomId);
   if (existing) clearTimeout(existing);
   unreadDebounceTimers.set(roomId, setTimeout(() => {
-    const gun = GunService.getGun();
-    let unread = 0;
-    gun.get('chats').get(roomId).map().once((msg: any) => {
-      if (msg && msg.recipientId === currentUserId && !msg.readAt) unread++;
+    const unreadIds = new Set<string>();
+    getChatRoomNodes(roomId).forEach((roomNode) => {
+      roomNode.map().once((msg: any, msgId: string) => {
+        if (msg && msgId && msg.recipientId === currentUserId && !msg.readAt) unreadIds.add(msgId);
+      });
     });
     setTimeout(() => {
       const entry = chatList.value.find(c => c.userId === otherUserId);
-      if (entry) entry.unreadCount = unread;
+      if (entry) entry.unreadCount = unreadIds.size;
       chatList.value = [...chatList.value].sort((a, b) => b.lastMessageTime - a.lastMessageTime);
     }, 300);
   }, 500));
 }
 
 function subscribeToRoom(otherUserId: string, otherName: string, otherPublicKey: string) {
-  const gun    = GunService.getGun();
   const roomId = getRoomId(currentUserId, otherUserId);
+  const seenMessageSignatures = new Map<string, string>();
+  const existingEntry = chatList.value.find(c => c.userId === otherUserId);
 
-  if (!chatList.value.find(c => c.userId === otherUserId)) {
+  if (!existingEntry) {
     chatList.value.push({
       userId: otherUserId, name: otherName,
       lastMessage: '', lastMessageTime: 0,
       unreadCount: 0, publicKey: otherPublicKey,
     });
+  } else {
+    existingEntry.name = otherName;
+    existingEntry.publicKey = otherPublicKey;
   }
 
-  const listener = gun.get('chats').get(roomId).map().on((msg: any) => {
+  if (subscribedChatRooms.has(roomId)) {
+    return;
+  }
+  subscribedChatRooms.add(roomId);
+
+  const handleMessage = (msg: any, msgId: string) => {
     if (!msg || !msg.senderId || !msg.timestamp) return;
+    if (msgId) {
+      const signature = JSON.stringify({
+        senderId: msg.senderId,
+        recipientId: msg.recipientId,
+        timestamp: msg.timestamp,
+        readAt: msg.readAt ?? null,
+      });
+      if (seenMessageSignatures.get(msgId) === signature) return;
+      seenMessageSignatures.set(msgId, signature);
+    }
     const entry = chatList.value.find(c => c.userId === otherUserId);
     if (!entry) return;
     if (msg.timestamp > entry.lastMessageTime) {
@@ -668,18 +701,22 @@ function subscribeToRoom(otherUserId: string, otherName: string, otherPublicKey:
       entry.lastMessage     = msg.senderId === currentUserId ? 'You: [Encrypted]' : '[Encrypted message]';
     }
     recomputeUnread(roomId, otherUserId);
-  });
+  };
 
-  gunListeners.push(() => listener?.off?.());
+  const listeners = getChatRoomNodes(roomId).map((roomNode) => roomNode.map().on(handleMessage));
+  gunListeners.push(() => listeners.forEach((listener) => listener?.off?.()));
 }
 
 async function loadChatList() {
   const gun = GunService.getGun();
-  gun.get('chats').once((rooms: any) => {
-    if (!rooms) return;
-    Object.keys(rooms)
-      .filter(k => k !== '_' && k.includes(currentUserId))
-      .forEach((roomId) => {
+  const roomIds = new Set<string>();
+  getChatRoots().forEach((rootNode) => {
+    rootNode.once((rooms: any) => {
+      if (!rooms) return;
+      Object.keys(rooms)
+        .filter(k => k !== '_' && k.includes(currentUserId))
+        .forEach((roomId) => roomIds.add(roomId));
+      roomIds.forEach((roomId) => {
         const otherUserId = roomId.split(':').find(id => id !== currentUserId);
         if (!otherUserId) return;
         gun.get('users').get(otherUserId).once((userData: any) => {
@@ -690,6 +727,7 @@ async function loadChatList() {
           );
         });
       });
+    });
   });
 }
 
@@ -1079,6 +1117,7 @@ onMounted(async () => {
 onUnmounted(() => {
   bgChatService?.disconnect();
   gunListeners.forEach(off => off());
+  subscribedChatRooms.clear();
   unreadDebounceTimers.forEach(t => clearTimeout(t));
   unreadDebounceTimers.clear();
 });

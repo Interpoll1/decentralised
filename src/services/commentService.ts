@@ -10,6 +10,48 @@ function getGun() {
   return GunService.getGun();
 }
 
+function putNodeWithTimeout(
+  node: any,
+  value: any,
+  verify: (data: any) => boolean,
+  timeoutMs = 5000,
+  verifyTimeoutMs = 1500,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      let verified = false;
+      node.once((data: any) => {
+        if (settled || verified) return;
+        verified = true;
+        settled = true;
+        if (verify(data)) {
+          resolve();
+          return;
+        }
+        reject(new Error('Comment write timed out and could not be verified'));
+      });
+      setTimeout(() => {
+        if (settled || verified) return;
+        verified = true;
+        settled = true;
+        reject(new Error('Comment write timed out and could not be verified'));
+      }, verifyTimeoutMs);
+    }, timeoutMs);
+    node.put(value, (ack: any) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (ack?.err) {
+        reject(ack.err);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
 export interface Comment {
   id: string;
   postId: string;
@@ -138,12 +180,11 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
       commentRecord.authorName = 'encrypted';
     }
 
-    commentNode.put(commentRecord, (ack: any) => {
-      if (ack?.err) {
-        reject(ack.err);
-        return;
-      }
-
+    putNodeWithTimeout(
+      commentNode,
+      commentRecord,
+      (stored) => Boolean(stored?.id === commentId && stored?.postId === data.postId),
+    ).then(() => {
       // Add to post's comments index
       getGun().get('posts')
         .get(data.postId)
@@ -189,7 +230,7 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
 
         resolve(comment);
       }, 100);
-    });
+    }).catch(reject);
   });
 }
 

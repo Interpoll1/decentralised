@@ -1,6 +1,6 @@
 // chatService.ts - P2P Chat Service for Vue
 
-import { GunService } from './gunService';
+import { GunService, GUN_NAMESPACE } from './gunService';
 
 export interface ChatMessage {
   id: string;
@@ -148,6 +148,18 @@ class ChatService {
     return [userA, userB].sort().join(':');
   }
 
+  private getChatRoots(): any[] {
+    const rawGun = GunService.getRawGun();
+    return [
+      rawGun.get('chats'),
+      rawGun.get(GUN_NAMESPACE).get('chats'),
+    ];
+  }
+
+  private getRoomNodes(roomId: string): any[] {
+    return this.getChatRoots().map((root) => root.get(roomId));
+  }
+
   private async storeMessageInGun(
     roomId: string,
     messageId: string,
@@ -157,8 +169,7 @@ class ChatService {
     encryptedForSender: string,
     timestamp: number
   ): Promise<void> {
-    const gun = GunService.getGun();
-    gun.get('chats').get(roomId).get(messageId).put({
+    const messageRecord = {
       id:                   messageId,
       senderId,
       recipientId,
@@ -166,6 +177,9 @@ class ChatService {
       encryptedForSender,    // decryptable by sender
       timestamp,
       readAt:               null,
+    };
+    this.getRoomNodes(roomId).forEach((roomNode) => {
+      roomNode.get(messageId).put(messageRecord);
     });
   }
 
@@ -173,28 +187,23 @@ class ChatService {
    * Load and decrypt all messages for a conversation from GunDB.
    */
   async loadHistory(recipientId: string): Promise<ChatMessage[]> {
-    const gun    = GunService.getGun();
     const roomId = this.getRoomId(this.userId, recipientId);
-    const raw: any[] = [];
-
-    await new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, 3000);
-      gun.get('chats').get(roomId).once((room: any) => {
-        clearTimeout(timer);
-        if (!room) { resolve(); return; }
-        const keys = Object.keys(room).filter(k => k !== '_' && k.startsWith('msg-'));
-        if (keys.length === 0) { resolve(); return; }
-
-        let loaded = 0;
-        keys.forEach((msgId) => {
-          gun.get('chats').get(roomId).get(msgId).once((msg: any) => {
-            if (msg && msg.senderId) raw.push(msg);
-            loaded++;
-            if (loaded === keys.length) resolve();
-          });
+    const roomMessages = await Promise.all(this.getRoomNodes(roomId).map((roomNode) => this.readRoomMessages(roomNode)));
+    const raw = Array.from(roomMessages.reduce((merged, messages) => {
+      messages.forEach((msg, msgId) => {
+        const existing = merged.get(msgId);
+        if (!existing) {
+          merged.set(msgId, msg);
+          return;
+        }
+        merged.set(msgId, {
+          ...existing,
+          ...msg,
+          readAt: existing.readAt ?? msg.readAt,
         });
       });
-    });
+      return merged;
+    }, new Map<string, any>()).values());
 
     // Sort by timestamp
     raw.sort((a, b) => a.timestamp - b.timestamp);
@@ -362,21 +371,39 @@ class ChatService {
   }
 
   private flushReadMarkers(roomId: string): void {
-    const gun = GunService.getGun();
     const readAt = Date.now();
-    const roomNode = gun.get('chats').get(roomId);
-    roomNode.once((room: any) => {
-      if (!room || typeof room !== 'object') return;
-      const messageIds = Object.keys(room).filter((msgId) => msgId !== '_' && msgId.startsWith('msg-'));
-      if (messageIds.length === 0) return;
-      void this.readMessagesInBatches(roomNode, messageIds).then((messages) => {
-        const unreadIds = messages
-          .filter(([, msg]) => Boolean(msg && msg.recipientId === this.userId && !msg.readAt))
-          .map(([msgId]) => msgId);
-        if (unreadIds.length === 0) return;
-        return this.writeReadMarkers(roomId, unreadIds, readAt);
+    void Promise.all(this.getRoomNodes(roomId).map((roomNode) => this.readRoomMessages(roomNode))).then((messageSets) => {
+      const unreadIds = Array.from(messageSets.reduce((ids, messages) => {
+        messages.forEach((msg, msgId) => {
+          if (msg && msg.recipientId === this.userId && !msg.readAt) {
+            ids.add(msgId);
+          }
+        });
+        return ids;
+      }, new Set<string>()));
+      if (unreadIds.length === 0) return;
+      return this.writeReadMarkers(roomId, unreadIds, readAt);
+    });
+  }
+
+  private async readRoomMessages(roomNode: any): Promise<Map<string, any>> {
+    const room = await new Promise<any>((resolve) => {
+      const timer = setTimeout(() => resolve(null), 3000);
+      roomNode.once((data: any) => {
+        clearTimeout(timer);
+        resolve(data);
       });
     });
+    if (!room || typeof room !== 'object') return new Map();
+    const messageIds = Object.keys(room).filter((msgId) => msgId !== '_' && msgId.startsWith('msg-'));
+    if (messageIds.length === 0) return new Map();
+    const messages = await this.readMessagesInBatches(roomNode, messageIds);
+    return messages.reduce((map, [msgId, msg]) => {
+      if (msg && msg.senderId) {
+        map.set(msgId, msg);
+      }
+      return map;
+    }, new Map<string, any>());
   }
 
   private async readMessagesInBatches(roomNode: any, messageIds: string[]): Promise<Array<[string, any]>> {
@@ -398,11 +425,12 @@ class ChatService {
   }
 
   private async writeReadMarkers(roomId: string, unreadIds: string[], readAt: number): Promise<void> {
-    const gun = GunService.getGun();
     const batchSize = 20;
     for (let index = 0; index < unreadIds.length; index += batchSize) {
       unreadIds.slice(index, index + batchSize).forEach((msgId) => {
-        gun.get('chats').get(roomId).get(msgId).get('readAt').put(readAt);
+        this.getRoomNodes(roomId).forEach((roomNode) => {
+          roomNode.get(msgId).get('readAt').put(readAt);
+        });
       });
       if (index + batchSize < unreadIds.length) {
         await new Promise((resolve) => window.setTimeout(resolve, 25));

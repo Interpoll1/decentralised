@@ -32,6 +32,48 @@ export class UserService {
   private static currentUser: UserProfile | null = null;
   private static writeQueues = new Map<string, Promise<void>>();
 
+  private static putNode(
+    node: any,
+    value: any,
+    verify: (stored: any) => boolean,
+    timeoutMs = 5000,
+    verifyTimeoutMs = 1500,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        let verified = false;
+        node.once((stored: any) => {
+          if (settled || verified) return;
+          verified = true;
+          settled = true;
+          if (verify(stored)) {
+            resolve();
+            return;
+          }
+          reject(new Error('User write timed out and could not be verified'));
+        });
+        setTimeout(() => {
+          if (settled || verified) return;
+          verified = true;
+          settled = true;
+          reject(new Error('User write timed out and could not be verified'));
+        }, verifyTimeoutMs);
+      }, timeoutMs);
+      node.put(value, (ack: any) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (ack?.err) {
+          reject(new Error(ack.err));
+          return;
+        }
+        resolve();
+      });
+    });
+  }
+
   private static async enqueueWrite<T>(userId: string, task: () => Promise<T>): Promise<T> {
     const previous = this.writeQueues.get(userId) ?? Promise.resolve();
     const run = previous.then(task, task);
@@ -73,7 +115,11 @@ export class UserService {
     if (existingProfile) {
       // Backfill publicKey if it's missing from an older profile
       if (!existingProfile.publicKey) {
-        await gun.get('users').get(deviceId).get('publicKey').put(publicKey);
+        await this.putNode(
+          gun.get('users').get(deviceId).get('publicKey'),
+          publicKey,
+          (stored) => stored === publicKey,
+        );
         existingProfile.publicKey = publicKey;
       }
       this.currentUser = existingProfile;
@@ -95,7 +141,11 @@ export class UserService {
       publicKey, // ← stored in GunDB so other users can fetch it
     };
 
-    await gun.get('users').get(deviceId).put(newProfile);
+    await this.putNode(
+      gun.get('users').get(deviceId),
+      newProfile,
+      (stored) => Boolean(stored?.id === deviceId && stored?.publicKey === publicKey),
+    );
     this.currentUser = newProfile;
 
     return newProfile;
@@ -110,7 +160,11 @@ export class UserService {
         ? this.currentUser
         : await this.getUser(currentUser.id) ?? currentUser;
       const updatedProfile = { ...baseProfile, ...updates };
-      await gun.get('users').get(currentUser.id).put(updatedProfile);
+      await this.putNode(
+        gun.get('users').get(currentUser.id),
+        updatedProfile,
+        (stored) => Object.entries(updates).every(([key, fieldValue]) => stored?.[key] === fieldValue),
+      );
 
       this.currentUser = updatedProfile;
       return updatedProfile;
@@ -127,7 +181,11 @@ export class UserService {
     await this.enqueueWrite(user.id, async () => {
       const latestUser = await this.getUser(user.id) ?? user;
       const nextPostCount = (latestUser.postCount || 0) + 1;
-      await GunService.getGun().get('users').get(user.id).get('postCount').put(nextPostCount);
+      await this.putNode(
+        GunService.getGun().get('users').get(user.id).get('postCount'),
+        nextPostCount,
+        (stored) => stored === nextPostCount,
+      );
       this.currentUser = {
         ...(this.currentUser?.id === user.id ? this.currentUser : latestUser),
         postCount: nextPostCount,
@@ -140,7 +198,11 @@ export class UserService {
     await this.enqueueWrite(user.id, async () => {
       const latestUser = await this.getUser(user.id) ?? user;
       const nextCommentCount = (latestUser.commentCount || 0) + 1;
-      await GunService.getGun().get('users').get(user.id).get('commentCount').put(nextCommentCount);
+      await this.putNode(
+        GunService.getGun().get('users').get(user.id).get('commentCount'),
+        nextCommentCount,
+        (stored) => stored === nextCommentCount,
+      );
       this.currentUser = {
         ...(this.currentUser?.id === user.id ? this.currentUser : latestUser),
         commentCount: nextCommentCount,
@@ -154,7 +216,11 @@ export class UserService {
       const user = await this.getUser(authorId);
       if (!user) return;
       const nextKarma = (user.karma || 0) + points;
-      await GunService.getGun().get('users').get(authorId).get('karma').put(nextKarma);
+      await this.putNode(
+        GunService.getGun().get('users').get(authorId).get('karma'),
+        nextKarma,
+        (stored) => stored === nextKarma,
+      );
       if (this.currentUser?.id === authorId) {
         this.currentUser = { ...this.currentUser, karma: nextKarma };
       }
