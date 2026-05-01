@@ -341,7 +341,7 @@ async function createPoll() {
       const buildVoteLink = (code: string) => {
         const routeLocation = router.resolve({
           path: `/vote/${poll.id}`,
-          query: { code },
+          query: { code, communityId: poll.communityId },
         });
         return `${window.location.origin}${routeLocation.href}`;
       };

@@ -54,6 +54,8 @@ npm run preview   # Serve the built dist/ folder locally
 
 The system has four layers that each handle a different concern.
 
+For a detailed, implementation-aligned protocol write-up, see **`docs/protocol-whitepaper.md`**.
+
 ```mermaid
 graph TD
     A[Browser Tab] -->|votes, polls| B[Local Blockchain - IndexedDB]

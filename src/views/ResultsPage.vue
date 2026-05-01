@@ -46,7 +46,7 @@
           <ion-button
             expand="block"
             class="mt-3"
-            @click="router.push(`/vote/${route.params.pollId}`)"
+            @click="router.push({ path: `/vote/${route.params.pollId}`, query: poll?.communityId ? { communityId: poll.communityId } : undefined })"
           >
             Vote in This Poll
           </ion-button>
@@ -63,7 +63,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage,
@@ -82,14 +82,12 @@ import {
   IonSpinner
 } from '@ionic/vue';
 import { usePollStore } from '../stores/pollStore';
-import type { Poll } from '../services/pollService';
-
 const route = useRoute();
 const router = useRouter();
 const pollStore = usePollStore();
 
-const poll = ref<Poll | null>(null);
 const isLoading = ref(true);
+const poll = computed(() => pollStore.currentPoll);
 
 const totalVotes = computed(() => {
   if (!poll.value || !poll.value.options) return 0;
@@ -109,8 +107,8 @@ const getPercentage = (count: number) => {
 
 onMounted(async () => {
   const pollId = route.params.pollId as string;
-  await pollStore.selectPoll(pollId);
-  poll.value = pollStore.currentPoll;
+  const communityId = typeof route.query.communityId === 'string' ? route.query.communityId : undefined;
+  await pollStore.selectPoll(pollId, communityId);
   isLoading.value = false;
 });
 </script>

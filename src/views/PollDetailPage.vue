@@ -4,7 +4,7 @@
     <ion-header>
       <ion-toolbar>
         <ion-buttons slot="start">
-          <ion-back-button :default-href="`/community/${poll?.communityId || '/home'}`"></ion-back-button>
+          <ion-back-button :default-href="poll?.communityId ? `/community/${poll.communityId}` : '/home'"></ion-back-button>
         </ion-buttons>
         <ion-title>Poll</ion-title>
         <ion-buttons slot="end" v-if="poll && isAuthor && poll.isPrivate">
@@ -396,7 +396,10 @@ async function presentToast(message: string, duration = 2000) {
 function openInviteCodePage() {
   if (!poll.value?.id) return;
   blurActiveElement();
-  void router.push(`/vote/${poll.value.id}`);
+  void router.push({
+    path: `/vote/${poll.value.id}`,
+    query: { communityId: poll.value.communityId },
+  });
 }
 
 async function submitVote() {
@@ -572,7 +575,7 @@ async function loadPoll() {
           // Patch into store
           pollStore.injectPoll({
             id: data.id, communityId: data.communityId,
-            authorId: '', authorName: data.authorName || 'Anonymous',
+            authorId: data.authorId || '', authorName: data.authorName || 'Anonymous',
             question: data.question, description: data.description || '',
             options: data.options,
             createdAt: data.createdAt || Date.now(),
@@ -591,18 +594,19 @@ async function loadPoll() {
   }
   // ── Step 3: Gun fetch only if still no data (last resort) ────────────────
   if (!poll.value) {
-    await pollStore.selectPoll(pollId)
+    const communityId = typeof route.params.communityId === 'string' ? route.params.communityId : undefined
+    await pollStore.selectPoll(pollId, communityId)
     // Prefer store version (may have options from creation); fall back to currentPoll
     poll.value = pollStore.pollsMap.get(pollId) || pollStore.currentPoll
     isLoading.value = false
   }
   // ── Step 4: Background tasks (non-blocking) ───────────────────────────────
-  Promise.all([
+  await Promise.all([
     UserService.getCurrentUser().then(u => { currentUserId.value = u.id }),
     VoteTrackerService.hasVoted(pollId).then(v => { if (v) hasVoted.value = true }),
   ]).catch(() => {})
   if (poll.value?.isPrivate && isAuthor.value) {
-    loadInviteCodes()
+    await loadInviteCodes()
   }
   isLoading.value = false
 }
@@ -623,7 +627,7 @@ async function copyInviteLink(code: string) {
   if (!poll.value) return;
   const routeLocation = router.resolve({
     path: `/vote/${poll.value.id}`,
-    query: { code },
+    query: { code, communityId: poll.value.communityId },
   });
   const link = `${window.location.origin}${routeLocation.href}`;
 
@@ -660,7 +664,7 @@ async function copyAllLinks() {
     .map((entry) => {
       const routeLocation = router.resolve({
         path: `/vote/${poll.value!.id}`,
-        query: { code: entry.code },
+        query: { code: entry.code, communityId: poll.value!.communityId },
       });
       return `${window.location.origin}${routeLocation.href}`;
     })

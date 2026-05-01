@@ -89,7 +89,8 @@ async function loadVotePage() {
     await chainStore.initialize();
     const pollId = route.params.pollId as string;
     inviteCode.value = (route.query.code as string | undefined) || '';
-    await pollStore.selectPoll(pollId);
+    const communityId = typeof route.query.communityId === 'string' ? route.query.communityId : undefined;
+    await pollStore.selectPoll(pollId, communityId);
   } catch (error) {
     console.error('Error loading poll:', error);
   } finally {

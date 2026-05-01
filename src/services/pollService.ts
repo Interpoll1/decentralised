@@ -486,6 +486,62 @@ export class PollService {
     return null;
   }
 
+  private static async loadPollFromCommunityPath(
+    communityId: string,
+    pollId: string,
+    allowApiOptionFallback = true,
+    allowLocalBackupFallback = true,
+  ): Promise<Poll | null> {
+    if (!communityId) return null;
+    const pollNode = this.getCommunityPollPath(communityId, pollId);
+    let pollData = await this.onceNode<any>(pollNode, 300);
+    if (!pollData?.id) {
+      pollData = await this.waitForNode<any>(pollNode, (value) => !!value?.id, 1500);
+    }
+    if (!pollData?.id && allowLocalBackupFallback) {
+      const localBackup = await this.getLocalPollBackup(pollId);
+      if (localBackup?.communityId === communityId) {
+        return localBackup;
+      }
+      return null;
+    }
+    if (!pollData?.id) return null;
+
+    let options = await this.loadCommunityPollOptions(communityId, pollId);
+    let optionsCameFromGun = options.length > 0;
+    if (options.length === 0) {
+      const rootOptions = await this.loadPollOptions(pollId, false, pollData);
+      if (rootOptions.length > 0) {
+        options = rootOptions;
+        optionsCameFromGun = true;
+      } else if (allowApiOptionFallback) {
+        const apiFallback = await this.loadPollFromAPI(pollId);
+        options = apiFallback.options;
+      }
+    }
+    const builtPoll = this.buildPollRecord({
+      ...pollData,
+      communityId: pollData.communityId || communityId,
+    }, options);
+    if (builtPoll) {
+      if (optionsCameFromGun) {
+        this.warmPollCache({
+          ...pollData,
+          communityId: builtPoll.communityId,
+        }, this.buildOptionsMap(builtPoll.options));
+      }
+      void this.saveLocalPollBackup(builtPoll);
+      return builtPoll;
+    }
+    if (allowLocalBackupFallback) {
+      const localBackup = await this.getLocalPollBackup(pollId);
+      if (localBackup?.communityId === communityId) {
+        return localBackup;
+      }
+    }
+    return null;
+  }
+
   private static warmPollCache(pollData: any, optionsData?: any) {
     if (!pollData?.id) return;
     const pollNode = this.getPollPath(pollData.id);
@@ -531,7 +587,7 @@ export class PollService {
       if (disposed || !pollId || pollId === '_' || (hydrating && seenIds.has(pollId))) return Promise.resolve(null);
       const inFlight = loading.get(pollId);
       if (inFlight) return inFlight;
-      const task = this.loadPoll(pollId)
+      const task = this.loadPoll(pollId, communityId)
         .then((poll) => {
           if (poll && !poll.communityId) {
             return { ...poll, communityId };
@@ -1007,15 +1063,45 @@ export class PollService {
   }
 
   // ── Canonical poll read: Gun/local only (never API vote ingestion) ───────────
-  static async loadPoll(pollId: string): Promise<Poll | null> {
+  static async loadPoll(pollId: string, communityId?: string): Promise<Poll | null> {
+    if (communityId) {
+      const rootPoll = await this.loadPollFromGun(pollId, false, false);
+      if (rootPoll) {
+        return rootPoll.communityId ? rootPoll : { ...rootPoll, communityId };
+      }
+      const communityPoll = await this.loadPollFromCommunityPath(communityId, pollId, false, false);
+      if (communityPoll) {
+        return communityPoll;
+      }
+      const localBackup = await this.getLocalPollBackup(pollId);
+      if (localBackup?.communityId === communityId) {
+        return localBackup;
+      }
+      return null;
+    }
     return this.loadPollFromGun(pollId, false);
   }
 
   // ── UX fallback read: Gun first, then metadata-only API shell ─────────────────
-  static async loadPollWithApiFallback(pollId: string): Promise<Poll | null> {
-    const gunPoll = await this.loadPollFromGun(pollId, true);
-    if (gunPoll) {
-      return gunPoll;
+  static async loadPollWithApiFallback(pollId: string, communityId?: string): Promise<Poll | null> {
+    if (communityId) {
+      const gunPoll = await this.loadPollFromGun(pollId, false, false);
+      if (gunPoll) {
+        return gunPoll.communityId ? gunPoll : { ...gunPoll, communityId };
+      }
+      const communityPoll = await this.loadPollFromCommunityPath(communityId, pollId, false, false);
+      if (communityPoll) {
+        return communityPoll;
+      }
+      const localBackup = await this.getLocalPollBackup(pollId);
+      if (localBackup?.communityId === communityId) {
+        return localBackup;
+      }
+    } else {
+      const gunPoll = await this.loadPollFromGun(pollId, true);
+      if (gunPoll) {
+        return gunPoll;
+      }
     }
     const { pollData: apiData, options: apiOptions } = await this.loadPollFromAPI(pollId);
     return this.buildPollRecord(apiData, apiOptions);
@@ -1062,9 +1148,10 @@ export class PollService {
     return this.parsePollOptions(liveOptions);
   }
 
-  static async vote(pollId: string, optionIds: string[], voterId: string): Promise<void> {
+  static async vote(pollId: string, optionIds: string[], voterId: string, communityId?: string): Promise<void> {
     // Voting must use Gun-backed state to avoid API bounce-back or stale zero baselines.
-    const poll = await this.loadPollFromGun(pollId, false, false);
+    const poll = await this.loadPollFromGun(pollId, false, false)
+      ?? (communityId ? await this.loadPollFromCommunityPath(communityId, pollId, false, false) : null);
     if (!poll) throw new Error('Poll not found');
     if (poll.isExpired) throw new Error('Poll has expired');
     const selectedOptions = poll.options.filter(opt => optionIds.includes(opt.id));
@@ -1179,8 +1266,8 @@ export class PollService {
     });
   }
 
-  static async voteOnPoll(pollId: string, optionIds: string[], voterId: string): Promise<void> {
-    return this.vote(pollId, optionIds, voterId);
+  static async voteOnPoll(pollId: string, optionIds: string[], voterId: string, communityId?: string): Promise<void> {
+    return this.vote(pollId, optionIds, voterId, communityId);
   }
 
   static async getInviteCodes(pollId: string): Promise<{ code: string; used: boolean }[]> {

@@ -282,6 +282,7 @@ export const usePollStore = defineStore('poll', () => {
   async function voteOnPoll(pollId: string, optionIds: string[]) {
     const user     = await UserService.getCurrentUser();
     const original = pollsMap.value.get(pollId);
+    const communityId = original?.communityId || currentPoll.value?.communityId;
 
     // Sweep expired vote-protection entries
     const now = Date.now();
@@ -304,8 +305,8 @@ export const usePollStore = defineStore('poll', () => {
       if (currentPoll.value?.id === pollId) currentPoll.value = optimistic;
     }
     try {
-      await PollService.vote(pollId, optionIds, user.id);
-      const canonical = await PollService.loadPoll(pollId);
+      await PollService.vote(pollId, optionIds, user.id, communityId);
+      const canonical = await PollService.loadPoll(pollId, communityId);
       if (canonical) {
         pollsMap.value.set(pollId, canonical);
         if (currentPoll.value?.id === pollId) currentPoll.value = canonical;
@@ -328,7 +329,7 @@ export const usePollStore = defineStore('poll', () => {
 
   // ─── Select ────────────────────────────────────────────────────────────────
 
-  async function selectPoll(pollId: string) {
+  async function selectPoll(pollId: string, communityId?: string) {
     isLoading.value = true;
     try {
       const existing = pollsMap.value.get(pollId);
@@ -337,7 +338,7 @@ export const usePollStore = defineStore('poll', () => {
         currentPoll.value = existing;
         return;
       }
-      const poll = await PollService.loadPollWithApiFallback(pollId);
+      const poll = await PollService.loadPollWithApiFallback(pollId, communityId);
       if (poll) {
         pollsMap.value.set(poll.id, poll);
         tryDecryptPoll(poll);

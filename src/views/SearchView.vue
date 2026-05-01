@@ -578,7 +578,10 @@ const navigateToResult = (result: any) => {
   if (result.type === 'post') {
     router.push(`/post/${result.id}`);
   } else {
-    router.push(`/vote/${result.id}`);
+    router.push({
+      path: `/vote/${result.id}`,
+      query: result.community ? { communityId: result.community } : undefined,
+    });
   }
 };
 
