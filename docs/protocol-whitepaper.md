@@ -237,9 +237,9 @@ The following mechanisms exist to reduce fraud and spam. They are **practical ab
 | Mechanism | What it does | What it does NOT guarantee |
 |---|---|---|
 | Device fingerprinting | Tracks per-device vote history locally and in the backend registry | Cryptographic uniqueness per human person |
-| Backend vote authorization | In-memory `pollId:deviceId` registry on relay server rejects duplicates | Availability guarantee if relay is offline |
+| Backend vote authorization | Persisted relay registry (`pollId:identity`) plus two-phase authorize/confirm rejects duplicates across relay restarts | Availability guarantee if relay is offline |
 | Invite codes | Single-use per-poll access codes gated via GunDB | Resistance if invite codes are leaked |
-| OAuth gating | Optionally requires Google/Microsoft login before voting | Anonymity or unlinkability of votes |
+| OAuth gating | Optionally requires Google/Microsoft login before voting; backend identity is derived from provider userinfo (not unverified JWT payload decode) | Anonymity or unlinkability of votes |
 | Rate limits and bot scoring | Reduces automated spam | Guaranteed spam elimination |
 | Proof-of-Work (optional) | Increases cost of high-frequency message floods | Mathematical Sybil resistance |
 
@@ -247,13 +247,13 @@ The following mechanisms exist to reduce fraud and spam. They are **practical ab
 - practical duplicate-vote prevention per device
 - private poll access control via invite codes
 - spam and bot mitigation
-- optional backend authorization with audit log
+- backend authorization that fails closed (`unreachable/invalid response => not authorized`) with audit log
 
 **What the anti-abuse layer does NOT provide:**
 - cryptographic Sybil resistance (one vote per unique person)
 - anonymity against the application origin or relay operator
 - protection from a compromised or malicious frontend bundle
-- guaranteed duplicate-vote prevention if the backend is offline and multiple devices are used
+- guaranteed duplicate-vote prevention when the backend is offline and multiple devices are used
 
 These controls should be deployed together for best effect. Community administrators can choose which layers to enable per poll.
 
@@ -433,4 +433,3 @@ Keys can be exported as JSON for backup and imported on a different device or br
 - Encryption: `src/services/encryptionService.ts`, `src/services/keyVaultService.ts`
 - Invite links: `src/services/inviteLinkService.ts`
 - Private community CRUD: `src/services/communityService.ts` (`createPrivateCommunity`, `joinPrivateCommunity`, `decryptCommunityMeta`)
-

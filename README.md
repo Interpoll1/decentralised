@@ -108,7 +108,7 @@ After voting, users get a receipt containing a short verification code. This rec
 Duplicate voting is prevented at multiple levels:
 
 - **Device fingerprinting.** A SHA-256 hash of browser properties (user agent, screen size, timezone, canvas fingerprint) creates a persistent device ID. The app tracks which polls each device has voted on.
-- **Backend authorization.** If the relay server is reachable, it maintains an in-memory registry of `pollId:deviceId` pairs and rejects duplicates. This is a second line of defense -- the app still works if the backend is down.
+- **Backend authorization.** If the relay server is reachable, it maintains a persisted vote registry and rejects duplicates with a two-phase authorize/confirm flow. This path fails closed on backend errors.
 - **Invite codes.** Private polls generate single-use alphanumeric codes. Each code is marked as consumed atomically in GunDB when used.
 - **OAuth gating.** Polls can optionally require a Google or Microsoft login before accepting a vote.
 

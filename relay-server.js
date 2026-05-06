@@ -34,11 +34,55 @@ const botDetector = new BotDetector();
 const spamScorer = new SpamScorer();
 const powChallenge = new PowChallenge();
 
-// In-memory registry for backend-side vote protection
-// key = `${pollId}:${deviceId}`
 const voteRegistry = new Set();
 const pendingVoteReservations = new Map();
 const PENDING_VOTE_TTL_MS = 60_000;
+const VOTE_REGISTRY_FILE = new URL('./vote-registry.json', import.meta.url).pathname;
+const VOTE_REGISTRY_BACKUP_FILE = new URL('./vote-registry.backup.json', import.meta.url).pathname;
+const VOTE_REGISTRY_TMP_FILE = new URL('./vote-registry.tmp.json', import.meta.url).pathname;
+let voteRegistryOperational = true;
+
+function loadVoteRegistryFromFile(filePath) {
+  const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  if (!Array.isArray(raw)) {
+    throw new Error('vote registry is not an array');
+  }
+  voteRegistry.clear();
+  for (const key of raw) {
+    if (typeof key === 'string' && key.length > 0) voteRegistry.add(key);
+  }
+}
+
+try {
+  if (fs.existsSync(VOTE_REGISTRY_FILE)) {
+    loadVoteRegistryFromFile(VOTE_REGISTRY_FILE);
+    console.log(`Loaded ${voteRegistry.size} vote records from disk`);
+  } else if (fs.existsSync(VOTE_REGISTRY_BACKUP_FILE)) {
+    loadVoteRegistryFromFile(VOTE_REGISTRY_BACKUP_FILE);
+    console.log(`Recovered ${voteRegistry.size} vote records from backup`);
+  }
+} catch (error) {
+  console.error('Failed to load primary vote registry, trying backup:', error.message);
+  try {
+    if (fs.existsSync(VOTE_REGISTRY_BACKUP_FILE)) {
+      loadVoteRegistryFromFile(VOTE_REGISTRY_BACKUP_FILE);
+      console.log(`Recovered ${voteRegistry.size} vote records from backup`);
+    } else {
+      voteRegistryOperational = false;
+    }
+  } catch (backupError) {
+    console.error('Failed to load backup vote registry:', backupError.message);
+    voteRegistryOperational = false;
+  }
+}
+
+function saveVoteRegistry() {
+  const payload = JSON.stringify([...voteRegistry]);
+  fs.writeFileSync(VOTE_REGISTRY_TMP_FILE, payload);
+  fs.renameSync(VOTE_REGISTRY_TMP_FILE, VOTE_REGISTRY_FILE);
+  fs.writeFileSync(VOTE_REGISTRY_BACKUP_FILE, payload);
+  voteRegistryOperational = true;
+}
 
 function cleanupPendingVoteReservations(now = Date.now()) {
   for (const [key, expiresAt] of pendingVoteReservations) {
@@ -57,6 +101,9 @@ function hasPendingVoteReservation(key, now = Date.now()) {
 }
 
 function reserveVoteSlot(key, now = Date.now()) {
+  if (!voteRegistryOperational) {
+    return { ok: false, reason: 'vote registry unavailable' };
+  }
   cleanupPendingVoteReservations(now);
   if (voteRegistry.has(key) || hasPendingVoteReservation(key, now)) {
     return { ok: false, reason: 'already voted or vote pending' };
@@ -66,6 +113,9 @@ function reserveVoteSlot(key, now = Date.now()) {
 }
 
 function commitVoteSlot(key, now = Date.now()) {
+  if (!voteRegistryOperational) {
+    return { ok: false, reason: 'vote registry unavailable' };
+  }
   cleanupPendingVoteReservations(now);
   if (voteRegistry.has(key)) {
     pendingVoteReservations.delete(key);
@@ -76,6 +126,13 @@ function commitVoteSlot(key, now = Date.now()) {
   }
   pendingVoteReservations.delete(key);
   voteRegistry.add(key);
+  try {
+    saveVoteRegistry();
+  } catch (error) {
+    voteRegistry.delete(key);
+    voteRegistryOperational = false;
+    return { ok: false, reason: 'vote registry persistence failed' };
+  }
   return { ok: true, alreadyRecorded: false };
 }
 
@@ -136,6 +193,7 @@ setInterval(() => {
 }, 2 * 60_000);
 
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
+const OAUTH_STATE_COOKIE = 'interpoll_oauth_state';
 
 console.log('Google OAuth config:', {
   clientIdConfigured: !!process.env.GOOGLE_CLIENT_ID,
@@ -147,13 +205,46 @@ function generateRandomId(bytes = 16) {
   return crypto.randomBytes(bytes).toString('hex');
 }
 
+function appendSetCookie(res, cookie) {
+  const existing = res.getHeader('Set-Cookie');
+  if (!existing) {
+    res.setHeader('Set-Cookie', [cookie]);
+    return;
+  }
+  if (Array.isArray(existing)) {
+    res.setHeader('Set-Cookie', [...existing, cookie]);
+    return;
+  }
+  res.setHeader('Set-Cookie', [existing, cookie]);
+}
+
+function getCookie(req, name) {
+  const cookieHeader = req.headers['cookie'];
+  if (!cookieHeader) return null;
+  const parts = cookieHeader.split(';').map((c) => c.trim());
+  const part = parts.find((p) => p.startsWith(`${name}=`));
+  return part ? part.slice(name.length + 1) : null;
+}
+
+function setOauthStateCookie(res, nonce) {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const securePart = isProduction ? ' Secure;' : '';
+  appendSetCookie(res, `${OAUTH_STATE_COOKIE}=${nonce}; HttpOnly; Path=/; SameSite=Lax; Max-Age=600;${securePart}`);
+}
+
+function clearOauthStateCookie(res) {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const securePart = isProduction ? ' Secure;' : '';
+  appendSetCookie(res, `${OAUTH_STATE_COOKIE}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0;${securePart}`);
+}
+
 function setSessionCookie(res, user) {
   const sessionId = generateRandomId(16);
   sessions.set(sessionId, user);
   const isProduction = process.env.NODE_ENV === 'production';
   const securePart = isProduction ? ' Secure;' : '';
   const cookie = `sessionId=${sessionId}; HttpOnly; Path=/; SameSite=Lax;${securePart}`;
-  res.setHeader('Set-Cookie', cookie);
+  appendSetCookie(res, cookie);
 }
 
 function getSessionFromRequest(req) {
@@ -234,21 +325,6 @@ function getJson(urlString, headers = {}) {
   });
 }
 
-function decodeJwt(token) {
-  try {
-    const parts = token.split('.');
-    if (parts.length < 2) return null;
-    const payload = parts[1]
-      .replace(/-/g, '+')
-      .replace(/_/g, '/');
-    const decoded = Buffer.from(payload, 'base64').toString('utf8');
-    return JSON.parse(decoded);
-  } catch (error) {
-    console.error('Failed to decode JWT:', error);
-    return null;
-  }
-}
-
 server.on('request', (req, res) => {
   // ─── Security headers ───────────────────────────────────────────────────
   setSecurityHeaders(res);
@@ -298,7 +374,9 @@ server.on('request', (req, res) => {
     }
 
     const state = generateRandomId(16);
-    oauthStates.set(state, { provider: 'google', createdAt: Date.now() });
+    const stateNonce = generateRandomId(16);
+    oauthStates.set(state, { provider: 'google', createdAt: Date.now(), nonce: stateNonce });
+    setOauthStateCookie(res, stateNonce);
 
     const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     authUrl.searchParams.set('client_id', clientId);
@@ -317,13 +395,16 @@ server.on('request', (req, res) => {
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state');
 
-    if (!code || !state || oauthStates.get(state)?.provider !== 'google') {
+    const oauthState = state ? oauthStates.get(state) : null;
+    const cookieNonce = getCookie(req, OAUTH_STATE_COOKIE);
+    if (!code || !state || !oauthState || oauthState.provider !== 'google' || !cookieNonce || oauthState.nonce !== cookieNonce) {
       res.writeHead(400, { 'Content-Type': 'text/plain' });
       res.end('Invalid OAuth state');
       return;
     }
 
     oauthStates.delete(state);
+    clearOauthStateCookie(res);
 
     const tokenEndpoint = 'https://oauth2.googleapis.com/token';
     const redirectUri = `http://localhost:${PORT}/auth/google/callback`;
@@ -336,32 +417,9 @@ server.on('request', (req, res) => {
       grant_type: 'authorization_code',
     })
       .then((tokenResponse) => {
-        console.log('Google token response received (id_token present:', !!tokenResponse.id_token, ')');
-
-        const idToken = tokenResponse.id_token;
-        if (idToken) {
-          const claims = decodeJwt(idToken);
-          if (!claims) {
-            throw new Error('Failed to decode id_token from Google');
-          }
-
-          const user = {
-            provider: 'google',
-            sub: claims.sub,
-            email: claims.email,
-            name: claims.name || claims.email,
-            picture: claims.picture || null,
-          };
-
-          setSessionCookie(res, user);
-          res.writeHead(302, { Location: `${FRONTEND_ORIGIN}/auth/callback` });
-          res.end();
-          return;
-        }
-
         const accessToken = tokenResponse.access_token;
         if (!accessToken) {
-          throw new Error('No id_token or access_token from Google');
+          throw new Error('No access_token from Google');
         }
 
         return getJson('https://openidconnect.googleapis.com/v1/userinfo', {
@@ -410,7 +468,9 @@ server.on('request', (req, res) => {
     }
 
     const state = generateRandomId(16);
-    oauthStates.set(state, { provider: 'microsoft', createdAt: Date.now() });
+    const stateNonce = generateRandomId(16);
+    oauthStates.set(state, { provider: 'microsoft', createdAt: Date.now(), nonce: stateNonce });
+    setOauthStateCookie(res, stateNonce);
 
     const authUrl = new URL(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize`);
     authUrl.searchParams.set('client_id', clientId);
@@ -429,13 +489,16 @@ server.on('request', (req, res) => {
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state');
 
-    if (!code || !state || oauthStates.get(state)?.provider !== 'microsoft') {
+    const oauthState = state ? oauthStates.get(state) : null;
+    const cookieNonce = getCookie(req, OAUTH_STATE_COOKIE);
+    if (!code || !state || !oauthState || oauthState.provider !== 'microsoft' || !cookieNonce || oauthState.nonce !== cookieNonce) {
       res.writeHead(400, { 'Content-Type': 'text/plain' });
       res.end('Invalid OAuth state');
       return;
     }
 
     oauthStates.delete(state);
+    clearOauthStateCookie(res);
 
     const tenant = process.env.MS_TENANT || 'common';
     const tokenEndpoint = `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`;
@@ -450,22 +513,29 @@ server.on('request', (req, res) => {
       grant_type: 'authorization_code',
     })
       .then((tokenResponse) => {
-        const idToken = tokenResponse.id_token;
-        const claims = idToken ? decodeJwt(idToken) : null;
-        if (!claims) {
-          throw new Error('No id_token from Microsoft');
+        const accessToken = tokenResponse.access_token;
+        if (!accessToken) {
+          throw new Error('No access_token from Microsoft');
         }
 
-        const user = {
-          provider: 'microsoft',
-          sub: claims.sub || claims.oid,
-          email: claims.email || claims.preferred_username,
-          name: claims.name || claims.preferred_username,
-        };
+        return getJson('https://graph.microsoft.com/oidc/userinfo', {
+          Authorization: `Bearer ${accessToken}`,
+        }).then((profile) => {
+          if (!profile || !profile.sub) {
+            throw new Error('No userinfo from Microsoft');
+          }
 
-        setSessionCookie(res, user);
-        res.writeHead(302, { Location: `${FRONTEND_ORIGIN}/auth/callback` });
-        res.end();
+          const user = {
+            provider: 'microsoft',
+            sub: profile.sub,
+            email: profile.email || profile.preferred_username,
+            name: profile.name || profile.preferred_username || profile.email,
+          };
+
+          setSessionCookie(res, user);
+          res.writeHead(302, { Location: `${FRONTEND_ORIGIN}/auth/callback` });
+          res.end();
+        });
       })
       .catch((error) => {
         console.error('Microsoft OAuth error:', error);

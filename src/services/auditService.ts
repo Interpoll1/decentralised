@@ -34,8 +34,7 @@ export class AuditService {
 
   /**
    * Ask backend if this device is allowed to vote on a poll.
-   * If the backend is unreachable or returns an unexpected response,
-   * we default to allowing the vote so offline mode still works.
+   * Fail closed for all backend errors or unexpected responses.
    */
   static async authorizeVote(pollId: string, deviceId: string): Promise<boolean> {
     try {
@@ -52,7 +51,7 @@ export class AuditService {
       });
 
       if (!res.ok) {
-        return true;
+        return false;
       }
 
       const data = (await res.json()) as VoteAuthorizeResponse;
@@ -60,9 +59,9 @@ export class AuditService {
         return data.allowed;
       }
 
-      return true;
+      return false;
     } catch (_error) {
-      return true;
+      return false;
     }
   }
 
