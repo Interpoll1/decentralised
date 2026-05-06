@@ -338,7 +338,90 @@ This is not a list of weaknesses — it is a precise statement of scope. The pro
 
 ---
 
-## 15. Reference Implementation Map
+## 15. Encrypted Communities and Private Spaces
+
+InterPoll supports fully encrypted communities where the community name, description, rules, and all content (posts, polls, comments, and chat messages) are encrypted client-side before being stored in GunDB. This section documents how it works.
+
+### 15.1 What gets encrypted
+
+| Object | What is encrypted | Storage in GunDB |
+|---|---|---|
+| Community metadata | `name`, `displayName`, `description`, `rules[]` — stored as a single `encryptedMeta` blob | Public shell contains `isEncrypted: true`, member count, creator ID, and a `🔒 Private Community` placeholder |
+| Posts | All post fields (title, body, author, images, Schnorr signature) — stored as `encryptedContent` blob | Public shell contains `🔒 Encrypted Post` title |
+| Polls | Poll question, options, description — stored as `encryptedContent` blob | Public shell contains `🔒 Encrypted Poll` question |
+| Comments | Comment text, author name/ID — stored as `encryptedContent` blob | Public shell contains `🔒 Encrypted comment` |
+| Chat room metadata | Room name, description, creator ID — stored as `encryptedMeta` blob | Public shell contains `🔒 Encrypted Room` placeholder |
+| Chat messages | Message text, sender ID and name — stored as `encryptedContent` blob | No plaintext content in GunDB |
+
+A community's existence is always visible in GunDB (anyone can see `isEncrypted: true` and the member count). Only the content is hidden from non-members.
+
+### 15.2 Encryption algorithm
+
+All community/content encryption uses **AES-256-GCM** via the browser's Web Crypto API:
+
+- A random 96-bit (12-byte) IV is generated per encryption operation and prepended to the ciphertext.
+- The combined `IV (12 bytes) || ciphertext` is base64-encoded and stored as an `EncryptedBlob` string in GunDB.
+- Decryption extracts the IV from the first 12 bytes of the decoded blob and uses AES-GCM's built-in authentication to detect tampering (any modification causes decryption to fail).
+
+Each encrypted message/post also includes an **HMAC-SHA256 authentication tag** derived from the community AES key via HKDF (domain-separated with `'interpoll-hmac-auth-v1'`). This provides an additional anti-sabotage check independent of the GCM authentication tag.
+
+### 15.3 Key distribution
+
+There are two ways to join a private community, corresponding to two key distribution methods:
+
+**Invite-link method (random key):**
+1. The community creator generates a random AES-256 key via `crypto.subtle.generateKey`.
+2. An invite URL is generated in the format `{origin}/join/community/{id}#{base64url-key}`.
+3. The `#fragment` portion of the URL is **never sent to any server** — it exists only in the browser's URL bar.
+4. The invitee visits the link, the key is extracted from the fragment, and used to decrypt the community.
+5. The key is stored locally in IndexedDB via `KeyVaultService`.
+
+**Password method (derived key):**
+1. The creator sets a community password.
+2. The AES-256 key is derived via PBKDF2-SHA-256 with 600,000 iterations and salt = the string literal `communityId + 'interpoll-v2'` (e.g. `c-bitcoin-interpoll-v2`). Note: this is simple string concatenation; community IDs are slugs (`c-{name}`) and the suffix `interpoll-v2` is a fixed domain separator, so collisions are not a practical concern with the slug format used.
+3. Any peer who knows the password and community ID can independently derive the same key.
+4. The derived key is stored locally in IndexedDB for future access.
+
+### 15.4 Trust model for encrypted communities
+
+| Actor | What they can observe |
+|---|---|
+| GunDB relays | Only encrypted blobs — they cannot read community content, names, or post data without the key |
+| WebSocket relay server | Only encrypted blobs passed through; cannot read content |
+| Uninvited peers | Can see that a community exists and its member count; cannot read metadata or content |
+| Backend/API server | Same as GunDB relays — content is encrypted before being written to GunDB |
+| Community members | Full plaintext after decryption using the stored key |
+
+**Important limitations:**
+- **The frontend must be trusted.** Encryption and decryption happen in the browser. If the frontend bundle is compromised, it could exfiltrate keys or plaintext before encryption.
+- **Invite links must be shared securely.** An invite link in the URL fragment is invisible to servers, but is visible in the user's browser history and can be shared by copy-paste like any URL.
+- **Key loss is permanent.** There is no key recovery mechanism. If a user loses their key (clears IndexedDB, changes browsers) and has no backup, they cannot decrypt community content.
+- **Key revocation is not supported.** There is no mechanism to rotate the community key or revoke access for specific members. All members with the key retain permanent read access to all past content.
+
+### 15.5 Key storage
+
+Keys are persisted in the browser's IndexedDB via `KeyVaultService` (`encryption-keys` store). Each stored key has:
+
+```ts
+{
+  id: string,         // communityId, chatRoomId, or 'server' for server-wide keys
+  type: 'community' | 'chatroom' | 'server',
+  key: string,        // base64-encoded AES-256 key
+  method: 'invite' | 'password',
+  label: string,
+  joinedAt: number
+}
+```
+
+- `'community'` — key for a specific private community (covers its posts, polls, and comments).
+- `'chatroom'` — key for a specific encrypted group chat room.
+- `'server'` — key for server-wide encryption, used when an operator enables `encryptAll` in `ServerEncryptionConfig`, so all communities on that relay instance are encrypted under a single server-wide AES key derived from the operator-supplied `serverPassword`.
+
+Keys can be exported as JSON for backup and imported on a different device or browser. `KeyManagementSection` in Settings provides this UI.
+
+---
+
+## 16. Reference Implementation Map
 
 - Chain + sync orchestration: `src/stores/chainStore.ts`
 - Chain logic: `src/services/chainService.ts`
@@ -347,4 +430,7 @@ This is not a list of weaknesses — it is a precise statement of scope. The pro
 - Vote API client path: `src/services/auditService.ts`
 - Relay ingress/egress: `relay-server.js`, `relay-server/relay-server-enhanced.js`
 - Shared protocol validation helpers: `shared-validation/index.js`
+- Encryption: `src/services/encryptionService.ts`, `src/services/keyVaultService.ts`
+- Invite links: `src/services/inviteLinkService.ts`
+- Private community CRUD: `src/services/communityService.ts` (`createPrivateCommunity`, `joinPrivateCommunity`, `decryptCommunityMeta`)
 
