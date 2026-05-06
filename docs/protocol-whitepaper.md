@@ -12,7 +12,7 @@ InterPoll is built on a simple principle: **a voice for everyone, with records t
 
 The protocol is designed so participation does not depend on a single central database. Votes and civic activity are written locally, propagated peer-to-peer, and replicated across distributed storage. In practice, this means discussion and voting history can survive outages, server churn, and censorship attempts — provided at least one honest peer, device, or relay retains a copy and later reconnects.
 
-We found that other social media platforms censor a lot, and even if not, shadow-ban it. In our case, anyone can create his algorithm.
+We found that other social media platforms censor a lot — and even if not — shadow-ban it. In our case, anyone can create his algorithm.
 
 Our motto is: **"101 % Uptime!!!"**
 
