@@ -1,6 +1,6 @@
 # Interpoll
 
-A decentralized polling platform. Votes are recorded on a local blockchain, poll data lives in a distributed database (GunDB), and peers find each other through a lightweight WebSocket relay. Everything works offline -- sync happens when a connection is available. Data is basically unerasable, because as soon as one peer is back online, whole data is restored.
+A browser-first, relay-assisted decentralized polling platform. Votes are recorded on a local blockchain, poll data lives in a distributed database (GunDB), and peers find each other through a lightweight WebSocket relay. Everything works offline — sync happens when a connection is available. Data is harder to erase than on any single-server platform: as soon as one peer reconnects, its local history reseeds the network.
 <img width="1918" height="966" alt="image" src="https://github.com/user-attachments/assets/31717176-eb42-43b2-8200-8da9cf022550" />
 
 
@@ -87,7 +87,7 @@ When someone casts a vote:
 2. A new block is created linking to the previous block's hash
 3. The block is signed and its own hash is computed
 4. The block and vote are saved to IndexedDB
-5. A BIP-39 mnemonic (12 words) is generated as a receipt
+5. A verification code (receipt code) is generated and stored as a human-readable receipt
 6. The block is broadcast to other peers via WebSocket and BroadcastChannel
 
 Validation walks the entire chain and checks that every block's previousHash matches the preceding block's currentHash, every block's own hash recomputes correctly, and signatures verify. If any block has been tampered with, the chain breaks.
@@ -101,7 +101,7 @@ graph LR
 
 ### Vote verification
 
-After voting, users get a 12-word mnemonic receipt (BIP-39 standard, same as cryptocurrency wallets). This receipt maps to a specific block in the chain. Anyone can look up a receipt in the Chain Explorer to verify that their vote was recorded and has not been altered.
+After voting, users get a receipt containing a short verification code. This receipt maps to a specific block in the chain. Anyone can look up a receipt in the Chain Explorer to verify that their vote was recorded and has not been altered. The verification code is a human-readable lookup identifier — it is **not** a BIP-39 wallet seed or private key, and it is safe to share.
 
 ### Anti-fraud
 
@@ -167,7 +167,7 @@ Key services:
 | `broadcastService.ts` | Cross-tab sync via BroadcastChannel |
 | `pollService.ts` | Poll CRUD, invite code generation and validation |
 | `voteTrackerService.ts` | Device fingerprinting, duplicate vote prevention |
-| `cryptoService.ts` | SHA-256 hashing, BIP-39 mnemonic generation |
+| `cryptoService.ts` | SHA-256 hashing, verification code generation |
 | `auditService.ts` | OAuth login/logout, backend vote authorization |
 | `storageService.ts` | IndexedDB wrapper for blocks, votes, receipts |
 | `pinningService.ts` | Storage policies and quota management |
