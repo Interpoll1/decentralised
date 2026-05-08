@@ -34,6 +34,8 @@ The relay server reads these directly from the environment:
 | Variable | Default | Purpose |
 |---|---|---|
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | CORS origin |
+| `SERVER_ORIGIN` | `http://localhost:8080` | Public relay origin used for OAuth callback URIs (required and must be HTTPS in production) |
+| `VOTE_RESERVATION_SECRET` | random per process | HMAC secret for short-lived vote reservation tokens |
 | `GOOGLE_CLIENT_ID` | -- | Google OAuth app ID |
 | `GOOGLE_CLIENT_SECRET` | -- | Google OAuth secret |
 | `MS_CLIENT_ID` | -- | Microsoft OAuth app ID |
@@ -112,7 +114,7 @@ Duplicate voting is prevented at multiple levels:
 - **Invite codes.** Private polls generate single-use alphanumeric codes. Each code is marked as consumed atomically in GunDB when used.
 - **OAuth gating.** Polls can optionally require a Google or Microsoft login before accepting a vote.
 
-The production relay (`relay-server/relay-server-enhanced.js` via PM2) uses a two-phase vote flow: `/api/vote-authorize` creates only a short-lived pending reservation, then `/api/vote-record` or `/api/vote-confirm` commits the vote to the persisted registry at `relay-server/data/vote-registry.json`.
+The production relay (`relay-server/relay-server-enhanced.js` via PM2) uses a two-phase vote flow: `/api/vote-authorize` creates only a short-lived pending reservation and returns a short-lived reservation token, then `/api/vote-record` or `/api/vote-confirm` commits the vote (with that token) to the persisted registry at `relay-server/data/vote-registry.json`.
 
 When deploying production for this rollout, reset `relay-server/data/vote-registry.json` to `[]` before restarting PM2 so stale persisted entries do not keep previously blocked voters locked out.
 
