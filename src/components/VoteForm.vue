@@ -170,8 +170,8 @@ const submitVote = async () => {
     }
 
     // Ask backend (if available) to enforce one-vote-per-device
-    const allowedByBackend = await AuditService.authorizeVote(props.poll.id, deviceId);
-    if (!allowedByBackend) {
+    const authorization = await AuditService.authorizeVote(props.poll.id, deviceId);
+    if (!authorization.allowed || !authorization.reservationToken) {
       const toast = await toastController.create({
         message: 'This device has already voted on this poll (server)',
         duration: 3000,
@@ -205,6 +205,7 @@ const submitVote = async () => {
 
     emit('vote-submitted', receipt.mnemonic);
     const pollIdForSync = props.poll.id;
+    const reservationTokenForSync = authorization.reservationToken;
     const inviteCodeForSync = inviteCode;
     const inviteReservationIdForSync = inviteReservationId;
     const selectedOptionValue = selectedOption.value;
@@ -229,7 +230,11 @@ const submitVote = async () => {
       }
 
       try {
-        const confirmedByBackend = await AuditService.confirmVote(pollIdForSync, deviceId);
+        const confirmedByBackend = await AuditService.confirmVote(
+          pollIdForSync,
+          deviceId,
+          reservationTokenForSync,
+        );
         if (!confirmedByBackend) {
           console.warn('Vote confirmation request failed after chain vote');
         }

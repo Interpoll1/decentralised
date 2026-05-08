@@ -8,7 +8,8 @@ import http from 'http';
 import https from 'https';
 import fs from 'fs';
 import crypto from 'crypto';
-import { URL } from 'url';
+import path from 'path';
+import { URL, fileURLToPath } from 'url';
 import { RateLimiter } from './rate-limiter.js';
 import { BotDetector } from './bot-detector.js';
 import { SpamScorer } from './spam-scorer.js';
@@ -37,10 +38,19 @@ const powChallenge = new PowChallenge();
 const voteRegistry = new Set();
 const pendingVoteReservations = new Map();
 const PENDING_VOTE_TTL_MS = 60_000;
-const VOTE_REGISTRY_FILE = new URL('./vote-registry.json', import.meta.url).pathname;
-const VOTE_REGISTRY_BACKUP_FILE = new URL('./vote-registry.backup.json', import.meta.url).pathname;
-const VOTE_REGISTRY_TMP_FILE = new URL('./vote-registry.tmp.json', import.meta.url).pathname;
+const CURRENT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const DATA_DIR = path.join(CURRENT_DIR, 'relay-server', 'data');
+const VOTE_REGISTRY_FILE = path.join(DATA_DIR, 'vote-registry.json');
+const VOTE_REGISTRY_BACKUP_FILE = path.join(DATA_DIR, 'vote-registry.backup.json');
+const VOTE_REGISTRY_TMP_FILE = path.join(DATA_DIR, 'vote-registry.tmp.json');
 let voteRegistryOperational = true;
+
+try {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+} catch (error) {
+  console.error('Failed to initialize vote registry data directory:', error.message);
+  voteRegistryOperational = false;
+}
 
 function loadVoteRegistryFromFile(filePath) {
   const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -85,22 +95,70 @@ function saveVoteRegistry() {
 }
 
 function cleanupPendingVoteReservations(now = Date.now()) {
-  for (const [key, expiresAt] of pendingVoteReservations) {
-    if (expiresAt <= now) pendingVoteReservations.delete(key);
+  for (const [key, reservation] of pendingVoteReservations) {
+    if (reservation.expiresAt <= now) pendingVoteReservations.delete(key);
   }
 }
 
+setInterval(() => cleanupPendingVoteReservations(), 30_000);
+
 function hasPendingVoteReservation(key, now = Date.now()) {
-  const expiresAt = pendingVoteReservations.get(key);
-  if (!expiresAt) return false;
-  if (expiresAt <= now) {
+  const reservation = pendingVoteReservations.get(key);
+  if (!reservation) return false;
+  if (reservation.expiresAt <= now) {
     pendingVoteReservations.delete(key);
     return false;
   }
   return true;
 }
 
-function reserveVoteSlot(key, now = Date.now()) {
+function buildReservationOwner(req) {
+  const ip = req.socket.remoteAddress || 'unknown';
+  const userAgent = String(req.headers['user-agent'] || '');
+  return crypto.createHash('sha256').update(`${ip}|${userAgent}`).digest('hex');
+}
+
+const RESERVATION_SECRET = process.env.VOTE_RESERVATION_SECRET || generateRandomId(32);
+
+function signReservationToken(key, ownerId, reservationId, expiresAt) {
+  return crypto
+    .createHmac('sha256', RESERVATION_SECRET)
+    .update(`${key}:${ownerId}:${reservationId}:${expiresAt}`)
+    .digest('base64url');
+}
+
+function issueReservationToken(key, ownerId, reservationId, expiresAt) {
+  const signature = signReservationToken(key, ownerId, reservationId, expiresAt);
+  return `${reservationId}.${expiresAt}.${signature}`;
+}
+
+function parseReservationToken(token) {
+  if (typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  const [reservationId, expiresAtRaw, signature] = parts;
+  const expiresAt = Number.parseInt(expiresAtRaw, 10);
+  if (!reservationId || !Number.isFinite(expiresAt) || !signature) return null;
+  return { reservationId, expiresAt, signature };
+}
+
+function isValidReservationToken(token, key, ownerId, now = Date.now()) {
+  const parsed = parseReservationToken(token);
+  if (!parsed) return { valid: false, reason: 'invalid reservation token', parsed: null };
+  if (parsed.expiresAt <= now) return { valid: false, reason: 'vote authorization expired', parsed };
+  const expectedSignature = signReservationToken(key, ownerId, parsed.reservationId, parsed.expiresAt);
+  if (expectedSignature.length !== parsed.signature.length) {
+    return { valid: false, reason: 'invalid reservation token', parsed };
+  }
+  const expectedBuffer = Buffer.from(expectedSignature);
+  const signatureBuffer = Buffer.from(parsed.signature);
+  if (!crypto.timingSafeEqual(expectedBuffer, signatureBuffer)) {
+    return { valid: false, reason: 'invalid reservation token', parsed };
+  }
+  return { valid: true, reason: null, parsed };
+}
+
+function reserveVoteSlot(key, ownerId, now = Date.now()) {
   if (!voteRegistryOperational) {
     return { ok: false, reason: 'vote registry unavailable' };
   }
@@ -108,21 +166,32 @@ function reserveVoteSlot(key, now = Date.now()) {
   if (voteRegistry.has(key) || hasPendingVoteReservation(key, now)) {
     return { ok: false, reason: 'already voted or vote pending' };
   }
-  pendingVoteReservations.set(key, now + PENDING_VOTE_TTL_MS);
-  return { ok: true };
+  const expiresAt = now + PENDING_VOTE_TTL_MS;
+  const reservationId = generateRandomId(12);
+  pendingVoteReservations.set(key, { expiresAt, reservationId, ownerId });
+  return { ok: true, reservationToken: issueReservationToken(key, ownerId, reservationId, expiresAt) };
 }
 
-function commitVoteSlot(key, now = Date.now()) {
+function commitVoteSlot(key, ownerId, reservationToken, now = Date.now()) {
   if (!voteRegistryOperational) {
     return { ok: false, reason: 'vote registry unavailable' };
   }
   cleanupPendingVoteReservations(now);
+  const tokenValidation = isValidReservationToken(reservationToken, key, ownerId, now);
+  if (!tokenValidation.valid) {
+    return { ok: false, reason: tokenValidation.reason };
+  }
+  const pending = pendingVoteReservations.get(key);
+  if (!pending || pending.expiresAt <= now) {
+    pendingVoteReservations.delete(key);
+    return { ok: false, reason: 'vote not authorized or authorization expired' };
+  }
+  if (pending.ownerId !== ownerId || pending.reservationId !== tokenValidation.parsed.reservationId) {
+    return { ok: false, reason: 'vote not authorized for this session' };
+  }
   if (voteRegistry.has(key)) {
     pendingVoteReservations.delete(key);
     return { ok: true, alreadyRecorded: true };
-  }
-  if (!hasPendingVoteReservation(key, now)) {
-    return { ok: false, reason: 'vote not authorized or authorization expired' };
   }
   pendingVoteReservations.delete(key);
   voteRegistry.add(key);
@@ -182,7 +251,8 @@ setInterval(saveMessageCache, 30000);
 // Minimal in-memory OAuth state & session stores
 const OAUTH_STATE_TTL_MS = 10 * 60_000; // 10 minutes
 const oauthStates = new Map(); // state -> { provider, createdAt }
-const sessions = new Map(); // sessionId -> user
+const SESSION_TTL_MS = 24 * 60 * 60_000; // 24 hours
+const sessions = new Map(); // sessionId -> { user, expiresAt }
 
 // Cleanup expired OAuth states every 2 minutes
 setInterval(() => {
@@ -192,8 +262,26 @@ setInterval(() => {
   }
 }, 2 * 60_000);
 
+setInterval(() => {
+  const now = Date.now();
+  for (const [sessionId, entry] of sessions) {
+    if (entry.expiresAt <= now) sessions.delete(sessionId);
+  }
+}, 5 * 60_000);
+
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
 const OAUTH_STATE_COOKIE = 'interpoll_oauth_state';
+const isProduction = process.env.NODE_ENV === 'production';
+
+if (isProduction) {
+  if (!process.env.SERVER_ORIGIN) {
+    throw new Error('SERVER_ORIGIN must be set in production');
+  }
+  const parsedOrigin = new URL(process.env.SERVER_ORIGIN);
+  if (parsedOrigin.protocol !== 'https:') {
+    throw new Error('SERVER_ORIGIN must use https in production');
+  }
+}
 
 console.log('Google OAuth config:', {
   clientIdConfigured: !!process.env.GOOGLE_CLIENT_ID,
@@ -203,6 +291,11 @@ console.log('Google OAuth config:', {
 
 function generateRandomId(bytes = 16) {
   return crypto.randomBytes(bytes).toString('hex');
+}
+
+function getServerOrigin() {
+  const raw = process.env.SERVER_ORIGIN || `http://localhost:${PORT}`;
+  return raw.endsWith('/') ? raw.slice(0, -1) : raw;
 }
 
 function appendSetCookie(res, cookie) {
@@ -227,23 +320,20 @@ function getCookie(req, name) {
 }
 
 function setOauthStateCookie(res, nonce) {
-  const isProduction = process.env.NODE_ENV === 'production';
   const securePart = isProduction ? ' Secure;' : '';
   appendSetCookie(res, `${OAUTH_STATE_COOKIE}=${nonce}; HttpOnly; Path=/; SameSite=Lax; Max-Age=600;${securePart}`);
 }
 
 function clearOauthStateCookie(res) {
-  const isProduction = process.env.NODE_ENV === 'production';
   const securePart = isProduction ? ' Secure;' : '';
   appendSetCookie(res, `${OAUTH_STATE_COOKIE}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0;${securePart}`);
 }
 
 function setSessionCookie(res, user) {
   const sessionId = generateRandomId(16);
-  sessions.set(sessionId, user);
-  const isProduction = process.env.NODE_ENV === 'production';
+  sessions.set(sessionId, { user, expiresAt: Date.now() + SESSION_TTL_MS });
   const securePart = isProduction ? ' Secure;' : '';
-  const cookie = `sessionId=${sessionId}; HttpOnly; Path=/; SameSite=Lax;${securePart}`;
+  const cookie = `sessionId=${sessionId}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)};${securePart}`;
   appendSetCookie(res, cookie);
 }
 
@@ -255,7 +345,13 @@ function getSessionFromRequest(req) {
   if (!sessionPart) return null;
   const sessionId = sessionPart.split('=')[1];
   if (!sessionId) return null;
-  return sessions.get(sessionId) || null;
+  const entry = sessions.get(sessionId);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    sessions.delete(sessionId);
+    return null;
+  }
+  return entry.user;
 }
 
 function postForm(urlString, data) {
@@ -365,7 +461,7 @@ server.on('request', (req, res) => {
   // ─────────────────────────────────────────────────────────────
   if (req.method === 'GET' && url.pathname === '/auth/google/start') {
     const clientId = process.env.GOOGLE_CLIENT_ID;
-    const redirectUri = `http://localhost:${PORT}/auth/google/callback`;
+    const redirectUri = `${getServerOrigin()}/auth/google/callback`;
 
     if (!clientId) {
       res.writeHead(500, { 'Content-Type': 'text/plain' });
@@ -407,7 +503,7 @@ server.on('request', (req, res) => {
     clearOauthStateCookie(res);
 
     const tokenEndpoint = 'https://oauth2.googleapis.com/token';
-    const redirectUri = `http://localhost:${PORT}/auth/google/callback`;
+    const redirectUri = `${getServerOrigin()}/auth/google/callback`;
 
     postForm(tokenEndpoint, {
       code,
@@ -459,7 +555,7 @@ server.on('request', (req, res) => {
     const clientId = process.env.MS_CLIENT_ID;
     const tenant = process.env.MS_TENANT || 'common';
     const scopes = process.env.MS_SCOPES || 'openid profile email';
-    const redirectUri = `http://localhost:${PORT}/auth/microsoft/callback`;
+    const redirectUri = `${getServerOrigin()}/auth/microsoft/callback`;
 
     if (!clientId) {
       res.writeHead(500, { 'Content-Type': 'text/plain' });
@@ -502,7 +598,7 @@ server.on('request', (req, res) => {
 
     const tenant = process.env.MS_TENANT || 'common';
     const tokenEndpoint = `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`;
-    const redirectUri = `http://localhost:${PORT}/auth/microsoft/callback`;
+    const redirectUri = `${getServerOrigin()}/auth/microsoft/callback`;
 
     postForm(tokenEndpoint, {
       client_id: process.env.MS_CLIENT_ID || '',
@@ -565,7 +661,8 @@ server.on('request', (req, res) => {
       }
     }
     // Expire the cookie
-    res.setHeader('Set-Cookie', 'sessionId=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0');
+    const securePart = isProduction ? ' Secure;' : '';
+    appendSetCookie(res, `sessionId=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0;${securePart}`);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true }));
     return;
@@ -585,7 +682,8 @@ server.on('request', (req, res) => {
         }
 
         const key = `${pollId}:${deviceId}`;
-        const reservation = reserveVoteSlot(key);
+        const ownerId = buildReservationOwner(req);
+        const reservation = reserveVoteSlot(key, ownerId);
         const allowed = reservation.ok;
 
         // Log the authorization attempt
@@ -599,7 +697,11 @@ server.on('request', (req, res) => {
         fs.appendFile(RECEIPT_LOG_FILE, JSON.stringify(logEntry) + '\n', () => {});
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ allowed, reason: allowed ? undefined : reservation.reason }));
+        res.end(JSON.stringify({
+          allowed,
+          reservationToken: allowed ? reservation.reservationToken : undefined,
+          reason: allowed ? undefined : reservation.reason,
+        }));
       } catch (error) {
         // SECURITY FIX: Return allowed: false on error (was: true)
         console.error('Error in /api/vote-authorize:', error.message);
@@ -616,15 +718,17 @@ server.on('request', (req, res) => {
       try {
         const pollId = sanitizeId(String(data.pollId || ''), 128);
         const deviceId = sanitizeId(String(data.deviceId || ''), 128);
+        const reservationToken = String(data.reservationToken || '').trim();
 
-        if (!pollId || !deviceId) {
+        if (!pollId || !deviceId || !reservationToken) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: false, reason: 'missing or invalid pollId or deviceId' }));
+          res.end(JSON.stringify({ ok: false, reason: 'missing or invalid pollId, deviceId, or reservationToken' }));
           return;
         }
 
         const key = `${pollId}:${deviceId}`;
-        const commitResult = commitVoteSlot(key);
+        const ownerId = buildReservationOwner(req);
+        const commitResult = commitVoteSlot(key, ownerId, reservationToken);
         if (!commitResult.ok) {
           res.writeHead(409, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ ok: false, reason: commitResult.reason }));

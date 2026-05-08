@@ -5,6 +5,7 @@ export type ReceiptKind = 'vote' | 'comment';
 
 interface VoteAuthorizeResponse {
   allowed: boolean;
+  reservationToken?: string;
   reason?: string;
 }
 
@@ -36,7 +37,10 @@ export class AuditService {
    * Ask backend if this device is allowed to vote on a poll.
    * Fail closed for all backend errors or unexpected responses.
    */
-  static async authorizeVote(pollId: string, deviceId: string): Promise<boolean> {
+  static async authorizeVote(
+    pollId: string,
+    deviceId: string,
+  ): Promise<{ allowed: boolean; reservationToken: string | null }> {
     try {
       const body = await IntegrityService.seal(
         { pollId, deviceId } as Record<string, unknown>,
@@ -51,24 +55,24 @@ export class AuditService {
       });
 
       if (!res.ok) {
-        return false;
+        return { allowed: false, reservationToken: null };
       }
 
       const data = (await res.json()) as VoteAuthorizeResponse;
-      if (typeof data.allowed === 'boolean') {
-        return data.allowed;
+      if (data.allowed === true && typeof data.reservationToken === 'string' && data.reservationToken.length > 0) {
+        return { allowed: true, reservationToken: data.reservationToken };
       }
 
-      return false;
+      return { allowed: false, reservationToken: null };
     } catch (_error) {
-      return false;
+      return { allowed: false, reservationToken: null };
     }
   }
 
-  static async confirmVote(pollId: string, deviceId: string): Promise<boolean> {
+  static async confirmVote(pollId: string, deviceId: string, reservationToken: string): Promise<boolean> {
     try {
       const body = await IntegrityService.seal(
-        { pollId, deviceId } as Record<string, unknown>,
+        { pollId, deviceId, reservationToken } as Record<string, unknown>,
         'vote-confirm',
       );
       const res = await fetch(`${config.relay.api}/api/vote-confirm`, {

@@ -306,6 +306,18 @@ const hasVoted = ref(false);
 const currentUserId = ref('');
 const inviteCodes = ref<{ code: string; used: boolean }[]>([]);
 const isLoadingCodes = ref(false);
+const loadPollRequestId = ref(0);
+
+function readVotedPolls(): string[] {
+  try {
+    const raw = localStorage.getItem('voted-polls');
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
 const isAuthor = computed(() => {
   if (!poll.value || !currentUserId.value) return false;
@@ -414,8 +426,8 @@ async function submitVote() {
       return
     }
 
-    const allowedByBackend = await AuditService.authorizeVote(poll.value.id, deviceId)
-    if (!allowedByBackend) {
+    const authorization = await AuditService.authorizeVote(poll.value.id, deviceId)
+    if (!authorization.allowed || !authorization.reservationToken) {
       hasVoted.value = true;
       await presentToast('Already voted on this poll', 3000)
       return
@@ -444,7 +456,7 @@ async function submitVote() {
     const receipt = await chainStore.addVote(vote)
 
     hasVoted.value = true
-    const votedPolls = JSON.parse(localStorage.getItem('voted-polls') || '[]')
+    const votedPolls = readVotedPolls()
     votedPolls.push(poll.value.id)
     localStorage.setItem('voted-polls', JSON.stringify(votedPolls));
     try {
@@ -461,7 +473,11 @@ async function submitVote() {
 
     void (async () => {
       try {
-        const confirmedByBackend = await AuditService.confirmVote(pollIdForSync, deviceId)
+        const confirmedByBackend = await AuditService.confirmVote(
+          pollIdForSync,
+          deviceId,
+          authorization.reservationToken,
+        )
         if (!confirmedByBackend) {
           console.warn('Vote confirm request failed after chain vote')
         }
@@ -547,6 +563,8 @@ async function submitVote() {
 }
 
 async function loadPoll() {
+  const requestId = ++loadPollRequestId.value;
+  const isStale = () => requestId !== loadPollRequestId.value;
   const pollId = route.params.pollId as string
   poll.value = null
   selectedOption.value = ''
@@ -554,7 +572,7 @@ async function loadPoll() {
   inviteCodes.value = []
   isLoading.value = true
   // Check local vote state first (fast, no network)
-  const votedPolls = JSON.parse(localStorage.getItem('voted-polls') || '[]')
+  const votedPolls = readVotedPolls()
   const votedLocally = votedPolls.includes(pollId)
   hasVoted.value = votedLocally
   // ── Step 1: Show from store immediately if available with options ──────────
@@ -563,14 +581,18 @@ async function loadPoll() {
     poll.value = cached
     isLoading.value = false
     // Still check device vote in background
-    VoteTrackerService.hasVoted(pollId).then(v => { if (v) hasVoted.value = true })
+    VoteTrackerService.hasVoted(pollId).then(v => {
+      if (!isStale() && v) hasVoted.value = true
+    })
   }
   // ── Step 2: If no options in cache, fetch from Nuxt API (fast, ~300ms) ────
   if (!poll.value || poll.value.options.length === 0) {
     try {
       const res = await fetch(`${config.relay.api}/api/poll/${pollId}`)
+      if (isStale()) return
       if (res.ok) {
         const data = await res.json()
+        if (isStale()) return
         if (data?.id && data.options?.length > 0) {
           // Patch into store
           pollStore.injectPoll({
@@ -596,6 +618,7 @@ async function loadPoll() {
   if (!poll.value) {
     const communityId = typeof route.params.communityId === 'string' ? route.params.communityId : undefined
     await pollStore.selectPoll(pollId, communityId)
+    if (isStale()) return
     // Prefer store version (may have options from creation); fall back to currentPoll
     poll.value = pollStore.pollsMap.get(pollId) || pollStore.currentPoll
     isLoading.value = false
@@ -603,10 +626,14 @@ async function loadPoll() {
   // ── Step 4: Background tasks (non-blocking) ───────────────────────────────
   await Promise.all([
     UserService.getCurrentUser().then(u => { currentUserId.value = u.id }),
-    VoteTrackerService.hasVoted(pollId).then(v => { if (v) hasVoted.value = true }),
+    VoteTrackerService.hasVoted(pollId).then(v => {
+      if (!isStale() && v) hasVoted.value = true
+    }),
   ]).catch(() => {})
+  if (isStale()) return
   if (poll.value?.isPrivate && isAuthor.value) {
     await loadInviteCodes()
+    if (isStale()) return
   }
   isLoading.value = false
 }

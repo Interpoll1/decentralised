@@ -62,7 +62,7 @@ All services are **static classes** — never instantiated with `new`. Initializ
 | File | Class | Purpose |
 |---|---|---|
 | `eventService.ts` | `EventService` | Nostr-compatible event creation and verification. Canonical serialization → SHA-256 ID → Schnorr sig. Event kinds: `100` poll create, `101` vote cast, `102` poll update, `103` post create. |
-| `auditService.ts` | `AuditService` | Backend calls for `logReceipt()`, `authorizeVote()`, and `confirmVote()`. Vote submission uses a two-phase backend flow: authorize creates a short-lived pending reservation, then confirm commits the vote after chain success. `authorizeVote()` is fail-closed: non-2xx responses, malformed responses, and request errors all return `false`. Calls seal payloads with `IntegrityService.seal()` before POST. `confirmVote()` returns a boolean so callers can show receipt-preserving warnings on confirm failures instead of treating an already-written chain vote as lost. Uses `config.relay.api`. |
+| `auditService.ts` | `AuditService` | Backend calls for `logReceipt()`, `authorizeVote()`, and `confirmVote()`. Vote submission uses a two-phase backend flow: authorize creates a short-lived pending reservation and returns a reservation token, then confirm commits the vote after chain success using that token. `authorizeVote()` is fail-closed: non-2xx responses, malformed responses, and request errors all return `{ allowed: false, reservationToken: null }`. Calls seal payloads with `IntegrityService.seal()` before POST. `confirmVote()` returns a boolean so callers can show receipt-preserving warnings on confirm failures instead of treating an already-written chain vote as lost. Uses `config.relay.api`. |
 
 ## Utilities / Support
 
