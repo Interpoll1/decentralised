@@ -3,7 +3,6 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { ChainBlock, Vote, Receipt, ActionType } from '../types/chain';
 import { ChainService } from '../services/chainService';
-import { CryptoService } from '../services/cryptoService';
 import { StorageService } from '../services/storageService';
 import { BroadcastService } from '../services/broadcastService';
 import { WebSocketService } from '../services/websocketService';
@@ -66,6 +65,13 @@ export const useChainStore = defineStore('chain', () => {
     blocks.value.sort((a, b) => a.index - b.index);
   }
 
+  function requestIncrementalSync() {
+    const lastIndex = blocks.value.length > 0 ? blocks.value[blocks.value.length - 1].index : -1;
+    const request = { peerId: BroadcastService.getPeerId(), lastIndex };
+    BroadcastService.broadcast('request-sync', request);
+    WebSocketService.broadcast('request-sync', request);
+  }
+
   function setupSyncListeners() {
     // BroadcastChannel
     BroadcastService.subscribe('new-block', handleNewBlock);
@@ -83,23 +89,43 @@ export const useChainStore = defineStore('chain', () => {
   }
 
   async function handleNewBlock(block: ChainBlock) {
-    const exists = blocks.value.find((b) => b.index === block.index);
-    if (exists) return;
+    if (!block || typeof block !== 'object') return;
 
-    if (blocks.value.length > 0 && block.index === blocks.value.length) {
-      const previousBlock = blocks.value[blocks.value.length - 1];
-      if (previousBlock.currentHash !== block.previousHash) return;
-      if (ChainService.validateBlock(block, previousBlock)) {
+    const exists = blocks.value.find((b) => b.index === block.index);
+    if (exists) {
+      if (exists.currentHash !== block.currentHash) {
+        console.warn(`Chain conflict at block index ${block.index}; requesting incremental resync`);
+        requestIncrementalSync();
+      }
+      return;
+    }
+
+    if (block.index === 0) {
+      if (blocks.value.length === 0 && ChainService.validateGenesisBlock(block, { allowLegacy: true })) {
         await StorageService.saveBlock(block);
         blocks.value.push(block);
       }
-    } else if (block.index === 0) {
-      // Genesis block: verify hash integrity before accepting
-      const calculatedHash = CryptoService.hashBlock(block);
-      if (block.currentHash === calculatedHash) {
-        await StorageService.saveBlock(block);
-        blocks.value.push(block);
+      return;
+    }
+
+    if (blocks.value.length === 0) {
+      requestIncrementalSync();
+      return;
+    }
+
+    const previousBlock = blocks.value[blocks.value.length - 1];
+    const expectedIndex = previousBlock.index + 1;
+    if (block.index !== expectedIndex) {
+      if (block.index > expectedIndex) {
+        console.warn(`Received future block ${block.index} (expected ${expectedIndex}); requesting sync`);
+        requestIncrementalSync();
       }
+      return;
+    }
+
+    if (ChainService.validateBlock(block, previousBlock)) {
+      await StorageService.saveBlock(block);
+      blocks.value.push(block);
     }
   }
 
@@ -125,50 +151,60 @@ export const useChainStore = defineStore('chain', () => {
   }
 
   async function handleSyncResponse(data: any) {
-  if (!data?.blocks?.length) return;
+    if (!data?.blocks?.length || !Array.isArray(data.blocks)) return;
 
-  const sorted = [...data.blocks].sort((a: ChainBlock, b: ChainBlock) => a.index - b.index);
-  let addedCount = 0;
+    const sorted = [...data.blocks].sort((a: ChainBlock, b: ChainBlock) => a.index - b.index);
+    let addedCount = 0;
 
-  for (const block of sorted) {
-    const exists = blocks.value.find((b) => b.index === block.index);
-    if (exists) {
-      // Skip if we already have this exact block
-      if (exists.currentHash === block.currentHash) continue;
-      
-      // Conflict: same index, different hash - ignore remote block
-      continue;
-    }
+    for (const block of sorted) {
+      if (!block || typeof block !== 'object') continue;
 
-    if (block.index === 0) {
-      // Only accept genesis if we don't have one
-      if (blocks.value.length === 0) {
-        const calculatedHash = CryptoService.hashBlock(block);
-        if (block.currentHash === calculatedHash) {
+      const exists = blocks.value.find((b) => b.index === block.index);
+      if (exists) {
+        if (exists.currentHash !== block.currentHash) {
+          console.warn(`Detected conflicting sync block at index ${block.index}; requesting resync`);
+          requestIncrementalSync();
+          break;
+        }
+        continue;
+      }
+
+      if (block.index === 0) {
+        if (blocks.value.length === 0 && ChainService.validateGenesisBlock(block, { allowLegacy: true })) {
           await StorageService.saveBlock(block);
           blocks.value.push(block);
           addedCount++;
         }
+        continue;
       }
-    } else {
-      // Only add if previous block exists AND matches
-      const previousBlock = blocks.value.find((b) => b.index === block.index - 1);
-      
-      if (previousBlock && previousBlock.currentHash === block.previousHash) {
-        if (ChainService.validateBlock(block, previousBlock)) {
-          await StorageService.saveBlock(block);
-          blocks.value.push(block);
-          addedCount++;
+
+      const latest = blocks.value[blocks.value.length - 1];
+      if (!latest) {
+        requestIncrementalSync();
+        break;
+      }
+
+      const expectedIndex = latest.index + 1;
+      if (block.index !== expectedIndex) {
+        if (block.index > expectedIndex) {
+          console.warn(`Sync gap detected at index ${block.index} (expected ${expectedIndex}); requesting resync`);
+          requestIncrementalSync();
+          break;
         }
+        continue;
       }
-      // If previous block doesn't exist or doesn't match, skip this block
+
+      if (ChainService.validateBlock(block, latest, { allowLegacy: true })) {
+        await StorageService.saveBlock(block);
+        blocks.value.push(block);
+        addedCount++;
+      }
+    }
+
+    if (addedCount > 0) {
+      blocks.value.sort((a, b) => a.index - b.index);
     }
   }
-
-  if (addedCount > 0) {
-    blocks.value.sort((a, b) => a.index - b.index);
-  }
-}
 
   async function handleNewEvent(eventData: any) {
     // Verify the Nostr event signature before accepting

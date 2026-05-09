@@ -426,10 +426,16 @@ async function submitVote() {
       return
     }
 
-    const authorization = await AuditService.authorizeVote(poll.value.id, deviceId)
+    const authorization = await AuditService.authorizeVote(poll.value.id, deviceId, !!poll.value.requireLogin)
     if (!authorization.allowed || !authorization.reservationToken) {
-      hasVoted.value = true;
-      await presentToast('Already voted on this poll', 3000)
+      if (authorization.requiresAuth) {
+        await presentToast('Sign in is required before voting on this poll', 3000)
+        AuditService.saveReturnUrl(route.fullPath)
+        AuditService.startOAuthLogin('google')
+        return
+      }
+      hasVoted.value = authorization.reason?.includes('already') ?? false;
+      await presentToast(authorization.reason || 'Already voted on this poll', 3000)
       return
     }
 
@@ -477,6 +483,7 @@ async function submitVote() {
           pollIdForSync,
           deviceId,
           authorization.reservationToken,
+          !!poll.value?.requireLogin,
         )
         if (!confirmedByBackend) {
           console.warn('Vote confirm request failed after chain vote')

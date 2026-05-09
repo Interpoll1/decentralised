@@ -10,6 +10,7 @@ const POW_DIFFICULTY: Record<string, number> = {
   'vote-authorize': 18,
   'vote-record': 18,
   'vote-confirm': 18,
+  'poll-policy': 18,
   'broadcast': 12,
   'chat-message': 10,
   'chatroom-message': 10,

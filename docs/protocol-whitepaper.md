@@ -1,6 +1,6 @@
 # InterPoll Protocol(IPP) Whitepaper
  
-**Version:** 0.3  
+**Version:** 0.4  
 **Status:** Official 
 
 
@@ -154,7 +154,8 @@ When a user votes:
 3. Block and vote are persisted locally.
 4. A receipt is generated and stored.
 5. New block/event are broadcast for peer synchronization.
-6. Optional backend confirmation path can mark vote registry state for duplicate protection.
+6. Backend duplicate-protection uses a strict two-phase path: `vote-authorize` issues a short-lived reservation token, and `vote-confirm` commits only with that token from the same session context.
+7. For polls marked `requireLogin`, relay-side vote identity is OAuth-backed (provider+subject), not only device ID.
 
 ### 5.3 Incremental sync path
 
@@ -215,6 +216,14 @@ Two media:
 
 Both carry compatible sync semantics so clients can process updates similarly regardless of path.
 
+### 7.1 Integrity-sealed mutating requests
+
+All mutating relay/API requests are integrity-sealed and verified with canonical hash + Schnorr signature + freshness + replay nonce + PoW checks.
+
+- Sealed metadata: `_hash`, `_sig`, `_pub`, `_pow`, `_ts`, `_nonce`
+- Verified paths include vote authorization/confirmation, receipt logging, and poll policy registration
+- Invalid or stale envelopes are rejected (fail-closed)
+
 ---
 
 ## 8. Discovery and Multi-Relay Behavior
@@ -237,7 +246,7 @@ The following mechanisms exist to reduce fraud and spam. They are **practical ab
 | Mechanism | What it does | What it does NOT guarantee |
 |---|---|---|
 | Device fingerprinting | Tracks per-device vote history locally and in the backend registry | Cryptographic uniqueness per human person |
-| Backend vote authorization | Persisted relay registry (`pollId:identity`) plus two-phase authorize/confirm rejects duplicates across relay restarts | Availability guarantee if relay is offline |
+| Backend vote authorization | Persisted relay registry (`pollId:identity`) plus strict two-phase authorize/confirm with reservation token; mutating requests require integrity-sealed envelopes; relay fails closed when poll policy is missing | Availability guarantee if relay is offline |
 | Invite codes | Single-use per-poll access codes gated via GunDB | Resistance if invite codes are leaked |
 | OAuth gating | Optionally requires Google/Microsoft login before voting; backend identity is derived from provider userinfo (not unverified JWT payload decode) | Anonymity or unlinkability of votes |
 | Rate limits and bot scoring | Reduces automated spam | Guaranteed spam elimination |
@@ -256,6 +265,8 @@ The following mechanisms exist to reduce fraud and spam. They are **practical ab
 - guaranteed duplicate-vote prevention when the backend is offline and multiple devices are used
 
 These controls should be deployed together for best effect. Community administrators can choose which layers to enable per poll.
+
+> **Current implementation note:** poll `requireLogin` policy is persisted per relay and enforced fail-closed at vote time. This improves safety against bypasses, but cross-relay policy consistency is still an operational concern in decentralized deployments.
 
 ---
 
