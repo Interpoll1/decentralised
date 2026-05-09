@@ -10,6 +10,9 @@ import fs from 'fs';
 import crypto from 'crypto';
 import path from 'path';
 import { URL, fileURLToPath } from 'url';
+import { sha256 } from '@noble/hashes/sha256';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
+import { schnorr } from '@noble/curves/secp256k1.js';
 import { RateLimiter } from './rate-limiter.js';
 import { BotDetector } from './bot-detector.js';
 import { SpamScorer } from './spam-scorer.js';
@@ -43,13 +46,40 @@ const DATA_DIR = path.join(CURRENT_DIR, 'relay-server', 'data');
 const VOTE_REGISTRY_FILE = path.join(DATA_DIR, 'vote-registry.json');
 const VOTE_REGISTRY_BACKUP_FILE = path.join(DATA_DIR, 'vote-registry.backup.json');
 const VOTE_REGISTRY_TMP_FILE = path.join(DATA_DIR, 'vote-registry.tmp.json');
+const COMMUNITY_SECURITY_FILE = path.join(DATA_DIR, 'community-security.json');
+const COMMUNITY_SECURITY_BACKUP_FILE = path.join(DATA_DIR, 'community-security.backup.json');
+const COMMUNITY_SECURITY_TMP_FILE = path.join(DATA_DIR, 'community-security.tmp.json');
+const MAX_COMMUNITY_SECURITY_COMMUNITIES = 5000;
+const MAX_REQUESTS_PER_COMMUNITY = 200;
+const MAX_KEYRING_ENTRIES_PER_COMMUNITY = 1000;
+const REQUEST_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 let voteRegistryOperational = true;
+let communitySecurityOperational = true;
+let communitySecurityState = { communities: Object.create(null) };
 
 try {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 } catch (error) {
   console.error('Failed to initialize vote registry data directory:', error.message);
   voteRegistryOperational = false;
+  communitySecurityOperational = false;
+}
+
+function loadCommunitySecurityStateFromFile(filePath) {
+  const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error('community security data is not an object');
+  }
+  const communities = raw.communities;
+  if (!communities || typeof communities !== 'object' || Array.isArray(communities)) {
+    throw new Error('community security communities field is invalid');
+  }
+  const safeCommunities = Object.create(null);
+  for (const [communityId, bucket] of Object.entries(communities)) {
+    if (isUnsafeMapKey(communityId)) continue;
+    safeCommunities[communityId] = normalizeCommunityBucket(bucket);
+  }
+  communitySecurityState = { communities: safeCommunities };
 }
 
 function loadVoteRegistryFromFile(filePath) {
@@ -86,12 +116,257 @@ try {
   }
 }
 
+try {
+  if (fs.existsSync(COMMUNITY_SECURITY_FILE)) {
+    loadCommunitySecurityStateFromFile(COMMUNITY_SECURITY_FILE);
+    console.log(`Loaded ${Object.keys(communitySecurityState.communities).length} community security records from disk`);
+  } else if (fs.existsSync(COMMUNITY_SECURITY_BACKUP_FILE)) {
+    loadCommunitySecurityStateFromFile(COMMUNITY_SECURITY_BACKUP_FILE);
+    console.log(`Recovered ${Object.keys(communitySecurityState.communities).length} community security records from backup`);
+  }
+} catch (error) {
+  console.error('Failed to load primary community security data, trying backup:', error.message);
+  try {
+    if (fs.existsSync(COMMUNITY_SECURITY_BACKUP_FILE)) {
+      loadCommunitySecurityStateFromFile(COMMUNITY_SECURITY_BACKUP_FILE);
+      console.log(`Recovered ${Object.keys(communitySecurityState.communities).length} community security records from backup`);
+    } else {
+      communitySecurityOperational = false;
+    }
+  } catch (backupError) {
+    console.error('Failed to load backup community security data:', backupError.message);
+    communitySecurityOperational = false;
+  }
+}
+
 function saveVoteRegistry() {
   const payload = JSON.stringify([...voteRegistry]);
   fs.writeFileSync(VOTE_REGISTRY_TMP_FILE, payload);
   fs.renameSync(VOTE_REGISTRY_TMP_FILE, VOTE_REGISTRY_FILE);
   fs.writeFileSync(VOTE_REGISTRY_BACKUP_FILE, payload);
   voteRegistryOperational = true;
+}
+
+function saveCommunitySecurityState() {
+  const payload = JSON.stringify(communitySecurityState);
+  fs.writeFileSync(COMMUNITY_SECURITY_TMP_FILE, payload);
+  fs.renameSync(COMMUNITY_SECURITY_TMP_FILE, COMMUNITY_SECURITY_FILE);
+  fs.writeFileSync(COMMUNITY_SECURITY_BACKUP_FILE, payload);
+  communitySecurityOperational = true;
+}
+
+function createSafeMap() {
+  return Object.create(null);
+}
+
+function isUnsafeMapKey(value) {
+  return value === '__proto__' || value === 'prototype' || value === 'constructor';
+}
+
+function parseCommunityId(raw) {
+  const value = sanitizeId(String(raw || ''), 128);
+  if (!value || isUnsafeMapKey(value)) return null;
+  return value;
+}
+
+function parseDevicePublicKey(raw) {
+  const value = sanitizeString(String(raw || ''), 2048).trim();
+  if (isUnsafeMapKey(value)) return null;
+  return value.length > 0 ? value : null;
+}
+
+function parseDeviceEncryptionPublicKey(raw) {
+  const value = sanitizeString(String(raw || ''), 4096).trim();
+  return value.length > 0 ? value : null;
+}
+
+function parseSignature(raw) {
+  const value = sanitizeString(String(raw || ''), 4096).trim();
+  return value.length > 0 ? value : null;
+}
+
+function parseEncryptedCommunityKey(raw) {
+  const value = sanitizeString(String(raw || ''), 12288).trim();
+  return value.length > 0 ? value : null;
+}
+
+function parseMethod(raw) {
+  return raw === 'invite' || raw === 'password' ? raw : null;
+}
+
+function parseTimestamp(raw) {
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) return Date.now();
+  return Math.floor(value);
+}
+
+function parseKeyVersion(raw) {
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 1) return 1;
+  return Math.floor(value);
+}
+
+function parseExistingKeyVersion(raw) {
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 1) return 0;
+  return Math.floor(value);
+}
+
+function hashString(input) {
+  return bytesToHex(sha256(new TextEncoder().encode(input)));
+}
+
+function verifySchnorrSignature(data, signatureHex, publicKeyHex) {
+  try {
+    const messageHash = hashString(data);
+    return schnorr.verify(hexToBytes(signatureHex), hexToBytes(messageHash), hexToBytes(publicKeyHex));
+  } catch {
+    return false;
+  }
+}
+
+function verifyFrontendCryptoServiceSignature(data, signatureHex, publicKeyHex) {
+  return verifySchnorrSignature(hashString(data), signatureHex, publicKeyHex);
+}
+
+function computeSessionOwnerKey(user) {
+  if (!user || typeof user !== 'object') return null;
+  const provider = sanitizeString(String(user.provider || ''), 64);
+  const subject = sanitizeString(String(user.sub || ''), 256);
+  if (!provider || !subject) return null;
+  return hashString(`${provider}:${subject}`);
+}
+
+function normalizeCommunityBucket(rawBucket) {
+  const bucket = {
+    requests: createSafeMap(),
+    keyRing: createSafeMap(),
+    rotations: [],
+    revokedDevices: createSafeMap(),
+    currentKeyVersion: 1,
+    ownerSessionKey: null,
+    updatedAt: Date.now(),
+  };
+  if (!rawBucket || typeof rawBucket !== 'object' || Array.isArray(rawBucket)) return bucket;
+  const requests = rawBucket.requests;
+  if (requests && typeof requests === 'object' && !Array.isArray(requests)) {
+    for (const [devicePublicKey, request] of Object.entries(requests)) {
+      if (isUnsafeMapKey(devicePublicKey) || !request || typeof request !== 'object') continue;
+      bucket.requests[devicePublicKey] = request;
+    }
+  }
+  const keyRing = rawBucket.keyRing;
+  if (keyRing && typeof keyRing === 'object' && !Array.isArray(keyRing)) {
+    for (const [devicePublicKey, entry] of Object.entries(keyRing)) {
+      if (isUnsafeMapKey(devicePublicKey) || !entry || typeof entry !== 'object') continue;
+      bucket.keyRing[devicePublicKey] = entry;
+    }
+  }
+  if (Array.isArray(rawBucket.rotations)) {
+    bucket.rotations = rawBucket.rotations.slice(-200);
+  }
+  if (rawBucket.revokedDevices && typeof rawBucket.revokedDevices === 'object' && !Array.isArray(rawBucket.revokedDevices)) {
+    for (const [devicePublicKey, version] of Object.entries(rawBucket.revokedDevices)) {
+      if (isUnsafeMapKey(devicePublicKey)) continue;
+      bucket.revokedDevices[devicePublicKey] = parseKeyVersion(version);
+    }
+  }
+  bucket.currentKeyVersion = parseKeyVersion(rawBucket.currentKeyVersion);
+  bucket.ownerSessionKey = typeof rawBucket.ownerSessionKey === 'string' ? rawBucket.ownerSessionKey : null;
+  bucket.updatedAt = parseTimestamp(rawBucket.updatedAt);
+  pruneStaleCommunityRequests(bucket);
+  return bucket;
+}
+
+function pruneStaleCommunityRequests(bucket, now = Date.now()) {
+  for (const [devicePublicKey, request] of Object.entries(bucket.requests)) {
+    if (!request || typeof request !== 'object') {
+      delete bucket.requests[devicePublicKey];
+      continue;
+    }
+    const requestedAt = Number(request.requestedAt);
+    if (!Number.isFinite(requestedAt) || (now - requestedAt) > REQUEST_TTL_MS) {
+      delete bucket.requests[devicePublicKey];
+    }
+  }
+}
+
+function getCommunitySecurityBucket(communityId) {
+  const existingIds = Object.keys(communitySecurityState.communities);
+  if (!communitySecurityState.communities[communityId] && existingIds.length >= MAX_COMMUNITY_SECURITY_COMMUNITIES) {
+    return null;
+  }
+  const existing = communitySecurityState.communities[communityId];
+  if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
+    if (!existing.requests || typeof existing.requests !== 'object' || Array.isArray(existing.requests)) {
+      existing.requests = createSafeMap();
+    }
+    if (!existing.keyRing || typeof existing.keyRing !== 'object' || Array.isArray(existing.keyRing)) {
+      existing.keyRing = createSafeMap();
+    }
+    if (!Array.isArray(existing.rotations)) existing.rotations = [];
+    if (!existing.revokedDevices || typeof existing.revokedDevices !== 'object' || Array.isArray(existing.revokedDevices)) {
+      existing.revokedDevices = createSafeMap();
+    }
+    existing.currentKeyVersion = parseKeyVersion(existing.currentKeyVersion);
+    pruneStaleCommunityRequests(existing);
+    return existing;
+  }
+  const created = {
+    requests: createSafeMap(),
+    keyRing: createSafeMap(),
+    rotations: [],
+    revokedDevices: createSafeMap(),
+    currentKeyVersion: 1,
+    ownerSessionKey: null,
+    updatedAt: Date.now(),
+  };
+  communitySecurityState.communities[communityId] = created;
+  return created;
+}
+
+function getCommunitySecurityBucketForRead(communityId) {
+  const existing = communitySecurityState.communities[communityId];
+  if (!existing || typeof existing !== 'object' || Array.isArray(existing)) return null;
+  if (!existing.requests || typeof existing.requests !== 'object' || Array.isArray(existing.requests)) {
+    existing.requests = createSafeMap();
+  }
+  if (!existing.keyRing || typeof existing.keyRing !== 'object' || Array.isArray(existing.keyRing)) {
+    existing.keyRing = createSafeMap();
+  }
+  if (!Array.isArray(existing.rotations)) existing.rotations = [];
+  if (!existing.revokedDevices || typeof existing.revokedDevices !== 'object' || Array.isArray(existing.revokedDevices)) {
+    existing.revokedDevices = createSafeMap();
+  }
+  existing.currentKeyVersion = parseKeyVersion(existing.currentKeyVersion);
+  pruneStaleCommunityRequests(existing);
+  return existing;
+}
+
+function requireDeviceReadAuthorization(url, communityId, bucket, resource) {
+  const requesterDevicePublicKey = parseDevicePublicKey(url.searchParams.get('requesterDevicePublicKey'));
+  const signature = parseSignature(url.searchParams.get('signature'));
+  const timestamp = parseTimestamp(url.searchParams.get('timestamp'));
+  if (!requesterDevicePublicKey || !signature) {
+    return { ok: false, reason: 'missing requester device authorization' };
+  }
+  const trustedEntry = bucket.keyRing[requesterDevicePublicKey];
+  if (!trustedEntry) {
+    return { ok: false, reason: 'requester device is not approved for this community' };
+  }
+  const authPayload = JSON.stringify({
+    communityId,
+    requesterDevicePublicKey,
+    resource,
+    timestamp,
+  });
+  if (!verifyFrontendCryptoServiceSignature(authPayload, signature, requesterDevicePublicKey)) {
+    return { ok: false, reason: 'invalid requester signature' };
+  }
+  if (Math.abs(Date.now() - timestamp) > 5 * 60 * 1000) {
+    return { ok: false, reason: 'request timestamp out of range' };
+  }
+  return { ok: true };
 }
 
 function cleanupPendingVoteReservations(now = Date.now()) {
@@ -665,6 +940,362 @@ server.on('request', (req, res) => {
     appendSetCookie(res, `sessionId=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0;${securePart}`);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/community-device/requests') {
+    if (!communitySecurityOperational) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'community security registry unavailable' }));
+      return;
+    }
+    const communityId = parseCommunityId(url.searchParams.get('communityId'));
+    if (!communityId) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid communityId' }));
+      return;
+    }
+    const bucket = getCommunitySecurityBucketForRead(communityId);
+    if (!bucket) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'community security record not found' }));
+      return;
+    }
+    const authz = requireDeviceReadAuthorization(url, communityId, bucket, 'requests');
+    if (!authz.ok) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: authz.reason }));
+      return;
+    }
+    const requests = Object.values(bucket.requests)
+      .sort((a, b) => Number(a.requestedAt) - Number(b.requestedAt))
+      .map((request) => ({
+        communityId,
+        devicePublicKey: request.devicePublicKey,
+        userId: request.userId,
+        deviceEncryptionPublicKey: request.deviceEncryptionPublicKey,
+        requestedAt: Number(request.requestedAt) || 0,
+        method: request.method,
+        signature: request.signature,
+      }));
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ requests }));
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/community-device/request') {
+    parseBodyWithLimit(req, res, 16384).then((data) => {
+      if (!data) return;
+      try {
+        if (!communitySecurityOperational) {
+          res.writeHead(503, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'community security registry unavailable' }));
+          return;
+        }
+        const communityId = parseCommunityId(data.communityId);
+        const userId = sanitizeId(String(data.userId || ''), 128);
+        const method = parseMethod(data.method);
+        const devicePublicKey = parseDevicePublicKey(data.devicePublicKey);
+        const deviceEncryptionPublicKey = parseDeviceEncryptionPublicKey(data.deviceEncryptionPublicKey);
+        const signature = parseSignature(data.signature);
+        const requestedAt = parseTimestamp(data.requestedAt);
+        if (!communityId || !userId || !method || !devicePublicKey || !deviceEncryptionPublicKey || !signature) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'invalid community device request payload' }));
+          return;
+        }
+        const requestPayload = JSON.stringify({
+          deviceEncryptionPublicKey,
+          devicePublicKey,
+          method,
+          requestedAt,
+          userId,
+        });
+        if (!verifyFrontendCryptoServiceSignature(requestPayload, signature, devicePublicKey)) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'invalid device request signature' }));
+          return;
+        }
+        let bucket = getCommunitySecurityBucketForRead(communityId);
+        if (!bucket) {
+          const bootstrapUser = getSessionFromRequest(req);
+          const ownerSessionKey = computeSessionOwnerKey(bootstrapUser);
+          if (!bootstrapUser || !ownerSessionKey) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'authenticated session required to initialize community security state' }));
+            return;
+          }
+          bucket = getCommunitySecurityBucket(communityId);
+          if (!bucket) {
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'community security registry capacity reached' }));
+            return;
+          }
+          bucket.ownerSessionKey = ownerSessionKey;
+        }
+        if (!bucket.requests[devicePublicKey] && Object.keys(bucket.requests).length >= MAX_REQUESTS_PER_COMMUNITY) {
+          res.writeHead(429, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'too many pending requests for this community' }));
+          return;
+        }
+        bucket.requests[devicePublicKey] = {
+          communityId,
+          userId,
+          method,
+          devicePublicKey,
+          deviceEncryptionPublicKey,
+          signature,
+          requestedAt,
+        };
+        bucket.updatedAt = Date.now();
+        try {
+          saveCommunitySecurityState();
+        } catch (error) {
+          communitySecurityOperational = false;
+          sendError(res, 500, 'community security persistence failed', error, '/api/community-device/request');
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (error) {
+        sendError(res, 500, 'community device request failed', error, '/api/community-device/request');
+      }
+    });
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/community-device/keyring') {
+    if (!communitySecurityOperational) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'community security registry unavailable' }));
+      return;
+    }
+    const communityId = parseCommunityId(url.searchParams.get('communityId'));
+    if (!communityId) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid communityId' }));
+      return;
+    }
+    const bucket = getCommunitySecurityBucketForRead(communityId);
+    if (!bucket) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'community security record not found' }));
+      return;
+    }
+    const authz = requireDeviceReadAuthorization(url, communityId, bucket, 'keyring');
+    if (!authz.ok) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: authz.reason }));
+      return;
+    }
+    const entries = Object.values(bucket.keyRing)
+      .sort((a, b) => Number(b.updatedAt) - Number(a.updatedAt))
+      .map((entry) => ({
+        communityId,
+        devicePublicKey: entry.devicePublicKey,
+        deviceEncryptionPublicKey: entry.deviceEncryptionPublicKey,
+        approvedBy: entry.approvedBy,
+        keyVersion: Number(entry.keyVersion) || 1,
+        updatedAt: Number(entry.updatedAt) || 0,
+      }));
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ entries }));
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/community-device/approval') {
+    parseBodyWithLimit(req, res, 32768).then((data) => {
+      if (!data) return;
+      try {
+        if (!communitySecurityOperational) {
+          res.writeHead(503, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'community security registry unavailable' }));
+          return;
+        }
+        const communityId = parseCommunityId(data.communityId);
+        const devicePublicKey = parseDevicePublicKey(data.devicePublicKey);
+        const deviceEncryptionPublicKey = parseDeviceEncryptionPublicKey(data.deviceEncryptionPublicKey);
+        const encryptedCommunityKey = parseEncryptedCommunityKey(data.encryptedCommunityKey);
+        const approvedBy = parseDevicePublicKey(data.approvedBy);
+        const signature = parseSignature(data.signature);
+        const keyVersion = parseKeyVersion(data.keyVersion);
+        const updatedAt = parseTimestamp(data.updatedAt);
+        if (!communityId || !devicePublicKey || !deviceEncryptionPublicKey || !encryptedCommunityKey || !approvedBy || !signature) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'invalid community approval payload' }));
+          return;
+        }
+        const bucket = getCommunitySecurityBucketForRead(communityId);
+        if (!bucket) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'community security record not found' }));
+          return;
+        }
+        const approverInRing = Boolean(bucket.keyRing[approvedBy]);
+        const isBootstrapEnvelope = Object.keys(bucket.keyRing).length === 0 && approvedBy === devicePublicKey;
+        if (isBootstrapEnvelope && !getSessionFromRequest(req)) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'authenticated session required for bootstrap approval' }));
+          return;
+        }
+        if (isBootstrapEnvelope) {
+          const bootstrapUser = getSessionFromRequest(req);
+          const ownerSessionKey = computeSessionOwnerKey(bootstrapUser);
+          if (!ownerSessionKey || !bucket.ownerSessionKey || ownerSessionKey !== bucket.ownerSessionKey) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'bootstrap approval is restricted to the community owner session' }));
+            return;
+          }
+        }
+        if (!approverInRing && !isBootstrapEnvelope) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'approver is not authorized for this community' }));
+          return;
+        }
+        const envelopePayload = JSON.stringify({
+          approvedBy,
+          communityId,
+          deviceEncryptionPublicKey,
+          devicePublicKey,
+          encryptedCommunityKey,
+          keyVersion,
+          updatedAt,
+        });
+        if (!verifyFrontendCryptoServiceSignature(envelopePayload, signature, approvedBy)) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'invalid approval signature' }));
+          return;
+        }
+        if (keyVersion < bucket.currentKeyVersion) {
+          res.writeHead(409, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'stale key version for this community' }));
+          return;
+        }
+        const revokedAtVersion = parseExistingKeyVersion(bucket.revokedDevices[devicePublicKey]);
+        if (revokedAtVersion > 0 && keyVersion <= revokedAtVersion) {
+          res.writeHead(409, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'device was revoked for this key version' }));
+          return;
+        }
+        if (!bucket.keyRing[devicePublicKey] && Object.keys(bucket.keyRing).length >= MAX_KEYRING_ENTRIES_PER_COMMUNITY) {
+          res.writeHead(429, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'community key ring capacity reached' }));
+          return;
+        }
+        const existingEntry = bucket.keyRing[devicePublicKey];
+        if (existingEntry && Number(existingEntry.keyVersion) > keyVersion) {
+          res.writeHead(409, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'stale key version for device approval' }));
+          return;
+        }
+        bucket.keyRing[devicePublicKey] = {
+          communityId,
+          devicePublicKey,
+          deviceEncryptionPublicKey,
+          encryptedCommunityKey,
+          approvedBy,
+          signature,
+          keyVersion,
+          updatedAt,
+        };
+        if (keyVersion > bucket.currentKeyVersion) {
+          bucket.currentKeyVersion = keyVersion;
+        }
+        delete bucket.requests[devicePublicKey];
+        bucket.updatedAt = Date.now();
+        try {
+          saveCommunitySecurityState();
+        } catch (error) {
+          communitySecurityOperational = false;
+          sendError(res, 500, 'community security persistence failed', error, '/api/community-device/approval');
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (error) {
+        sendError(res, 500, 'community approval failed', error, '/api/community-device/approval');
+      }
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/community-device/remove') {
+    parseBodyWithLimit(req, res, 16384).then((data) => {
+      if (!data) return;
+      try {
+        if (!communitySecurityOperational) {
+          res.writeHead(503, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'community security registry unavailable' }));
+          return;
+        }
+        const communityId = parseCommunityId(data.communityId);
+        const removedDevicePublicKey = parseDevicePublicKey(data.removedDevicePublicKey);
+        const rotatedBy = parseDevicePublicKey(data.rotatedBy);
+        const signature = parseSignature(data.signature);
+        const keyVersion = parseKeyVersion(data.keyVersion);
+        const rotatedAt = parseTimestamp(data.rotatedAt);
+        if (!communityId || !removedDevicePublicKey || !rotatedBy || !signature) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'invalid community remove payload' }));
+          return;
+        }
+        const bucket = getCommunitySecurityBucketForRead(communityId);
+        if (!bucket) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'community security record not found' }));
+          return;
+        }
+        if (!bucket.keyRing[rotatedBy]) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'rotating device is not authorized for this community' }));
+          return;
+        }
+        const removePayload = JSON.stringify({
+          communityId,
+          removedDevicePublicKey,
+          rotatedBy,
+          keyVersion,
+          rotatedAt,
+        });
+        if (!verifyFrontendCryptoServiceSignature(removePayload, signature, rotatedBy)) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'invalid rotation signature' }));
+          return;
+        }
+        if (keyVersion <= bucket.currentKeyVersion) {
+          res.writeHead(409, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'rotation key version must be newer than current' }));
+          return;
+        }
+        const existed = Boolean(bucket.keyRing[removedDevicePublicKey] || bucket.requests[removedDevicePublicKey]);
+        delete bucket.keyRing[removedDevicePublicKey];
+        delete bucket.requests[removedDevicePublicKey];
+        bucket.revokedDevices[removedDevicePublicKey] = keyVersion;
+        bucket.currentKeyVersion = keyVersion;
+        bucket.rotations.push({
+          communityId,
+          removedDevicePublicKey,
+          rotatedBy,
+          keyVersion,
+          rotatedAt,
+        });
+        if (bucket.rotations.length > 200) {
+          bucket.rotations = bucket.rotations.slice(-200);
+        }
+        bucket.updatedAt = Date.now();
+        try {
+          saveCommunitySecurityState();
+        } catch (error) {
+          communitySecurityOperational = false;
+          sendError(res, 500, 'community security persistence failed', error, '/api/community-device/remove');
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, removed: existed }));
+      } catch (error) {
+        sendError(res, 500, 'community remove failed', error, '/api/community-device/remove');
+      }
+    });
     return;
   }
 

@@ -85,6 +85,65 @@
             Share Invite
           </ion-button>
         </div>
+
+        <div v-if="showDeviceAdminPanel" class="device-admin-panel">
+          <div class="device-admin-header">
+            <h3>Device Access Management</h3>
+            <ion-button
+              size="small"
+              fill="clear"
+              @click="refreshDeviceAdminState"
+              :disabled="isDevicePanelLoading"
+            >
+              {{ isDevicePanelLoading ? 'Refreshing…' : 'Refresh' }}
+            </ion-button>
+          </div>
+          <p class="device-admin-subtitle">
+            Approve pending devices and remove compromised devices to rotate future community keys.
+          </p>
+
+          <div class="device-admin-block">
+            <h4>Pending device requests</h4>
+            <p v-if="pendingDeviceRequests.length === 0" class="device-empty">No pending requests.</p>
+            <div v-else class="device-list">
+              <div v-for="request in pendingDeviceRequests" :key="request.devicePublicKey" class="device-item">
+                <div class="device-item-meta">
+                  <code>{{ abbreviateKey(request.devicePublicKey) }}</code>
+                  <span>{{ request.method }} · {{ formatRequestTime(request.requestedAt) }}</span>
+                </div>
+                <ion-button
+                  size="small"
+                  @click="approvePendingDevice(request)"
+                  :disabled="Boolean(deviceActionInFlight)"
+                >
+                  {{ deviceActionInFlight === `approve:${request.devicePublicKey}` ? 'Approving…' : 'Approve' }}
+                </ion-button>
+              </div>
+            </div>
+          </div>
+
+          <div class="device-admin-block">
+            <h4>Approved devices</h4>
+            <p v-if="approvedDeviceEntries.length === 0" class="device-empty">No approved devices found.</p>
+            <div v-else class="device-list">
+              <div v-for="entry in approvedDeviceEntries" :key="entry.devicePublicKey" class="device-item">
+                <div class="device-item-meta">
+                  <code>{{ abbreviateKey(entry.devicePublicKey) }}</code>
+                  <span>key v{{ entry.keyVersion }} · approved {{ formatRequestTime(entry.updatedAt) }}</span>
+                </div>
+                <ion-button
+                  size="small"
+                  color="danger"
+                  fill="outline"
+                  @click="removeApprovedDevice(entry.devicePublicKey)"
+                  :disabled="entry.devicePublicKey === currentDevicePublicKey || approvedDeviceEntries.length <= 1 || Boolean(deviceActionInFlight)"
+                >
+                  {{ deviceActionInFlight === `remove:${entry.devicePublicKey}` ? 'Removing…' : 'Remove' }}
+                </ion-button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Content Filter -->
@@ -394,6 +453,85 @@
   font-style: italic;
 }
 
+/* ── Device Admin ─────────────────────────────────── */
+.device-admin-panel {
+  margin: 0 0 14px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(var(--ion-color-tertiary-rgb), 0.2);
+  background: rgba(var(--ion-color-tertiary-rgb), 0.06);
+}
+
+.device-admin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.device-admin-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.device-admin-subtitle {
+  margin: 6px 0 12px;
+  font-size: 12px;
+  color: var(--ion-color-medium);
+  line-height: 1.4;
+}
+
+.device-admin-block + .device-admin-block {
+  margin-top: 12px;
+}
+
+.device-admin-block h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.device-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(var(--ion-text-color-rgb), 0.03);
+  border: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
+}
+
+.device-item-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.device-item-meta code {
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.device-item-meta span {
+  font-size: 12px;
+  color: var(--ion-color-medium);
+}
+
+.device-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ion-color-medium);
+}
+
 /* ── Rules ───────────────────────────────────────── */
 .rules-section {
   padding: 20px 16px;
@@ -445,6 +583,7 @@ import {
   IonSegmentButton,
   IonLabel,
   IonSpinner,
+  alertController,
   toastController,
   onIonViewWillEnter,
   onIonViewDidLeave
@@ -466,13 +605,19 @@ import { usePostStore } from '../stores/postStore';
 import { usePollStore } from '../stores/pollStore';
 import { useUserStore } from '../stores/userStore';
 import { UserService } from '../services/userService';
+import { KeyService } from '../services/keyService';
 import PostCard from '../components/PostCard.vue';
 import PollCard from '../components/PollCard.vue';
 import EncryptedBadge from '../components/EncryptedBadge.vue';
 import ConsentBanner from '../components/ConsentBanner.vue';
 import { Post, PostService } from '../services/postService';
 import { Poll, PollService } from '../services/pollService';
-import { CommunityService, type Community } from '../services/communityService';
+import {
+  CommunityService,
+  type Community,
+  type BackendDeviceApprovalRequestSummary,
+  type BackendCommunityKeyRingEntrySummary,
+} from '../services/communityService';
 import { KeyVaultService } from '../services/keyVaultService';
 import { EncryptionService } from '../services/encryptionService';
 import { InviteLinkService } from '../services/inviteLinkService';
@@ -496,7 +641,10 @@ const isLoading = ref(true);
 const isJoining = ref(false);
 const contentFilter = ref<'all' | 'posts' | 'polls'>('all');
 const currentUserId = ref('');
+const currentDevicePublicKey = ref('');
 const voteVersion = ref(0);
+const upvotedPostIds = ref<Set<string>>(new Set());
+const downvotedPostIds = ref<Set<string>>(new Set());
 const descriptionExpanded = ref(false);
 type LoadStatus = 'idle' | 'loading' | 'loaded' | 'timed-out' | 'error';
 const postLoadStatus = ref<LoadStatus>('idle');
@@ -510,6 +658,17 @@ const decryptedMeta = ref<Community | null>(null);
 const displayCommunity = computed(() => decryptedMeta.value || community.value);
 const decryptedPosts = ref<Post[]>([]);
 const decryptedPolls = ref<Poll[]>([]);
+const pendingDeviceRequests = ref<BackendDeviceApprovalRequestSummary[]>([]);
+const approvedDeviceEntries = ref<BackendCommunityKeyRingEntrySummary[]>([]);
+const isDevicePanelLoading = ref(false);
+const deviceActionInFlight = ref<string | null>(null);
+const deviceRefreshGeneration = ref(0);
+const isCommunityAdmin = computed(() => (
+  Boolean(community.value && currentUserId.value && community.value.creatorId === currentUserId.value)
+));
+const showDeviceAdminPanel = computed(() => (
+  Boolean(community.value?.isEncrypted && isJoined.value && hasAccess.value && isCommunityAdmin.value)
+));
 
 const currentModSettings = computed(() => {
   moderationVersion.value;
@@ -759,25 +918,40 @@ const displayedContent = computed(() => {
   );
 });
 
+function loadVoteSetsFromStorage(): void {
+  try {
+    const upvoted = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
+    const downvoted = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
+    upvotedPostIds.value = new Set(Array.isArray(upvoted) ? upvoted.filter((id) => typeof id === 'string') : []);
+    downvotedPostIds.value = new Set(Array.isArray(downvoted) ? downvoted.filter((id) => typeof id === 'string') : []);
+  } catch {
+    upvotedPostIds.value = new Set();
+    downvotedPostIds.value = new Set();
+  }
+}
+
+function persistVoteSets(): void {
+  localStorage.setItem('upvoted-posts', JSON.stringify(Array.from(upvotedPostIds.value)));
+  localStorage.setItem('downvoted-posts', JSON.stringify(Array.from(downvotedPostIds.value)));
+}
+
 function hasUpvoted(postId: string): boolean {
   voteVersion.value; // reactive dependency to trigger re-render on vote changes
-  const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
-  return votedPosts.includes(postId);
+  return upvotedPostIds.value.has(postId);
 }
 
 function hasDownvoted(postId: string): boolean {
   voteVersion.value; // reactive dependency to trigger re-render on vote changes
-  const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
-  return votedPosts.includes(postId);
+  return downvotedPostIds.value.has(postId);
 }
 
 async function handleUpvote(post: Post) {
+  const previousUpvoted = new Set(upvotedPostIds.value);
+  const previousDownvoted = new Set(downvotedPostIds.value);
   try {
     if (hasUpvoted(post.id)) {
-      // Remove from localStorage first (optimistic UI)
-      const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
-      const filtered = votedPosts.filter((id: string) => id !== post.id);
-      localStorage.setItem('upvoted-posts', JSON.stringify(filtered));
+      upvotedPostIds.value.delete(post.id);
+      persistVoteSets();
       voteVersion.value++;
 
       await postStore.removeUpvote(post.id);
@@ -788,21 +962,14 @@ async function handleUpvote(post: Post) {
       });
       await toast.present();
     } else {
-      // Clear downvote from localStorage first if needed
-      const downvotedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
-      if (downvotedPosts.includes(post.id)) {
-        const filtered = downvotedPosts.filter((id: string) => id !== post.id);
-        localStorage.setItem('downvoted-posts', JSON.stringify(filtered));
-      }
-
-      // Add to upvoted localStorage
-      const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
-      votedPosts.push(post.id);
-      localStorage.setItem('upvoted-posts', JSON.stringify(votedPosts));
+      const hadDownvote = downvotedPostIds.value.has(post.id);
+      downvotedPostIds.value.delete(post.id);
+      upvotedPostIds.value.add(post.id);
+      persistVoteSets();
       voteVersion.value++;
 
       // Clear existing downvote in store if needed
-      if (downvotedPosts.includes(post.id)) {
+      if (hadDownvote) {
         await postStore.removeDownvote(post.id);
       }
       await postStore.upvotePost(post.id);
@@ -814,6 +981,9 @@ async function handleUpvote(post: Post) {
       await toast.present();
     }
   } catch (error) {
+    upvotedPostIds.value = previousUpvoted;
+    downvotedPostIds.value = previousDownvoted;
+    persistVoteSets();
     voteVersion.value++;
     console.error('Error upvoting:', error);
     const toast = await toastController.create({
@@ -825,12 +995,12 @@ async function handleUpvote(post: Post) {
 }
 
 async function handleDownvote(post: Post) {
+  const previousUpvoted = new Set(upvotedPostIds.value);
+  const previousDownvoted = new Set(downvotedPostIds.value);
   try {
     if (hasDownvoted(post.id)) {
-      // Remove from localStorage first (optimistic UI)
-      const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
-      const filtered = votedPosts.filter((id: string) => id !== post.id);
-      localStorage.setItem('downvoted-posts', JSON.stringify(filtered));
+      downvotedPostIds.value.delete(post.id);
+      persistVoteSets();
       voteVersion.value++;
 
       await postStore.removeDownvote(post.id);
@@ -841,21 +1011,14 @@ async function handleDownvote(post: Post) {
       });
       await toast.present();
     } else {
-      // Clear upvote from localStorage first if needed
-      const upvotedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
-      if (upvotedPosts.includes(post.id)) {
-        const filtered = upvotedPosts.filter((id: string) => id !== post.id);
-        localStorage.setItem('upvoted-posts', JSON.stringify(filtered));
-      }
-
-      // Add to downvoted localStorage
-      const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
-      votedPosts.push(post.id);
-      localStorage.setItem('downvoted-posts', JSON.stringify(votedPosts));
+      const hadUpvote = upvotedPostIds.value.has(post.id);
+      upvotedPostIds.value.delete(post.id);
+      downvotedPostIds.value.add(post.id);
+      persistVoteSets();
       voteVersion.value++;
 
       // Clear existing upvote in store if needed
-      if (upvotedPosts.includes(post.id)) {
+      if (hadUpvote) {
         await postStore.removeUpvote(post.id);
       }
       await postStore.downvotePost(post.id);
@@ -867,6 +1030,9 @@ async function handleDownvote(post: Post) {
       await toast.present();
     }
   } catch (error) {
+    upvotedPostIds.value = previousUpvoted;
+    downvotedPostIds.value = previousDownvoted;
+    persistVoteSets();
     voteVersion.value++;
     console.error('Error downvoting:', error);
     const toast = await toastController.create({
@@ -882,6 +1048,113 @@ function formatNumber(num: number | undefined | null): string {
   if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
   if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
   return n.toString();
+}
+
+function abbreviateKey(key: string): string {
+  if (!key || key.length <= 28) return key;
+  return `${key.slice(0, 14)}…${key.slice(-10)}`;
+}
+
+function formatRequestTime(timestamp: number): string {
+  if (!Number.isFinite(timestamp)) return 'unknown time';
+  return new Date(timestamp).toLocaleString();
+}
+
+async function refreshDeviceAdminState(): Promise<void> {
+  const generation = ++deviceRefreshGeneration.value;
+  if (!showDeviceAdminPanel.value) {
+    pendingDeviceRequests.value = [];
+    approvedDeviceEntries.value = [];
+    return;
+  }
+  isDevicePanelLoading.value = true;
+  try {
+    const [requests, keyRingEntries] = await Promise.all([
+      CommunityService.listPendingDeviceRequests(communityId.value),
+      CommunityService.listCommunityKeyRing(communityId.value),
+    ]);
+    if (generation !== deviceRefreshGeneration.value) return;
+    pendingDeviceRequests.value = requests;
+    approvedDeviceEntries.value = keyRingEntries;
+  } catch (error) {
+    if (generation !== deviceRefreshGeneration.value) return;
+    console.error('Failed to load device admin state:', error);
+    const toast = await toastController.create({
+      message: 'Failed to load device approvals',
+      duration: 2200,
+      color: 'danger',
+    });
+    await toast.present();
+  } finally {
+    if (generation === deviceRefreshGeneration.value) {
+      isDevicePanelLoading.value = false;
+    }
+  }
+}
+
+async function approvePendingDevice(request: BackendDeviceApprovalRequestSummary): Promise<void> {
+  const devicePublicKey = request.devicePublicKey;
+  if (deviceActionInFlight.value) return;
+  deviceActionInFlight.value = `approve:${devicePublicKey}`;
+  try {
+    await CommunityService.approveDeviceRequest(communityId.value, devicePublicKey, request);
+    const toast = await toastController.create({
+      message: 'Device approved',
+      duration: 1800,
+      color: 'success',
+    });
+    await toast.present();
+    await refreshDeviceAdminState();
+  } catch (error) {
+    console.error('Failed to approve device:', error);
+    const toast = await toastController.create({
+      message: error instanceof Error ? error.message : 'Device approval failed',
+      duration: 2400,
+      color: 'danger',
+    });
+    await toast.present();
+  } finally {
+    deviceActionInFlight.value = null;
+  }
+}
+
+async function removeApprovedDevice(devicePublicKey: string): Promise<void> {
+  if (deviceActionInFlight.value) return;
+  const alert = await alertController.create({
+    header: 'Remove this device?',
+    message: 'This rotates the community key for all remaining devices. Removed devices lose access to future encrypted content.',
+    buttons: [
+      { text: 'Cancel', role: 'cancel' },
+      {
+        text: 'Remove device',
+        role: 'destructive',
+        handler: async () => {
+          deviceActionInFlight.value = `remove:${devicePublicKey}`;
+          try {
+            await CommunityService.removeDeviceAndRotateKey(communityId.value, devicePublicKey);
+            const toast = await toastController.create({
+              message: 'Device removed and key rotated',
+              duration: 2200,
+              color: 'success',
+            });
+            await toast.present();
+            await refreshDeviceAdminState();
+          } catch (error) {
+            console.error('Failed to remove device:', error);
+            const toast = await toastController.create({
+              message: error instanceof Error ? error.message : 'Failed to remove device',
+              duration: 2600,
+              color: 'danger',
+            });
+            await toast.present();
+          } finally {
+            deviceActionInFlight.value = null;
+          }
+        },
+      },
+    ],
+  });
+  await alert.present();
 }
 
 function navigateToPost(post: Post) {
@@ -947,7 +1220,15 @@ async function shareInviteLink() {
 let loadGeneration = 0;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 const COMMUNITY_STORE_BOOTSTRAP_TIMEOUT_MS = 2500;
-const COMMUNITY_DEBUG = typeof window !== 'undefined' && localStorage.getItem('interpoll_community_debug') === 'true';
+function isCommunityDebugEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem('interpoll_community_debug') === 'true';
+  } catch {
+    return false;
+  }
+}
+const COMMUNITY_DEBUG = isCommunityDebugEnabled();
 
 function communityDebug(step: string, payload: Record<string, unknown> = {}) {
   if (!COMMUNITY_DEBUG) return;
@@ -1087,8 +1368,12 @@ async function loadCommunityContent() {
   try {
     // Load current user for private poll filtering
     try {
-      const user = await UserService.getCurrentUser();
+      const [user, deviceKeys] = await Promise.all([
+        UserService.getCurrentUser(),
+        KeyService.getKeyPair(),
+      ]);
       currentUserId.value = user.id;
+      currentDevicePublicKey.value = deviceKeys.publicKey;
     } catch {
       // Not critical
     }
@@ -1188,6 +1473,7 @@ async function loadCommunityContent() {
 
 // Re-load when Ionic enters (or re-enters) the page — covers first mount and cache re-entry
 onIonViewWillEnter(async () => {
+  loadVoteSetsFromStorage();
   window.addEventListener('focus', recoverLoadOnFocus);
   document.addEventListener('visibilitychange', handleVisibilityChange);
   const isCurrentCommunity = community.value?.id === communityId.value;
@@ -1195,6 +1481,7 @@ onIonViewWillEnter(async () => {
     await loadCommunityContent();
   }
   scheduleRetryIfEmpty();
+  await refreshDeviceAdminState();
 });
 
 onIonViewDidLeave(() => {
@@ -1208,7 +1495,17 @@ watch(communityId, async (newId, oldId) => {
   if (newId && newId !== oldId) {
     await loadCommunityContent();
     scheduleRetryIfEmpty();
+    await refreshDeviceAdminState();
   }
+});
+
+watch(showDeviceAdminPanel, async (visible) => {
+  if (visible) {
+    await refreshDeviceAdminState();
+    return;
+  }
+  pendingDeviceRequests.value = [];
+  approvedDeviceEntries.value = [];
 });
 
 watch([postLoadStatus, pollLoadStatus], ([nextPostStatus, nextPollStatus]) => {
@@ -1228,7 +1525,15 @@ watch(totalLoadedContentCount, (nextCount, previousCount) => {
   keepBackgroundSyncVisible();
 });
 
+watch(isBackgroundSyncing, (syncing, wasSyncing) => {
+  if (wasSyncing && !syncing) {
+    scheduleRetryIfEmpty();
+  }
+});
+
 onUnmounted(() => {
+  window.removeEventListener('focus', recoverLoadOnFocus);
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
   clearBackgroundSyncIdleTimer();
   if (retryTimer) clearTimeout(retryTimer);
 });

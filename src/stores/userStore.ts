@@ -6,15 +6,25 @@ import { UserService } from '../services/userService';
 
 export const useUserStore = defineStore('user', () => {
   const profiles = ref<Record<string, UserProfile>>({});
+  const inFlightProfiles = new Map<string, Promise<UserProfile | null>>();
 
   async function getProfile(userId: string): Promise<UserProfile | null> {
     if (profiles.value[userId]) return profiles.value[userId];
+    const inFlight = inFlightProfiles.get(userId);
+    if (inFlight) return inFlight;
 
-    const profile = await UserService.getUser(userId);
-    if (profile) {
-      profiles.value[userId] = profile;
-    }
-    return profile;
+    const request = UserService.getUser(userId)
+      .then((profile) => {
+        if (profile) {
+          profiles.value[userId] = profile;
+        }
+        return profile;
+      })
+      .finally(() => {
+        inFlightProfiles.delete(userId);
+      });
+    inFlightProfiles.set(userId, request);
+    return request;
   }
 
   function getCachedKarma(userId: string): number | null {

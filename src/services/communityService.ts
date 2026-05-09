@@ -7,6 +7,7 @@ import { KeyVaultService } from './keyVaultService';
 import { InviteLinkService } from './inviteLinkService';
 import { DeviceKeyService } from './deviceKeyService';
 import { UserService } from './userService';
+import config from '@/config';
 import type {
   CommunityKeyEnvelope,
   DecryptedCommunityMeta,
@@ -33,8 +34,30 @@ export interface Community {
   currentKeyVersion?: number;
 }
 
+export interface BackendDeviceApprovalRequestSummary {
+  communityId: string;
+  devicePublicKey: string;
+  requestedAt: number;
+  method: 'invite' | 'password';
+  userId?: string;
+  deviceEncryptionPublicKey?: string;
+  signature?: string;
+}
+
+export interface BackendCommunityKeyRingEntrySummary {
+  communityId: string;
+  devicePublicKey: string;
+  deviceEncryptionPublicKey: string;
+  approvedBy: string;
+  keyVersion: number;
+  updatedAt: number;
+  signature?: string;
+}
+
 export class CommunityService {
   private static get gun() { return GunService.getGun(); }
+  private static readonly backendSyncQueueKey = 'interpoll-community-backend-sync-queue';
+  private static backendSyncQueueLock: Promise<void> = Promise.resolve();
   private static getCommunityNode(id: string) { return this.gun.get('communities').get(id); }
   private static readonly rulesCache = new Map<string, string[]>();
   private static readonly rulesLoadPromises = new Map<string, Promise<string[]>>();
@@ -146,13 +169,195 @@ export class CommunityService {
     };
   }
 
+  private static slugifyCommunityName(name: string): string {
+    return name.toLowerCase().replace(/\s+/g, '-');
+  }
+
+  private static async generateCommunityId(name: string): Promise<string> {
+    const baseId = `c-${this.slugifyCommunityName(name)}`;
+    const existing = await this.getCommunity(baseId);
+    if (!existing) return baseId;
+    return `${baseId}-${Date.now().toString(36)}`;
+  }
+
+  private static async postCommunityApi(path: string, payload: Record<string, unknown>): Promise<void> {
+    const response = await fetch(`${config.relay.api}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Community backend request failed (${response.status}): ${body || response.statusText}`);
+    }
+  }
+
+  private static getBackendSyncQueue(): Array<{ path: string; payload: Record<string, unknown> }> {
+    try {
+      const raw = localStorage.getItem(this.backendSyncQueueKey);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((item) => (
+        item
+        && typeof item === 'object'
+        && typeof item.path === 'string'
+        && item.payload
+        && typeof item.payload === 'object'
+      ));
+    } catch {
+      return [];
+    }
+  }
+
+  private static setBackendSyncQueue(queue: Array<{ path: string; payload: Record<string, unknown> }>): void {
+    try {
+      localStorage.setItem(this.backendSyncQueueKey, JSON.stringify(queue.slice(0, 100)));
+    } catch (error) {
+      console.warn('Failed to persist backend sync queue', error);
+    }
+  }
+
+  private static async withBackendSyncQueueLock<T>(task: () => Promise<T> | T): Promise<T> {
+    const previousLock = this.backendSyncQueueLock;
+    let releaseLock: (() => void) | null = null;
+    this.backendSyncQueueLock = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    await previousLock;
+    try {
+      return await task();
+    } finally {
+      releaseLock?.();
+    }
+  }
+
+  private static async queueBackendSync(path: string, payload: Record<string, unknown>): Promise<void> {
+    await this.withBackendSyncQueueLock(() => {
+      const queue = this.getBackendSyncQueue();
+      queue.push({ path, payload });
+      this.setBackendSyncQueue(queue);
+    });
+  }
+
+  static async flushBackendSyncQueue(): Promise<void> {
+    await this.withBackendSyncQueueLock(async () => {
+      const queue = this.getBackendSyncQueue();
+      if (queue.length === 0) return;
+      const remaining: Array<{ path: string; payload: Record<string, unknown> }> = [];
+      for (const item of queue) {
+        try {
+          await this.postCommunityApi(item.path, item.payload);
+        } catch {
+          remaining.push(item);
+        }
+      }
+      this.setBackendSyncQueue(remaining);
+    });
+  }
+
+  private static async syncBackendMutation(path: string, payload: Record<string, unknown>): Promise<void> {
+    try {
+      await this.postCommunityApi(path, payload);
+      await this.flushBackendSyncQueue();
+    } catch (error) {
+      await this.queueBackendSync(path, payload);
+      console.warn(`Queued backend sync for retry: ${path}`, error);
+    }
+  }
+
+  private static async getCommunityApi<T>(path: string): Promise<T> {
+    const response = await fetch(`${config.relay.api}${path}`, {
+      method: 'GET',
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Community backend request failed (${response.status}): ${body || response.statusText}`);
+    }
+    return (await response.json()) as T;
+  }
+
+  private static async buildReadAuthorizationQuery(
+    communityId: string,
+    resource: 'requests' | 'keyring',
+  ): Promise<string> {
+    const identity = await KeyService.getKeyPair();
+    const timestamp = Date.now();
+    const authPayload = JSON.stringify({
+      communityId,
+      requesterDevicePublicKey: identity.publicKey,
+      resource,
+      timestamp,
+    });
+    const signature = CryptoService.sign(CryptoService.hash(authPayload), identity.privateKey);
+    const params = new URLSearchParams({
+      requesterDevicePublicKey: identity.publicKey,
+      timestamp: String(timestamp),
+      signature,
+    });
+    return params.toString();
+  }
+
+  private static async syncDeviceRequestToBackend(
+    communityId: string,
+    request: DeviceApprovalRequest,
+  ): Promise<void> {
+    await this.syncBackendMutation('/api/community-device/request', {
+      communityId,
+      ...request,
+    });
+  }
+
+  private static async syncKeyRingEntryToBackend(
+    communityId: string,
+    devicePublicKey: string,
+    envelope: CommunityKeyEnvelope,
+  ): Promise<void> {
+    await this.syncBackendMutation('/api/community-device/approval', {
+      communityId,
+      devicePublicKey,
+      ...envelope,
+    });
+  }
+
+  private static async syncDeviceRemovalToBackend(
+    communityId: string,
+    removedDevicePublicKey: string,
+    rotatedBy: string,
+    keyVersion: number,
+  ): Promise<void> {
+    const actorIdentity = await KeyService.getKeyPair();
+    if (actorIdentity.publicKey !== rotatedBy) {
+      throw new Error('Rotation signer does not match the active device identity');
+    }
+    const rotatedAt = Date.now();
+    const payload = JSON.stringify({
+      communityId,
+      removedDevicePublicKey,
+      rotatedBy,
+      keyVersion,
+      rotatedAt,
+    });
+    const signature = CryptoService.sign(CryptoService.hash(payload), actorIdentity.privateKey);
+    await this.syncBackendMutation('/api/community-device/remove', {
+      communityId,
+      removedDevicePublicKey,
+      rotatedBy,
+      keyVersion,
+      rotatedAt,
+      signature,
+    });
+  }
+
   // ─── Create ────────────────────────────────────────────────────────────────
 
   static async createCommunity(data: {
     name: string; displayName: string; description: string;
     rules: string[]; creatorId: string;
   }): Promise<Community> {
-    const id = `c-${data.name.toLowerCase().replace(/\s+/g, '-')}`;
+    const id = await this.generateCommunityId(data.name);
     const community: Community = {
       id, name: data.name, displayName: data.displayName,
       description: data.description, rules: data.rules,
@@ -186,6 +391,7 @@ export class CommunityService {
     }
 
     await this.put(this.getCommunityNode(id), gunData);
+    await this.markMembershipAndRefreshCount(id, data.creatorId);
 
     if (community.rules.length > 0) {
       const rulesObj = Object.fromEntries(community.rules.map((rule, i) => [i, rule]));
@@ -208,7 +414,7 @@ export class CommunityService {
       }
     }
 
-    const id = `c-${data.name.toLowerCase().replace(/\s+/g, '-')}`;
+    const id = await this.generateCommunityId(data.name);
     const createdAt = Date.now();
 
     let aesKey: CryptoKey;
@@ -292,10 +498,16 @@ export class CommunityService {
       keyVersion: 1,
     });
 
+    const ownerRequest = await this.createSignedDeviceRequest(creatorUser.id, method);
     await this.put(
       this.getDeviceRequestNode(id).get('owner'),
-      await this.createSignedDeviceRequest(creatorUser.id, method),
+      ownerRequest,
     );
+    await Promise.all([
+      this.syncDeviceRequestToBackend(id, ownerRequest),
+      this.syncKeyRingEntryToBackend(id, creatorIdentity.publicKey, creatorEnvelope),
+    ]);
+    await this.markMembershipAndRefreshCount(id, creatorUser.id);
 
     let inviteLink = '';
     if (method === 'invite') {
@@ -382,10 +594,12 @@ export class CommunityService {
     if (community.keyRingRequired) {
       const approved = await UserService.isCurrentDeviceApproved(currentUser.id);
       if (!approved) {
+        const request = await this.createSignedDeviceRequest(currentUser.id, method);
         await this.put(
           this.getDeviceRequestNode(communityId).get(currentDevice.publicKey),
-          await this.createSignedDeviceRequest(currentUser.id, method),
+          request,
         );
+        await this.syncDeviceRequestToBackend(communityId, request);
         throw new Error('This device is not approved yet. An already-approved device must approve it first.');
       }
 
@@ -394,10 +608,12 @@ export class CommunityService {
         KeyVaultService.hasKey(communityId),
       ]);
       if (!entryRaw?.encryptedCommunityKey) {
+        const request = await this.createSignedDeviceRequest(currentUser.id, method);
         await this.put(
           this.getDeviceRequestNode(communityId).get(currentDevice.publicKey),
-          await this.createSignedDeviceRequest(currentUser.id, method),
+          request,
         );
+        await this.syncDeviceRequestToBackend(communityId, request);
         throw new Error('Device approval required. Ask an approved device to approve this device for the community.');
       }
 
@@ -431,10 +647,7 @@ export class CommunityService {
       });
 
       if (!hasExistingCommunityKey) {
-        await this.put(
-          this.getCommunityNode(communityId).get('memberCount'),
-          community.memberCount + 1
-        );
+        await this.markMembershipAndRefreshCount(communityId, currentUser.id);
       }
       return {
         ...community,
@@ -479,10 +692,7 @@ export class CommunityService {
     });
 
     if (!existingKey) {
-      await this.put(
-        this.getCommunityNode(communityId).get('memberCount'),
-        community.memberCount + 1
-      );
+      await this.markMembershipAndRefreshCount(communityId, currentUser.id);
     }
 
     return {
@@ -497,6 +707,7 @@ export class CommunityService {
   static async approveDeviceRequest(
     communityId: string,
     targetDevicePublicKey: string,
+    requestOverride?: BackendDeviceApprovalRequestSummary,
   ): Promise<void> {
     const [community, approverIdentity] = await Promise.all([
       this.getCommunity(communityId),
@@ -510,15 +721,19 @@ export class CommunityService {
       throw new Error('Current device is not authorized to approve this community request');
     }
     const keyVersion = Number(community.currentKeyVersion) || 1;
-    const [request, keyEntry] = await Promise.all([
+    const [requestFromGun, keyEntry] = await Promise.all([
       this.once<any>(this.getDeviceRequestNode(communityId).get(targetDevicePublicKey)),
       KeyVaultService.getCommunityKeyByVersion(communityId, keyVersion),
     ]);
+    const request = requestOverride ?? requestFromGun;
     if (!request?.deviceEncryptionPublicKey) {
       throw new Error('No pending device request found for this public key');
     }
     if (request.devicePublicKey !== targetDevicePublicKey) {
       throw new Error('Device request payload does not match target device public key');
+    }
+    if (typeof request.userId !== 'string' || request.userId.trim().length === 0) {
+      throw new Error('Device request is missing the user identifier');
     }
     if (typeof request.signature !== 'string' || request.signature.length === 0) {
       throw new Error('Device request is missing a signature');
@@ -556,6 +771,7 @@ export class CommunityService {
     });
     await this.put(this.getDeviceKeyRingNode(communityId).get(targetDevicePublicKey), envelope);
     await this.put(this.getDeviceRequestNode(communityId).get(targetDevicePublicKey), null);
+    await this.syncKeyRingEntryToBackend(communityId, targetDevicePublicKey, envelope);
   }
 
   static async removeDeviceAndRotateKey(
@@ -600,6 +816,7 @@ export class CommunityService {
     const reEncryptedMeta = await EncryptionService.encrypt(decryptedMetaRaw, newAesKey);
 
     const writePromises: Array<Promise<void>> = [];
+    const backendSyncPromises: Array<Promise<void>> = [];
     for (const [devicePublicKey, value] of remainingEntries) {
       const envelope = await this.createSignedEnvelope({
         communityId,
@@ -609,6 +826,7 @@ export class CommunityService {
         keyVersion: nextKeyVersion,
       });
       writePromises.push(this.put(this.getDeviceKeyRingNode(communityId).get(devicePublicKey), envelope));
+      backendSyncPromises.push(this.syncKeyRingEntryToBackend(communityId, devicePublicKey, envelope));
     }
     writePromises.push(this.put(this.getDeviceKeyRingNode(communityId).get(removedDevicePublicKey), null));
     writePromises.push(this.put(this.getCommunityNode(communityId).get('currentKeyVersion'), nextKeyVersion));
@@ -624,6 +842,46 @@ export class CommunityService {
       joinedAt: Date.now(),
       keyVersion: nextKeyVersion,
     });
+    await Promise.all(backendSyncPromises);
+    await this.syncDeviceRemovalToBackend(
+      communityId,
+      removedDevicePublicKey,
+      currentDevice.publicKey,
+      nextKeyVersion,
+    );
+  }
+
+  private static async markMembershipAndRefreshCount(communityId: string, userId: string): Promise<void> {
+    await this.put(this.getCommunityNode(communityId).get('members').get(userId), Date.now());
+    const membersRaw = await this.once<Record<string, unknown>>(
+      this.getCommunityNode(communityId).get('members'),
+    );
+    const memberCount = membersRaw
+      ? Object.keys(membersRaw).filter((key) => key !== '_' && membersRaw[key] != null).length
+      : 0;
+    if (memberCount > 0) {
+      await this.put(this.getCommunityNode(communityId).get('memberCount'), memberCount);
+    }
+  }
+
+  static async listPendingDeviceRequests(communityId: string): Promise<BackendDeviceApprovalRequestSummary[]> {
+    await this.flushBackendSyncQueue();
+    const encodedCommunityId = encodeURIComponent(communityId);
+    const authQuery = await this.buildReadAuthorizationQuery(communityId, 'requests');
+    const payload = await this.getCommunityApi<{ requests?: BackendDeviceApprovalRequestSummary[] }>(
+      `/api/community-device/requests?communityId=${encodedCommunityId}&${authQuery}`,
+    );
+    return Array.isArray(payload.requests) ? payload.requests : [];
+  }
+
+  static async listCommunityKeyRing(communityId: string): Promise<BackendCommunityKeyRingEntrySummary[]> {
+    await this.flushBackendSyncQueue();
+    const encodedCommunityId = encodeURIComponent(communityId);
+    const authQuery = await this.buildReadAuthorizationQuery(communityId, 'keyring');
+    const payload = await this.getCommunityApi<{ entries?: BackendCommunityKeyRingEntrySummary[] }>(
+      `/api/community-device/keyring?communityId=${encodedCommunityId}&${authQuery}`,
+    );
+    return Array.isArray(payload.entries) ? payload.entries : [];
   }
 
   // ─── Live subscription (replaces subscribeToCommunities) ──────────────────
@@ -686,10 +944,8 @@ export class CommunityService {
       return;
     }
     if (!community) throw new Error('Community not found');
-    await this.put(
-      this.getCommunityNode(communityId).get('memberCount'),
-      community.memberCount + 1
-    );
+    const currentUser = await UserService.getCurrentUser();
+    await this.markMembershipAndRefreshCount(communityId, currentUser.id);
   }
 
   /** @deprecated use subscribeToCommunitiesLive */
@@ -721,7 +977,7 @@ export class CommunityService {
       node.once((val: any) => {
         if (!done) { done = true; res(val ?? null); }
       });
-      setTimeout(() => { if (!done) { done = true; res(null); } }, 800);
+      setTimeout(() => { if (!done) { done = true; res(null); } }, 3000);
     });
   }
 
