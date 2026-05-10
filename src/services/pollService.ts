@@ -3,6 +3,7 @@ import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
 import { StorageService } from './storageService';
 import config from '../config';
+import { AuditService } from './auditService';
 
 function getApiBase(): string {
   return config.relay.api;
@@ -838,19 +839,6 @@ export class PollService {
       totalVotes: 0, isExpired: false,
     };
 
-    const optionsMap = this.buildOptionsMap(pollOptions);
-
-    const gunPoll = {
-      id: poll.id, communityId: poll.communityId, authorId: poll.authorId,
-      authorName: poll.authorName, authorShowRealName: poll.authorShowRealName,
-      question: poll.question, description: poll.description, createdAt: poll.createdAt,
-      expiresAt: poll.expiresAt, allowMultipleChoices: poll.allowMultipleChoices,
-      showResultsBeforeVoting: poll.showResultsBeforeVoting,
-      requireLogin: poll.requireLogin, isPrivate: poll.isPrivate,
-      totalVotes: 0, isExpired: false,
-      options: optionsMap,
-    };
-
     try {
       const { KeyService }    = await import('./keyService');
       const { CryptoService } = await import('./cryptoService');
@@ -884,10 +872,46 @@ export class PollService {
           poll.isEncrypted      = true;
           poll.encryptionKeyVersion = storedKey.keyVersion || 1;
           logPollDebug('create', 'Poll encryption completed', { pollId });
-        } catch (err) { console.warn('Failed to encrypt poll:', err); }
+        } catch (err) {
+          throw new Error(`Failed to encrypt poll: ${err instanceof Error ? err.message : String(err)}`);
+        }
       } else {
         logPollDebug('create', 'No encryption key for community; proceeding unencrypted', { pollId, communityId: poll.communityId });
       }
+    }
+
+    const persistedPollOptions = poll.isEncrypted
+      ? pollOptions.map((option) => ({ ...option, text: '🔒 Encrypted option', voters: [] as string[] }))
+      : pollOptions;
+    const optionsMap = this.buildOptionsMap(persistedPollOptions);
+    const gunPoll = {
+      id: poll.id,
+      communityId: poll.communityId,
+      authorId: poll.authorId,
+      authorName: poll.isEncrypted ? 'encrypted' : poll.authorName,
+      authorShowRealName: poll.authorShowRealName,
+      question: poll.isEncrypted ? '🔒 Encrypted Poll' : poll.question,
+      description: poll.isEncrypted ? '' : poll.description,
+      createdAt: poll.createdAt,
+      expiresAt: poll.expiresAt,
+      allowMultipleChoices: poll.allowMultipleChoices,
+      showResultsBeforeVoting: poll.showResultsBeforeVoting,
+      requireLogin: poll.requireLogin,
+      isPrivate: poll.isPrivate,
+      totalVotes: 0,
+      isExpired: false,
+      options: optionsMap,
+      isEncrypted: poll.isEncrypted ? true : undefined,
+      encryptedContent: poll.encryptedContent,
+      authTag: poll.authTag,
+      encryptionKeyVersion: poll.encryptionKeyVersion,
+      authorPubkey: poll.authorPubkey,
+      contentSignature: poll.contentSignature,
+    };
+
+    const policyRegistered = await AuditService.registerPollPolicy(poll.id, poll.requireLogin);
+    if (!policyRegistered) {
+      throw new Error('Failed to register poll policy with relay');
     }
 
     const createWriteOptions = { timeoutMs: 15000 } as const;
@@ -977,18 +1001,6 @@ export class PollService {
       });
     }
 
-    if (poll.isEncrypted && poll.encryptedContent) {
-      const node = this.getPollPath(pollId);
-      node.get('question').put('🔒 Encrypted Poll');
-      node.get('description').put('');
-      node.get('encryptedContent').put(poll.encryptedContent);
-      node.get('authTag').put(poll.authTag);
-      node.get('encryptionKeyVersion').put(poll.encryptionKeyVersion || 1);
-      node.get('isEncrypted').put(true);
-      if (poll.authorPubkey)     node.get('authorPubkey').put(poll.authorPubkey);
-      if (poll.contentSignature) node.get('contentSignature').put(poll.contentSignature);
-    }
-
     if (poll.isPrivate) {
       const rawInviteCount = Number(data.inviteCodeCount);
       const safeInviteCount = Number.isFinite(rawInviteCount) ? rawInviteCount : 20;
@@ -1064,10 +1076,15 @@ export class PollService {
       logPollDebug('create', 'Private invite codes generated', { pollId, inviteCount });
     }
 
-    void indexForSearch('poll', poll.id, {
-      question: poll.question, description: poll.description || '',
-      authorName: poll.authorName, communitySlug: poll.communityId, createdAt: poll.createdAt
-    });
+    if (!poll.isEncrypted) {
+      void indexForSearch('poll', poll.id, {
+        question: poll.question,
+        description: poll.description || '',
+        authorName: poll.authorName,
+        communitySlug: poll.communityId,
+        createdAt: poll.createdAt,
+      });
+    }
 
     logPollDebug('create', 'createPoll completed', {
       pollId,

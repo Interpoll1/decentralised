@@ -113,7 +113,7 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
         comment.isEncrypted = true;
         comment.encryptionKeyVersion = storedKey.keyVersion || 1;
       } catch (err) {
-        console.warn('Failed to encrypt comment:', err);
+        throw new Error(`Failed to encrypt comment: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
   }
@@ -126,9 +126,9 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
     commentNode.get('postId').put(data.postId);
     commentNode.get('communityId').put(data.communityId);
     commentNode.get('authorId').put(data.authorId);
-    commentNode.get('authorName').put(data.authorName);
+    commentNode.get('authorName').put(comment.isEncrypted ? 'encrypted' : data.authorName);
     commentNode.get('authorShowRealName').put(data.authorShowRealName || false);
-    commentNode.get('content').put(data.content);
+    commentNode.get('content').put(comment.isEncrypted ? '🔒 Encrypted comment' : data.content);
     
     if (data.parentId) {
       commentNode.get('parentId').put(data.parentId);
@@ -152,9 +152,6 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
       commentNode.get('encryptedContent').put(comment.encryptedContent);
       commentNode.get('authTag').put(comment.authTag);
       commentNode.get('encryptionKeyVersion').put(comment.encryptionKeyVersion || 1);
-      // Replace plaintext with placeholder
-      commentNode.get('content').put('🔒 Encrypted comment');
-      commentNode.get('authorName').put('encrypted');
     }
 
     // Add to post's comments index

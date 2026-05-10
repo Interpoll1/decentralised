@@ -170,15 +170,26 @@ const submitVote = async () => {
     }
 
     // Ask backend (if available) to enforce one-vote-per-device
-    const authorization = await AuditService.authorizeVote(props.poll.id, deviceId);
+    const authorization = await AuditService.authorizeVote(props.poll.id, deviceId, !!(props.poll as any).requireLogin);
     if (!authorization.allowed || !authorization.reservationToken) {
+      if (authorization.requiresAuth) {
+        const toast = await toastController.create({
+          message: 'Sign in is required before voting on this poll',
+          duration: 3000,
+          color: 'warning'
+        });
+        await toast.present();
+        AuditService.saveReturnUrl(router.currentRoute.value.fullPath);
+        AuditService.startOAuthLogin('google');
+        return;
+      }
       const toast = await toastController.create({
-        message: 'This device has already voted on this poll (server)',
+        message: authorization.reason || 'This device has already voted on this poll (server)',
         duration: 3000,
         color: 'danger'
       });
       await toast.present();
-      hasAlreadyVoted.value = true;
+      hasAlreadyVoted.value = authorization.reason?.includes('already') ?? false;
       return;
     }
 
@@ -234,6 +245,7 @@ const submitVote = async () => {
           pollIdForSync,
           deviceId,
           reservationTokenForSync,
+          !!(props.poll as any).requireLogin,
         );
         if (!confirmedByBackend) {
           console.warn('Vote confirmation request failed after chain vote');
