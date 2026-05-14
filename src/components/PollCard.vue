@@ -15,6 +15,9 @@
         </div>
         <div class="poll-meta">
           <span class="author">u/{{ authorDisplayName }}</span>
+          <span v-if="poll.authorShowRealName" class="identity-badge" :class="authorIdentityClass">
+            {{ authorIdentityLabel }}
+          </span>
           <span class="separator">•</span>
           <span class="timestamp">{{ formatTime(poll.createdAt) }}</span>
           <span v-if="poll.isExpired" class="expired-badge">Ended</span>
@@ -90,7 +93,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { IonIcon, IonButton } from '@ionic/vue';
 
 import { 
@@ -104,6 +107,8 @@ import {
 import { Poll } from '../services/pollService';
 import type { FilterAction } from '../services/moderationService';
 import { generatePseudonym } from '../utils/pseudonym';
+import { useUserStore } from '../stores/userStore';
+import type { UserProfile } from '../services/userService';
 
 const props = defineProps<{
   poll: Poll;
@@ -113,6 +118,24 @@ const props = defineProps<{
 defineEmits(['click', 'vote']);
 
 const revealed = ref(false);
+const userStore = useUserStore();
+const authorProfile = ref<UserProfile | null>(null);
+let authorProfileRequestId = 0;
+
+watch(
+  () => [props.poll.authorId, props.poll.authorShowRealName] as const,
+  async ([authorId, authorShowRealName]) => {
+    const requestId = ++authorProfileRequestId;
+    if (!authorId || !authorShowRealName) {
+      authorProfile.value = null;
+      return;
+    }
+    const profile = await userStore.getProfile(authorId);
+    if (requestId !== authorProfileRequestId) return;
+    authorProfile.value = profile;
+  },
+  { immediate: true }
+);
 
 const authorDisplayName = computed(() => {
   if (props.poll.authorShowRealName) {
@@ -123,6 +146,14 @@ const authorDisplayName = computed(() => {
   }
   return props.poll.authorName || 'anon';
 });
+
+const authorIdentityLabel = computed(() =>
+  authorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'Issuer linked' : 'Unverified identity'
+);
+
+const authorIdentityClass = computed(() =>
+  authorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'
+);
 
 function formatTime(timestamp: number): string {
   const now = Date.now();
@@ -233,6 +264,24 @@ html.dark .poll-footer {
 .author {
   color: var(--ion-color-step-600);
   font-weight: 500;
+}
+
+.identity-badge {
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.identity-badge.unverified {
+  background: rgba(var(--ion-color-warning-rgb), 0.16);
+  color: var(--ion-color-warning-shade);
+}
+
+.identity-badge.trusted-issuer {
+  background: rgba(var(--ion-color-success-rgb), 0.14);
+  color: var(--ion-color-success-shade);
 }
 
 .expired-badge {
@@ -400,4 +449,3 @@ html.dark .poll-footer {
   font-size: 13px;
 }
 </style>
-

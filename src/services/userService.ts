@@ -2,12 +2,16 @@
 import { GunService } from './gunService';
 import { VoteTrackerService } from './voteTrackerService';
 import { KeyService } from './keyService';
+import { parseIdentityTrust } from '@/utils/identityTrust';
 
 export interface UserProfile {
   id: string;
   username: string;
   displayName: string;
   customUsername?: string;
+  identityUsername?: string;
+  identityIssuer?: string;
+  identityTrustLevel?: 'trusted-issuer' | 'unverified';
   showRealName?: boolean;
   avatarIPFS?: string;
   avatarThumbnail?: string;
@@ -30,6 +34,16 @@ export interface UserStats {
 
 export class UserService {
   private static currentUser: UserProfile | null = null;
+
+  private static deriveIdentityFields(profileLike: Partial<UserProfile>): Pick<UserProfile, 'identityUsername' | 'identityIssuer' | 'identityTrustLevel'> {
+    const identityUsername = (profileLike.customUsername || profileLike.username || '').trim();
+    const trust = parseIdentityTrust(identityUsername);
+    return {
+      identityUsername: trust.identityUsername,
+      identityIssuer: trust.issuer || undefined,
+      identityTrustLevel: trust.trustLevel,
+    };
+  }
 
   static async getCurrentUser(forceRefresh = false): Promise<UserProfile> {
     if (this.currentUser && !forceRefresh) return this.currentUser;
@@ -61,6 +75,13 @@ export class UserService {
         await gun.get('users').get(deviceId).get('publicKey').put(publicKey);
         existingProfile.publicKey = publicKey;
       }
+      if (!existingProfile.identityTrustLevel || existingProfile.identityUsername == null) {
+        const derived = this.deriveIdentityFields(existingProfile);
+        await gun.get('users').get(deviceId).put(derived);
+        existingProfile.identityUsername = derived.identityUsername;
+        existingProfile.identityIssuer = derived.identityIssuer;
+        existingProfile.identityTrustLevel = derived.identityTrustLevel;
+      }
       this.currentUser = existingProfile;
       return existingProfile;
     }
@@ -78,6 +99,7 @@ export class UserService {
       postCount: 0,
       commentCount: 0,
       publicKey, // ← stored in GunDB so other users can fetch it
+      ...this.deriveIdentityFields({ username: `user_${deviceId.substring(0, 8)}` }),
     };
 
     await gun.get('users').get(deviceId).put(newProfile);
@@ -90,7 +112,9 @@ export class UserService {
     const gun = GunService.getGun();
     const currentUser = await this.getCurrentUser();
 
-    const updatedProfile = { ...currentUser, ...updates };
+    const mergedProfile = { ...currentUser, ...updates };
+    const derivedIdentity = this.deriveIdentityFields(mergedProfile);
+    const updatedProfile = { ...mergedProfile, ...derivedIdentity };
     await gun.get('users').get(currentUser.id).put(updatedProfile);
 
     this.currentUser = updatedProfile;
