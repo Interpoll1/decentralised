@@ -11,6 +11,9 @@
       <div class="comment-header">
         <span class="commenter-dot"></span>
         <span class="author-name">u/{{ displayName }}</span>
+        <span v-if="comment.authorShowRealName" class="identity-badge" :class="authorIdentityClass">
+          {{ authorIdentityLabel }}
+        </span>
         <span class="separator">•</span>
         <span class="timestamp">{{ formatTime(comment.createdAt) }}</span>
         <span v-if="comment.edited" class="edited-label">(edited)</span>
@@ -111,6 +114,24 @@
 .author-name {
   font-weight: 600;
   color: var(--ion-text-color);
+}
+
+.identity-badge {
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.identity-badge.unverified {
+  background: rgba(var(--ion-color-warning-rgb), 0.16);
+  color: var(--ion-color-warning-shade);
+}
+
+.identity-badge.trusted-issuer {
+  background: rgba(var(--ion-color-success-rgb), 0.14);
+  color: var(--ion-color-success-shade);
 }
 
 .edited-label {
@@ -242,7 +263,7 @@
 </style>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { IonIcon, IonTextarea, IonButton, toastController } from '@ionic/vue';
 import {
   arrowUpOutline,
@@ -257,6 +278,8 @@ import { Comment } from '../services/commentService';
 import { generatePseudonym } from '../utils/pseudonym';
 import type { FilterAction } from '../services/moderationService';
 import { ModerationService } from '../services/moderationService';
+import { useUserStore } from '../stores/userStore';
+import type { UserProfile } from '../services/userService';
 
 const props = defineProps<{
   comment: Comment;
@@ -269,9 +292,27 @@ const props = defineProps<{
 defineEmits(['upvote', 'downvote']);
 
 const commentStore = useCommentStore();
+const userStore = useUserStore();
 const showReplyForm = ref(false);
 const replyText = ref('');
 const revealed = ref(false);
+const authorProfile = ref<UserProfile | null>(null);
+let authorProfileRequestId = 0;
+
+watch(
+  () => [props.comment.authorId, props.comment.authorShowRealName] as const,
+  async ([authorId, authorShowRealName]) => {
+    const requestId = ++authorProfileRequestId;
+    if (!authorId || !authorShowRealName) {
+      authorProfile.value = null;
+      return;
+    }
+    const profile = await userStore.getProfile(authorId);
+    if (requestId !== authorProfileRequestId) return;
+    authorProfile.value = profile;
+  },
+  { immediate: true }
+);
 
 function checkReplyFlagged(content: string): boolean {
   return ModerationService.checkContent(content || '').flagged;
@@ -286,6 +327,14 @@ const displayName = computed(() => {
   }
   return props.comment.authorName || 'anon';
 });
+
+const authorIdentityLabel = computed(() =>
+  authorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'Issuer linked' : 'Unverified identity'
+);
+
+const authorIdentityClass = computed(() =>
+  authorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'
+);
 
 const hasUpvoted = computed(() => {
   commentStore.voteVersion; // reactive dependency to trigger re-evaluation on vote changes
@@ -387,4 +436,3 @@ function formatNumber(num: number | undefined | null): string {
   return n.toString();
 }
 </script>
-

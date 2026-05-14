@@ -198,6 +198,12 @@ const TYPE_VALIDATORS = {
       if (!deviceId) return { valid: false, reason: 'Invalid deviceId format' };
       data.deviceId = deviceId;
     }
+    if (data.identityUsername !== undefined) {
+      if (typeof data.identityUsername !== 'string') {
+        return { valid: false, reason: 'identityUsername must be a string' };
+      }
+      data.identityUsername = sanitizeString(data.identityUsername, 120).trim();
+    }
     return { valid: true };
   },
 

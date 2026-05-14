@@ -15,6 +15,9 @@
           <span class="community-name">{{ communityName }}</span>
           <span class="separator">•</span>
           <span class="author">u/{{ authorDisplayName }}</span>
+          <span v-if="props.post.authorShowRealName" class="identity-badge" :class="authorIdentityClass">
+            {{ authorIdentityLabel }}
+          </span>
           <span class="separator">•</span>
           <span class="timestamp">{{ formatTime(post.createdAt) }}</span>
           <span v-if="flagged && filterAction === 'flag'" class="flag-badge" title="Flagged by word filter">
@@ -120,6 +123,24 @@ html.dark .post-footer {
 .author {
   color: var(--ion-color-step-600);
   font-weight: 500;
+}
+
+.identity-badge {
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.identity-badge.unverified {
+  background: rgba(var(--ion-color-warning-rgb), 0.16);
+  color: var(--ion-color-warning-shade);
+}
+
+.identity-badge.trusted-issuer {
+  background: rgba(var(--ion-color-success-rgb), 0.14);
+  color: var(--ion-color-success-shade);
 }
 
 .timestamp {
@@ -370,7 +391,7 @@ html.dark .stat-button:hover {
 </style>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { IonIcon } from '@ionic/vue';
 import {
@@ -383,8 +404,13 @@ import {
 import { Post } from '../services/postService';
 import type { FilterAction } from '../services/moderationService';
 import { generatePseudonym } from '../utils/pseudonym';
+import { useUserStore } from '../stores/userStore';
+import type { UserProfile } from '../services/userService';
 
 const router = useRouter();
+const userStore = useUserStore();
+const authorProfile = ref<UserProfile | null>(null);
+let authorProfileRequestId = 0;
 
 const props = defineProps<{ 
   post: Post;
@@ -399,6 +425,21 @@ const revealed = ref(false);
 
 const emit = defineEmits(['upvote', 'downvote']);
 
+watch(
+  () => [props.post.authorId, props.post.authorShowRealName] as const,
+  async ([authorId, authorShowRealName]) => {
+    const requestId = ++authorProfileRequestId;
+    if (!authorId || !authorShowRealName) {
+      authorProfile.value = null;
+      return;
+    }
+    const profile = await userStore.getProfile(authorId);
+    if (requestId !== authorProfileRequestId) return;
+    authorProfile.value = profile;
+  },
+  { immediate: true }
+);
+
 const authorDisplayName = computed(() => {
   if (props.post.authorShowRealName) {
     return props.post.authorName || 'anon';
@@ -408,6 +449,14 @@ const authorDisplayName = computed(() => {
   }
   return props.post.authorName || 'anon';
 });
+
+const authorIdentityLabel = computed(() =>
+  authorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'Issuer linked' : 'Unverified identity'
+);
+
+const authorIdentityClass = computed(() =>
+  authorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'
+);
 
 const truncatedContent = computed(() => {
   const content = props.post.content || '';

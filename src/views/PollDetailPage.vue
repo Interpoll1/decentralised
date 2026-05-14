@@ -52,7 +52,11 @@
           </div>
           <h1 class="poll-title">{{ poll.question }}</h1>
           <p class="poll-author">
-            Posted by u/{{ pollAuthorDisplayName }} • {{ formatTime(poll.createdAt) }}
+            Posted by u/{{ pollAuthorDisplayName }}
+            <span v-if="poll.authorShowRealName" class="identity-badge" :class="pollAuthorIdentityClass">
+              {{ pollAuthorIdentityLabel }}
+            </span>
+            • {{ formatTime(poll.createdAt) }}
           </p>
           <p v-if="poll.description" class="poll-description">{{ poll.description }}</p>
           <div class="separator"></div>
@@ -282,6 +286,7 @@ import {
 } from 'ionicons/icons';
 import { usePollStore } from '../stores/pollStore';
 import { useChainStore } from '../stores/chainStore';
+import { useUserStore } from '../stores/userStore';
 import { PollService } from '../services/pollService';
 import type { Poll } from '../services/pollService';
 import { UserService } from '../services/userService';
@@ -296,6 +301,7 @@ const route = useRoute();
 const router = useRouter();
 const pollStore = usePollStore();
 const chainStore = useChainStore();
+const userStore = useUserStore();
 
 const poll = ref<Poll | null>(null);
 const isLoading = ref(true);
@@ -307,6 +313,8 @@ const currentUserId = ref('');
 const inviteCodes = ref<{ code: string; used: boolean }[]>([]);
 const isLoadingCodes = ref(false);
 const loadPollRequestId = ref(0);
+const pollAuthorTrustLevel = ref<'trusted-issuer' | 'unverified'>('unverified');
+let pollAuthorTrustRequestId = 0;
 
 function readVotedPolls(): string[] {
   try {
@@ -334,6 +342,14 @@ const pollAuthorDisplayName = computed(() => {
   }
   return poll.value.authorName || 'anon';
 });
+
+const pollAuthorIdentityLabel = computed(() =>
+  pollAuthorTrustLevel.value === 'trusted-issuer' ? 'Issuer linked' : 'Unverified identity'
+);
+
+const pollAuthorIdentityClass = computed(() =>
+  pollAuthorTrustLevel.value === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'
+);
 
 const canSubmitVote = computed(() => {
   if (poll.value?.allowMultipleChoices) {
@@ -385,6 +401,21 @@ function getTimeRemaining(): string {
   if (minutes > 0) return `${minutes}m left`;
   return 'Ending soon';
 }
+
+watch(
+  () => [poll.value?.authorId, poll.value?.authorShowRealName] as const,
+  async ([authorId, authorShowRealName]) => {
+    const requestId = ++pollAuthorTrustRequestId;
+    if (!authorId || !authorShowRealName) {
+      pollAuthorTrustLevel.value = 'unverified';
+      return;
+    }
+    const profile = await userStore.getProfile(authorId);
+    if (requestId !== pollAuthorTrustRequestId) return;
+    pollAuthorTrustLevel.value = profile?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified';
+  },
+  { immediate: true }
+);
 
 function getOptionPercent(option: { votes: number }): number {
   const total = actualTotalVotes.value;
@@ -815,6 +846,26 @@ watch(
   font-size: 13px;
   color: var(--ion-color-medium);
   margin: 0 0 12px 0;
+}
+
+.identity-badge {
+  display: inline-block;
+  border-radius: 10px;
+  padding: 1px 8px;
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.identity-badge.unverified {
+  background: rgba(var(--ion-color-warning-rgb), 0.16);
+  color: var(--ion-color-warning-shade);
+}
+
+.identity-badge.trusted-issuer {
+  background: rgba(var(--ion-color-success-rgb), 0.14);
+  color: var(--ion-color-success-shade);
 }
 
 .poll-description {

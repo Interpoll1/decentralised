@@ -52,3 +52,10 @@ Pure ranking/filtering utilities for Home and Community feed personalization.
   - excluded-keyword demotion (keeps content visible but lowers rank)
   - deterministic ordering fallback by `createdAt`
 - Works with `FeedPreferencesService` settings (mode, keywords, community preferences, ranking weights).
+
+## `identityTrust.ts` — Username issuer trust parsing
+
+Parses user identity-style usernames (e.g. `viktor@endles.sbs`) into a normalized trust signal for UI/service logic.
+
+- `parseIdentityTrust(rawUsername)` returns `{ identityUsername, issuer, hasIssuer, isTrustedIssuer, trustLevel }`
+- `trustLevel` is `'trusted-issuer'` when issuer domain is in the trusted issuer allowlist, otherwise `'unverified'`
