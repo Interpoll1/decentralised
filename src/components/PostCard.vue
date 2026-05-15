@@ -14,7 +14,10 @@
         <div class="post-meta">
           <span class="community-name">{{ communityName }}</span>
           <span class="separator">•</span>
-          <span class="author">u/{{ authorDisplayName }}</span>
+          <UserIdentityBadge
+            :authorId="post.authorId"
+            :username="authorDisplayName"
+          />
           <span class="separator">•</span>
           <span class="timestamp">{{ formatTime(post.createdAt) }}</span>
           <span v-if="flagged && filterAction === 'flag'" class="flag-badge" title="Flagged by word filter">
@@ -370,7 +373,7 @@ html.dark .stat-button:hover {
 </style>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { IonIcon } from '@ionic/vue';
 import {
@@ -383,6 +386,8 @@ import {
 import { Post } from '../services/postService';
 import type { FilterAction } from '../services/moderationService';
 import { generatePseudonym } from '../utils/pseudonym';
+import UserIdentityBadge from './UserIdentityBadge.vue';
+import { UserService } from '../services/userService';
 
 const router = useRouter();
 
@@ -399,15 +404,35 @@ const revealed = ref(false);
 
 const emit = defineEmits(['upvote', 'downvote']);
 
-const authorDisplayName = computed(() => {
+// Reactive display name — resolves async for live customUsername lookup
+const resolvedAuthorName = ref<string>('');
+
+onMounted(async () => {
+  resolvedAuthorName.value = await resolveAuthorName();
+});
+
+async function resolveAuthorName(): Promise<string> {
+  // Case 1: post was created with showRealName=true (stored name is authoritative)
   if (props.post.authorShowRealName) {
     return props.post.authorName || 'anon';
   }
+  // Case 2: look up live customUsername from UserService
+  // (handles old posts that stored a pseudonym but user has since set a customUsername)
+  if (props.post.authorId) {
+    try {
+      const profile = await UserService.getUser(props.post.authorId);
+      if (profile?.customUsername) return profile.customUsername;
+      if (profile?.showRealName && profile?.displayName) return profile.displayName;
+    } catch { /* fall through to pseudonym */ }
+  }
+  // Case 3: pseudonym (anonymous post)
   if (props.post.authorId && props.post.id) {
     return generatePseudonym(props.post.id, props.post.authorId);
   }
   return props.post.authorName || 'anon';
-});
+}
+
+const authorDisplayName = computed(() => resolvedAuthorName.value || props.post.authorName || '…');
 
 const truncatedContent = computed(() => {
   const content = props.post.content || '';
