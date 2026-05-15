@@ -40,6 +40,9 @@
               </ion-chip>
               <span class="separator">•</span>
               <span class="author">u/{{ postAuthorDisplayName }}</span>
+              <span v-if="post?.authorShowRealName" class="identity-badge" :class="postAuthorIdentityClass">
+                {{ postAuthorIdentityLabel }}
+              </span>
               <span class="separator">•</span>
               <span class="timestamp">{{ formatTime(post.createdAt) }}</span>
             </div>
@@ -98,6 +101,9 @@
             <div v-for="commenter in uniqueCommenters" :key="commenter.authorId" class="commenter-chip">
               <span class="commenter-online-dot"></span>
               <span class="commenter-name">u/{{ commenter.displayName }}</span>
+              <span v-if="commenter.authorShowRealName" class="identity-badge" :class="commenter.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'">
+                {{ commenter.identityTrustLevel === 'trusted-issuer' ? 'Issuer linked' : 'Unverified identity' }}
+              </span>
               <ion-badge color="medium" class="commenter-count">{{ commenter.commentCount }}</ion-badge>
             </div>
           </div>
@@ -157,7 +163,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, watchEffect } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
@@ -194,6 +200,8 @@ const isLoading = ref(true);
 const newCommentText = ref('');
 const voteVersion = ref(0);
 const fullImageSrc = ref<string | null>(null);
+const postAuthorTrustLevel = ref<'trusted-issuer' | 'unverified'>('unverified');
+let postAuthorTrustRequestId = 0;
 let fullImageLoadPromise: Promise<string | null> | null = null;
 
 // Load full-res image from GunDB to replace thumbnail
@@ -249,6 +257,14 @@ const postAuthorDisplayName = computed(() => {
   return post.value.authorName || 'anon';
 });
 
+const postAuthorIdentityLabel = computed(() =>
+  postAuthorTrustLevel.value === 'trusted-issuer' ? 'Issuer linked' : 'Unverified identity'
+);
+
+const postAuthorIdentityClass = computed(() =>
+  postAuthorTrustLevel.value === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'
+);
+
 const allComments = computed(() =>
   commentStore.comments.filter(c => {
     const matchesPost = c.postId === postId.value || c.postId === post.value?.id;
@@ -261,14 +277,32 @@ const modSettings = computed(() => {
   return ModerationService.getSettings();
 });
 
-// Pre-fetch author profiles outside computed
-watchEffect(() => {
-  for (const c of allComments.value) {
-    if (c.authorId && userStore.getCachedKarma(c.authorId) === null) {
-      userStore.getProfile(c.authorId);
+watch(
+  () => [post.value?.authorId, post.value?.authorShowRealName] as const,
+  async ([authorId, showRealName]) => {
+    const requestId = ++postAuthorTrustRequestId;
+    if (!authorId || !showRealName) {
+      postAuthorTrustLevel.value = 'unverified';
+      return;
     }
-  }
-});
+    const profile = await userStore.getProfile(authorId);
+    if (requestId !== postAuthorTrustRequestId) return;
+    postAuthorTrustLevel.value = profile?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified';
+  },
+  { immediate: true }
+);
+
+watch(
+  () => allComments.value.map((c) => c.authorId).join('|'),
+  () => {
+    for (const c of allComments.value) {
+      if (c.authorId && userStore.getCachedKarma(c.authorId) === null) {
+        userStore.getProfile(c.authorId);
+      }
+    }
+  },
+  { immediate: true }
+);
 
 const sortedComments = computed(() => {
   moderationVersion.value; // reactive dependency
@@ -301,7 +335,7 @@ function isCommentFlagged(content: string): boolean {
 }
 
 const uniqueCommenters = computed(() => {
-  const authorMap = new Map<string, { authorId: string; displayName: string; commentCount: number }>();
+  const authorMap = new Map<string, { authorId: string; displayName: string; commentCount: number; authorShowRealName: boolean; identityTrustLevel: 'trusted-issuer' | 'unverified' }>();
 
   commentStore.comments
     .filter(c => c.postId === postId.value || c.postId === post.value?.id)
@@ -309,6 +343,10 @@ const uniqueCommenters = computed(() => {
       const existing = authorMap.get(c.authorId);
       if (existing) {
         existing.commentCount++;
+        if (!existing.authorShowRealName && c.authorShowRealName === true) {
+          existing.displayName = c.authorName || 'anon';
+        }
+        existing.authorShowRealName = existing.authorShowRealName || c.authorShowRealName === true;
       } else {
         const name = c.authorShowRealName
           ? (c.authorName || 'anon')
@@ -319,6 +357,8 @@ const uniqueCommenters = computed(() => {
           authorId: c.authorId,
           displayName: name,
           commentCount: 1,
+          authorShowRealName: c.authorShowRealName === true,
+          identityTrustLevel: userStore.profiles[c.authorId]?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified',
         });
       }
     });
@@ -737,6 +777,24 @@ html.dark .section-separator {
 
 .commenter-name {
   color: var(--ion-text-color);
+}
+
+.identity-badge {
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.identity-badge.unverified {
+  background: rgba(var(--ion-color-warning-rgb), 0.16);
+  color: var(--ion-color-warning-shade);
+}
+
+.identity-badge.trusted-issuer {
+  background: rgba(var(--ion-color-success-rgb), 0.14);
+  color: var(--ion-color-success-shade);
 }
 
 .commenter-count {

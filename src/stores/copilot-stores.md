@@ -63,6 +63,7 @@ Key computed: `polls`, `sortedPolls`
 ## `userStore.ts` — `useUserStore`
 
 - Simple profile cache: `profiles: Record<string, UserProfile>`. Fetches from `UserService` on miss.
+- `getProfile()` now deduplicates concurrent fetches per user ID with an in-flight promise map, so components requesting the same profile at once share one network read.
 - `getCachedKarma(userId)` — used by `useModerationFilter` to hide low-karma content without a network fetch.
 
 ## `chatRoomStore.ts` — `useChatRoomStore`

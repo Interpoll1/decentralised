@@ -35,9 +35,12 @@ export class RateLimiter {
     }
   }
 
-  _check(id, limit) {
+  _check(id, limitOverride, defaultLimit) {
     const now = Date.now();
     const entry = this._getEntry(id);
+    const limit = Number.isFinite(limitOverride) && limitOverride > 0
+      ? Math.floor(limitOverride)
+      : defaultLimit;
 
     this._decayViolations(entry, now);
 
@@ -73,12 +76,12 @@ export class RateLimiter {
     return { allowed: true, violations: entry.violations };
   }
 
-  checkHttp(ip) {
-    return this._check(ip, this.httpLimit);
+  checkHttp(ip, limitOverride) {
+    return this._check(ip, limitOverride, this.httpLimit);
   }
 
-  checkWs(peerId) {
-    return this._check(peerId, this.wsLimit);
+  checkWs(peerId, limitOverride) {
+    return this._check(peerId, limitOverride, this.wsLimit);
   }
 
   getViolations(id) {
