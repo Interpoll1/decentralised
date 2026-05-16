@@ -36,8 +36,9 @@ Key computed: `polls`, `sortedPolls`
 
 ## `communityStore.ts` — `useCommunityStore`
 
-- Has a **MySQL REST fallback** via the gun-relay's `/db/search?prefix={namespace}/communities` endpoint, but only when the active namespace is `v2` or lower. In `v3+` clean-slate mode, this fallback is intentionally skipped so empty Gun namespaces stay empty.
-- `selectCommunity()` follows the same rule: `/db/soul` fallback is v2-only, so v3+ does not trigger cross-origin fallback requests when Gun has no matching community yet.
+- Has a **DB snapshot fallback** via the gun-relay's `/db/search?prefix={namespace}/communities` endpoint. If Gun returns no communities during bootstrap (including private/incognito sessions), fallback hydrates communities and warms posts so feeds do not appear empty.
+- Community fallback now only accepts canonical top-level community nodes (`{namespace}/communities/{id}` where `id` starts with `c-`) and requires soul/id match, preventing nested poll nodes from being rendered as fake communities.
+- `selectCommunity()` uses the same `/db/soul` fallback when Gun has no matching community, regardless of namespace version.
 - The fallback relay base URL is derived from runtime config (`config.relay.gun`), not hardcoded, so Settings relay overrides and localhost/dev relays are respected.
 - Fallback `/db/search` and `/db/soul` reads are timeboxed to avoid hanging community navigation when fallback relay requests are slow or blocked.
 - Deduplicates with a `seen: Set<string>`.

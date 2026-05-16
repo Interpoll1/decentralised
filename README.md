@@ -118,9 +118,21 @@ The production relay (`relay-server/relay-server-enhanced.js` via PM2) uses a tw
 
 When deploying production for this rollout, reset `relay-server/data/vote-registry.json` to `[]` before restarting PM2 so stale persisted entries do not keep previously blocked voters locked out.
 
+### Username trust-issuer spec (optional)
+
+Verified usernames use an external trust issuer API:
+
+- `GET /public-key` → issuer metadata (`issuerDomain`, `publicKey`)
+- `POST /challenge` with `{ username, pubkey }` → PoW challenge
+- `POST /claim` with `{ challengeId, nonce, username, pubkey }` → signed certificate
+
+The client verifies certificate signature and username/pubkey binding locally before writing `level: 'verified'` claims to GunDB (`usernames/{username}`). Issuer endpoints must be HTTPS (localhost HTTP allowed for development), and issuer domain must match endpoint host binding.
+
 ### Data distribution
 
 Poll metadata, communities, user profiles, posts, comments, and images all live in GunDB -- a distributed, eventually-consistent database. Each browser keeps a local copy and syncs with a GunDB relay server. If the relay goes down, data persists locally and syncs when the relay comes back.
+
+When Gun bootstrap is empty, the app can hydrate communities from relay DB snapshot endpoints (`/db/search`, `/db/soul`). Fallback ingestion is strict: only top-level canonical community nodes are accepted (`{namespace}/communities/{id}` with matching `data.id`, `c-*` IDs) so poll/index rows cannot appear as communities.
 
 Images are compressed client-side (max 500KB, thumbnails at 20KB), base64-encoded, and stored as GunDB nodes.
 

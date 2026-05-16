@@ -22,16 +22,6 @@ function getGunRelayBaseUrl(): string {
 const FALLBACK_SOUL_TIMEOUT_MS = 4000;
 const FALLBACK_COMMUNITY_SEARCH_TIMEOUT_MS = 8000;
 const FALLBACK_POST_SEARCH_TIMEOUT_MS = 12000;
-const CLEAN_SLATE_NAMESPACE_VERSION = 3;
-
-function getNamespaceVersion(namespace: string): number {
-  const parsed = Number.parseInt(namespace.replace(/^v/i, ''), 10);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function isCleanSlateNamespace(namespace: string): boolean {
-  return getNamespaceVersion(namespace) >= CLEAN_SLATE_NAMESPACE_VERSION;
-}
 
 async function fetchJsonWithTimeout<T>(url: string, timeoutMs: number): Promise<T | null> {
   const controller = new AbortController();
@@ -60,13 +50,29 @@ function asStringArray(value: unknown): string[] {
   return value.filter((entry): entry is string => typeof entry === 'string');
 }
 
-function toCommunityRecord(value: unknown): Community | null {
+function getTopLevelCommunitySoulId(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const parts = value.split('/').filter(Boolean);
+  if (parts.length !== 3) return null;
+  const [namespace, root, id] = parts;
+  if (namespace !== GUN_NAMESPACE || root !== 'communities' || !id) return null;
+  return id;
+}
+
+function isCanonicalCommunityId(id: string): boolean {
+  return id.startsWith('c-');
+}
+
+function toCommunityRecord(value: unknown, expectedId?: string): Community | null {
   if (!value || typeof value !== 'object') return null;
   const data = value as Record<string, unknown>;
   const id = asString(data.id);
+  if (!id) return null;
+  if (expectedId && id !== expectedId) return null;
+  if (!isCanonicalCommunityId(id)) return null;
+
   const name = asString(data.name, id);
   const displayName = asString(data.displayName, name || id);
-  if (!id) return null;
 
   return {
     id,
@@ -177,18 +183,20 @@ export const useCommunityStore = defineStore('community', () => {
   // gun-relay's /db/search endpoint and hydrate the store immediately.
 
   async function loadCommunitiesFromDB(): Promise<number> {
-    if (isCleanSlateNamespace(GUN_NAMESPACE)) return 0;
     try {
       const relayBaseUrl = getGunRelayBaseUrl();
-      const json = await fetchJsonWithTimeout<{ results?: Array<{ data?: Record<string, unknown> }> }>(
-        `${relayBaseUrl}/db/search?prefix=${GUN_NAMESPACE}/communities&limit=200`,
+      const prefix = encodeURIComponent(`${GUN_NAMESPACE}/communities`);
+      const json = await fetchJsonWithTimeout<{ results?: Array<{ soul?: unknown; data?: Record<string, unknown> }> }>(
+        `${relayBaseUrl}/db/search?prefix=${prefix}&limit=200`,
         FALLBACK_COMMUNITY_SEARCH_TIMEOUT_MS,
       );
       if (!json) return 0;
 
       let added = 0;
       for (const row of json.results || []) {
-        const community = toCommunityRecord(row.data);
+        const soulId = getTopLevelCommunitySoulId(row.soul);
+        if (!soulId) continue;
+        const community = toCommunityRecord(row.data, soulId);
         if (!community) continue;
 
         const previousCount = communities.value.length;
@@ -209,11 +217,11 @@ export const useCommunityStore = defineStore('community', () => {
   // Same thing for posts — scan all community post index nodes from MySQL
   // so postStore can subscribe to communities even on cold relay
   async function loadPostsFromDB(): Promise<void> {
-    if (isCleanSlateNamespace(GUN_NAMESPACE)) return;
     try {
       const relayBaseUrl = getGunRelayBaseUrl();
+      const prefix = encodeURIComponent(`${GUN_NAMESPACE}/posts`);
       const json = await fetchJsonWithTimeout<{ results?: Array<{ data?: Record<string, unknown> }> }>(
-        `${relayBaseUrl}/db/search?prefix=${GUN_NAMESPACE}/posts&limit=500`,
+        `${relayBaseUrl}/db/search?prefix=${prefix}&limit=500`,
         FALLBACK_POST_SEARCH_TIMEOUT_MS,
       );
       if (!json) return;
@@ -245,20 +253,15 @@ export const useCommunityStore = defineStore('community', () => {
       void upsertCommunity(community);
     });
 
-    // 2. After 1.5s, if Gun gave us nothing (cold relay), v2 can fall back to MySQL.
-    // v3+ is clean-slate mode; skip API relay fallback so we don't rehydrate legacy data.
+    // 2. After 1.5s, if Gun gave us nothing (cold relay), fall back to DB snapshot.
+    // This keeps fresh sessions (including private mode) usable when Gun bootstrap is empty.
     await new Promise(r => setTimeout(r, 1500));
 
     if (communities.value.length === 0) {
-      const shouldUseFallback = !isCleanSlateNamespace(GUN_NAMESPACE);
-      if (shouldUseFallback) {
-        console.log('⚠️  Gun returned no communities — falling back to MySQL...');
-        await loadCommunitiesFromDB();
-        // Also warm up posts so the feed isn't empty
-        await loadPostsFromDB();
-      } else {
-        console.log('ℹ️  Gun returned no communities in clean-slate mode; skipping MySQL fallback.');
-      }
+      console.log('⚠️  Gun returned no communities — falling back to DB snapshot...');
+      await loadCommunitiesFromDB();
+      // Also warm up posts so the feed isn't empty
+      await loadPostsFromDB();
     }
 
     isLoading.value = false;
@@ -343,14 +346,16 @@ export const useCommunityStore = defineStore('community', () => {
       // Try Gun first
       currentCommunity.value = await CommunityService.getCommunity(communityId);
 
-      // Fallback: fetch from MySQL relay only for v2 and older namespaces.
-      if (!currentCommunity.value && !isCleanSlateNamespace(GUN_NAMESPACE)) {
+      // Fallback: fetch from DB snapshot relay when Gun is empty/unavailable.
+      if (!currentCommunity.value) {
         const relayBaseUrl = getGunRelayBaseUrl();
-        const json = await fetchJsonWithTimeout<{ data?: unknown }>(
-          `${relayBaseUrl}/db/soul?soul=${GUN_NAMESPACE}/communities/${communityId}`,
+        const soul = encodeURIComponent(`${GUN_NAMESPACE}/communities/${communityId}`);
+        const json = await fetchJsonWithTimeout<{ soul?: unknown; data?: unknown }>(
+          `${relayBaseUrl}/db/soul?soul=${soul}`,
           FALLBACK_SOUL_TIMEOUT_MS,
         );
-        const fallbackCommunity = toCommunityRecord(json?.data);
+        const soulId = getTopLevelCommunitySoulId(json?.soul);
+        const fallbackCommunity = soulId ? toCommunityRecord(json?.data, soulId) : null;
         if (fallbackCommunity) {
           currentCommunity.value = fallbackCommunity;
         }

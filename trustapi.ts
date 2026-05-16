@@ -1,0 +1,347 @@
+/**
+ * Minimal Trust Issuer API for InterPoll.
+ *
+ * Endpoints:
+ *   POST /challenge { username, pubkey }
+ *   POST /claim     { challengeId, nonce, username, pubkey }
+ *   GET  /health
+ *   GET  /public-key
+ *
+ * Run (Node 22+):
+ *   TRUST_PRIVATE_KEY_HEX=... node --experimental-strip-types trustapi.ts
+ *
+ * Or with tsx:
+ *   npx tsx trustapi.ts
+ */
+
+import http from 'node:http';
+import { randomUUID } from 'node:crypto';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+import { sha256 } from '@noble/hashes/sha256';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
+import { schnorr } from '@noble/curves/secp256k1.js';
+
+type ChallengeRecord = {
+  challengeId: string;
+  username: string;
+  pubkey: string;
+  prefix: string;
+  difficulty: number;
+  expiresAt: number;
+  createdAt: number;
+  used: boolean;
+};
+
+type ClaimRecord = {
+  username: string;
+  pubkey: string;
+  issuedAt: number;
+  expiresAt: number;
+  signature: string;
+};
+
+type PersistedState = {
+  claims: Record<string, ClaimRecord>;
+};
+
+const PORT = Number(process.env.TRUST_PORT || 8787);
+const ISSUER_DOMAIN = (process.env.TRUST_ISSUER_DOMAIN || 'endless.sbs').trim().toLowerCase();
+const FRONTEND_ORIGIN = (process.env.TRUST_FRONTEND_ORIGIN || 'https://endless.sbs').trim();
+const PRIVATE_KEY_HEX = (process.env.TRUST_PRIVATE_KEY_HEX || '').trim();
+const DIFFICULTY = clampInt(process.env.TRUST_POW_DIFFICULTY, 22, 18, 30);
+const CHALLENGE_TTL_MS = clampInt(process.env.TRUST_CHALLENGE_TTL_MS, 10 * 60_000, 30_000, 60 * 60_000);
+const CERT_TTL_MS = clampInt(process.env.TRUST_CERT_TTL_MS, 180 * 24 * 60 * 60 * 1000, 24 * 60 * 60 * 1000, 3_650 * 24 * 60 * 60 * 1000);
+const MAX_BODY_BYTES = clampInt(process.env.TRUST_MAX_BODY_BYTES, 32_000, 1_024, 256_000);
+const STATE_FILE = resolve(process.env.TRUST_STATE_FILE || './data/trust-issuer-state.json');
+const ALLOWED_ORIGIN_SET = new Set(
+  [FRONTEND_ORIGIN, 'http://localhost:5173', 'http://127.0.0.1:5173'].filter(Boolean),
+);
+
+if (!PRIVATE_KEY_HEX) {
+  throw new Error('Missing TRUST_PRIVATE_KEY_HEX env var');
+}
+
+const ISSUER_PUBLIC_KEY_HEX = bytesToHex(schnorr.getPublicKey(hexToBytes(PRIVATE_KEY_HEX)));
+const challenges = new Map<string, ChallengeRecord>();
+const claims = new Map<string, ClaimRecord>();
+
+await loadState();
+setInterval(cleanupChallenges, 15_000).unref();
+
+const server = http.createServer(async (req, res) => {
+  try {
+    setCorsHeaders(req, res);
+
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    if (req.method === 'GET' && url.pathname === '/health') {
+      return sendJson(res, 200, {
+        ok: true,
+        issuerDomain: ISSUER_DOMAIN,
+        difficulty: DIFFICULTY,
+        activeChallenges: challenges.size,
+        issuedClaims: claims.size,
+      });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/public-key') {
+      return sendJson(res, 200, {
+        issuerDomain: ISSUER_DOMAIN,
+        publicKey: ISSUER_PUBLIC_KEY_HEX,
+      });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/challenge') {
+      const body = await readJsonBody(req);
+      const username = normalizeUsername(body?.username);
+      const pubkey = normalizeHex(body?.pubkey);
+
+      if (!isValidUsername(username)) {
+        return sendJson(res, 400, { error: 'Invalid username format' });
+      }
+      if (!isValidPubkey(pubkey)) {
+        return sendJson(res, 400, { error: 'Invalid pubkey' });
+      }
+
+      const claim = claims.get(username);
+      if (claim && claim.pubkey !== pubkey) {
+        return sendJson(res, 409, { error: 'Username already claimed by another pubkey' });
+      }
+
+      const challengeId = randomUUID();
+      const createdAt = Date.now();
+      const expiresAt = createdAt + CHALLENGE_TTL_MS;
+      const prefix = `issuer:${ISSUER_DOMAIN}|username:${username}|pubkey:${pubkey}|challenge:${challengeId}|`;
+
+      const challenge: ChallengeRecord = {
+        challengeId,
+        username,
+        pubkey,
+        prefix,
+        difficulty: DIFFICULTY,
+        expiresAt,
+        createdAt,
+        used: false,
+      };
+
+      challenges.set(challengeId, challenge);
+      return sendJson(res, 200, {
+        challengeId,
+        prefix,
+        difficulty: DIFFICULTY,
+        expiresAt,
+      });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/claim') {
+      const body = await readJsonBody(req);
+      const challengeId = typeof body?.challengeId === 'string' ? body.challengeId.trim() : '';
+      const username = normalizeUsername(body?.username);
+      const pubkey = normalizeHex(body?.pubkey);
+      const nonce = body?.nonce;
+
+      if (!challengeId) return sendJson(res, 400, { error: 'Missing challengeId' });
+      if (!isValidUsername(username)) return sendJson(res, 400, { error: 'Invalid username format' });
+      if (!isValidPubkey(pubkey)) return sendJson(res, 400, { error: 'Invalid pubkey' });
+      if (!Number.isSafeInteger(nonce) || nonce < 0) return sendJson(res, 400, { error: 'Invalid nonce' });
+
+      const challenge = challenges.get(challengeId);
+      if (!challenge) return sendJson(res, 404, { error: 'Challenge not found' });
+      if (challenge.used) return sendJson(res, 409, { error: 'Challenge already used' });
+      if (Date.now() > challenge.expiresAt) {
+        challenges.delete(challengeId);
+        return sendJson(res, 410, { error: 'Challenge expired' });
+      }
+      if (challenge.username !== username || challenge.pubkey !== pubkey) {
+        return sendJson(res, 400, { error: 'Challenge data mismatch' });
+      }
+
+      const powInput = `${challenge.prefix}${nonce}`;
+      const powHashHex = hash(powInput);
+      if (countLeadingZeroBits(powHashHex) < challenge.difficulty) {
+        return sendJson(res, 400, { error: 'Invalid PoW solution' });
+      }
+
+      const existing = claims.get(username);
+      if (existing && existing.pubkey !== pubkey) {
+        return sendJson(res, 409, { error: 'Username already claimed by another pubkey' });
+      }
+
+      const issuedAt = Date.now();
+      const expiresAt = issuedAt + CERT_TTL_MS;
+      const certPayload = JSON.stringify({
+        issuerDomain: ISSUER_DOMAIN,
+        username,
+        userPubkey: pubkey,
+        issuedAt,
+        expiresAt,
+      });
+      const signature = signPayload(certPayload, PRIVATE_KEY_HEX);
+
+      challenge.used = true;
+      challenges.delete(challengeId);
+
+      claims.set(username, {
+        username,
+        pubkey,
+        issuedAt,
+        expiresAt,
+        signature,
+      });
+      await saveState();
+
+      return sendJson(res, 200, {
+        issuerDomain: ISSUER_DOMAIN,
+        username,
+        userPubkey: pubkey,
+        issuedAt,
+        expiresAt,
+        signature,
+      });
+    }
+
+    return sendJson(res, 404, { error: 'Not found' });
+  } catch (err) {
+    console.error('[trustapi] request error:', err);
+    return sendJson(res, 500, { error: 'Internal server error' });
+  }
+});
+
+server.listen(PORT, () => {
+  console.log(`[trustapi] listening on :${PORT}`);
+  console.log(`[trustapi] issuer domain: ${ISSUER_DOMAIN}`);
+  console.log(`[trustapi] issuer pubkey: ${ISSUER_PUBLIC_KEY_HEX}`);
+  console.log(`[trustapi] state file: ${STATE_FILE}`);
+});
+
+function hash(data: string): string {
+  return bytesToHex(sha256(new TextEncoder().encode(data)));
+}
+
+function signPayload(payload: string, privateKeyHex: string): string {
+  const digest = hexToBytes(hash(payload));
+  const sig = schnorr.sign(digest, hexToBytes(privateKeyHex));
+  return bytesToHex(sig);
+}
+
+function countLeadingZeroBits(hexHash: string): number {
+  let bits = 0;
+  for (const ch of hexHash) {
+    const nibble = parseInt(ch, 16);
+    if (nibble === 0) {
+      bits += 4;
+      continue;
+    }
+    if (nibble < 2) bits += 3;
+    else if (nibble < 4) bits += 2;
+    else if (nibble < 8) bits += 1;
+    break;
+  }
+  return bits;
+}
+
+function normalizeUsername(input: unknown): string {
+  return typeof input === 'string' ? input.trim() : '';
+}
+
+function normalizeHex(input: unknown): string {
+  return typeof input === 'string' ? input.trim().toLowerCase() : '';
+}
+
+function isValidUsername(username: string): boolean {
+  return /^[a-zA-Z0-9_.-]{3,32}$/.test(username);
+}
+
+function isValidPubkey(pubkey: string): boolean {
+  return /^[0-9a-f]{64}$/.test(pubkey);
+}
+
+function clampInt(input: string | undefined, fallback: number, min: number, max: number): number {
+  const parsed = Number(input);
+  if (!Number.isFinite(parsed)) return fallback;
+  const int = Math.trunc(parsed);
+  if (int < min) return min;
+  if (int > max) return max;
+  return int;
+}
+
+function cleanupChallenges(): void {
+  const now = Date.now();
+  for (const [id, challenge] of challenges) {
+    if (challenge.expiresAt <= now || challenge.used) challenges.delete(id);
+  }
+}
+
+async function readJsonBody(req: http.IncomingMessage): Promise<any> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of req) {
+    const b = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += b.length;
+    if (total > MAX_BODY_BYTES) {
+      throw new Error('Payload too large');
+    }
+    chunks.push(b);
+  }
+  const raw = Buffer.concat(chunks).toString('utf8');
+  if (!raw) return {};
+  return JSON.parse(raw);
+}
+
+function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
+  const json = JSON.stringify(body);
+  res.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'content-length': Buffer.byteLength(json),
+  });
+  res.end(json);
+}
+
+function setCorsHeaders(req: http.IncomingMessage, res: http.ServerResponse): void {
+  const origin = typeof req.headers.origin === 'string' ? req.headers.origin : '';
+  if (origin && ALLOWED_ORIGIN_SET.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  } else if (!origin) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'content-type');
+}
+
+async function loadState(): Promise<void> {
+  try {
+    const raw = await readFile(STATE_FILE, 'utf8');
+    const parsed = JSON.parse(raw) as PersistedState;
+    if (!parsed || typeof parsed !== 'object' || !parsed.claims || typeof parsed.claims !== 'object') {
+      return;
+    }
+    for (const [username, claim] of Object.entries(parsed.claims)) {
+      if (!isValidUsername(username)) continue;
+      if (!claim || typeof claim !== 'object') continue;
+      if (!isValidPubkey(claim.pubkey)) continue;
+      if (typeof claim.issuedAt !== 'number' || typeof claim.expiresAt !== 'number') continue;
+      if (typeof claim.signature !== 'string') continue;
+      claims.set(username, claim);
+    }
+  } catch {
+    // No state file yet is normal.
+  }
+}
+
+async function saveState(): Promise<void> {
+  const dir = dirname(STATE_FILE);
+  await mkdir(dir, { recursive: true });
+  const tmp = `${STATE_FILE}.tmp`;
+  const payload: PersistedState = {
+    claims: Object.fromEntries(claims),
+  };
+  await writeFile(tmp, JSON.stringify(payload), 'utf8');
+  await rename(tmp, STATE_FILE);
+}

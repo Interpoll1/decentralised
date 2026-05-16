@@ -1,6 +1,6 @@
 # InterPoll Protocol(IPP) Whitepaper
  
-**Version:** 0.4  
+**Version:** 0.5  
 **Status:** Official 
 
 
@@ -177,6 +177,37 @@ A block is accepted only when chain continuity is satisfied (or valid genesis bo
 
 Within one browser, `BroadcastChannel('interpoll-sync')` mirrors the same sync semantics as WebSocket, so separate tabs converge without needing network round-trips.
 
+### 5.5 Verified username trust-issuer flow
+
+InterPoll supports optional verified usernames through external trust issuers.
+
+1. Client selects an issuer (`domain`, `endpoint`, `publicKey`) from built-in, Gun, or local custom issuer sources.
+2. Client requests challenge: `POST {issuer}/challenge` with `{ username, pubkey }`.
+3. Issuer returns `{ challengeId, prefix, difficulty, expiresAt }`.
+4. Client solves SHA-256 leading-zero PoW locally and submits `POST {issuer}/claim` with `{ challengeId, nonce, username, pubkey }`.
+5. Issuer returns signed certificate:
+
+```ts
+{
+  issuerDomain: string,
+  username: string,
+  userPubkey: string,
+  issuedAt: number,
+  expiresAt: number,
+  signature: string
+}
+```
+
+6. Client verifies certificate signature against issuer public key and verifies username/pubkey binding before persisting claim.
+7. Verified claim is stored under `usernames/{username}` with `level: 'verified'`, and UI profile identity fields (`identityUsername`, `identityIssuer`, `identityTrustLevel`) are updated from claim state.
+
+Security constraints implemented by the client:
+
+- issuer endpoints must be HTTPS (except localhost development)
+- issuer domain must match endpoint host/parent domain
+- challenge payload bounds are validated (`difficulty`, `expiresAt`, required fields)
+- certificate username and `userPubkey` must match the request and persisted username record
+
 ---
 
 ## 6. Replication semantics
@@ -195,6 +226,18 @@ InterPoll does not promise mathematical immutability or guaranteed data availabi
 As long as at least some peers/devices retain data and later reconnect, history can be re-propagated. This is the core principle: sooner or later a peer with a copy will log back in and reseed the network.
 
 **In short:** the system is *harder to erase* than a single-server platform, not *impossible to erase*.
+
+### 6.1 Cold-start DB snapshot fallback behavior
+
+When Gun bootstrap returns no community data, the client may request relay snapshot fallback via `/db/search` and `/db/soul` for namespace-scoped community hydration.
+
+To avoid cross-type contamination from broad prefix scans, fallback ingestion accepts only canonical top-level community nodes:
+
+- soul must match `{namespace}/communities/{id}` exactly
+- community `id` in payload must match soul `{id}`
+- accepted community IDs are canonical `c-*` slugs
+
+Nested poll/post/index rows are ignored during community hydration.
 
 ---
 
@@ -278,7 +321,8 @@ An  implementation should support:
 2. WS/Broadcast sync messages (`new-block`, `request-sync`, `sync-response`, `new-event`),
 3. Gun namespace compatibility under `v1-v2` or `v3`(for compatibility with official client) roots,
 4. Nostr-style event signing/verification for supported kinds,
-5. receipt generation and local receipt lookup semantics.
+5. receipt generation and local receipt lookup semantics,
+6. optional trust-issuer flow (`/public-key`, `/challenge`, `/claim`) with local certificate verification before claim persistence.
 
 ---
 

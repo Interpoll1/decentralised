@@ -421,7 +421,6 @@ import type { UserProfile } from '../services/userService';
 import { VoteTrackerService } from '../services/voteTrackerService';
 import { IPFSService } from '../services/ipfsService';
 import { useCommunityStore } from '../stores/communityStore';
-import { parseIdentityTrust } from '../utils/identityTrust';
 
 const communityStore = useCommunityStore();
 
@@ -437,7 +436,10 @@ const avatarFile = ref<File | null>(null);
 const avatarInput = ref<HTMLInputElement | null>(null);
 
 const joinedCommunitiesCount = computed(() => communityStore.joinedCommunities?.size || 0);
-const identityTrust = computed(() => parseIdentityTrust(customUsername.value.trim() || userProfile.value?.username || ''));
+const identityTrust = computed(() => ({
+  trustLevel: userProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified',
+  issuer: userProfile.value?.identityIssuer || '',
+}));
 const identityBadgeLabel = computed(() =>
   identityTrust.value.trustLevel === 'trusted-issuer'
     ? `Issuer linked (${identityTrust.value.issuer})`

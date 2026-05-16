@@ -42,11 +42,46 @@
         <div class="issuer-section">
           <div class="issuer-header">
             <span>Trust issuer <span class="optional">(optional)</span></span>
+            <ion-button
+              fill="clear"
+              size="small"
+              class="custom-issuer-toggle"
+              @click="showCustomIssuerMenu = !showCustomIssuerMenu"
+            >
+              {{ showCustomIssuerMenu ? 'Hide custom' : 'Add custom' }}
+            </ion-button>
             <ion-icon
               :icon="helpCircleOutline"
               class="help-icon"
               @click="showTrustInfo = true"
             />
+          </div>
+
+          <div v-if="showCustomIssuerMenu" class="custom-issuer-menu">
+            <ion-item class="custom-field">
+              <ion-label position="stacked">Issuer endpoint</ion-label>
+              <ion-input
+                v-model="customIssuerEndpoint"
+                placeholder="https://interpoll.endless.sbs/trust"
+                autocomplete="off"
+              />
+            </ion-item>
+            <ion-item class="custom-field">
+              <ion-label position="stacked">Issuer contact (optional)</ion-label>
+              <ion-input
+                v-model="customIssuerContact"
+                placeholder="viktor@endless.sbs"
+                autocomplete="off"
+              />
+            </ion-item>
+            <ion-button
+              size="small"
+              :disabled="addingCustomIssuer || !customIssuerEndpoint.trim()"
+              @click="addCustomIssuer"
+            >
+              {{ addingCustomIssuer ? 'Adding…' : 'Save custom issuer' }}
+            </ion-button>
+            <p v-if="customIssuerError" class="field-hint error">{{ customIssuerError }}</p>
           </div>
 
           <div v-if="loadingIssuers" class="loading-row">
@@ -72,9 +107,9 @@
 
             <div
               v-for="issuer in issuers"
-              :key="issuer.domain"
+              :key="issuerKey(issuer)"
               class="issuer-item"
-              :class="{ selected: selectedIssuer?.domain === issuer.domain }"
+              :class="{ selected: selectedIssuer && issuerKey(selectedIssuer) === issuerKey(issuer) }"
               @click="selectedIssuer = issuer"
             >
               <div class="issuer-name">
@@ -176,13 +211,15 @@ import {
   personOutline, shieldCheckmarkOutline, warningOutline,
   helpCircleOutline,
 } from 'ionicons/icons';
-import { TrustService, type TrustIssuer, type VerifiedUsername } from '@/services/trustService';
+import { TrustService, type TrustCertificate, type TrustIssuer, type VerifiedUsername } from '@/services/trustService';
 import { UserService } from '@/services/userService';
+import { useUserStore } from '@/stores/userStore';
 import UserIdentityBadge from '@/components/UserIdentityBadge.vue';
 
 type Step = 'input' | 'pow' | 'done';
 
 const router = useRouter();
+const userStore = useUserStore();
 
 const step = ref<Step>('input');
 const username = ref('');
@@ -194,16 +231,34 @@ const showTrustInfo = ref(false);
 const powNonce = ref(0);
 const powError = ref('');
 const claimedVerified = ref(false);
+const claimedCertificate = ref<TrustCertificate | null>(null);
+const showCustomIssuerMenu = ref(false);
+const customIssuerEndpoint = ref('https://interpoll.endless.sbs/trust');
+const customIssuerContact = ref('viktor@endless.sbs');
+const addingCustomIssuer = ref(false);
+const customIssuerError = ref('');
 
 // Pre-built trust record for the done-screen badge preview (no GunDB roundtrip needed)
 const previewTrust = computed<VerifiedUsername>(() => ({
   username: username.value,
   level: claimedVerified.value ? 'verified' : 'none',
+  certificate: claimedVerified.value ? claimedCertificate.value || undefined : undefined,
+  issuer: claimedVerified.value ? selectedIssuer.value || undefined : undefined,
 }));
 
 onMounted(async () => {
-  issuers.value = await TrustService.getIssuers();
-  loadingIssuers.value = false;
+  try {
+    issuers.value = await TrustService.getIssuers();
+    const defaultIssuer = issuers.value.find((issuer) =>
+      issuer.endpoint === 'https://interpoll.endless.sbs/trust' || issuer.domain === 'endless.sbs'
+    );
+    if (defaultIssuer) selectedIssuer.value = defaultIssuer;
+  } catch (e) {
+    issuers.value = [];
+    customIssuerError.value = e instanceof Error ? e.message : 'Failed to load trust issuers';
+  } finally {
+    loadingIssuers.value = false;
+  }
 
   // Pre-fill current username
   try {
@@ -211,6 +266,39 @@ onMounted(async () => {
     if (user.customUsername) username.value = user.customUsername;
   } catch { /* ignore */ }
 });
+
+function issuerKey(issuer: TrustIssuer): string {
+  return `${issuer.domain}|${issuer.endpoint}`;
+}
+
+async function addCustomIssuer() {
+  if (!customIssuerEndpoint.value.trim()) {
+    customIssuerError.value = 'Issuer endpoint is required.';
+    return;
+  }
+  addingCustomIssuer.value = true;
+  customIssuerError.value = '';
+  try {
+    const issuer = await TrustService.addCustomIssuer({
+      endpoint: customIssuerEndpoint.value,
+      contact: customIssuerContact.value || undefined,
+    });
+    issuers.value = await TrustService.getIssuers();
+    const selected = issuers.value.find((entry) => issuerKey(entry) === issuerKey(issuer));
+    if (selected) selectedIssuer.value = selected;
+    showCustomIssuerMenu.value = false;
+    const toast = await toastController.create({
+      message: `Added issuer ${issuer.domain}`,
+      duration: 1800,
+      color: 'success',
+    });
+    await toast.present();
+  } catch (e) {
+    customIssuerError.value = e instanceof Error ? e.message : 'Failed to add issuer';
+  } finally {
+    addingCustomIssuer.value = false;
+  }
+}
 
 function onUsernameInput() {
   if (!username.value) { usernameError.value = ''; return; }
@@ -220,22 +308,37 @@ function onUsernameInput() {
 }
 
 const canProceed = computed(() =>
+  !loadingIssuers.value &&
   username.value.length >= 3 &&
   !usernameError.value
 );
 
 async function proceed() {
   if (!canProceed.value) return;
+  const normalizedUsername = username.value.trim();
+  if (!TrustService.isValidUsername(normalizedUsername)) {
+    usernameError.value = 'Only letters, numbers, _ . - (3–32 chars)';
+    return;
+  }
+  username.value = normalizedUsername;
 
   if (!selectedIssuer.value) {
     // Unverified claim
-    const ok = await TrustService.claimUnverifiedUsername(username.value);
+    const ok = await TrustService.claimUnverifiedUsername(normalizedUsername);
     if (!ok) {
       usernameError.value = 'Username already taken by another user.';
       return;
     }
-    await UserService.updateProfile({ customUsername: username.value, trustLevel: 'none' });
+    const updated = await UserService.updateProfile({
+      customUsername: normalizedUsername,
+      trustLevel: 'none',
+      identityUsername: normalizedUsername,
+      identityIssuer: '',
+      identityTrustLevel: 'unverified',
+    });
+    userStore.profiles[updated.id] = updated;
     claimedVerified.value = false;
+    claimedCertificate.value = null;
     step.value = 'done';
     return;
   }
@@ -246,16 +349,25 @@ async function proceed() {
   powError.value = '';
 
   try {
-    await TrustService.solveAndClaimVerifiedUsername(
+    const cert = await TrustService.solveAndClaimVerifiedUsername(
       selectedIssuer.value,
-      username.value,
+      normalizedUsername,
       (n) => { powNonce.value = n; },
     );
-    await UserService.updateProfile({ customUsername: username.value, trustLevel: 'verified' });
+    const updated = await UserService.updateProfile({
+      customUsername: normalizedUsername,
+      trustLevel: 'verified',
+      identityUsername: `${normalizedUsername}@${selectedIssuer.value.domain}`,
+      identityIssuer: selectedIssuer.value.domain,
+      identityTrustLevel: 'trusted-issuer',
+    });
+    userStore.profiles[updated.id] = updated;
     claimedVerified.value = true;
+    claimedCertificate.value = cert;
     step.value = 'done';
   } catch (e) {
     powError.value = e instanceof Error ? e.message : 'Verification failed';
+    claimedCertificate.value = null;
     const toast = await toastController.create({
       message: powError.value,
       duration: 4000,
@@ -335,6 +447,27 @@ async function proceed() {
   color: var(--ion-color-medium);
   font-size: 18px;
   cursor: pointer;
+}
+
+.custom-issuer-toggle {
+  margin-left: auto;
+  --padding-start: 8px;
+  --padding-end: 8px;
+  font-size: 0.75rem;
+}
+
+.custom-issuer-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.25);
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+
+.custom-field {
+  --inner-padding-end: 0;
 }
 
 .issuer-list {
