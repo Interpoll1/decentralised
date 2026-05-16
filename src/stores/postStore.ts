@@ -243,16 +243,23 @@ export const usePostStore = defineStore('post', () => {
 
   async function createPost(data: { communityId: string; title: string; content: string; imageFile?: File; }) {
     try {
-      const currentUser = await UserService.getCurrentUser();
+      // Force refresh so we always get the latest customUsername, not a stale cache
+      const currentUser = await UserService.getCurrentUser(true);
       const showReal = currentUser.showRealName === true;
       const postId = `post-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const authorName = showReal
-        ? (currentUser.customUsername || currentUser.displayName || currentUser.username)
-        : generatePseudonym(postId, currentUser.id);
+      // If user has set a customUsername, always use it (it IS their identity).
+      // Only fall back to pseudonym for users who have never set one.
+      const authorName = currentUser.customUsername
+        ? currentUser.customUsername
+        : (showReal
+            ? (currentUser.displayName || currentUser.username)
+            : generatePseudonym(postId, currentUser.id));
+      // Show real name whenever a customUsername is set
+      const showRealName = showReal || !!currentUser.customUsername;
 
       const post = await PostService.createPost({
         communityId: data.communityId, authorId: currentUser.id,
-        authorName, authorShowRealName: showReal,
+        authorName, authorShowRealName: showRealName,
         title: data.title, content: data.content,
       }, data.imageFile, postId);
 

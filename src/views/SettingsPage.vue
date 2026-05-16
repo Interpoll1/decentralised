@@ -62,9 +62,23 @@
               <span>Device ID</span>
               <code>{{ fullDeviceId }}</code>
             </div>
-            <div class="info-row">
+            <div class="info-row identity-row">
               <span>Username</span>
-              <strong>{{ userProfile?.username }}</strong>
+              <div class="identity-right">
+                <UserIdentityBadge
+                  v-if="userProfile"
+                  :username="userProfile.customUsername || userProfile.username"
+                  :pubkey="publicKeyHex"
+                />
+                <ion-button
+                  fill="outline"
+                  size="small"
+                  class="claim-btn"
+                  @click="$router.push('/claim-username')"
+                >
+                  {{ userProfile?.customUsername ? 'Change' : 'Set username' }}
+                </ion-button>
+              </div>
             </div>
             <div class="info-row">
               <span>Karma</span>
@@ -1192,6 +1206,27 @@
   border-radius: 8px;
 }
 
+.identity-row {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.identity-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.claim-btn {
+  --padding-start: 10px;
+  --padding-end: 10px;
+  height: 28px;
+  font-size: 12px;
+}
+
 /* Network Status */
 .status-header {
   display: flex;
@@ -1567,7 +1602,8 @@ import {
   IonInput,
   IonSpinner,
   alertController,
-  toastController
+  toastController,
+  onIonViewWillEnter
 } from '@ionic/vue';
 import {
   refreshOutline,
@@ -1604,6 +1640,7 @@ import { GUN_NAMESPACE } from '../services/gunService';
 import { betaFeatures, setBetaFeature } from '../utils/betaFeatures';
 import { useFeedPreferences } from '../composables/useFeedPreferences';
 import type { FeedMode, FeedRankingWeights } from '../services/feedPreferencesService';
+import UserIdentityBadge from '../components/UserIdentityBadge.vue';
 
 const router = useRouter();
 const chainStore = useChainStore();
@@ -2511,10 +2548,14 @@ async function copyPrivateKey() {
   } catch { /* clipboard not available */ }
 }
 
+onIonViewWillEnter(async () => {
+  userProfile.value = await UserService.getCurrentUser(true);
+});
+
 onMounted(async () => {
   await refreshStorageStats();
   await loadPolicy();
-  userProfile.value = await UserService.getCurrentUser();
+  userProfile.value = await UserService.getCurrentUser(true);
   deviceId.value = await VoteTrackerService.getDeviceId();
   void communityStore.loadCommunities();
 

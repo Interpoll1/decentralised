@@ -444,11 +444,23 @@ const authorDisplayName = computed(() => {
   if (props.post.authorShowRealName) {
     return props.post.authorName || 'anon';
   }
+  // Case 2: look up live customUsername from UserService
+  // (handles old posts that stored a pseudonym but user has since set a customUsername)
+  if (props.post.authorId) {
+    try {
+      const profile = await UserService.getUser(props.post.authorId);
+      if (profile?.customUsername) return profile.customUsername;
+      if (profile?.showRealName && profile?.displayName) return profile.displayName;
+    } catch { /* fall through to pseudonym */ }
+  }
+  // Case 3: pseudonym (anonymous post)
   if (props.post.authorId && props.post.id) {
     return generatePseudonym(props.post.id, props.post.authorId);
   }
   return props.post.authorName || 'anon';
-});
+}
+
+const authorDisplayName = computed(() => resolvedAuthorName.value || props.post.authorName || '…');
 
 const authorIdentityLabel = computed(() =>
   authorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'Issuer linked' : 'Unverified identity'
