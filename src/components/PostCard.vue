@@ -426,10 +426,10 @@ const revealed = ref(false);
 const emit = defineEmits(['upvote', 'downvote']);
 
 watch(
-  () => [props.post.authorId, props.post.authorShowRealName] as const,
-  async ([authorId, authorShowRealName]) => {
+  () => props.post.authorId,
+  async (authorId) => {
     const requestId = ++authorProfileRequestId;
-    if (!authorId || !authorShowRealName) {
+    if (!authorId) {
       authorProfile.value = null;
       return;
     }
@@ -440,34 +440,33 @@ watch(
   { immediate: true }
 );
 
+const currentAuthorProfile = computed(() => {
+  if (!props.post.authorId) return authorProfile.value;
+  return userStore.profiles[props.post.authorId] || authorProfile.value;
+});
+
 const authorDisplayName = computed(() => {
   if (props.post.authorShowRealName) {
     return props.post.authorName || 'anon';
   }
-  // Case 2: look up live customUsername from UserService
-  // (handles old posts that stored a pseudonym but user has since set a customUsername)
-  if (props.post.authorId) {
-    try {
-      const profile = await UserService.getUser(props.post.authorId);
-      if (profile?.customUsername) return profile.customUsername;
-      if (profile?.showRealName && profile?.displayName) return profile.displayName;
-    } catch { /* fall through to pseudonym */ }
+  if (currentAuthorProfile.value?.customUsername) {
+    return currentAuthorProfile.value.customUsername;
   }
-  // Case 3: pseudonym (anonymous post)
+  if (currentAuthorProfile.value?.showRealName && currentAuthorProfile.value?.displayName) {
+    return currentAuthorProfile.value.displayName;
+  }
   if (props.post.authorId && props.post.id) {
     return generatePseudonym(props.post.id, props.post.authorId);
   }
   return props.post.authorName || 'anon';
-}
-
-const authorDisplayName = computed(() => resolvedAuthorName.value || props.post.authorName || '…');
+});
 
 const authorIdentityLabel = computed(() =>
-  authorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'Issuer linked' : 'Unverified identity'
+  currentAuthorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'Issuer linked' : 'Unverified identity'
 );
 
 const authorIdentityClass = computed(() =>
-  authorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'
+  currentAuthorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'
 );
 
 const truncatedContent = computed(() => {
