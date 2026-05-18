@@ -307,14 +307,11 @@ export const usePostStore = defineStore('post', () => {
   async function voteOnPost(postId: string, direction: 'up' | 'down') {
     try {
       const currentUser = await UserService.getCurrentUser();
-      await PostService.voteOnPost(postId, direction, currentUser.id);
-      const post = postsMap.value.get(postId);
-      if (post) {
-        const updated = { ...post };
-        if (direction === 'up') updated.upvotes++; else updated.downvotes++;
-        updated.score = updated.upvotes - updated.downvotes;
+      const updated = await PostService.voteOnPost(postId, direction, currentUser.id);
+      if (updated) {
         postsMap.value.set(postId, updated);
-        await UserService.incrementKarma(post.authorId, direction === 'up' ? 1 : -1);
+        if (currentPost.value?.id === postId) currentPost.value = updated;
+        await UserService.incrementKarma(updated.authorId, direction === 'up' ? 1 : -1);
       }
     } catch (error) { console.error('Error voting:', error); throw error; }
   }
@@ -322,8 +319,7 @@ export const usePostStore = defineStore('post', () => {
   async function upvotePost(postId: string) {
     try {
       const currentUser = await UserService.getCurrentUser();
-      await PostService.voteOnPost(postId, 'up', currentUser.id);
-      const updated = await PostService.getPost(postId);
+      const updated = await PostService.voteOnPost(postId, 'up', currentUser.id);
       if (updated) {
         postsMap.value.set(postId, updated);
         if (currentPost.value?.id === postId) currentPost.value = updated;
@@ -335,8 +331,7 @@ export const usePostStore = defineStore('post', () => {
   async function downvotePost(postId: string) {
     try {
       const currentUser = await UserService.getCurrentUser();
-      await PostService.voteOnPost(postId, 'down', currentUser.id);
-      const updated = await PostService.getPost(postId);
+      const updated = await PostService.voteOnPost(postId, 'down', currentUser.id);
       if (updated) {
         postsMap.value.set(postId, updated);
         if (currentPost.value?.id === postId) currentPost.value = updated;
@@ -348,8 +343,7 @@ export const usePostStore = defineStore('post', () => {
   async function removeUpvote(postId: string) {
     try {
       const currentUser = await UserService.getCurrentUser();
-      await PostService.removeVote(postId, 'up', currentUser.id);
-      const updated = await PostService.getPost(postId);
+      const updated = await PostService.removeVote(postId, 'up', currentUser.id);
       if (updated) {
         postsMap.value.set(postId, updated);
         if (currentPost.value?.id === postId) currentPost.value = updated;
@@ -361,8 +355,7 @@ export const usePostStore = defineStore('post', () => {
   async function removeDownvote(postId: string) {
     try {
       const currentUser = await UserService.getCurrentUser();
-      await PostService.removeVote(postId, 'down', currentUser.id);
-      const updated = await PostService.getPost(postId);
+      const updated = await PostService.removeVote(postId, 'down', currentUser.id);
       if (updated) {
         postsMap.value.set(postId, updated);
         if (currentPost.value?.id === postId) currentPost.value = updated;

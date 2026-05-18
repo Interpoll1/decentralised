@@ -9,7 +9,7 @@ All stores use the **Composition API form** of Pinia: `defineStore('name', () =>
 The most critical store. Owns the local blockchain.
 
 - **Init**: Call `chainStore.initialize()` once on app start. It calls `BroadcastService.initialize()`, `RelayManager.initialize()`, `WebSocketService.initialize()`, `ChainService.initializeChain()`, then wires sync listeners for both channels.
-- **Sync protocol**: On connect, sends `request-sync` with `lastIndex` (incremental — only fetches missing blocks). Responds to `sync-response` by validating and appending blocks in strict index order. Same-index hash conflicts and index gaps now trigger an explicit incremental resync request instead of silently continuing; malformed or out-of-order blocks are dropped.
+- **Sync protocol**: On connect, sends `request-sync` with `lastIndex` (incremental — only fetches missing blocks). Responds to `sync-response` by validating and appending blocks in strict index order. Same-index hash conflicts and index gaps trigger incremental resync, but resync requests are now backoff-throttled and duplicate sync-warning logs are deduplicated to prevent console storms during relay/peer inconsistency; malformed or out-of-order blocks are dropped.
 - **Voting**: `addVote(vote)` → creates block → broadcasts on both channels → saves receipt → calls `AuditService.logReceipt`.
 - **Actions**: `addAction(actionType, data, label)` records non-vote events (community creation, post creation) as blocks.
 - **Nostr events**: Every vote also creates and broadcasts a signed Nostr event via `EventService`.
