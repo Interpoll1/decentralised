@@ -123,8 +123,11 @@ When deploying production for this rollout, reset `relay-server/data/vote-regist
 Verified usernames use an external trust issuer API:
 
 - `GET /public-key` → issuer metadata (`issuerDomain`, `publicKey`)
-- `POST /challenge` with `{ username, pubkey }` → PoW challenge
-- `POST /claim` with `{ challengeId, nonce, username, pubkey }` → signed certificate
+- `POST /challenge-v2` with `{ username, pubkey }` → PoW challenge (preferred)
+- `POST /claim-v2` with `{ challengeId, nonce, username, pubkey, authTs, authNonce, authSig }` → signed certificate
+- Legacy fallback remains supported for older clients:
+  - `POST /challenge` with `{ username, pubkey }`
+  - `POST /claim` with `{ challengeId, nonce, username, pubkey }`
 
 The client verifies certificate signature and username/pubkey binding locally before writing `level: 'verified'` claims to GunDB (`usernames/{username}`). Issuer endpoints must be HTTPS (localhost HTTP allowed for development), and issuer domain must match endpoint host binding.
 

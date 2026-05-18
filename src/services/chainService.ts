@@ -5,32 +5,22 @@ import { KeyService } from './keyService';
 
 export class ChainService {
   private static readonly GENESIS_HASH = '0'.repeat(64);
+  private static readonly GENESIS_TIMESTAMP = 1700000000000;
   private static readonly HEX_64 = /^[0-9a-f]{64}$/i;
   private static readonly HEX_128 = /^[0-9a-f]{128}$/i;
   private static readonly MAX_FUTURE_SKEW_MS = 30_000;
+  private static readonly MAX_PAST_SKEW_MS = 24 * 60 * 60 * 1000;
 
   static async createGenesisBlock(): Promise<ChainBlock> {
-    const keyPair = await KeyService.getKeyPair();
-
     const block: ChainBlock = {
       index: 0,
-      timestamp: Date.now(),
+      timestamp: this.GENESIS_TIMESTAMP,
       previousHash: this.GENESIS_HASH,
       voteHash: this.GENESIS_HASH,
       signature: '',
       currentHash: '',
       nonce: 0,
-      pubkey: keyPair.publicKey,
     };
-
-    block.signature = CryptoService.sign(
-      JSON.stringify({
-        index: block.index,
-        voteHash: block.voteHash,
-        previousHash: block.previousHash,
-      }),
-      keyPair.privateKey
-    );
 
     block.currentHash = CryptoService.hashBlock(block);
 
@@ -146,8 +136,9 @@ export class ChainService {
       console.error('Invalid block timestamp type');
       return false;
     }
-    if (block.timestamp < previousBlock.timestamp) {
-      console.error('Block timestamp is older than previous block');
+    const backwardSkew = previousBlock.timestamp - block.timestamp;
+    if (backwardSkew > this.MAX_PAST_SKEW_MS) {
+      console.error('Block timestamp is too far older than previous block');
       return false;
     }
     if (block.timestamp > Date.now() + this.MAX_FUTURE_SKEW_MS) {
@@ -218,12 +209,26 @@ export class ChainService {
 
 
   static async initializeChain(): Promise<void> {
-    const latestBlock = await StorageService.getLatestBlock();
-
-    if (!latestBlock) {
-      const genesis = await this.createGenesisBlock();
-      await StorageService.saveBlock(genesis);
+    const allBlocks = await StorageService.getAllBlocks();
+    if (allBlocks.length === 0) {
+      await StorageService.saveBlock(await this.createGenesisBlock());
+      return;
     }
+
+    const sorted = [...allBlocks].sort((a, b) => a.index - b.index);
+    const existingGenesis = sorted[0];
+    const canonicalGenesis = await this.createGenesisBlock();
+    const isCanonicalGenesis =
+      this.validateGenesisBlock(existingGenesis, { allowLegacy: true }) &&
+      existingGenesis.currentHash === canonicalGenesis.currentHash &&
+      existingGenesis.timestamp === canonicalGenesis.timestamp &&
+      existingGenesis.previousHash === canonicalGenesis.previousHash &&
+      existingGenesis.voteHash === canonicalGenesis.voteHash;
+
+    if (isCanonicalGenesis) return;
+
+    console.warn('Detected legacy local genesis; resetting chain to canonical genesis for sync compatibility');
+    await this.resetChain();
   }
 
   static async resetChain(): Promise<void> {

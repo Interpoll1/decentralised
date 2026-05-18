@@ -476,19 +476,23 @@ function handleVoteCommit(req, res, routePath, validationEndpoint = 'vote-record
 }
 
 const MAX_CACHED_MESSAGES = 500;
+const CACHEABLE_MESSAGE_TYPES = new Set(['new-poll', 'new-event', 'new-post']);
 let messageCache = [];
 try {
   if (fs.existsSync(MESSAGE_CACHE_FILE)) {
     const raw = JSON.parse(fs.readFileSync(MESSAGE_CACHE_FILE, 'utf8'));
-    messageCache = raw.filter(m => !m._flagged && !m.data?._flagged);
+    messageCache = raw.filter((m) => {
+      const messageType = typeof m?.type === 'string' ? m.type : '';
+      return CACHEABLE_MESSAGE_TYPES.has(messageType) && !m._flagged && !m.data?._flagged;
+    });
   }
 } catch { messageCache = []; }
 
 function cacheMessage(msg) {
   if (!msg?.type) return;
   if (msg._flagged || msg.data?._flagged) return;
-  const cacheable = ['new-poll', 'new-block', 'sync-response', 'new-event', 'new-post'];
-  if (!cacheable.includes(msg.type || msg.data?.type)) return;
+  const messageType = typeof msg.type === 'string' ? msg.type : '';
+  if (!CACHEABLE_MESSAGE_TYPES.has(messageType)) return;
   messageCache.push({ ...msg, _cachedAt: Date.now() });
   while (messageCache.length > MAX_CACHED_MESSAGES) messageCache.shift();
 }

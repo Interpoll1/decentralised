@@ -1,6 +1,6 @@
 import config from '@/config';
 import { CryptoService } from '@/services/cryptoService';
-import { GunService } from '@/services/gunService';
+import { GUN_NAMESPACE, GunService } from '@/services/gunService';
 import { KeyService } from '@/services/keyService';
 
 const DISCOVERY_ROOT = 'server-config';
@@ -9,6 +9,7 @@ const DEFAULT_TTL_MS = 5 * 60_000;
 const MIN_TTL_MS = 30_000;
 const MAX_TTL_MS = 24 * 60 * 60_000;
 const DEFAULT_MAX_ENTRIES = 100;
+const DISCOVERY_DB_FETCH_TIMEOUT_MS = 5000;
 
 interface DiscoverySignedPayload {
   version: 1;
@@ -41,21 +42,25 @@ export interface PublishDiscoveryInput {
   ttlMs?: number;
 }
 
-export class DiscoveryService {
+class DiscoveryService {
   private static initialized = false;
   private static subscribed = false;
   private static maxEntries = DEFAULT_MAX_ENTRIES;
   private static entries: Map<string, DiscoveryEntry> = new Map();
   private static pruneTimer: ReturnType<typeof setInterval> | null = null;
 
-  static async initialize(options?: { maxEntries?: number }): Promise<void> {
+  static async initialize(options?: { maxEntries?: number; subscribeLive?: boolean }): Promise<void> {
     if (typeof options?.maxEntries === 'number' && options.maxEntries > 0) {
       this.maxEntries = Math.floor(options.maxEntries);
     }
-    if (this.initialized) return;
-    this.initialized = true;
-    this.subscribeToAnnouncements();
-    this.startPruneLoop();
+    const shouldSubscribe = options?.subscribeLive === true;
+    if (!this.initialized) {
+      this.initialized = true;
+      this.startPruneLoop();
+    }
+    if (shouldSubscribe) {
+      this.subscribeToAnnouncements();
+    }
   }
 
   static async publishLocalAnnouncement(input: PublishDiscoveryInput): Promise<DiscoveryEntry | null> {
@@ -94,6 +99,7 @@ export class DiscoveryService {
 
   static async refreshFromGun(): Promise<DiscoveryEntry[]> {
     await this.initialize();
+    await this.refreshFromRelaySnapshot();
     this.pruneExpiredEntries();
     return this.getEntries();
   }
@@ -123,6 +129,51 @@ export class DiscoveryService {
         });
     } catch {
       // Gun unavailable; keep existing cache
+    }
+  }
+
+  private static async refreshFromRelaySnapshot(): Promise<void> {
+    const relayBase = this.getGunRelayBaseUrl();
+    if (!relayBase) return;
+    const prefix = encodeURIComponent(`${GUN_NAMESPACE}/${DISCOVERY_ROOT}/${DISCOVERY_PATH}`);
+    const path = `${relayBase}/db/search?prefix=${prefix}&limit=${this.maxEntries}`;
+
+    const payload = await this.fetchJsonWithTimeout<{ results?: Array<{ data?: unknown }> }>(
+      path,
+      DISCOVERY_DB_FETCH_TIMEOUT_MS,
+    );
+    if (!payload?.results?.length) return;
+
+    for (const row of payload.results) {
+      const normalized = this.normalizeAndValidate(row?.data);
+      if (!normalized) continue;
+      this.upsertEntry(this.discoveryKey(normalized), normalized);
+    }
+  }
+
+  private static getGunRelayBaseUrl(): string {
+    try {
+      const endpoint = new URL(config.relay.gun);
+      endpoint.pathname = endpoint.pathname.replace(/\/gun\/?$/, '');
+      endpoint.search = '';
+      endpoint.hash = '';
+      return endpoint.toString().replace(/\/$/, '');
+    } catch {
+      return config.relay.gun.replace(/\/gun\/?$/, '').replace(/\/$/, '');
+    }
+  }
+
+  private static async fetchJsonWithTimeout<T>(url: string, timeoutMs: number): Promise<T | null> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) return null;
+      return await response.json() as T;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -311,3 +362,6 @@ export class DiscoveryService {
     return `${entry.signerPubkey}:${entry.nodeId}`;
   }
 }
+
+export { DiscoveryService };
+export default DiscoveryService;

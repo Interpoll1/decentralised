@@ -1,6 +1,6 @@
 //services/websocketService.ts
 import config from '../config';
-import { DiscoveryService } from './discoveryService';
+import DiscoveryService from './discoveryService';
 
 /** Message types that may require proof-of-work on the relay server.
  *  Must stay in sync with POW_REQUIRED_TYPES in src/services/powService.ts. */
@@ -282,7 +282,7 @@ export class WebSocketService {
 
   private static async bootstrapDiscovery() {
     try {
-      await DiscoveryService.initialize({ maxEntries: this.MAX_KNOWN_SERVERS });
+      await DiscoveryService.initialize({ maxEntries: this.MAX_KNOWN_SERVERS, subscribeLive: false });
       await this.mergeDiscoveryServers();
     } catch {
       // Discovery is optional; continue with server-list fallback

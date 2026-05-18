@@ -453,12 +453,19 @@ const postStore = usePostStore();
 const pollStore = usePollStore();
 
 const FEED_DEBUG = localStorage.getItem('interpoll_feed_debug') === 'true';
+const SYNC_DEBUG = localStorage.getItem('interpoll_sync_debug') === 'true';
 const FEED_INITIAL_RENDER_TARGET = 50;
 
 function feedDebug(label: string, data?: Record<string, unknown>) {
   if (!FEED_DEBUG) return;
   if (data) console.log(`[FeedDebug] ${label}`, data);
   else console.log(`[FeedDebug] ${label}`);
+}
+
+function syncDebug(label: string, data?: Record<string, unknown>) {
+  if (!SYNC_DEBUG) return;
+  if (data) console.log(`[SyncDebug] ${label}`, data);
+  else console.log(`[SyncDebug] ${label}`);
 }
 
 const activeTab = ref('home');
@@ -493,6 +500,8 @@ const totalUnread = computed(() => chatList.value.reduce((sum, c) => sum + c.unr
 let bgChatService: ChatService | null = null;
 let currentUserId = '';
 const gunListeners: Array<() => void> = [];
+let chatInitPromise: Promise<void> | null = null;
+let bgChatInitPromise: Promise<void> | null = null;
 
 const userSearchQuery   = ref('');
 const userSearchResults = ref<Array<{ id: string; name: string; username: string; publicKey: string }>>([]);
@@ -677,6 +686,7 @@ async function loadChatList() {
   const gun = GunService.getGun();
   gun.get('chats').once((rooms: any) => {
     if (!rooms) return;
+    syncDebug('chat-rooms-snapshot', { roomCount: Object.keys(rooms).filter(k => k !== '_').length });
     Object.keys(rooms)
       .filter(k => k !== '_' && k.includes(currentUserId))
       .forEach((roomId) => {
@@ -737,6 +747,47 @@ async function initBackgroundChat() {
   };
 
   await bgChatService.init();
+}
+
+function ensureBackgroundChatInitialized(): Promise<void> {
+  if (bgChatInitPromise) return bgChatInitPromise;
+  bgChatInitPromise = (async () => {
+    try {
+      if (!currentUserId) {
+        const currentUser = await UserService.getCurrentUser();
+        currentUserId = currentUser.id;
+      }
+      syncDebug('background-chat-init-start');
+      await initBackgroundChat();
+      syncDebug('background-chat-init-complete');
+    } catch (error) {
+      bgChatInitPromise = null;
+      throw error;
+    }
+  })();
+  return bgChatInitPromise;
+}
+
+function ensureChatInitialized(): Promise<void> {
+  if (chatInitPromise) return chatInitPromise;
+  chatInitPromise = (async () => {
+    try {
+      if (!currentUserId) {
+        const currentUser = await UserService.getCurrentUser();
+        currentUserId = currentUser.id;
+      }
+      syncDebug('chat-tab-init-start');
+      await Promise.allSettled([
+        ensureBackgroundChatInitialized(),
+        loadChatList(),
+      ]);
+      syncDebug('chat-tab-init-complete');
+    } catch (error) {
+      chatInitPromise = null;
+      throw error;
+    }
+  })();
+  return chatInitPromise;
 }
 
 // ── Chat navigation ───────────────────────────────────────────────────────────
@@ -1010,6 +1061,10 @@ watch(() => communityStore.communities.length, (newLen, oldLen) => {
 watch(activeTab, (tab) => {
   if (tab === 'home') {
     ensureInitialFeedVisible('home-tab-selected');
+    return;
+  }
+  if (tab === 'chat') {
+    void ensureChatInitialized();
   }
 });
 
@@ -1053,12 +1108,15 @@ onMounted(async () => {
     try {
       const currentUser = await UserService.getCurrentUser();
       currentUserId = currentUser.id;
-      // All three in parallel — if chat fails, chain still works
+      // Keep startup sync light: defer heavy chat graph subscriptions until chat tab is opened.
+      // Keep live DM notifications enabled even if chain init fails.
       await Promise.allSettled([
         chainStore.initialize(),
-        loadChatList(),
-        initBackgroundChat(),
+        ensureBackgroundChatInitialized(),
       ]);
+      if (activeTab.value === 'chat') {
+        await ensureChatInitialized();
+      }
     } catch (err) {
       console.warn('Heavy init error (non-critical):', err);
     }

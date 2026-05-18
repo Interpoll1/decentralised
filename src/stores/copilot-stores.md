@@ -10,6 +10,7 @@ The most critical store. Owns the local blockchain.
 
 - **Init**: Call `chainStore.initialize()` once on app start. It calls `BroadcastService.initialize()`, `RelayManager.initialize()`, `WebSocketService.initialize()`, `ChainService.initializeChain()`, then wires sync listeners for both channels.
 - **Sync protocol**: On connect, sends `request-sync` with `lastIndex` (incremental — only fetches missing blocks). Responds to `sync-response` by validating and appending blocks in strict index order. Same-index hash conflicts and index gaps trigger incremental resync, but resync requests are now backoff-throttled and duplicate sync-warning logs are deduplicated to prevent console storms during relay/peer inconsistency; malformed or out-of-order blocks are dropped.
+- Sync diagnostics: when `localStorage.interpoll_sync_debug === 'true'`, emits `[SyncDebug] chainStore diagnostics active` plus periodic heartbeat logs and per-second `[SyncRate]` metrics (`chain-new-block`, `chain-sync-request-sent`, `chain-sync-request-received`, `chain-sync-response-received`, `chain-sync-response-blocks`).
 - **Voting**: `addVote(vote)` → creates block → broadcasts on both channels → saves receipt → calls `AuditService.logReceipt`.
 - **Actions**: `addAction(actionType, data, label)` records non-vote events (community creation, post creation) as blocks.
 - **Nostr events**: Every vote also creates and broadcasts a signed Nostr event via `EventService`.
@@ -26,6 +27,8 @@ Manages polls loaded from GunDB and cross-tab vote updates.
 - During subscription updates, if an incoming poll patch is missing `communityId` but an existing cached poll has it, the store preserves the existing `communityId` to prevent the poll from disappearing from community-filtered views due to partial Gun records.
 - Community poll loads now avoid treating local fallback cache as proof of an active live subscription: stale subscription state is cleaned and re-subscribed unless both subscription bookkeeping and community polls are already live, so network updates/deletes are not missed.
 - Uses per-community initial-load tracking (`initialLoadDoneByCommId`) to avoid cross-community false "new poll" classification.
+- Incoming poll updates are buffered in short flush windows (50 ms / 100 items) before being applied, with round-robin queue draining across communities so one hot stream does not starve others.
+- Sync diagnostics: when `localStorage.interpoll_sync_debug === 'true'`, logs `[SyncRate] poll-incoming` and `[SyncRate] poll-flush` once per second with queue depth.
 - `pendingNewPolls` only contains truly new arrivals after initial hydration; `flushNewPolls()` moves them into `pollsMap` and persists seen IDs in localStorage.
 - Pagination: `visibleCount` incremented by `PAGE_SIZE` (10).
 - `createPoll()` checks the current user's `showRealName` preference. Same pseudonym-vs-real-name logic as posts.
@@ -36,7 +39,8 @@ Key computed: `polls`, `sortedPolls`
 
 ## `communityStore.ts` — `useCommunityStore`
 
-- Has a **DB snapshot fallback** via the gun-relay's `/db/search?prefix={namespace}/communities` endpoint. If Gun returns no communities during bootstrap (including private/incognito sessions), fallback hydrates communities and warms posts so feeds do not appear empty.
+- Has a **DB snapshot fallback** via the gun-relay's `/db/search?prefix={namespace}/communities` endpoint. If Gun returns no communities during bootstrap (including private/incognito sessions), fallback hydrates communities and starts post warmup in the background so feeds do not appear empty without flooding Gun/DOM on first paint.
+- Has a **DB snapshot fallback** via the gun-relay's `/db/search?prefix={namespace}/communities` endpoint. If Gun returns no communities during bootstrap (including private/incognito sessions), fallback hydrates communities. Post warmup re-puts into Gun are now disabled by default (to avoid startup Gun record floods) and can be explicitly re-enabled for diagnostics via `localStorage.interpoll_posts_warmup === 'true'`.
 - Community fallback now only accepts canonical top-level community nodes (`{namespace}/communities/{id}` where `id` starts with `c-`) and requires soul/id match, preventing nested poll nodes from being rendered as fake communities.
 - `selectCommunity()` uses the same `/db/soul` fallback when Gun has no matching community, regardless of namespace version.
 - The fallback relay base URL is derived from runtime config (`config.relay.gun`), not hardcoded, so Settings relay overrides and localhost/dev relays are respected.
@@ -46,15 +50,18 @@ Key computed: `polls`, `sortedPolls`
 - Joined state is also synced from stored community encryption keys, so invite/password-joined private communities behave like normal joined communities after refresh.
 - Encrypted communities are decrypted before surfacing when the user already has access, so joined private communities show their real names/descriptions instead of the public placeholder metadata.
 - `joinCommunity()` is optimistic locally for normal joins, but first checks existing key-vault access and short-circuits without incrementing member counts when the user already holds the private-community key.
+- Sync diagnostics: when `localStorage.interpoll_sync_debug === 'true'`, logs `[SyncRate] community-live` and `[SyncRate] fallback-post-warmup` once per second with event throughput.
 
 ## `postStore.ts` — `usePostStore`
 
 - Similar structure to `pollStore`: map-based, per-community subscriptions, pagination.
 - Uses per-community initial-load tracking (`communityInitialLoadDone`) plus subscription timestamps to avoid false "new post" banners from startup hydration.
+- Incoming post updates are buffered in short flush windows (50 ms / 100 items) before applying to `postsMap`, using round-robin queue draining across communities to avoid starvation under bursty sync.
 - `pendingNewPosts` is banner-only state; accepted posts live in `postsMap` and seen IDs are persisted (`seen-post-ids`) so accepted content survives refresh.
 - `createPost()` checks the current user's `showRealName` preference. If false (default), generates a pseudonym from the pre-generated postId + authorId as the `authorName`. If true, uses the user's `customUsername`.
 - `loadMorePosts()` still paginates by `PAGE_SIZE` (10), but Home feed now controls initial visibility separately (up to 50 items) so users do not need an initial scroll to reveal already-fetched content.
 - Debug instrumentation logs `[PostStoreDebug]` entries for community subscription start/initial completion, injected posts, and visible-count changes to help diagnose feed hydration issues (enabled only when `localStorage.interpoll_post_debug === 'true'`).
+- Sync diagnostics: when `localStorage.interpoll_sync_debug === 'true'`, logs `[SyncRate] post-incoming` and `[SyncRate] post-flush` once per second with queue depth.
 
 ## `commentStore.ts` — `useCommentStore`
 

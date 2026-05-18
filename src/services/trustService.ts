@@ -102,6 +102,8 @@ export class TrustService {
   private static issuersCache: TrustIssuer[] | null = null;
   private static certCache = new Map<string, TrustCertificate | null>(); // pubkey → cert
   private static readonly ISSUER_REQUEST_TIMEOUT_MS = 20000;
+  private static readonly CLAIM_V2_SUPPORT_STORAGE_KEY = 'interpoll_trust_v2_support';
+  private static readonly CLAIM_V2_AUTH_PURPOSE = 'interpoll-trust-claim-v2';
 
   // ── Issuers ────────────────────────────────────────────────────────────────
 
@@ -259,6 +261,47 @@ export class TrustService {
     return { challengeId, prefix, difficulty, expiresAt };
   }
 
+  private static async requestIssuerChallengeV2(
+    issuer: TrustIssuer,
+    username: string,
+  ): Promise<{ challengeId: string; prefix: string; difficulty: number; expiresAt: number } | null> {
+    const support = this.getClaimV2Support(issuer.endpoint);
+    if (support === false) return null;
+    const pubkey = await KeyService.getPublicKeyHex();
+
+    const res = await this.fetchWithTimeout(`${issuer.endpoint}/challenge-v2`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, pubkey }),
+    }, this.ISSUER_REQUEST_TIMEOUT_MS);
+
+    if (res.status === 404) {
+      this.setClaimV2Support(issuer.endpoint, false);
+      return null;
+    }
+    if (!res.ok) {
+      const err = await res.text().catch(() => res.statusText);
+      throw new Error(`Trust issuer v2 challenge failed: ${err}`);
+    }
+
+    const raw = await res.json();
+    const challengeId = typeof raw?.challengeId === 'string' ? raw.challengeId.trim() : '';
+    const prefix = typeof raw?.prefix === 'string' ? raw.prefix : '';
+    const difficulty = Number(raw?.difficulty);
+    const expiresAt = Number(raw?.expiresAt);
+    const maxExpiry = Date.now() + (30 * 60 * 1000);
+    if (!challengeId || !prefix) throw new Error('Trust issuer v2 returned an invalid challenge payload');
+    if (!Number.isInteger(difficulty) || difficulty < 1 || difficulty > 24) {
+      throw new Error('Trust issuer v2 returned an invalid challenge difficulty');
+    }
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now() || expiresAt > maxExpiry) {
+      throw new Error('Trust issuer v2 returned an invalid challenge expiry');
+    }
+
+    this.setClaimV2Support(issuer.endpoint, true);
+    return { challengeId, prefix, difficulty, expiresAt };
+  }
+
   /**
    * Solve the issuer's PoW challenge (difficulty ~22, ~15 s) and submit it.
    * On success the issuer returns a signed TrustCertificate.
@@ -269,9 +312,66 @@ export class TrustService {
     username: string,
     onProgress?: (nonce: number) => void,
   ): Promise<TrustCertificate> {
-    const challenge = await this.requestIssuerChallenge(issuer, username);
+    const challengeV2 = await this.requestIssuerChallengeV2(issuer, username);
+    if (challengeV2) {
+      const nonce = await this.solvePoW(
+        challengeV2.prefix,
+        challengeV2.difficulty,
+        challengeV2.expiresAt,
+        onProgress,
+      );
+      const pubkey = await KeyService.getPublicKeyHex();
+      const privateKey = await KeyService.getPrivateKeyHex();
+      const authTs = Date.now();
+      const authNonce = CryptoService.hash(`${pubkey}:${challengeV2.challengeId}:${authTs}:${Math.random()}`).slice(0, 32);
+      const authPayload = this.buildClaimV2AuthPayload({
+        challengeId: challengeV2.challengeId,
+        username,
+        pubkey,
+        nonce,
+        authTs,
+        authNonce,
+        issuerDomain: issuer.domain,
+      });
+      const authSig = CryptoService.sign(authPayload, privateKey);
 
-    // Solve PoW
+      const resV2 = await this.fetchWithTimeout(`${issuer.endpoint}/claim-v2`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          challengeId: challengeV2.challengeId,
+          nonce,
+          username,
+          pubkey,
+          authTs,
+          authNonce,
+          authSig,
+        }),
+      }, this.ISSUER_REQUEST_TIMEOUT_MS);
+      if (resV2.status === 404) {
+        this.setClaimV2Support(issuer.endpoint, false);
+        return this.solveAndClaimVerifiedUsernameLegacy(issuer, username, onProgress);
+      }
+      if (!resV2.ok) {
+        const err = await resV2.text().catch(() => resV2.statusText);
+        throw new Error(`Trust issuer v2 claim failed: ${err}`);
+      }
+
+      const certV2: TrustCertificate = await resV2.json();
+      await this.validateClaimedCertificate(certV2, issuer, username, pubkey);
+      this.certCache.set(pubkey, certV2);
+      return certV2;
+    }
+
+    return this.solveAndClaimVerifiedUsernameLegacy(issuer, username, onProgress);
+  }
+
+  private static async solveAndClaimVerifiedUsernameLegacy(
+    issuer: TrustIssuer,
+    username: string,
+    onProgress?: (nonce: number) => void,
+  ): Promise<TrustCertificate> {
+    const challenge = await this.requestIssuerChallenge(issuer, username);
     const nonce = await this.solvePoW(
       challenge.prefix,
       challenge.difficulty,
@@ -280,8 +380,6 @@ export class TrustService {
     );
 
     const pubkey = await KeyService.getPublicKeyHex();
-
-    // Submit proof
     const res = await this.fetchWithTimeout(`${issuer.endpoint}/claim`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -294,6 +392,17 @@ export class TrustService {
     }
 
     const cert: TrustCertificate = await res.json();
+    await this.validateClaimedCertificate(cert, issuer, username, pubkey);
+    this.certCache.set(pubkey, cert);
+    return cert;
+  }
+
+  private static async validateClaimedCertificate(
+    cert: TrustCertificate,
+    issuer: TrustIssuer,
+    username: string,
+    pubkey: string,
+  ): Promise<void> {
     if (cert.username !== username) {
       throw new Error('Trust issuer returned certificate for a different username');
     }
@@ -301,12 +410,9 @@ export class TrustService {
       throw new Error('Trust issuer returned certificate for a different public key');
     }
 
-    // Verify the certificate locally before storing
     if (!this.verifyCertificate(cert, issuer)) {
       throw new Error('Trust issuer returned an invalid certificate signature');
     }
-
-    // Store in GunDB
     const gun = GunService.getGun();
     await gun.get(GUN_USERNAMES_ROOT).get(username).put({
       pubkey,
@@ -314,9 +420,6 @@ export class TrustService {
       certificate: JSON.stringify(cert),
       claimedAt: Date.now(),
     });
-
-    this.certCache.set(pubkey, cert);
-    return cert;
   }
 
   // ── Verification ───────────────────────────────────────────────────────────
@@ -639,5 +742,40 @@ export class TrustService {
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  private static buildClaimV2AuthPayload(input: {
+    challengeId: string;
+    username: string;
+    pubkey: string;
+    nonce: number;
+    authTs: number;
+    authNonce: string;
+    issuerDomain: string;
+  }): string {
+    const { challengeId, username, pubkey, nonce, authTs, authNonce, issuerDomain } = input;
+    return JSON.stringify({
+      purpose: this.CLAIM_V2_AUTH_PURPOSE,
+      issuerDomain,
+      challengeId,
+      username,
+      pubkey,
+      nonce,
+      authTs,
+      authNonce,
+    });
+  }
+
+  private static getClaimV2Support(endpoint: string): boolean | null {
+    if (typeof sessionStorage === 'undefined') return null;
+    const raw = sessionStorage.getItem(`${this.CLAIM_V2_SUPPORT_STORAGE_KEY}:${endpoint}`);
+    if (raw === 'true') return true;
+    if (raw === 'false') return false;
+    return null;
+  }
+
+  private static setClaimV2Support(endpoint: string, supported: boolean): void {
+    if (typeof sessionStorage === 'undefined') return;
+    sessionStorage.setItem(`${this.CLAIM_V2_SUPPORT_STORAGE_KEY}:${endpoint}`, supported ? 'true' : 'false');
   }
 }

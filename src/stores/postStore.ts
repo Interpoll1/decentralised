@@ -14,6 +14,9 @@ import { GUN_NAMESPACE } from '../services/gunService';
 const PAGE_SIZE      = 10;
 const SEEN_POSTS_KEY = 'seen-post-ids';
 const POST_DEBUG = localStorage.getItem('interpoll_post_debug') === 'true';
+const SYNC_DEBUG = localStorage.getItem('interpoll_sync_debug') === 'true';
+const INCOMING_POST_FLUSH_MS = 50;
+const INCOMING_POST_BATCH_SIZE = 100;
 
 // Timestamp when this app session started.
 // Gun re-delivers ALL posts on every reconnect — we only treat a post
@@ -40,6 +43,21 @@ function postDebug(label: string, data?: Record<string, unknown>) {
   else console.log(`[PostStoreDebug] ${label}`);
 }
 
+function createRateLogger(label: string, snapshot?: () => Record<string, unknown>) {
+  let windowStart = Date.now();
+  let count = 0;
+  return (delta = 1) => {
+    if (!SYNC_DEBUG) return;
+    count += delta;
+    const now = Date.now();
+    if (now - windowStart < 1000) return;
+    const payload = snapshot ? snapshot() : {};
+    console.warn(`[SyncRate] ${label}`, { eventsPerSec: count, ...payload });
+    windowStart = now;
+    count = 0;
+  };
+}
+
 export const usePostStore = defineStore('post', () => {
   const postsMap           = ref<Map<string, Post>>(new Map());
   const currentPost        = ref<Post | null>(null);
@@ -59,6 +77,21 @@ export const usePostStore = defineStore('post', () => {
   // Per-community initial load tracking: ensures no cross-community misclassification
   const communityInitialLoadDone = new Map<string, boolean>();
   const communityArrivalCounts = new Map<string, number>();
+  const pendingPostsByCommunity = new Map<string, Map<string, Post>>();
+  let pendingPostsFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  const getPendingIncomingPostCount = () => {
+    let total = 0;
+    for (const queue of pendingPostsByCommunity.values()) total += queue.size;
+    return total;
+  };
+  const logIncomingPostRate = createRateLogger('post-incoming', () => ({
+    queueDepth: getPendingIncomingPostCount(),
+    subscribedCommunities: subscribedCommunities.size,
+    postsInStore: postsMap.value.size,
+  }));
+  const logPostFlushRate = createRateLogger('post-flush', () => ({
+    queueDepth: getPendingIncomingPostCount(),
+  }));
 
   /** Attempt to decrypt an encrypted post and update the store */
   function tryDecryptPost(post: Post) {
@@ -71,6 +104,91 @@ export const usePostStore = defineStore('post', () => {
         }
       }
     }).catch(() => { /* no key or decryption failed — keep encrypted version */ });
+  }
+
+  function processIncomingPost(communityId: string, post: Post) {
+    // Always update existing posts in-place (vote counts, edits)
+    if (postsMap.value.has(post.id)) {
+      postsMap.value.set(post.id, post);
+      tryDecryptPost(post);
+      return;
+    }
+
+    // Already seen in a previous session → add silently, no banner
+    if (seenPostIds.has(post.id)) {
+      postsMap.value.set(post.id, post);
+      tryDecryptPost(post);
+      const next = (communityArrivalCounts.get(communityId) || 0) + 1;
+      communityArrivalCounts.set(communityId, next);
+      return;
+    }
+
+    // Only genuinely new if created AFTER this session started.
+    // This prevents Gun re-delivering old posts from triggering banner.
+    const isGenuinelyNew = post.createdAt > APP_START_TIME;
+
+    if (communityInitialLoadDone.get(communityId) && isGenuinelyNew) {
+      // Auto-prepend immediately — no banner, no click required
+      postsMap.value.set(post.id, post);
+      tryDecryptPost(post);
+      seenPostIds.add(post.id);
+      saveSeenIds(seenPostIds);
+      const next = (communityArrivalCounts.get(communityId) || 0) + 1;
+      communityArrivalCounts.set(communityId, next);
+    } else {
+      // Initial load or stale Gun re-delivery → add silently
+      postsMap.value.set(post.id, post);
+      tryDecryptPost(post);
+      seenPostIds.add(post.id);
+      const next = (communityArrivalCounts.get(communityId) || 0) + 1;
+      communityArrivalCounts.set(communityId, next);
+    }
+  }
+
+  function scheduleIncomingPostsFlush() {
+    if (pendingPostsFlushTimer) return;
+    pendingPostsFlushTimer = setTimeout(() => {
+      pendingPostsFlushTimer = null;
+      let processed = 0;
+      const queues = Array.from(pendingPostsByCommunity.entries());
+      let cursor = 0;
+      while (processed < INCOMING_POST_BATCH_SIZE && queues.length > 0) {
+        const [communityId, queue] = queues[cursor];
+        const first = queue.values().next().value as Post | undefined;
+        if (first) {
+          queue.delete(first.id);
+          processIncomingPost(communityId, first);
+          processed++;
+        }
+        if (queue.size === 0) {
+          pendingPostsByCommunity.delete(communityId);
+          queues.splice(cursor, 1);
+          if (queues.length === 0) break;
+          if (cursor >= queues.length) cursor = 0;
+          continue;
+        }
+        cursor = (cursor + 1) % queues.length;
+      }
+      if (processed > 0) logPostFlushRate(processed);
+      if (pendingPostsByCommunity.size > 0) scheduleIncomingPostsFlush();
+    }, INCOMING_POST_FLUSH_MS);
+  }
+
+  function queueIncomingPost(communityId: string, post: Post) {
+    const queue = pendingPostsByCommunity.get(communityId) || new Map<string, Post>();
+    queue.set(post.id, post);
+    pendingPostsByCommunity.set(communityId, queue);
+    logIncomingPostRate();
+    scheduleIncomingPostsFlush();
+  }
+
+  function flushCommunityIncomingPosts(communityId: string) {
+    const queue = pendingPostsByCommunity.get(communityId);
+    if (!queue) return;
+    pendingPostsByCommunity.delete(communityId);
+    for (const post of queue.values()) {
+      processIncomingPost(communityId, post);
+    }
   }
 
   // ─── Computed ──────────────────────────────────────────────────────────────
@@ -127,44 +245,10 @@ export const usePostStore = defineStore('post', () => {
       const unsub = PostService.subscribeToPostsInCommunity(
         communityId,
         (post) => {
-          // Always update existing posts in-place (vote counts, edits)
-          if (postsMap.value.has(post.id)) {
-            postsMap.value.set(post.id, post);
-            tryDecryptPost(post);
-            return;
-          }
-
-          // Already seen in a previous session → add silently, no banner
-          if (seenPostIds.has(post.id)) {
-            postsMap.value.set(post.id, post);
-            tryDecryptPost(post);
-            const next = (communityArrivalCounts.get(communityId) || 0) + 1;
-            communityArrivalCounts.set(communityId, next);
-            return;
-          }
-
-          // Only genuinely new if created AFTER this session started.
-          // This prevents Gun re-delivering old posts from triggering banner.
-          const isGenuinelyNew = post.createdAt > APP_START_TIME;
-
-          if (communityInitialLoadDone.get(communityId) && isGenuinelyNew) {
-            // Auto-prepend immediately — no banner, no click required
-            postsMap.value.set(post.id, post);
-            tryDecryptPost(post);
-            seenPostIds.add(post.id);
-            saveSeenIds(seenPostIds);
-            const next = (communityArrivalCounts.get(communityId) || 0) + 1;
-            communityArrivalCounts.set(communityId, next);
-          } else {
-            // Initial load or stale Gun re-delivery → add silently
-            postsMap.value.set(post.id, post);
-            tryDecryptPost(post);
-            seenPostIds.add(post.id);
-            const next = (communityArrivalCounts.get(communityId) || 0) + 1;
-            communityArrivalCounts.set(communityId, next);
-          }
+          queueIncomingPost(communityId, post);
         },
         () => {
+          flushCommunityIncomingPosts(communityId);
           subscribedCommunities.add(communityId);
           communityInitialLoadDone.set(communityId, true);
           for (const id of postsMap.value.keys()) seenPostIds.add(id);
@@ -368,6 +452,7 @@ export const usePostStore = defineStore('post', () => {
 
   async function refreshPosts() {
     if (!currentCommunityId.value) return;
+    pendingPostsByCommunity.delete(currentCommunityId.value);
     const unsub = unsubscribers.get(currentCommunityId.value);
     if (unsub) unsub();
     unsubscribers.delete(currentCommunityId.value);

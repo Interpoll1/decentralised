@@ -14,6 +14,7 @@ export const useChainStore = defineStore('chain', () => {
   const SYNC_REQUEST_BASE_INTERVAL_MS = 1200;
   const SYNC_REQUEST_MAX_INTERVAL_MS = 12000;
   const SYNC_LOG_DEDUP_WINDOW_MS = 5000;
+  const SYNC_DEBUG_HEARTBEAT_MS = 3000;
 
   const blocks = ref<ChainBlock[]>([]);
   const isInitialized = ref(false);
@@ -25,6 +26,50 @@ export const useChainStore = defineStore('chain', () => {
   let consecutiveSyncNoProgress = 0;
   let pendingSyncTimer: ReturnType<typeof setTimeout> | null = null;
   const syncLogLastSeen = new Map<string, number>();
+  let debugHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  let lastSyncMessageAt = 0;
+
+  function isSyncDebugEnabled(): boolean {
+    return typeof window !== 'undefined' && window.localStorage.getItem('interpoll_sync_debug') === 'true';
+  }
+
+  function createRateLogger(label: string, snapshot?: () => Record<string, unknown>) {
+    let windowStart = Date.now();
+    let count = 0;
+    return (delta = 1) => {
+      if (!isSyncDebugEnabled()) return;
+      count += delta;
+      const now = Date.now();
+      lastSyncMessageAt = now;
+      if (now - windowStart < 1000) return;
+      const payload = snapshot ? snapshot() : {};
+      console.log(`[SyncRate] ${label}`, { eventsPerSec: count, ...payload });
+      windowStart = now;
+      count = 0;
+    };
+  }
+
+  function ensureSyncDebugHeartbeat() {
+    if (debugHeartbeatTimer) return;
+    if (!isSyncDebugEnabled()) return;
+    console.log('[SyncDebug] chainStore diagnostics active');
+    debugHeartbeatTimer = setInterval(() => {
+      if (!isSyncDebugEnabled()) return;
+      const now = Date.now();
+      const ageMs = lastSyncMessageAt > 0 ? now - lastSyncMessageAt : null;
+      console.log('[SyncDebug] chainStore heartbeat', {
+        wsConnected: isWebSocketConnected.value,
+        localHeight: blocks.value.length > 0 ? blocks.value[blocks.value.length - 1].index : -1,
+        sinceLastSyncMessageMs: ageMs,
+      });
+    }, SYNC_DEBUG_HEARTBEAT_MS);
+  }
+
+  const logNewBlockRate = createRateLogger('chain-new-block');
+  const logSyncRequestSentRate = createRateLogger('chain-sync-request-sent');
+  const logSyncRequestReceivedRate = createRateLogger('chain-sync-request-received');
+  const logSyncResponseReceivedRate = createRateLogger('chain-sync-response-received');
+  const logSyncResponseBlockRate = createRateLogger('chain-sync-response-blocks');
 
   const latestBlock = computed(() =>
     blocks.value.length > 0 ? blocks.value[blocks.value.length - 1] : null
@@ -61,6 +106,8 @@ export const useChainStore = defineStore('chain', () => {
     WebSocketService.onStatusChange(({ connected }) => {
       isWebSocketConnected.value = connected;
     });
+
+    ensureSyncDebugHeartbeat();
 
     isInitialized.value = true;
   }
@@ -103,6 +150,7 @@ export const useChainStore = defineStore('chain', () => {
     consecutiveSyncNoProgress++;
     const lastIndex = blocks.value.length > 0 ? blocks.value[blocks.value.length - 1].index : -1;
     const request = { peerId: BroadcastService.getPeerId(), lastIndex };
+    logSyncRequestSentRate();
     BroadcastService.broadcast('request-sync', request);
     WebSocketService.broadcast('request-sync', request);
   }
@@ -125,6 +173,7 @@ export const useChainStore = defineStore('chain', () => {
 
   async function handleNewBlock(block: ChainBlock) {
     if (!block || typeof block !== 'object') return;
+    logNewBlockRate();
 
     const exists = blocks.value.find((b) => b.index === block.index);
     if (exists) {
@@ -172,6 +221,7 @@ export const useChainStore = defineStore('chain', () => {
   }
 
   async function handleSyncRequest(data: any) {
+    logSyncRequestReceivedRate();
     const allBlocks: ChainBlock[] = await StorageService.getAllBlocks();
     const lastIndex = typeof data?.lastIndex === 'number' ? data.lastIndex : -1;
 
@@ -194,6 +244,8 @@ export const useChainStore = defineStore('chain', () => {
 
   async function handleSyncResponse(data: any) {
     if (!data?.blocks?.length || !Array.isArray(data.blocks)) return;
+    logSyncResponseReceivedRate();
+    logSyncResponseBlockRate(data.blocks.length);
 
     const sorted = [...data.blocks].sort((a: ChainBlock, b: ChainBlock) => a.index - b.index);
     let addedCount = 0;

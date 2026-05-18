@@ -32,13 +32,15 @@ export class GunService {
   private static user: any = null;
   private static evicting = false;
   private static isInitialized = false;
+  private static gunWarningTraceInstalled = false;
 
   static initialize() {
     if (this.isInitialized && this.gun) return this.proxiedGun;
+    this.installGunWarningTrace();
 
     this.gun = Gun({
       peers: [config.relay.gun],
-      localStorage: true,
+      localStorage: false,
       radisk: false,
       axe: false,
       // ── Increased batching — Gun is live-updates only now, less urgency ──
@@ -53,6 +55,42 @@ export class GunService {
     this.user = this.gun.user();
     this.isInitialized = true;
     return this.proxiedGun;
+  }
+
+  private static installGunWarningTrace(): void {
+    if (this.gunWarningTraceInstalled) return;
+    if (typeof window === 'undefined') return;
+    if (window.localStorage.getItem('interpoll_sync_debug') !== 'true') return;
+
+    const originalWarn = console.warn.bind(console);
+    const originalLog = console.log.bind(console);
+
+    const traceIfGunFloodWarning = (args: unknown[]): boolean => {
+      try {
+        const first = args[0];
+        if (typeof first === 'string' && first.includes('syncing 1K+ records a second')) {
+          originalWarn(...args);
+          originalWarn('[SyncDebug] Gun warning trace', new Error('Gun warning origin trace').stack);
+          return true;
+        }
+      } catch {
+        // keep original warn behavior on any tracing failure
+      }
+      return false;
+    };
+
+    console.warn = (...args: unknown[]) => {
+      if (traceIfGunFloodWarning(args)) return;
+      originalWarn(...args);
+    };
+
+    console.log = (...args: unknown[]) => {
+      if (traceIfGunFloodWarning(args)) return;
+      originalLog(...args);
+    };
+
+    this.gunWarningTraceInstalled = true;
+    originalWarn('[SyncDebug] Gun warning trace enabled');
   }
 
   static getGun() {
@@ -84,7 +122,7 @@ export class GunService {
     this.user = null;
     this.gun = Gun({
       peers: [peerUrl],
-      localStorage: true,
+      localStorage: false,
       radisk: false,
       axe: false,
       wait: 250,
