@@ -42,6 +42,9 @@ function canonicalPostPayload(post: { authorId: string; title: string; content: 
 
 const postActiveListeners = new Map<string, any>();
 const MAX_INITIAL_POSTS = 50;
+const MISSING_POST_CACHE_TTL_MS = 30_000;
+const missingPostCache = new Map<string, number>();
+const postMemoryCache = new Map<string, Post>();
 
 // ── Timebox: 400ms (was 800ms) — Gun is now live-updates only ─────────────────
 const INITIAL_LOAD_TIMEBOX_MS = 400;
@@ -226,6 +229,8 @@ export class PostService {
       createdAt: cleanPost.createdAt
     });
 
+    postMemoryCache.set(newPost.id, newPost);
+    missingPostCache.delete(newPost.id);
     return newPost;
   }
 
@@ -459,20 +464,44 @@ export class PostService {
 
   // ── API-first getPost with stale-while-revalidate ─────────────────────────
   static async getPost(postId: string): Promise<Post | null> {
-    try {
-      const res = await fetch(`${getApiBase()}/api/post/${postId}`, {
-        headers: { 'Cache-Control': 'stale-while-revalidate=30' },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.id) return { ...data, dataVersion: GUN_NAMESPACE };
-      }
-    } catch {}
+    const cached = postMemoryCache.get(postId);
+    if (cached) return cached;
+
+    const missingUntil = missingPostCache.get(postId);
+    const isRecentlyMissing = typeof missingUntil === 'number' && missingUntil > Date.now();
+    if (!isRecentlyMissing) {
+      missingPostCache.delete(postId);
+    }
+
+    if (!isRecentlyMissing) {
+      try {
+        const res = await fetch(`${getApiBase()}/api/post/${postId}`, {
+          headers: { 'Cache-Control': 'stale-while-revalidate=30' },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.id) {
+            const post = { ...data, dataVersion: GUN_NAMESPACE };
+            postMemoryCache.set(postId, post);
+            missingPostCache.delete(postId);
+            return post;
+          }
+        } else if (res.status === 404) {
+          missingPostCache.set(postId, Date.now() + MISSING_POST_CACHE_TTL_MS);
+        }
+      } catch {}
+    }
 
     // Fallback to Gun (new posts written but not yet indexed)
     const gun = GunService.getGun();
     const postData = await onceWithTimeout(gun.get('posts').get(postId));
-    if (postData && postData.id) return { ...postData, dataVersion: GUN_NAMESPACE };
+    if (postData && postData.id) {
+      const post = { ...postData, dataVersion: GUN_NAMESPACE };
+      postMemoryCache.set(postId, post);
+      missingPostCache.delete(postId);
+      return post;
+    }
+    missingPostCache.set(postId, Date.now() + MISSING_POST_CACHE_TTL_MS);
     return null;
   }
 
@@ -489,6 +518,11 @@ export class PostService {
         if (ack.err) reject(new Error(ack.err)); else resolve();
       });
     });
+
+    const cached = postMemoryCache.get(postId);
+    if (cached) {
+      postMemoryCache.set(postId, { ...cached, ...cleanUpdates });
+    }
   }
 
   static async deletePost(postId: string, communityId: string): Promise<void> {
@@ -505,20 +539,26 @@ export class PostService {
     });
   }
 
-  static async voteOnPost(postId: string, direction: 'up' | 'down', _userId: string): Promise<void> {
+  static async voteOnPost(postId: string, direction: 'up' | 'down', _userId: string): Promise<Post> {
     const post = await PostService.getPost(postId);
     if (!post) throw new Error('Post not found');
     const newUpvotes   = (post.upvotes   || 0) + (direction === 'up'   ? 1 : 0);
     const newDownvotes = (post.downvotes || 0) + (direction === 'down' ? 1 : 0);
     await PostService.updatePost(postId, { upvotes: newUpvotes, downvotes: newDownvotes, score: newUpvotes - newDownvotes });
+    const updated: Post = { ...post, upvotes: newUpvotes, downvotes: newDownvotes, score: newUpvotes - newDownvotes };
+    postMemoryCache.set(postId, updated);
+    return updated;
   }
 
-  static async removeVote(postId: string, direction: 'up' | 'down', _userId: string): Promise<void> {
+  static async removeVote(postId: string, direction: 'up' | 'down', _userId: string): Promise<Post> {
     const post = await PostService.getPost(postId);
     if (!post) throw new Error('Post not found');
     const newUpvotes   = direction === 'up'   ? Math.max(0, (post.upvotes   || 0) - 1) : (post.upvotes   || 0);
     const newDownvotes = direction === 'down' ? Math.max(0, (post.downvotes || 0) - 1) : (post.downvotes || 0);
     await PostService.updatePost(postId, { upvotes: newUpvotes, downvotes: newDownvotes, score: newUpvotes - newDownvotes });
+    const updated: Post = { ...post, upvotes: newUpvotes, downvotes: newDownvotes, score: newUpvotes - newDownvotes };
+    postMemoryCache.set(postId, updated);
+    return updated;
   }
 
   static verifyPostSignature(post: Post): 'verified' | 'unverified' | 'unsigned' {

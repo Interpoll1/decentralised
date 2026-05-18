@@ -11,11 +11,20 @@ import { AuditService } from '../services/auditService';
 import { EventService } from '../services/eventService';
 
 export const useChainStore = defineStore('chain', () => {
+  const SYNC_REQUEST_BASE_INTERVAL_MS = 1200;
+  const SYNC_REQUEST_MAX_INTERVAL_MS = 12000;
+  const SYNC_LOG_DEDUP_WINDOW_MS = 5000;
+
   const blocks = ref<ChainBlock[]>([]);
   const isInitialized = ref(false);
   const isValidating = ref(false);
   const chainValid = ref(true);
   const isWebSocketConnected = ref(false);
+
+  let lastSyncRequestAt = 0;
+  let consecutiveSyncNoProgress = 0;
+  let pendingSyncTimer: ReturnType<typeof setTimeout> | null = null;
+  const syncLogLastSeen = new Map<string, number>();
 
   const latestBlock = computed(() =>
     blocks.value.length > 0 ? blocks.value[blocks.value.length - 1] : null
@@ -45,11 +54,7 @@ export const useChainStore = defineStore('chain', () => {
     // so peers only respond with blocks we're missing
     WebSocketService.onConnectSyncRequest(() => {
       setTimeout(() => {
-        const lastIndex = blocks.value.length > 0
-          ? blocks.value[blocks.value.length - 1].index
-          : -1;
-        BroadcastService.broadcast('request-sync', { peerId: BroadcastService.getPeerId(), lastIndex });
-        WebSocketService.broadcast('request-sync', { peerId: WebSocketService.getPeerId(), lastIndex });
+        requestIncrementalSync();
       }, 1000);
     });
 
@@ -65,7 +70,37 @@ export const useChainStore = defineStore('chain', () => {
     blocks.value.sort((a, b) => a.index - b.index);
   }
 
+  function logSyncIssue(key: string, message: string) {
+    const now = Date.now();
+    const lastSeen = syncLogLastSeen.get(key) ?? 0;
+    if (now - lastSeen < SYNC_LOG_DEDUP_WINDOW_MS) return;
+    syncLogLastSeen.set(key, now);
+    console.warn(message);
+  }
+
+  function markSyncProgress() {
+    consecutiveSyncNoProgress = 0;
+  }
+
   function requestIncrementalSync() {
+    const now = Date.now();
+    const minInterval = Math.min(
+      SYNC_REQUEST_BASE_INTERVAL_MS * Math.max(1, consecutiveSyncNoProgress),
+      SYNC_REQUEST_MAX_INTERVAL_MS,
+    );
+    const waitMs = (lastSyncRequestAt + minInterval) - now;
+    if (waitMs > 0) {
+      if (!pendingSyncTimer) {
+        pendingSyncTimer = setTimeout(() => {
+          pendingSyncTimer = null;
+          requestIncrementalSync();
+        }, waitMs);
+      }
+      return;
+    }
+
+    lastSyncRequestAt = now;
+    consecutiveSyncNoProgress++;
     const lastIndex = blocks.value.length > 0 ? blocks.value[blocks.value.length - 1].index : -1;
     const request = { peerId: BroadcastService.getPeerId(), lastIndex };
     BroadcastService.broadcast('request-sync', request);
@@ -94,7 +129,10 @@ export const useChainStore = defineStore('chain', () => {
     const exists = blocks.value.find((b) => b.index === block.index);
     if (exists) {
       if (exists.currentHash !== block.currentHash) {
-        console.warn(`Chain conflict at block index ${block.index}; requesting incremental resync`);
+        logSyncIssue(
+          `new-block-conflict-${block.index}`,
+          `Chain conflict at block index ${block.index}; requesting incremental resync`,
+        );
         requestIncrementalSync();
       }
       return;
@@ -117,7 +155,10 @@ export const useChainStore = defineStore('chain', () => {
     const expectedIndex = previousBlock.index + 1;
     if (block.index !== expectedIndex) {
       if (block.index > expectedIndex) {
-        console.warn(`Received future block ${block.index} (expected ${expectedIndex}); requesting sync`);
+        logSyncIssue(
+          `new-block-future-${expectedIndex}`,
+          `Received future block ${block.index} (expected ${expectedIndex}); requesting sync`,
+        );
         requestIncrementalSync();
       }
       return;
@@ -126,6 +167,7 @@ export const useChainStore = defineStore('chain', () => {
     if (ChainService.validateBlock(block, previousBlock)) {
       await StorageService.saveBlock(block);
       blocks.value.push(block);
+      markSyncProgress();
     }
   }
 
@@ -162,7 +204,10 @@ export const useChainStore = defineStore('chain', () => {
       const exists = blocks.value.find((b) => b.index === block.index);
       if (exists) {
         if (exists.currentHash !== block.currentHash) {
-          console.warn(`Detected conflicting sync block at index ${block.index}; requesting resync`);
+          logSyncIssue(
+            `sync-conflict-${block.index}`,
+            `Detected conflicting sync block at index ${block.index}; requesting resync`,
+          );
           requestIncrementalSync();
           break;
         }
@@ -174,6 +219,7 @@ export const useChainStore = defineStore('chain', () => {
           await StorageService.saveBlock(block);
           blocks.value.push(block);
           addedCount++;
+          markSyncProgress();
         }
         continue;
       }
@@ -187,7 +233,10 @@ export const useChainStore = defineStore('chain', () => {
       const expectedIndex = latest.index + 1;
       if (block.index !== expectedIndex) {
         if (block.index > expectedIndex) {
-          console.warn(`Sync gap detected at index ${block.index} (expected ${expectedIndex}); requesting resync`);
+          logSyncIssue(
+            `sync-gap-${expectedIndex}`,
+            `Sync gap detected at index ${block.index} (expected ${expectedIndex}); requesting resync`,
+          );
           requestIncrementalSync();
           break;
         }
@@ -198,6 +247,7 @@ export const useChainStore = defineStore('chain', () => {
         await StorageService.saveBlock(block);
         blocks.value.push(block);
         addedCount++;
+        markSyncProgress();
       }
     }
 
