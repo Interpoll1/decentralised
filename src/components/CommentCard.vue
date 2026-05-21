@@ -280,6 +280,7 @@ import type { FilterAction } from '../services/moderationService';
 import { ModerationService } from '../services/moderationService';
 import { useUserStore } from '../stores/userStore';
 import type { UserProfile } from '../services/userService';
+import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 
 const props = defineProps<{
   comment: Comment;
@@ -329,7 +330,12 @@ const displayName = computed(() => {
 });
 
 const authorIdentityLabel = computed(() =>
-  authorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'Issuer linked' : 'Unverified identity'
+  authorProfile.value?.identityTrustLevel === 'trusted-issuer'
+    ? formatTrustedIdentityLabel({
+      username: authorProfile.value?.customUsername || props.comment.authorName,
+      issuer: authorProfile.value?.identityIssuer,
+    })
+    : 'Unverified identity'
 );
 
 const authorIdentityClass = computed(() =>

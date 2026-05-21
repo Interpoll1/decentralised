@@ -30,3 +30,14 @@ export function parseIdentityTrust(rawUsername: string | null | undefined): Iden
   };
 }
 
+export function formatTrustedIdentityLabel(input: {
+  username?: string | null;
+  issuer?: string | null;
+}): string {
+  const username = typeof input.username === 'string' ? input.username.trim() : '';
+  const issuer = typeof input.issuer === 'string' ? input.issuer.trim() : '';
+  if (!username && !issuer) return 'Unverified identity';
+  if (!issuer) return username || 'Unverified identity';
+  if (!username) return `@${issuer}`;
+  return `${username}@${issuer}`;
+}

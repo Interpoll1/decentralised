@@ -109,6 +109,7 @@ import type { FilterAction } from '../services/moderationService';
 import { generatePseudonym } from '../utils/pseudonym';
 import { useUserStore } from '../stores/userStore';
 import type { UserProfile } from '../services/userService';
+import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 
 const props = defineProps<{
   poll: Poll;
@@ -148,7 +149,12 @@ const authorDisplayName = computed(() => {
 });
 
 const authorIdentityLabel = computed(() =>
-  authorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'Issuer linked' : 'Unverified identity'
+  authorProfile.value?.identityTrustLevel === 'trusted-issuer'
+    ? formatTrustedIdentityLabel({
+      username: authorProfile.value?.customUsername || props.poll.authorName,
+      issuer: authorProfile.value?.identityIssuer,
+    })
+    : 'Unverified identity'
 );
 
 const authorIdentityClass = computed(() =>

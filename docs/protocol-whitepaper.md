@@ -94,7 +94,7 @@ A receipt contains **public verification material only**. It does not contain an
 }
 ```
 
-> **Note on `verificationCode`:** This is a short human-readable code (previously labelled `mnemonic`) used for receipt lookup and display. It is **not** a BIP-39 wallet seed, not a private key, and not a recovery secret. It carries no cryptographic signing authority. Users should not treat it as sensitive wallet material.
+> **Note on `verificationCode`:** This is a short human-readable code used for receipt lookup and display. It is **not** a BIP-39 wallet seed, not a private key, and not a recovery secret. It carries no cryptographic signing authority. Users should not treat it as sensitive wallet material.
 
 ### 4.4 Signed event (Nostr-compatible shape)
 
@@ -341,6 +341,12 @@ Since the architecture depends on WebSocket and GunDB relays, the following docu
 
 **Summary:** a relay can censor or delay, but it cannot forge or corrupt data that has been locally signed and hash-linked. Clients that connect to multiple relays are more resilient to relay-level censorship.
 
+**Simple censorship-detection signals (client-observable):**
+- **Local-vs-network mismatch:** a user sees a locally signed action in their chain, but peers connected to other relays do not see it after expected sync windows.
+- **Persistent index gaps:** repeated missing block ranges (for the same peer/relay path) after incremental re-requests from `lastIndex`.
+- **Divergent chain heads across relays:** one relay consistently reports a shorter or stale head while others progress.
+- **Asymmetric visibility reports:** multiple users report that only clients behind a specific relay fail to receive certain posts/votes.
+
 ---
 
 ## 12. Browser App-Origin Trust Boundary
@@ -453,7 +459,21 @@ There are two ways to join a private community, corresponding to two key distrib
 - **Key loss is permanent.** There is no key recovery mechanism. If a user loses their key (clears IndexedDB, changes browsers) and has no backup, they cannot decrypt community content.
 - **Key revocation is not supported.** There is no mechanism to rotate the community key or revoke access for specific members. All members with the key retain permanent read access to all past content.
 
-### 15.5 Key storage
+### 15.5 Metadata leakage notes (what remains visible)
+
+Even with end-to-end content encryption, the system still leaks structural metadata that operators should model explicitly:
+
+| Leakage surface | Visible to relays/observers | Why this matters |
+|---|---|---|
+| Community existence | Community ID and `isEncrypted: true` shell | Reveals that a private space exists even if content is unreadable |
+| Membership/activity size | Member counts and rough object volume growth | Enables coarse inference of community growth and activity spikes |
+| Timing metadata | Write timestamps and update cadence | Correlating burst times can reveal event windows (e.g., live discussions) |
+| Social graph hints | Which encrypted communities a public user key appears to join | May reveal affiliation patterns even without plaintext access |
+| Network metadata | IP addresses, connection/session metadata at relay layer | Can support traffic analysis or cross-service correlation by infrastructure operators |
+
+Encryption protects payload confidentiality, not traffic-shape secrecy. InterPoll does not currently implement cover traffic, mixnet routing, or metadata-hiding replication.
+
+### 15.6 Key storage
 
 Keys are persisted in the browser's IndexedDB via `KeyVaultService` (`encryption-keys` store). Each stored key has:
 

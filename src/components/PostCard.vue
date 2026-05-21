@@ -406,6 +406,7 @@ import type { FilterAction } from '../services/moderationService';
 import { generatePseudonym } from '../utils/pseudonym';
 import { useUserStore } from '../stores/userStore';
 import type { UserProfile } from '../services/userService';
+import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -462,7 +463,12 @@ const authorDisplayName = computed(() => {
 });
 
 const authorIdentityLabel = computed(() =>
-  currentAuthorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'Issuer linked' : 'Unverified identity'
+  currentAuthorProfile.value?.identityTrustLevel === 'trusted-issuer'
+    ? formatTrustedIdentityLabel({
+      username: currentAuthorProfile.value?.customUsername || props.post.authorName,
+      issuer: currentAuthorProfile.value?.identityIssuer,
+    })
+    : 'Unverified identity'
 );
 
 const authorIdentityClass = computed(() =>

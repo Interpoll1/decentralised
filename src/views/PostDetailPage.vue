@@ -102,7 +102,7 @@
               <span class="commenter-online-dot"></span>
               <span class="commenter-name">u/{{ commenter.displayName }}</span>
               <span v-if="commenter.authorShowRealName" class="identity-badge" :class="commenter.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'">
-                {{ commenter.identityTrustLevel === 'trusted-issuer' ? 'Issuer linked' : 'Unverified identity' }}
+                {{ commenter.identityTrustLabel }}
               </span>
               <ion-badge color="medium" class="commenter-count">{{ commenter.commentCount }}</ion-badge>
             </div>
@@ -185,6 +185,7 @@ import CommentCard from '../components/CommentCard.vue';
 import { Post } from '../services/postService';
 import { generatePseudonym } from '../utils/pseudonym';
 import { ModerationService, moderationVersion } from '../services/moderationService';
+import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 
 import { IPFSService } from '../services/ipfsService';
 
@@ -258,7 +259,12 @@ const postAuthorDisplayName = computed(() => {
 });
 
 const postAuthorIdentityLabel = computed(() =>
-  postAuthorTrustLevel.value === 'trusted-issuer' ? 'Issuer linked' : 'Unverified identity'
+  postAuthorTrustLevel.value === 'trusted-issuer'
+    ? formatTrustedIdentityLabel({
+      username: post.value?.authorName,
+      issuer: userStore.profiles[post.value?.authorId || '']?.identityIssuer,
+    })
+    : 'Unverified identity'
 );
 
 const postAuthorIdentityClass = computed(() =>
@@ -335,7 +341,14 @@ function isCommentFlagged(content: string): boolean {
 }
 
 const uniqueCommenters = computed(() => {
-  const authorMap = new Map<string, { authorId: string; displayName: string; commentCount: number; authorShowRealName: boolean; identityTrustLevel: 'trusted-issuer' | 'unverified' }>();
+  const authorMap = new Map<string, {
+    authorId: string;
+    displayName: string;
+    commentCount: number;
+    authorShowRealName: boolean;
+    identityTrustLevel: 'trusted-issuer' | 'unverified';
+    identityTrustLabel: string;
+  }>();
 
   commentStore.comments
     .filter(c => c.postId === postId.value || c.postId === post.value?.id)
@@ -347,6 +360,13 @@ const uniqueCommenters = computed(() => {
           existing.displayName = c.authorName || 'anon';
         }
         existing.authorShowRealName = existing.authorShowRealName || c.authorShowRealName === true;
+        existing.identityTrustLevel = userStore.profiles[c.authorId]?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified';
+        existing.identityTrustLabel = existing.identityTrustLevel === 'trusted-issuer'
+          ? formatTrustedIdentityLabel({
+            username: existing.displayName,
+            issuer: userStore.profiles[c.authorId]?.identityIssuer,
+          })
+          : 'Unverified identity';
       } else {
         const name = c.authorShowRealName
           ? (c.authorName || 'anon')
@@ -359,6 +379,12 @@ const uniqueCommenters = computed(() => {
           commentCount: 1,
           authorShowRealName: c.authorShowRealName === true,
           identityTrustLevel: userStore.profiles[c.authorId]?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified',
+          identityTrustLabel: userStore.profiles[c.authorId]?.identityTrustLevel === 'trusted-issuer'
+            ? formatTrustedIdentityLabel({
+              username: name,
+              issuer: userStore.profiles[c.authorId]?.identityIssuer,
+            })
+            : 'Unverified identity',
         });
       }
     });

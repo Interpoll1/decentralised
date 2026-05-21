@@ -295,6 +295,7 @@ import { AuditService } from '../services/auditService';
 import { GUN_NAMESPACE } from '../services/gunService';
 import type { Vote } from '../types/chain';
 import { generatePseudonym } from '../utils/pseudonym';
+import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 import config from '../config';
 
 const route = useRoute();
@@ -344,7 +345,12 @@ const pollAuthorDisplayName = computed(() => {
 });
 
 const pollAuthorIdentityLabel = computed(() =>
-  pollAuthorTrustLevel.value === 'trusted-issuer' ? 'Issuer linked' : 'Unverified identity'
+  pollAuthorTrustLevel.value === 'trusted-issuer'
+    ? formatTrustedIdentityLabel({
+      username: poll.value?.authorName,
+      issuer: userStore.profiles[poll.value?.authorId || '']?.identityIssuer,
+    })
+    : 'Unverified identity'
 );
 
 const pollAuthorIdentityClass = computed(() =>
