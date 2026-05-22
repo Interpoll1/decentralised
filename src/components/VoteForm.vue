@@ -39,7 +39,7 @@
         <p class="text-xs">
           <ion-icon :icon="informationCircle" class="align-middle"></ion-icon>
           <strong>One Vote Per Device:</strong> Your device fingerprint will be recorded
-          to prevent duplicate votes. You'll receive a 12-word receipt to verify your vote later.
+          to prevent duplicate votes. You'll receive a 12-word receipt verification code to verify your vote later.
         </p>
       </div>
 
@@ -214,7 +214,7 @@ const submitVote = async () => {
       console.warn('Failed to persist local vote record after chain vote:', recordError);
     }
 
-    emit('vote-submitted', receipt.mnemonic);
+    emit('vote-submitted', receipt.verificationCode);
     const pollIdForSync = props.poll.id;
     const reservationTokenForSync = authorization.reservationToken;
     const inviteCodeForSync = inviteCode;

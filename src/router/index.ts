@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from '@ionic/vue-router';
 import { RouteRecordRaw } from 'vue-router';
-import { isBetaEnabled } from '../utils/betaFeatures';
 
 const routes: Array<RouteRecordRaw> = [
   { path: '/', redirect: '/home' },
@@ -32,7 +31,7 @@ const routes: Array<RouteRecordRaw> = [
   { path: '/chain-explorer', name: 'ChainExplorer', component: () => import('../views/ChainExplorerPage.vue') },
   { path: '/vote/:pollId', name: 'Vote', component: () => import('../views/VotePage.vue'), props: true },
   { path: '/results/:pollId', name: 'Results', component: () => import('../views/ResultsPage.vue'), props: true },
-  { path: '/receipt/:mnemonic?', name: 'Receipt', component: () => import('../views/ReceiptPage.vue') },
+  { path: '/receipt/:verificationCode?', name: 'Receipt', component: () => import('../views/ReceiptPage.vue') },
   { path: '/search', name: 'Search', component: () => import('../views/SearchView.vue') },
   { path: '/chat/:userId', name: 'Chat', component: () => import('../views/ChatView.vue'), props: true },
   { path: '/resilience', name: 'Resilience', component: () => import('../views/ResiliencePage.vue') },
@@ -54,14 +53,6 @@ const routes: Array<RouteRecordRaw> = [
 const router = createRouter({
   history: createWebHistory('/'),
   routes
-});
-
-router.beforeEach((to, _from, next) => {
-  if (to.name === 'Resilience' && !isBetaEnabled('resilience')) {
-    next({ name: 'Home' });
-    return;
-  }
-  next();
 });
 
 export default router;

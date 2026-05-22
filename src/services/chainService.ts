@@ -275,9 +275,9 @@ export class ChainService {
     await StorageService.saveBlock(newBlock);
     await StorageService.saveVote(vote);
 
-    const mnemonic = CryptoService.generateMnemonic();
+    const verificationCode = CryptoService.generateVerificationCode();
 
-    return { block: newBlock, receipt: mnemonic };
+    return { block: newBlock, receipt: verificationCode };
   }
 
   static async addAction(

@@ -1,6 +1,6 @@
 # Interpoll
 
-A browser-first, relay-assisted decentralized polling platform. Votes are recorded on a local blockchain, poll data lives in a distributed database (GunDB), and peers find each other through a lightweight WebSocket relay. Everything works offline — sync happens when a connection is available. Data is harder to erase than on any single-server platform: as soon as one peer reconnects, its local history reseeds the network.
+A browser-first, relay-assisted decentralized polling platform. Votes are recorded on a local blockchain, poll data lives in a distributed database (GunDB), and peers find each other through a lightweight WebSocket relay. The app supports offline continuity with later convergence when a connection is available. Records are harder to erase than on a single-server platform, but not impossible to erase.
 <img width="1918" height="966" alt="image" src="https://github.com/user-attachments/assets/31717176-eb42-43b2-8200-8da9cf022550" />
 
 

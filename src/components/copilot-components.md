@@ -15,7 +15,7 @@ Reusable UI components built with Vue 3 Composition API + Ionic + Tailwind.
 | `CommentCard.vue` | Single comment with author pseudonym, vote controls, nested replies, and issuer trust badge (`username@trust_issuer` for trusted, `Unverified identity` otherwise) when real-name authorship is enabled. Trusted badge styling remains green. | `comment`, `postId` |
 | `CommunityCard.vue` | Community listing card with name, description, member count. | `community: Community` |
 | `ChainStatus.vue` | Badge/indicator showing blockchain sync state (valid/invalid, block count, WebSocket connected). Uses `useChainStore`. | — |
-| `ReceiptViewer.vue` | Displays a vote receipt (mnemonic + block details). Allows receipt lookup in chain explorer. | `receipt: Receipt` |
+| `ReceiptViewer.vue` | Displays a vote receipt (verification code + block details). Allows receipt lookup in chain explorer. | `receipt: Receipt` |
 | `ImageUploader.vue` | Drag-and-drop / click-to-upload image picker. Compresses and uploads via `IPFSService`. Emits `uploaded` with `{ cid, thumbnail }`. | emits `uploaded` |
 | `ConnectionBanner.vue` | Top-of-screen banner shown when WebSocket is disconnected. Uses `chainStore.isWebSocketConnected`. | — |
 | `RecoveryPhraseCard.vue` | Displays a BIP-39 mnemonic receipt in a stylized card. | `mnemonic: string` |

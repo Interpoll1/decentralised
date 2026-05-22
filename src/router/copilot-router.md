@@ -22,7 +22,7 @@ Single file: `index.ts`. Uses `@ionic/vue-router` (`createRouter` from Ionic for
 | `/chain-explorer` | `ChainExplorer` | `ChainExplorerPage` | — |
 | `/vote/:pollId` | `Vote` | `VotePage` | `true` |
 | `/results/:pollId` | `Results` | `ResultsPage` | `true` |
-| `/receipt/:mnemonic?` | `Receipt` | `ReceiptPage` | — |
+| `/receipt/:verificationCode?` | `Receipt` | `ReceiptPage` | — |
 | `/search` | `Search` | `SearchView` | — |
 | `/chat/:userId` | `Chat` | `ChatView` | `true` |
 | `/chatrooms` | `ChatRoomList` | `ChatRoomListPage` | — |
@@ -34,7 +34,8 @@ Single file: `index.ts`. Uses `@ionic/vue-router` (`createRouter` from Ionic for
 ## Notes
 
 - All components are lazy-loaded.
-- `router.beforeEach` is a passthrough — add auth guards here if needed.
+- `router.beforeEach` is currently a passthrough — add auth guards here if needed.
 - History mode: `createWebHistory('/')` — the server (or `dist/`) must handle SPA fallback.
 - Internal same-origin anchor links are intercepted in `App.vue` and forwarded through Vue Router so `/community/...`, `/chat...`, and `/join/...` links stay in-app instead of forcing a browser reload.
 - `JoinPrivatePage` supports community, chatroom, and server invite routes.
+- `ResiliencePage` is directly routable from `/resilience` (not beta-gated).

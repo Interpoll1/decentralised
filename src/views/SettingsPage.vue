@@ -93,24 +93,6 @@
           <div class="separator"></div>
         </div>
 
-        <!-- Beta Features -->
-        <div class="section">
-          <h3 class="section-title">Beta Features</h3>
-          <p class="section-subtitle">Try experimental features before they're fully released</p>
-          <ion-list>
-            <ion-item>
-              <ion-toggle :checked="betaFeatures.resilience" @ionChange="onToggleResilienceBeta($event)">
-                Resilience Tools
-              </ion-toggle>
-            </ion-item>
-          </ion-list>
-          <p class="helper-text">
-            Anti-censorship toolkit: relay health scanning, relay management, snapshot export/import, Tor support.
-            Enable to access the Resilience page from the side menu.
-          </p>
-          <div class="separator"></div>
-        </div>
-
         <!-- Cryptographic Identity -->
         <div class="section">
           <h3 class="section-title">Cryptographic Identity</h3>
@@ -1637,7 +1619,6 @@ import config from '../config';
 import { ModerationService, moderationVersion, type ModerationSettings, type WordCategory } from '../services/moderationService';
 import { getEnabledVersions, setEnabledVersions, probeForVersions, availableVersions, type DataVersion } from '../utils/dataVersionSettings';
 import { GUN_NAMESPACE } from '../services/gunService';
-import { betaFeatures, setBetaFeature } from '../utils/betaFeatures';
 import { useFeedPreferences } from '../composables/useFeedPreferences';
 import type { FeedMode, FeedRankingWeights } from '../services/feedPreferencesService';
 import UserIdentityBadge from '../components/UserIdentityBadge.vue';
@@ -1662,10 +1643,6 @@ const {
 } = useFeedPreferences();
 const newFeedIncludeKeyword = ref('');
 const newFeedExcludeKeyword = ref('');
-
-function onToggleResilienceBeta(ev: CustomEvent) {
-  setBetaFeature('resilience', ev.detail.checked);
-}
 
 const storageStats = ref({ used: 0, quota: 0, pinnedItems: 0 });
 

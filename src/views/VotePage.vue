@@ -106,7 +106,7 @@ watch(
   { immediate: true },
 );
 
-const handleVoteSubmitted = (mnemonic: string) => {
-  router.push(`/receipt/${mnemonic}`);
+const handleVoteSubmitted = (verificationCode: string) => {
+  router.push(`/receipt/${verificationCode}`);
 };
 </script>

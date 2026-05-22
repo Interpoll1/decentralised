@@ -596,7 +596,7 @@ async function submitVote() {
     })()
 
     await presentToast('Vote recorded. Network sync will continue in the background.')
-    void router.push(`/receipt/${receipt.mnemonic}`)
+    void router.push(`/receipt/${receipt.verificationCode}`)
 
   } catch (error) {
     console.error('Vote error:', error);
