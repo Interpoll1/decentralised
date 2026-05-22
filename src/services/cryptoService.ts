@@ -45,20 +45,33 @@ export class CryptoService {
     return this.hash(blockString);
   }
 
-  // Generate 12-word mnemonic
-  static generateMnemonic(): string {
+  // Generate 12-word receipt verification code (BIP-39 word list format)
+  static generateVerificationCode(): string {
     return bip39.generateMnemonic();
   }
 
-  // Validate mnemonic
-  static validateMnemonic(mnemonic: string): boolean {
-    return bip39.validateMnemonic(mnemonic);
+  // Validate receipt verification code format
+  static validateVerificationCode(verificationCode: string): boolean {
+    return bip39.validateMnemonic(verificationCode);
   }
 
-  // Derive receipt ID from mnemonic
-  static mnemonicToReceiptId(mnemonic: string): string {
-    const seed = bip39.mnemonicToSeedSync(mnemonic);
+  // Derive receipt ID from receipt verification code
+  static verificationCodeToReceiptId(verificationCode: string): string {
+    const seed = bip39.mnemonicToSeedSync(verificationCode);
     return bytesToHex(sha256(seed)).substring(0, 32);
+  }
+
+  // Legacy aliases
+  static generateMnemonic(): string {
+    return this.generateVerificationCode();
+  }
+
+  static validateMnemonic(mnemonic: string): boolean {
+    return this.validateVerificationCode(mnemonic);
+  }
+
+  static mnemonicToReceiptId(mnemonic: string): string {
+    return this.verificationCodeToReceiptId(mnemonic);
   }
 
   // Generate browser fingerprint (anonymous)

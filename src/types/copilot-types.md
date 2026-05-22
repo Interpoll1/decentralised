@@ -10,7 +10,7 @@ Core blockchain types. Import with `import type { ChainBlock, Vote, Receipt, Pol
 |---|---|
 | `ChainBlock` | Fields: `index`, `timestamp`, `previousHash`, `voteHash`, `signature`, `currentHash`, `nonce`. Optional: `pubkey` (Schnorr x-only hex), `eventId` (Nostr event ref), `actionType`, `actionLabel`. Legacy blocks omit `pubkey` — they are still valid if hash-chain holds. |
 | `Vote` | `pollId`, `choice`, `timestamp`, `deviceId` |
-| `Receipt` | `blockIndex`, `voteHash`, `chainHeadHash`, `mnemonic`, `timestamp`, `pollId` |
+| `Receipt` | `blockIndex`, `voteHash`, `chainHeadHash`, `verificationCode`, `timestamp`, `pollId` (`mnemonic` retained as legacy alias) |
 | `Poll` | Minimal chain-layer poll: `id`, `title`, `description`, `options[]`, `createdAt`. **Not** the same as `pollService.ts` `Poll` which has more fields. |
 | `ActionType` | `'vote' \| 'community-create' \| 'post-create'` — extend this union to add new block action types. |
 

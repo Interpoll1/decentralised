@@ -331,7 +331,7 @@ export const useChainStore = defineStore('chain', () => {
     });
 
     // Add vote to blockchain (signed with real Schnorr key)
-    const { block, receipt: mnemonic } = await ChainService.addVote(vote);
+    const { block, receipt: verificationCode } = await ChainService.addVote(vote);
 
     blocks.value.push(block);
 
@@ -345,7 +345,8 @@ export const useChainStore = defineStore('chain', () => {
       blockIndex: block.index,
       voteHash: block.voteHash,
       chainHeadHash: block.currentHash,
-      mnemonic,
+      verificationCode,
+      mnemonic: verificationCode,
       timestamp: block.timestamp,
       pollId: vote.pollId,
     };

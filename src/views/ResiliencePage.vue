@@ -10,6 +10,38 @@
     </ion-header>
 
     <ion-content class="ion-padding">
+      <ion-card>
+        <ion-card-header>
+          <ion-card-title>Resilience Center</ion-card-title>
+        </ion-card-header>
+        <ion-card-content>
+          <p class="text-sm opacity-75 mb-3">
+            Keep your connection healthy, rotate relays quickly, and protect continuity with snapshot backup tools.
+          </p>
+          <div class="quick-actions-grid">
+            <ion-button :disabled="scanning" @click="scanAllRelays">
+              <ion-icon :icon="analyticsOutline" slot="start"></ion-icon>
+              Scan relays
+            </ion-button>
+            <ion-button fill="outline" :disabled="scanning || relays.length === 0" @click="switchToBestRelay">
+              <ion-icon :icon="swapHorizontalOutline" slot="start"></ion-icon>
+              Pick best relay
+            </ion-button>
+            <ion-button fill="outline" :disabled="exporting" @click="exportSnapshot">
+              <ion-icon :icon="downloadOutline" slot="start"></ion-icon>
+              Backup snapshot
+            </ion-button>
+            <ion-button fill="outline" :disabled="sharing" @click="shareWithPeers">
+              <ion-icon :icon="sendOutline" slot="start"></ion-icon>
+              Share to peers
+            </ion-button>
+            <ion-button fill="clear" :disabled="probeResults.length === 0" @click="copyRelayReport">
+              <ion-icon :icon="copyOutline" slot="start"></ion-icon>
+              Copy relay report
+            </ion-button>
+          </div>
+        </ion-card-content>
+      </ion-card>
 
       <!-- 1. Network Status -->
       <ion-card>
@@ -17,6 +49,9 @@
           <ion-card-title>Network Status</ion-card-title>
         </ion-card-header>
         <ion-card-content>
+          <p class="text-sm opacity-75 mb-3">
+            Check live WebSocket health, peer reachability, and censorship signals across your configured relays.
+          </p>
           <div class="flex items-center gap-3 mb-3">
             <ion-badge :color="wsConnected ? 'success' : 'danger'">
               {{ wsConnected ? 'Connected' : 'Disconnected' }}
@@ -26,6 +61,9 @@
               <ion-icon :icon="fingerPrintOutline" class="mr-1"></ion-icon> Tor Browser
             </ion-badge>
           </div>
+          <p v-if="lastScanAt" class="text-xs opacity-60 mb-2">
+            Last full scan: {{ lastScanAt }}
+          </p>
 
           <ion-button expand="block" :disabled="scanning" @click="scanAllRelays">
             <ion-spinner v-if="scanning" name="crescent" class="mr-2"></ion-spinner>
@@ -88,6 +126,9 @@
           <ion-card-title>Relay Management</ion-card-title>
         </ion-card-header>
         <ion-card-content>
+          <p class="text-sm opacity-75 mb-3">
+            Add fallback relays, probe individual endpoints, and switch instantly when performance drops.
+          </p>
           <ion-list>
             <ion-item
               v-for="relay in relays"
@@ -178,6 +219,9 @@
           <ion-card-title>Snapshot Manager</ion-card-title>
         </ion-card-header>
         <ion-card-content>
+          <p class="text-sm opacity-75 mb-3">
+            Export encrypted local state backups, import trusted snapshots, and share state for fast peer recovery.
+          </p>
           <!-- Export -->
           <div class="mb-4">
             <h3 class="font-semibold mb-2">Export</h3>
@@ -263,6 +307,9 @@
           <ion-card-title>Advanced Tools</ion-card-title>
         </ion-card-header>
         <ion-card-content>
+          <p class="text-sm opacity-75 mb-3">
+            Optional controls for relay-assisted peer sync and command-line Tor peer operations.
+          </p>
           <ion-item lines="none">
             <ion-toggle v-model="webrtcEnabled">
               Peer Snapshot Sync
@@ -272,13 +319,23 @@
             Enable relay-mediated peer-to-peer snapshot sharing (experimental).
           </p>
 
-          <div class="mt-4 p-3 glass-inset">
-            <p class="text-sm">
-              <strong>Tor headless peer:</strong> Run a relay peer through the Tor network:
-            </p>
-            <code class="block mt-1 p-2 rounded text-xs bg-black/30">
+          <div class="tor-command-card mt-4">
+            <div class="tor-command-header">
+              <div class="tor-command-title">
+                <ion-icon :icon="terminalOutline"></ion-icon>
+                <strong>Tor headless peer command</strong>
+              </div>
+              <ion-button size="small" fill="outline" @click="copyTorPeerCommand">
+                <ion-icon :icon="copyOutline" slot="start"></ion-icon>
+                Copy
+              </ion-button>
+            </div>
+            <code class="tor-command-code">
               node peer.js --proxy socks5h://127.0.0.1:9050
             </code>
+            <p class="tor-command-help">
+              Use this only when you run a dedicated relay peer through Tor.
+            </p>
           </div>
         </ion-card-content>
       </ion-card>
@@ -379,7 +436,8 @@ import {
   refreshOutline, downloadOutline, cloudUploadOutline,
   trashOutline, fingerPrintOutline, chevronDownOutline, chevronUpOutline,
   ellipse, warningOutline, lockClosedOutline, checkmarkCircleOutline,
-  serverOutline, hardwareChipOutline, shieldCheckmarkOutline,
+  serverOutline, hardwareChipOutline, shieldCheckmarkOutline, analyticsOutline,
+  swapHorizontalOutline, copyOutline, sendOutline, terminalOutline,
 } from 'ionicons/icons';
 import { RelayManager } from '../services/relayManager';
 import { RelayHealthService } from '../services/relayHealthService';
@@ -400,6 +458,7 @@ const isTor = ref(false);
 const scanning = ref(false);
 const probeResults = ref<RelayProbeResult[]>([]);
 const censorship = ref<{ blocked: RelayEndpoint[]; reachable: RelayEndpoint[]; torRequired: RelayEndpoint[] } | null>(null);
+const lastScanAt = ref<string>('');
 
 const autoFailoverEnabled = ref(localStorage.getItem('interpoll_auto_failover') === 'true');
 const newRelay = ref({ label: '', ws: '', gun: '', api: '', isTor: false, priority: 10 });
@@ -444,6 +503,27 @@ function latencyDisplay(r: RelayProbeResult): string {
   return avg !== '—' ? `${avg}ms` : '—';
 }
 
+function bestRelayFromResults(results: RelayProbeResult[]): RelayProbeResult | null {
+  const rank = (result: RelayProbeResult) => {
+    if (result.overall === 'online') return 0;
+    if (result.overall === 'degraded') return 1;
+    return 2;
+  };
+
+  const sortable = [...results].sort((a, b) => {
+    const rankDelta = rank(a) - rank(b);
+    if (rankDelta !== 0) return rankDelta;
+
+    const aLatency = avgLatency(a);
+    const bLatency = avgLatency(b);
+    const aValue = aLatency === '—' ? Number.POSITIVE_INFINITY : Number(aLatency);
+    const bValue = bLatency === '—' ? Number.POSITIVE_INFINITY : Number(bLatency);
+    return aValue - bValue;
+  });
+
+  return sortable.find(r => r.overall !== 'offline') ?? null;
+}
+
 function statusColor(status: string): string {
   switch (status) {
     case 'online': return 'success';
@@ -473,9 +553,32 @@ async function scanAllRelays() {
     const results = await RelayHealthService.probeAll(relays.value);
     probeResults.value = results;
     censorship.value = RelayHealthService.detectCensorship(results, relays.value);
+    lastScanAt.value = new Date().toLocaleString();
     await showToast(`Scanned ${results.length} relay(s)`);
   } catch (e: unknown) {
     await showToast(e instanceof Error ? e.message : 'Scan failed');
+  } finally {
+    scanning.value = false;
+  }
+}
+
+async function switchToBestRelay() {
+  scanning.value = true;
+  try {
+    const results = await RelayHealthService.probeAll(relays.value);
+    probeResults.value = results;
+    censorship.value = RelayHealthService.detectCensorship(results, relays.value);
+    lastScanAt.value = new Date().toLocaleString();
+    const best = bestRelayFromResults(results);
+    if (!best) {
+      await showToast('No reachable relay available');
+      return;
+    }
+    await RelayManager.switchToRelay(best.relayId);
+    refreshStatus();
+    await showToast(`Switched to ${relayLabelById(best.relayId)}`);
+  } catch (e: unknown) {
+    await showToast(e instanceof Error ? e.message : 'Could not pick relay');
   } finally {
     scanning.value = false;
   }
@@ -577,6 +680,39 @@ async function shareWithPeers() {
     await showToast(e instanceof Error ? e.message : 'Share failed');
   } finally {
     sharing.value = false;
+  }
+}
+
+function buildRelayReport(): string {
+  if (probeResults.value.length === 0) return 'No relay scan available.';
+  const lines = probeResults.value.map((result) => {
+    return `${relayLabelById(result.relayId)}: ${result.overall} (WS:${result.ws.reachable ? 'up' : 'down'}, Gun:${result.gun.reachable ? 'up' : 'down'}, API:${result.api.reachable ? 'up' : 'down'}, latency:${latencyDisplay(result)})`;
+  });
+  const blockedCount = censorship.value?.blocked.length ?? 0;
+  const torCount = censorship.value?.torRequired.length ?? 0;
+  return [
+    'InterPoll Relay Report',
+    `Scanned: ${lastScanAt.value || 'unknown time'}`,
+    ...lines,
+    `Censorship signals: blocked=${blockedCount}, torRequired=${torCount}`,
+  ].join('\n');
+}
+
+async function copyRelayReport() {
+  try {
+    await navigator.clipboard.writeText(buildRelayReport());
+    await showToast('Relay report copied');
+  } catch (e: unknown) {
+    await showToast(e instanceof Error ? e.message : 'Copy failed');
+  }
+}
+
+async function copyTorPeerCommand() {
+  try {
+    await navigator.clipboard.writeText('node peer.js --proxy socks5h://127.0.0.1:9050');
+    await showToast('Tor command copied');
+  } catch (e: unknown) {
+    await showToast(e instanceof Error ? e.message : 'Copy failed');
   }
 }
 
@@ -709,5 +845,50 @@ ion-list {
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 12px;
+}
+
+.quick-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.tor-command-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(18, 18, 18, 0.45);
+  padding: 12px;
+}
+
+.tor-command-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.tor-command-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.92rem;
+}
+
+.tor-command-code {
+  display: block;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  word-break: break-all;
+}
+
+.tor-command-help {
+  margin-top: 8px;
+  font-size: 0.75rem;
+  opacity: 0.72;
 }
 </style>

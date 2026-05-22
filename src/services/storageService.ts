@@ -105,17 +105,33 @@ export class StorageService {
   // Receipt operations
   static async saveReceipt(receipt: Receipt): Promise {
     const db = await this.getDB();
-    await db.put('receipts', receipt);
+    const normalizedReceipt: Receipt = {
+      ...receipt,
+      verificationCode: receipt.verificationCode || receipt.mnemonic || '',
+      mnemonic: receipt.mnemonic || receipt.verificationCode,
+    };
+    await db.put('receipts', normalizedReceipt);
   }
 
-  static async getReceipt(mnemonic: string): Promise {
+  static async getReceipt(verificationCode: string): Promise {
     const db = await this.getDB();
-    return db.get('receipts', mnemonic);
+    const receipt = await db.get('receipts', verificationCode);
+    if (!receipt) return undefined;
+    return {
+      ...receipt,
+      verificationCode: receipt.verificationCode || receipt.mnemonic || '',
+      mnemonic: receipt.mnemonic || receipt.verificationCode,
+    };
   }
 
   static async getAllReceipts(): Promise {
     const db = await this.getDB();
-    return db.getAll('receipts');
+    const receipts = await db.getAll('receipts');
+    return receipts.map((receipt: Receipt) => ({
+      ...receipt,
+      verificationCode: receipt.verificationCode || receipt.mnemonic || '',
+      mnemonic: receipt.mnemonic || receipt.verificationCode,
+    }));
   }
 
   // Poll operations

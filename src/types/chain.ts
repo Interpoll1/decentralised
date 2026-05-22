@@ -35,7 +35,8 @@ export interface Receipt {
   blockIndex: number;
   voteHash: string;
   chainHeadHash: string;
-  mnemonic: string;
+  verificationCode: string;
+  mnemonic?: string; // Legacy alias for older stored receipts
   timestamp: number;
   pollId: string;
 }
