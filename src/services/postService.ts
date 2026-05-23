@@ -42,6 +42,7 @@ function canonicalPostPayload(post: { authorId: string; title: string; content: 
 
 const postActiveListeners = new Map<string, any>();
 const MAX_INITIAL_POSTS = 50;
+const MAX_COMMUNITY_INITIAL_POSTS = 120;
 const MISSING_POST_CACHE_TTL_MS = 30_000;
 const missingPostCache = new Map<string, number>();
 const postMemoryCache = new Map<string, Post>();
@@ -267,7 +268,7 @@ export class PostService {
       if (!allPosts) { checkLoadComplete(); return; }
       const keys = Object.keys(allPosts).filter(k => k !== '_');
       void loadPostIdsInBatches(
-        keys,
+        keys.slice(0, MAX_COMMUNITY_INITIAL_POSTS),
         (postId) => onceWithTimeout(gun.get('posts').get(postId)),
         (postData) => {
           if (postData.id && !initialSeenIds.has(postData.id)) {
@@ -275,7 +276,7 @@ export class PostService {
             collectedPosts.push({ ...postData, dataVersion: GUN_NAMESPACE });
           }
         },
-        100,
+        40,
       ).then(() => {
         collectedPosts.sort((a, b) => b.createdAt - a.createdAt);
         collectedPosts.forEach(p => onPost(p));
@@ -286,6 +287,7 @@ export class PostService {
     // Live updates: map().on emits one post-id key at a time, which is more
     // reliable than parsing full-node patches from .on for large communities.
     subscription = communityPostsNode.map().on((_: any, postId: string) => {
+      if (!initialLoadDone) return;
       if (!postId || postId === '_' || initialSeenIds.has(postId) || inFlightIds.has(postId)) return;
       inFlightIds.add(postId);
       void onceWithTimeout(gun.get('posts').get(postId)).then((postData) => {
@@ -307,7 +309,7 @@ export class PostService {
         const keys = Object.keys(allPosts).filter(k => k !== '_');
         const v1Collected: Post[] = [];
         void loadPostIdsInBatches(
-          keys,
+          keys.slice(0, MAX_COMMUNITY_INITIAL_POSTS),
           (postId) => onceWithTimeout(rawGun.get('posts').get(postId)),
           (postData) => {
             if (postData.id && !initialSeenIds.has(postData.id)) {
@@ -315,7 +317,7 @@ export class PostService {
               v1Collected.push({ ...postData, dataVersion: 'v1' });
             }
           },
-          100,
+          40,
         ).then(() => {
           v1Collected.sort((a, b) => b.createdAt - a.createdAt);
           v1Collected.forEach(p => onPost(p));
@@ -323,6 +325,7 @@ export class PostService {
         });
       });
       v1Subscription = v1Node.map().on((_: any, postId: string) => {
+        if (!initialLoadDone) return;
         if (!postId || postId === '_' || initialSeenIds.has(postId) || inFlightIds.has(postId)) return;
         inFlightIds.add(postId);
         void onceWithTimeout(rawGun.get('posts').get(postId)).then((postData) => {
@@ -395,6 +398,7 @@ export class PostService {
     });
 
     subscription = postsNode.on((allPosts: any) => {
+      if (!initialLoadDone) return;
       if (!allPosts) return;
       Object.keys(allPosts).forEach(postId => {
         if (postId === '_' || initialSeenIds.has(postId) || inFlightIds.has(postId)) return;
@@ -435,6 +439,7 @@ export class PostService {
         });
       });
       v1Subscription = v1PostsNode.on((allPosts: any) => {
+        if (!initialLoadDone) return;
         if (!allPosts) return;
         Object.keys(allPosts).forEach(postId => {
           if (postId === '_' || initialSeenIds.has(postId) || inFlightIds.has(postId)) return;

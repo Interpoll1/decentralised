@@ -453,6 +453,7 @@ const pollStore = usePollStore();
 
 const FEED_DEBUG = localStorage.getItem('interpoll_feed_debug') === 'true';
 const SYNC_DEBUG = localStorage.getItem('interpoll_sync_debug') === 'true';
+const HOME_GUN_FEED_ENABLED = localStorage.getItem('interpoll_home_gun_feed') === 'true';
 const FEED_INITIAL_RENDER_TARGET = 50;
 
 function feedDebug(label: string, data?: Record<string, unknown>) {
@@ -970,6 +971,7 @@ function navigateToPoll(poll: Poll) { router.push(`/community/${poll.communityId
 const subscribedFromHome = new Set<string>();
 
 const GUN_SUBSCRIPTION_TIMEOUT_MS = 8_000;
+const EMPTY_FEED_RECOVERY_TIMEOUT_MS = 4_000;
 
 async function subscribeNewCommunities(communities: typeof communityStore.communities) {
   const newOnes = communities.filter(c => !subscribedFromHome.has(c.id));
@@ -1023,6 +1025,30 @@ async function subscribeNewCommunities(communities: typeof communityStore.commun
   }
 }
 
+async function tryRecoverEmptyFeedFromGun() {
+  if (combinedFeed.value.length > 0) return;
+  const fallbackCommunities = communityStore.communities.slice(0, 1);
+  if (fallbackCommunities.length === 0) return;
+  syncDebug('home-empty-feed-recovery-start', {
+    communityIds: fallbackCommunities.map(c => c.id),
+  });
+  const recovery = Promise.allSettled(
+    fallbackCommunities.flatMap(c => [
+      postStore.loadPostsForCommunity(c.id),
+      pollStore.loadPollsForCommunity(c.id),
+    ]),
+  );
+  const timeout = new Promise<void>((resolve) => {
+    setTimeout(resolve, EMPTY_FEED_RECOVERY_TIMEOUT_MS);
+  });
+  await Promise.race([recovery, timeout]);
+  syncDebug('home-empty-feed-recovery-complete', {
+    combinedFeedLength: combinedFeed.value.length,
+    posts: postStore.sortedPosts.length,
+    polls: pollStore.sortedPolls.filter(p => !p.isPrivate).length,
+  });
+}
+
 async function showPostOptions() {
   if (joinedCommunities.value.length > 0) {
     const actionSheet = await actionSheetController.create({
@@ -1052,6 +1078,7 @@ async function showPollOptions() {
 // ── Watchers & lifecycle ──────────────────────────────────────────────────────
 
 watch(() => communityStore.communities.length, (newLen, oldLen) => {
+  if (!HOME_GUN_FEED_ENABLED) return;
   if (!warmupComplete.value) return;
   if (newLen <= oldLen) return; // only subscribe when new communities added
   subscribeNewCommunities(communityStore.communities);
@@ -1092,8 +1119,11 @@ onMounted(async () => {
   // so the length-change watcher missed them. Subscribe before arming
   // the watcher so the two mechanisms handle strictly separate phases:
   // explicit call → warmup communities; watcher → later Gun arrivals.
-  if (communityStore.communities.length > 0) {
+  if (HOME_GUN_FEED_ENABLED && communityStore.communities.length > 0) {
     subscribeNewCommunities(communityStore.communities);
+  }
+  if (!HOME_GUN_FEED_ENABLED) {
+    syncDebug('home-gun-feed-disabled (set localStorage.interpoll_home_gun_feed=true to enable)');
   }
   warmupComplete.value = true;
 
@@ -1122,6 +1152,10 @@ onMounted(async () => {
   })();
 
   await feedPromise;
+  if (!HOME_GUN_FEED_ENABLED && combinedFeed.value.length === 0) {
+    await tryRecoverEmptyFeedFromGun();
+    ensureInitialFeedVisible('empty-feed-recovery');
+  }
   if (FEED_DEBUG) {
     feedDebug('onMounted-feed-ready', {
       sortedPosts: postStore.sortedPosts.length,

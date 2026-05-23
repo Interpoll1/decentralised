@@ -47,9 +47,19 @@ class ChatService {
     this.keyPair = await this.loadOrGenerateKeyPair();
     const pubKeyB64 = await this.exportPublicKey();
 
-    // Publish RSA-OAEP public key to GunDB so peers can find it
+    // Publish RSA-OAEP public key to GunDB so peers can find it.
+    // Skip redundant writes on every startup to reduce Gun churn.
     const gun = GunService.getGun();
-    gun.get('users').get(this.userId).get('chatPublicKey').put(pubKeyB64);
+    const currentKey = await new Promise<string | null>((resolve) => {
+      const timer = setTimeout(() => resolve(null), 2500);
+      gun.get('users').get(this.userId).get('chatPublicKey').once((key: unknown) => {
+        clearTimeout(timer);
+        resolve(typeof key === 'string' ? key : null);
+      });
+    });
+    if (currentKey !== pubKeyB64) {
+      gun.get('users').get(this.userId).get('chatPublicKey').put(pubKeyB64);
+    }
 
     this.connect();
     return pubKeyB64;
