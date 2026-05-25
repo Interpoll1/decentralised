@@ -31,7 +31,11 @@ router.isReady().then(() => {
   app.mount('#app')
   // Defer after first paint
   setTimeout(() => {
-    import('./services/gunService').then(({ GunService }) => GunService.initialize()).catch(e => console.error('[Init] GunService failed:', e))
+    import('./services/gunService').then(({ GunService }) => {
+      GunService.initialize();
+      // Probe all preset relays in the background; live ones are added to Gun dynamically
+      GunService.probePresetsAndExpand().catch(e => console.warn('[Init] GunService probe failed:', e));
+    }).catch(e => console.error('[Init] GunService failed:', e))
     import('./services/ipfsService').then(({ IPFSService }) => IPFSService.initialize()).catch(e => console.error('[Init] IPFSService failed:', e))
     import('./services/memoryWatchdogService').then(({ MemoryWatchdogService }) => MemoryWatchdogService.start()).catch(e => console.error('[Init] MemoryWatchdog failed:', e))
   }, 0)

@@ -213,7 +213,124 @@
         </ion-card-content>
       </ion-card>
 
-      <!-- 3. Snapshot Manager -->
+      <!-- 3. Gun DB Relay Network -->
+      <ion-card>
+        <ion-card-header>
+          <div class="flex items-center justify-between">
+            <ion-card-title>GunDB Relay Network</ion-card-title>
+            <ion-badge :color="gunConnectedCount > 0 ? 'success' : 'danger'" class="text-sm">
+              {{ gunConnectedCount }}/{{ gunPeerUrls.length }} live
+              <span v-if="gunAvgLatency != null"> · {{ gunAvgLatency }}ms</span>
+            </ion-badge>
+          </div>
+        </ion-card-header>
+        <ion-card-content>
+          <p class="text-sm opacity-75 mb-3">
+            Gun connects to all peers simultaneously. Data syncs across all relays — the more peers, the more resilient the network.
+          </p>
+
+          <!-- Live peer grid -->
+          <div class="gun-relay-grid">
+            <div
+              v-for="peer in gunDetailedPeers"
+              :key="peer.url"
+              class="gun-relay-card"
+              :class="{ 'gun-relay-card--live': peer.connected }"
+            >
+              <div class="gun-relay-header">
+                <span class="gun-relay-dot" :class="{ online: peer.connected }"></span>
+                <strong class="gun-relay-name">{{ labelForGunUrl(peer.url) }}</strong>
+                <span v-if="peer.latencyMs != null" class="gun-relay-latency">{{ peer.latencyMs }}ms</span>
+              </div>
+              <div class="gun-relay-url">{{ peer.url }}</div>
+              <div class="gun-relay-status" :class="peer.connected ? 'text-green-400' : 'text-gray-500'">
+                {{ peer.connected ? '● Connected' : '○ Connecting…' }}
+              </div>
+              <ion-button
+                v-if="gunPeerUrls.length > 1"
+                size="small"
+                fill="clear"
+                color="danger"
+                class="gun-relay-remove"
+                @click="removeGunPeer(peer.url)"
+              >
+                <ion-icon :icon="trashOutline" slot="icon-only"></ion-icon>
+              </ion-button>
+            </div>
+          </div>
+
+          <!-- Startup probe status -->
+          <div v-if="gunStartupProbeRunning" class="mt-2 flex items-center gap-2 text-sm opacity-70">
+            <ion-spinner name="dots" style="width:16px;height:16px"></ion-spinner>
+            Probing all relays in background…
+          </div>
+
+          <!-- Scan all Gun peers -->
+          <ion-button expand="block" :disabled="gunScanning || gunStartupProbeRunning" class="mt-3" @click="scanGunPeers">
+            <ion-spinner v-if="gunScanning" name="crescent" class="mr-2"></ion-spinner>
+            <ion-icon v-else :icon="analyticsOutline" slot="start"></ion-icon>
+            {{ gunScanning ? 'Probing all 38 relays…' : 'Probe All Relay Presets' }}
+          </ion-button>
+
+          <!-- Gun scan results -->
+          <div v-if="gunScanResults.length" class="mt-3 overflow-x-auto">
+            <div class="text-xs opacity-60 mb-1">
+              {{ gunScanResults.filter(r => r.reachable).length }}/{{ gunScanResults.length }} reachable
+              · live peers auto-added
+            </div>
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-left opacity-70">
+                  <th class="pb-2">Peer</th>
+                  <th class="pb-2">Status</th>
+                  <th class="pb-2">Latency</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in gunScanResults" :key="r.url" class="border-t border-gray-700/30">
+                  <td class="py-1 text-xs font-mono opacity-80">{{ labelForGunUrl(r.url) }}</td>
+                  <td>
+                    <ion-icon
+                      :icon="ellipse"
+                      :color="r.reachable ? 'success' : 'danger'"
+                      size="small"
+                    />
+                  </td>
+                  <td class="text-xs">{{ r.latencyMs != null ? r.latencyMs + 'ms' : '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Add from presets -->
+          <div class="mt-4 p-3 glass-inset">
+            <h3 class="font-semibold mb-2">Add Gun Peer</h3>
+            <div class="flex gap-2 mb-2">
+              <select v-model="selectedGunPreset" class="gun-preset-select flex-1 text-sm">
+                <option value="">— pick a preset —</option>
+                <option v-for="p in availableGunPresets" :key="p.url" :value="p.url">{{ p.label }}</option>
+              </select>
+              <ion-button size="small" :disabled="!selectedGunPreset" @click="addGunPeerFromPreset">Add</ion-button>
+            </div>
+            <div class="flex gap-2">
+              <ion-input
+                v-model="newGunPeerUrl"
+                placeholder="https://your-relay.example.com/gun"
+                fill="outline"
+                class="flex-1 text-xs"
+                @keyup.enter="addGunPeerFromInput"
+              ></ion-input>
+              <ion-button size="small" :disabled="!newGunPeerUrl.trim()" @click="addGunPeerFromInput">Add</ion-button>
+            </div>
+          </div>
+
+          <ion-button expand="block" fill="outline" color="medium" size="small" class="mt-3" @click="resetGunPeers">
+            Reset to defaults
+          </ion-button>
+        </ion-card-content>
+      </ion-card>
+
+      <!-- 4. Snapshot Manager -->
       <ion-card>
         <ion-card-header>
           <ion-card-title>Snapshot Manager</ion-card-title>
@@ -444,6 +561,9 @@ import { RelayHealthService } from '../services/relayHealthService';
 import { SnapshotService } from '../services/snapshotService';
 import { SnapshotSyncService } from '../services/snapshotSyncService';
 import { WebSocketService } from '../services/websocketService';
+import { GunService } from '../services/gunService';
+import config from '../config';
+import { GUN_RELAY_PRESETS, isValidGunUrl, labelForGunUrl, DEFAULT_GUN_PEERS } from '../services/gunRelayPresets';
 import type { RelayEndpoint } from '../services/relayManager';
 import type { RelayProbeResult } from '../services/relayHealthService';
 import type { NetworkSnapshot } from '../services/snapshotService';
@@ -478,6 +598,112 @@ const expandedGuide = ref<string | null>(null);
 const cleanups: (() => void)[] = [];
 const syncCleanups: (() => void)[] = [];
 let importClearTimer: ReturnType<typeof setTimeout> | null = null;
+
+// Gun multi-relay state
+interface GunScanResult { url: string; reachable: boolean; latencyMs?: number }
+const gunPeerUrls = ref<string[]>(config.getGunPeers());
+const gunDetailedPeers = ref<Array<{ url: string; connected: boolean; latencyMs?: number }>>([]);
+const gunConnectedCount = ref(0);
+const gunAvgLatency = ref<number | undefined>(undefined);
+const gunScanning = ref(false);
+const gunScanResults = ref<GunScanResult[]>([]);
+const newGunPeerUrl = ref('');
+const selectedGunPreset = ref('');
+const gunStartupProbeRunning = ref(false);
+let gunPollInterval: ReturnType<typeof setInterval> | null = null;
+
+const availableGunPresets = computed(() =>
+  GUN_RELAY_PRESETS.filter(p => !gunPeerUrls.value.includes(p.url))
+);
+
+function refreshGunStatus() {
+  gunPeerUrls.value = config.getGunPeers();
+  gunDetailedPeers.value = GunService.getDetailedPeerStats();
+  const stats = GunService.getPeerStats();
+  gunConnectedCount.value = stats.connectedCount;
+  gunAvgLatency.value = stats.avgLatencyMs;
+  gunStartupProbeRunning.value = GunService.presetProbeRunning;
+}
+
+async function addGunPeerFromInput() {
+  const url = newGunPeerUrl.value.trim();
+  if (!isValidGunUrl(url)) {
+    await showToast('Invalid Gun relay URL');
+    return;
+  }
+  const current = config.getGunPeers();
+  if (current.includes(url)) {
+    await showToast('Already in list');
+    return;
+  }
+  const updated = [...current, url];
+  config.setGunPeers(updated);
+  GunService.addPeerDynamic(url);
+  newGunPeerUrl.value = '';
+  refreshGunStatus();
+  await showToast(`Added ${labelForGunUrl(url)}`);
+}
+
+async function addGunPeerFromPreset() {
+  const url = selectedGunPreset.value;
+  if (!url) return;
+  const current = config.getGunPeers();
+  const updated = [...current, url];
+  config.setGunPeers(updated);
+  GunService.addPeerDynamic(url);
+  selectedGunPreset.value = '';
+  refreshGunStatus();
+  await showToast(`Added ${labelForGunUrl(url)}`);
+}
+
+async function removeGunPeer(url: string) {
+  const current = config.getGunPeers();
+  if (current.length <= 1) {
+    await showToast('Cannot remove last Gun relay');
+    return;
+  }
+  const updated = current.filter(u => u !== url);
+  config.setGunPeers(updated);
+  GunService.reconnect(updated);
+  refreshGunStatus();
+  await showToast('Relay removed');
+}
+
+async function resetGunPeers() {
+  config.resetGunPeers();
+  GunService.reconnect(DEFAULT_GUN_PEERS);
+  refreshGunStatus();
+  await showToast('Gun peers reset to defaults');
+}
+
+async function scanGunPeers() {
+  gunScanning.value = true;
+  gunScanResults.value = [];
+
+  // Reuse GunService probe (also discovers and adds live peers)
+  await GunService.probePresetsAndExpand().catch(() => {});
+
+  // Render results from the shared probe map
+  const results: GunScanResult[] = [];
+  for (const [url, status] of GunService.presetProbeResults) {
+    const latencyMs = GunService['peerLatency']?.get?.(url);
+    results.push({
+      url,
+      reachable: status === 'live',
+      latencyMs: latencyMs ?? (status === 'dead' ? undefined : undefined),
+    });
+  }
+  gunScanResults.value = results.sort((a, b) => {
+    if (a.reachable && !b.reachable) return -1;
+    if (!a.reachable && b.reachable) return 1;
+    return (a.latencyMs ?? 99999) - (b.latencyMs ?? 99999);
+  });
+
+  refreshGunStatus();
+  gunScanning.value = false;
+  const liveCount = results.filter(r => r.reachable).length;
+  await showToast(`${liveCount}/${results.length} Gun relays reachable`);
+}
 
 // --- Computed ---
 const canAddRelay = computed(() => {
@@ -777,6 +1003,7 @@ function registerSyncCallbacks() {
 onMounted(async () => {
   RelayManager.initialize();
   refreshStatus();
+  refreshGunStatus();
 
   cleanups.push(RelayManager.onRelayListChange(() => refreshStatus()));
 
@@ -784,6 +1011,9 @@ onMounted(async () => {
     wsConnected.value = status.connected;
     peerCount.value = status.peerCount;
   }));
+
+  // Poll Gun peer stats every 4s while page is open
+  gunPollInterval = setInterval(refreshGunStatus, 4000);
 
   if (webrtcEnabled.value) {
     try {
@@ -797,6 +1027,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (importClearTimer) clearTimeout(importClearTimer);
+  if (gunPollInterval) clearInterval(gunPollInterval);
   cleanups.forEach(fn => fn());
   syncCleanups.forEach(fn => fn());
   SnapshotSyncService.cleanup();
@@ -828,6 +1059,112 @@ ion-card-header {
 
 ion-card-content {
   --background: transparent;
+}
+
+/* Gun relay grid */
+.gun-relay-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+@media (max-width: 480px) {
+  .gun-relay-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.gun-relay-card {
+  position: relative;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  transition: border-color 0.3s;
+}
+
+.gun-relay-card--live {
+  border-color: rgba(var(--ion-color-success-rgb), 0.3);
+  background: rgba(var(--ion-color-success-rgb), 0.04);
+}
+
+.gun-relay-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.gun-relay-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ion-color-medium);
+  flex-shrink: 0;
+}
+
+.gun-relay-dot.online {
+  background: var(--ion-color-success);
+  box-shadow: 0 0 5px rgba(var(--ion-color-success-rgb), 0.6);
+}
+
+.gun-relay-name {
+  font-size: 12px;
+  color: var(--ion-text-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.gun-relay-latency {
+  font-size: 10px;
+  font-family: monospace;
+  color: var(--ion-color-medium);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 5px;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+
+.gun-relay-url {
+  font-size: 10px;
+  font-family: monospace;
+  color: var(--ion-color-medium);
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+
+.gun-relay-status {
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.gun-relay-remove {
+  position: absolute;
+  top: 4px;
+  right: 2px;
+  --padding-start: 4px;
+  --padding-end: 4px;
+  height: 22px;
+  font-size: 12px;
+}
+
+.gun-preset-select {
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ion-text-color);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 8px 10px;
+  border-radius: 8px;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
 }
 
 ion-item {

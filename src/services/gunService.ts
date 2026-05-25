@@ -26,6 +26,14 @@ function createNamespacedProxy(gun: any, nsNode: any): any {
   });
 }
 
+export interface GunPeerDetail {
+  url: string;
+  connected: boolean;
+  latencyMs?: number;
+}
+
+export type PresetProbeStatus = 'pending' | 'live' | 'dead';
+
 export class GunService {
   private static gun: any = null;
   private static proxiedGun: any = null;
@@ -33,22 +41,29 @@ export class GunService {
   private static evicting = false;
   private static isInitialized = false;
   private static gunWarningTraceInstalled = false;
+  /** Latency measurements keyed by peer URL (updated on each connection event) */
+  private static peerLatency = new Map<string, number>();
+  private static peerConnectTime = new Map<string, number>();
+  /** Probe results for all presets — populated by probePresetsAndExpand() */
+  static presetProbeResults = new Map<string, PresetProbeStatus>();
+  /** True while the startup probe is running */
+  static presetProbeRunning = false;
 
   static initialize() {
     if (this.isInitialized && this.gun) return this.proxiedGun;
     this.installGunWarningTrace();
 
+    const peers = config.getGunPeers();
     this.gun = Gun({
-      peers: [config.relay.gun],
+      peers,
       localStorage: false,
       radisk: false,
       axe: false,
-      // ── Increased batching — Gun is live-updates only now, less urgency ──
-      // wait: buffer writes for 250ms before flushing (was 150ms)
-      // chunk: max 150 records per WS message (was 100)
       wait: 250,
       chunk: 150,
     });
+
+    this.trackPeerLatency(peers);
 
     const nsNode = this.gun.get(GUN_NAMESPACE);
     this.proxiedGun = createNamespacedProxy(this.gun, nsNode);
@@ -108,8 +123,121 @@ export class GunService {
     return this.user;
   }
 
-  static reconnect(newPeerUrl?: string) {
-    const peerUrl = newPeerUrl || config.relay.gun;
+  /** Track open-time latency by watching Gun peer WebSocket open events */
+  private static trackPeerLatency(peers: string[]) {
+    for (const url of peers) {
+      this.peerConnectTime.set(url, performance.now());
+    }
+    // Gun creates peers lazily — poll after a short delay for WS objects
+    setTimeout(() => {
+      try {
+        const gunPeers = this.gun?._.opt?.peers || {};
+        for (const [, peer] of Object.entries(gunPeers) as [string, any][]) {
+          const peerUrl: string = peer?.id || peer?.url || '';
+          if (!peerUrl) continue;
+          const connectStart = this.peerConnectTime.get(peerUrl) ?? performance.now();
+          const ws: WebSocket | undefined = peer?.wire;
+          if (!ws) continue;
+          if (ws.readyState === 1) {
+            this.peerLatency.set(peerUrl, Math.round(performance.now() - connectStart));
+          }
+          ws.addEventListener('open', () => {
+            this.peerLatency.set(peerUrl, Math.round(performance.now() - connectStart));
+          }, { once: true });
+        }
+      } catch { /* best-effort */ }
+    }, 2000);
+  }
+
+  /**
+   * Probes every preset URL concurrently at startup via WebSocket (5 s timeout).
+   * Gun relays speak WebSocket — HTTP GET probes give false results (404 on valid relays).
+   * Live peers are added to Gun dynamically and saved to localStorage.
+   * Results are stored in `presetProbeResults` for the network UI.
+   */
+  static async probePresetsAndExpand(): Promise<void> {
+    if (this.presetProbeRunning) return;
+    this.presetProbeRunning = true;
+    try {
+      const { GUN_RELAY_PRESETS } = await import('./gunRelayPresets');
+      const existing = new Set(config.getGunPeers());
+
+      for (const { url } of GUN_RELAY_PRESETS) {
+        this.presetProbeResults.set(url, 'pending');
+      }
+
+      const probeOneWs = (url: string): Promise<boolean> => {
+        return new Promise(resolve => {
+          const wsUrl = url.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://');
+          const start = performance.now();
+          let done = false;
+          const finish = (live: boolean) => {
+            if (done) return;
+            done = true;
+            if (live) {
+              this.peerConnectTime.set(url, start);
+              this.peerLatency.set(url, Math.round(performance.now() - start));
+            }
+            resolve(live);
+          };
+          try {
+            const ws = new WebSocket(wsUrl);
+            const timer = setTimeout(() => { ws.close(); finish(false); }, 5000);
+            ws.onopen = () => { clearTimeout(timer); ws.close(); finish(true); };
+            ws.onerror = () => { clearTimeout(timer); finish(false); };
+          } catch {
+            finish(false);
+          }
+        });
+      };
+
+      const entries = GUN_RELAY_PRESETS.map(p => p.url);
+      const results = await Promise.allSettled(
+        entries.map(async url => ({ url, live: await probeOneWs(url) }))
+      );
+
+      const liveUrls: string[] = [];
+      for (const r of results) {
+        if (r.status === 'fulfilled') {
+          const { url, live } = r.value;
+          this.presetProbeResults.set(url, live ? 'live' : 'dead');
+          if (live && !existing.has(url)) liveUrls.push(url);
+        }
+      }
+
+      for (const url of liveUrls) {
+        this.addPeerDynamic(url);
+      }
+
+      if (liveUrls.length > 0) {
+        const merged = [...existing, ...liveUrls];
+        config.setGunPeers(merged);
+      }
+
+      const liveCount = liveUrls.length + [...existing].filter(u => this.presetProbeResults.get(u) === 'live').length;
+      console.info(`[GunService] Probe complete: ${liveUrls.length} new live peers added (${liveCount} total live)`);
+    } finally {
+      this.presetProbeRunning = false;
+    }
+  }
+
+  /** Dynamically add a peer to the running Gun instance without full reconnect */
+  static addPeerDynamic(url: string): void {
+    if (!this.gun) return;
+    try {
+      this.gun.opt({ peers: [url] });
+      if (!this.peerConnectTime.has(url)) {
+        this.peerConnectTime.set(url, performance.now());
+      }
+    } catch { /* ignore */ }
+  }
+
+
+  static reconnect(newPeerUrls?: string | string[]) {
+    const peers: string[] = newPeerUrls
+      ? (Array.isArray(newPeerUrls) ? newPeerUrls : [newPeerUrls])
+      : config.getGunPeers();
+
     // Close existing peer WebSockets before discarding the instance
     if (this.gun?._.opt?.peers) {
       for (const peer of Object.values(this.gun._.opt.peers) as any[]) {
@@ -120,14 +248,18 @@ export class GunService {
     this.gun = null;
     this.proxiedGun = null;
     this.user = null;
+    this.peerLatency.clear();
+    this.peerConnectTime.clear();
+
     this.gun = Gun({
-      peers: [peerUrl],
+      peers,
       localStorage: false,
       radisk: false,
       axe: false,
       wait: 250,
       chunk: 150,
     });
+    this.trackPeerLatency(peers);
     const nsNode = this.gun.get(GUN_NAMESPACE);
     this.proxiedGun = createNamespacedProxy(this.gun, nsNode);
     this.user = this.gun.user();
@@ -135,17 +267,45 @@ export class GunService {
     return this.proxiedGun;
   }
 
-  static getPeerStats(): { isConnected: boolean; peerCount: number } {
-    if (typeof window === 'undefined') return { isConnected: false, peerCount: 0 };
+  static getPeerStats(): { isConnected: boolean; peerCount: number; connectedCount: number; avgLatencyMs?: number } {
+    if (typeof window === 'undefined') return { isConnected: false, peerCount: 0, connectedCount: 0 };
     if (!this.gun) {
-      try { this.initialize(); } catch { return { isConnected: false, peerCount: 0 }; }
+      try { this.initialize(); } catch { return { isConnected: false, peerCount: 0, connectedCount: 0 }; }
     }
     try {
       const peers = this.gun?._.opt?.peers || {};
-      const activePeers = Object.values(peers).filter((peer: any) => peer?.wire?.readyState === 1);
-      return { isConnected: activePeers.length > 0, peerCount: activePeers.length };
+      const allPeers = Object.values(peers) as any[];
+      const activePeers = allPeers.filter((peer: any) => peer?.wire?.readyState === 1);
+      const latencies = activePeers
+        .map((peer: any) => this.peerLatency.get(peer?.id || peer?.url || ''))
+        .filter((l): l is number => l !== undefined);
+      const avgLatencyMs = latencies.length
+        ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length)
+        : undefined;
+      return {
+        isConnected: activePeers.length > 0,
+        peerCount: allPeers.length,
+        connectedCount: activePeers.length,
+        avgLatencyMs,
+      };
     } catch {
-      return { isConnected: false, peerCount: 0 };
+      return { isConnected: false, peerCount: 0, connectedCount: 0 };
+    }
+  }
+
+  /** Returns per-peer connection details for the network UI */
+  static getDetailedPeerStats(): GunPeerDetail[] {
+    if (!this.gun) return [];
+    try {
+      const peers = this.gun?._.opt?.peers || {};
+      return Object.values(peers).map((peer: any) => {
+        const url: string = peer?.id || peer?.url || 'unknown';
+        const connected = peer?.wire?.readyState === 1;
+        const latencyMs = this.peerLatency.get(url);
+        return { url, connected, latencyMs };
+      });
+    } catch {
+      return [];
     }
   }
 

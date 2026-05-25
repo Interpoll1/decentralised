@@ -11,6 +11,8 @@
 
 const STORAGE_KEY = 'interpoll_relay_config';
 const ENCRYPTION_STORAGE_KEY = 'interpoll_encryption_config';
+// v3 — removed dead Heroku relays; existing installs get clean defaults
+const GUN_PEERS_STORAGE_KEY = 'interpoll_gun_peers_v3';
 
 interface RelayOverrides {
   websocket?: string;
@@ -32,6 +34,19 @@ function loadOverrides(): RelayOverrides {
     // Corrupted data; ignore
   }
   return {};
+}
+
+function loadGunPeers(): string[] | null {
+  try {
+    const raw = localStorage.getItem(GUN_PEERS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {
+    // Corrupted data; ignore
+  }
+  return null;
 }
 
 // Defaults always point to Render URLs
@@ -59,6 +74,7 @@ function loadEncryptionConfig(): EncryptionConfig {
 
 let overrides = loadOverrides();
 let encryptionConfig = loadEncryptionConfig();
+let gunPeers: string[] | null = loadGunPeers();
 
 function ws(): string {
   return overrides.websocket || defaults.websocket;
@@ -115,6 +131,35 @@ const config = {
   /** Get current overrides (if any) */
   getRelayOverrides(): RelayOverrides {
     return { ...overrides };
+  },
+
+  /**
+   * Get the active Gun peer list.
+   * Falls back to DEFAULT_GUN_PEERS (imported lazily to avoid circular deps at module load).
+   */
+  getGunPeers(): string[] {
+    if (gunPeers && gunPeers.length > 0) return [...gunPeers];
+    return [
+      defaults.gun,
+      'https://relay.peer.ooo/gun',
+    ];
+  },
+
+  /** Persist a new Gun peer list */
+  setGunPeers(urls: string[]) {
+    gunPeers = urls.filter(u => !!u.trim());
+    if (gunPeers.length === 0) {
+      gunPeers = null;
+      localStorage.removeItem(GUN_PEERS_STORAGE_KEY);
+    } else {
+      localStorage.setItem(GUN_PEERS_STORAGE_KEY, JSON.stringify(gunPeers));
+    }
+  },
+
+  /** Reset Gun peers to built-in defaults */
+  resetGunPeers() {
+    gunPeers = null;
+    localStorage.removeItem(GUN_PEERS_STORAGE_KEY);
   },
 
   /** Check if server-wide encryption is active */
