@@ -281,6 +281,7 @@ import { ModerationService } from '../services/moderationService';
 import { useUserStore } from '../stores/userStore';
 import type { UserProfile } from '../services/userService';
 import { formatTrustedIdentityLabel } from '../utils/identityTrust';
+import { checkContent } from '../utils/contentGuard';
 
 const props = defineProps<{
   comment: Comment;
@@ -382,7 +383,12 @@ function cancelReply() {
 
 async function submitReply() {
   if (!replyText.value.trim()) return;
-
+  const guard = checkContent(replyText.value.trim(), 'comment');
+  if (!guard.ok) {
+    const toast = await toastController.create({ message: guard.reason!, duration: 2500, color: 'warning' });
+    await toast.present();
+    return;
+  }
   try {
     await commentStore.createComment({
       postId: props.postId,

@@ -188,6 +188,7 @@ import { ModerationService, moderationVersion } from '../services/moderationServ
 import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 
 import { IPFSService } from '../services/ipfsService';
+import { checkContent } from '../utils/contentGuard';
 
 const route = useRoute();
 const router = useRouter();
@@ -509,6 +510,11 @@ async function handleDownvote() {
 
 async function submitComment() {
   if (!post.value || !newCommentText.value.trim()) return;
+  const guard = checkContent(newCommentText.value.trim(), 'comment');
+  if (!guard.ok) {
+    (await toastController.create({ message: guard.reason!, duration: 2500, color: 'warning' })).present();
+    return;
+  }
   try {
     await commentStore.createComment({
       postId: post.value.id,

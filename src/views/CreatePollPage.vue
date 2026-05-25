@@ -161,6 +161,7 @@ import {
 import { useCommunityStore } from '../stores/communityStore';
 import { usePollStore } from '../stores/pollStore';
 import { Community } from '../services/communityService';
+import { checkContent, checkOption } from '../utils/contentGuard';
 
 const POLL_DEBUG_KEY = 'interpoll_poll_debug';
 type PollDebugCategory = 'create' | 'writes' | 'index' | 'ui' | 'all';
@@ -301,16 +302,27 @@ async function createPoll() {
 
   try {
     isSubmitting.value = true;
-    logPollDebug('ui', 'Submit started', {
-      communityId: selectedCommunity.value?.id,
-      isPrivate: isPrivate.value,
-      durationDays: duration.value,
-      optionDraftCount: options.value.length,
-    });
-    // Filter out empty options
-    const validOptions = options.value
-      .map(opt => opt.text.trim())
-      .filter(opt => opt.length > 0);
+
+    // Spam check — question
+    const qCheck = checkContent(question.value.trim(), 'title');
+    if (!qCheck.ok) {
+      const toast = await toastController.create({ message: `Question: ${qCheck.reason}`, duration: 2500, color: 'warning' });
+      await toast.present();
+      isSubmitting.value = false;
+      return;
+    }
+
+    // Spam check — each option
+    const validOptions = options.value.map(opt => opt.text.trim()).filter(opt => opt.length > 0);
+    for (const opt of validOptions) {
+      const oCheck = checkOption(opt);
+      if (!oCheck.ok) {
+        const toast = await toastController.create({ message: `Option "${opt.slice(0, 20)}": ${oCheck.reason}`, duration: 2500, color: 'warning' });
+        await toast.present();
+        isSubmitting.value = false;
+        return;
+      }
+    }
     logPollDebug('ui', 'Prepared poll payload', {
       validOptionsCount: validOptions.length,
       hasDescription: Boolean(description.value.trim()),

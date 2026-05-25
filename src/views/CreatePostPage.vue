@@ -202,6 +202,7 @@ import {
 import { imageOutline, closeCircle, informationCircle } from 'ionicons/icons';
 import { useCommunityStore } from '../stores/communityStore';
 import { usePostStore } from '../stores/postStore';
+import { checkContent } from '../utils/contentGuard';
 
 const route = useRoute();
 const router = useRouter();
@@ -272,6 +273,21 @@ const removeImage = () => {
 
 const submitPost = async () => {
   if (!canSubmit.value) return;
+
+  const titleCheck = checkContent(title.value.trim(), 'title');
+  if (!titleCheck.ok) {
+    const toast = await toastController.create({ message: `Title: ${titleCheck.reason}`, duration: 2500, color: 'warning' });
+    await toast.present();
+    return;
+  }
+  if (content.value.trim()) {
+    const bodyCheck = checkContent(content.value.trim(), 'body');
+    if (!bodyCheck.ok) {
+      const toast = await toastController.create({ message: `Content: ${bodyCheck.reason}`, duration: 2500, color: 'warning' });
+      await toast.present();
+      return;
+    }
+  }
 
   isSubmitting.value = true;
 
