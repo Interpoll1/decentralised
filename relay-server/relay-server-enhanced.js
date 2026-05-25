@@ -71,6 +71,9 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 const VOTE_REGISTRY_FILE = `${DATA_DIR}/vote-registry.json`;
 const VOTE_REGISTRY_BACKUP_FILE = `${DATA_DIR}/vote-registry.backup.json`;
 const VOTE_REGISTRY_TMP_FILE = `${DATA_DIR}/vote-registry.tmp.json`;
+const PENDING_VOTE_RESERVATIONS_FILE = `${DATA_DIR}/pending-vote-reservations.json`;
+const PENDING_VOTE_RESERVATIONS_BACKUP_FILE = `${DATA_DIR}/pending-vote-reservations.backup.json`;
+const PENDING_VOTE_RESERVATIONS_TMP_FILE = `${DATA_DIR}/pending-vote-reservations.tmp.json`;
 const POLL_POLICY_FILE = `${DATA_DIR}/poll-policy.json`;
 const POLL_POLICY_BACKUP_FILE = `${DATA_DIR}/poll-policy.backup.json`;
 const POLL_POLICY_TMP_FILE = `${DATA_DIR}/poll-policy.tmp.json`;
@@ -107,6 +110,35 @@ function loadVoteRegistryFromFile(filePath) {
     throw new Error('vote registry is not an array');
   }
   voteRegistry = new Set(data.filter((entry) => typeof entry === 'string' && entry.length > 0));
+}
+
+function normalizePendingVoteReservationRecord(record) {
+  if (!record || typeof record !== 'object' || Array.isArray(record)) return null;
+  const key = typeof record.key === 'string' ? record.key : '';
+  const reservationId = typeof record.reservationId === 'string' ? record.reservationId : '';
+  const deviceId = typeof record.deviceId === 'string' ? record.deviceId : '';
+  const expiresAt = Number.parseInt(String(record.expiresAt || ''), 10);
+  if (!key || !reservationId || !deviceId || !Number.isFinite(expiresAt)) return null;
+  return { key, reservationId, deviceId, expiresAt };
+}
+
+function loadPendingVoteReservationsFromFile(filePath) {
+  const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  if (!Array.isArray(data)) {
+    throw new Error('pending vote reservations is not an array');
+  }
+  pendingVoteReservations.clear();
+  for (const entry of data) {
+    const normalized = normalizePendingVoteReservationRecord(entry);
+    if (normalized) {
+      pendingVoteReservations.set(normalized.key, {
+        reservationId: normalized.reservationId,
+        deviceId: normalized.deviceId,
+        expiresAt: normalized.expiresAt,
+      });
+    }
+  }
+  cleanupPendingVoteReservations();
 }
 
 function normalizePollPolicyRecord(record) {
@@ -168,6 +200,26 @@ try {
 }
 
 try {
+  if (fs.existsSync(PENDING_VOTE_RESERVATIONS_FILE)) {
+    loadPendingVoteReservationsFromFile(PENDING_VOTE_RESERVATIONS_FILE);
+    console.log(`Loaded ${pendingVoteReservations.size} pending vote reservations from disk`);
+  } else if (fs.existsSync(PENDING_VOTE_RESERVATIONS_BACKUP_FILE)) {
+    loadPendingVoteReservationsFromFile(PENDING_VOTE_RESERVATIONS_BACKUP_FILE);
+    console.log(`Recovered ${pendingVoteReservations.size} pending vote reservations from backup`);
+  }
+} catch (err) {
+  console.error('Failed to load primary pending vote reservations, trying backup:', err.message);
+  try {
+    if (fs.existsSync(PENDING_VOTE_RESERVATIONS_BACKUP_FILE)) {
+      loadPendingVoteReservationsFromFile(PENDING_VOTE_RESERVATIONS_BACKUP_FILE);
+      console.log(`Recovered ${pendingVoteReservations.size} pending vote reservations from backup`);
+    }
+  } catch (backupErr) {
+    console.error('Failed to load backup pending vote reservations:', backupErr.message);
+  }
+}
+
+try {
   if (fs.existsSync(POLL_POLICY_FILE)) {
     loadPollPolicyFromFile(POLL_POLICY_FILE);
     console.log(`Loaded ${pollPolicyRegistry.size} poll policy entries from disk`);
@@ -221,6 +273,20 @@ function saveVoteRegistrySync() {
     console.error('Failed to save vote registry:', err.message);
     throw err;
   }
+}
+
+function savePendingVoteReservationsSync() {
+  const data = JSON.stringify(
+    [...pendingVoteReservations.entries()].map(([key, reservation]) => ({
+      key,
+      reservationId: reservation.reservationId,
+      deviceId: reservation.deviceId,
+      expiresAt: reservation.expiresAt,
+    })),
+  );
+  fs.writeFileSync(PENDING_VOTE_RESERVATIONS_TMP_FILE, data);
+  fs.renameSync(PENDING_VOTE_RESERVATIONS_TMP_FILE, PENDING_VOTE_RESERVATIONS_FILE);
+  fs.writeFileSync(PENDING_VOTE_RESERVATIONS_BACKUP_FILE, data);
 }
 
 let _pollPolicySaving = false;
@@ -323,7 +389,14 @@ function reserveVoteSlot(key, deviceId, now = Date.now()) {
   const expiresAt = now + PENDING_VOTE_TTL_MS;
   const reservationId = crypto.randomBytes(12).toString('hex');
   pendingVoteReservations.set(key, { expiresAt, reservationId, deviceId });
-  return { ok: true, reservationToken: issueReservationToken(key, reservationId, expiresAt) };
+  try {
+    savePendingVoteReservationsSync();
+    return { ok: true, reservationToken: issueReservationToken(key, reservationId, expiresAt) };
+  } catch (err) {
+    pendingVoteReservations.delete(key);
+    console.error('Failed to persist pending vote reservation:', err.message);
+    return { ok: false, reason: 'vote authorization unavailable' };
+  }
 }
 
 function commitVoteSlot(key, reservationToken, deviceId, now = Date.now()) {
@@ -348,9 +421,13 @@ function commitVoteSlot(key, reservationToken, deviceId, now = Date.now()) {
   }
   if (voteRegistry.has(key)) {
     pendingVoteReservations.delete(key);
+    try {
+      savePendingVoteReservationsSync();
+    } catch (err) {
+      console.error('Failed to persist pending vote reservation cleanup:', err.message);
+    }
     return { ok: true, alreadyRecorded: true };
   }
-  pendingVoteReservations.delete(key);
   if (voteRegistry.size >= MAX_VOTE_REGISTRY) {
     return { ok: false, reason: 'vote registry full' };
   }
@@ -360,6 +437,12 @@ function commitVoteSlot(key, reservationToken, deviceId, now = Date.now()) {
   } catch (err) {
     voteRegistry.delete(key);
     return { ok: false, reason: 'vote registry persistence failed' };
+  }
+  pendingVoteReservations.delete(key);
+  try {
+    savePendingVoteReservationsSync();
+  } catch (err) {
+    console.error('Failed to persist pending vote reservation cleanup:', err.message);
   }
   return { ok: true, alreadyRecorded: false };
 }
@@ -739,13 +822,24 @@ function createJWT(payload, expiresIn = '7d') {
 
 function verifyJWT(token) {
   try {
-    const [header, payload, signature] = token.split('.');
+    if (typeof token !== 'string' || !token.trim()) return null;
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const [header, payload, signature] = parts;
+    const headerJson = JSON.parse(Buffer.from(header, 'base64url').toString());
+    if (!headerJson || typeof headerJson !== 'object' || Array.isArray(headerJson)) return null;
+    if (headerJson.alg !== 'HS256' || headerJson.typ !== 'JWT') return null;
     const valid = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${payload}`).digest('base64url');
     const validBuf = Buffer.from(valid, 'utf8');
     const sigBuf = Buffer.from(signature, 'utf8');
     if (validBuf.length !== sigBuf.length || !crypto.timingSafeEqual(validBuf, sigBuf)) return null;
     const claims = JSON.parse(Buffer.from(payload, 'base64url').toString());
+    if (!claims || typeof claims !== 'object' || Array.isArray(claims)) return null;
+    if (typeof claims.sub !== 'string' || !claims.sub.trim()) return null;
+    if (typeof claims.provider !== 'string' || !claims.provider.trim()) return null;
+    if (typeof claims.exp !== 'number' || !Number.isFinite(claims.exp)) return null;
     if (claims.exp < Date.now()) return null;
+    if (typeof claims.iat !== 'number' || !Number.isFinite(claims.iat)) return null;
     return claims;
   } catch { return null; }
 }
@@ -767,7 +861,11 @@ async function setSecureSession(res, req, user) {
       [sessionId, user.sub, sessionData.ip, sessionData.userAgent, Date.now(), expiresAt, Date.now()]
     );
   }
-  const jwt = createJWT({ sub: user.sub, email: user.email });
+  const jwt = createJWT({
+    sub: user.sub,
+    email: user.email,
+    provider: sanitizeId(String(user?.provider || 'oauth'), 32) || 'oauth',
+  });
   appendSetCookie(res, `sessionId=${sessionId}; HttpOnly; Path=/; SameSite=None; Secure; Max-Age=604800`);
   appendSetCookie(res, `jwt=${jwt}; HttpOnly; Path=/; SameSite=None; Secure; Max-Age=604800`);
   return { sessionId, jwt };
@@ -787,6 +885,8 @@ async function getSecureSession(req) {
     return null;
   }
   if (claims.sub !== sessionData.user?.sub) return null;
+  if ((claims.provider || '') !== String(sessionData.user?.provider || '')) return null;
+  if (claims.email && sessionData.user?.email && claims.email !== sessionData.user.email) return null;
   if (db) await db.execute(`UPDATE sessions SET last_activity = ? WHERE session_id = ?`, [Date.now(), sid]);
   return sessionData.user;
 }
