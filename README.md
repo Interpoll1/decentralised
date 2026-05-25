@@ -35,6 +35,7 @@ The relay server reads these directly from the environment:
 |---|---|---|
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | CORS origin |
 | `SERVER_ORIGIN` | `http://localhost:8080` | Public relay origin used for OAuth callback URIs (required and must be HTTPS in production) |
+| `JWT_SECRET` | random per process | HMAC secret for signed relay session JWTs |
 | `VOTE_RESERVATION_SECRET` | random per process | HMAC secret for short-lived vote reservation tokens |
 | `GOOGLE_CLIENT_ID` | -- | Google OAuth app ID |
 | `GOOGLE_CLIENT_SECRET` | -- | Google OAuth secret |
@@ -43,6 +44,8 @@ The relay server reads these directly from the environment:
 | `MS_TENANT` | `common` | Azure AD tenant |
 
 OAuth is optional. The app works fine without it. Polls can optionally require login to vote -- that is the only feature gated behind OAuth.
+
+Use `.env.example` (and `src/views/.env.example`) as templates for local configuration. Keep real `.env` files and runtime data directories out of git.
 
 ### Build commands
 
