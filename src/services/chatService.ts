@@ -1,6 +1,7 @@
 // chatService.ts - P2P Chat Service for Vue
 
 import { GunService } from './gunService';
+import { StorageService } from './storageService';
 
 export interface ChatMessage {
   id: string;
@@ -20,6 +21,7 @@ export interface RecipientInfo {
 }
 
 class ChatService {
+  private static readonly KEYPAIR_STORAGE_PREFIX = 'chat-keypair';
   private ws: WebSocket | null = null;
   private wsUrl: string;
   private userId: string;
@@ -67,38 +69,71 @@ class ChatService {
 
   // ── RSA Key Management ──────────────────────────────────────────────────────
 
+  private getKeypairStorageKey(): string {
+    return `${ChatService.KEYPAIR_STORAGE_PREFIX}:${this.userId}`;
+  }
+
+  private getLegacyKeypairStorageKey(): string {
+    return `chat-keypair-${this.userId}`;
+  }
+
+  private async persistKeyPair(keyPair: CryptoKeyPair): Promise<void> {
+    await StorageService.setMetadata(this.getKeypairStorageKey(), keyPair);
+  }
+
+  private isStoredKeyPair(value: unknown): value is CryptoKeyPair {
+    return !!value
+      && typeof value === 'object'
+      && 'publicKey' in value
+      && 'privateKey' in value;
+  }
+
   private async loadOrGenerateKeyPair(): Promise<CryptoKeyPair> {
     try {
-      const stored = localStorage.getItem(`chat-keypair-${this.userId}`);
-      if (stored) {
-        const { privateKey, publicKey } = JSON.parse(stored);
+      const stored = await StorageService.getMetadata(this.getKeypairStorageKey());
+      if (this.isStoredKeyPair(stored)) {
+        return stored;
+      }
+    } catch (error) {
+      console.warn('Failed to load stored chat keypair:', error);
+    }
+
+    const legacy = localStorage.getItem(this.getLegacyKeypairStorageKey());
+    if (legacy) {
+      try {
+        const parsed = JSON.parse(legacy);
+        if (typeof parsed?.publicKey !== 'string' || typeof parsed?.privateKey !== 'string') {
+          throw new Error('Legacy chat keypair is malformed');
+        }
         const pub = await crypto.subtle.importKey(
           'spki',
-          Uint8Array.from(atob(publicKey), c => c.charCodeAt(0)),
+          Uint8Array.from(atob(parsed.publicKey), c => c.charCodeAt(0)),
           { name: 'RSA-OAEP', hash: 'SHA-256' },
-          true, ['encrypt']
+          true,
+          ['encrypt'],
         );
         const priv = await crypto.subtle.importKey(
           'pkcs8',
-          Uint8Array.from(atob(privateKey), c => c.charCodeAt(0)),
+          Uint8Array.from(atob(parsed.privateKey), c => c.charCodeAt(0)),
           { name: 'RSA-OAEP', hash: 'SHA-256' },
-          true, ['decrypt']
+          false,
+          ['decrypt'],
         );
-        return { publicKey: pub, privateKey: priv };
+        const keyPair = { publicKey: pub, privateKey: priv };
+        await this.persistKeyPair(keyPair);
+        localStorage.removeItem(this.getLegacyKeypairStorageKey());
+        return keyPair;
+      } catch (error) {
+        localStorage.removeItem(this.getLegacyKeypairStorageKey());
+        console.warn('Failed to migrate legacy chat keypair:', error);
       }
-    } catch {
-      // Corrupt stored key — regenerate
     }
 
     const pair = await crypto.subtle.generateKey(
       { name: 'RSA-OAEP', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' },
-      true, ['encrypt', 'decrypt']
+      false, ['encrypt', 'decrypt']
     );
-
-    const pubExp  = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.exportKey('spki',  pair.publicKey))));
-    const privExp = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.exportKey('pkcs8', pair.privateKey))));
-    localStorage.setItem(`chat-keypair-${this.userId}`, JSON.stringify({ publicKey: pubExp, privateKey: privExp }));
-
+    await this.persistKeyPair(pair);
     return pair;
   }
 

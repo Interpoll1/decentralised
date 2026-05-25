@@ -20,6 +20,10 @@ export class AuditService {
   private static readonly CLOUD_USER_KEY = 'interpoll_cloud_user';
   private static readonly RETURN_URL_KEY = 'interpoll_auth_return_url';
 
+  private static getTrustedApiBase(): string {
+    return config.auth.api;
+  }
+
   static async logReceipt(type: ReceiptKind, payload: any): Promise<void> {
     try {
       const body = await IntegrityService.seal(
@@ -52,7 +56,7 @@ export class AuditService {
         { pollId, deviceId, requireLogin } as Record<string, unknown>,
         'vote-authorize',
       );
-      const res = await fetch(`${config.relay.api}/api/vote-authorize`, {
+      const res = await fetch(`${this.getTrustedApiBase()}/api/vote-authorize`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -98,7 +102,7 @@ export class AuditService {
         { pollId, deviceId, reservationToken, requireLogin } as Record<string, unknown>,
         'vote-confirm',
       );
-      const res = await fetch(`${config.relay.api}/api/vote-confirm`, {
+      const res = await fetch(`${this.getTrustedApiBase()}/api/vote-confirm`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -124,7 +128,7 @@ export class AuditService {
         { pollId, requireLogin } as Record<string, unknown>,
         'poll-policy',
       );
-      const res = await fetch(`${config.relay.api}/api/poll-policy`, {
+      const res = await fetch(`${this.getTrustedApiBase()}/api/poll-policy`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -138,7 +142,7 @@ export class AuditService {
 
   static async getCloudUser(): Promise<Record<string, unknown> | null> {
     try {
-      const res = await fetch(`${config.relay.api}/api/me`, {
+      const res = await fetch(`${this.getTrustedApiBase()}/api/me`, {
         method: 'GET',
         credentials: 'include',
       });
@@ -190,7 +194,7 @@ export class AuditService {
   }
 
   static startOAuthLogin(provider: 'google' | 'microsoft' = 'google'): void {
-    window.location.href = `${config.relay.api}/auth/${provider}/start`;
+    window.location.href = `${this.getTrustedApiBase()}/auth/${provider}/start`;
   }
 
   private static clearCachedCloudUser(): void {

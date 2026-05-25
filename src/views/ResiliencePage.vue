@@ -361,7 +361,7 @@
             </ion-item>
             <div v-if="expandedGuide === 'tor'" class="px-4 pb-3 text-sm opacity-80">
               <ol class="list-decimal list-inside space-y-1">
-                <li>Download and install <a href="https://www.torproject.org" target="_blank" class="text-blue-400 underline">Tor Browser</a>.</li>
+                <li>Download and install <a href="https://www.torproject.org" target="_blank" rel="noopener noreferrer" class="text-blue-400 underline">Tor Browser</a>.</li>
                 <li>Open InterPoll in Tor Browser using the app URL.</li>
                 <li>Go to <strong>Settings → Network</strong> and add a <code>.onion</code> relay address.</li>
                 <li>The app will automatically detect Tor Browser and route traffic accordingly.</li>

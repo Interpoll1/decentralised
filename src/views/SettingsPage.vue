@@ -1970,6 +1970,15 @@ function shortenUrl(url: string): string {
   }
 }
 
+function escapeHtml(value: string): string {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function endpointToKnownServer(
   endpoint: BootstrapEndpoint,
   options: { addedBy: string; source: KnownServer['source']; signatureValid: boolean },
@@ -2152,9 +2161,9 @@ async function importBootstrapInvite() {
     const switchDisabled = probe.overall === 'offline';
     const hasSignatureMetadata = Boolean(artifact.signature?.alg && artifact.signature?.sig);
     const signatureLabel = hasSignatureMetadata ? 'present' : 'none';
-    const sourcePeerLabel = artifact.handoff?.sourcePeerId || artifact.meta?.createdBy || 'unknown';
+    const sourcePeerLabel = escapeHtml(artifact.handoff?.sourcePeerId || artifact.meta?.createdBy || 'unknown');
     const status = artifact.handoff?.status;
-    const connectedServerLabel = artifact.handoff?.connectedServer?.websocket || artifact.endpoint.websocket;
+    const connectedServerLabel = escapeHtml(artifact.handoff?.connectedServer?.websocket || artifact.endpoint.websocket);
     const message = [
       `Probe: ${probe.overall}`,
       `WS: ${probe.ws.reachable ? 'ok' : 'fail'} · Gun: ${probe.gun.reachable ? 'ok' : 'fail'} · API: ${probe.api.reachable ? 'ok' : 'fail'}`,
@@ -2440,7 +2449,7 @@ async function probeAndSwitchToServer(server: KnownServer) {
   }
 
   const alert = await alertController.create({
-    header: `Switch to ${shortenUrl(server.websocket)}?`,
+    header: `Switch to ${escapeHtml(shortenUrl(server.websocket))}?`,
     message: [
       `Probe: ${probe.overall}`,
       `WS: ${probe.ws.reachable ? 'ok' : 'fail'} · Gun: ${probe.gun.reachable ? 'ok' : 'fail'} · API: ${probe.api.reachable ? 'ok' : 'fail'}`,

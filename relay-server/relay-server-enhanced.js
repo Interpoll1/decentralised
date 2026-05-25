@@ -769,7 +769,7 @@ async function setSecureSession(res, req, user) {
   }
   const jwt = createJWT({ sub: user.sub, email: user.email });
   appendSetCookie(res, `sessionId=${sessionId}; HttpOnly; Path=/; SameSite=None; Secure; Max-Age=604800`);
-  appendSetCookie(res, `jwt=${jwt}; Path=/; SameSite=None; Secure; Max-Age=604800`);
+  appendSetCookie(res, `jwt=${jwt}; HttpOnly; Path=/; SameSite=None; Secure; Max-Age=604800`);
   return { sessionId, jwt };
 }
 
@@ -1354,7 +1354,7 @@ server.on('request', async (req, res) => {
     const cookie = req.headers['cookie'] || '';
     const sid = cookie.split(';').find(c => c.trim().startsWith('sessionId='))?.split('=')[1];
     if (sid) { sessions.delete(sid); if (db) await db.execute(`DELETE FROM sessions WHERE session_id = ?`, [sid]); }
-    res.setHeader('Set-Cookie', ['sessionId=; HttpOnly; Path=/; SameSite=None; Secure; Max-Age=0', 'jwt=; Path=/; SameSite=None; Secure; Max-Age=0']);
+    res.setHeader('Set-Cookie', ['sessionId=; HttpOnly; Path=/; SameSite=None; Secure; Max-Age=0', 'jwt=; HttpOnly; Path=/; SameSite=None; Secure; Max-Age=0']);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true })); return;
   }

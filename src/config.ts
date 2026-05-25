@@ -78,6 +78,11 @@ const config = {
     get api() { return api(); },
   },
 
+  /** Trusted backend origin for auth/session-gated requests */
+  auth: {
+    get api() { return defaults.api; },
+  },
+
   /** Server-wide encryption settings (mutable at runtime) */
   encryption: {
     /** Whether all content should be encrypted by default */
