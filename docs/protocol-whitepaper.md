@@ -264,7 +264,7 @@ Both carry compatible sync semantics so clients can process updates similarly re
 All mutating relay/API requests are integrity-sealed and verified with canonical hash + Schnorr signature + freshness + replay nonce + PoW checks.
 
 - Sealed metadata: `_hash`, `_sig`, `_pub`, `_pow`, `_ts`, `_nonce`
-- Verified paths include vote authorization/confirmation, receipt logging, and poll policy registration
+- Verified paths include vote authorization/confirmation, receipt logging, and poll policy registration; vote authorization persists its short-lived reservation so a relay restart does not reopen the same authorization window.
 - Invalid or stale envelopes are rejected (fail-closed)
 
 ---
