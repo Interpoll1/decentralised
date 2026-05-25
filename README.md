@@ -8,9 +8,9 @@
 
 ## What is InterPoll?
 
-InterPoll is a **free, open, decentralised polling platform** — a place where communities can vote, discuss, and organise without any single company in control.
+InterPoll is a **free, open, decentralised polling + discussion platform** — a place where communities can vote, post, comment, and organise without any single company in control.
 
-When you cast a vote on InterPoll, it is written directly to your own device. No central server owns your vote. It is copied to other participants around the network, so it is extraordinarily difficult to delete, alter, or suppress. You receive a receipt that lets you verify your vote was recorded exactly as you intended — any time, for free, with no account needed.
+When you vote, publish a post, or leave a comment on InterPoll, your activity is stored locally first and then shared across the network. No central server owns your community history. Poll results are backed by verifiable receipts, while posts and comments are replicated across peers so they are harder to suppress or quietly erase.
 
 We built InterPoll because we noticed that other platforms censor a lot — and even when they don't, they shadow-ban. On InterPoll, **anyone can create their own community, set their own rules, and design their own experience**. There is no algorithm deciding what you see. There is no central team that can quietly remove your poll.
 
@@ -18,14 +18,15 @@ We built InterPoll because we noticed that other platforms censor a lot — and 
 
 ## Why it matters
 
-Traditional online polls share a fundamental weakness: **one server, one point of control**. The company that runs the server can delete a poll, alter results, suppress inconvenient votes, or simply go offline. This is as true of small community forums as it is of massive social platforms.
+Traditional online communities share a fundamental weakness: **one server, one point of control**. The company that runs the server can delete a poll, hide a post, remove comments, alter results, or simply go offline. This is as true of small community forums as it is of massive social platforms.
 
 InterPoll takes a different approach:
 
 - 🌐 **No single owner.** Data is spread across every participant's device and a network of relay servers. Anyone can run a relay. Communities can run their own.
 - 🔒 **Your vote, signed by you.** Every action you take is cryptographically signed with a key that lives only on your device. No relay or server can forge a vote in your name.
+- 💬 **Posts and comments that persist.** Community discussion is replicated across peers and relays, not trapped in a single vendor database.
 - 📄 **Verifiable receipts.** After voting you get a short verification code. You can check it in the built-in Chain Explorer at any time to confirm your vote is intact.
-- 📴 **Works offline.** Lost your connection? Your vote is still recorded locally and syncs to the network the moment connectivity returns.
+- 📴 **Works offline.** Lost your connection? Your votes and local activity are still saved and sync when connectivity returns.
 - 🔐 **Private communities.** Sensitive discussions can be fully encrypted so that only invited members can read them — not even the relay server knows the contents.
 
 ---
@@ -35,6 +36,7 @@ InterPoll takes a different approach:
 | Feature | What it means for you |
 |---|---|
 | **Tamper-evident voting** | Every vote is chained to the previous one. If anyone tries to alter or delete a record, the entire chain breaks — and it shows. |
+| **Public posts & threaded comments** | Run community conversations in the same network: publish updates, debate in comments, and keep context attached to each poll. |
 | **Verifiable receipt** | You get a short code after voting. Enter it in the Chain Explorer to confirm your vote was recorded, unchanged. |
 | **Offline-first** | Vote even without internet. Your record is kept locally and synced when you reconnect. |
 | **Private & encrypted communities** | Create communities where all content is encrypted in your browser. Relay servers see only scrambled data. |
@@ -50,20 +52,20 @@ InterPoll takes a different approach:
 InterPoll has three layers working together:
 
 **1. Your local chain (the record)**
-When you vote, a new "block" is added to a chain stored right in your browser. Each block is linked to the one before it using a unique fingerprint (a cryptographic hash). Changing any past vote would snap the chain — making tampering instantly visible.
+Votes and key actions are written to a local integrity log in your browser. Each new block links to the previous one using a unique fingerprint (a cryptographic hash). Changing past records would snap the chain — making tampering instantly visible.
 
 **2. The distributed network (the copies)**
-Your data — polls, posts, communities, user profiles — is replicated across a distributed database called GunDB. Every connected device holds a copy. If one relay goes down, the data lives on in the others and syncs back up when connectivity returns.
+Your data — polls, posts, comments, communities, and profiles — is replicated across a distributed database called GunDB. Every connected device holds a copy. If one relay goes down, the data lives on in the others and syncs back up when connectivity returns.
 
 **3. The relay (the messenger)**
 A lightweight WebSocket relay helps devices find each other and share updates in real time. Anyone can run a relay. If one relay is blocked or shut down, peers can switch to another. The more relays exist, the more resilient the network becomes.
 
-> **In short:** your vote exists on your device, on your peers' devices, and across relay servers — all at once. Erasing it would require erasing every copy simultaneously. That is the core principle: sooner or later, a peer with a copy reconnects and reseeds the network.
+> **In short:** your polls, posts, comments, and vote history exist on your device, on your peers' devices, and across relay servers — all at once. Erasing them would require erasing every copy simultaneously. That is the core principle: sooner or later, a peer with a copy reconnects and reseeds the network.
 
 ```mermaid
 graph TD
-    A[Your Browser] -->|signs & stores vote| B[Local Chain — your device]
-    A -->|replicates polls & profiles| C[GunDB — distributed]
+    A[Your Browser] -->|signs & stores actions| B[Local Chain — your device]
+    A -->|replicates polls, posts, comments, communities| C[GunDB — distributed]
     A -->|syncs new blocks| D[WebSocket Relay]
     A -->|syncs other tabs| E[BroadcastChannel]
     D -->|broadcasts| F[Other Participants]
@@ -77,7 +79,7 @@ graph TD
 InterPoll is designed to be **harder to censor and tamper with than a single-server platform** — not impossible. Here is what that means in practice:
 
 - Data survives as long as **at least one honest participant** retains a copy and later reconnects.
-- The relay server can **delay or censor** messages, but it **cannot forge** a vote signed by your device key.
+- The relay server can **delay or censor** messages, but it **cannot forge** a vote or signed action from your device key.
 - Anti-fraud controls (device fingerprinting, two-phase vote authorization, invite codes, OAuth gating) **raise the cost** of duplicate voting — they do not provide one-human-one-vote mathematical guarantees.
 - **Private communities** encrypt content in your browser. The encryption is strong (AES-256-GCM), but if you lose your key, there is no recovery.
 
