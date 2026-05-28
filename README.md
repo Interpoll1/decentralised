@@ -95,7 +95,7 @@ For the full technical threat model, see [**`docs/protocol-whitepaper.md`**](doc
 node peer.js
 ```
 
-**Run a relay** — give your community full data sovereignty. See `gun-relay/` for the GunDB relay and `relay-server.js` for the WebSocket relay.
+**Run a relay** — give your community full data sovereignty. See `gun-relay/` for the GunDB relay and `relay-server.js` for the WebSocket relay. Or run the official one.
 
 **Contribute code** — open a PR. The project is fully open source.
 
