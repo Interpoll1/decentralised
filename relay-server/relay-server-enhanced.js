@@ -803,12 +803,29 @@ function getCookie(req, name) {
   return found ? found.split('=')[1] : null;
 }
 
-function setOauthStateCookie(res, nonce) {
-  appendSetCookie(res, `${OAUTH_STATE_COOKIE}=${nonce}; HttpOnly; Path=/; SameSite=Lax; Secure; Max-Age=600`);
+function getCookiePolicy(req, defaultSameSite = 'Lax') {
+  const forwardedProto = String(req?.headers?.['x-forwarded-proto'] || '').toLowerCase();
+  const serverOrigin = String(process.env.SERVER_ORIGIN || '').toLowerCase();
+  const isSecureTransport = forwardedProto.includes('https')
+    || !!req?.socket?.encrypted
+    || serverOrigin.startsWith('https://');
+  const sameSite = isSecureTransport ? defaultSameSite : 'Lax';
+  return {
+    secure: isSecureTransport,
+    sameSite,
+  };
 }
 
-function clearOauthStateCookie(res) {
-  appendSetCookie(res, `${OAUTH_STATE_COOKIE}=; HttpOnly; Path=/; SameSite=Lax; Secure; Max-Age=0`);
+function setOauthStateCookie(res, req, nonce) {
+  const policy = getCookiePolicy(req, 'Lax');
+  const secureFlag = policy.secure ? '; Secure' : '';
+  appendSetCookie(res, `${OAUTH_STATE_COOKIE}=${nonce}; HttpOnly; Path=/; SameSite=${policy.sameSite}${secureFlag}; Max-Age=600`);
+}
+
+function clearOauthStateCookie(res, req) {
+  const policy = getCookiePolicy(req, 'Lax');
+  const secureFlag = policy.secure ? '; Secure' : '';
+  appendSetCookie(res, `${OAUTH_STATE_COOKIE}=; HttpOnly; Path=/; SameSite=${policy.sameSite}${secureFlag}; Max-Age=0`);
 }
 
 function createJWT(payload, expiresIn = '7d') {
@@ -866,8 +883,10 @@ async function setSecureSession(res, req, user) {
     email: user.email,
     provider: sanitizeId(String(user?.provider || 'oauth'), 32) || 'oauth',
   });
-  appendSetCookie(res, `sessionId=${sessionId}; HttpOnly; Path=/; SameSite=None; Secure; Max-Age=604800`);
-  appendSetCookie(res, `jwt=${jwt}; HttpOnly; Path=/; SameSite=None; Secure; Max-Age=604800`);
+  const policy = getCookiePolicy(req, 'None');
+  const secureFlag = policy.secure ? '; Secure' : '';
+  appendSetCookie(res, `sessionId=${sessionId}; HttpOnly; Path=/; SameSite=${policy.sameSite}${secureFlag}; Max-Age=604800`);
+  appendSetCookie(res, `jwt=${jwt}; HttpOnly; Path=/; SameSite=${policy.sameSite}${secureFlag}; Max-Age=604800`);
   return { sessionId, jwt };
 }
 
@@ -877,7 +896,35 @@ async function getSecureSession(req) {
   if (!sid || !jwt) return null;
   const claims = verifyJWT(jwt);
   if (!claims) return null;
-  const sessionData = sessions.get(sid);
+  let sessionData = sessions.get(sid);
+  if (!sessionData && db) {
+    try {
+      const [rows] = await db.execute(
+        `SELECT user_id, ip_address, user_agent, created_at, expires_at
+         FROM sessions
+         WHERE session_id = ?
+         LIMIT 1`,
+        [sid],
+      );
+      const row = Array.isArray(rows) ? rows[0] : null;
+      if (row && Number(row.expires_at || 0) > Date.now() && String(row.user_id || '') === String(claims.sub || '')) {
+        sessionData = {
+          user: {
+            sub: claims.sub,
+            email: typeof claims.email === 'string' ? claims.email : '',
+            provider: claims.provider,
+          },
+          ip: row.ip_address || req.socket.remoteAddress,
+          userAgent: row.user_agent || req.headers['user-agent'],
+          createdAt: Number(row.created_at || Date.now()),
+          expiresAt: Number(row.expires_at || Date.now()),
+        };
+        sessions.set(sid, sessionData);
+      }
+    } catch (err) {
+      console.error('Session DB lookup failed:', err.message);
+    }
+  }
   if (!sessionData) return null;
   if (sessionData.expiresAt <= Date.now()) {
     sessions.delete(sid);
@@ -1357,7 +1404,7 @@ server.on('request', async (req, res) => {
     const state = generateSecureToken(16);
     const stateNonce = generateSecureToken(16);
     oauthStates.set(state, { provider: 'google', createdAt: Date.now(), nonce: stateNonce });
-    setOauthStateCookie(res, stateNonce);
+    setOauthStateCookie(res, req, stateNonce);
     const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     authUrl.searchParams.set('client_id', clientId);
     authUrl.searchParams.set('redirect_uri', redirectUri);
@@ -1374,10 +1421,11 @@ server.on('request', async (req, res) => {
     const oauthState = state ? oauthStates.get(state) : null;
     const cookieNonce = getCookie(req, OAUTH_STATE_COOKIE);
     if (!code || !state || !oauthState || oauthState.provider !== 'google' || !cookieNonce || oauthState.nonce !== cookieNonce) {
+      clearOauthStateCookie(res, req);
       res.writeHead(400); res.end('Invalid OAuth state'); return;
     }
     oauthStates.delete(state);
-    clearOauthStateCookie(res);
+    clearOauthStateCookie(res, req);
     const redirectUri = `${process.env.SERVER_ORIGIN || `http://localhost:${PORT}`}/auth/google/callback`;
     postForm('https://oauth2.googleapis.com/token', { code, client_id: process.env.GOOGLE_CLIENT_ID || '', client_secret: process.env.GOOGLE_CLIENT_SECRET || '', redirect_uri: redirectUri, grant_type: 'authorization_code' })
       .then(async (tokenResponse) => {
@@ -1401,7 +1449,7 @@ server.on('request', async (req, res) => {
     const state = generateSecureToken(16);
     const stateNonce = generateSecureToken(16);
     oauthStates.set(state, { provider: 'microsoft', createdAt: Date.now(), nonce: stateNonce });
-    setOauthStateCookie(res, stateNonce);
+    setOauthStateCookie(res, req, stateNonce);
     const authUrl = new URL(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize`);
     authUrl.searchParams.set('client_id', clientId);
     authUrl.searchParams.set('response_type', 'code');
@@ -1418,10 +1466,11 @@ server.on('request', async (req, res) => {
     const oauthState = state ? oauthStates.get(state) : null;
     const cookieNonce = getCookie(req, OAUTH_STATE_COOKIE);
     if (!code || !state || !oauthState || oauthState.provider !== 'microsoft' || !cookieNonce || oauthState.nonce !== cookieNonce) {
+      clearOauthStateCookie(res, req);
       res.writeHead(400); res.end('Invalid OAuth state'); return;
     }
     oauthStates.delete(state);
-    clearOauthStateCookie(res);
+    clearOauthStateCookie(res, req);
     const tenant = process.env.MS_TENANT || 'common';
     const redirectUri = `${process.env.SERVER_ORIGIN || `http://localhost:${PORT}`}/auth/microsoft/callback`;
     postForm(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, { client_id: process.env.MS_CLIENT_ID || '', client_secret: process.env.MS_CLIENT_SECRET || '', scope: process.env.MS_SCOPES || 'openid profile email', code, redirect_uri: redirectUri, grant_type: 'authorization_code' })
@@ -1454,7 +1503,12 @@ server.on('request', async (req, res) => {
     const cookie = req.headers['cookie'] || '';
     const sid = cookie.split(';').find(c => c.trim().startsWith('sessionId='))?.split('=')[1];
     if (sid) { sessions.delete(sid); if (db) await db.execute(`DELETE FROM sessions WHERE session_id = ?`, [sid]); }
-    res.setHeader('Set-Cookie', ['sessionId=; HttpOnly; Path=/; SameSite=None; Secure; Max-Age=0', 'jwt=; HttpOnly; Path=/; SameSite=None; Secure; Max-Age=0']);
+    const policy = getCookiePolicy(req, 'None');
+    const secureFlag = policy.secure ? '; Secure' : '';
+    res.setHeader('Set-Cookie', [
+      `sessionId=; HttpOnly; Path=/; SameSite=${policy.sameSite}${secureFlag}; Max-Age=0`,
+      `jwt=; HttpOnly; Path=/; SameSite=${policy.sameSite}${secureFlag}; Max-Age=0`,
+    ]);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true })); return;
   }
