@@ -1,5 +1,6 @@
 // searchService.ts - Full-Text Search Service for Vue
 import config from '@/config';
+import { GUN_NAMESPACE } from '@/services/gunService';
 
 export interface SearchResult {
   id: string;
@@ -58,6 +59,9 @@ class SearchService {
     if (options.community) params.append('community', options.community);
     if (options.limit) params.append('limit', options.limit.toString());
     if (options.offset) params.append('offset', options.offset.toString());
+    params.append('namespace', GUN_NAMESPACE);
+    params.append('dataVersion', GUN_NAMESPACE);
+    params.append('version', GUN_NAMESPACE);
 
     try {
       const response = await fetch(`${apiBase}/api/search?${params}`, {
@@ -117,7 +121,14 @@ class SearchService {
     try {
       const { IntegrityService } = await import('@/services/integrityService');
       const body = await IntegrityService.seal(
-        { type, id, data } as Record<string, unknown>,
+        {
+          type,
+          id,
+          data,
+          namespace: GUN_NAMESPACE,
+          dataVersion: GUN_NAMESPACE,
+          version: GUN_NAMESPACE,
+        } as Record<string, unknown>,
         'index',
       );
       const response = await fetch(`${this.getApiBase()}/api/index`, {

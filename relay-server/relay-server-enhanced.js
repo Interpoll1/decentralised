@@ -628,6 +628,7 @@ async function initMySQL() {
       CREATE TABLE IF NOT EXISTS search_index (
         id VARCHAR(100) PRIMARY KEY,
         type ENUM('post', 'poll') NOT NULL,
+        data_version VARCHAR(16) NOT NULL DEFAULT 'v2',
         title TEXT,
         content TEXT,
         author VARCHAR(200),
@@ -635,11 +636,18 @@ async function initMySQL() {
         created_at BIGINT,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         FULLTEXT idx_title_content (title, content),
+        INDEX idx_data_version (data_version),
         INDEX idx_author (author),
         INDEX idx_community (community),
         INDEX idx_created (created_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
+    // Backward-compatible schema repair for deployments created before data_version existed.
+    const hasDataVersion = await queryMySQL(`SHOW COLUMNS FROM search_index LIKE 'data_version'`, []);
+    if (!Array.isArray(hasDataVersion) || hasDataVersion.length === 0) {
+      await db.execute(`ALTER TABLE search_index ADD COLUMN data_version VARCHAR(16) NOT NULL DEFAULT 'v2' AFTER type`);
+      await db.execute(`ALTER TABLE search_index ADD INDEX idx_data_version (data_version)`);
+    }
 
     await db.execute(`
       CREATE TABLE IF NOT EXISTS chat_messages (
@@ -747,18 +755,22 @@ function resolveWsIdentityTier(sessionUser, identityUsername) {
 }
 
 // ─── Search ───────────────────────────────────────────────────────────────────
-async function indexContent(type, id, data) {
+async function indexContent(type, id, data, dataVersion = null) {
   if (!db) return;
   try {
     const title = type === 'post' ? data.title : data.question;
     const content = type === 'post' ? data.content : data.description;
+    const normalizedVersion = sanitizeString(
+      dataVersion || data?.dataVersion || data?.namespace || 'v2',
+      16
+    ) || 'v2';
     await db.execute(
-      `INSERT INTO search_index (id, type, title, content, author, community, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO search_index (id, type, data_version, title, content, author, community, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
-         title = VALUES(title), content = VALUES(content),
+         data_version = VALUES(data_version), title = VALUES(title), content = VALUES(content),
          author = VALUES(author), updated_at = NOW()`,
-      [id, type, title, content || '', data.authorName || 'Anonymous', data.communitySlug || '', data.createdAt || Date.now()]
+      [id, type, normalizedVersion, title, content || '', data.authorName || 'Anonymous', data.communitySlug || '', data.createdAt || Date.now()]
     );
   } catch (err) {
     console.error('❌ Indexing error:', err.message);
@@ -786,6 +798,12 @@ async function searchContent(query, filters = {}) {
     }
     if (filters.type)      { sql += ' AND type = ?';      params.push(filters.type);      countSql += ' AND type = ?';      countParams.push(filters.type); }
     if (filters.community) { sql += ' AND community = ?'; params.push(filters.community); countSql += ' AND community = ?'; countParams.push(filters.community); }
+    if (filters.dataVersion) {
+      sql += ' AND data_version = ?';
+      params.push(filters.dataVersion);
+      countSql += ' AND data_version = ?';
+      countParams.push(filters.dataVersion);
+    }
     sql += ` ORDER BY relevance DESC, created_at DESC LIMIT ? OFFSET ?`;
     params.push(limit, offset);
     const results     = await queryMySQL(sql, params);
@@ -1336,7 +1354,17 @@ server.on('request', async (req, res) => {
       res.end(JSON.stringify(makeError(ErrorCodes.SCHEMA_INVALID, 'Invalid search query')));
       return;
     }
-    const filters = { type: url.searchParams.get('type'), community: url.searchParams.get('community'), limit: url.searchParams.get('limit'), offset: url.searchParams.get('offset') };
+    const requestedVersion = sanitizeString(
+      url.searchParams.get('dataVersion') || url.searchParams.get('namespace') || url.searchParams.get('version') || '',
+      16
+    );
+    const filters = {
+      type: url.searchParams.get('type'),
+      community: url.searchParams.get('community'),
+      limit: url.searchParams.get('limit'),
+      offset: url.searchParams.get('offset'),
+      dataVersion: requestedVersion || null,
+    };
     const results = await searchContent(sanitizedQuery, filters);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(results)); return;
@@ -1354,10 +1382,10 @@ server.on('request', async (req, res) => {
           res.end(JSON.stringify(makeError(ErrorCodes.SCHEMA_INVALID, idxValidation.errors)));
           return;
         }
-        const { type, id, data } = body;
+        const { type, id, data, dataVersion, namespace, version } = body;
         if (!type || !id || !data) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Missing required fields' })); return; }
         if (!['post', 'poll'].includes(type)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Invalid type' })); return; }
-        await indexContent(type, id, data);
+        await indexContent(type, id, data, dataVersion || namespace || version || null);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       } catch (err) { sendError(res, 500, 'Indexing failed', err, '/api/index'); }
