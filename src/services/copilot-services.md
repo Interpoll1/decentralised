@@ -70,7 +70,7 @@ All services are **static classes** — never instantiated with `new`. Initializ
 
 | File | Class | Purpose |
 |---|---|---|
-| `searchService.ts` | `SearchService` | **Instance-based**. Full-text search via the current relay API (`config.relay.api`) with a 1-minute result cache keyed by the active API base, so fresh/incognito sessions and Settings relay overrides hit the same backend as the rest of the app without reusing stale results from a previous relay. `indexContent()` seals payloads with `IntegrityService.seal()` before POST. |
+| `searchService.ts` | `SearchService` | **Instance-based**. Full-text search via the current relay API (`config.relay.api`) with a 1-minute result cache keyed by the active API base, so fresh/incognito sessions and Settings relay overrides hit the same backend as the rest of the app without reusing stale results from a previous relay. Search and indexing requests include `namespace`/`dataVersion`/`version` from `GUN_NAMESPACE` (currently `v3`) so backend queries do not fall back to legacy v2 data. `indexContent()` seals payloads with `IntegrityService.seal()` before POST. |
 | `seoService.ts` | `SEOService` | Fetches posts/polls from GunDB for server-side SEO rendering. |
 | `moderationService.ts` | `ModerationService` | Client-side content word filtering plus local image-filter settings. Settings persisted in localStorage (`moderation_settings`). Image filtering is disabled by default and supports `manual`, `detail-auto`, and `all-auto` scan modes. |
 | `feedPreferencesService.ts` | `FeedPreferencesService` | Local-only personalized feed settings (mode, include/exclude keywords, muted/favorite communities, content-type toggles, ranking weights). Persists in localStorage (`interpoll_feed_preferences`). |
