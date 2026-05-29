@@ -138,7 +138,7 @@ function loadPendingVoteReservationsFromFile(filePath) {
       });
     }
   }
-  cleanupPendingVoteReservations();
+  cleanupPendingVoteReservations(Date.now(), { persist: true });
 }
 
 function normalizePollPolicyRecord(record) {
@@ -321,9 +321,20 @@ function savePollPolicyRegistrySync() {
   }
 }
 
-function cleanupPendingVoteReservations(now = Date.now()) {
+function cleanupPendingVoteReservations(now = Date.now(), { persist = false } = {}) {
+  let removed = 0;
   for (const [key, reservation] of pendingVoteReservations) {
-    if (reservation.expiresAt <= now) pendingVoteReservations.delete(key);
+    if (reservation.expiresAt <= now) {
+      pendingVoteReservations.delete(key);
+      removed += 1;
+    }
+  }
+  if (persist && removed > 0) {
+    try {
+      savePendingVoteReservationsSync();
+    } catch (err) {
+      console.error('Failed to persist expired vote reservation cleanup:', err.message);
+    }
   }
 }
 
@@ -332,6 +343,11 @@ function hasPendingVoteReservation(key, now = Date.now()) {
   if (!reservation) return false;
   if (reservation.expiresAt <= now) {
     pendingVoteReservations.delete(key);
+    try {
+      savePendingVoteReservationsSync();
+    } catch (err) {
+      console.error('Failed to persist pending vote reservation cleanup:', err.message);
+    }
     return false;
   }
   return true;
@@ -379,7 +395,7 @@ function reserveVoteSlot(key, deviceId, now = Date.now()) {
   if (!voteRegistryOperational) {
     return { ok: false, reason: 'vote registry unavailable' };
   }
-  cleanupPendingVoteReservations(now);
+  cleanupPendingVoteReservations(now, { persist: true });
   if (voteRegistry.has(key) || hasPendingVoteReservation(key, now)) {
     return { ok: false, reason: 'already voted or vote pending' };
   }
@@ -403,7 +419,7 @@ function commitVoteSlot(key, reservationToken, deviceId, now = Date.now()) {
   if (!voteRegistryOperational) {
     return { ok: false, reason: 'vote registry unavailable' };
   }
-  cleanupPendingVoteReservations(now);
+  cleanupPendingVoteReservations(now, { persist: true });
   const tokenValidation = isValidReservationToken(reservationToken, key, now);
   if (!tokenValidation.valid) {
     return { ok: false, reason: tokenValidation.reason };
@@ -587,7 +603,7 @@ function saveMessageCache() {
 setInterval(saveMessageCache, 30_000);
 setInterval(saveVoteRegistry, 60_000);
 setInterval(savePollPolicyRegistry, 60_000);
-setInterval(() => cleanupPendingVoteReservations(), PENDING_VOTE_CLEANUP_MS);
+setInterval(() => cleanupPendingVoteReservations(Date.now(), { persist: true }), PENDING_VOTE_CLEANUP_MS);
 
 // ─── MySQL ────────────────────────────────────────────────────────────────────
 let db = null;
