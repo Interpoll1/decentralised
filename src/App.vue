@@ -2,6 +2,7 @@
   <ion-app>
     <AppLoader v-if="!appReady" />
     <ion-router-outlet v-else />
+    <GlobalCommandPalette :is-open="globalPaletteOpen" @close="closeGlobalPalette" />
   </ion-app>
 </template>
 
@@ -14,13 +15,34 @@ import { WebSocketService } from './services/websocketService';
 import { GunService } from './services/gunService';
 import { warmupFromDB } from './services/dbWarmup';
 import AppLoader from './components/AppLoader.vue';
+import GlobalCommandPalette from './components/GlobalCommandPalette.vue';
 
 const chainStore = useChainStore();
 const router = useRouter();
 const appReady = ref(false);
+const globalPaletteOpen = ref(false);
 
 let visibilityHandler: (() => void) | null = null;
 let internalLinkHandler: ((event: MouseEvent) => void) | null = null;
+let keydownHandler: ((event: KeyboardEvent) => void) | null = null;
+
+function isTypingTarget(event: KeyboardEvent): boolean {
+  const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+  for (const node of path) {
+    if (!(node instanceof HTMLElement)) continue;
+    const tag = node.tagName.toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+    if (tag === 'ion-input' || tag === 'ion-textarea' || tag === 'ion-searchbar') return true;
+    if (node.isContentEditable) return true;
+    const contentEditable = node.getAttribute('contenteditable');
+    if (contentEditable !== null && contentEditable !== 'false') return true;
+  }
+  return false;
+}
+
+function closeGlobalPalette() {
+  globalPaletteOpen.value = false;
+}
 
 onMounted(async () => {
   const storedTheme = localStorage.getItem('theme');
@@ -64,6 +86,20 @@ onMounted(async () => {
   };
   document.addEventListener('click', internalLinkHandler);
 
+  keydownHandler = (event: KeyboardEvent) => {
+    const isPaletteShortcut = (event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'p';
+    if (isPaletteShortcut && !isTypingTarget(event)) {
+      event.preventDefault();
+      globalPaletteOpen.value = true;
+      return;
+    }
+
+    if (event.key === 'Escape' && globalPaletteOpen.value) {
+      closeGlobalPalette();
+    }
+  };
+  document.addEventListener('keydown', keydownHandler);
+
   // Show loader until warmup is done — then reveal the app
   try {
     await warmupFromDB();
@@ -96,6 +132,9 @@ onUnmounted(() => {
   }
   if (internalLinkHandler) {
     document.removeEventListener('click', internalLinkHandler);
+  }
+  if (keydownHandler) {
+    document.removeEventListener('keydown', keydownHandler);
   }
 });
 </script>
