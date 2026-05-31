@@ -1,13 +1,11 @@
 <template>
-  <div class="poll-card" @click="$emit('click')">
-    <!-- Flagged content overlay (blur mode) -->
+  <article class="poll-card surface-card surface-card--interactive">
     <div v-if="flagged && filterAction === 'blur' && !revealed" class="flagged-overlay" @click.stop="revealed = true">
       <ion-icon :icon="warningOutline"></ion-icon>
       <span>Poll hidden by word filter — tap to reveal</span>
     </div>
 
-    <div :class="{ 'content-blurred': flagged && filterAction === 'blur' && !revealed }">
-      <!-- Poll Header -->
+    <div class="poll-body" @click="$emit('click')" :class="{ 'content-blurred': flagged && filterAction === 'blur' && !revealed }">
       <div class="poll-header">
         <div class="poll-badge">
           <ion-icon :icon="statsChartOutline"></ion-icon>
@@ -27,76 +25,67 @@
         </div>
       </div>
 
-      <!-- Poll Question -->
       <h3 class="poll-question">{{ poll.question || 'Untitled Poll' }}</h3>
-
-      <!-- Poll Description -->
       <p v-if="poll.description" class="poll-description">{{ poll.description }}</p>
 
-    <!-- Poll Options Preview -->
-    <div v-if="poll.options && poll.options.length > 0" class="poll-options-preview">
-      <div 
-        v-for="(option, index) in poll.options.slice(0, 3)" 
-        :key="option.id || index"
-        class="option-preview"
-      >
-        <div class="option-bar">
-          <div 
-            class="option-fill" 
-            :style="{ width: `${getOptionPercent(option)}%` }"
-          ></div>
+      <div v-if="poll.options && poll.options.length > 0" class="poll-options-preview">
+        <div
+          v-for="(option, index) in poll.options.slice(0, 3)"
+          :key="option.id || index"
+          class="option-preview"
+        >
+          <div class="option-bar">
+            <div
+              class="option-fill"
+              :style="{ width: `${getOptionPercent(option)}%` }"
+            ></div>
+          </div>
+          <div class="option-info">
+            <span class="option-text">{{ option.text || `Option ${index + 1}` }}</span>
+            <span class="option-votes">{{ option.votes || 0 }} votes</span>
+          </div>
         </div>
-        <div class="option-info">
-          <span class="option-text">{{ option.text || `Option ${index + 1}` }}</span>
-          <span class="option-votes">{{ option.votes || 0 }} votes</span>
-        </div>
-      </div>
-      <div v-if="poll.options.length > 3" class="more-options">
-        +{{ poll.options.length - 3 }} more option{{ poll.options.length - 3 !== 1 ? 's' : '' }}
-      </div>
-    </div>
-
-    <!-- No options message -->
-    <div v-else class="no-options">
-      <p>No poll options available</p>
-    </div>
-
-    <!-- Poll Footer -->
-    <div class="poll-footer">
-      <div class="poll-stats">
-        <div class="stat-item">
-          <ion-icon :icon="peopleOutline"></ion-icon>
-          <span>{{ poll.totalVotes || 0 }} vote{{ (poll.totalVotes || 0) !== 1 ? 's' : '' }}</span>
-        </div>
-        
-        <div class="stat-item">
-          <ion-icon :icon="timeOutline"></ion-icon>
-          <span>{{ getTimeRemaining() }}</span>
-        </div>
-
-        <div v-if="poll.allowMultipleChoices" class="stat-item">
-          <ion-icon :icon="checkmarkDoneOutline"></ion-icon>
-          <span>Multiple choice</span>
+        <div v-if="poll.options.length > 3" class="more-options">
+          +{{ poll.options.length - 3 }} more option{{ poll.options.length - 3 !== 1 ? 's' : '' }}
         </div>
       </div>
 
-      <ion-button fill="clear" size="small" @click.stop="$emit('vote')">
-        Vote Now
-        <ion-icon slot="end" :icon="chevronForwardOutline"></ion-icon>
-      </ion-button>
-    </div>
-    </div>
+      <div v-else class="no-options">
+        <p>No poll options available</p>
+      </div>
 
-    <!-- Separator line -->
-    <div class="poll-separator"></div>
-  </div>
+      <div class="poll-footer" @click.stop>
+        <div class="poll-stats">
+          <div class="stat-item">
+            <ion-icon :icon="peopleOutline"></ion-icon>
+            <span>{{ poll.totalVotes || 0 }} vote{{ (poll.totalVotes || 0) !== 1 ? 's' : '' }}</span>
+          </div>
+
+          <div class="stat-item">
+            <ion-icon :icon="timeOutline"></ion-icon>
+            <span>{{ getTimeRemaining() }}</span>
+          </div>
+
+          <div v-if="poll.allowMultipleChoices" class="stat-item">
+            <ion-icon :icon="checkmarkDoneOutline"></ion-icon>
+            <span>Multiple choice</span>
+          </div>
+        </div>
+
+        <ion-button fill="clear" size="small" @click.stop="$emit('vote')">
+          Vote Now
+          <ion-icon slot="end" :icon="chevronForwardOutline"></ion-icon>
+        </ion-button>
+      </div>
+    </div>
+  </article>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { IonIcon, IonButton } from '@ionic/vue';
 
-import { 
+import {
   statsChartOutline,
   peopleOutline,
   timeOutline,
@@ -164,16 +153,16 @@ const authorIdentityClass = computed(() =>
 function formatTime(timestamp: number): string {
   const now = Date.now();
   const diff = now - timestamp;
-  
+
   const minutes = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
-  
+
   if (minutes < 1) return 'just now';
   if (minutes < 60) return `${minutes}m ago`;
   if (hours < 24) return `${hours}h ago`;
   if (days < 7) return `${days}d ago`;
-  
+
   return new Date(timestamp).toLocaleDateString();
 }
 
@@ -186,13 +175,13 @@ function getTimeRemaining(): string {
   if (props.poll.isExpired) {
     return 'Ended';
   }
-  
+
   const now = Date.now();
   const remaining = props.poll.expiresAt - now;
-  
+
   const days = Math.floor(remaining / 86400000);
   const hours = Math.floor((remaining % 86400000) / 3600000);
-  
+
   if (days > 0) {
     return `${days}d left`;
   } else if (hours > 0) {
@@ -203,52 +192,32 @@ function getTimeRemaining(): string {
 }
 </script>
 
-
 <style scoped>
 .poll-card {
-  margin-left: 20px;
-  margin-right: 8px;
-  padding: 16px 0;
-  cursor: pointer;
-  background: transparent;
-}
-
-.poll-separator {
-  height: 1px;
-  background: rgba(var(--ion-text-color-rgb), 0.08);
-  margin-top: 8px;
-}
-
-html.dark .poll-separator {
-  background: rgba(255, 255, 255, 0.15);
-}
-
-html.dark .poll-footer {
-  border-top-color: rgba(255, 255, 255, 0.12);
+  margin: 0 12px 16px 20px;
+  padding: 18px;
 }
 
 .poll-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   margin-bottom: 12px;
 }
 
 .poll-badge {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
+  gap: 6px;
+  padding: 6px 12px;
   background: rgba(var(--ion-color-tertiary-rgb), 0.08);
   border: 1px solid rgba(var(--ion-color-tertiary-rgb), 0.18);
-  border-top-color: rgba(var(--ion-color-tertiary-rgb), 0.25);
+  border-radius: 999px;
   color: var(--ion-color-tertiary);
-  border-radius: 12px;
   font-size: 12px;
   font-weight: 600;
-  backdrop-filter: blur(10px) saturate(1.4);
-  -webkit-backdrop-filter: blur(10px) saturate(1.4);
-  box-shadow: var(--glass-highlight);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .poll-badge ion-icon {
@@ -259,178 +228,158 @@ html.dark .poll-footer {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: var(--app-text-muted);
 }
 
 .separator {
-  color: var(--ion-color-medium-shade);
+  color: rgba(255, 255, 255, 0.25);
 }
 
 .author {
-  color: var(--ion-color-step-600);
+  color: var(--app-text);
   font-weight: 500;
 }
 
-.identity-badge {
-  border-radius: 10px;
-  padding: 1px 8px;
+.identity-badge,
+.expired-badge {
+  padding: 4px 9px;
+  border-radius: 999px;
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .identity-badge.unverified {
-  background: rgba(var(--ion-color-warning-rgb), 0.16);
-  color: var(--ion-color-warning-shade);
+  background: rgba(var(--ion-color-warning-rgb), 0.12);
+  color: var(--ion-color-warning);
 }
 
 .identity-badge.trusted-issuer {
   background: rgba(var(--ion-color-success-rgb), 0.14);
-  color: var(--ion-color-success-shade);
+  color: var(--ion-color-success);
 }
 
 .expired-badge {
-  padding: 2px 8px;
-  background: rgba(var(--ion-color-medium-rgb), 0.10);
-  color: var(--ion-color-medium);
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.16);
-  border-radius: 12px;
-  font-size: 10px;
-  font-weight: 600;
-  backdrop-filter: blur(8px) saturate(1.3);
-  -webkit-backdrop-filter: blur(8px) saturate(1.3);
+  background: rgba(var(--ion-color-medium-rgb), 0.1);
+  color: var(--app-text-muted);
+}
+
+.timestamp,
+.option-votes,
+.more-options,
+.no-options p {
+  color: var(--app-text-subtle);
 }
 
 .poll-question {
-  margin: 0 0 8px 0;
-  font-size: 18px;
+  margin: 0 0 10px;
+  font-size: 20px;
   font-weight: 600;
-  line-height: 1.4;
-  color: var(--ion-text-color);
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  color: var(--app-text);
 }
 
 .poll-description {
-  margin: 0 0 16px 0;
+  margin: 0 0 16px;
   font-size: 14px;
-  line-height: 1.5;
-  color: var(--ion-color-step-600);
+  line-height: 1.7;
+  color: var(--app-text-muted);
 }
 
 .poll-options-preview {
-  margin: 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 18px;
 }
 
 .option-preview {
-  margin-bottom: 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
 }
 
 .option-bar {
   height: 8px;
-  background: rgba(var(--ion-card-background-rgb), 0.22);
-  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
   overflow: hidden;
-  margin-bottom: 4px;
-  border: 1px solid var(--glass-border);
-  border-top-color: var(--glass-border-top);
-  backdrop-filter: blur(10px) saturate(1.3);
-  -webkit-backdrop-filter: blur(10px) saturate(1.3);
+  margin-bottom: 8px;
 }
 
 .option-fill {
   height: 100%;
-  background: var(--ion-color-tertiary);
-  transition: width 0.5s cubic-bezier(0.23, 1, 0.32, 1);
-  border-radius: 8px;
+  background: linear-gradient(90deg, var(--app-accent), var(--ion-color-tertiary));
+  border-radius: 999px;
+  box-shadow: 0 0 24px rgba(var(--app-accent-rgb), 0.18);
+  transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .option-info {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 13px;
+  gap: 8px;
 }
 
 .option-text {
-  color: var(--ion-text-color);
+  color: var(--app-text);
+  font-size: 14px;
   font-weight: 500;
-}
-
-.option-votes {
-  color: var(--ion-color-medium);
-  font-size: 12px;
-}
-
-.more-options {
-  text-align: center;
-  font-size: 13px;
-  color: var(--ion-color-medium);
-  margin-top: 8px;
-}
-
-.no-options {
-  padding: 12px 0;
-  text-align: center;
-  color: var(--ion-color-medium);
-  background: transparent;
-  margin: 12px 0;
 }
 
 .poll-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.05);
-  padding-top: 6px;
-
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  flex-wrap: wrap;
 }
 
 .poll-stats {
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .stat-item {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  padding: 8px 11px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: var(--app-text-muted);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .stat-item ion-icon {
-  font-size: 14px;
+  color: var(--app-text-subtle);
 }
 
-@media (max-width: 576px) {
-  .poll-question {
-    font-size: 16px;
-  }
-
-  .poll-description {
-    font-size: 13px;
-  }
-
-  .poll-stats {
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-}
-
-/* ── Flagged content ─────────────────────────────── */
 .flagged-overlay {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  background: rgba(var(--ion-color-warning-rgb), 0.10);
+  margin-bottom: 10px;
+  background: rgba(var(--ion-color-warning-rgb), 0.1);
   border: 1px solid rgba(var(--ion-color-warning-rgb), 0.25);
-  border-radius: 8px;
-  color: var(--ion-color-warning-shade);
+  border-radius: 12px;
+  color: var(--ion-color-warning);
   font-size: 13px;
   cursor: pointer;
-  margin-bottom: 8px;
 }
 
 .flagged-overlay ion-icon {
@@ -453,5 +402,20 @@ html.dark .poll-footer {
 
 .flag-badge ion-icon {
   font-size: 13px;
+}
+
+@media (max-width: 576px) {
+  .poll-card {
+    margin: 0 12px 14px;
+    padding: 16px;
+  }
+
+  .poll-question {
+    font-size: 17px;
+  }
+
+  .poll-description {
+    font-size: 13px;
+  }
 }
 </style>

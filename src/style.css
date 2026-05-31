@@ -1,742 +1,594 @@
-/* =============================================================================
-   1a. LIGHT THEME (default)
-   ============================================================================= */
-
 :root {
   color-scheme: light;
+  font-family: "Inter", "Geist Sans", system-ui, sans-serif;
 
-  /* Surfaces */
-  --ion-background-color:       #f0f2f7;
-  --ion-background-color-rgb:   240, 242, 247;
-  --ion-card-background:        rgba(255, 255, 255, 0.32);
-  --ion-card-background-rgb:    255, 255, 255;
-  --ion-item-background:        rgba(255, 255, 255, 0.22);
-  --ion-item-background-rgb:    255, 255, 255;
+  --app-bg-deep: #eef2ff;
+  --app-bg-base: #f5f7fb;
+  --app-bg-elevated: #ffffff;
+  --app-surface: rgba(255, 255, 255, 0.72);
+  --app-surface-strong: rgba(255, 255, 255, 0.88);
+  --app-surface-hover: rgba(255, 255, 255, 0.96);
+  --app-border: rgba(15, 23, 42, 0.08);
+  --app-border-strong: rgba(15, 23, 42, 0.14);
+  --app-border-accent: rgba(94, 106, 210, 0.32);
+  --app-text: #111827;
+  --app-text-muted: #5b6472;
+  --app-text-subtle: rgba(17, 24, 39, 0.56);
+  --app-accent: #5e6ad2;
+  --app-accent-bright: #6872d9;
+  --app-accent-rgb: 94, 106, 210;
+  --app-success: #34d399;
+  --app-success-rgb: 52, 211, 153;
+  --app-warning: #fbbf24;
+  --app-warning-rgb: 251, 191, 36;
+  --app-danger: #f87171;
+  --app-danger-rgb: 248, 113, 113;
+  --app-radius-lg: 16px;
+  --app-radius-md: 12px;
+  --app-radius-sm: 10px;
+  --app-shadow-sm: 0 0 0 1px rgba(15, 23, 42, 0.04), 0 12px 36px rgba(15, 23, 42, 0.08);
+  --app-shadow-md: 0 0 0 1px rgba(15, 23, 42, 0.06), 0 18px 42px rgba(15, 23, 42, 0.12), 0 0 72px rgba(94, 106, 210, 0.08);
+  --app-shadow-lg: 0 0 0 1px rgba(15, 23, 42, 0.08), 0 24px 60px rgba(15, 23, 42, 0.16), 0 0 90px rgba(94, 106, 210, 0.12);
+  --app-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  --app-focus-ring: 0 0 0 2px rgba(94, 106, 210, 0.55);
+  --app-transition: 240ms cubic-bezier(0.16, 1, 0.3, 1);
+  --app-grid-color: rgba(255, 255, 255, 0.03);
+  --app-noise-opacity: 0.018;
+  --app-ambient-spot-1: rgba(94, 106, 210, 0.26);
+  --app-ambient-spot-2: rgba(140, 92, 246, 0.12);
+  --app-ambient-spot-3: rgba(99, 102, 241, 0.14);
+  --app-ambient-spot-4: rgba(94, 106, 210, 0.12);
+  --app-surface-tint-top: rgba(255, 255, 255, 0.18);
+  --app-surface-tint-bottom: rgba(255, 255, 255, 0.03);
+  --app-surface-tint-top-hover: rgba(255, 255, 255, 0.22);
+  --app-surface-tint-bottom-hover: rgba(255, 255, 255, 0.04);
+  --app-pill-surface: rgba(255, 255, 255, 0.04);
+  --app-item-surface: rgba(255, 255, 255, 0.03);
+  --app-search-surface: rgba(255, 255, 255, 0.04);
+  --app-heading-start: #111827;
+  --app-heading-end: rgba(17, 24, 39, 0.72);
+  --glass-blur: 20px;
+  --glass-saturation: 1.2;
+  --glass-item-blur: 16px;
+  --glass-item-saturation: 1.08;
+  --toolbar-blur: 18px;
+  --toolbar-saturation: 1.15;
+  --glass-border: var(--app-border);
+  --glass-border-top: rgba(255, 255, 255, 0.65);
+  --glass-border-bottom: rgba(15, 23, 42, 0.06);
+  --glass-shadow: var(--app-shadow-md);
+  --glass-highlight: var(--app-shadow-inset);
+  --glass-inner-glow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --liquid-transition: all var(--app-transition);
+  --liquid-spring: transform var(--app-transition), box-shadow var(--app-transition), border-color var(--app-transition);
 
-  /* Text */
-  --ion-text-color:             #111827;
-  --ion-text-color-rgb:         17, 24, 39;
+  --ion-background-color: var(--app-bg-base);
+  --ion-background-color-rgb: 245, 247, 251;
+  --ion-card-background: var(--app-surface);
+  --ion-card-background-rgb: 255, 255, 255;
+  --ion-item-background: rgba(255, 255, 255, 0.82);
+  --ion-item-background-rgb: 255, 255, 255;
+  --ion-text-color: var(--app-text);
+  --ion-text-color-rgb: 17, 24, 39;
 
-  /* ── Liquid Glass Tokens ── */
-  --glass-blur:           28px;
-  --glass-saturation:     1.8;
-  --glass-tint:           rgba(255, 255, 255, 0.18);
-
-  /* Borders — top is brightest (light hits the top edge) */
-  --glass-border-top:     rgba(255, 255, 255, 0.75);
-  --glass-border:         rgba(255, 255, 255, 0.45);
-  --glass-border-bottom:  rgba(255, 255, 255, 0.12);
-
-  /* Shadows & glows */
-  --glass-shadow:
-    0 8px 40px rgba(100, 100, 140, 0.10),
-    0 1.5px 4px rgba(0, 0, 0, 0.04);
-  --glass-highlight:
-    inset 0  1px 0 rgba(255, 255, 255, 0.85),   /* top inner edge: bright  */
-    inset 0 -1px 0 rgba(255, 255, 255, 0.08);   /* bottom inner edge: dim  */
-  --glass-inner-glow:     inset 0 0 30px rgba(255, 255, 255, 0.12);
-  --glass-depth:          0 20px 60px rgba(0, 0, 0, 0.06);
-
-  /* Specular: the bright diagonal streak across the glass face */
-  --glass-specular: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.50) 0%,
-    rgba(255, 255, 255, 0.18) 25%,
-    rgba(255, 255, 255, 0.02) 50%,
-    transparent              70%
-  );
-
-  /* Refraction: subtle color bleed from the bottom-right edge */
-  --glass-refraction: linear-gradient(
-    320deg,
-    transparent              40%,
-    rgba(255, 255, 255, 0.06) 60%,
-    rgba(255, 255, 255, 0.14) 80%,
-    rgba(255, 255, 255, 0.22) 100%
-  );
-
-  /* Transition presets */
-  --liquid-transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1);   /* smooth ease-out */
-  --liquid-spring:     all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); /* springy overshoot */
-
-  /* ── Brand Colors ── */
-  --ion-color-primary:             #6366f1;
-  --ion-color-primary-rgb:         99, 102, 241;
-  --ion-color-primary-contrast:    #ffffff;
+  --ion-color-primary: var(--app-accent);
+  --ion-color-primary-rgb: var(--app-accent-rgb);
+  --ion-color-primary-contrast: #ffffff;
   --ion-color-primary-contrast-rgb: 255, 255, 255;
-  --ion-color-primary-shade:       #5457d5;
-  --ion-color-primary-tint:        #7375f2;
+  --ion-color-primary-shade: #535dbc;
+  --ion-color-primary-tint: var(--app-accent-bright);
 
-  --ion-color-secondary:             #06b6d4;
-  --ion-color-secondary-rgb:         6, 182, 212;
-  --ion-color-secondary-contrast:    #ffffff;
+  --ion-color-secondary: #8b5cf6;
+  --ion-color-secondary-rgb: 139, 92, 246;
+  --ion-color-secondary-contrast: #ffffff;
   --ion-color-secondary-contrast-rgb: 255, 255, 255;
-  --ion-color-secondary-shade:       #05a0bb;
-  --ion-color-secondary-tint:        #1fbdd8;
+  --ion-color-secondary-shade: #7a51d8;
+  --ion-color-secondary-tint: #976cf7;
 
-  --ion-color-tertiary:             #8b5cf6;
-  --ion-color-tertiary-rgb:         139, 92, 246;
-  --ion-color-tertiary-contrast:    #ffffff;
+  --ion-color-tertiary: #7c8cff;
+  --ion-color-tertiary-rgb: 124, 140, 255;
+  --ion-color-tertiary-contrast: #ffffff;
   --ion-color-tertiary-contrast-rgb: 255, 255, 255;
-  --ion-color-tertiary-shade:       #7a51d8;
-  --ion-color-tertiary-tint:        #976cf7;
+  --ion-color-tertiary-shade: #6d7be0;
+  --ion-color-tertiary-tint: #8a99ff;
 
-  --ion-color-success:             #10b981;
-  --ion-color-success-rgb:         16, 185, 129;
-  --ion-color-success-contrast:    #ffffff;
-  --ion-color-success-contrast-rgb: 255, 255, 255;
-  --ion-color-success-shade:       #0ea372;
-  --ion-color-success-tint:        #28c08e;
+  --ion-color-success: var(--app-success);
+  --ion-color-success-rgb: var(--app-success-rgb);
+  --ion-color-success-contrast: #04110c;
+  --ion-color-success-contrast-rgb: 4, 17, 12;
+  --ion-color-success-shade: #2db989;
+  --ion-color-success-tint: #48d7a3;
 
-  --ion-color-warning:             #f59e0b;
-  --ion-color-warning-rgb:         245, 158, 11;
-  --ion-color-warning-contrast:    #000000;
-  --ion-color-warning-contrast-rgb: 0, 0, 0;
-  --ion-color-warning-shade:       #d88b0a;
-  --ion-color-warning-tint:        #f6a823;
+  --ion-color-warning: var(--app-warning);
+  --ion-color-warning-rgb: var(--app-warning-rgb);
+  --ion-color-warning-contrast: #1a1301;
+  --ion-color-warning-contrast-rgb: 26, 19, 1;
+  --ion-color-warning-shade: #ddb326;
+  --ion-color-warning-tint: #fcc943;
 
-  --ion-color-danger:             #ef4444;
-  --ion-color-danger-rgb:         239, 68, 68;
-  --ion-color-danger-contrast:    #ffffff;
-  --ion-color-danger-contrast-rgb: 255, 255, 255;
-  --ion-color-danger-shade:       #d23c3c;
-  --ion-color-danger-tint:        #f15757;
+  --ion-color-danger: var(--app-danger);
+  --ion-color-danger-rgb: var(--app-danger-rgb);
+  --ion-color-danger-contrast: #160404;
+  --ion-color-danger-contrast-rgb: 22, 4, 4;
+  --ion-color-danger-shade: #da6363;
+  --ion-color-danger-tint: #f98686;
 
-  --ion-color-medium:             #6b7280;
-  --ion-color-medium-rgb:         107, 114, 128;
-  --ion-color-medium-contrast:    #ffffff;
+  --ion-color-medium: var(--app-text-muted);
+  --ion-color-medium-rgb: 138, 143, 152;
+  --ion-color-medium-contrast: #ffffff;
   --ion-color-medium-contrast-rgb: 255, 255, 255;
-  --ion-color-medium-shade:       #5e6470;
-  --ion-color-medium-tint:        #7a808d;
+  --ion-color-medium-shade: #717780;
+  --ion-color-medium-tint: #989da5;
 
-  --ion-color-light:             #e5e7eb;
-  --ion-color-light-rgb:         229, 231, 235;
-  --ion-color-light-contrast:    #111827;
-  --ion-color-light-contrast-rgb: 17, 24, 39;
-  --ion-color-light-shade:       #cacdd2;
-  --ion-color-light-tint:        #e8eaed;
+  --ion-color-light: #17181c;
+  --ion-color-light-rgb: 23, 24, 28;
+  --ion-color-light-contrast: #ffffff;
+  --ion-color-light-contrast-rgb: 255, 255, 255;
+  --ion-color-light-shade: #141519;
+  --ion-color-light-tint: #2a2b30;
 
-  /* ── Navigation Chrome ── */
-  --ion-toolbar-background:       rgba(255, 255, 255, 0.48);
-  --ion-toolbar-color:            #111827;
-  --ion-tab-bar-background:       rgba(255, 255, 255, 0.48);
-  --ion-tab-bar-color:            #6b7280;
-  --ion-tab-bar-color-selected:   #6366f1;
+  --ion-toolbar-background: rgba(255, 255, 255, 0.78);
+  --ion-toolbar-color: var(--app-text);
+  --ion-tab-bar-background: rgba(255, 255, 255, 0.9);
+  --ion-tab-bar-color: var(--app-text-muted);
+  --ion-tab-bar-color-selected: var(--app-accent-bright);
+  --ion-placeholder-color: var(--app-text-subtle);
 
-  /* ── Neutral Step Palette (light → dark) ── */
-  --ion-color-step-50:  #f0f1f3;
-  --ion-color-step-100: #e1e3e7;
-  --ion-color-step-150: #d2d5da;
-  --ion-color-step-200: #c3c7ce;
-  --ion-color-step-250: #b4b9c2;
-  --ion-color-step-300: #a5abb5;
-  --ion-color-step-350: #969da9;
-  --ion-color-step-400: #878f9d;
-  --ion-color-step-450: #798190;
-  --ion-color-step-500: #6a7384;
-  --ion-color-step-550: #5b6578;
-  --ion-color-step-600: #4c576b;
-  --ion-color-step-650: #3d495f;
-  --ion-color-step-700: #2e3b52;
-  --ion-color-step-750: #202d46;
-  --ion-color-step-800: #111f3a;
-  --ion-color-step-850: #07142e;
-  --ion-color-step-900: #030d24;
-  --ion-color-step-950: #010818;
+  --ion-color-step-50: #f8fafc;
+  --ion-color-step-100: #f1f5f9;
+  --ion-color-step-150: #e2e8f0;
+  --ion-color-step-200: #dbe2ea;
+  --ion-color-step-250: #cbd5e1;
+  --ion-color-step-300: #b8c2cf;
+  --ion-color-step-350: #a6b0be;
+  --ion-color-step-400: #94a0b0;
+  --ion-color-step-450: #8692a2;
+  --ion-color-step-500: #748091;
+  --ion-color-step-550: #677283;
+  --ion-color-step-600: #5b6472;
+  --ion-color-step-650: #4b5563;
+  --ion-color-step-700: #374151;
+  --ion-color-step-750: #26303d;
+  --ion-color-step-800: #1f2937;
+  --ion-color-step-850: #18212d;
+  --ion-color-step-900: #111827;
+  --ion-color-step-950: #0f172a;
 }
-
-
-/* =============================================================================
-   1b. DARK THEME
-   Strategy: solid OLED black at rest → subtle glass lift on hover/interaction.
-   Glass tokens are intentionally "off" so cards look flat until interacted with.
-   ============================================================================= */
 
 html.dark,
 body.dark {
   color-scheme: dark;
-
-  /* Surfaces — pure OLED black */
-  --ion-background-color:       #000000;
-  --ion-background-color-rgb:   0, 0, 0;
-  --ion-card-background:        #000000;
-  --ion-card-background-rgb:    0, 0, 0;
-  --ion-item-background:        #000000;
-  --ion-item-background-rgb:    0, 0, 0;
-
-  /* Text */
-  --ion-text-color:             #e4e4e7;
-  --ion-text-color-rgb:         228, 228, 231;
-
-  /* Glass tokens — dormant at rest, activate only on hover */
-  --glass-blur:           0px;       /* no blur = solid look */
-  --glass-saturation:     1.0;
-  --glass-tint:           transparent;
-  --glass-border-top:     rgba(255, 255, 255, 0.06);
-  --glass-border:         rgba(255, 255, 255, 0.04);
-  --glass-border-bottom:  rgba(255, 255, 255, 0.02);
-  --glass-shadow:         0 1px 2px rgba(0, 0, 0, 0.6);
-  --glass-highlight:      none;
-  --glass-specular:       none;
-  --glass-refraction:     none;
-  --glass-inner-glow:     none;
-  --glass-depth:          none;
-
-  /* Brand colors — boosted for dark-bg contrast */
-  --ion-color-primary:             #818cf8;
-  --ion-color-primary-rgb:         129, 140, 248;
-  --ion-color-primary-contrast:    #000000;
-  --ion-color-primary-contrast-rgb: 0, 0, 0;
-  --ion-color-primary-shade:       #727bda;
-  --ion-color-primary-tint:        #8e97f9;
-
-  --ion-color-secondary:             #22d3ee;
-  --ion-color-secondary-rgb:         34, 211, 238;
-  --ion-color-secondary-contrast:    #000000;
-  --ion-color-secondary-contrast-rgb: 0, 0, 0;
-  --ion-color-secondary-shade:       #1ebad1;
-  --ion-color-secondary-tint:        #38d7f0;
-
-  --ion-color-tertiary:             #a78bfa;
-  --ion-color-tertiary-rgb:         167, 139, 250;
-  --ion-color-tertiary-contrast:    #000000;
-  --ion-color-tertiary-contrast-rgb: 0, 0, 0;
-  --ion-color-tertiary-shade:       #937adc;
-  --ion-color-tertiary-tint:        #b097fb;
-
-  --ion-color-success:             #34d399;
-  --ion-color-success-rgb:         52, 211, 153;
-  --ion-color-success-contrast:    #ffffff;
-  --ion-color-success-contrast-rgb: 255, 255, 255;
-  --ion-color-success-shade:       #2dba87;
-  --ion-color-success-tint:        #48d7a3;
-
-  --ion-color-warning:             #fbbf24;
-  --ion-color-warning-rgb:         251, 191, 36;
-  --ion-color-warning-contrast:    #000000;
-  --ion-color-warning-contrast-rgb: 0, 0, 0;
-  --ion-color-warning-shade:       #dda820;
-  --ion-color-warning-tint:        #fbc53a;
-
-  --ion-color-danger:             #f87171;
-  --ion-color-danger-rgb:         248, 113, 113;
-  --ion-color-danger-contrast:    #ffffff;
-  --ion-color-danger-contrast-rgb: 255, 255, 255;
-  --ion-color-danger-shade:       #da6363;
-  --ion-color-danger-tint:        #f97f7f;
-
-  --ion-color-dark:             #f4f5f8;
-  --ion-color-dark-rgb:         244, 245, 248;
-  --ion-color-dark-contrast:    #000000;
-  --ion-color-dark-contrast-rgb: 0, 0, 0;
-  --ion-color-dark-shade:       #d7d8da;
-  --ion-color-dark-tint:        #f5f6f9;
-
-  --ion-color-medium:             #a1a1aa;
-  --ion-color-medium-rgb:         161, 161, 170;
-  --ion-color-medium-contrast:    #000000;
-  --ion-color-medium-contrast-rgb: 0, 0, 0;
-  --ion-color-medium-shade:       #71717a;
-  --ion-color-medium-tint:        #d4d4d8;
-
-  --ion-color-light:             #18181b;
-  --ion-color-light-rgb:         24, 24, 27;
-  --ion-color-light-contrast:    #ffffff;
-  --ion-color-light-contrast-rgb: 255, 255, 255;
-  --ion-color-light-shade:       #09090b;
-  --ion-color-light-tint:        #27272a;
-
-  /* Navigation Chrome */
-  --ion-toolbar-background:       #000000;
-  --ion-toolbar-color:            #e4e4e7;
-  --ion-tab-bar-background:       #000000;
-  --ion-tab-bar-color:            #a1a1aa;
-  --ion-tab-bar-color-selected:   #818cf8;
-
-  /* Item overrides */
-  --ion-item-background:    transparent;
-  --ion-item-color:         #e4e4e7;
-  --ion-placeholder-color:  #71717a;
-
-  /* Neutral Step Palette (dark → light) */
-  --ion-color-step-50:  #0d0d0d;
-  --ion-color-step-100: #1a1a1a;
-  --ion-color-step-150: #262626;
-  --ion-color-step-200: #333333;
-  --ion-color-step-250: #404040;
-  --ion-color-step-300: #4d4d4d;
-  --ion-color-step-350: #595959;
-  --ion-color-step-400: #666666;
-  --ion-color-step-450: #737373;
-  --ion-color-step-500: #808080;
-  --ion-color-step-550: #8c8c8c;
-  --ion-color-step-600: #999999;
-  --ion-color-step-650: #a6a6a6;
-  --ion-color-step-700: #b3b3b3;
-  --ion-color-step-750: #bfbfbf;
-  --ion-color-step-800: #cccccc;
-  --ion-color-step-850: #d9d9d9;
-  --ion-color-step-900: #e6e6e6;
-  --ion-color-step-950: #f2f2f2;
+  --app-bg-deep: #000000;
+  --app-bg-base: #000000;
+  --app-bg-elevated: #000000;
+  --app-surface: #000000;
+  --app-surface-strong: #000000;
+  --app-surface-hover: #000000;
+  --app-border: rgba(255, 255, 255, 0.08);
+  --app-border-strong: rgba(255, 255, 255, 0.14);
+  --app-text: #f5f5f6;
+  --app-text-muted: #70757f;
+  --app-text-subtle: rgba(255, 255, 255, 0.44);
+  --app-grid-color: rgba(255, 255, 255, 0);
+  --app-noise-opacity: 0;
+  --app-ambient-spot-1: rgba(94, 106, 210, 0);
+  --app-ambient-spot-2: rgba(140, 92, 246, 0);
+  --app-ambient-spot-3: rgba(99, 102, 241, 0);
+  --app-ambient-spot-4: rgba(94, 106, 210, 0);
+  --app-surface-tint-top: rgba(255, 255, 255, 0);
+  --app-surface-tint-bottom: rgba(255, 255, 255, 0);
+  --app-surface-tint-top-hover: rgba(255, 255, 255, 0);
+  --app-surface-tint-bottom-hover: rgba(255, 255, 255, 0);
+  --app-pill-surface: #000000;
+  --app-item-surface: #000000;
+  --app-search-surface: #000000;
+  --app-heading-start: #ffffff;
+  --app-heading-end: rgba(255, 255, 255, 0.58);
+  --app-shadow-sm: 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --app-shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --app-shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --app-shadow-inset: inset 0 0 0 rgba(255, 255, 255, 0);
+  --glass-blur: 0px;
+  --glass-saturation: 1;
+  --glass-item-blur: 0px;
+  --glass-item-saturation: 1;
+  --toolbar-blur: 0px;
+  --toolbar-saturation: 1;
+  --glass-border-top: rgba(255, 255, 255, 0.04);
+  --glass-border-bottom: rgba(255, 255, 255, 0.04);
+  --ion-background-color-rgb: 0, 0, 0;
+  --ion-item-background: #000000;
+  --ion-text-color-rgb: 245, 245, 246;
+  --ion-toolbar-background: #000000;
+  --ion-tab-bar-background: #000000;
+  --ion-color-step-50: #050505;
+  --ion-color-step-100: #0a0a0a;
+  --ion-color-step-150: #111111;
+  --ion-color-step-200: #181818;
+  --ion-color-step-250: #212121;
+  --ion-color-step-300: #2b2b2b;
+  --ion-color-step-350: #373737;
+  --ion-color-step-400: #454545;
+  --ion-color-step-450: #545454;
+  --ion-color-step-500: #656565;
+  --ion-color-step-550: #777777;
+  --ion-color-step-600: #8a8a8a;
+  --ion-color-step-650: #9d9d9d;
+  --ion-color-step-700: #b1b1b1;
+  --ion-color-step-750: #c4c4c4;
+  --ion-color-step-800: #d5d5d5;
+  --ion-color-step-850: #e3e3e3;
+  --ion-color-step-900: #efefef;
+  --ion-color-step-950: #f8f8f8;
 }
 
+html,
+body,
+#app,
+ion-app,
+.ion-page {
+  min-height: 100%;
+}
 
-/* =============================================================================
-   2. ANIMATED MESH BACKGROUND
-   This is the vivid ambient color field that the glass refracts through.
-   Light mode only — dark mode uses plain black.
-   ============================================================================= */
+html,
+body {
+  background:
+    radial-gradient(ellipse at top, var(--app-bg-elevated) 0%, var(--app-bg-base) 45%, var(--app-bg-deep) 100%);
+  color: var(--app-text);
+}
+
+body {
+  position: relative;
+  margin: 0;
+  overflow-x: hidden;
+  font-family: "Inter", "Geist Sans", system-ui, sans-serif;
+}
+
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
 
 body::before {
-  content: '';
-  position: fixed;
-  inset: -30%;          /* oversized so it covers the whole screen even when animated */
-  z-index: -1;
-  pointer-events: none;
-  will-change: transform;
-
+  z-index: -2;
   background:
-    radial-gradient(ellipse 90% 70% at 15% 20%, rgba( 99, 102, 241, 0.24) 0%, transparent 55%), /* indigo  — top-left  */
-    radial-gradient(ellipse 70% 90% at 85% 75%, rgba(  6, 182, 212, 0.20) 0%, transparent 55%), /* cyan    — bot-right */
-    radial-gradient(ellipse 80% 60% at 50% 45%, rgba(139,  92, 246, 0.16) 0%, transparent 55%), /* violet  — center   */
-    radial-gradient(ellipse 60% 50% at 80% 15%, rgba( 16, 185, 129, 0.12) 0%, transparent 50%), /* emerald — top-right*/
-    radial-gradient(ellipse 50% 70% at 25% 80%, rgba(245, 158,  11, 0.10) 0%, transparent 50%), /* amber   — bot-left */
-    radial-gradient(ellipse 40% 40% at 65% 60%, rgba(236,  72, 153, 0.08) 0%, transparent 50%); /* pink    — mid      */
-
-  animation: meshFloat 30s ease-in-out infinite alternate;
+    radial-gradient(circle at 50% 10%, var(--app-ambient-spot-1) 0, transparent 34%),
+    radial-gradient(circle at 16% 32%, var(--app-ambient-spot-2) 0, transparent 32%),
+    radial-gradient(circle at 84% 26%, var(--app-ambient-spot-3) 0, transparent 30%),
+    radial-gradient(circle at 70% 82%, var(--app-ambient-spot-4) 0, transparent 28%);
+  filter: blur(72px);
+  transform: translateZ(0);
+  animation: ambientFloat 10s ease-in-out infinite;
 }
 
-html.dark body::before {
-  background: none;
-  animation: none;
+body::after {
+  z-index: -1;
+  opacity: 1;
+  background-image:
+    linear-gradient(var(--app-grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--app-grid-color) 1px, transparent 1px),
+    radial-gradient(circle at center, rgba(255, 255, 255, var(--app-noise-opacity)) 0, transparent 58%);
+  background-size: 64px 64px, 64px 64px, 180px 180px;
+  background-position: center center;
+  mask-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.35));
 }
 
-@keyframes meshFloat {
-  0%   { transform: scale(1.00) translate( 0%,  0%)  rotate( 0.0deg); }
-  20%  { transform: scale(1.08) translate(-4%,  2%)  rotate( 0.8deg); }
-  40%  { transform: scale(0.95) translate( 3%, -2%)  rotate(-0.5deg); }
-  60%  { transform: scale(1.05) translate(-2%,  4%)  rotate( 0.4deg); }
-  80%  { transform: scale(0.98) translate( 2%, -1%)  rotate(-0.3deg); }
-  100% { transform: scale(1.03) translate(-1%,  1%)  rotate( 0.2deg); }
+@keyframes ambientFloat {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(0, -18px, 0) scale(1.03);
+  }
 }
 
-
-/* =============================================================================
-   3. GLASS PRIMITIVES
-   Utility classes you can attach to any element.
-   ============================================================================= */
-
-/* Generic glass panel — for divs, sidebars, etc. */
-.glass-panel {
-  background: rgba(var(--ion-background-color-rgb), 0.35) !important;
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  border: 1px solid var(--glass-border);
-  border-top-color:    var(--glass-border-top);
-  border-bottom-color: var(--glass-border-bottom);
-  box-shadow: var(--glass-shadow), var(--glass-highlight), var(--glass-inner-glow);
+* {
+  box-sizing: border-box;
 }
 
-/* Glass card — for Ionic ion-card overrides via class */
+a {
+  color: inherit;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: var(--app-text);
+  margin-top: 0;
+}
+
+p {
+  color: var(--app-text-muted);
+}
+
+.app-shell {
+  position: relative;
+  min-height: 100vh;
+}
+
+.ambient-page {
+  --background: transparent;
+}
+
+.ambient-page::part(scroll) {
+  background: transparent;
+}
+
+.ambient-page__content {
+  width: min(1320px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 24px 0 120px;
+}
+
+.surface-card,
+.glass-panel,
 .glass-card {
-  --background: rgba(var(--ion-card-background-rgb), 0.28);
+  background:
+    linear-gradient(180deg, var(--app-surface-tint-top), var(--app-surface-tint-bottom)),
+    var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  box-shadow: var(--app-shadow-md), var(--app-shadow-inset);
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  border: 1px solid var(--glass-border) !important;
-  border-top-color:    var(--glass-border-top) !important;
-  border-bottom-color: var(--glass-border-bottom) !important;
-  box-shadow: var(--glass-shadow), var(--glass-highlight), var(--glass-inner-glow);
 }
 
-/* Status card variant (lighter alpha) */
-ion-card.status-card {
-  --background: rgba(var(--ion-item-background-rgb), 0.22);
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  border: 1px solid var(--glass-border);
-  border-top-color:    var(--glass-border-top);
-  border-bottom-color: var(--glass-border-bottom);
+.surface-card--interactive {
+  transition:
+    transform var(--app-transition),
+    border-color var(--app-transition),
+    background var(--app-transition),
+    box-shadow var(--app-transition);
 }
 
+.surface-card--interactive:hover {
+  transform: translateY(-4px);
+  background:
+    linear-gradient(180deg, var(--app-surface-tint-top-hover), var(--app-surface-tint-bottom-hover)),
+    var(--app-surface-hover);
+  border-color: var(--app-border-strong);
+  box-shadow: var(--app-shadow-lg), var(--app-shadow-inset);
+}
 
-/* =============================================================================
-   4. ion-card — Full Liquid Glass Treatment
-   Three visual layers stacked inside the card:
-     Layer 0 — glass backdrop (blur + tint via background)
-     Layer 1 — ::before  Specular highlight (bright diagonal streak)
-     Layer 2 — ::after   Refraction edge   (color bleed at bottom-right)
-     Layer 3 — card content (z-index: 1)
-   ============================================================================= */
+.surface-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--app-border);
+  background: var(--app-pill-surface);
+  color: var(--app-text-muted);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
 
+.surface-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--app-text-subtle);
+}
+
+.section-heading {
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  background: linear-gradient(to bottom, var(--app-heading-start), var(--app-heading-end));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.section-subtitle {
+  font-size: clamp(1rem, 2vw, 1.15rem);
+  line-height: 1.7;
+  color: var(--app-text-muted);
+}
+
+ion-content,
+ion-header,
+ion-toolbar,
+ion-footer,
+ion-page,
+ion-list,
+ion-item,
 ion-card {
-  /* Translucent frosted background */
-  --background: rgba(var(--ion-card-background-rgb), 0.28);
-  background:   rgba(var(--ion-card-background-rgb), 0.28);
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-
-  /* Glass border — top edge is brightest (catches the light) */
-  border: 1px solid var(--glass-border) !important;
-  border-top-color:    var(--glass-border-top) !important;
-  border-bottom-color: var(--glass-border-bottom) !important;
-  border-radius: 20px;
-
-  box-shadow:
-    var(--glass-shadow),      /* ambient drop shadow */
-    var(--glass-highlight),   /* inner top/bottom edge highlights */
-    var(--glass-inner-glow),  /* soft internal glow */
-    var(--glass-depth);       /* deep diffuse shadow */
-
-  overflow: hidden;
-  position: relative;
-  transition: var(--liquid-transition);
+  background: transparent;
 }
 
-/* Specular highlight — the bright diagonal streak across the glass face */
-ion-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: var(--glass-specular);
-  border-radius: inherit;
-  pointer-events: none;
-  z-index: 0;
-  transition: opacity 0.5s ease;
+ion-content {
+  --background: transparent;
+  color: var(--app-text);
 }
 
-/* Refraction edge — subtle color bleed from bottom-right corner */
-ion-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: var(--glass-refraction);
-  border-radius: inherit;
-  pointer-events: none;
-  z-index: 0;
-  mix-blend-mode: overlay;
+ion-header::after {
+  display: none !important;
 }
-
-/* Ensure card content sits above the pseudo-element layers */
-ion-card > * {
-  position: relative;
-  z-index: 1;
-}
-
-/* Hover — lift card off surface, brighten glow */
-ion-card:hover {
-  transform: translateY(-3px) scale(1.005);
-  border-color: rgba(255, 255, 255, 0.65) !important;
-  box-shadow:
-    0 24px 64px rgba(99, 102, 241, 0.14),
-    0  4px 16px rgba(0, 0, 0, 0.06),
-    var(--glass-highlight),
-    var(--glass-inner-glow);
-}
-
-/* Dark hover — same lift, no light-glass effects */
-html.dark ion-card:hover {
-  transform: translateY(-3px) scale(1.005);
-  background: #0c0c0c;
-  border-color: rgba(255, 255, 255, 0.10) !important;
-  box-shadow:
-    0 12px 40px rgba(129, 140, 248, 0.08),
-    0  4px 12px rgba(0, 0, 0, 0.50),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-
-/* =============================================================================
-   5. NAVIGATION (ion-toolbar / ion-tab-bar)
-   Frosted chrome bars — translucent in light, opaque in dark (see §12).
-   ============================================================================= */
 
 ion-toolbar {
   --background: var(--ion-toolbar-background);
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  border-bottom: 1px solid var(--glass-border-bottom);
-  box-shadow: var(--glass-highlight);
+  --color: var(--ion-toolbar-color);
+  --border-width: 0;
+  border-bottom: 1px solid var(--app-border);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(var(--toolbar-blur)) saturate(var(--toolbar-saturation));
+  -webkit-backdrop-filter: blur(var(--toolbar-blur)) saturate(var(--toolbar-saturation));
 }
 
-ion-tab-bar {
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  border-top: 1px solid var(--glass-border);
-  box-shadow: inset 0 1px 0 var(--glass-border-top);
+ion-card {
+  --background: transparent;
+  margin: 0;
+  border-radius: var(--app-radius-lg);
+  overflow: hidden;
 }
 
-
-/* =============================================================================
-   6. ion-segment / ion-segment-button
-   ============================================================================= */
-
-ion-segment {
-  background: rgba(var(--ion-card-background-rgb), 0.18);
-  backdrop-filter: blur(16px) saturate(1.5);
-  -webkit-backdrop-filter: blur(16px) saturate(1.5);
-  border: 1px solid var(--glass-border);
-  border-top-color: var(--glass-border-top);
-  border-radius: 16px;
-  box-shadow: var(--glass-inner-glow);
-  padding: 3px;
+ion-item {
+  --background: var(--app-item-surface);
+  --color: var(--app-text);
+  --border-color: transparent;
+  --inner-border-width: 0;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-md);
+  backdrop-filter: blur(var(--glass-item-blur)) saturate(var(--glass-item-saturation));
+  -webkit-backdrop-filter: blur(var(--glass-item-blur)) saturate(var(--glass-item-saturation));
+  transition:
+    border-color var(--app-transition),
+    background var(--app-transition),
+    box-shadow var(--app-transition);
 }
 
-ion-segment-button {
-  --indicator-color:      rgba(var(--ion-color-primary-rgb), 0.16);
-  --background-checked:   rgba(var(--ion-color-primary-rgb), 0.10);
-  --indicator-box-shadow:
-    0 2px 12px rgba(var(--ion-color-primary-rgb), 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.30);
-  border-radius: 13px;
-  transition: var(--liquid-transition);
+ion-item.item-has-focus,
+ion-item:focus-within {
+  border-color: var(--app-border-accent);
+  box-shadow: var(--app-focus-ring);
 }
 
-
-/* =============================================================================
-   7. OVERLAYS (ion-alert, ion-action-sheet)
-   Very deep frost — like looking through thick glass.
-   ============================================================================= */
-
-ion-alert .alert-wrapper,
-ion-action-sheet .action-sheet-wrapper {
-  backdrop-filter: blur(40px) saturate(2.0);
-  -webkit-backdrop-filter: blur(40px) saturate(2.0);
-  background: rgba(var(--ion-card-background-rgb), 0.50) !important;
-  border: 1px solid var(--glass-border);
-  border-top-color: var(--glass-border-top);
-  border-radius: 24px;
-  box-shadow:
-    0 32px 100px rgba(0, 0, 0, 0.18),
-    var(--glass-highlight),
-    var(--glass-inner-glow);
+ion-input,
+ion-textarea,
+ion-select,
+ion-searchbar {
+  --background: transparent;
+  --color: var(--app-text);
+  --placeholder-color: var(--app-text-subtle);
+  --highlight-color-focused: var(--app-accent);
+  --highlight-color-valid: var(--app-accent);
+  --highlight-color-invalid: var(--app-danger);
+  --border-radius: var(--app-radius-sm);
 }
 
+ion-searchbar {
+  --background: var(--app-search-surface);
+  --box-shadow: none;
+  --clear-button-color: var(--app-text-subtle);
+  --icon-color: var(--app-text-subtle);
+  --placeholder-color: var(--app-text-subtle);
+}
 
-/* =============================================================================
-   8. ion-button
-   ============================================================================= */
+ion-select::part(text),
+ion-input::part(native),
+ion-textarea::part(native) {
+  color: var(--app-text);
+}
 
 ion-button {
-  --border-radius: 14px;
-  --box-shadow: var(--glass-shadow);
-  transition: var(--liquid-spring);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  transition:
+    transform var(--app-transition),
+    box-shadow var(--app-transition),
+    filter var(--app-transition);
 }
 
-/* Outline / clear buttons also get a touch of glass blur */
-ion-button[fill="outline"],
-ion-button[fill="clear"] {
-  backdrop-filter: blur(12px) saturate(1.4);
-  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+ion-button:not([fill="clear"]):not([fill="outline"]) {
+  --border-radius: 10px;
+  --padding-start: 16px;
+  --padding-end: 16px;
+  --box-shadow: 0 0 0 1px rgba(94, 106, 210, 0.34), 0 8px 24px rgba(94, 106, 210, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  --background: var(--app-accent);
+  --background-hover: var(--app-accent-bright);
+  --background-activated: #545dbc;
+  --color: #ffffff;
+}
+
+ion-button[fill="clear"]:not([color]),
+ion-button[fill="outline"]:not([color]) {
+  --background: rgba(255, 255, 255, 0.04);
+  --border-color: var(--app-border);
+  --box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 ion-button:hover {
-  --box-shadow: 0 8px 28px rgba(var(--ion-color-primary-rgb), 0.22);
   transform: translateY(-1px);
+  filter: brightness(1.04);
 }
 
 ion-button:active {
-  transform: translateY(0) scale(0.98);
+  transform: scale(0.98);
 }
 
-
-/* =============================================================================
-   9. ion-chip / ion-badge
-   ============================================================================= */
+ion-chip,
+ion-badge {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
 
 ion-chip {
-  backdrop-filter: blur(12px) saturate(1.4);
-  -webkit-backdrop-filter: blur(12px) saturate(1.4);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-highlight);
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  color: var(--app-text);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 ion-badge {
-  backdrop-filter: blur(10px) saturate(1.3);
-  -webkit-backdrop-filter: blur(10px) saturate(1.3);
-  box-shadow: var(--glass-highlight);
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
-
-/* =============================================================================
-   10. ion-item / ion-toggle
-   ============================================================================= */
-
-ion-item  { --background: var(--ion-item-background); transition: var(--liquid-transition); }
-ion-toggle { transition: var(--liquid-transition); }
-
-
-/* =============================================================================
-   11. ion-toast
-   ============================================================================= */
-
-ion-toast::part(container) {
-  backdrop-filter: blur(28px) saturate(1.8);
-  -webkit-backdrop-filter: blur(28px) saturate(1.8);
-  background: var(--glass-tint, rgba(255, 255, 255, 0.40));
-  border: 1px solid var(--glass-border);
-  border-top-color: var(--glass-border-top);
+ion-toast::part(container),
+ion-alert .alert-wrapper,
+ion-action-sheet .action-sheet-wrapper {
+  background: rgba(10, 10, 12, 0.94) !important;
+  color: var(--app-text);
+  border: 1px solid var(--app-border);
   border-radius: 20px;
-  box-shadow: var(--glass-shadow), var(--glass-highlight);
-  color: var(--ion-text-color, #1a1a1a);
+  box-shadow: var(--app-shadow-lg);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
 }
 
-
-/* =============================================================================
-   12. DARK-MODE IONIC OVERRIDES
-   Solid OLED black at rest — glass activates only on hover/interaction.
-   ============================================================================= */
-
-/* Content background */
-html.dark ion-content { --background: #000000; }
-
-/* Cards — solid, no glass at rest; pseudo-elements removed */
-html.dark ion-card {
-  --background: #000000;
-  background:   #000000;
-  --color: var(--ion-text-color);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-html.dark ion-card::before,
-html.dark ion-card::after { display: none; }
-
-html.dark ion-card-header { --background: transparent; }
-
-/* Toolbar & tab bar — solid black, no blur */
-html.dark ion-toolbar {
-  --background: #000000;
-  --color:      var(--ion-toolbar-color);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  border-bottom-color: rgba(255, 255, 255, 0.04);
-}
-html.dark ion-tab-bar {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  border-top-color: rgba(255, 255, 255, 0.04);
+:focus-visible {
+  outline: none;
+  box-shadow: var(--app-focus-ring);
 }
 
-/* Items & lists */
-html.dark ion-item { --background: transparent; --color: var(--ion-item-color); }
-html.dark ion-list { --background: transparent; }
-
-/* Segments */
-html.dark ion-segment {
-  background: #000000;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  border-color: rgba(255, 255, 255, 0.04);
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
 
-/* Buttons — no box-shadow at rest; subtle indigo glow on hover */
-html.dark ion-button { --box-shadow: none; }
-html.dark ion-button[fill="outline"],
-html.dark ion-button[fill="clear"] {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-html.dark ion-button:hover {
-  --box-shadow: 0 6px 20px rgba(129, 140, 248, 0.15);
-  transform: translateY(-2px);
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-/* Chips & badges — solid */
-html.dark ion-chip {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  border-color: rgba(255, 255, 255, 0.06);
-}
-html.dark ion-badge {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
 }
 
-/* Toasts — keep light glass even in dark (they're transient overlays) */
-html.dark ion-toast::part(container) {
-  backdrop-filter: blur(24px) saturate(1.8);
-  -webkit-backdrop-filter: blur(24px) saturate(1.8);
-  background:   rgba(20, 20, 20, 0.85);
-  border-color: rgba(255, 255, 255, 0.10);
-  color: #f0f0f0;
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
 }
 
-/* Alerts & action sheets — solid dark instead of frosted */
-html.dark ion-alert .alert-wrapper,
-html.dark ion-action-sheet .action-sheet-wrapper {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  background:   #0a0a0a !important;
-  border-color: rgba(255, 255, 255, 0.06);
+@media (max-width: 767px) {
+  .ambient-page__content {
+    width: min(100%, calc(100% - 24px));
+    padding-top: 16px;
+    padding-bottom: 112px;
+  }
 }
-
-/* Inputs */
-html.dark ion-textarea,
-html.dark ion-input,
-html.dark ion-select { --background: #000000; }
-
-
-/* =============================================================================
-   13. BASE / GLOBAL STYLES
-   ============================================================================= */
-
-/* Global transition for theme switches */
-body,
-ion-content,
-ion-card,
-ion-toolbar,
-ion-item,
-ion-tab-bar {
-  transition: var(--liquid-transition);
-}
-
-body,
-.ion-page,
-ion-content {
-  background: var(--ion-background-color);
-  color:      var(--ion-text-color);
-}
-
-h1, h2, h3, h4, h5, h6 { color: var(--ion-text-color); }
-p                        { color: var(--ion-text-color); opacity: 0.9; }
-.text-muted              { color: var(--ion-color-medium); }
-
-ion-item { --background: var(--ion-item-background); }
-
-
-/* =============================================================================
-   14. INPUT FIELDS (ion-textarea, ion-input, ion-select)
-   ============================================================================= */
-
-ion-textarea,
-ion-input,
-ion-select {
-  --background:    rgba(var(--ion-card-background-rgb), 0.18);
-  --border-radius: 14px;
-}
-
-
-/* =============================================================================
-   15. CUSTOM SCROLLBAR (WebKit)
-   ============================================================================= */
-
-::-webkit-scrollbar               { width: 6px; }
-::-webkit-scrollbar-track         { background: transparent; }
-::-webkit-scrollbar-thumb         { background: rgba(var(--ion-text-color-rgb), 0.10); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover   { background: rgba(var(--ion-text-color-rgb), 0.18); }
-
-
-/* =============================================================================
-   16. ACCESSIBILITY — prefers-reduced-motion
-   Disables the mesh animation and collapses all transitions to near-zero.
-   ============================================================================= */
 
 @media (prefers-reduced-motion: reduce) {
-  body::before { animation: none; }
+  body::before {
+    animation: none;
+  }
 
   *,
   *::before,
   *::after {
     transition-duration: 0.01ms !important;
-    animation-duration:  0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
   }
 }
