@@ -21,11 +21,11 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content :scroll-events="true" @ionScroll="handleScroll">
-      <div class="page-layout">
+    <ion-content class="ambient-page" :scroll-events="true" @ionScroll="handleScroll">
+      <div class="page-layout ambient-page__content">
 
         <!-- ── LEFT NAV (desktop only) ─────────────────── -->
-        <nav class="side-nav">
+        <nav class="side-nav surface-card">
           <!-- Primary nav tabs -->
           <button
             class="side-nav-item"
@@ -51,7 +51,7 @@
             <ion-icon :icon="activeTab === 'chat' ? chatbubble : chatbubbleOutline"></ion-icon>
             <span>Chat</span>
 
-            <span v-if="totalUnread > 0" class="nav-badge" style="position:absolute; top:0px; right:0px; z-index:9999; background:red; color:white;">
+            <span v-if="totalUnread > 0" class="nav-badge nav-badge--desktop">
               {{ totalUnread > 99 ? '99+' : totalUnread }}
             </span>
           </button>
@@ -90,11 +90,11 @@
         </nav>
 
         <!-- ── MAIN CONTENT ────────────────────────────── -->
-        <main class="main-content">
+        <main class="main-content surface-card">
 
           <!-- HOME TAB -->
           <div v-if="activeTab === 'home'" class="home-tab">
-            <div class="feed-mode-toggle">
+            <div class="feed-mode-toggle surface-pill">
               <button
                 class="mode-btn"
                 :class="{ active: feedMode === 'for-you' }"
@@ -307,7 +307,7 @@
               </div>
 
               <div v-if="chatList.length === 0 && !userSearchQuery" class="empty-chat">
-                <ion-icon :icon="chatbubbleOutline" style="font-size: 4rem; color: var(--ion-color-medium);"></ion-icon>
+                <ion-icon :icon="chatbubbleOutline" class="empty-chat-icon"></ion-icon>
                 <p>No conversations yet</p>
                 <p class="empty-hint">Search for users above to start chatting</p>
               </div>
@@ -342,7 +342,7 @@
 
         <!-- ── RIGHT SIDEBAR (desktop only) ───────────── -->
         <aside class="right-sidebar">
-          <div class="sidebar-section">
+          <div class="sidebar-section surface-card">
             <div class="sidebar-header">
               <span>Communities</span>
               <button class="sidebar-link" @click="activeTab = 'communities'">See all</button>
@@ -376,7 +376,7 @@
             </div>
           </div>
 
-          <div class="sidebar-section sidebar-about">
+          <div class="sidebar-section sidebar-about surface-card">
             <p class="sidebar-about-title">Interpoll</p>
             <p class="sidebar-about-text">A peer-to-peer community platform built on GunDB. Posts and votes sync across all peers.</p>
           </div>
@@ -400,7 +400,7 @@
       <button class="nav-item" :class="{ active: activeTab === 'chat' }" @click="activeTab = 'chat'">
         <ion-icon :icon="activeTab === 'chat' ? chatbubble : chatbubbleOutline"></ion-icon>
         <span>Chat</span>
-        <span v-if="totalUnread > 0" class="nav-badge" style="position:absolute; top:0px; right:20px; z-index:9999; background:red; color:white;">
+        <span v-if="totalUnread > 0" class="nav-badge nav-badge--mobile">
           {{ totalUnread > 99 ? '99+' : totalUnread }}
         </span>
       </button>
@@ -1202,68 +1202,72 @@ if (FEED_DEBUG) {
   font-family: 'Grand Hotel', cursive;
   font-size: 32px;
   margin-left: 20px;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.02em;
   padding-inline-start: 0;
-  --color: var(--ion-text-color);
+  --color: var(--app-text);
+  background: linear-gradient(to bottom, var(--app-heading-start), var(--app-heading-end));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 ion-header {
-  transition: transform 0.3s ease;
+  transition: transform var(--app-transition);
 }
+
 ion-header::after {
   display: none;
 }
+
 ion-header ion-toolbar {
   --border-width: 0;
   --box-shadow: none;
-  border-bottom: 1px solid var(--glass-border-bottom);
 }
+
 ion-header.header-hidden {
   transform: translateY(-100%);
 }
 
 .feed-mode-toggle {
   display: inline-flex;
-  gap: 6px;
+  gap: 8px;
   margin: 12px 16px 8px;
-  padding: 4px;
-  border-radius: 999px;
-  border: 1px solid var(--glass-border);
-  background: rgba(var(--ion-card-background-rgb), 0.22);
-  backdrop-filter: blur(10px) saturate(1.3);
-  -webkit-backdrop-filter: blur(10px) saturate(1.3);
+  padding: 5px;
 }
 
 .mode-btn {
   border: none;
   border-radius: 999px;
-  padding: 6px 14px;
+  padding: 8px 15px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--ion-color-medium);
+  color: var(--app-text-muted);
   background: transparent;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--app-transition);
 }
 
 .mode-btn.active {
   color: #fff;
-  background: var(--ion-color-primary);
+  background: linear-gradient(180deg, var(--app-accent-bright), var(--app-accent));
+  box-shadow: 0 0 0 1px rgba(var(--app-accent-rgb), 0.38), 0 8px 24px rgba(var(--app-accent-rgb), 0.28);
 }
 
 .new-content-banner {
   position: sticky;
-  top: 0;
+  top: 12px;
   z-index: 10;
-  background: var(--ion-color-primary);
+  width: calc(100% - 32px);
+  margin: 0 16px 16px;
+  background: linear-gradient(180deg, var(--app-accent-bright), var(--app-accent));
   color: white;
   text-align: center;
   padding: 10px 16px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  border-radius: 0 0 12px 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  border-radius: 14px;
+  box-shadow: 0 0 0 1px rgba(var(--app-accent-rgb), 0.35), 0 12px 32px rgba(var(--app-accent-rgb), 0.24);
   animation: slideDown 0.25s ease;
   user-select: none;
 }
@@ -1276,8 +1280,7 @@ ion-header.header-hidden {
 .page-layout {
   display: flex;
   align-items: flex-start;
-  max-width: 1200px;
-  margin: 0 auto;
+  gap: 20px;
   position: relative;
 }
 
@@ -1289,20 +1292,17 @@ ion-header.header-hidden {
 .side-nav  { display: none; }
 .right-sidebar { display: none; }
 
-/* Header utility buttons: visible on mobile, hidden on desktop */
 .header-util-buttons {
   display: flex;
 }
 
-/* ── Side nav divider ── */
 .side-nav-divider {
   height: 1px;
-  background: var(--glass-border-bottom);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
   margin: 8px 12px;
   border-radius: 1px;
 }
 
-/* ── Loading / Empty ── */
 .loading-container {
   display: flex;
   flex-direction: column;
@@ -1310,7 +1310,7 @@ ion-header.header-hidden {
   justify-content: center;
   padding: 48px 24px;
   gap: 16px;
-  color: var(--ion-color-medium);
+  color: var(--app-text-muted);
 }
 
 .empty-state {
@@ -1320,19 +1320,34 @@ ion-header.header-hidden {
   justify-content: center;
   padding: 64px 24px;
   text-align: center;
-  gap: 6px;
+  gap: 8px;
 }
-.empty-state ion-icon { color: var(--ion-color-medium); margin-bottom: 10px; }
-.empty-state p        { color: var(--ion-color-medium); margin: 0; }
-.subtitle             { font-size: 13px; }
 
-/* ── Communities toolbar ── */
+.empty-state ion-icon,
+.empty-chat-icon {
+  color: var(--app-text-muted);
+  margin-bottom: 10px;
+  font-size: 4rem;
+}
+
+.empty-state p,
+.empty-chat p {
+  color: var(--app-text-muted);
+  margin: 0;
+}
+
+.subtitle,
+.empty-hint {
+  font-size: 13px;
+  color: var(--app-text-subtle);
+}
+
 .communities-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--glass-border-bottom);
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .tab-bar { display: flex; }
@@ -1344,24 +1359,24 @@ ion-header.header-hidden {
   padding: 8px 14px;
   font-size: 14px;
   font-weight: 500;
-  color: var(--ion-color-medium);
+  color: var(--app-text-muted);
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  transition: color var(--app-transition), border-color var(--app-transition);
 }
+
 .tab-btn.active {
-  color: var(--ion-color-primary);
-  border-bottom-color: var(--ion-color-primary);
+  color: var(--app-accent-bright);
+  border-bottom-color: var(--app-accent);
   font-weight: 700;
 }
 
-/* ── Create Tab ── */
 .section-label {
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--ion-color-medium);
-  margin: 20px 16px 10px;
+  letter-spacing: 0.14em;
+  color: var(--app-text-subtle);
+  margin: 20px 16px 12px;
 }
 
 .create-options { display: flex; flex-direction: column; }
@@ -1370,31 +1385,44 @@ ion-header.header-hidden {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px 16px;
+  padding: 16px 18px;
   cursor: pointer;
-  border-bottom: 1px solid var(--glass-border-bottom);
-  transition: background 0.15s;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  transition:
+    background var(--app-transition),
+    transform var(--app-transition);
 }
-.create-option-item:active { background: rgba(var(--ion-text-color-rgb), 0.04); }
+
+.create-option-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  transform: translateY(-1px);
+}
+
+.create-option-item:active {
+  background: rgba(255, 255, 255, 0.06);
+}
 
 .create-icon-wrap {
   width: 40px;
   height: 40px;
-  border-radius: 10px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   font-size: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
-.create-icon-wrap.primary   { background: rgba(var(--ion-color-primary-rgb),   0.12); color: var(--ion-color-primary); }
-.create-icon-wrap.secondary { background: rgba(var(--ion-color-secondary-rgb), 0.12); color: var(--ion-color-secondary); }
-.create-icon-wrap.tertiary  { background: rgba(var(--ion-color-tertiary-rgb),  0.12); color: var(--ion-color-tertiary); }
+
+.create-icon-wrap.primary   { background: rgba(var(--app-accent-rgb), 0.12); color: var(--app-accent-bright); }
+.create-icon-wrap.secondary { background: rgba(139, 92, 246, 0.12); color: rgb(167, 139, 250); }
+.create-icon-wrap.tertiary  { background: rgba(124, 140, 255, 0.12); color: rgb(160, 173, 255); }
 
 .option-content      { flex: 1; }
 .option-content h3   { margin: 0 0 2px; font-size: 15px; font-weight: 600; }
-.option-content p    { margin: 0; font-size: 13px; color: var(--ion-color-medium); }
-.chevron             { font-size: 18px; color: var(--ion-color-medium); }
+.option-content p    { margin: 0; font-size: 13px; color: var(--app-text-muted); }
+.chevron             { font-size: 18px; color: var(--app-text-muted); }
 
 .quick-post-section  { margin-top: 8px; }
 .quick-communities   { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 16px; }
@@ -1402,37 +1430,47 @@ ion-header.header-hidden {
 .nav-item {
   position: relative;
 }
+
 .nav-item .nav-badge {
   position: absolute;
-  top: -2px;
+  top: -4px;
   right: 18px;
-  background: var(--ion-color-danger);
+  background: linear-gradient(180deg, #fb7185, #ef4444);
   color: #fff;
-  border-radius: 10px;
+  border-radius: 999px;
   font-size: 9px;
   font-weight: 700;
-  padding: 1px 5px;
+  padding: 2px 6px;
   min-width: 16px;
   text-align: center;
   line-height: 1.4;
+  box-shadow: 0 8px 18px rgba(239, 68, 68, 0.32);
 }
 
-/* ── Nav Badge ── */
 .nav-badge {
-  background: var(--ion-color-danger);
+  background: linear-gradient(180deg, #fb7185, #ef4444);
   color: #fff;
-  border-radius: 10px;
+  border-radius: 999px;
   font-size: 10px;
-  padding: 1px 5px;
+  padding: 2px 6px;
   margin-left: 4px;
   min-width: 16px;
   text-align: center;
+  box-shadow: 0 8px 18px rgba(239, 68, 68, 0.24);
 }
 
-/* ── Bottom Spacing ── */
+.nav-badge--desktop {
+  top: -4px !important;
+  right: 0 !important;
+}
+
+.nav-badge--mobile {
+  top: 0 !important;
+  right: 20px !important;
+}
+
 .bottom-spacing { height: 80px; }
 
-/* ── Mobile Bottom Nav ── */
 .bottom-nav {
   position: fixed;
   bottom: 0;
@@ -1441,14 +1479,14 @@ ion-header.header-hidden {
   display: flex;
   justify-content: space-around;
   align-items: center;
-  background: rgba(var(--ion-background-color-rgb), 0.60);
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  border-top: 1px solid var(--glass-border);
-  box-shadow: inset 0 1px 0 var(--glass-border-top);
+  background: color-mix(in srgb, var(--app-bg-elevated) 78%, transparent);
+  backdrop-filter: blur(22px) saturate(1.18);
+  -webkit-backdrop-filter: blur(22px) saturate(1.18);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 -18px 40px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
   z-index: 1000;
-  transition: transform 0.3s ease;
+  transition: transform var(--app-transition);
 }
 .bottom-nav-hidden { transform: translateY(100%); }
 
@@ -1462,25 +1500,31 @@ ion-header.header-hidden {
   border: none;
   padding: 2px 4px;
   cursor: pointer;
-  color: var(--ion-color-medium);
-  transition: color 0.2s;
+  color: var(--app-text-muted);
+  transition: color var(--app-transition);
   flex: 1;
   max-width: 120px;
 }
 .nav-item ion-icon  { font-size: 22px; }
 .nav-item span      { font-size: 11px; font-weight: 500; }
-.nav-item.active    { color: var(--ion-color-primary); }
+.nav-item.active    { color: var(--app-accent-bright); }
 .nav-item.active span { font-weight: 700; }
 
-/* ── Chat Tab ── */
 .tab-intro { padding: 16px 16px 8px; }
-.tab-intro h2 { margin: 0 0 4px; font-size: 22px; font-weight: 700; }
-.tab-intro p  { margin: 0; color: var(--ion-color-medium); font-size: 14px; }
+.tab-intro h2 {
+  margin: 0 0 4px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.tab-intro p  { margin: 0; color: var(--app-text-muted); font-size: 14px; }
 
 .user-search-box {
-  padding: 8px 8px;
+  margin: 0 16px 12px;
+  padding: 6px;
   border-radius: 999px;
-  border-bottom: 1px solid var(--glass-border-bottom);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
 }
 .user-search-box ion-searchbar {
   --border-radius: 20px;
@@ -1488,8 +1532,13 @@ ion-header.header-hidden {
 }
 
 .user-search-results {
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  margin: 0 16px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  overflow: hidden;
 }
 
 .search-results-header {
@@ -1497,16 +1546,16 @@ ion-header.header-hidden {
   justify-content: space-between;
   align-items: center;
   padding: 10px 16px;
-  border-bottom: 1px solid var(--glass-border-bottom);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   font-size: 13px;
   font-weight: 600;
-  color: var(--ion-color-medium);
+  color: var(--app-text-muted);
 }
 
 .clear-search-btn {
   background: none;
   border: none;
-  color: var(--ion-color-primary);
+  color: var(--app-accent-bright);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -1518,33 +1567,33 @@ ion-header.header-hidden {
   gap: 14px;
   padding: 12px 16px;
   cursor: pointer;
-  border-bottom: 1px solid var(--glass-border-bottom);
-  transition: background 0.15s;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  transition: background var(--app-transition);
 }
-.user-result-item:hover { background: rgba(var(--ion-card-background-rgb), 0.35); }
+.user-result-item:hover { background: rgba(255, 255, 255, 0.04); }
 
 .user-avatar {
   width: 46px;
   height: 46px;
   border-radius: 50%;
-  background: rgba(var(--ion-card-background-rgb), 0.28);
-  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
-.user-avatar ion-icon { font-size: 46px; color: var(--ion-color-medium); }
+.user-avatar ion-icon { font-size: 46px; color: var(--app-text-muted); }
 
 .user-info    { flex: 1; min-width: 0; }
 .user-name    { font-weight: 600; font-size: 15px; margin-bottom: 2px; }
-.user-username { font-size: 13px; color: var(--ion-color-medium); }
-.chat-icon    { font-size: 22px; color: var(--ion-color-primary); flex-shrink: 0; }
+.user-username { font-size: 13px; color: var(--app-text-muted); }
+.chat-icon    { font-size: 22px; color: var(--app-accent-bright); flex-shrink: 0; }
 
 .no-users-found {
   text-align: center;
   padding: 32px 16px;
-  color: var(--ion-color-medium);
+  color: var(--app-text-muted);
 }
 
 .searching-users {
@@ -1553,21 +1602,15 @@ ion-header.header-hidden {
   align-items: center;
   padding: 32px;
   gap: 12px;
-  color: var(--ion-color-medium);
+  color: var(--app-text-muted);
 }
-.user-search-box{
-  border-radius: 999px;
-}
-html.dark .user-search-box ion-searchbar {
-  --background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.10);
-}
+
 .chat-list-header {
   padding: 10px 16px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--ion-color-medium);
-  border-bottom: 1px solid var(--glass-border-bottom);
+  color: var(--app-text-muted);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .empty-chat {
@@ -1578,42 +1621,40 @@ html.dark .user-search-box ion-searchbar {
   text-align: center;
   gap: 8px;
 }
-.empty-chat p    { margin: 0; color: var(--ion-color-medium); }
-.empty-hint      { font-size: 13px; }
 
 .chat-item {
   display: flex;
   align-items: center;
   gap: 14px;
   padding: 12px 16px;
-  background: rgba(var(--ion-card-background-rgb), 0.18);
-  border-bottom: 1px solid var(--glass-border-bottom);
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--app-transition);
 }
-.chat-item:hover { background: rgba(var(--ion-card-background-rgb), 0.35); }
+.chat-item:hover { background: rgba(255, 255, 255, 0.05); }
 
 .chat-avatar {
   width: 46px;
   height: 46px;
   border-radius: 50%;
-  background: rgba(var(--ion-card-background-rgb), 0.28);
-  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
-.chat-avatar ion-icon { font-size: 46px; color: var(--ion-color-medium); }
+.chat-avatar ion-icon { font-size: 46px; color: var(--app-text-muted); }
 
 .chat-info         { flex: 1; min-width: 0; }
 .chat-header-row   { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
 .chat-name         { font-weight: 600; font-size: 15px; }
-.chat-time         { font-size: 12px; color: var(--ion-color-medium); }
-.chat-preview      { font-size: 14px; color: var(--ion-color-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-time         { font-size: 12px; color: var(--app-text-subtle); }
+.chat-preview      { font-size: 14px; color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .unread-badge {
-  background: var(--ion-color-primary);
+  background: linear-gradient(180deg, var(--app-accent-bright), var(--app-accent));
   color: #fff;
   border-radius: 12px;
   padding: 2px 8px;
@@ -1622,17 +1663,14 @@ html.dark .user-search-box ion-searchbar {
   min-width: 20px;
   text-align: center;
   flex-shrink: 0;
+  box-shadow: 0 8px 24px rgba(var(--app-accent-rgb), 0.28);
 }
 
-/* ══════════════════════════════════════════════════
-   Tablet (768px+)
-   ══════════════════════════════════════════════════ */
 @media (min-width: 768px) {
   .logo-title { margin-left: 10%; }
   .bottom-nav     { display: none; }
   .bottom-spacing { height: 24px; }
 
-  /* Hide header utility buttons — they live in the side-nav now */
   .header-util-buttons { display: none; }
 
   ion-header ion-toolbar {
@@ -1641,7 +1679,7 @@ html.dark .user-search-box ion-searchbar {
     padding-inline-end: 32px;
   }
 
-  .page-layout { padding: 0 16px; gap: 24px; }
+  .page-layout { gap: 24px; }
 
   .side-nav {
     display: flex;
@@ -1650,8 +1688,8 @@ html.dark .user-search-box ion-searchbar {
     width: 200px;
     flex-shrink: 0;
     position: sticky;
-    top: 16px;
-    padding-top: 16px;
+    top: 24px;
+    padding: 16px 12px;
   }
 
   .side-nav-item {
@@ -1664,9 +1702,9 @@ html.dark .user-search-box ion-searchbar {
     border-radius: 12px;
     font-size: 15px;
     font-weight: 500;
-    color: var(--ion-color-medium);
+    color: var(--app-text-muted);
     cursor: pointer;
-    transition: var(--liquid-transition);
+    transition: var(--app-transition);
     text-align: left;
     width: 100%;
     position: relative;
@@ -1674,21 +1712,18 @@ html.dark .user-search-box ion-searchbar {
   .side-nav-item ion-icon { font-size: 20px; flex-shrink: 0; }
 
   .side-nav-item:hover {
-    background: rgba(var(--ion-text-color-rgb), 0.06);
-    color: var(--ion-text-color);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--app-text);
   }
 
   .side-nav-item.active {
-    background: rgba(var(--ion-color-primary-rgb), 0.12);
-    backdrop-filter: blur(12px) saturate(1.4);
-    -webkit-backdrop-filter: blur(12px) saturate(1.4);
-    border: 1px solid rgba(var(--ion-color-primary-rgb), 0.20);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.20);
-    color: var(--ion-color-primary);
+    background: rgba(var(--app-accent-rgb), 0.12);
+    border: 1px solid rgba(var(--app-accent-rgb), 0.24);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 12px 24px rgba(var(--app-accent-rgb), 0.12);
+    color: var(--app-accent-bright);
     font-weight: 700;
   }
 
-  /* Utility nav items: slightly smaller / more muted than primary nav */
   .side-nav-util {
     font-size: 14px;
     padding: 8px 14px;
@@ -1700,9 +1735,6 @@ html.dark .user-search-box ion-searchbar {
   .chat-tab { max-width: 700px; margin: 0 auto; }
 }
 
-/* ══════════════════════════════════════════════════
-   Desktop (1024px+)
-   ══════════════════════════════════════════════════ */
 @media (min-width: 1024px) {
   .page-layout { gap: 32px; }
   .side-nav    { width: 220px; }
@@ -1714,20 +1746,12 @@ html.dark .user-search-box ion-searchbar {
     width: 280px;
     flex-shrink: 0;
     position: sticky;
-    top: 16px;
-    padding-top: 16px;
+    top: 24px;
+    padding-top: 0;
     align-self: flex-start;
   }
 
   .sidebar-section {
-    background: rgba(var(--ion-card-background-rgb), 0.28);
-    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-    border: 1px solid var(--glass-border);
-    border-top-color: var(--glass-border-top);
-    border-bottom-color: var(--glass-border-bottom);
-    border-radius: 16px;
-    box-shadow: var(--glass-shadow), var(--glass-highlight), var(--glass-inner-glow);
     overflow: hidden;
   }
 
@@ -1739,15 +1763,15 @@ html.dark .user-search-box ion-searchbar {
     font-size: 13px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--ion-color-medium);
+    letter-spacing: 0.14em;
+    color: var(--app-text-subtle);
   }
 
   .sidebar-link {
     background: none;
     border: none;
     font-size: 12px;
-    color: var(--ion-color-primary);
+    color: var(--app-accent-bright);
     cursor: pointer;
     font-weight: 600;
     padding: 0;
@@ -1761,17 +1785,17 @@ html.dark .user-search-box ion-searchbar {
     gap: 10px;
     padding: 8px 14px;
     cursor: pointer;
-    transition: background 0.15s;
-    border-top: 1px solid var(--glass-border-bottom);
+    transition: background var(--app-transition);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
   }
-  .sidebar-community-item:hover { background: rgba(var(--ion-card-background-rgb), 0.35); }
+  .sidebar-community-item:hover { background: rgba(255, 255, 255, 0.04); }
 
   .sidebar-community-avatar {
     width: 32px;
     height: 32px;
     border-radius: 8px;
-    background: rgba(var(--ion-color-primary-rgb), 0.12);
-    color: var(--ion-color-primary);
+    background: rgba(var(--app-accent-rgb), 0.12);
+    color: var(--app-accent-bright);
     font-size: 14px;
     font-weight: 700;
     display: flex;
@@ -1782,17 +1806,14 @@ html.dark .user-search-box ion-searchbar {
 
   .sidebar-community-info  { flex: 1; min-width: 0; }
   .sidebar-community-name  { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .sidebar-community-meta  { display: block; font-size: 12px; color: var(--ion-color-medium); }
-  .joined-check            { font-size: 16px; color: var(--ion-color-primary); flex-shrink: 0; }
+  .sidebar-community-meta  { display: block; font-size: 12px; color: var(--app-text-muted); }
+  .joined-check            { font-size: 16px; color: var(--app-accent-bright); flex-shrink: 0; }
 
   .sidebar-about           { padding: 14px; }
   .sidebar-about-title     { font-family: 'Grand Hotel', cursive; font-size: 20px; margin: 0 0 6px; }
-  .sidebar-about-text      { font-size: 12px; color: var(--ion-color-medium); line-height: 1.5; margin: 0; }
+  .sidebar-about-text      { font-size: 12px; color: var(--app-text-muted); line-height: 1.6; margin: 0; }
 }
 
-/* ══════════════════════════════════════════════════
-   Large Desktop (1280px+)
-   ══════════════════════════════════════════════════ */
 @media (min-width: 1280px) {
   .side-nav      { width: 240px; }
   .right-sidebar { width: 300px; }

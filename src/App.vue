@@ -1,7 +1,10 @@
 <template>
   <ion-app>
     <AppLoader v-if="!appReady" />
-    <ion-router-outlet v-else />
+    <div v-else class="app-shell">
+      <ion-router-outlet />
+      <CommandPalette />
+    </div>
   </ion-app>
 </template>
 
@@ -14,6 +17,7 @@ import { WebSocketService } from './services/websocketService';
 import { GunService } from './services/gunService';
 import { warmupFromDB } from './services/dbWarmup';
 import AppLoader from './components/AppLoader.vue';
+import CommandPalette from './components/CommandPalette.vue';
 
 const chainStore = useChainStore();
 const router = useRouter();
@@ -101,8 +105,11 @@ onUnmounted(() => {
 </script>
 
 <style>
-/* Remove the old padding offset — no full-width bar anymore */
 ion-header ion-toolbar:first-of-type {
   padding-top: env(safe-area-inset-top, 0px) !important;
+}
+
+ion-app {
+  background: transparent;
 }
 </style>

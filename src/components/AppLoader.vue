@@ -84,76 +84,104 @@ onUnmounted(() => cancelAnimationFrame(rafId))
 @import url('https://fonts.googleapis.com/css2?family=Grand+Hotel&display=swap');
 
 .ip-loader {
-  position: fixed; inset: 0; z-index: 9999;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  background: #0a0a0f; padding: 2rem;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 2rem;
+  background: radial-gradient(ellipse at top, #0a0a0f 0%, #050506 48%, #020203 100%);
 }
 
-/* subtle star-field texture */
 .ip-loader::before {
   content: '';
-  position: absolute; inset: 0; z-index: 0;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
   background-image:
-    radial-gradient(1px 1px at 20% 30%, rgba(159,151,240,0.25) 0%, transparent 100%),
-    radial-gradient(1px 1px at 75% 15%, rgba(159,151,240,0.2) 0%, transparent 100%),
-    radial-gradient(1px 1px at 55% 70%, rgba(159,151,240,0.2) 0%, transparent 100%),
-    radial-gradient(1px 1px at 10% 80%, rgba(159,151,240,0.15) 0%, transparent 100%),
-    radial-gradient(1px 1px at 88% 60%, rgba(159,151,240,0.2) 0%, transparent 100%),
-    radial-gradient(1px 1px at 40% 90%, rgba(159,151,240,0.15) 0%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 65% 40%, rgba(159,151,240,0.3) 0%, transparent 100%),
-    radial-gradient(1px 1px at 30% 55%, rgba(159,151,240,0.15) 0%, transparent 100%);
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    radial-gradient(circle at 20% 30%, rgba(94, 106, 210, 0.16), transparent 24%),
+    radial-gradient(circle at 80% 20%, rgba(124, 140, 255, 0.12), transparent 28%);
+  background-size: 64px 64px, 64px 64px, auto, auto;
   pointer-events: none;
+  opacity: 0.55;
 }
 
-/* soft purple ambient glow behind canvas */
 .ip-loader::after {
   content: '';
   position: absolute;
-  width: 320px; height: 320px;
+  width: 420px;
+  height: 420px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(83,74,183,0.12) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(94, 106, 210, 0.2) 0%, transparent 70%);
+  filter: blur(18px);
   pointer-events: none;
   z-index: 0;
 }
 
 .ip-canvas-wrap {
-  position: relative; width: 200px; height: 200px;
-  margin-bottom: 1.5rem; z-index: 1;
+  position: relative;
+  width: 220px;
+  height: 220px;
+  margin-bottom: 1.75rem;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 32px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 24px 60px rgba(0, 0, 0, 0.45),
+    0 0 100px rgba(94, 106, 210, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 .ip-logo {
   font-family: 'Grand Hotel', cursive;
-  font-size: 48px;
-  color: #e8e4ff;
-  letter-spacing: 0.5px;
-  margin-bottom: 0.3rem;
+  font-size: 54px;
+  letter-spacing: 0.02em;
+  margin-bottom: 0.2rem;
   z-index: 1;
-  /* soft text glow matching the purple theme */
-  text-shadow: 0 0 40px rgba(127,119,221,0.4), 0 0 80px rgba(83,74,183,0.2);
+  background: linear-gradient(to bottom, #ffffff, rgba(255, 255, 255, 0.72));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 40px rgba(94, 106, 210, 0.22);
 }
 
 .ip-tagline {
   font-size: 11px;
-  color: #3d3d58;
-  letter-spacing: 0.2em;
+  color: rgba(255, 255, 255, 0.56);
+  letter-spacing: 0.22em;
   text-transform: uppercase;
-  margin-bottom: 2.5rem;
+  margin-bottom: 2rem;
   z-index: 1;
 }
 
 .ip-bar-wrap {
-  width: 140px; height: 1px;
-  background: #1a1a2e;
-  border-radius: 99px; overflow: hidden;
-  margin-bottom: 1.2rem; z-index: 1;
+  width: 168px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+  z-index: 1;
 }
 
 .ip-bar {
-  height: 100%; width: 0%;
-  background: linear-gradient(90deg, #534ab7, #9f97f0, #c4bfff);
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #5e6ad2, #8b5cf6, #7c8cff);
   border-radius: 99px;
-  animation: barFill 2.4s cubic-bezier(0.4,0,0.2,1) forwards;
-  box-shadow: 0 0 8px rgba(159,151,240,0.6);
+  animation: barFill 2.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  box-shadow: 0 0 24px rgba(94, 106, 210, 0.45);
 }
 
 @keyframes barFill {
@@ -164,8 +192,10 @@ onUnmounted(() => cancelAnimationFrame(rafId))
 }
 
 .ip-status {
-  font-size: 11px; color: #4a4270;
-  letter-spacing: 0.15em; text-transform: uppercase;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.52);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
   animation: pulse 1.8s ease-in-out infinite;
   z-index: 1;
 }
