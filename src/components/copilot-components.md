@@ -25,7 +25,7 @@ Reusable UI components built with Vue 3 Composition API + Ionic + Tailwind.
 | `KeyManagementSection.vue` | Settings section for managing stored encryption keys. Lists keys with type/method badges, supports delete with confirmation, export (JSON download), and import (file picker). Calls `KeyVaultService` directly. | — |
 | `PrivateCommunityToggle.vue` | Toggle + config UI for creating encrypted communities. Offers invite-link (random AES key) or password-derived key methods. Used in `CreateCommunityPage`. | emits `update:config` with `PrivateCommunityConfig` |
 | `ConsentBanner.vue` | Compact inline mobile notice shown under the community description until dismissed. Warns that data is stored locally and content is unmoderated. Persists acceptance in `localStorage` (`interpoll_consent_accepted`). | — |
-| `CommandPalette.vue` | Global `Cmd/Ctrl+K` searchable command dialog for fast route navigation and create actions. Filters auth-only actions by session state and supports full keyboard navigation (`↑`, `↓`, `Enter`, `Esc`). | — |
+| `GlobalCommandPalette.vue` | App-wide command palette modal (`Ctrl/Cmd+Shift+P`) for navigation and quick create/tools actions. | `isOpen`, emits `close` |
 
 ## Conventions
 
