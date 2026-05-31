@@ -1,15 +1,12 @@
 <!-- In PostCard.vue template -->
 <template>
-  <div class="post-card" v-if="post">
-    <!-- Flagged content overlay (blur mode) -->
+  <article class="post-card surface-card surface-card--interactive" v-if="post">
     <div v-if="flagged && filterAction === 'blur' && !revealed" class="flagged-overlay" @click.stop="revealed = true">
       <ion-icon :icon="warningOutline"></ion-icon>
       <span>Content hidden by word filter — tap to reveal</span>
     </div>
 
-    <!-- Clickable card content area -->
-    <div @click="handleCardClick" :class="{ 'content-blurred': flagged && filterAction === 'blur' && !revealed }">
-      <!-- Post Header -->
+    <div class="post-body" @click="handleCardClick" :class="{ 'content-blurred': flagged && filterAction === 'blur' && !revealed }">
       <div class="post-header">
         <div class="post-meta">
           <span class="community-name">{{ communityName }}</span>
@@ -26,13 +23,10 @@
         </div>
       </div>
 
-      <!-- Post Title -->
       <h3 class="post-title">{{ post.title }}</h3>
 
-      <!-- Post Content Preview -->
       <p v-if="post.content" class="post-content">{{ truncatedContent }}</p>
 
-      <!-- Post Image -->
       <div v-if="post.imageThumbnail || post.imageIPFS">
         <div class="post-image">
           <img
@@ -42,7 +36,6 @@
         </div>
       </div>
 
-      <!-- Post Footer - Not clickable for card navigation -->
       <div class="post-footer" @click.stop>
         <div class="post-stats">
           <button class="stat-button upvote" @click="handleUpvote" :class="{ active: hasUpvoted }">
@@ -60,46 +53,24 @@
             <span>{{ formatNumber(post.commentCount) }}</span>
           </button>
 
-          <div class="stat-item score" style="margin-right: 15px;">
+          <div class="stat-item score">
             <ion-icon :icon="trendingUpOutline"></ion-icon>
             <span>{{ post.score }}</span>
           </div>
         </div>
       </div>
     </div>
-    
-    <!-- Separator line -->
-    <div class="post-separator"></div>
-  </div>
+  </article>
 </template>
 
 <style scoped>
-/* Main Post Card Container */
 .post-card {
-  margin-left: 20px;
-  padding: 8px 0;
-  cursor: pointer;
-  background: transparent;
-  border: none;
+  margin: 0 12px 16px 20px;
+  padding: 18px;
 }
 
-.post-separator {
-  height: 0.5px;
-  background: rgba(var(--ion-text-color-rgb), 0.08);
-  margin-top: 16px;
-}
-
-html.dark .post-separator {
-  background: rgba(255, 255, 255, 0.35);
-}
-
-html.dark .post-footer {
-  border-top-color: rgba(255, 255, 255, 0.25);
-}
-
-/* Post Header */
 .post-header {
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .post-meta {
@@ -107,71 +78,71 @@ html.dark .post-footer {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: var(--app-text-muted);
   flex-wrap: wrap;
 }
 
 .community-name {
-  color: var(--ion-color-step-600);
+  color: var(--app-accent-bright);
   font-weight: 600;
 }
 
 .separator {
-  color: var(--ion-color-medium-shade);
+  color: rgba(255, 255, 255, 0.25);
 }
 
 .author {
-  color: var(--ion-color-step-600);
+  color: var(--app-text);
   font-weight: 500;
 }
 
 .identity-badge {
-  border-radius: 10px;
-  padding: 1px 8px;
+  border-radius: 999px;
+  padding: 4px 9px;
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .identity-badge.unverified {
-  background: rgba(var(--ion-color-warning-rgb), 0.16);
-  color: var(--ion-color-warning-shade);
+  background: rgba(var(--ion-color-warning-rgb), 0.12);
+  color: var(--ion-color-warning);
 }
 
 .identity-badge.trusted-issuer {
   background: rgba(var(--ion-color-success-rgb), 0.14);
-  color: var(--ion-color-success-shade);
+  color: var(--ion-color-success);
 }
 
 .timestamp {
-  color: var(--ion-color-medium);
+  color: var(--app-text-subtle);
 }
 
-/* Post Title */
 .post-title {
-  margin: 8px 0;
-  margin-right: 10px;
-  font-size: 18px;
+  margin: 0 0 10px;
+  font-size: 20px;
   font-weight: 600;
-  line-height: 1.4;
-  color: var(--ion-text-color);
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  color: var(--app-text);
 }
 
-/* Post Content */
 .post-content {
-  margin: 8px 0;
+  margin: 0 0 14px;
   font-size: 14px;
-  
-  line-height: 1.5;
-  color: var(--ion-color-step-600);
+  line-height: 1.7;
+  color: var(--app-text-muted);
 }
 
-/* Post Image */
 .post-image {
-  margin: 12px 10px;
-  border-radius: 12px;
+  margin: 0 0 16px;
+  border-radius: 16px;
   overflow: hidden;
-  background: rgba(var(--ion-card-background-rgb), 0.3);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .post-image img {
@@ -181,43 +152,44 @@ html.dark .post-footer {
   object-fit: cover;
 }
 
-/* Post Footer - Voting and Stats */
 .post-footer {
-  margin-top: 1px;
-  padding-top: 4px;
-  
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .post-stats {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-/* Stat Buttons Base Styles */
 .stat-button {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 12px 12px;
-  background: transparent;
-  border: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
-  border-radius: 20px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
   font-size: 13px;
-  font-weight: 500;
-  color: var(--ion-color-medium);
+  font-weight: 600;
+  color: var(--app-text-muted);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--app-transition);
   -webkit-tap-highlight-color: transparent;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .stat-button:hover {
-  background: rgba(var(--ion-text-color-rgb), 0.04);
-  border-color: rgba(var(--ion-text-color-rgb), 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+  transform: translateY(-1px);
 }
 
 .stat-button:active {
-  transform: scale(0.95);
+  transform: scale(0.98);
 }
 
 .stat-button ion-icon {
@@ -229,7 +201,6 @@ html.dark .post-footer {
   text-align: center;
 }
 
-/* Upvote Button */
 .stat-button.upvote {
   border-color: rgba(var(--ion-color-success-rgb), 0.15);
 }
@@ -246,11 +217,6 @@ html.dark .post-footer {
   color: var(--ion-color-success);
 }
 
-.stat-button.upvote.active ion-icon {
-  color: var(--ion-color-success);
-}
-
-/* Downvote Button */
 .stat-button.downvote {
   border-color: rgba(var(--ion-color-danger-rgb), 0.15);
 }
@@ -267,11 +233,6 @@ html.dark .post-footer {
   color: var(--ion-color-danger);
 }
 
-.stat-button.downvote.active ion-icon {
-  color: var(--ion-color-danger);
-}
-
-/* Comments Button */
 .stat-button.comments {
   border-color: rgba(var(--ion-color-primary-rgb), 0.15);
 }
@@ -286,19 +247,19 @@ html.dark .post-footer {
   background: rgba(var(--ion-color-primary-rgb), 0.12);
 }
 
-/* Score Display (Non-interactive) */
 .stat-item.score {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 12px;
+  padding: 10px 12px;
   background: rgba(var(--ion-color-tertiary-rgb), 0.08);
   border: 1px solid rgba(var(--ion-color-tertiary-rgb), 0.18);
-  border-radius: 20px;
+  border-radius: 999px;
   font-size: 13px;
   font-weight: 600;
   color: var(--ion-color-tertiary);
   margin-left: auto;
+  margin-right: 0;
 }
 
 .stat-item.score ion-icon {
@@ -306,8 +267,12 @@ html.dark .post-footer {
   color: var(--ion-color-tertiary);
 }
 
-/* Mobile Responsive */
 @media (max-width: 576px) {
+  .post-card {
+    margin: 0 12px 14px;
+    padding: 16px;
+  }
+
   .post-title {
     font-size: 16px;
   }
@@ -322,7 +287,7 @@ html.dark .post-footer {
   }
 
   .stat-button {
-    padding: 5px 10px;
+    padding: 8px 10px;
     font-size: 12px;
   }
 
@@ -336,17 +301,6 @@ html.dark .post-footer {
   }
 }
 
-/* Dark Mode Enhancements */
-html.dark .stat-button {
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-html.dark .stat-button:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.15);
-}
-
-/* Flagged content styles */
 .flagged-overlay {
   display: flex;
   align-items: center;
@@ -383,10 +337,8 @@ html.dark .stat-button:hover {
   font-size: 14px;
 }
 
-/* Accessibility - Focus States */
 .stat-button:focus-visible {
-  outline: 2px solid var(--ion-color-primary);
-  outline-offset: 2px;
+  box-shadow: var(--app-focus-ring);
 }
 </style>
 
