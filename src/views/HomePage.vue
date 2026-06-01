@@ -384,31 +384,32 @@
 
       </div>
 
-      <div class="bottom-spacing"></div>
     </ion-content>
 
     <!-- Bottom Nav (mobile only) -->
-    <div class="bottom-nav" :class="{ 'bottom-nav-hidden': isTabBarHidden }">
-      <button class="nav-item" :class="{ active: activeTab === 'home' }" @click="activeTab = 'home'">
-        <ion-icon :icon="activeTab === 'home' ? home : homeOutline"></ion-icon>
-        <span>Home</span>
-      </button>
-      <button class="nav-item" :class="{ active: activeTab === 'communities' }" @click="activeTab = 'communities'">
-        <ion-icon :icon="activeTab === 'communities' ? people : peopleOutline"></ion-icon>
-        <span>Communities</span>
-      </button>
-      <button class="nav-item" :class="{ active: activeTab === 'chat' }" @click="activeTab = 'chat'">
-        <ion-icon :icon="activeTab === 'chat' ? chatbubble : chatbubbleOutline"></ion-icon>
-        <span>Chat</span>
-        <span v-if="totalUnread > 0" class="nav-badge nav-badge--mobile">
-          {{ totalUnread > 99 ? '99+' : totalUnread }}
-        </span>
-      </button>
-      <button class="nav-item" :class="{ active: activeTab === 'create' }" @click="activeTab = 'create'">
-        <ion-icon :icon="activeTab === 'create' ? addCircle : addCircleOutline"></ion-icon>
-        <span>Create</span>
-      </button>
-    </div>
+    <ion-footer class="bottom-nav-footer">
+      <div class="bottom-nav" :class="{ 'bottom-nav-hidden': isTabBarHidden }">
+        <button class="nav-item" :class="{ active: activeTab === 'home' }" @click="activeTab = 'home'">
+          <ion-icon :icon="activeTab === 'home' ? home : homeOutline"></ion-icon>
+          <span>Home</span>
+        </button>
+        <button class="nav-item" :class="{ active: activeTab === 'communities' }" @click="activeTab = 'communities'">
+          <ion-icon :icon="activeTab === 'communities' ? people : peopleOutline"></ion-icon>
+          <span>Communities</span>
+        </button>
+        <button class="nav-item" :class="{ active: activeTab === 'chat' }" @click="activeTab = 'chat'">
+          <ion-icon :icon="activeTab === 'chat' ? chatbubble : chatbubbleOutline"></ion-icon>
+          <span>Chat</span>
+          <span v-if="totalUnread > 0" class="nav-badge nav-badge--mobile">
+            {{ totalUnread > 99 ? '99+' : totalUnread }}
+          </span>
+        </button>
+        <button class="nav-item" :class="{ active: activeTab === 'create' }" @click="activeTab = 'create'">
+          <ion-icon :icon="activeTab === 'create' ? addCircle : addCircleOutline"></ion-icon>
+          <span>Create</span>
+        </button>
+      </div>
+    </ion-footer>
 
   </ion-page>
 </template>
@@ -417,7 +418,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,IonBadge,  
-  IonButtons, IonButton, IonIcon, IonSegment, IonSegmentButton,
+  IonButtons, IonButton, IonIcon, IonSegment, IonSegmentButton, IonFooter,
   IonLabel, IonSpinner, IonChip, IonSearchbar,
   IonInfiniteScroll, IonInfiniteScrollContent,
   actionSheetController, toastController
@@ -1196,8 +1197,6 @@ if (FEED_DEBUG) {
 
 <style scoped>
 
-@import url('https://fonts.googleapis.com/css2?family=Grand+Hotel&display=swap');
-
 .logo-title {
   font-family: 'Grand Hotel', cursive;
   font-size: 32px;
@@ -1460,22 +1459,22 @@ ion-header.header-hidden {
 }
 
 .nav-badge--desktop {
-  top: -4px !important;
-  right: 0 !important;
+  top: -4px;
+  right: 0;
 }
 
 .nav-badge--mobile {
-  top: 0 !important;
-  right: 20px !important;
+  top: 0;
+  right: 20px;
 }
 
-.bottom-spacing { height: 80px; }
+.bottom-nav-footer {
+  display: block;
+  background: transparent;
+  box-shadow: none;
+}
 
 .bottom-nav {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
   display: flex;
   justify-content: space-around;
   align-items: center;
@@ -1485,7 +1484,6 @@ ion-header.header-hidden {
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow: 0 -18px 40px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
-  z-index: 1000;
   transition: transform var(--app-transition);
 }
 .bottom-nav-hidden { transform: translateY(100%); }
@@ -1668,8 +1666,7 @@ ion-header.header-hidden {
 
 @media (min-width: 768px) {
   .logo-title { margin-left: 10%; }
-  .bottom-nav     { display: none; }
-  .bottom-spacing { height: 24px; }
+  .bottom-nav-footer { display: none; }
 
   .header-util-buttons { display: none; }
 

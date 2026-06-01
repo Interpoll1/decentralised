@@ -39,3 +39,4 @@ Single file: `index.ts`. Uses `@ionic/vue-router` (`createRouter` from Ionic for
 - Internal same-origin anchor links are intercepted in `App.vue` and forwarded through Vue Router so `/community/...`, `/chat...`, and `/join/...` links stay in-app instead of forcing a browser reload.
 - `JoinPrivatePage` supports community, chatroom, and server invite routes.
 - `ResiliencePage` is directly routable from `/resilience` (not beta-gated).
+- `App.vue` supplies the Ion router-outlet animation so page swaps use a shorter fade/slide and the outgoing page clears promptly.

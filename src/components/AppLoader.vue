@@ -81,8 +81,6 @@ onUnmounted(() => cancelAnimationFrame(rafId))
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Grand+Hotel&display=swap');
-
 .ip-loader {
   position: fixed;
   inset: 0;
