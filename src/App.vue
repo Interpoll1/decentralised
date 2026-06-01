@@ -1,11 +1,9 @@
 <template>
   <ion-app>
     <AppLoader v-if="!appReady" />
-    <ion-router-outlet v-else />
-    <GlobalCommandPalette :is-open="globalPaletteOpen" @close="closeGlobalPalette" />
     <div v-else class="app-shell">
       <ion-router-outlet />
-      <CommandPalette />
+      <GlobalCommandPalette :is-open="globalPaletteOpen" @close="closeGlobalPalette" />
     </div>
   </ion-app>
 </template>
