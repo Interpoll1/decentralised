@@ -64,3 +64,11 @@ Linux tooling wrappers used by docs/CI:
   - Frontend changes: iterate with `vue-code-reviewer` until all clear.
   - Backend/security changes: iterate with `ts-backend-security-auditor` until all clear.
   - If agents conflict, use `agent-arbitrator`.
+IMPORTANT:
+- Read only files that are directly relevant.
+- Do not scan the entire repository.
+- Do not create a multi-step plan unless requested.
+- Make the smallest possible change.
+- Ask before reading additional files.
+- Output only the final patch and a brief explanation.
+i am short on tokens. if you find you are too powerful for task. tell me

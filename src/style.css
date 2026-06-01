@@ -308,11 +308,6 @@ p {
   color: var(--app-text-muted);
 }
 
-.app-shell {
-  position: relative;
-  min-height: 100vh;
-}
-
 .ambient-page {
   --background: transparent;
 }
@@ -411,7 +406,7 @@ ion-content {
 }
 
 ion-header::after {
-  display: none !important;
+  display: none;
 }
 
 ion-toolbar {
@@ -538,7 +533,7 @@ ion-badge {
 ion-toast::part(container),
 ion-alert .alert-wrapper,
 ion-action-sheet .action-sheet-wrapper {
-  background: rgba(10, 10, 12, 0.94) !important;
+  background: rgba(10, 10, 12, 0.94);
   color: var(--app-text);
   border: 1px solid var(--app-border);
   border-radius: 20px;
@@ -586,9 +581,9 @@ ion-action-sheet .action-sheet-wrapper {
   *,
   *::before,
   *::after {
-    transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    scroll-behavior: auto !important;
+    transition-duration: 0.01ms;
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+    scroll-behavior: auto;
   }
 }
