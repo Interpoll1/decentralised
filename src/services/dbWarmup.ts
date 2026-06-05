@@ -64,6 +64,18 @@ export async function warmupFromDB(): Promise<void> {
     const postStore      = usePostStore()
     const pollStore      = usePollStore()
 
+    // Eradicate legacy posts when running v3+: remove any cached posts whose
+    // dataVersion does not match the active namespace to avoid importing v2.
+    try {
+      if (getNamespaceVersion(GUN_NAMESPACE) >= 3 && typeof postStore.purgeLegacyPosts === 'function') {
+        const removed = await postStore.purgeLegacyPosts();
+        if (removed > 0) warmupLog('Purged legacy posts', { removed });
+      }
+    } catch (err) {
+      warmupLog('Purge legacy posts failed', { err: String(err) });
+    }
+
+    // Keep v3 clean-slate: do not warm from legacy API snapshots
     const shouldWarmApiFeeds = getNamespaceVersion(GUN_NAMESPACE) <= 2
     const shouldWarmApiCommunities = shouldWarmApiFeeds
 
@@ -123,6 +135,13 @@ export async function warmupFromDB(): Promise<void> {
       let n = 0
       for (const d of posts || []) {
         if (!d?.id || !d?.title || !d?.communityId) continue
+        // Skip posts from other namespace versions (avoid importing v2 posts into v3 clients)
+        const postDataVersion = typeof d.dataVersion === 'string' ? d.dataVersion : null
+        const namespaceVersion = getNamespaceVersion(GUN_NAMESPACE)
+        if (postDataVersion && postDataVersion !== GUN_NAMESPACE) continue
+        // If running v3+ and the post lacks dataVersion, be conservative and skip it
+        if (!postDataVersion && namespaceVersion >= 3) continue
+
         // Always inject — overwrite stale if present
         postStore.injectPost({
           id:            d.id,

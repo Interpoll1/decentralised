@@ -107,6 +107,12 @@ export const usePostStore = defineStore('post', () => {
   }
 
   function processIncomingPost(communityId: string, post: Post) {
+    // Avoid accepting legacy posts into a v3 client
+    const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;
+    const postDataVersion = (post as any).dataVersion || null;
+    if (postDataVersion && postDataVersion !== GUN_NAMESPACE) return;
+    if (!postDataVersion && namespaceVersion >= 3) return;
+
     // Always update existing posts in-place (vote counts, edits)
     if (postsMap.value.has(post.id)) {
       postsMap.value.set(post.id, post);
@@ -276,6 +282,12 @@ export const usePostStore = defineStore('post', () => {
   }
 
   function injectPost(post: Post) {
+    // Prevent injecting posts from other namespace versions
+    const postDataVersion = (post as any).dataVersion || null;
+    const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;
+    if (postDataVersion && postDataVersion !== GUN_NAMESPACE) return;
+    if (!postDataVersion && namespaceVersion >= 3) return;
+
     if (!postsMap.value.has(post.id)) {
       postsMap.value.set(post.id, post);
       tryDecryptPost(post);
@@ -293,6 +305,43 @@ export const usePostStore = defineStore('post', () => {
 
   function saveSeenNow() {
     saveSeenIds(seenPostIds);
+  }
+
+  /**
+   * Purge any posts from the store and local Gun cache that do not match
+   * the current active namespace (eradicate v2 when running v3).
+   */
+  async function purgeLegacyPosts(): Promise<number> {
+    const removed: string[] = [];
+    for (const [id, post] of postsMap.value) {
+      const v = post.dataVersion || null;
+      if (v !== GUN_NAMESPACE) removed.push(id);
+    }
+    if (removed.length === 0) return 0;
+
+    for (const id of removed) {
+      postsMap.value.delete(id);
+    }
+
+    // Attempt to clear local Gun nodes as well (best-effort)
+    try {
+      const gunModule = await import('../services/gunService');
+      const gun = gunModule.GunService?.getGun?.();
+      if (gun && typeof gun.get === 'function') {
+        for (const id of removed) {
+          try {
+            // Put null to clear the node locally — Gun may ignore depending on persistence
+            gun.get('posts').get(id).put(null);
+          } catch (err) {
+            // best-effort
+          }
+        }
+      }
+    } catch (err) {
+      // ignore
+    }
+
+    return removed.length;
   }
 
   function loadMorePosts() {
@@ -464,12 +513,28 @@ export const usePostStore = defineStore('post', () => {
     await loadPostsForCommunity(currentCommunityId.value);
   }
 
+  // Run immediate purge on initialization for v3 clients to ensure no legacy posts persist
+  (async () => {
+    try {
+      const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;
+      if (namespaceVersion >= 3) {
+        const removed = await purgeLegacyPosts();
+        if (removed > 0) {
+          saveSeenIds(new Set());
+          // clear seen-post-ids to avoid restoring old IDs
+          try { localStorage.removeItem(SEEN_POSTS_KEY); } catch {}
+          if (POST_DEBUG) postDebug('purged-legacy-posts', { removed });
+        }
+      }
+    } catch (err) { /* ignore */ }
+  })();
+
   return {
     posts, postsMap, currentPost, isLoading, currentFeed,
     sortedPosts, communityPosts, visiblePosts, hasMorePosts, visibleCount,
     newPostCount, pendingNewPosts,
     loadPostsForCommunity, loadMorePosts, resetVisibleCount,
-    flushNewPosts, injectPost, saveSeenNow,
+    flushNewPosts, injectPost, saveSeenNow, purgeLegacyPosts,
     createPost, selectPost,
     voteOnPost, upvotePost, downvotePost, removeUpvote, removeDownvote,
     refreshPosts,

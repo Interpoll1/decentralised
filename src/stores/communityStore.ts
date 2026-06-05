@@ -19,6 +19,17 @@ function getGunRelayBaseUrl(): string {
   }
 }
 
+function getApiBaseUrl(): string {
+  try {
+    const endpoint = new URL(config.relay.api);
+    endpoint.search = '';
+    endpoint.hash = '';
+    return endpoint.toString().replace(/\/$/, '');
+  } catch {
+    return config.relay.api.replace(/\/$/, '');
+  }
+}
+
 const FALLBACK_SOUL_TIMEOUT_MS = 4000;
 const FALLBACK_COMMUNITY_SEARCH_TIMEOUT_MS = 8000;
 const FALLBACK_POST_SEARCH_TIMEOUT_MS = 12000;
@@ -221,6 +232,31 @@ export const useCommunityStore = defineStore('community', () => {
   // When Gun returns nothing (cold relay), fetch directly from MySQL via the
   // gun-relay's /db/search endpoint and hydrate the store immediately.
 
+  async function loadCommunitiesFromApiFallback(): Promise<number> {
+    const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;
+    if (namespaceVersion >= 3) return 0;
+    const apiBaseUrl = getApiBaseUrl();
+    const json = await fetchJsonWithTimeout<{ communities?: Array<Record<string, unknown>> }>(
+      `${apiBaseUrl}/api/communities`,
+      FALLBACK_COMMUNITY_SEARCH_TIMEOUT_MS,
+    );
+    if (!json?.communities?.length) return 0;
+
+    let added = 0;
+    for (const row of json.communities) {
+      const community = toCommunityRecord(row);
+      if (!community) continue;
+      const previousCount = communities.value.length;
+      await upsertCommunity(community);
+      if (communities.value.length > previousCount) added++;
+    }
+
+    if (added > 0) {
+      console.log(`✅ Loaded ${added} communities from API fallback`);
+    }
+    return added;
+  }
+
   async function loadCommunitiesFromDB(): Promise<number> {
     try {
       const relayBaseUrl = getGunRelayBaseUrl();
@@ -229,7 +265,10 @@ export const useCommunityStore = defineStore('community', () => {
         `${relayBaseUrl}/db/search?prefix=${prefix}&limit=200`,
         FALLBACK_COMMUNITY_SEARCH_TIMEOUT_MS,
       );
-      if (!json) return 0;
+      if (!json) {
+        console.warn('⚠️  MySQL community fallback unavailable, trying API fallback...');
+        return await loadCommunitiesFromApiFallback();
+      }
 
       let added = 0;
       for (const row of json.results || []) {
@@ -246,16 +285,55 @@ export const useCommunityStore = defineStore('community', () => {
       if (added > 0) {
         console.log(`✅ Loaded ${added} communities from MySQL fallback`);
       }
+      if (added === 0) {
+        // DB returned no top-level canonical community rows; API snapshot may still have data.
+        return await loadCommunitiesFromApiFallback();
+      }
       return added;
     } catch (err) {
       console.warn('⚠️  MySQL community fallback failed:', err);
-      return 0;
+      return await loadCommunitiesFromApiFallback();
     }
   }
 
   // Same thing for posts — scan all community post index nodes from MySQL
   // so postStore can subscribe to communities even on cold relay
-  async function loadPostsFromDB(): Promise<void> {
+  async function loadPostsFromApiFallback(): Promise<number> {
+    const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;
+    if (namespaceVersion >= 3) return 0;
+    const apiBaseUrl = getApiBaseUrl();
+    const json = await fetchJsonWithTimeout<{ posts?: Array<Record<string, unknown>> }>(
+      `${apiBaseUrl}/api/posts?limit=500`,
+      FALLBACK_POST_SEARCH_TIMEOUT_MS,
+    );
+    if (!json?.posts?.length) return 0;
+
+    const gun = (await import('../services/gunService')).GunService.getGun() as unknown as GunNodeLike;
+    let staged = 0;
+    for (const d of json.posts) {
+      const postId = asString(d.id);
+      if (!postId || !asString(d.title)) continue;
+      // Avoid hydrating posts from a different dataVersion (e.g., v2 into v3)
+      const postDataVersion = typeof d.dataVersion === 'string' ? d.dataVersion : null;
+      const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;
+      if (postDataVersion && postDataVersion !== GUN_NAMESPACE) continue;
+      if (!postDataVersion && namespaceVersion >= 3) continue;
+
+      if (!await shouldHydrateFallbackPost(gun, d)) continue;
+      gun.get('posts').get(postId).put(d);
+      staged += 1;
+      logFallbackWarmupRate();
+      if (staged % FALLBACK_POST_WARMUP_BATCH_SIZE === 0) {
+        await sleep(FALLBACK_POST_WARMUP_BATCH_DELAY_MS);
+      }
+    }
+    if (staged > 0) {
+      console.log(`✅ Warmed ${staged} posts from API fallback (chunked)`);
+    }
+    return staged;
+  }
+
+  async function loadPostsFromDB(): Promise<number> {
     try {
       const relayBaseUrl = getGunRelayBaseUrl();
       const prefix = encodeURIComponent(`${GUN_NAMESPACE}/posts`);
@@ -263,7 +341,10 @@ export const useCommunityStore = defineStore('community', () => {
         `${relayBaseUrl}/db/search?prefix=${prefix}&limit=500`,
         FALLBACK_POST_SEARCH_TIMEOUT_MS,
       );
-      if (!json) return;
+      if (!json) {
+        console.warn('⚠️  MySQL posts fallback unavailable, trying API fallback...');
+        return await loadPostsFromApiFallback();
+      }
 
       // Warm up Gun's local cache by putting data back into it so existing
       // postService subscriptions fire correctly
@@ -275,6 +356,13 @@ export const useCommunityStore = defineStore('community', () => {
         if (!d) continue;
         const postId = asString(d.id);
         if (!postId || !asString(d.title)) continue; // only full post nodes
+
+        // Avoid hydrating posts from a different dataVersion (e.g., v2 into v3)
+        const postDataVersion = typeof d.dataVersion === 'string' ? d.dataVersion : null;
+        const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;
+        if (postDataVersion && postDataVersion !== GUN_NAMESPACE) continue;
+        if (!postDataVersion && namespaceVersion >= 3) continue;
+
         if (!await shouldHydrateFallbackPost(gun, d)) continue;
         gun.get('posts').get(postId).put(d);
         staged += 1;
@@ -287,8 +375,14 @@ export const useCommunityStore = defineStore('community', () => {
       if (staged > 0) {
         console.log(`✅ Warmed ${staged} posts from MySQL fallback (chunked)`);
       }
+      if (staged === 0) {
+        // DB may return only index/incomplete rows; API snapshot can still restore the feed.
+        return await loadPostsFromApiFallback();
+      }
+      return staged;
     } catch (err) {
       console.warn('⚠️  MySQL posts warmup failed:', err);
+      return await loadPostsFromApiFallback();
     }
   }
 
@@ -335,15 +429,25 @@ export const useCommunityStore = defineStore('community', () => {
     return getPostActivityCount(fallbackPost) > getPostActivityCount(existing);
   }
 
-  function startPostsWarmup(): Promise<void> {
-    if (!FALLBACK_POST_WARMUP_ENABLED) {
+  async function hasWarmPostsLoaded(): Promise<boolean> {
+    const { usePostStore } = await import('./postStore');
+    const postStore = usePostStore();
+    return postStore.postsMap.size > 0;
+  }
+
+  function startPostsWarmup(options?: { force?: boolean }): Promise<void> {
+    const force = options?.force === true;
+    if (!FALLBACK_POST_WARMUP_ENABLED && !force) {
       if (isSyncDebugEnabled()) {
         console.log('[SyncDebug] posts warmup disabled (set localStorage.interpoll_posts_warmup=true to enable)');
       }
       return Promise.resolve();
     }
+    if (force && isSyncDebugEnabled()) {
+      console.log('[SyncDebug] forcing posts warmup because feed is empty');
+    }
     if (!postsWarmupPromise) {
-      postsWarmupPromise = loadPostsFromDB().finally(() => {
+      postsWarmupPromise = loadPostsFromDB().then(() => undefined).finally(() => {
         postsWarmupPromise = null;
       });
     }
@@ -372,14 +476,14 @@ export const useCommunityStore = defineStore('community', () => {
         await loadCommunitiesFromDB();
         // Also warm up posts so the feed isn't empty; run in background and chunked
         // to avoid flooding Gun + DOM with thousands of records at startup.
-        void startPostsWarmup();
+        void startPostsWarmup({ force: !(await hasWarmPostsLoaded()) });
       }
     } else {
       if (isSyncDebugEnabled()) {
         console.log('[SyncDebug] community Gun live subscription disabled; using DB snapshot bootstrap');
       }
       await loadCommunitiesFromDB();
-      void startPostsWarmup();
+      void startPostsWarmup({ force: !(await hasWarmPostsLoaded()) });
     }
 
     isLoading.value = false;

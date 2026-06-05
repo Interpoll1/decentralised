@@ -72,3 +72,6 @@ IMPORTANT:
 - Ask before reading additional files.
 - Output only the final patch and a brief explanation.
 i am short on tokens. if you find you are too powerful for task. tell me
+Do not perform multi-step environment discovery unless the file is missing.
+Ask for missing paths once instead of searching repeatedly.
+Assume tools are available unless failure occurs.

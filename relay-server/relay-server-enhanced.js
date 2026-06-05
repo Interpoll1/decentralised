@@ -1768,7 +1768,7 @@ server.on('request', async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/api/communities') {
     if (!db) { res.writeHead(503, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ communities: [] })); return; }
     try {
-      const rows = await queryMySQL(`SELECT data FROM gun_nodes WHERE soul REGEXP '^(v2/communities|communities)/c-[^/]+$' ORDER BY JSON_EXTRACT(data, '$.createdAt') DESC LIMIT 200`, []);
+      const rows = await queryMySQL(`SELECT data FROM gun_nodes WHERE soul REGEXP '^v3/communities/c-[^/]+$' ORDER BY JSON_EXTRACT(data, '$.createdAt') DESC LIMIT 200`, []);
       const communities = [];
       const seen = new Set();
       for (const row of rows || []) {
@@ -1790,7 +1790,7 @@ server.on('request', async (req, res) => {
     const limit = Math.max(1, Math.min(parseInt(url.searchParams.get('limit') || '15') || 15, 500));
     try {
       const rows = await queryMySQL(
-        `SELECT data FROM gun_nodes WHERE soul REGEXP '^(v2/communities|communities)/[^/]+/posts/post-[^/]+$' ORDER BY JSON_EXTRACT(data, '$.createdAt') DESC LIMIT ${limit}`, []
+        `SELECT data FROM gun_nodes WHERE soul REGEXP '^v3/communities/[^/]+/posts/post-[^/]+$' ORDER BY JSON_EXTRACT(data, '$.createdAt') DESC LIMIT ${limit}`, []
       );
       const posts = [];
       const seen = new Set();
@@ -1799,7 +1799,7 @@ server.on('request', async (req, res) => {
           const d = JSON.parse(row.data);
           if (!d?.id || !d?.title || !d?.communityId || seen.has(d.id)) continue;
           seen.add(d.id);
-          posts.push({ id: d.id, communityId: d.communityId, authorId: d.authorId || '', authorName: d.authorName || 'Anonymous', title: d.title, content: d.content || '', imageIPFS: d.imageIPFS || '', imageThumbnail: d.imageThumbnail || '', createdAt: d.createdAt || 0, upvotes: d.upvotes || 0, downvotes: d.downvotes || 0, score: d.score || 0, commentCount: d.commentCount || 0, isEncrypted: d.isEncrypted || false });
+          posts.push({ id: d.id, communityId: d.communityId, authorId: d.authorId || '', authorName: d.authorName || 'Anonymous', title: d.title, content: d.content || '', imageIPFS: d.imageIPFS || '', imageThumbnail: d.imageThumbnail || '', createdAt: d.createdAt || 0, upvotes: d.upvotes || 0, downvotes: d.downvotes || 0, score: d.score || 0, commentCount: d.commentCount || 0, isEncrypted: d.isEncrypted || false, dataVersion: 'v3' });
         } catch {}
       }
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=30, stale-while-revalidate=60' });
@@ -1813,13 +1813,13 @@ server.on('request', async (req, res) => {
     if (!postId || !db) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'not found' })); return; }
     try {
       const escaped = postId.replace(/[%_\\]/g, '\\$&');
-      const rows = await queryMySQL(`SELECT data FROM gun_nodes WHERE soul LIKE ? ESCAPE ? OR soul LIKE ? ESCAPE ? OR soul = ? OR soul = ? LIMIT 5`, [`v2/communities/%/posts/${escaped}`, '\\', `communities/%/posts/${escaped}`, '\\', `v2/posts/${postId}`, `posts/${postId}`]);
+      const rows = await queryMySQL(`SELECT data FROM gun_nodes WHERE soul LIKE ? ESCAPE ? OR soul = ? LIMIT 5`, [`v3/communities/%/posts/${escaped}`, '\\', `v3/posts/${postId}`]);
       for (const row of rows || []) {
         try {
           const d = JSON.parse(row.data);
           if (!d?.title) continue;
           res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60, stale-while-revalidate=120' });
-          res.end(JSON.stringify({ ...d, id: d.id || postId })); return;
+          res.end(JSON.stringify({ ...d, id: d.id || postId, dataVersion: 'v3' })); return;
         } catch {}
       }
       res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'not found' })); return;

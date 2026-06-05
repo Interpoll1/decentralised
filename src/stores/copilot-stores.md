@@ -39,8 +39,9 @@ Key computed: `polls`, `sortedPolls`
 
 ## `communityStore.ts` — `useCommunityStore`
 
-- Has a **DB snapshot fallback** via the gun-relay's `/db/search?prefix={namespace}/communities` endpoint. If Gun returns no communities during bootstrap (including private/incognito sessions), fallback hydrates communities and starts post warmup in the background so feeds do not appear empty without flooding Gun/DOM on first paint.
-- Has a **DB snapshot fallback** via the gun-relay's `/db/search?prefix={namespace}/communities` endpoint. If Gun returns no communities during bootstrap (including private/incognito sessions), fallback hydrates communities. Post warmup re-puts into Gun are now disabled by default (to avoid startup Gun record floods) and can be explicitly re-enabled for diagnostics via `localStorage.interpoll_posts_warmup === 'true'`.
+- Has a **DB snapshot fallback** via the gun-relay's `/db/search?prefix={namespace}/communities` endpoint. If that DB endpoint is unavailable or returns no canonical community rows, it falls back again to `${config.relay.api}/api/communities`.
+- Post warmup re-puts into Gun remain disabled by default (`localStorage.interpoll_posts_warmup !== 'true'`) to avoid startup floods, but `loadCommunities()` now force-enables warmup when the feed is empty so users still recover posts without manual flags.
+- Post warmup now has an **API fallback**: if `/db/search?prefix={namespace}/posts` is unavailable/empty, it retries with `${config.relay.api}/api/posts?limit=500` and hydrates `gun.get('posts')` in chunks.
 - Community fallback now only accepts canonical top-level community nodes (`{namespace}/communities/{id}` where `id` starts with `c-`) and requires soul/id match, preventing nested poll nodes from being rendered as fake communities.
 - `selectCommunity()` uses the same `/db/soul` fallback when Gun has no matching community, regardless of namespace version.
 - The fallback relay base URL is derived from runtime config (`config.relay.gun`), not hardcoded, so Settings relay overrides and localhost/dev relays are respected.
