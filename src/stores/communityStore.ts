@@ -233,8 +233,6 @@ export const useCommunityStore = defineStore('community', () => {
   // gun-relay's /db/search endpoint and hydrate the store immediately.
 
   async function loadCommunitiesFromApiFallback(): Promise<number> {
-    const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;
-    if (namespaceVersion >= 3) return 0;
     const apiBaseUrl = getApiBaseUrl();
     const json = await fetchJsonWithTimeout<{ communities?: Array<Record<string, unknown>> }>(
       `${apiBaseUrl}/api/communities`,
@@ -299,8 +297,6 @@ export const useCommunityStore = defineStore('community', () => {
   // Same thing for posts — scan all community post index nodes from MySQL
   // so postStore can subscribe to communities even on cold relay
   async function loadPostsFromApiFallback(): Promise<number> {
-    const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;
-    if (namespaceVersion >= 3) return 0;
     const apiBaseUrl = getApiBaseUrl();
     const json = await fetchJsonWithTimeout<{ posts?: Array<Record<string, unknown>> }>(
       `${apiBaseUrl}/api/posts?limit=500`,

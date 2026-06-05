@@ -1,14 +1,13 @@
 // src/services/dbWarmup.ts
 // Strategy:
-//   1. INSTANT   — API warmup for v2 feeds, or clean-slate skip for v3+
+//   1. INSTANT   — API warmup for active namespace feeds
 //   2. LIVE      — Gun subscriptions (real-time updates only, not initial load)
 //
 // Key changes from previous version:
 //   - Gun localStorage cache REMOVED — it was the source of stale-data flash
-//   - v2: API is primary for posts/polls warmup; Gun is live-updates-only
-//   - v3+: posts/polls API warmup is skipped to keep namespace clean slate
+//   - API warmup is namespace-aware and only hydrates entries matching active namespace
 //   - stale-while-revalidate Cache-Control on all fetches
-//   - v3+: communities API warmup is skipped too, so lists come only from Gun
+//   - communities API warmup is enabled; rows are still validated before hydration
 
 import { isVersionEnabled } from '../utils/dataVersionSettings'
 import { GUN_NAMESPACE } from './gunService'
@@ -75,8 +74,8 @@ export async function warmupFromDB(): Promise<void> {
       warmupLog('Purge legacy posts failed', { err: String(err) });
     }
 
-    // Keep v3 clean-slate: do not warm from legacy API snapshots
-    const shouldWarmApiFeeds = getNamespaceVersion(GUN_NAMESPACE) <= 2
+    // Warm active namespace feed data; per-row version checks below still reject mismatches.
+    const shouldWarmApiFeeds = getNamespaceVersion(GUN_NAMESPACE) <= 3
     const shouldWarmApiCommunities = shouldWarmApiFeeds
 
     // ── Fetch everything in parallel — no sequential blocking ────────────────

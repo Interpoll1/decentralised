@@ -202,6 +202,9 @@ export const usePostStore = defineStore('post', () => {
   const posts = computed(() => Array.from(postsMap.value.values()));
 
   function matchesVersion(p: Post): boolean {
+    const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;
+    // In v3+ mode, require explicit dataVersion match to avoid legacy bleed.
+    if (namespaceVersion >= 3) return p.dataVersion === GUN_NAMESPACE;
     const v = p.dataVersion || GUN_NAMESPACE;
     return enabledVersions.value.includes(v as DataVersion);
   }
