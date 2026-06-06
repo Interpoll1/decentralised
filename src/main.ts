@@ -35,10 +35,28 @@ router.isReady().then(() => {
       GunService.initialize();
       // Probe all preset relays in the background; live ones are added to Gun dynamically
       GunService.probePresetsAndExpand().catch(e => console.warn('[Init] GunService probe failed:', e));
-    }).catch(e => console.error('[Init] GunService failed:', e))
-    import('./services/ipfsService').then(({ IPFSService }) => IPFSService.initialize()).catch(e => console.error('[Init] IPFSService failed:', e))
-    import('./services/memoryWatchdogService').then(({ MemoryWatchdogService }) => MemoryWatchdogService.start()).catch(e => console.error('[Init] MemoryWatchdog failed:', e))
-  }, 0)
+    }).catch(e => console.error('[Init] GunService failed:', e));
+    import('./services/ipfsService').then(({ IPFSService }) => IPFSService.initialize()).catch(e => console.error('[Init] IPFSService failed:', e));
+    import('./services/memoryWatchdogService').then(({ MemoryWatchdogService }) => MemoryWatchdogService.start()).catch(e => console.error('[Init] MemoryWatchdog failed:', e));
+    // Evict legacy/v2 posts from caches on startup
+    (async () => {
+      try {
+        const { PostService } = await import('./services/postService');
+        await PostService.evictLegacyPosts();
+      } catch (e) {
+        console.warn('Post eviction failed:', e);
+      }
+    })();
+    // Run destructive purge of persisted legacy posts if user requested it
+    (async () => {
+      try {
+        const { StorageService } = await import('./services/storageService');
+        const gun = await import('./services/gunService');
+        const removed = await StorageService.purgePersistedLegacyPosts(gun.GUN_NAMESPACE);
+        if (removed > 0) console.info(`[Startup] Removed ${removed} persisted legacy posts`);
+      } catch (err) {
+        /* best-effort purge */
+      }
+    })();
+  }, 0);
 })
-
-
