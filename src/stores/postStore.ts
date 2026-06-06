@@ -59,6 +59,21 @@ function createRateLogger(label: string, snapshot?: () => Record<string, unknown
 }
 
 export const usePostStore = defineStore('post', () => {
+  // Listen for eviction signals and purge legacy posts from the store
+  if (typeof window !== 'undefined') {
+    window.addEventListener('evict-legacy-posts', (ev: any) => {
+      const ns = ev?.detail?.namespace || null;
+      if (!ns) return;
+      const keysToDelete: string[] = [];
+      for (const [id, p] of postsMap.value.entries()) {
+        const dv = (p as any).dataVersion || null;
+        if (dv && dv !== ns) keysToDelete.push(id);
+      }
+      for (const k of keysToDelete) postsMap.value.delete(k);
+      console.info(`[PostStore] Evicted ${keysToDelete.length} legacy posts (namespace filter ${ns})`);
+    });
+  }
+
   const postsMap           = ref<Map<string, Post>>(new Map());
   const currentPost        = ref<Post | null>(null);
   const isLoading          = ref(false);

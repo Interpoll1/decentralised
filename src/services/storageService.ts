@@ -174,4 +174,54 @@ export class StorageService {
       tx.objectStore('encryption-keys').clear(),
     ]);
   }
+
+  /**
+   * Destructive: remove any persisted legacy posts (v2) from metadata store
+   * This deletes offline copies of posts that were stored under legacy keys.
+   */
+  static async purgePersistedLegacyPosts(currentNamespace: string): Promise<number> {
+    const db = await this.getDB();
+    const tx = db.transaction(['metadata'], 'readwrite');
+    const store = tx.objectStore('metadata');
+    const allKeys = await store.getAllKeys();
+    let removed = 0;
+    for (const key of allKeys) {
+      try {
+        const val = await store.get(key as IDBValidKey);
+        // Heuristic: legacy posts may be stored under keys like 'post:<id>' or in arrays
+        if (!val) continue;
+        if (typeof key === 'string' && key.startsWith('post-')) {
+          // val should have dataVersion; remove if not matching
+          const dv = val && typeof val.dataVersion === 'string' ? val.dataVersion : null;
+          if (dv && dv !== currentNamespace) {
+            await store.delete(key as IDBValidKey);
+            removed++;
+          }
+          if (!dv && Number.parseInt(currentNamespace.replace(/^v/i, ''), 10) >= 3) {
+            // no version and running v3+ -> delete conservatively
+            await store.delete(key as IDBValidKey);
+            removed++;
+          }
+        }
+        // Also handle arrays of posts stored under metadata keys like 'posts-cache'
+        if (typeof val === 'object' && val !== null && Array.isArray((val as any).posts)) {
+          const postsArr = (val as any).posts as any[];
+          const filtered = postsArr.filter(p => {
+            const dv = p && typeof p.dataVersion === 'string' ? p.dataVersion : null;
+            if (dv && dv !== currentNamespace) return false;
+            if (!dv && Number.parseInt(currentNamespace.replace(/^v/i, ''), 10) >= 3) return false;
+            return true;
+          });
+          if (filtered.length !== postsArr.length) {
+            (val as any).posts = filtered;
+            await store.put(val, key as IDBValidKey);
+            removed += (postsArr.length - filtered.length);
+          }
+        }
+      } catch (err) {
+        // best-effort per key
+      }
+    }
+    return removed;
+  }
 }

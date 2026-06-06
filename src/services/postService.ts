@@ -103,6 +103,41 @@ async function indexForSearch(type: 'post' | 'poll', id: string, data: any) {
 }
 
 export class PostService {
+  /** Evict legacy (non-GUN_NAMESPACE) posts from memory caches and notify UI stores */
+  static async evictLegacyPosts(): Promise<void> {
+    try {
+      // Clear in-memory caches where dataVersion is not current namespace
+      for (const [id, post] of Array.from(postMemoryCache.entries())) {
+        const dv = (post as any).dataVersion || null;
+        if (dv && dv !== GUN_NAMESPACE) postMemoryCache.delete(id);
+      }
+      // Clear missing cache (conservative)
+      missingPostCache.clear();
+
+      // Attempt to purge store-level entries if postStore is available
+      try {
+        const { usePostStore } = await import('../stores/postStore');
+        const postStore = usePostStore();
+        if (postStore && typeof postStore.purgeLegacyPosts === 'function') {
+          const removed = await postStore.purgeLegacyPosts();
+          if (removed > 0) console.info(`[PostService] Purged ${removed} legacy posts from store`);
+        }
+      } catch (err) {
+        // best-effort
+      }
+
+      // Notify UI/store layers to purge their maps (backup)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('evict-legacy-posts', { detail: { namespace: GUN_NAMESPACE } }));
+        try { localStorage.removeItem('seen-post-ids'); } catch {}
+      }
+
+      console.info('[PostService] Evicted legacy posts from memory cache and store');
+    } catch (err) {
+      console.warn('[PostService] Failed to evict legacy posts:', err);
+    }
+  }
+
   static async createPost(
     post: Omit<Post, 'id' | 'createdAt' | 'upvotes' | 'downvotes' | 'score' | 'commentCount'>,
     imageFile?: File,
@@ -273,7 +308,7 @@ export class PostService {
         (postData) => {
           if (postData.id && !initialSeenIds.has(postData.id)) {
             initialSeenIds.add(postData.id);
-            collectedPosts.push({ ...postData, dataVersion: GUN_NAMESPACE });
+            collectedPosts.push({ ...postData, dataVersion: (postData && postData.dataVersion) ? postData.dataVersion : GUN_NAMESPACE });
           }
         },
         40,
@@ -293,51 +328,14 @@ export class PostService {
       void onceWithTimeout(gun.get('posts').get(postId)).then((postData) => {
         if (postData && postData.id) {
           initialSeenIds.add(postData.id);
-          onPost({ ...postData, dataVersion: GUN_NAMESPACE });
+          onPost({ ...postData, dataVersion: (postData && postData.dataVersion) ? postData.dataVersion : GUN_NAMESPACE });
         }
       }).finally(() => {
         inFlightIds.delete(postId);
       });
     });
 
-    if (isVersionEnabled('v1')) {
-      pendingLoads++;
-      const rawGun = GunService.getRawGun();
-      const v1Node = rawGun.get('communities').get(communityId).get('posts');
-      v1Node.once((allPosts: any) => {
-        if (!allPosts) { checkLoadComplete(); return; }
-        const keys = Object.keys(allPosts).filter(k => k !== '_');
-        const v1Collected: Post[] = [];
-        void loadPostIdsInBatches(
-          keys.slice(0, MAX_COMMUNITY_INITIAL_POSTS),
-          (postId) => onceWithTimeout(rawGun.get('posts').get(postId)),
-          (postData) => {
-            if (postData.id && !initialSeenIds.has(postData.id)) {
-              initialSeenIds.add(postData.id);
-              v1Collected.push({ ...postData, dataVersion: 'v1' });
-            }
-          },
-          40,
-        ).then(() => {
-          v1Collected.sort((a, b) => b.createdAt - a.createdAt);
-          v1Collected.forEach(p => onPost(p));
-          checkLoadComplete();
-        });
-      });
-      v1Subscription = v1Node.map().on((_: any, postId: string) => {
-        if (!initialLoadDone) return;
-        if (!postId || postId === '_' || initialSeenIds.has(postId) || inFlightIds.has(postId)) return;
-        inFlightIds.add(postId);
-        void onceWithTimeout(rawGun.get('posts').get(postId)).then((postData) => {
-          if (postData && postData.id) {
-            initialSeenIds.add(postData.id);
-            onPost({ ...postData, dataVersion: 'v1' });
-          }
-        }).finally(() => {
-          inFlightIds.delete(postId);
-        });
-      });
-    }
+    // v1 posts intentionally excluded from community feed — only using GUN v3 namespace
 
     const listenerKey = `${communityId}-posts-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     postActiveListeners.set(listenerKey, { subscription, v1Subscription, timer: timeboxTimer });
@@ -386,7 +384,7 @@ export class PostService {
         (postData) => {
           if (postData.id && !initialSeenIds.has(postData.id)) {
             initialSeenIds.add(postData.id);
-            collectedPosts.push({ ...postData, dataVersion: GUN_NAMESPACE });
+            collectedPosts.push({ ...postData, dataVersion: (postData && postData.dataVersion) ? postData.dataVersion : GUN_NAMESPACE });
           }
         },
         50,
@@ -406,7 +404,7 @@ export class PostService {
         void onceWithTimeout(gun.get('posts').get(postId)).then((postData) => {
           if (postData && postData.id) {
             initialSeenIds.add(postData.id);
-            onPost({ ...postData, dataVersion: GUN_NAMESPACE });
+            onPost({ ...postData, dataVersion: (postData && postData.dataVersion) ? postData.dataVersion : GUN_NAMESPACE });
           }
         }).finally(() => {
           inFlightIds.delete(postId);
@@ -414,47 +412,7 @@ export class PostService {
       });
     });
 
-    if (isVersionEnabled('v1')) {
-      pendingLoads++;
-      const rawGun = GunService.getRawGun();
-      const v1PostsNode = rawGun.get('posts');
-      v1PostsNode.once((allPosts: any) => {
-        if (!allPosts) { checkLoadComplete(); return; }
-        const keys = Object.keys(allPosts).filter(k => k !== '_');
-        const v1Collected: Post[] = [];
-        void loadPostIdsInBatches(
-          keys.slice(0, MAX_INITIAL_POSTS),
-          (postId) => onceWithTimeout(rawGun.get('posts').get(postId)),
-          (postData) => {
-            if (postData.id && !initialSeenIds.has(postData.id)) {
-              initialSeenIds.add(postData.id);
-              v1Collected.push({ ...postData, dataVersion: 'v1' });
-            }
-          },
-          50,
-        ).then(() => {
-          v1Collected.sort((a, b) => b.createdAt - a.createdAt);
-          v1Collected.forEach(p => onPost(p));
-          checkLoadComplete();
-        });
-      });
-      v1Subscription = v1PostsNode.on((allPosts: any) => {
-        if (!initialLoadDone) return;
-        if (!allPosts) return;
-        Object.keys(allPosts).forEach(postId => {
-          if (postId === '_' || initialSeenIds.has(postId) || inFlightIds.has(postId)) return;
-          inFlightIds.add(postId);
-          void onceWithTimeout(rawGun.get('posts').get(postId)).then((postData) => {
-            if (postData && postData.id) {
-              initialSeenIds.add(postData.id);
-              onPost({ ...postData, dataVersion: 'v1' });
-            }
-          }).finally(() => {
-            inFlightIds.delete(postId);
-          });
-        });
-      });
-    }
+    // v1 posts intentionally excluded from global feed — only using GUN v3 namespace
 
     const listenerKey = `all-posts-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     postActiveListeners.set(listenerKey, { subscription, v1Subscription, timer: timeboxTimer });
@@ -486,7 +444,7 @@ export class PostService {
         if (res.ok) {
           const data = await res.json();
           if (data?.id) {
-            const post = { ...data, dataVersion: GUN_NAMESPACE };
+            const post = { ...data, dataVersion: (data && data.dataVersion) ? data.dataVersion : GUN_NAMESPACE };
             postMemoryCache.set(postId, post);
             missingPostCache.delete(postId);
             return post;
@@ -501,7 +459,7 @@ export class PostService {
     const gun = GunService.getGun();
     const postData = await onceWithTimeout(gun.get('posts').get(postId));
     if (postData && postData.id) {
-      const post = { ...postData, dataVersion: GUN_NAMESPACE };
+      const post = { ...postData, dataVersion: (postData && postData.dataVersion) ? postData.dataVersion : GUN_NAMESPACE };
       postMemoryCache.set(postId, post);
       missingPostCache.delete(postId);
       return post;
