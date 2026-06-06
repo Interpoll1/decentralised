@@ -88,7 +88,8 @@
 
 <style scoped>
 .comment-card {
-  padding: 12px 16px;
+  padding: 12px 0 14px;
+  margin-bottom: 8px;
   border-bottom: 1px solid rgba(var(--ion-text-color-rgb), 0.07);
 }
 
@@ -175,7 +176,7 @@
 }
 
 .action-button:hover {
-  background: rgba(var(--ion-text-color-rgb), 0.06);
+  background: rgba(var(--ion-text-color-rgb), 0.04);
 }
 
 .action-button:active {
@@ -203,7 +204,7 @@
 .reply-form {
   margin-top: 10px;
   padding: 10px;
-  background: rgba(var(--ion-text-color-rgb), 0.04);
+  background: rgba(var(--ion-text-color-rgb), 0.03);
   border-radius: 10px;
 }
 

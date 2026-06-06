@@ -142,16 +142,13 @@ onUnmounted(() => cancelAnimationFrame(rafId))
 }
 
 .ip-logo {
-  font-family: 'Grand Hotel', cursive;
-  font-size: 54px;
-  letter-spacing: 0.02em;
+  font-family: inherit;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
   margin-bottom: 0.2rem;
   z-index: 1;
-  background: linear-gradient(to bottom, #ffffff, rgba(255, 255, 255, 0.72));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  text-shadow: 0 0 40px rgba(94, 106, 210, 0.22);
+  color: rgba(255, 255, 255, 0.94);
 }
 
 .ip-tagline {

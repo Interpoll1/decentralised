@@ -1197,9 +1197,13 @@ if (FEED_DEBUG) {
 
 <style scoped>
 
+.main-content { padding: 20px; }
+
 .logo-title {
-  font-family: 'Grand Hotel', cursive;
-  font-size: 32px;
+  font-family: inherit;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
   margin-left: 20px;
   letter-spacing: 0.02em;
   padding-inline-start: 0;
@@ -1807,7 +1811,7 @@ ion-header.header-hidden {
   .joined-check            { font-size: 16px; color: var(--app-accent-bright); flex-shrink: 0; }
 
   .sidebar-about           { padding: 14px; }
-  .sidebar-about-title     { font-family: 'Grand Hotel', cursive; font-size: 20px; margin: 0 0 6px; }
+  .sidebar-about-title     { font-family: inherit; font-size: 20px; font-weight: 700; margin: 0 0 6px; }
   .sidebar-about-text      { font-size: 12px; color: var(--app-text-muted); line-height: 1.6; margin: 0; }
 }
 
