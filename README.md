@@ -22,12 +22,12 @@ Traditional online communities share a fundamental weakness: **one server, one p
 
 InterPoll takes a different approach:
 
-- 🌐 **No single owner.** Data is spread across every participant's device and a network of relay servers. Anyone can run a relay. Communities can run their own.
-- 🔒 **Your vote, signed by you.** Every action you take is cryptographically signed with a key that lives only on your device. No relay or server can forge a vote in your name.
-- 💬 **Posts and comments that persist.** Community discussion is replicated across peers and relays, not trapped in a single vendor database.
-- 📄 **Verifiable receipts.** After voting you get a short verification code. You can check it in the built-in Chain Explorer at any time to confirm your vote is intact.
-- 📴 **Works offline.** Lost your connection? Your votes and local activity are still saved and sync when connectivity returns.
-- 🔐 **Private communities.** Sensitive discussions can be fully encrypted so that only invited members can read them — not even the relay server knows the contents.
+- **No single owner.** Data is spread across every participant's device and a network of relay servers. Anyone can run a relay. Communities can run their own.
+- **Your vote, signed by you.** Every action you take is cryptographically signed with a key that lives only on your device. No relay or server can forge a vote in your name.
+- **Posts and comments that persist.** Community discussion is replicated across peers and relays, not trapped in a single vendor database.
+- **Verifiable receipts.** After voting you get a short verification code. You can check it in the built-in Chain Explorer at any time to confirm your vote is intact.
+  **Works offline.** Lost your connection? Your votes and local activity are still saved and sync when connectivity returns.
+- **Private communities.** Sensitive discussions can be fully encrypted so that only invited members can read them — not even the relay server knows the contents.
 
 ---
 
@@ -157,7 +157,7 @@ npm test          # Run the Vitest test suite
 
 For an implementation-aligned protocol specification — including the full block structure, vote flow, sync protocol, encryption details, relay trust model, and threat model — read the whitepaper:
 
-📄 **[`docs/protocol-whitepaper.md`](docs/protocol-whitepaper.md)**
+**[`docs/protocol-whitepaper.md`](docs/protocol-whitepaper.md)**
 
 ### Project layout
 
