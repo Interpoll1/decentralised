@@ -1,6 +1,6 @@
 <!-- In PostCard.vue template -->
 <template>
-  <article class="post-card surface-card surface-card--interactive" v-if="post">
+  <article class="post-card" v-if="post">
     <div v-if="flagged && filterAction === 'blur' && !revealed" class="flagged-overlay" @click.stop="revealed = true">
       <ion-icon :icon="warningOutline"></ion-icon>
       <span>Content hidden by word filter — tap to reveal</span>
@@ -65,8 +65,9 @@
 
 <style scoped>
 .post-card {
-  margin: 0 12px 16px 20px;
-  padding: 18px;
+  margin: 0 0 24px;
+  padding: 20px 0 18px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
 }
 
 .post-header {
@@ -183,9 +184,8 @@
 }
 
 .stat-button:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.12);
-  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .stat-button:active {
@@ -269,8 +269,8 @@
 
 @media (max-width: 576px) {
   .post-card {
-    margin: 0 12px 14px;
-    padding: 16px;
+    margin: 0 0 14px;
+    padding: 16px 0 14px;
   }
 
   .post-title {

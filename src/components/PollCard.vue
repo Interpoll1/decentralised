@@ -1,5 +1,5 @@
 <template>
-  <article class="poll-card surface-card surface-card--interactive">
+  <article class="poll-card">
     <div v-if="flagged && filterAction === 'blur' && !revealed" class="flagged-overlay" @click.stop="revealed = true">
       <ion-icon :icon="warningOutline"></ion-icon>
       <span>Poll hidden by word filter — tap to reveal</span>
@@ -194,8 +194,9 @@ function getTimeRemaining(): string {
 
 <style scoped>
 .poll-card {
-  margin: 0 12px 16px 20px;
-  padding: 18px;
+  margin: 0 0 24px;
+  padding: 20px 0 18px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
 }
 
 .poll-header {
@@ -299,15 +300,12 @@ function getTimeRemaining(): string {
 }
 
 .option-preview {
-  padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 14px;
+  padding: 0;
 }
 
 .option-bar {
   height: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.05);
   border-radius: 999px;
   overflow: hidden;
   margin-bottom: 8px;
@@ -340,7 +338,7 @@ function getTimeRemaining(): string {
   align-items: center;
   gap: 12px;
   padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
   flex-wrap: wrap;
 }
 
@@ -356,8 +354,8 @@ function getTimeRemaining(): string {
   align-items: center;
   gap: 6px;
   padding: 8px 11px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 999px;
   font-size: 12px;
   color: var(--app-text-muted);
@@ -406,8 +404,8 @@ function getTimeRemaining(): string {
 
 @media (max-width: 576px) {
   .poll-card {
-    margin: 0 12px 14px;
-    padding: 16px;
+    margin: 0 0 14px;
+    padding: 16px 0 14px;
   }
 
   .poll-question {

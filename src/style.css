@@ -344,12 +344,12 @@ p {
 }
 
 .surface-card--interactive:hover {
-  transform: translateY(-4px);
+  transform: translateY(-1px);
   background:
     linear-gradient(180deg, var(--app-surface-tint-top-hover), var(--app-surface-tint-bottom-hover)),
     var(--app-surface-hover);
   border-color: var(--app-border-strong);
-  box-shadow: var(--app-shadow-lg), var(--app-shadow-inset);
+  box-shadow: var(--app-shadow-md), var(--app-shadow-inset);
 }
 
 .surface-pill {
