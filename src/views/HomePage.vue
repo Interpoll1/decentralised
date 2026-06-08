@@ -1206,8 +1206,8 @@ if (FEED_DEBUG) {
   letter-spacing: -0.03em;
   margin-left: 20px;
   letter-spacing: 0.02em;
-  padding-inline-start: 0;
   --color: var(--app-text);
+  padding-inline-start: 0;
   background: linear-gradient(to bottom, var(--app-heading-start), var(--app-heading-end));
   -webkit-background-clip: text;
   background-clip: text;

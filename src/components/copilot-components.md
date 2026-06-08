@@ -17,6 +17,7 @@ Reusable UI components built with Vue 3 Composition API + Ionic + Tailwind.
 | `ChainStatus.vue` | Badge/indicator showing blockchain sync state (valid/invalid, block count, WebSocket connected). Uses `useChainStore`. | — |
 | `ReceiptViewer.vue` | Displays a vote receipt (verification code + block details). Allows receipt lookup in chain explorer. | `receipt: Receipt` |
 | `ImageUploader.vue` | Drag-and-drop / click-to-upload image picker. Compresses and uploads via `IPFSService`. Emits `uploaded` with `{ cid, thumbnail }`. | emits `uploaded` |
+| `AppLoader.vue` | Full-screen startup loader with animated network canvas and an Interpoll wordmark centered over the scene inside a translucent card, so brand identity stays visible while peers connect. | — |
 | `ConnectionBanner.vue` | Top-of-screen banner shown when WebSocket is disconnected. Uses `chainStore.isWebSocketConnected`. | — |
 | `RecoveryPhraseCard.vue` | Displays a BIP-39 mnemonic receipt in a stylized card. | `mnemonic: string` |
 | `ChatImageMessage.vue` | Renders an image message in the chat view with thumbnail preview. | `message: ChatMessage` |

@@ -20,7 +20,7 @@ export interface KnownServer {
 
 export class WebSocketService {
   private static ws: WebSocket | null = null;
-  private static peerId: string = Math.random().toString(36).substring(7);
+  private static peerId: string = WebSocketService.createPeerId();
   private static callbacks: Map<string, Set<(data: any) => void>> = new Map();
   private static isConnected = false;
   private static reconnectAttempts = 0;
@@ -50,6 +50,10 @@ export class WebSocketService {
   private static connectionEpoch = 0;
   private static syncRequestCallback: (() => void) | null = null;
   private static chatRoomListeners: Map<string, Set<(data: any) => void>> = new Map();
+
+  private static createPeerId(): string {
+    return `peer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  }
 
   /**
    * Register a callback that fires on every (re)connect to request incremental sync.
@@ -143,6 +147,14 @@ export class WebSocketService {
             return;
           }
 
+          if (message.type === 'error' && message.code === 'PEER_ID_TAKEN') {
+            this.peerId = this.createPeerId();
+            this.sendToRelay('register', { peerId: this.peerId });
+            this.sendToRelay('join-room', { roomId: 'default' });
+            this.broadcastAddresses();
+            return;
+          }
+
           if (message.type === 'peer-list') {
             if (Array.isArray(message.peers)) {
               this.peers = new Set(message.peers.filter(Boolean));
@@ -190,6 +202,7 @@ export class WebSocketService {
                 gunPeers: data.gunPeers || [],
                 joinedAt: data.joinedAt || Date.now(),
               });
+              this.notifyStatus();
             }
           }
 
@@ -627,8 +640,11 @@ export class WebSocketService {
   }
 
   static getPeerCount(): number {
-    const totalPeers = this.peers.size || (this.isConnected ? 1 : 0);
-    return Math.max(0, totalPeers - 1);
+    const peerListCount = this.peers.has(this.peerId)
+      ? Math.max(0, this.peers.size - 1)
+      : this.peers.size;
+    const peerAddressCount = this.peerAddresses.size;
+    return Math.max(peerListCount, peerAddressCount);
   }
 
   static getPeerAddresses(): Map<string, { peerId: string; relayUrl: string; gunPeers: string[]; joinedAt: number }> {

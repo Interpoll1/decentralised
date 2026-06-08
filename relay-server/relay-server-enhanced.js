@@ -2063,18 +2063,23 @@ wss.on('connection', (ws, req) => {
       switch (data.type) {
         case 'register':
           {
-            const sessionUser = await getSecureSession(req);
-            const sessionSub = sanitizeId(String(sessionUser?.sub || ''), 128);
-            if (!sessionSub) {
+            const requestedPeerId = sanitizeId(String(data.peerId || ''), 128);
+            if (!requestedPeerId) {
               if (ws.readyState === 1) {
-                ws.send(JSON.stringify({ type: 'error', code: 'AUTH_REQUIRED', reason: 'authenticated session required for websocket registration' }));
+                ws.send(JSON.stringify({ type: 'error', code: 'INVALID_PEER_ID', reason: 'peerId is required for websocket registration' }));
               }
               break;
             }
-            sessionUserCache = sessionUser;
-            userId = sessionSub;
+            peerId = requestedPeerId;
+            const sessionUser = await getSecureSession(req);
+            const sessionSub = sanitizeId(String(sessionUser?.sub || ''), 128);
+            if (sessionSub) {
+              sessionUserCache = sessionUser;
+              userId = sessionSub;
+            } else {
+              userId = `anon:${peerId}`;
+            }
           }
-          peerId = data.peerId;
           if (clients.has(peerId)) {
             if (ws.readyState === 1) {
               ws.send(JSON.stringify({ type: 'error', code: 'PEER_ID_TAKEN', reason: 'Peer ID already registered' }));

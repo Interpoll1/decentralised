@@ -394,6 +394,15 @@ export const usePostStore = defineStore('post', () => {
 
   async function createPost(data: { communityId: string; title: string; content: string; imageFile?: File; }) {
     try {
+      let joinedCommunityIds: string[] = [];
+      try {
+        joinedCommunityIds = JSON.parse(localStorage.getItem('joined-communities') || '[]');
+      } catch {
+        joinedCommunityIds = [];
+      }
+      if (!joinedCommunityIds.includes(data.communityId)) {
+        throw new Error('COMMUNITY_JOIN_REQUIRED');
+      }
       // Force refresh so we always get the latest customUsername, not a stale cache
       const currentUser = await UserService.getCurrentUser(true);
       const showReal = currentUser.showRealName === true;
