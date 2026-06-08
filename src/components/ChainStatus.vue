@@ -35,7 +35,7 @@
         </div>
 
         <div class="flex justify-between items-center">
-          <span class="text-sm font-medium opacity-80">GunDB:</span>
+          <span class="text-sm font-medium opacity-80">GenosDB:</span>
           <div class="flex items-center gap-2">
             <div
               class="w-2 h-2 rounded-full"
@@ -120,33 +120,23 @@ import {
 } from '@ionic/vue';
 import { checkmarkCircle, closeCircle, shield, warningOutline } from 'ionicons/icons';
 import { useChainStore } from '../stores/chainStore';
-import { GunService } from '../services/gunService';
+import { getNetworkStats } from '../services/gdbServices';
 
 const chainStore = useChainStore();
 const gunConnected = ref(false);
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 
-const overallStatusColor = computed(() => {
-  if (chainStore.isWebSocketConnected && gunConnected.value) return 'success';
-  if (chainStore.isWebSocketConnected || gunConnected.value) return 'warning';
-  return 'warning';
-});
+const overallStatusColor = computed(() => (gunConnected.value ? 'success' : 'warning'));
 
-const overallStatusLabel = computed(() => {
-  if (chainStore.isWebSocketConnected && gunConnected.value) return 'Online';
-  if (chainStore.isWebSocketConnected) return 'WS Only';
-  if (gunConnected.value) return 'Gun Only';
-  return 'Offline';
-});
+const overallStatusLabel = computed(() => (gunConnected.value ? 'Online' : 'Connecting'));
 
-function refreshGunStatus() {
-  const stats = GunService.getPeerStats();
-  gunConnected.value = stats.isConnected;
+function refreshNetworkStatus() {
+  gunConnected.value = getNetworkStats().isConnected;
 }
 
 onMounted(() => {
-  refreshGunStatus();
-  pollInterval = setInterval(refreshGunStatus, 5000);
+  refreshNetworkStatus();
+  pollInterval = setInterval(refreshNetworkStatus, 5000);
 });
 
 onUnmounted(() => {

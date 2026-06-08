@@ -1,415 +1,219 @@
-// chatService.ts - P2P Chat Service for Vue
-
-import { GunService } from './gunService';
-import { StorageService } from './storageService';
+// chatService.ts — 1:1 end-to-end encrypted direct messages over GenosDB.
+//
+// The RSA-OAEP pairwise encryption is kept (it is app-level WebCrypto, not Gun).
+// What changes is the plumbing: the WebSocket relay + manual reconnect is replaced
+// by GenosDB's P2P sync (encrypted message nodes deliver in real time on their own)
+// and an ephemeral db.room channel for typing indicators. Recipient key discovery
+// moves from a Gun path to a GenosDB node.
+import { db } from './gdbServices'
+import { StorageService } from './storageService'
 
 export interface ChatMessage {
-  id: string;
-  from: string;
-  to: string;
-  message: string;
-  timestamp: number;
-  read: boolean;
-  sent: boolean;
+  id: string
+  from: string
+  to: string
+  message: string
+  timestamp: number
+  read: boolean
+  sent: boolean
 }
 
 export interface RecipientInfo {
-  userId: string;
-  publicKey?: string;
-  name?: string;
-  avatar?: string;
+  userId: string
+  publicKey?: string
+  name?: string
+  avatar?: string
 }
 
 class ChatService {
-  private static readonly KEYPAIR_STORAGE_PREFIX = 'chat-keypair';
-  private ws: WebSocket | null = null;
-  private wsUrl: string;
-  private userId: string;
-  private peerId: string;
-  private keyPair: CryptoKeyPair | null = null;
-  private recipientKeys: Map<string, CryptoKey> = new Map();
-  private connected: boolean = false;
-  private reconnectTimer: number | null = null;
+  static readonly KEYPAIR_STORAGE_PREFIX = 'chat-keypair'
+  private userId: string
+  private keyPair: CryptoKeyPair | null = null
+  private recipientKeys = new Map<string, CryptoKey>()
+  private connected = false
+  private typingChannel: { send: (data: unknown) => void; on: (ev: string, cb: (data: any, peerId: string) => void) => void } | null = null
+  private unsubMessages: (() => void) | null = null
 
-  public onMessage:          ((msg: ChatMessage) => void) | null = null;
-  public onTyping:           ((data: { from: string; isTyping: boolean }) => void) | null = null;
-  public onDelivered:        ((data: { messageId: string; recipientId: string }) => void) | null = null;
-  public onReadReceipt:      ((data: { from: string }) => void) | null = null;
-  public onConnectionChange: ((connected: boolean) => void) | null = null;
+  public onMessage: ((msg: ChatMessage) => void) | null = null
+  public onTyping: ((data: { from: string; isTyping: boolean }) => void) | null = null
+  public onDelivered: ((data: { messageId: string; recipientId: string }) => void) | null = null
+  public onReadReceipt: ((data: { from: string }) => void) | null = null
+  public onConnectionChange: ((connected: boolean) => void) | null = null
 
-  constructor(wsUrl: string, userId: string) {
-    this.wsUrl   = wsUrl;
-    this.userId  = userId;
-    this.peerId  = `peer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  // wsUrl is accepted for API compatibility but unused — GenosDB needs no relay socket.
+  constructor(_wsUrl: string, userId: string) {
+    this.userId = userId
   }
 
   // ── Init ────────────────────────────────────────────────────────────────────
-
   async init(): Promise<string> {
-    this.keyPair = await this.loadOrGenerateKeyPair();
-    const pubKeyB64 = await this.exportPublicKey();
+    this.keyPair = await this.loadOrGenerateKeyPair()
+    const pubKeyB64 = await this.exportPublicKey()
 
-    // Publish RSA-OAEP public key to GunDB so peers can find it.
-    // Skip redundant writes on every startup to reduce Gun churn.
-    const gun = GunService.getGun();
-    const currentKey = await new Promise<string | null>((resolve) => {
-      const timer = setTimeout(() => resolve(null), 2500);
-      gun.get('users').get(this.userId).get('chatPublicKey').once((key: unknown) => {
-        clearTimeout(timer);
-        resolve(typeof key === 'string' ? key : null);
-      });
-    });
-    if (currentKey !== pubKeyB64) {
-      gun.get('users').get(this.userId).get('chatPublicKey').put(pubKeyB64);
+    // Publish our RSA public key so peers can encrypt to us.
+    const { result } = await db.get(`chatKey:${this.userId}`)
+    if (result?.value?.key !== pubKeyB64) {
+      await db.put({ type: 'chatKey', userId: this.userId, key: pubKeyB64 }, `chatKey:${this.userId}`)
     }
 
-    this.connect();
-    return pubKeyB64;
+    // Incoming messages arrive as synced nodes — only surface genuinely new ones.
+    const { unsubscribe } = await db.map(
+      { query: { type: 'dm', recipientId: this.userId } },
+      async ({ value, action }) => {
+        if (action !== 'added' || !value?.encryptedForRecipient) return
+        try {
+          const message = await this.decryptMessage(value.encryptedForRecipient)
+          this.onMessage?.({ id: value.id, from: value.senderId, to: this.userId, message, timestamp: value.timestamp, read: false, sent: false })
+        } catch { /* skip messages from a previous keypair */ }
+      },
+    )
+    this.unsubMessages = unsubscribe
+
+    // Ephemeral typing indicators travel over a room channel, not the database.
+    this.typingChannel = db.room.channel('chat-typing')
+    this.typingChannel!.on('message', (data: { from: string; to: string; isTyping: boolean }) => {
+      if (data?.to === this.userId) this.onTyping?.({ from: data.from, isTyping: data.isTyping })
+    })
+
+    this.connected = true
+    this.onConnectionChange?.(true)
+    return pubKeyB64
   }
 
-  // ── RSA Key Management ──────────────────────────────────────────────────────
-
+  // ── RSA key management ────────────────────────────────────────────────────────
   private getKeypairStorageKey(): string {
-    return `${ChatService.KEYPAIR_STORAGE_PREFIX}:${this.userId}`;
-  }
-
-  private getLegacyKeypairStorageKey(): string {
-    return `chat-keypair-${this.userId}`;
-  }
-
-  private async persistKeyPair(keyPair: CryptoKeyPair): Promise<void> {
-    await StorageService.setMetadata(this.getKeypairStorageKey(), keyPair);
+    return `${ChatService.KEYPAIR_STORAGE_PREFIX}:${this.userId}`
   }
 
   private isStoredKeyPair(value: unknown): value is CryptoKeyPair {
-    return !!value
-      && typeof value === 'object'
-      && 'publicKey' in value
-      && 'privateKey' in value;
+    return !!value && typeof value === 'object' && 'publicKey' in value && 'privateKey' in value
   }
 
   private async loadOrGenerateKeyPair(): Promise<CryptoKeyPair> {
     try {
-      const stored = await StorageService.getMetadata(this.getKeypairStorageKey());
-      if (this.isStoredKeyPair(stored)) {
-        return stored;
-      }
-    } catch (error) {
-      console.warn('Failed to load stored chat keypair:', error);
-    }
-
-    const legacy = localStorage.getItem(this.getLegacyKeypairStorageKey());
-    if (legacy) {
-      try {
-        const parsed = JSON.parse(legacy);
-        if (typeof parsed?.publicKey !== 'string' || typeof parsed?.privateKey !== 'string') {
-          throw new Error('Legacy chat keypair is malformed');
-        }
-        const pub = await crypto.subtle.importKey(
-          'spki',
-          Uint8Array.from(atob(parsed.publicKey), c => c.charCodeAt(0)),
-          { name: 'RSA-OAEP', hash: 'SHA-256' },
-          true,
-          ['encrypt'],
-        );
-        const priv = await crypto.subtle.importKey(
-          'pkcs8',
-          Uint8Array.from(atob(parsed.privateKey), c => c.charCodeAt(0)),
-          { name: 'RSA-OAEP', hash: 'SHA-256' },
-          false,
-          ['decrypt'],
-        );
-        const keyPair = { publicKey: pub, privateKey: priv };
-        await this.persistKeyPair(keyPair);
-        localStorage.removeItem(this.getLegacyKeypairStorageKey());
-        return keyPair;
-      } catch (error) {
-        localStorage.removeItem(this.getLegacyKeypairStorageKey());
-        console.warn('Failed to migrate legacy chat keypair:', error);
-      }
-    }
+      const stored = await StorageService.getMetadata(this.getKeypairStorageKey())
+      if (this.isStoredKeyPair(stored)) return stored
+    } catch { /* fall through to generate */ }
 
     const pair = await crypto.subtle.generateKey(
       { name: 'RSA-OAEP', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' },
-      false, ['encrypt', 'decrypt']
-    );
-    await this.persistKeyPair(pair);
-    return pair;
+      false, ['encrypt', 'decrypt'],
+    )
+    await StorageService.setMetadata(this.getKeypairStorageKey(), pair)
+    return pair
   }
 
   async exportPublicKey(): Promise<string> {
-    if (!this.keyPair) throw new Error('Key pair not initialized');
-    const exported = await crypto.subtle.exportKey('spki', this.keyPair.publicKey);
-    return btoa(String.fromCharCode(...new Uint8Array(exported)));
+    if (!this.keyPair) throw new Error('Key pair not initialized')
+    const exported = await crypto.subtle.exportKey('spki', this.keyPair.publicKey)
+    return btoa(String.fromCharCode(...new Uint8Array(exported)))
   }
 
   private async importPublicKey(base64Key: string): Promise<CryptoKey> {
-    const binary = Uint8Array.from(atob(base64Key), c => c.charCodeAt(0));
-    return await crypto.subtle.importKey(
-      'spki', binary,
-      { name: 'RSA-OAEP', hash: 'SHA-256' },
-      true, ['encrypt']
-    );
+    const binary = Uint8Array.from(atob(base64Key), c => c.charCodeAt(0))
+    return crypto.subtle.importKey('spki', binary, { name: 'RSA-OAEP', hash: 'SHA-256' }, true, ['encrypt'])
   }
-
-  // ── GunDB Key Fetch ─────────────────────────────────────────────────────────
 
   private async fetchRecipientChatKey(recipientId: string): Promise<string | null> {
-    const gun = GunService.getGun();
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => resolve(null), 5000);
-      gun.get('users').get(recipientId).get('chatPublicKey').once((key: any) => {
-        clearTimeout(timer);
-        resolve(typeof key === 'string' && key.length > 0 ? key : null);
-      });
-    });
+    const { result } = await db.get(`chatKey:${recipientId}`)
+    const key = result?.value?.key
+    return typeof key === 'string' && key.length > 0 ? key : null
   }
 
-  // ── Encryption ──────────────────────────────────────────────────────────────
-
+  // ── Encryption ────────────────────────────────────────────────────────────────
   private async encryptMessage(message: string, recipientPublicKey: CryptoKey): Promise<string> {
-    const data      = new TextEncoder().encode(message);
-    const encrypted = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, recipientPublicKey, data);
-    return btoa(String.fromCharCode(...new Uint8Array(encrypted)));
+    const encrypted = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, recipientPublicKey, new TextEncoder().encode(message))
+    return btoa(String.fromCharCode(...new Uint8Array(encrypted)))
   }
 
   private async decryptMessage(encryptedBase64: string): Promise<string> {
-    if (!this.keyPair) throw new Error('Key pair not initialized');
-    const binary    = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
-    const decrypted = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, this.keyPair.privateKey, binary);
-    return new TextDecoder().decode(decrypted);
+    if (!this.keyPair) throw new Error('Key pair not initialized')
+    const binary = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0))
+    const decrypted = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, this.keyPair.privateKey, binary)
+    return new TextDecoder().decode(decrypted)
   }
 
-  // ── GunDB Message Storage ───────────────────────────────────────────────────
-
-  /**
-   * Room key is sorted so both users share the same GunDB path.
-   * e.g. chats/alice:bob/msg-123
-   * Messages are stored twice — once encrypted for recipient, once for sender —
-   * so both can decrypt their own copy.
-   */
+  /** Stable conversation id shared by both participants. */
   private getRoomId(userA: string, userB: string): string {
-    return [userA, userB].sort().join(':');
-  }
-
-  private async storeMessageInGun(
-    roomId: string,
-    messageId: string,
-    senderId: string,
-    recipientId: string,
-    encryptedForRecipient: string,
-    encryptedForSender: string,
-    timestamp: number
-  ): Promise<void> {
-    const gun = GunService.getGun();
-    gun.get('chats').get(roomId).get(messageId).put({
-      id:                   messageId,
-      senderId,
-      recipientId,
-      encryptedForRecipient, // decryptable by recipient
-      encryptedForSender,    // decryptable by sender
-      timestamp,
-      readAt:               null,
-    });
-  }
-
-  /**
-   * Load and decrypt all messages for a conversation from GunDB.
-   */
-  async loadHistory(recipientId: string): Promise<ChatMessage[]> {
-    const gun    = GunService.getGun();
-    const roomId = this.getRoomId(this.userId, recipientId);
-    const raw: any[] = [];
-
-    await new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, 3000);
-      gun.get('chats').get(roomId).once((room: any) => {
-        clearTimeout(timer);
-        if (!room) { resolve(); return; }
-        const keys = Object.keys(room).filter(k => k !== '_' && k.startsWith('msg-'));
-        if (keys.length === 0) { resolve(); return; }
-
-        let loaded = 0;
-        keys.forEach((msgId) => {
-          gun.get('chats').get(roomId).get(msgId).once((msg: any) => {
-            if (msg && msg.senderId) raw.push(msg);
-            loaded++;
-            if (loaded === keys.length) resolve();
-          });
-        });
-      });
-    });
-
-    // Sort by timestamp
-    raw.sort((a, b) => a.timestamp - b.timestamp);
-
-    const result: ChatMessage[] = [];
-    for (const msg of raw) {
-      try {
-        const isSent        = msg.senderId === this.userId;
-        const encryptedBlob = isSent ? msg.encryptedForSender : msg.encryptedForRecipient;
-        const text          = await this.decryptMessage(encryptedBlob);
-        result.push({
-          id:        msg.id,
-          from:      msg.senderId,
-          to:        msg.recipientId,
-          message:   text,
-          timestamp: msg.timestamp,
-          read:      !!msg.readAt,
-          sent:      isSent,
-        });
-      } catch {
-        // Skip messages from a previous keypair
-      }
-    }
-
-    return result;
-  }
-
-  // ── WebSocket ───────────────────────────────────────────────────────────────
-
-  private connect(): void {
-    this.ws = new WebSocket(this.wsUrl);
-
-    this.ws.onopen = () => {
-      this.connected = true;
-      if (this.onConnectionChange) this.onConnectionChange(true);
-      this.ws!.send(JSON.stringify({ type: 'register', peerId: this.peerId, userId: this.userId }));
-    };
-
-    this.ws.onmessage = async (event) => {
-      try { await this.handleMessage(JSON.parse(event.data)); }
-      catch (err) { console.error('❌ Chat message error:', err); }
-    };
-
-    this.ws.onerror = (err) => console.error('❌ Chat WS error:', err);
-
-    this.ws.onclose = () => {
-      this.connected = false;
-      if (this.onConnectionChange) this.onConnectionChange(false);
-      this.reconnectTimer = window.setTimeout(() => this.connect(), 2000);
-    };
-  }
-
-  private async handleMessage(data: any): Promise<void> {
-    switch (data.type) {
-      case 'chat-message':
-        if (this.onMessage) {
-          try {
-            // Decrypt using our private key (encryptedForRecipient)
-            const decrypted = await this.decryptMessage(data.encryptedForRecipient);
-            this.onMessage({
-              id:        data.messageId,
-              from:      data.from,
-              to:        this.userId,
-              message:   decrypted,
-              timestamp: data.timestamp,
-              read:      false,
-              sent:      false,
-            });
-          } catch (err) {
-            console.error('❌ Decryption failed:', err);
-          }
-        }
-        break;
-
-      case 'chat-typing':
-        if (this.onTyping) this.onTyping({ from: data.from, isTyping: data.isTyping });
-        break;
-
-      case 'chat-delivered':
-        if (this.onDelivered) this.onDelivered({ messageId: data.messageId, recipientId: data.recipientId });
-        break;
-
-      case 'chat-read-receipt':
-        if (this.onReadReceipt) this.onReadReceipt({ from: data.from });
-        break;
-    }
+    return [userA, userB].sort().join(':')
   }
 
   // ── Public API ──────────────────────────────────────────────────────────────
-
   async startChat(recipient: RecipientInfo): Promise<void> {
-    const gunKey = await this.fetchRecipientChatKey(recipient.userId);
-    if (!gunKey) throw new Error(`No RSA chat key found for user ${recipient.userId}. Have them open the app first.`);
-
-    const pubKey = await this.importPublicKey(gunKey);
-    this.recipientKeys.set(recipient.userId, pubKey);
-
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'chat-start', recipientId: recipient.userId }));
-    }
+    const keyB64 = await this.fetchRecipientChatKey(recipient.userId)
+    if (!keyB64) throw new Error(`No RSA chat key found for user ${recipient.userId}. Have them open the app first.`)
+    this.recipientKeys.set(recipient.userId, await this.importPublicKey(keyB64))
   }
 
   async sendMessage(recipientId: string, message: string): Promise<string> {
-    let recipientKey = this.recipientKeys.get(recipientId);
-
-    // Auto-recover if key not cached
+    let recipientKey = this.recipientKeys.get(recipientId)
     if (!recipientKey) {
-      const keyB64 = await this.fetchRecipientChatKey(recipientId);
-      if (!keyB64) throw new Error('Recipient public key not found. Have them open the app first.');
-      recipientKey = await this.importPublicKey(keyB64);
-      this.recipientKeys.set(recipientId, recipientKey);
+      const keyB64 = await this.fetchRecipientChatKey(recipientId)
+      if (!keyB64) throw new Error('Recipient public key not found. Have them open the app first.')
+      recipientKey = await this.importPublicKey(keyB64)
+      this.recipientKeys.set(recipientId, recipientKey)
     }
 
-    // Encrypt once for recipient, once for ourselves (so we can decrypt sent msgs)
-    const encryptedForRecipient = await this.encryptMessage(message, recipientKey);
-    const encryptedForSender    = await this.encryptMessage(message, this.keyPair!.publicKey);
+    // Encrypt for the recipient and for ourselves, so both can read history.
+    const encryptedForRecipient = await this.encryptMessage(message, recipientKey)
+    const encryptedForSender = await this.encryptMessage(message, this.keyPair!.publicKey)
+    const messageId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
+    const timestamp = Date.now()
 
-    const messageId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const timestamp = Date.now();
-    const roomId    = this.getRoomId(this.userId, recipientId);
-
-    // Persist to GunDB (both encrypted blobs stored, neither is plaintext)
-    await this.storeMessageInGun(
-      roomId, messageId,
-      this.userId, recipientId,
+    // The synced node IS the delivery — no relay forwarding needed.
+    await db.put({
+      type: 'dm',
+      id: messageId,
+      roomId: this.getRoomId(this.userId, recipientId),
+      senderId: this.userId,
+      recipientId,
       encryptedForRecipient,
       encryptedForSender,
-      timestamp
-    );
+      timestamp,
+      readAt: null,
+    }, messageId)
 
-    // Deliver in real-time via WebSocket relay
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({
-        type:                 'chat-message',
-        recipientId,
-        encryptedForRecipient, // relay forwards this to recipient
-        messageId,
-        timestamp,
-      }));
+    return messageId
+  }
+
+  async loadHistory(recipientId: string): Promise<ChatMessage[]> {
+    const roomId = this.getRoomId(this.userId, recipientId)
+    const { results } = await db.map({ query: { type: 'dm', roomId } })
+    const raw = results.map(n => n.value).sort((a, b) => a.timestamp - b.timestamp)
+
+    const out: ChatMessage[] = []
+    for (const msg of raw) {
+      try {
+        const sent = msg.senderId === this.userId
+        const text = await this.decryptMessage(sent ? msg.encryptedForSender : msg.encryptedForRecipient)
+        out.push({ id: msg.id, from: msg.senderId, to: msg.recipientId, message: text, timestamp: msg.timestamp, read: !!msg.readAt, sent })
+      } catch { /* skip messages from a previous keypair */ }
     }
-
-    return messageId;
+    return out
   }
 
   sendTyping(recipientId: string, isTyping: boolean): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'chat-typing', recipientId, isTyping }));
-    }
+    this.typingChannel?.send({ from: this.userId, to: recipientId, isTyping })
   }
 
-  markAsRead(recipientId: string): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'chat-read', recipientId }));
-    }
-    // Mark in GunDB too
-    const gun    = GunService.getGun();
-    const roomId = this.getRoomId(this.userId, recipientId);
-    gun.get('chats').get(roomId).map().once((msg: any, msgId: string) => {
-      if (msg && msg.recipientId === this.userId && !msg.readAt) {
-        gun.get('chats').get(roomId).get(msgId).get('readAt').put(Date.now());
-      }
-    });
+  async markAsRead(recipientId: string): Promise<void> {
+    const roomId = this.getRoomId(this.userId, recipientId)
+    const { results } = await db.map({ query: { type: 'dm', roomId, recipientId: this.userId } })
+    await Promise.all(
+      results
+        .filter(n => !n.value.readAt)
+        .map(n => db.put({ ...n.value, readAt: Date.now() }, n.value.id)),
+    )
   }
 
-  isConnected(): boolean { return this.connected; }
+  isConnected(): boolean { return this.connected }
 
   disconnect(): void {
-    if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
-    if (this.ws) { this.ws.close(); this.ws = null; }
-    this.connected = false;
+    this.unsubMessages?.()
+    this.unsubMessages = null
+    this.connected = false
+    this.onConnectionChange?.(false)
   }
 }
 
-export default ChatService;
+export default ChatService

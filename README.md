@@ -4,13 +4,21 @@
 
 <img width="1918" height="966" alt="InterPoll screenshot" src="https://github.com/user-attachments/assets/31717176-eb42-43b2-8200-8da9cf022550" />
 
+> ### 🛰️ A GenosDB build of InterPoll — shared as a friendly contribution
+> This repository is a fork of [**theEndless11's InterPoll**](https://github.com/theEndless11/decentralised),
+> rebuilt end-to-end on **[GenosDB](https://github.com/estebanrfp/gdb)** to show how
+> the very same app runs on a single peer-to-peer database — **one dependency, zero
+> servers, signed by default**. It's offered as a gift and a showcase, not a
+> replacement: all credit for InterPoll goes to its original author.
+> See **[`WHY-GENOSDB.md`](WHY-GENOSDB.md)** for exactly what changed and why.
+
 ---
 
 ## What is InterPoll?
 
 InterPoll is a **free, open, decentralised polling + discussion platform** — a place where communities can vote, post, comment, and organise without any single company in control.
 
-When you vote, publish a post, or leave a comment on InterPoll, your activity is stored locally first and then shared across the network. No central server owns your community history. Poll results are backed by verifiable receipts, while posts and comments are replicated across peers so they are harder to suppress or quietly erase.
+When you vote, publish a post, or leave a comment on InterPoll, your activity is stored locally first and then synced peer-to-peer across the network. No central server owns your community history. Poll results are backed by verifiable, cryptographically signed receipts, while posts and comments are replicated across peers so they are harder to suppress or quietly erase.
 
 We built InterPoll because we noticed that other platforms censor a lot — and even when they don't, they shadow-ban. On InterPoll, **anyone can create their own community, set their own rules, and design their own experience**. There is no algorithm deciding what you see. There is no central team that can quietly remove your poll.
 
@@ -18,16 +26,16 @@ We built InterPoll because we noticed that other platforms censor a lot — and 
 
 ## Why it matters
 
-Traditional online communities share a fundamental weakness: **one server, one point of control**. The company that runs the server can delete a poll, hide a post, remove comments, alter results, or simply go offline. This is as true of small community forums as it is of massive social platforms.
+Traditional online communities share a fundamental weakness: **one server, one point of control**. The company that runs the server can delete a poll, hide a post, remove comments, alter results, or simply go offline.
 
-InterPoll takes a different approach:
+InterPoll takes a different approach, powered by **[GenosDB](https://github.com/estebanrfp/gdb)** — a peer-to-peer graph database with built-in cryptographic identity:
 
-- **No single owner.** Data is spread across every participant's device and a network of relay servers. Anyone can run a relay. Communities can run their own.
-- **Your vote, signed by you.** Every action you take is cryptographically signed with a key that lives only on your device. No relay or server can forge a vote in your name.
-- **Posts and comments that persist.** Community discussion is replicated across peers and relays, not trapped in a single vendor database.
-- **Verifiable receipts.** After voting you get a short verification code. You can check it in the built-in Chain Explorer at any time to confirm your vote is intact.
-  **Works offline.** Lost your connection? Your votes and local activity are still saved and sync when connectivity returns.
-- **Private communities.** Sensitive discussions can be fully encrypted so that only invited members can read them — not even the relay server knows the contents.
+- **No single owner.** Data lives on every participant's device and syncs directly peer-to-peer. There is no backend to capture or shut down.
+- **Your vote, signed by you.** Every action is cryptographically signed by an identity that lives only on your device. No peer can forge a vote or post in your name.
+- **Posts and comments that persist.** Community discussion is replicated across peers, not trapped in a single vendor database.
+- **Verifiable receipts.** After voting you get a short verification code. Check it in the built-in Chain Explorer any time to confirm your vote is intact.
+- **Works offline.** Lost your connection? Your activity is saved locally and syncs automatically when you reconnect.
+- **Private communities.** Sensitive discussions are encrypted in your browser so only invited members can read them.
 
 ---
 
@@ -35,184 +43,133 @@ InterPoll takes a different approach:
 
 | Feature | What it means for you |
 |---|---|
-| **Tamper-evident voting** | Every vote is chained to the previous one. If anyone tries to alter or delete a record, the entire chain breaks — and it shows. |
-| **Public posts & threaded comments** | Run community conversations in the same network: publish updates, debate in comments, and keep context attached to each poll. |
-| **Verifiable receipt** | You get a short code after voting. Enter it in the Chain Explorer to confirm your vote was recorded, unchanged. |
-| **Offline-first** | Vote even without internet. Your record is kept locally and synced when you reconnect. |
-| **Private & encrypted communities** | Create communities where all content is encrypted in your browser. Relay servers see only scrambled data. |
+| **Cryptographically signed actions** | Every vote, post and comment is signed by your device identity and verified by peers. Forgery is impossible without your key. |
+| **Tamper-evident history** | Actions are ordered by a Hybrid Logical Clock and recorded as signed nodes. Altering the past would invalidate the signatures — and it shows. |
+| **Public posts & threaded comments** | Run community conversations alongside polls: publish updates, debate in threads, keep context attached to each topic. |
+| **Verifiable receipt** | Get a short code after voting. Enter it in the Chain Explorer to confirm your vote was recorded, unchanged. |
+| **Offline-first** | Vote without internet. Your record is stored locally (OPFS) and synced when you reconnect. |
+| **Private & encrypted communities** | Create communities whose content is AES-encrypted in your browser; peers only ever see ciphertext. |
 | **No algorithm** | You see what your community posts. No hidden ranking, no shadow-banning, no promoted content. |
-| **Community-run relays** | Any group can host its own relay server, giving communities full sovereignty over their data. |
-| **Optional login gates** | Poll creators can optionally require a Google or Microsoft login to vote — useful for verified, members-only polls. |
 | **Invite-only polls** | Generate single-use invite codes for private polls. Each code can only be used once. |
+| **Passkey or recovery phrase** | Protect your identity with a WebAuthn passkey (biometrics / hardware key) or a 12-word BIP39 recovery phrase. |
 
 ---
 
 ## How it works (plain language)
 
-InterPoll has three layers working together:
+InterPoll runs entirely on **GenosDB** — there are no servers to operate:
 
-**1. Your local chain (the record)**
-Votes and key actions are written to a local integrity log in your browser. Each new block links to the previous one using a unique fingerprint (a cryptographic hash). Changing past records would snap the chain — making tampering instantly visible.
+**1. Your identity (the key)**
+On first use you generate an identity that lives only on your device, protected by a passkey or a recovery phrase. It signs every action automatically. Peers verify those signatures, so nobody can act as you.
 
-**2. The distributed network (the copies)**
-Your data — polls, posts, comments, communities, and profiles — is replicated across a distributed database called GunDB. Every connected device holds a copy. If one relay goes down, the data lives on in the others and syncs back up when connectivity returns.
+**2. The graph (the data)**
+Polls, votes, posts, comments, communities and profiles are stored as nodes in a local graph, persisted to your browser's high-performance OPFS storage. Each vote is its own signed node, so concurrent votes never overwrite each other — tallies are derived, not mutated.
 
-**3. The relay (the messenger)**
-A lightweight WebSocket relay helps devices find each other and share updates in real time. Anyone can run a relay. If one relay is blocked or shut down, peers can switch to another. The more relays exist, the more resilient the network becomes.
+**3. The mesh (the sync)**
+GenosDB connects peers directly over WebRTC, using decentralised Nostr relays only for discovery (signaling) — never for your data. Changes propagate peer-to-peer in real time, and across your own browser tabs instantly. At scale, an optional Cellular Mesh keeps large communities fast by reducing connections from O(N²) to O(N).
 
-> **In short:** your polls, posts, comments, and vote history exist on your device, on your peers' devices, and across relay servers — all at once. Erasing them would require erasing every copy simultaneously. That is the core principle: sooner or later, a peer with a copy reconnects and reseeds the network.
+> **In short:** your polls, posts, comments and vote history exist on your device and on your peers' devices at once. Erasing them would mean erasing every copy simultaneously — sooner or later, a peer with a copy reconnects and reseeds the network.
 
 ```mermaid
 graph TD
-    A[Your Browser] -->|signs & stores actions| B[Local Chain — your device]
-    A -->|replicates polls, posts, comments, communities| C[GunDB — distributed]
-    A -->|syncs new blocks| D[WebSocket Relay]
-    A -->|syncs other tabs| E[BroadcastChannel]
-    D -->|broadcasts| F[Other Participants]
-    C -->|replicates| G[Community Relay Servers]
+    A[Your Browser] -->|signs every action| B[Security Manager — your key]
+    A -->|stores nodes| C[GenosDB graph — OPFS]
+    A -->|reactive queries| D[db.map subscriptions]
+    C -->|P2P delta sync over WebRTC| E[Other Participants]
+    C -->|cross-tab| F[BroadcastChannel]
+    G[Nostr relays] -. signaling only .-> A
 ```
 
 ---
 
 ## Honest about the limits
 
-InterPoll is designed to be **harder to censor and tamper with than a single-server platform** — not impossible. Here is what that means in practice:
+InterPoll is designed to be **harder to censor and tamper with than a single-server platform** — not impossible:
 
-- Data survives as long as **at least one honest participant** retains a copy and later reconnects.
-- The relay server can **delay or censor** messages, but it **cannot forge** a vote or signed action from your device key.
-- Anti-fraud controls (device fingerprinting, two-phase vote authorization, invite codes, OAuth gating) **raise the cost** of duplicate voting — they do not provide one-human-one-vote mathematical guarantees.
-- **Private communities** encrypt content in your browser. The encryption is strong (AES-256-GCM), but if you lose your key, there is no recovery.
-
-For the full technical threat model, see [**`docs/protocol-whitepaper.md`**](docs/protocol-whitepaper.md).
-
----
-
-## Get involved
-
-**Run a peer** — the simplest way to strengthen the network. Running `peer.js` on any laptop adds another copy of the data and helps other participants sync faster.
-
-```bash
-node peer.js
-```
-
-**Run a relay** — give your community full data sovereignty. See `gun-relay/` for the GunDB relay and `relay-server.js` for the WebSocket relay. Or run the official one.
-
-**Contribute code** — open a PR. The project is fully open source.
+- Data survives as long as **at least one honest peer** keeps a copy and later reconnects.
+- A signature **cannot be forged** without your device key; peers reject any unsigned or invalidly-signed operation.
+- One-identity-one-vote is enforced per signing identity plus single-use invite codes for private polls — this **raises the cost** of duplicate voting but is not a one-human-one-vote mathematical guarantee.
+- **Private communities** encrypt content in your browser (AES-256-GCM). The encryption is strong, but if you lose your key there is no recovery.
 
 ---
 
 ## Quick start (for developers)
 
-You need two things running: the frontend dev server and the relay server.
+InterPoll is a pure client app — **no backend, no relay server to run.**
 
 ```bash
-chmod +x run.sh
-./run.sh
+pnpm install
+pnpm dev
 ```
 
-The app opens at `http://localhost:5173`. The relay listens on port 8080.
-
-### Environment variables
-
-**Frontend** (prefix with `VITE_`, set at build time):
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `VITE_WS_RELAY_URL` | `ws://localhost:8080` | WebSocket relay |
-| `VITE_GUN_RELAY_URL` | `http://localhost:8765/gun` | GunDB relay |
-| `VITE_API_BASE_URL` | `http://localhost:8080` | Backend API |
-
-Relay URLs can also be changed at runtime from the Settings page (saved in `localStorage`).
-
-**Relay server** (set in environment):
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `FRONTEND_ORIGIN` | `http://localhost:5173` | CORS origin |
-| `SERVER_ORIGIN` | `http://localhost:8080` | Public relay origin used for OAuth callback URIs (required and must be HTTPS in production) |
-| `JWT_SECRET` | random per process | HMAC secret for relay session JWTs |
-| `VOTE_RESERVATION_SECRET` | random per process | HMAC secret for vote reservation tokens |
-| `GOOGLE_CLIENT_ID` | — | Google OAuth app ID |
-| `GOOGLE_CLIENT_SECRET` | — | Google OAuth secret |
-| `MS_CLIENT_ID` | — | Microsoft OAuth app ID |
-| `MS_CLIENT_SECRET` | — | Microsoft OAuth secret |
-| `MS_TENANT` | `common` | Azure AD tenant |
-
-OAuth is optional — the app works without it. It is only required for polls that enforce a login-to-vote policy.
-
-Use `.env.example` as a template. Keep real `.env` files and data directories out of git.
+The app opens at `http://localhost:5173`.
 
 ### Build commands
 
 ```bash
-npm run dev       # Start Vite dev server
-npm run build     # Type-check + production build
-npm run preview   # Serve the built dist/ folder locally
-npm test          # Run the Vitest test suite
+pnpm dev       # Start the Vite dev server
+pnpm build     # Production build
+pnpm preview   # Serve the built dist/ folder locally
+pnpm test      # Run the Vitest test suite
 ```
+
+> **Bundler note:** GenosDB lazy-loads optional modules via `import(new URL(...))`, so the Vite config sets `optimizeDeps.exclude: ['genosdb']` and `build.target: 'es2022'` (for top-level await). No other configuration is required.
 
 ---
 
-## Technical deep-dive
+## Technical overview
 
-For an implementation-aligned protocol specification — including the full block structure, vote flow, sync protocol, encryption details, relay trust model, and threat model — read the whitepaper:
+### Stack
 
-**[`docs/protocol-whitepaper.md`](docs/protocol-whitepaper.md)**
+Vue 3 + Ionic + Pinia + Vite on the front end; **GenosDB** for data, identity and P2P sync. Installing GenosDB pulls **zero transitive dependencies**.
 
-### Project layout
+### Data model
 
-```
-src/
-  components/     UI components (VoteForm, PollCard, PostCard, etc.)
-  views/          Page-level components (HomePage, VotePage, SettingsPage, etc.)
-  services/       Core logic — blockchain, GunDB, WebSocket, crypto, storage
-  stores/         Pinia state stores (chainStore, pollStore, communityStore, etc.)
-  router/         Vue Router configuration
-  config.ts       Centralised config with runtime-mutable relay URLs
+Everything is a signed GenosDB node, queried reactively with `db.map`:
 
-relay-server.js                          Dev WebSocket relay + OAuth + vote authorization
-relay-server/relay-server-enhanced.js   Production PM2 relay with persisted vote registry
-gun-relay/gun-relay.js                  GunDB relay server
-```
+| Node type | Purpose |
+|---|---|
+| `poll`, `vote` | A poll and its individual signed votes (tallies derived) |
+| `post`, `postVote` | A post and its up/down votes |
+| `comment`, `commentVote` | Threaded comments (via `parentId`) and their votes |
+| `community`, `membership` | Communities and signed memberships (member count derived) |
+| `chatRoom`, `chatMessage`, `dm` | Encrypted group rooms and direct messages |
+| `user` | Profiles keyed by the signing Ethereum address |
+| `chainAction`, `receipt` | The tamper-evident action log and verifiable receipts |
+| `image` | Compressed images stored as nodes |
 
 ### Key services
 
 | File | Responsibility |
 |---|---|
-| `chainService.ts` | Block creation, hashing, signing, chain validation |
-| `gunService.ts` | GunDB read/write/subscribe wrapper |
-| `websocketService.ts` | WebSocket connection, peer discovery, server-list sharing |
-| `broadcastService.ts` | Cross-tab sync via BroadcastChannel |
-| `pollService.ts` | Poll CRUD, invite code generation and validation |
-| `voteTrackerService.ts` | Device fingerprinting, duplicate-vote prevention |
-| `cryptoService.ts` | SHA-256 hashing, verification code generation |
-| `auditService.ts` | OAuth login/logout, backend vote authorization |
-| `storageService.ts` | IndexedDB wrapper for blocks, votes, receipts |
-| `encryptionService.ts` | AES-256-GCM community/content encryption |
-| `keyVaultService.ts` | Local key storage and export/import |
-| `ipfsService.ts` | Image compression, upload, and retrieval via GunDB |
+| `gdbServices.ts` | The single GenosDB instance (identity + P2P + storage) and network status |
+| `userService.ts` | Profiles keyed by the active signing identity |
+| `pollService.ts` | Polls and signed, one-per-identity votes with derived tallies |
+| `postService.ts` / `commentService.ts` | Posts and threaded comments with signed voting |
+| `communityService.ts` | Communities, derived membership, private (encrypted) communities |
+| `chatService.ts` / `chatRoomService.ts` | E2E direct messages and encrypted group rooms |
+| `trustService.ts` | Verified usernames via external trust issuers |
+| `encryptionService.ts` / `keyVaultService.ts` | AES-256-GCM encryption and local key vault |
+| `ipfsService.ts` | Image compression and node storage |
+| `moderationService.ts` | Content filtering (word lists, karma thresholds) |
+| `searchService.ts` | Local full-text search over the graph |
 
-### Vote flow
+### How a vote works
 
-```mermaid
-graph LR
-    G[Genesis Block<br/>index 0] -->|hash link| B1[Block 1<br/>Vote: Alice → A]
-    B1 -->|hash link| B2[Block 2<br/>Vote: Bob → B]
-    B2 -->|hash link| B3[Block 3<br/>Vote: Carol → A]
+1. You select an option; the app records a **signed `vote` node** keyed `pollId:yourAddress` (one vote per identity — re-voting updates it in place).
+2. The Security Manager signs the operation automatically and peers verify it on receipt.
+3. The poll's tally is **derived** by aggregating its vote nodes — there are no shared counters to race on.
+4. A receipt with a short verification code is recorded for the Chain Explorer.
+5. The node syncs to peers in real time over WebRTC and to your other tabs via BroadcastChannel.
+
+### Project layout
+
 ```
-
-1. Vote payload is created and hashed (SHA-256).
-2. A new block is appended — linked to the previous block's hash.
-3. The block is signed with your device key and saved locally.
-4. A receipt with a short verification code is generated.
-5. The block is broadcast to peers via WebSocket and BroadcastChannel.
-6. The relay two-phase authorization path (`/api/vote-authorize` → `/api/vote-confirm`) prevents duplicate registration backend-side.
-
-### Anti-fraud layers
-
-- **Device fingerprinting** — a SHA-256 hash of browser properties creates a persistent device ID.
-- **Two-phase backend authorization** — the relay issues a short-lived reservation token; only confirming with that token commits the vote to the registry.
-- **Invite codes** — single-use codes, consumed atomically in GunDB on use.
-- **OAuth gating** — optional Google or Microsoft login required to vote.
-- **Rate limiting and bot scoring** — reduces automated spam.
-- **Proof-of-Work (optional)** — raises the cost of high-frequency message floods.
+src/
+  components/   UI components (VoteForm, PollCard, PostCard, OnboardingModal, …)
+  views/        Page-level components (HomePage, VotePage, SettingsPage, …)
+  services/     Data + identity logic, all backed by GenosDB
+  stores/       Pinia state stores (pollStore, postStore, communityStore, …)
+  router/       Vue Router configuration
+  config.ts     Centralised app configuration
+```

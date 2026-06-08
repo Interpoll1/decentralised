@@ -50,7 +50,7 @@ const props = defineProps<{
   username?: string;
   /** Author's device ID — badge resolves username + trust from their Gun profile. */
   authorId?: string;
-  /** Pre-resolved trust record — skips GunDB lookup entirely. */
+  /** Pre-resolved trust record — skips GenosDB lookup entirely. */
   preloadedTrust?: VerifiedUsername;
   /** Public key hex shown as fingerprint suffix when pubkeyChars > 0. */
   pubkey?: string;

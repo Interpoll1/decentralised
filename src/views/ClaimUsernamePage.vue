@@ -238,7 +238,7 @@ const customIssuerContact = ref('viktor@endless.sbs');
 const addingCustomIssuer = ref(false);
 const customIssuerError = ref('');
 
-// Pre-built trust record for the done-screen badge preview (no GunDB roundtrip needed)
+// Pre-built trust record for the done-screen badge preview (no GenosDB roundtrip needed)
 const previewTrust = computed<VerifiedUsername>(() => ({
   username: username.value,
   level: claimedVerified.value ? 'verified' : 'none',

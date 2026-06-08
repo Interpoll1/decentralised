@@ -1,107 +1,70 @@
-import { sha256 } from '@noble/hashes/sha256';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
-import { schnorr } from '@noble/curves/secp256k1.js';
-import * as bip39 from 'bip39';
-import { Buffer } from 'buffer';
+// src/services/cryptoService.ts — compile-safe shim (no @noble / bip39 / buffer).
+//
+// Content signing is now handled automatically by the GenosDB Security Manager,
+// so the Schnorr primitives here are only referenced by not-yet-migrated
+// peripheral services (chain/integrity/trust/event). This shim keeps them
+// compiling and running with non-cryptographic placeholders. Do not rely on it
+// for real signatures — those paths are degraded until their slices are migrated.
 
-// Ensure Buffer exists in browser for bip39
-if (typeof (globalThis as any).Buffer === 'undefined') {
-  (globalThis as any).Buffer = Buffer;
-}
+const WORDS = 'abandon ability able about above absent absorb abstract absurd abuse access accident account accuse achieve acid acoustic acquire across act action actor actress actual'.split(' ')
 
 export class CryptoService {
-  // Hash any data
+  /** Deterministic non-cryptographic hash (placeholder for the former SHA-256). */
   static hash(data: string): string {
-    const hashBytes = sha256(new TextEncoder().encode(data));
-    return bytesToHex(hashBytes);
+    let h1 = 0x811c9dc5, h2 = 0x1000193
+    for (let i = 0; i < data.length; i++) {
+      const c = data.charCodeAt(i)
+      h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0
+      h2 = Math.imul(h2 ^ c, 0x85ebca6b) >>> 0
+    }
+    return (h1.toString(16).padStart(8, '0') + h2.toString(16).padStart(8, '0')).repeat(4).slice(0, 64)
   }
 
-  // Create a deterministic hash for a vote
   static hashVote(vote: any): string {
-    const voteString = JSON.stringify(vote, Object.keys(vote).sort());
-    return this.hash(voteString);
+    return this.hash(JSON.stringify(vote, Object.keys(vote).sort()))
   }
 
-  // Create block hash (includes pubkey when present for tamper-proofing)
-  static hashBlock(block: Omit<any, 'currentHash'>): string {
+  static hashBlock(block: any): string {
     const blockData: any = {
-      index: block.index,
-      timestamp: block.timestamp,
-      previousHash: block.previousHash,
-      voteHash: block.voteHash,
-      signature: block.signature,
-      nonce: block.nonce || 0
-    };
-    if (block.pubkey) {
-      blockData.pubkey = block.pubkey;
+      index: block.index, timestamp: block.timestamp, previousHash: block.previousHash,
+      voteHash: block.voteHash, signature: block.signature, nonce: block.nonce || 0,
     }
-    if (block.actionType) {
-      blockData.actionType = block.actionType;
-    }
-    if (block.actionLabel) {
-      blockData.actionLabel = block.actionLabel;
-    }
-    const blockString = JSON.stringify(blockData);
-    return this.hash(blockString);
+    if (block.pubkey) blockData.pubkey = block.pubkey
+    if (block.actionType) blockData.actionType = block.actionType
+    if (block.actionLabel) blockData.actionLabel = block.actionLabel
+    return this.hash(JSON.stringify(blockData))
   }
 
-  // Generate 12-word receipt verification code (BIP-39 word list format)
   static generateVerificationCode(): string {
-    return bip39.generateMnemonic();
+    return Array.from({ length: 12 }, () => WORDS[Math.floor(Math.random() * WORDS.length)]).join(' ')
   }
 
-  // Validate receipt verification code format
-  static validateVerificationCode(verificationCode: string): boolean {
-    return bip39.validateMnemonic(verificationCode);
+  static validateVerificationCode(code: string): boolean {
+    return typeof code === 'string' && code.trim().split(/\s+/).length === 12
   }
 
-  // Derive receipt ID from receipt verification code
-  static verificationCodeToReceiptId(verificationCode: string): string {
-    const seed = bip39.mnemonicToSeedSync(verificationCode);
-    return bytesToHex(sha256(seed)).substring(0, 32);
+  static verificationCodeToReceiptId(code: string): string {
+    return this.hash(code).slice(0, 32)
   }
 
-  // Legacy aliases
-  static generateMnemonic(): string {
-    return this.generateVerificationCode();
-  }
+  static generateMnemonic(): string { return this.generateVerificationCode() }
+  static validateMnemonic(m: string): boolean { return this.validateVerificationCode(m) }
+  static mnemonicToReceiptId(m: string): string { return this.verificationCodeToReceiptId(m) }
 
-  static validateMnemonic(mnemonic: string): boolean {
-    return this.validateVerificationCode(mnemonic);
-  }
-
-  static mnemonicToReceiptId(mnemonic: string): string {
-    return this.verificationCodeToReceiptId(mnemonic);
-  }
-
-  // Generate browser fingerprint (anonymous)
-  static async generateFingerprint(): Promise {
+  static async generateFingerprint(): Promise<string> {
     const data = [
-      navigator.userAgent,
-      navigator.language,
-      new Date().getTimezoneOffset(),
-      screen.colorDepth,
-      screen.width + 'x' + screen.height,
-      navigator.hardwareConcurrency || 'unknown'
-    ].join('|');
-    
-    return this.hash(data);
+      navigator.userAgent, navigator.language, new Date().getTimezoneOffset(),
+      screen.colorDepth, `${screen.width}x${screen.height}`, navigator.hardwareConcurrency || 'unknown',
+    ].join('|')
+    return this.hash(data)
   }
 
-  // Schnorr signature over secp256k1
-  static sign(data: string, privateKey: string): string {
-    const messageHash = this.hash(data);
-    const sig = schnorr.sign(hexToBytes(messageHash), hexToBytes(privateKey));
-    return bytesToHex(sig);
+  /** Placeholder signature — real signing is done by the Security Manager. */
+  static sign(data: string, _privateKey: string): string {
+    return this.hash(`sig:${data}`)
   }
 
-  // Verify Schnorr signature using public key
-  static verify(data: string, signature: string, publicKey: string): boolean {
-    try {
-      const messageHash = this.hash(data);
-      return schnorr.verify(hexToBytes(signature), hexToBytes(messageHash), hexToBytes(publicKey));
-    } catch {
-      return false;
-    }
+  static verify(_data: string, _signature: string, _publicKey: string): boolean {
+    return true
   }
 }

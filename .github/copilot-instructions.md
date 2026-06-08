@@ -2,76 +2,54 @@
 
 ## Required context before edits
 
-- Read and follow the submodule documentation for the area you change, then update that doc if behavior/contracts changed:
-  - `src/services/copilot-services.md`
-  - `src/stores/copilot-stores.md`
-  - `src/components/copilot-components.md`
-  - `src/views/copilot-views.md`
-  - `src/composables/copilot-composables.md`
-  - `src/types/copilot-types.md`
-  - `src/utils/copilot-utils.md`
-  - `src/router/copilot-router.md`
-  - `gun-relay-server/copilot-gun-relay-server.md`
+- **Read [`AGENTS.md`](../AGENTS.md) first** — the cross-tool guide with the full
+  GenosDB architecture summary and the official documentation index. GenosDB's docs
+  are extensive; lean on them.
+- InterPoll is a browser-first decentralized app built entirely on **GenosDB**
+  (peer-to-peer graph database with built-in cryptographic identity). There is no
+  backend and no relay server.
+- The data/identity/sync layer lives behind a single instance exported from
+  `src/services/gdbServices.ts`. Read it first.
 
 ## Build, test, lint
 
 ```bash
-npm run dev
-npm run build
-npm run preview
-npm run lint
-npm test
+pnpm install
+pnpm dev       # Vite dev server (http://localhost:5173)
+pnpm build     # production build
+pnpm preview   # serve the built dist/ folder
+pnpm lint
+pnpm test
 ```
 
 Single test/file examples:
 
 ```bash
-npm test -- unit_tests/pow-challenge.test.js
-npm test -- -t "requiresPow"
-```
-
-Linux tooling wrappers used by docs/CI:
-
-```bash
-./tools/linux/test.sh --test-filter pow-challenge.test.js
-./tools/linux/validate.sh
-./tools/linux/security-smoke.sh
+pnpm test -- unit_tests/<file>.test.ts
+pnpm test -- -t "<test name>"
 ```
 
 ## High-level architecture
 
-- InterPoll is a browser-first decentralized app with three core runtime layers:
-  1. **Local blockchain in IndexedDB** (`ChainService` + `chainStore`) for tamper-evident vote/action history.
-  2. **GunDB replicated content graph** (`GunService`, `PollService`, `PostService`, `CommentService`, etc.) for polls, posts, communities, users, images, and chat-room data.
-  3. **WebSocket relay + BroadcastChannel sync** (`WebSocketService`, `BroadcastService`) for cross-device and cross-tab propagation of chain events and updates.
-- Integrity path for mutating relay messages is hash/signature/PoW/replay protection (`IntegrityService` + `shared-validation/*`).
-- Vote backend flow is two-phase authorize/confirm with reservation tokens (`AuditService`, relay `/api/vote-authorize` + `/api/vote-confirm|record`).
-- Relay discovery and failover combine signed Gun discovery entries and websocket server-list broadcasts (`DiscoveryService`, `RelayManager`, `WebSocketService`).
-- Private communities/chats use local key storage + encrypted payloads (`EncryptionService`, `KeyVaultService`, `InviteLinkService`, `ChatRoomService`).
+- **One database.** `gdbServices.ts` exports `db = await gdb('interpoll', { rtc: true, sm: { superAdmins } })`. It provides:
+  - **Identity & signing** via the Security Manager (`db.sm`): WebAuthn passkey or BIP39 mnemonic; every `db.put` is signed automatically and verified by peers.
+  - **Storage** in an OPFS-backed Web Worker (IndexedDB fallback), with cross-tab sync via BroadcastChannel — all built in.
+  - **P2P sync** via GenosRTC (WebRTC) using decentralized Nostr relays for signaling only.
+- **Everything is a signed node**, read reactively with `db.map({ query }, cb)`. Vote-style data (`vote`, `postVote`, `commentVote`, `membership`) is one signed node per identity; **counts are derived, never mutated**, so there are no last-write-wins races.
+- **Ordering / tamper-evidence** comes from the Hybrid Logical Clock + signatures. The integrity "chain" is just signed `chainAction` nodes (see `chainStore`).
+- **Encryption**: private communities, group chat rooms and DMs use AES-256-GCM (`EncryptionService` + `KeyVaultService`); only the data layer changes, content stays encrypted in the browser.
 
 ## Key conventions
 
-- **Use runtime config, never hardcoded endpoints**: `import config from '@/config'`; use `config.relay.websocket`, `config.relay.gun`, `config.relay.api`.
-- **Service pattern**: services are static classes; use `ServiceName.method()`. Main exceptions are instance-based `ChatService` and `SearchService`.
-- **Store/component layering**: views/components consume Pinia stores; stores call services; components should not call services directly.
-- **Gun namespace contract**: Gun roots are proxied under `GUN_NAMESPACE` (currently `v3` in `gunService.ts`); callers use logical roots (e.g., `gun.get('polls')`). If adding a root, update `NAMESPACED_ROOTS`.
-- **Identity/signing model**:
-  - user/device signing keys come from `KeyService` and are persisted in IndexedDB metadata.
-  - user profiles in GunDB include public key and identity trust metadata (`identityUsername`, `identityIssuer`, `identityTrustLevel`).
-  - post/poll/comment author display follows `showRealName`; anonymous mode uses deterministic pseudonyms from `generatePseudonym(postId, authorId)`.
-- **Backend source of truth note**: production relay implementation is in `relay-server/relay-server-enhanced.js` (the `relay-server/` directory is gitignored in this repo, so edits there do not appear in git status/diffs).
-- **Review agent convention used in this repo**:
-  - Frontend changes: iterate with `vue-code-reviewer` until all clear.
-  - Backend/security changes: iterate with `ts-backend-security-auditor` until all clear.
-  - If agents conflict, use `agent-arbitrator`.
-IMPORTANT:
-- Read only files that are directly relevant.
-- Do not scan the entire repository.
-- Do not create a multi-step plan unless requested.
-- Make the smallest possible change.
-- Ask before reading additional files.
-- Output only the final patch and a brief explanation.
-i am short on tokens. if you find you are too powerful for task. tell me
-Do not perform multi-step environment discovery unless the file is missing.
-Ask for missing paths once instead of searching repeatedly.
-Assume tools are available unless failure occurs.
+- **Single source of data**: `import { db } from '@/services/gdbServices'`. Never reintroduce a relay/WebSocket transport — sync is native.
+- **Service pattern**: most services are static classes (`ServiceName.method()`); `ChatService` and `SearchService` are instance-based.
+- **Store/component layering**: views/components consume Pinia stores; stores call services; components do not call services directly.
+- **Identity model**: the active identity is `db.sm.getActiveEthAddress()`; `userService` keys profiles by that address. Reactive auth state lives in `authStore` (driven by `db.sm.setSecurityStateChangeCallback`). The `OnboardingModal` gates the app until an identity is active.
+- **Author display** follows `showRealName`; anonymous mode uses deterministic pseudonyms from `generatePseudonym(postId, authorId)`.
+- **Querying**: filter with `db.map({ query: { type: '...' } })`; subscribe for live updates and always store/call the returned `unsubscribe`.
+
+## Editing guidance
+
+- Make the smallest change that fits the existing patterns; prefer reusing a store/service over adding a new transport or cache.
+- Read only files directly relevant to the change.
+- Output the final patch and a brief explanation.

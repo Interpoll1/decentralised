@@ -118,7 +118,7 @@
       <div class="ambient-page__content create-post-info" v-if="imageFile">
         <div class="info-box">
           <ion-icon :icon="informationCircle"></ion-icon>
-          <p>Image will be compressed to ~200 KB and stored on GunDB. Thumbnail (~15 KB) cached locally for fast loading.</p>
+          <p>Image will be compressed to ~200 KB and stored on GenosDB. Thumbnail (~15 KB) cached locally for fast loading.</p>
         </div>
       </div>
     </ion-content>

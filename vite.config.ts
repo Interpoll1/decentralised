@@ -44,10 +44,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      buffer: 'buffer',
-      os: 'os-browserify/browser',
-      path: 'path-browserify',
-      stream: 'stream-browserify'
     },
   },
   define: {
@@ -57,9 +53,11 @@ export default defineConfig({
     global: 'globalThis'
   },
   optimizeDeps: {
-    exclude: ['@ionic/vue'],
-    include: ['buffer', 'os-browserify/browser'],
+    // genosdb lazy-loads sibling modules (sm.min.js, genosrtc.min.js…) via
+    // import(new URL(...)); excluding it from pre-bundling keeps those reachable.
+    exclude: ['@ionic/vue', 'genosdb'],
     esbuildOptions: {
+      target: 'es2022',
       define: {
         global: 'globalThis'
       }
@@ -70,8 +68,8 @@ export default defineConfig({
     assetsDir: 'assets2',
     // 1. Raise warning threshold to reduce noise
     chunkSizeWarningLimit: 600,
-    // 2. Target modern browsers — smaller output, no legacy polyfills
-    target: 'es2020',
+    // 2. Target modern browsers — es2022 enables top-level await (GenosDB init)
+    target: 'es2022',
     // 3. Minification options
     minify: 'esbuild',
     cssMinify: true,

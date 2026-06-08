@@ -378,7 +378,7 @@
 
           <div class="sidebar-section sidebar-about surface-card">
             <p class="sidebar-about-title">Interpoll</p>
-            <p class="sidebar-about-text">A peer-to-peer community platform built on GunDB. Posts and votes sync across all peers.</p>
+            <p class="sidebar-about-text">A peer-to-peer community platform built on GenosDB. Posts and votes sync across all peers.</p>
           </div>
         </aside>
 
@@ -440,10 +440,9 @@ import PostCard from '../components/PostCard.vue';
 import PollCard from '../components/PollCard.vue';
 import { Post } from '../services/postService';
 import { Poll } from '../services/pollService';
-import { GunService } from '../services/gunService';
+import { db } from '../services/gdbServices';
 import { UserService } from '../services/userService';
 import ChatService from '../services/chatService';
-import { warmupFromDB } from '../services/dbWarmup';
 import config from '../config';
 
 const router = useRouter();
@@ -637,71 +636,52 @@ function getRoomId(a: string, b: string) {
   return [a, b].sort().join(':');
 }
 
-const unreadDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+let chatListUnsub: (() => void) | null = null;
 
-function recomputeUnread(roomId: string, otherUserId: string) {
-  // Debounce per room — only compute after 500ms of no new messages
-  const existing = unreadDebounceTimers.get(roomId);
-  if (existing) clearTimeout(existing);
-  unreadDebounceTimers.set(roomId, setTimeout(() => {
-    const gun = GunService.getGun();
-    let unread = 0;
-    gun.get('chats').get(roomId).map().once((msg: any) => {
-      if (msg && msg.recipientId === currentUserId && !msg.readAt) unread++;
-    });
-    setTimeout(() => {
-      const entry = chatList.value.find(c => c.userId === otherUserId);
-      if (entry) entry.unreadCount = unread;
-      chatList.value = [...chatList.value].sort((a, b) => b.lastMessageTime - a.lastMessageTime);
-    }, 300);
-  }, 500));
-}
-
-function subscribeToRoom(otherUserId: string, otherName: string, otherPublicKey: string) {
-  const gun    = GunService.getGun();
-  const roomId = getRoomId(currentUserId, otherUserId);
-
-  if (!chatList.value.find(c => c.userId === otherUserId)) {
-    chatList.value.push({
-      userId: otherUserId, name: otherName,
-      lastMessage: '', lastMessageTime: 0,
-      unreadCount: 0, publicKey: otherPublicKey,
-    });
-  }
-
-  const listener = gun.get('chats').get(roomId).map().on((msg: any) => {
-    if (!msg || !msg.senderId || !msg.timestamp) return;
-    const entry = chatList.value.find(c => c.userId === otherUserId);
-    if (!entry) return;
-    if (msg.timestamp > entry.lastMessageTime) {
-      entry.lastMessageTime = msg.timestamp;
-      entry.lastMessage     = msg.senderId === currentUserId ? 'You: [Encrypted]' : '[Encrypted message]';
-    }
-    recomputeUnread(roomId, otherUserId);
-  });
-
-  gunListeners.push(() => listener?.off?.());
-}
-
+/**
+ * Build the DM conversation list reactively from signed `dm` nodes in GenosDB.
+ * Messages stay end-to-end encrypted; the sidebar only needs sender, timestamp
+ * and unread state, so no decryption is required here.
+ */
 async function loadChatList() {
-  const gun = GunService.getGun();
-  gun.get('chats').once((rooms: any) => {
-    if (!rooms) return;
-    syncDebug('chat-rooms-snapshot', { roomCount: Object.keys(rooms).filter(k => k !== '_').length });
-    Object.keys(rooms)
-      .filter(k => k !== '_' && k.includes(currentUserId))
-      .forEach((roomId) => {
-        const otherUserId = roomId.split(':').find(id => id !== currentUserId);
-        if (!otherUserId) return;
-        gun.get('users').get(otherUserId).once((userData: any) => {
-          subscribeToRoom(
-            otherUserId,
-            userData?.displayName || userData?.username || otherUserId,
-            userData?.publicKey || '',
-          );
-        });
+  if (!currentUserId) {
+    const u = await UserService.getCurrentUser();
+    currentUserId = u?.id ?? '';
+  }
+  if (chatListUnsub) return;
+
+  const rebuild = async () => {
+    const { results } = await db.map({ query: { type: 'dm' } });
+    const convos = new Map<string, typeof chatList.value[number]>();
+    for (const node of results) {
+      const m: any = node.value;
+      if (m.senderId !== currentUserId && m.recipientId !== currentUserId) continue;
+      const other = m.senderId === currentUserId ? m.recipientId : m.senderId;
+      let c = convos.get(other);
+      if (!c) {
+        c = { userId: other, name: other, lastMessage: '', lastMessageTime: 0, unreadCount: 0, publicKey: '' };
+        convos.set(other, c);
+      }
+      if (m.timestamp > c.lastMessageTime) {
+        c.lastMessageTime = m.timestamp;
+        c.lastMessage = m.senderId === currentUserId ? 'You: [Encrypted]' : '[Encrypted message]';
+      }
+      if (m.recipientId === currentUserId && !m.readAt) c.unreadCount++;
+    }
+    chatList.value = [...convos.values()].sort((a, b) => b.lastMessageTime - a.lastMessageTime);
+    // Resolve display names lazily from each peer's profile.
+    for (const c of chatList.value) {
+      UserService.getUser(c.userId).then((u) => {
+        if (!u) return;
+        const e = chatList.value.find((x) => x.userId === c.userId);
+        if (e) { e.name = u.displayName || u.username || c.userId; e.publicKey = u.publicKey || ''; }
       });
-  });
+    }
+  };
+
+  const { unsubscribe } = await db.map({ query: { type: 'dm' } }, () => { void rebuild(); });
+  chatListUnsub = unsubscribe;
+  await rebuild();
 }
 
 async function initBackgroundChat() {
@@ -725,15 +705,13 @@ async function initBackgroundChat() {
         unreadCount: activeTab.value === 'chat' ? 0 : 1,
         publicKey: '',
       });
-      const gun = GunService.getGun();
-      gun.get('users').get(msg.from).once((userData: any) => {
+      UserService.getUser(msg.from).then((u) => {
         const e = chatList.value.find(c => c.userId === msg.from);
-        if (e && userData) {
-          e.name      = userData.displayName || userData.username || msg.from;
-          e.publicKey = userData.publicKey || '';
+        if (e && u) {
+          e.name      = u.displayName || u.username || msg.from;
+          e.publicKey = u.publicKey || '';
         }
       });
-      subscribeToRoom(msg.from, msg.from, '');
     }
 
     if (activeTab.value !== 'chat') {
@@ -823,33 +801,13 @@ async function handleUserSearch() {
   if (query.length < 2) { userSearchResults.value = []; return; }
   searchingUsers.value = true;
   try {
-    const gun     = GunService.getGun();
-    const results: typeof userSearchResults.value = [];
-    const seen    = new Set<string>();
-    await new Promise<void>((resolve) => {
-      const timeout = setTimeout(() => resolve(), 1000);
-      gun.get('users').once((users: any) => {
-        if (!users) { resolve(); return; }
-        const userKeys = Object.keys(users).filter(k => k !== '_');
-        let processed  = 0;
-        userKeys.forEach(userId => {
-          gun.get('users').get(userId).once((userData: any) => {
-            processed++;
-            if (userData && userData.id && !seen.has(userData.id)) {
-              const name     = userData.displayName || userData.username || '';
-              const username = userData.username || '';
-              if (name.toLowerCase().includes(query.toLowerCase()) ||
-                  username.toLowerCase().includes(query.toLowerCase())) {
-                seen.add(userData.id);
-                results.push({ id: userData.id, name: userData.displayName || userData.username || 'Anonymous', username: userData.username || userData.id, publicKey: userData.publicKey || '' });
-              }
-            }
-            if (processed === userKeys.length) { clearTimeout(timeout); resolve(); }
-          });
-        });
-      });
-    });
-    userSearchResults.value = results.slice(0, 10);
+    const users = await UserService.searchUsers(query);
+    userSearchResults.value = users.slice(0, 10).map(u => ({
+      id: u.id,
+      name: u.displayName || u.username || 'Anonymous',
+      username: u.username || u.id,
+      publicKey: u.publicKey || '',
+    }));
   } catch (err) {
     console.error('User search error:', err);
   } finally {
@@ -1104,7 +1062,7 @@ onMounted(async () => {
       feedMode: feedMode.value,
     });
   }
-  await warmupFromDB();
+  // GenosDB streams the feed via reactive store subscriptions — no warmup step needed.
   if (FEED_DEBUG) {
     feedDebug('warmup-finished', {
       durationMs: Date.now() - warmupStartedAt,
@@ -1170,9 +1128,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   bgChatService?.disconnect();
-  gunListeners.forEach(off => off());
-  unreadDebounceTimers.forEach(t => clearTimeout(t));
-  unreadDebounceTimers.clear();
+  chatListUnsub?.();
 });
 
 if (FEED_DEBUG) {

@@ -292,7 +292,6 @@ import type { Poll } from '../services/pollService';
 import { UserService } from '../services/userService';
 import { VoteTrackerService } from '../services/voteTrackerService';
 import { AuditService } from '../services/auditService';
-import { GUN_NAMESPACE } from '../services/gunService';
 import type { Vote } from '../types/chain';
 import { generatePseudonym } from '../utils/pseudonym';
 import { formatTrustedIdentityLabel } from '../utils/identityTrust';
@@ -544,27 +543,7 @@ async function submitVote() {
       const updatedOptions = syncedPoll.options
       const newTotalVotes = updatedOptions.reduce((sum, option) => sum + (option.votes || 0), 0)
 
-      void Promise.all(
-        updatedOptions.map((opt, i) =>
-          fetch(`${gunRelayBase}/db/write`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              soul: `${GUN_NAMESPACE}/communities/${communityIdForSync}/polls/${pollIdForSync}/options/${i}`,
-              data: { id: opt.id, text: opt.text, votes: opt.votes }
-            })
-          }).catch(() => {})
-        )
-      ).then(() => {
-        return fetch(`${gunRelayBase}/db/write`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            soul: `${GUN_NAMESPACE}/communities/${communityIdForSync}/polls/${pollIdForSync}`,
-            data: { totalVotes: newTotalVotes }
-          })
-        }).catch(() => {})
-      }).catch(() => {})
+      // The vote is already persisted and synced P2P by GenosDB — no relay write needed.
 
       setTimeout(async () => {
         try {

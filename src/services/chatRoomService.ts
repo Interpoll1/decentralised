@@ -1,149 +1,107 @@
-import { GunService } from './gunService';
-import { EncryptionService } from './encryptionService';
-import { KeyVaultService } from './keyVaultService';
-import { InviteLinkService } from './inviteLinkService';
+// src/services/chatRoomService.ts — encrypted group chat rooms (zero-trust transport).
+//
+// Group rooms use a shared AES key (per-room, distributed via invite link or
+// password) which GenosDB's per-user SM encryption does not cover, so the
+// EncryptionService + KeyVaultService crypto layer is kept as-is. Only the
+// transport changes: Gun nodes → GenosDB nodes, with a single reactive
+// db.map subscription replacing the once()/map().on() machinery.
+import { db } from './gdbServices'
+import { EncryptionService } from './encryptionService'
+import { KeyVaultService } from './keyVaultService'
+import { InviteLinkService } from './inviteLinkService'
 import type {
   DecryptedChatRoomMeta,
   DecryptedChatRoomMessageContent,
   StoredEncryptionKey,
-} from '../types/encryption';
+} from '../types/encryption'
 
 export interface ChatRoom {
-  id: string;
-  name: string;
-  description: string;
-  creatorId: string;
-  isEncrypted: boolean;
-  encryptionHint: string;
-  createdAt: number;
-  memberCount: number;
+  id: string
+  name: string
+  description: string
+  creatorId: string
+  isEncrypted: boolean
+  encryptionHint: string
+  createdAt: number
+  memberCount: number
 }
 
 export interface DisplayMessage {
-  id: string;
-  roomId: string;
-  text: string;
-  senderId: string;
-  senderName: string;
-  timestamp: number;
+  id: string
+  roomId: string
+  text: string
+  senderId: string
+  senderName: string
+  timestamp: number
 }
 
 export class ChatRoomService {
-  private static get gun() { return GunService.getGun(); }
-
-  /**
-   * Create a new encrypted chat room.
-   * @returns { room, inviteLink }
-   */
   static async createRoom(
     name: string,
     description: string,
     creatorId: string,
-    password?: string
+    password?: string,
   ): Promise<{ room: ChatRoom; inviteLink: string }> {
-    const roomId = `room-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const roomId = `room-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
 
-    let aesKey: CryptoKey;
-    let method: StoredEncryptionKey['method'];
+    let aesKey: CryptoKey
+    let method: StoredEncryptionKey['method']
     if (password) {
-      aesKey = await EncryptionService.deriveKeyFromPassword(password, roomId + 'interpoll-v2');
-      method = 'password';
+      aesKey = await EncryptionService.deriveKeyFromPassword(password, roomId + 'interpoll-v2')
+      method = 'password'
     } else {
-      aesKey = await EncryptionService.generateKey();
-      method = 'invite';
+      aesKey = await EncryptionService.generateKey()
+      method = 'invite'
     }
 
-    const meta: DecryptedChatRoomMeta = { name, description, creatorId };
-    const encryptedMeta = await EncryptionService.encrypt(JSON.stringify(meta), aesKey);
-    const encryptionHint = password ? 'Password-protected' : 'Invite-only';
+    const meta: DecryptedChatRoomMeta = { name, description, creatorId }
+    const encryptedMeta = await EncryptionService.encrypt(JSON.stringify(meta), aesKey)
+    const encryptionHint = password ? 'Password-protected' : 'Invite-only'
+    const createdAt = Date.now()
 
-    const roomData = {
+    await db.put({
+      type: 'chatRoom',
       id: roomId,
       isEncrypted: true,
       encryptionHint,
       encryptedMeta,
-      createdAt: Date.now(),
+      createdAt,
       memberCount: 1,
-      name: '🔒 Encrypted Room',
-      description: 'Encrypted chat room',
-    };
-    await new Promise<void>((resolve, reject) => {
-      this.gun.get('chatrooms').get(roomId).put(roomData, (ack: any) => {
-        if (ack.err) reject(ack.err);
-        else resolve();
-      });
-    });
+    }, roomId)
 
-    const keyBase64 = await EncryptionService.exportKey(aesKey);
-    await KeyVaultService.storeKey({
-      id: roomId,
-      type: 'chatroom',
-      key: keyBase64,
-      method,
-      label: name,
-      joinedAt: Date.now(),
-    });
+    const keyBase64 = await EncryptionService.exportKey(aesKey)
+    await KeyVaultService.storeKey({ id: roomId, type: 'chatroom', key: keyBase64, method, label: name, joinedAt: Date.now() })
 
-    const keyBase64Url = await EncryptionService.exportKeyAsBase64Url(aesKey);
-    const inviteLink = InviteLinkService.generateInviteLink(roomId, 'chatroom', keyBase64Url);
+    const keyBase64Url = await EncryptionService.exportKeyAsBase64Url(aesKey)
+    const inviteLink = InviteLinkService.generateInviteLink(roomId, 'chatroom', keyBase64Url)
 
-    const room: ChatRoom = {
-      id: roomId,
-      name,
-      description,
-      creatorId,
-      isEncrypted: true,
-      encryptionHint,
-      createdAt: roomData.createdAt,
-      memberCount: 1,
-    };
-
-    return { room, inviteLink };
+    return {
+      room: { id: roomId, name, description, creatorId, isEncrypted: true, encryptionHint, createdAt, memberCount: 1 },
+      inviteLink,
+    }
   }
 
-  /**
-   * Join an existing encrypted chat room using a key or password.
-   */
-  static async joinRoom(
-    roomId: string,
-    keyOrPassword: string,
-    method: 'invite' | 'password'
-  ): Promise<ChatRoom> {
-    let aesKey: CryptoKey;
-    if (method === 'password') {
-      aesKey = await EncryptionService.deriveKeyFromPassword(keyOrPassword, roomId + 'interpoll-v2');
-    } else {
-      aesKey = await EncryptionService.importKeyFromBase64Url(keyOrPassword);
-    }
+  static async joinRoom(roomId: string, keyOrPassword: string, method: 'invite' | 'password'): Promise<ChatRoom> {
+    const aesKey = method === 'password'
+      ? await EncryptionService.deriveKeyFromPassword(keyOrPassword, roomId + 'interpoll-v2')
+      : await EncryptionService.importKeyFromBase64Url(keyOrPassword)
 
-    const roomData = await new Promise<any>((resolve) => {
-      this.gun.get('chatrooms').get(roomId).once((data: any) => resolve(data));
-      setTimeout(() => resolve(null), 3000);
-    });
+    const { result } = await db.get(roomId)
+    const roomData = result?.value
+    if (!roomData?.encryptedMeta) throw new Error('Chat room not found')
 
-    if (!roomData?.encryptedMeta) {
-      throw new Error('Chat room not found');
-    }
-
-    let meta: DecryptedChatRoomMeta;
+    let meta: DecryptedChatRoomMeta
     try {
-      meta = JSON.parse(await EncryptionService.decrypt(roomData.encryptedMeta, aesKey));
+      meta = JSON.parse(await EncryptionService.decrypt(roomData.encryptedMeta, aesKey))
     } catch {
-      throw new Error('Invalid key or password — could not decrypt room');
+      throw new Error('Invalid key or password — could not decrypt room')
     }
 
-    const keyBase64 = await EncryptionService.exportKey(aesKey);
-    await KeyVaultService.storeKey({
-      id: roomId,
-      type: 'chatroom',
-      key: keyBase64,
-      method,
-      label: meta.name,
-      joinedAt: Date.now(),
-    });
+    const keyBase64 = await EncryptionService.exportKey(aesKey)
+    await KeyVaultService.storeKey({ id: roomId, type: 'chatroom', key: keyBase64, method, label: meta.name, joinedAt: Date.now() })
 
-    const currentCount = Number(roomData.memberCount) || 1;
-    this.gun.get('chatrooms').get(roomId).get('memberCount').put(currentCount + 1);
+    const memberCount = (Number(roomData.memberCount) || 1) + 1
+    await db.put({ ...roomData, memberCount }, roomId)
 
     return {
       id: roomId,
@@ -153,148 +111,92 @@ export class ChatRoomService {
       isEncrypted: true,
       encryptionHint: roomData.encryptionHint || '',
       createdAt: roomData.createdAt,
-      memberCount: currentCount + 1,
-    };
+      memberCount,
+    }
   }
 
-  /**
-   * Send an encrypted message to a chat room.
-   */
   static async sendMessage(roomId: string, text: string, senderId: string, senderName: string): Promise<DisplayMessage> {
-    const storedKey = await KeyVaultService.getKey(roomId);
-    if (!storedKey) throw new Error('No encryption key for this room');
+    const storedKey = await KeyVaultService.getKey(roomId)
+    if (!storedKey) throw new Error('No encryption key for this room')
 
-    const aesKey = await EncryptionService.importKey(storedKey.key);
-    const msgId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const timestamp = Date.now();
+    const aesKey = await EncryptionService.importKey(storedKey.key)
+    const msgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
+    const timestamp = Date.now()
 
-    const content: DecryptedChatRoomMessageContent = { text, senderId, senderName };
-    const encryptedContent = await EncryptionService.encrypt(JSON.stringify(content), aesKey);
-    const authTag = await EncryptionService.generateAuthTag(aesKey, msgId, String(timestamp), senderId);
+    const content: DecryptedChatRoomMessageContent = { text, senderId, senderName }
+    const encryptedContent = await EncryptionService.encrypt(JSON.stringify(content), aesKey)
+    const authTag = await EncryptionService.generateAuthTag(aesKey, msgId, String(timestamp), senderId)
 
-    const msgData = {
-      id: msgId,
-      roomId,
-      senderId,
-      encryptedContent,
-      authTag,
-      timestamp,
-    };
-    this.gun.get('chatrooms').get(roomId).get('messages').get(msgId).put(msgData);
-
-    return { id: msgId, roomId, text, senderId, senderName, timestamp };
+    await db.put({ type: 'chatMessage', id: msgId, roomId, senderId, encryptedContent, authTag, timestamp }, msgId)
+    return { id: msgId, roomId, text, senderId, senderName, timestamp }
   }
 
-  /**
-   * Subscribe to messages in a chat room (live updates).
-   * Automatically decrypts and verifies messages.
-   * Returns an unsubscribe function.
-   */
-  static subscribeToMessages(
-    roomId: string,
-    callback: (message: DisplayMessage) => void
-  ): () => void {
-    const seen = new Set<string>();
-    let active = true;
+  /** Live, auto-decrypting subscription to a room's messages. */
+  static subscribeToMessages(roomId: string, callback: (message: DisplayMessage) => void): () => void {
+    let active = true
+    let unsub: (() => void) | undefined
 
-    const listener = this.gun.get('chatrooms').get(roomId).get('messages')
-      .map()
-      .on(async (data: any, key: string) => {
-        if (!active || !data?.id || !data?.encryptedContent || seen.has(key)) return;
-        seen.add(key);
-
-        try {
-          const storedKey = await KeyVaultService.getKey(roomId);
-          if (!storedKey) return;
-
-          const aesKey = await EncryptionService.importKey(storedKey.key);
-
-          if (data.authTag) {
-            const valid = await EncryptionService.verifyAuthTag(
-              aesKey, data.authTag, data.id, String(data.timestamp), data.senderId || ''
-            );
-            if (!valid) return;
-          }
-
-          const content: DecryptedChatRoomMessageContent = JSON.parse(
-            await EncryptionService.decrypt(data.encryptedContent, aesKey)
-          );
-
-          callback({
-            id: data.id,
-            roomId,
-            text: content.text,
-            senderId: content.senderId,
-            senderName: content.senderName,
-            timestamp: data.timestamp,
-          });
-        } catch {
-          // Silently skip messages that can't be decrypted
-        }
-      });
-
-    return () => {
-      active = false;
-      if (listener) listener.off();
-    };
-  }
-
-  /**
-   * List all chat rooms the user has keys for.
-   */
-  static async listJoinedRooms(): Promise<ChatRoom[]> {
-    const keys = await KeyVaultService.listKeysByType('chatroom');
-    const rooms: ChatRoom[] = [];
-
-    for (const storedKey of keys) {
+    const handle = async ({ value, action }: { value: any; action: string }) => {
+      if (!active || action === 'removed' || !value?.encryptedContent) return
       try {
-        const roomData = await new Promise<any>((resolve) => {
-          this.gun.get('chatrooms').get(storedKey.id).once((data: any) => resolve(data));
-          setTimeout(() => resolve(null), 2000);
-        });
-
-        if (!roomData) continue;
-
-        let name = storedKey.label;
-        let description = '';
-        let creatorId = '';
-
-        if (roomData.encryptedMeta) {
-          try {
-            const aesKey = await EncryptionService.importKey(storedKey.key);
-            const meta: DecryptedChatRoomMeta = JSON.parse(
-              await EncryptionService.decrypt(roomData.encryptedMeta, aesKey)
-            );
-            name = meta.name;
-            description = meta.description;
-            creatorId = meta.creatorId;
-          } catch {
-            // Use stored label as fallback
-          }
+        const storedKey = await KeyVaultService.getKey(roomId)
+        if (!storedKey) return
+        const aesKey = await EncryptionService.importKey(storedKey.key)
+        if (value.authTag) {
+          const valid = await EncryptionService.verifyAuthTag(aesKey, value.authTag, value.id, String(value.timestamp), value.senderId || '')
+          if (!valid) return
         }
-
-        rooms.push({
-          id: storedKey.id,
-          name,
-          description,
-          creatorId,
-          isEncrypted: true,
-          encryptionHint: roomData.encryptionHint || '',
-          createdAt: roomData.createdAt || storedKey.joinedAt,
-          memberCount: Number(roomData.memberCount) || 1,
-        });
+        const content: DecryptedChatRoomMessageContent = JSON.parse(await EncryptionService.decrypt(value.encryptedContent, aesKey))
+        if (active) callback({ id: value.id, roomId, text: content.text, senderId: content.senderId, senderName: content.senderName, timestamp: value.timestamp })
       } catch {
-        // Skip rooms that can't be loaded
+        // Skip messages that cannot be decrypted/verified.
       }
     }
 
-    return rooms.sort((a, b) => b.createdAt - a.createdAt);
+    void (async () => {
+      const { unsubscribe } = await db.map({ query: { type: 'chatMessage', roomId } }, handle)
+      unsub = unsubscribe
+    })()
+
+    return () => { active = false; unsub?.() }
   }
 
-  /**
-   * Leave a chat room (delete stored key).
-   */
+  static async listJoinedRooms(): Promise<ChatRoom[]> {
+    const keys = await KeyVaultService.listKeysByType('chatroom')
+    const rooms: ChatRoom[] = []
+
+    for (const storedKey of keys) {
+      const { result } = await db.get(storedKey.id)
+      const roomData = result?.value
+      if (!roomData) continue
+
+      let name = storedKey.label
+      let description = ''
+      let creatorId = ''
+      if (roomData.encryptedMeta) {
+        try {
+          const aesKey = await EncryptionService.importKey(storedKey.key)
+          const meta: DecryptedChatRoomMeta = JSON.parse(await EncryptionService.decrypt(roomData.encryptedMeta, aesKey))
+          name = meta.name; description = meta.description; creatorId = meta.creatorId
+        } catch { /* fall back to stored label */ }
+      }
+
+      rooms.push({
+        id: storedKey.id,
+        name,
+        description,
+        creatorId,
+        isEncrypted: true,
+        encryptionHint: roomData.encryptionHint || '',
+        createdAt: roomData.createdAt || storedKey.joinedAt,
+        memberCount: Number(roomData.memberCount) || 1,
+      })
+    }
+
+    return rooms.sort((a, b) => b.createdAt - a.createdAt)
+  }
+
   static async leaveRoom(roomId: string): Promise<void> {
-    await KeyVaultService.removeKey(roomId);
+    await KeyVaultService.removeKey(roomId)
   }
 }

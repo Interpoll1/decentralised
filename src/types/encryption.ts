@@ -40,7 +40,7 @@ export interface DecryptedCommunityMeta {
   rules: string[];
 }
 
-/** Encrypted chat room stored in GunDB */
+/** Encrypted chat room stored in GenosDB */
 export interface EncryptedChatRoom {
   id: string;
   isEncrypted: true;
@@ -57,7 +57,7 @@ export interface DecryptedChatRoomMeta {
   creatorId: string;
 }
 
-/** Chat room message stored in GunDB */
+/** Chat room message stored in GenosDB */
 export interface ChatRoomMessage {
   id: string;
   roomId: string;
@@ -79,7 +79,7 @@ export interface ContentSignature {
   contentSignature: string;  // Schnorr signature (128 hex chars)
 }
 
-/** Encrypted post data stored in GunDB */
+/** Encrypted post data stored in GenosDB */
 export interface EncryptedPostData {
   id: string;
   communityId: string;

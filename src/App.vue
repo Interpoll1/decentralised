@@ -3,6 +3,7 @@
     <AppLoader v-if="!appReady" />
     <ion-router-outlet v-else :animated="true" :animation="pageTransition" />
     <GlobalCommandPalette :is-open="globalPaletteOpen" @close="closeGlobalPalette" />
+    <OnboardingModal />
   </ion-app>
 </template>
 
@@ -12,11 +13,9 @@ import { createAnimation } from '@ionic/vue';
 import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useChainStore } from './stores/chainStore';
-import { WebSocketService } from './services/websocketService';
-import { GunService } from './services/gunService';
-import { warmupFromDB } from './services/dbWarmup';
 import AppLoader from './components/AppLoader.vue';
 import GlobalCommandPalette from './components/GlobalCommandPalette.vue';
+import OnboardingModal from './components/OnboardingModal.vue';
 
 const chainStore = useChainStore();
 const router = useRouter();
@@ -130,30 +129,13 @@ onMounted(async () => {
   };
   document.addEventListener('keydown', keydownHandler);
 
-  // Show loader until warmup is done — then reveal the app
-  try {
-    await warmupFromDB();
-  } catch (_error) {
-    // warmup failed, continue anyway
-  } finally {
-    appReady.value = true;
-  }
+  // GenosDB is ready as soon as its module loads (top-level await); reveal the app.
+  appReady.value = true;
 
-  // Non-blocking after app is visible
+  // Initialise the integrity chain (non-blocking; GenosDB syncs it P2P).
   try {
     await chainStore.initialize();
   } catch (_error) {}
-
-  visibilityHandler = () => {
-    if (document.visibilityState === 'visible') {
-      setTimeout(() => {
-        if (!WebSocketService.getConnectionStatus()) WebSocketService.reconnect();
-        const gunStats = GunService.getPeerStats();
-        if (!gunStats.isConnected) GunService.reconnect();
-      }, 500);
-    }
-  };
-  document.addEventListener('visibilitychange', visibilityHandler);
 });
 
 onUnmounted(() => {

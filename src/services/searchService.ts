@@ -1,177 +1,93 @@
-// searchService.ts - Full-Text Search Service for Vue
-import config from '@/config';
-import { GUN_NAMESPACE } from '@/services/gunService';
+// searchService.ts — full-text search over GenosDB.
+//
+// The former service queried a relay REST endpoint (/api/search) and pushed a
+// sealed index to /api/index. GenosDB holds the data locally and syncs it P2P,
+// so search is a direct reactive query over `post` and `poll` nodes — no backend,
+// no separate index to maintain.
+import { db } from './gdbServices'
 
 export interface SearchResult {
-  id: string;
-  type: 'post' | 'poll';
-  title: string;
-  content: string;
-  author: string;
-  community: string;
-  created_at: number;
-  relevance?: number;
+  id: string
+  type: 'post' | 'poll'
+  title: string
+  content: string
+  author: string
+  community: string
+  created_at: number
+  relevance?: number
 }
 
 export interface SearchOptions {
-  type?: 'post' | 'poll';
-  community?: string;
-  limit?: number;
-  offset?: number;
+  type?: 'post' | 'poll'
+  community?: string
+  limit?: number
+  offset?: number
 }
 
 export interface SearchResponse {
-  results: SearchResult[];
-  total: number;
+  results: SearchResult[]
+  total: number
 }
 
 class SearchService {
-  private apiUrl: string;
-  private cache: Map<string, { data: SearchResponse; timestamp: number }>;
-  private cacheTTL: number = 60000; // 1 minute
-
-  constructor(apiUrl: string = '') {
-    this.apiUrl = apiUrl;
-    this.cache = new Map();
-  }
-
-  private getApiBase(): string {
-    return this.apiUrl || config.relay.api;
-  }
+  // apiUrl kept for constructor compatibility; unused (search is local).
+  constructor(_apiUrl: string = '') {}
 
   async search(query: string, options: SearchOptions = {}): Promise<SearchResponse> {
-    if (!query || query.length < 2) {
-      throw new Error('Query must be at least 2 characters');
-    }
+    if (!query || query.length < 2) throw new Error('Query must be at least 2 characters')
+    const q = query.toLowerCase()
+    const results: SearchResult[] = []
 
-    const apiBase = this.getApiBase();
-
-    // Check cache
-    const cacheKey = JSON.stringify({ apiBase, query, ...options });
-    const cached = this.cache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < this.cacheTTL) {
-      return cached.data;
-    }
-
-    // Build URL
-    const params = new URLSearchParams({ q: query });
-    if (options.type) params.append('type', options.type);
-    if (options.community) params.append('community', options.community);
-    if (options.limit) params.append('limit', options.limit.toString());
-    if (options.offset) params.append('offset', options.offset.toString());
-    params.append('namespace', GUN_NAMESPACE);
-    params.append('dataVersion', GUN_NAMESPACE);
-    params.append('version', GUN_NAMESPACE);
-
-    try {
-      const response = await fetch(`${apiBase}/api/search?${params}`, {
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        throw new Error(`Search failed: ${response.statusText}`);
+    if (!options.type || options.type === 'post') {
+      const { results: posts } = await db.map({ query: { type: 'post' } })
+      for (const node of posts) {
+        const p: any = node.value
+        if (options.community && p.communityId !== options.community) continue
+        if ((p.title || '').toLowerCase().includes(q) || (p.content || '').toLowerCase().includes(q)) {
+          results.push({ id: p.id, type: 'post', title: p.title || '', content: p.content || '', author: p.authorName || '', community: p.communityId || '', created_at: p.createdAt || 0 })
+        }
       }
-
-      const data: SearchResponse = await response.json();
-      
-      // Cache result
-      this.cache.set(cacheKey, {
-        data,
-        timestamp: Date.now(),
-      });
-
-      return data;
-    } catch (err) {
-      console.error('❌ Search error:', err);
-      throw err;
     }
-  }
 
-  async searchPosts(query: string, options: Omit<SearchOptions, 'type'> = {}): Promise<SearchResponse> {
-    return this.search(query, { ...options, type: 'post' });
-  }
-
-  async searchPolls(query: string, options: Omit<SearchOptions, 'type'> = {}): Promise<SearchResponse> {
-    return this.search(query, { ...options, type: 'poll' });
-  }
-
-  async searchInCommunity(
-  query: string,
-  communitySlug: string,
-  options: Omit<SearchOptions, 'community'> = {}
-): Promise<SearchResponse> {
-    return this.search(query, { ...options, community: communitySlug });
-  }
-
-  async searchPage(
-    query: string,
-    page: number = 1,
-    perPage: number = 20,
-    options: SearchOptions = {}
-  ): Promise<SearchResponse> {
-    const offset = (page - 1) * perPage;
-    return this.search(query, { ...options, limit: perPage, offset });
-  }
-
-  clearCache(): void {
-    this.cache.clear();
-  }
-
-  async indexContent(type: 'post' | 'poll', id: string, data: any): Promise<{ ok: boolean }> {
-    try {
-      const { IntegrityService } = await import('@/services/integrityService');
-      const body = await IntegrityService.seal(
-        {
-          type,
-          id,
-          data,
-          namespace: GUN_NAMESPACE,
-          dataVersion: GUN_NAMESPACE,
-          version: GUN_NAMESPACE,
-        } as Record<string, unknown>,
-        'index',
-      );
-      const response = await fetch(`${this.getApiBase()}/api/index`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(body),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Indexing failed: ${response.statusText}`);
+    if (!options.type || options.type === 'poll') {
+      const { results: polls } = await db.map({ query: { type: 'poll' } })
+      for (const node of polls) {
+        const p: any = node.value
+        if (options.community && p.communityId !== options.community) continue
+        if ((p.question || '').toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q)) {
+          results.push({ id: p.id, type: 'poll', title: p.question || '', content: p.description || '', author: p.authorName || '', community: p.communityId || '', created_at: p.createdAt || 0 })
+        }
       }
-
-      // Clear cache when new content is indexed
-      this.clearCache();
-      
-      return await response.json();
-    } catch (err) {
-      console.error('❌ Indexing error:', err);
-      throw err;
     }
+
+    results.sort((a, b) => b.created_at - a.created_at)
+    const offset = options.offset || 0
+    const limit = options.limit ?? results.length
+    return { results: results.slice(offset, offset + limit), total: results.length }
   }
 
-  /**
-   * Get total pages for pagination
-   */
-  getTotalPages(total: number, perPage: number = 20): number {
-    return Math.ceil(total / perPage);
+  async searchPaginated(query: string, page = 1, perPage = 20, options: SearchOptions = {}): Promise<SearchResponse> {
+    return this.search(query, { ...options, limit: perPage, offset: (page - 1) * perPage })
   }
 
-  /**
-   * Check if there's a next page
-   */
-  hasNextPage(currentPage: number, total: number, perPage: number = 20): boolean {
-    return currentPage < this.getTotalPages(total, perPage);
+  clearCache(): void {}
+
+  /** No-op — GenosDB search queries live data, so there is no separate index to write. */
+  async indexContent(_type: 'post' | 'poll', _id: string, _data: any): Promise<{ ok: boolean }> {
+    return { ok: true }
   }
 
-  /**
-   * Check if there's a previous page
-   */
+  getTotalPages(total: number, perPage = 20): number {
+    return Math.ceil(total / perPage)
+  }
+
+  hasNextPage(currentPage: number, total: number, perPage = 20): boolean {
+    return currentPage < this.getTotalPages(total, perPage)
+  }
+
   hasPreviousPage(currentPage: number): boolean {
-    return currentPage > 1;
+    return currentPage > 1
   }
 }
 
-export default SearchService;
+export default SearchService

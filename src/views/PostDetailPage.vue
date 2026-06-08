@@ -206,7 +206,7 @@ const postAuthorTrustLevel = ref<'trusted-issuer' | 'unverified'>('unverified');
 let postAuthorTrustRequestId = 0;
 let fullImageLoadPromise: Promise<string | null> | null = null;
 
-// Load full-res image from GunDB to replace thumbnail
+// Load full-res image from GenosDB to replace thumbnail
 watch(
   () => post.value?.imageIPFS,
   (cid) => {

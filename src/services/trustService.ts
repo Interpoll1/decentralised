@@ -10,7 +10,7 @@
  *      username to the issuer's endpoint. The issuer returns a PoW challenge
  *      (~15 s on average hardware = difficulty 22 on SHA-256) plus a signed
  *      token they must embed in their Gun profile after solving.
- *   3. Any peer can re-verify by fetching the issuer's pubkey from GunDB
+ *   3. Any peer can re-verify by fetching the issuer's pubkey from GenosDB
  *      `trust-issuers/<domain>` and checking the embedded certificate.
  *   4. Unverified usernames are accepted immediately but carry rate-limit
  *      penalties server-side (see RATE_LIMIT_TIERS below).
@@ -21,7 +21,7 @@
  *   Trust issuers SHOULD use this difficulty for their challenge response.
  */
 
-import { GunService } from './gunService';
+import { db } from './gdbServices';
 import { KeyService } from './keyService';
 import { CryptoService } from './cryptoService';
 
@@ -75,10 +75,9 @@ export const RATE_LIMIT_TIERS = {
  */
 export const TRUST_POW_DIFFICULTY = 22;
 
-// ─── GunDB schema paths ────────────────────────────────────────────────────
+// ─── Storage ────────────────────────────────────────────────────────────────
+// Issuers are GenosDB nodes `trustIssuer:<domain>`; usernames are `username:<name>`.
 
-const GUN_ISSUERS_ROOT = 'trust-issuers';
-const GUN_USERNAMES_ROOT = 'usernames'; // username → { userId, pubkey, certificate? }
 const CUSTOM_ISSUERS_STORAGE_KEY = 'interpoll_custom_trust_issuers';
 const BUILTIN_ISSUERS: Omit<TrustIssuer, 'addedAt'>[] = [
   {
@@ -107,18 +106,12 @@ export class TrustService {
 
   // ── Issuers ────────────────────────────────────────────────────────────────
 
-  /** Fetch all registered trust issuers from GunDB. */
+  /** Fetch all registered trust issuers from GenosDB. */
   static async getIssuers(): Promise<TrustIssuer[]> {
     if (this.issuersCache) return this.issuersCache;
-    const gun = GunService.getGun();
     const gunIssuers: TrustIssuer[] = [];
-
-    await new Promise<void>((resolve) => {
-      gun.get(GUN_ISSUERS_ROOT).map().once((data: any) => {
-        if (data && data.domain) gunIssuers.push(data as TrustIssuer);
-      });
-      setTimeout(resolve, 2000);
-    });
+    const { results } = await db.map({ query: { type: 'trustIssuer' } });
+    for (const node of results) gunIssuers.push(node.value as TrustIssuer);
 
     const builtinIssuers: TrustIssuer[] = BUILTIN_ISSUERS.map((issuer) => ({
       ...issuer,
@@ -137,9 +130,8 @@ export class TrustService {
 
   /** Register a new trust issuer (admin/bootstrap only). */
   static async registerIssuer(issuer: Omit<TrustIssuer, 'addedAt'>): Promise<void> {
-    const gun = GunService.getGun();
     const full: TrustIssuer = { ...issuer, addedAt: Date.now() };
-    await gun.get(GUN_ISSUERS_ROOT).get(issuer.domain).put(full);
+    await db.put({ type: 'trustIssuer', ...full }, `trustIssuer:${issuer.domain}`);
     this.issuersCache = null; // invalidate
   }
 
@@ -192,34 +184,25 @@ export class TrustService {
 
   /**
    * Claim a username without a trust issuer (unverified).
-   * The username is stored in GunDB mapped to the user's device ID + pubkey.
+   * The username is stored in GenosDB mapped to the user's device ID + pubkey.
    * Returns false if the username is already taken.
    */
   static async claimUnverifiedUsername(username: string): Promise<boolean> {
     if (!this.isValidUsername(username)) throw new Error('Invalid username format');
 
-    const gun = GunService.getGun();
     const pubkey = await KeyService.getPublicKeyHex();
 
     // Check availability
-    const existing = await new Promise<any>((resolve) => {
-      let done = false;
-      gun.get(GUN_USERNAMES_ROOT).get(username).once((d: any) => {
-        if (!done) { done = true; resolve(d); }
-      });
-      setTimeout(() => { if (!done) { done = true; resolve(null); } }, 2000);
-    });
-
+    const { result } = await db.get(`username:${username}`);
+    const existing = result?.value;
     if (existing && existing.pubkey && existing.pubkey !== pubkey) {
       return false; // taken by someone else
     }
 
-    await gun.get(GUN_USERNAMES_ROOT).get(username).put({
-      pubkey,
-      level: 'none' as TrustLevel,
-      claimedAt: Date.now(),
-    });
-
+    await db.put(
+      { type: 'username', name: username, pubkey, level: 'none' as TrustLevel, claimedAt: Date.now() },
+      `username:${username}`,
+    );
     return true;
   }
 
@@ -413,13 +396,15 @@ export class TrustService {
     if (!this.verifyCertificate(cert, issuer)) {
       throw new Error('Trust issuer returned an invalid certificate signature');
     }
-    const gun = GunService.getGun();
-    await gun.get(GUN_USERNAMES_ROOT).get(username).put({
-      pubkey,
-      level: 'verified' as TrustLevel,
-      certificate: JSON.stringify(cert),
-      claimedAt: Date.now(),
-    });
+    await db.put(
+      {
+        type: 'username', name: username, pubkey,
+        level: 'verified' as TrustLevel,
+        certificate: JSON.stringify(cert),
+        claimedAt: Date.now(),
+      },
+      `username:${username}`,
+    );
   }
 
   // ── Verification ───────────────────────────────────────────────────────────
@@ -437,19 +422,12 @@ export class TrustService {
   }
 
   /**
-   * Look up the trust level for any username stored in GunDB.
+   * Look up the trust level for any username stored in GenosDB.
    * Also resolves the issuer and verifies the certificate if present.
    */
   static async resolveTrust(username: string): Promise<VerifiedUsername> {
-    const gun = GunService.getGun();
-
-    const record = await new Promise<any>((resolve) => {
-      let done = false;
-      gun.get(GUN_USERNAMES_ROOT).get(username).once((d: any) => {
-        if (!done) { done = true; resolve(d); }
-      });
-      setTimeout(() => { if (!done) { done = true; resolve(null); } }, 2000);
-    });
+    const { result } = await db.get(`username:${username}`);
+    const record = result?.value;
 
     if (!record || !record.pubkey) {
       return { username, level: 'none' };
@@ -484,7 +462,7 @@ export class TrustService {
 
   /**
    * Quick lookup of a user's own trust level by their public key.
-   * Scans GunDB usernames for a matching pubkey+certificate.
+   * Scans GenosDB usernames for a matching pubkey+certificate.
    */
   static async getMyTrustLevel(): Promise<TrustLevel> {
     const pubkey = await KeyService.getPublicKeyHex();
@@ -492,17 +470,10 @@ export class TrustService {
       return this.certCache.get(pubkey) ? 'verified' : 'none';
     }
 
-    const gun = GunService.getGun();
-    let found: TrustLevel = 'none';
-
-    await new Promise<void>((resolve) => {
-      gun.get(GUN_USERNAMES_ROOT).map().once((record: any) => {
-        if (record && record.pubkey === pubkey && record.level === 'verified' && record.certificate) {
-          found = 'verified';
-        }
-      });
-      setTimeout(resolve, 2000);
-    });
+    const { results } = await db.map({ query: { type: 'username', level: 'verified' } });
+    const found: TrustLevel = results.some(
+      (n: any) => n.value?.pubkey === pubkey && n.value?.certificate,
+    ) ? 'verified' : 'none';
 
     this.certCache.set(pubkey, found === 'verified' ? ({} as TrustCertificate) : null);
     return found;

@@ -490,11 +490,13 @@ async function handleAvatarSelect(event: Event) {
 
 async function loadProfile() {
   try {
-    userProfile.value = await UserService.getCurrentUser(true);
-    displayName.value = userProfile.value.displayName || userProfile.value.username;
-    customUsername.value = userProfile.value.customUsername || '';
-    bio.value = userProfile.value.bio || '';
-    showRealName.value = userProfile.value.showRealName || false;
+    const profile = await UserService.getCurrentUser(true);
+    userProfile.value = profile;
+    if (!profile) return; // No active identity yet — onboarding gate handles sign-in.
+    displayName.value = profile.displayName || profile.username;
+    customUsername.value = profile.customUsername || '';
+    bio.value = profile.bio || '';
+    showRealName.value = profile.showRealName || false;
     deviceId.value = await VoteTrackerService.getDeviceId();
   } catch (error) {
     console.error('Error loading profile:', error);

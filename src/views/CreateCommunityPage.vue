@@ -91,7 +91,7 @@
         <div>
           <p><strong>Peer-to-Peer Community</strong></p>
           <p>
-            This community will be stored on GunDB and synced across all peers.
+            This community will be stored on GenosDB and synced across all peers.
             Once created, it cannot be deleted (that's the nature of P2P!).
           </p>
         </div>
