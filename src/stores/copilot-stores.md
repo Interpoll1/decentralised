@@ -60,6 +60,7 @@ Key computed: `polls`, `sortedPolls`
 - Incoming post updates are buffered in short flush windows (50 ms / 100 items) before applying to `postsMap`, using round-robin queue draining across communities to avoid starvation under bursty sync.
 - `pendingNewPosts` is banner-only state; accepted posts live in `postsMap` and seen IDs are persisted (`seen-post-ids`) so accepted content survives refresh.
 - `createPost()` checks the current user's `showRealName` preference. If false (default), generates a pseudonym from the pre-generated postId + authorId as the `authorName`. If true, uses the user's `customUsername`.
+- `createPost()` now also enforces community membership via locally persisted joined-community state and throws `COMMUNITY_JOIN_REQUIRED` for non-members, preventing invalid post attempts from composer/direct route calls.
 - `loadMorePosts()` still paginates by `PAGE_SIZE` (10), but Home feed now controls initial visibility separately (up to 50 items) so users do not need an initial scroll to reveal already-fetched content.
 - Debug instrumentation logs `[PostStoreDebug]` entries for community subscription start/initial completion, injected posts, and visible-count changes to help diagnose feed hydration issues (enabled only when `localStorage.interpoll_post_debug === 'true'`).
 - Sync diagnostics: when `localStorage.interpoll_sync_debug === 'true'`, logs `[SyncRate] post-incoming` and `[SyncRate] post-flush` once per second with queue depth.

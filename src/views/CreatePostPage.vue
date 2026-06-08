@@ -35,10 +35,10 @@
               <ion-select
                 v-model="selectedCommunity"
                 label="Community"
-                placeholder="Select community"
+                placeholder="Select joined community"
               >
                 <ion-select-option
-                  v-for="community in communityStore.communities"
+                  v-for="community in joinedCommunities"
                   :key="community.id"
                   :value="community.id"
                 >
@@ -310,9 +310,15 @@ const imageSize = computed(() => {
   return `${(kb / 1024).toFixed(1)} MB`;
 });
 
-const canSubmit = computed(() => {
-  return selectedCommunity.value && title.value.trim().length > 0;
-});
+const joinedCommunities = computed(() =>
+  communityStore.communities.filter(c => communityStore.isJoined(c.id))
+);
+
+const canSubmit = computed(() =>
+  !!selectedCommunity.value
+  && communityStore.isJoined(selectedCommunity.value)
+  && title.value.trim().length > 0
+);
 
 const selectImage = () => {
   fileInput.value?.click();
@@ -357,6 +363,15 @@ const removeImage = () => {
 
 const submitPost = async () => {
   if (!canSubmit.value) return;
+  if (!communityStore.isJoined(selectedCommunity.value)) {
+    const toast = await toastController.create({
+      message: 'Join a community before creating a post',
+      duration: 2500,
+      color: 'warning'
+    });
+    await toast.present();
+    return;
+  }
 
   const titleCheck = checkContent(title.value.trim(), 'title');
   if (!titleCheck.ok) {
@@ -399,9 +414,12 @@ const submitPost = async () => {
     router.push(`/community/${selectedCommunity.value}`);
   } catch (error) {
     console.error('Error creating post:', error);
+    const message = error instanceof Error && error.message === 'COMMUNITY_JOIN_REQUIRED'
+      ? 'Join the selected community before posting'
+      : 'Failed to create post';
     
     const toast = await toastController.create({
-      message: 'Failed to create post',
+      message,
       duration: 3000,
       color: 'danger'
     });

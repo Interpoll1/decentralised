@@ -456,7 +456,7 @@ async function handleUpvote() {
       // Optimistic update
       post.value = { ...post.value, upvotes: post.value.upvotes - 1, score: post.value.score - 1 };
       voteVersion.value++;
-      postStore.removeUpvote(post.value.id); // fire and forget
+      await postStore.removeUpvote(post.value.id);
       (await toastController.create({ message: 'Upvote removed', duration: 1500 })).present();
     } else {
       const wasDownvoted = hasDownvoted.value;
@@ -469,8 +469,8 @@ async function handleUpvote() {
         score: post.value.score + (wasDownvoted ? 2 : 1),
       };
       voteVersion.value++;
-      if (wasDownvoted) postStore.removeDownvote(post.value.id); // fire and forget
-      postStore.upvotePost(post.value.id); // fire and forget
+      if (wasDownvoted) await postStore.removeDownvote(post.value.id);
+      await postStore.upvotePost(post.value.id);
       (await toastController.create({ message: 'Upvoted', duration: 1500 })).present();
     }
   } catch {
@@ -486,7 +486,7 @@ async function handleDownvote() {
       // Optimistic update
       post.value = { ...post.value, downvotes: post.value.downvotes - 1, score: post.value.score + 1 };
       voteVersion.value++;
-      postStore.removeDownvote(post.value.id); // fire and forget
+      await postStore.removeDownvote(post.value.id);
       (await toastController.create({ message: 'Downvote removed', duration: 1500 })).present();
     } else {
       const wasUpvoted = hasUpvoted.value;
@@ -499,8 +499,8 @@ async function handleDownvote() {
         score: post.value.score - (wasUpvoted ? 2 : 1),
       };
       voteVersion.value++;
-      if (wasUpvoted) postStore.removeUpvote(post.value.id); // fire and forget
-      postStore.downvotePost(post.value.id); // fire and forget
+      if (wasUpvoted) await postStore.removeUpvote(post.value.id);
+      await postStore.downvotePost(post.value.id);
       (await toastController.create({ message: 'Downvoted', duration: 1500 })).present();
     }
   } catch {
