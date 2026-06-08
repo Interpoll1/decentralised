@@ -38,9 +38,48 @@ function spaRouteFallbackPlugin() {
   };
 }
 
+/**
+ * Serve GenosDB's self-contained `dist/` intact from a single location
+ * (`<base>/genosdb/`) instead of bundling it. GenosDB resolves its own plugins
+ * at runtime via `new URL('./*.min.js', import.meta.url)`, so all of them must
+ * live together in one folder — bundling would split + hash them and break that
+ * relative resolution. Dev serves them from node_modules; build copies the whole
+ * folder verbatim into the output. Matches the app's dynamic import in
+ * `src/services/gdbServices.ts`.
+ */
+function genosdbStaticPlugin() {
+  const distDir = path.resolve(__dirname, 'node_modules/genosdb/dist');
+  return {
+    name: 'genosdb-static',
+    configureServer(server: any) {
+      server.middlewares.use(async (req: any, res: any, next: any) => {
+        const match = (req.url?.split('?')[0] ?? '').match(/\/genosdb\/(.+\.js)$/);
+        if (!match) return next();
+        try {
+          const file = await fs.readFile(path.join(distDir, match[1]));
+          res.setHeader('Content-Type', 'application/javascript');
+          res.end(file);
+        } catch {
+          next();
+        }
+      });
+    },
+    async closeBundle() {
+      const outDir = path.resolve(__dirname, 'dist/genosdb');
+      await fs.mkdir(outDir, { recursive: true });
+      const files = (await fs.readdir(distDir)).filter((f) => f.endsWith('.js'));
+      await Promise.all(
+        files.map((f) => fs.copyFile(path.join(distDir, f), path.join(outDir, f)))
+      );
+    },
+  };
+}
+
 export default defineConfig({
-  base: '/',
-  plugins: [vue(), spaRouteFallbackPlugin()],
+  // GitHub Pages serves project sites under /<repo>/. Build with GH_PAGES=1 to
+  // emit that base; local dev/preview stays at root.
+  base: process.env.GH_PAGES === '1' ? '/interpoll-genosdb/' : '/',
+  plugins: [vue(), spaRouteFallbackPlugin(), genosdbStaticPlugin()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -53,9 +92,9 @@ export default defineConfig({
     global: 'globalThis'
   },
   optimizeDeps: {
-    // genosdb lazy-loads sibling modules (sm.min.js, genosrtc.min.js…) via
-    // import(new URL(...)); excluding it from pre-bundling keeps those reachable.
-    exclude: ['@ionic/vue', 'genosdb'],
+    // genosdb is not pre-bundled here — it is served intact as a static folder
+    // by the genosdb-static plugin and loaded via dynamic import (see gdbServices).
+    exclude: ['@ionic/vue'],
     esbuildOptions: {
       target: 'es2022',
       define: {

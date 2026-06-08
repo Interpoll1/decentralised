@@ -11,7 +11,13 @@
  *   const id = await db.put({ type: 'poll', question: '...' });
  *   await db.map({ query: { type: 'poll' } }, ({ id, value, action }) => { ... });
  */
-import { gdb } from 'genosdb'
+// GenosDB ships a self-contained `dist/` (gdb entry + its sm/genosrtc/… plugins),
+// and resolves those plugins at runtime via `new URL('./*.min.js', import.meta.url)`.
+// We therefore load it intact from a single served folder (<base>/genosdb/) instead
+// of letting the bundler split + hash it — which would scatter the siblings and
+// break that relative resolution. The folder is served from node_modules in dev and
+// copied verbatim into the build by the `genosdb-static` plugin in vite.config.ts.
+const { gdb } = await import(/* @vite-ignore */ `${import.meta.env.BASE_URL}genosdb/index.js`)
 
 /** Database identifier — also serves as the P2P room name. */
 export const GDB_NAME = 'interpoll'

@@ -36,3 +36,6 @@ nuxt-app
 shared-validation
 src/components/copilot-components.md
 src/services/copilot-services.md
+
+# Browser automation test artifacts
+.playwright-cli/
