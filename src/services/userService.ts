@@ -69,10 +69,12 @@ export class UserService {
    * acting requires a signing key).
    */
   static async getCurrentUser(forceRefresh = false): Promise<UserProfile | null> {
-    if (this.currentUser && !forceRefresh) return this.currentUser
-
     const address = db.sm.getActiveEthAddress()
     if (!address) return null
+
+    // The cache is only valid for the active identity — after logout + a new
+    // login the address changes, and a stale profile must never be returned.
+    if (this.currentUser?.id === address && !forceRefresh) return this.currentUser
 
     const existing = await this.readProfile(address)
     if (existing) {

@@ -460,6 +460,39 @@ const auth = useAuthStore();
 const chainStore = useChainStore();
 
 /**
+ * Identity-scoped startup: tamper-evident chain log + background chat (DM
+ * notifications). HomePage mounts underneath the identity gate, so this is a
+ * no-op until an identity is active — the `auth.isLoggedIn` watcher re-fires
+ * it right after login, and `handleLogout` re-arms it for the next identity.
+ */
+let userServicesInitDone = false;
+async function initUserScopedServices() {
+  if (userServicesInitDone || !auth.isLoggedIn) return;
+  try {
+    const currentUser = await UserService.getCurrentUser();
+    if (!currentUser) return;
+    userServicesInitDone = true;
+    currentUserId = currentUser.id;
+    // Keep startup sync light: defer heavy chat graph subscriptions until the
+    // chat tab is opened. Keep DM notifications even if chain init fails.
+    await Promise.allSettled([
+      chainStore.initialize(),
+      ensureBackgroundChatInitialized(),
+    ]);
+    if (activeTab.value === 'chat') {
+      await ensureChatInitialized();
+    }
+  } catch (err) {
+    userServicesInitDone = false;
+    console.warn('Identity-scoped init failed (will retry on next login):', err);
+  }
+}
+
+watch(() => auth.isLoggedIn, (loggedIn) => {
+  if (loggedIn) void initUserScopedServices();
+});
+
+/**
  * Log out the active Security Manager identity. Clears local signing so the
  * OnboardingModal (gated on `!auth.isLoggedIn`) reappears, letting the user
  * switch or recover an identity without clearing browser storage by hand.
@@ -468,6 +501,17 @@ async function handleLogout() {
   if (!confirm('Log out of this identity? You will need your recovery phrase or passkey to sign in again.')) return;
   await auth.logout();
   activeTab.value = 'home';
+  // Re-arm identity-scoped services so the next login (possibly a different
+  // identity) initialises cleanly instead of reusing the previous session.
+  userServicesInitDone = false;
+  currentUserId = '';
+  bgChatService?.disconnect();
+  bgChatService = null;
+  bgChatInitPromise = null;
+  chatInitPromise = null;
+  chatListUnsub?.();
+  chatListUnsub = null;
+  chatList.value = [];
 }
 const communityStore = useCommunityStore();
 const postStore = usePostStore();
@@ -756,6 +800,7 @@ function ensureBackgroundChatInitialized(): Promise<void> {
     try {
       if (!currentUserId) {
         const currentUser = await UserService.getCurrentUser();
+        if (!currentUser) throw new Error('Chat requires an active identity');
         currentUserId = currentUser.id;
       }
       syncDebug('background-chat-init-start');
@@ -775,6 +820,7 @@ function ensureChatInitialized(): Promise<void> {
     try {
       if (!currentUserId) {
         const currentUser = await UserService.getCurrentUser();
+        if (!currentUser) throw new Error('Chat requires an active identity');
         currentUserId = currentUser.id;
       }
       syncDebug('chat-tab-init-start');
@@ -1113,24 +1159,9 @@ onMounted(async () => {
     await communityStore.loadCommunities()
   })();
 
-  // STEP 3: User + chat + chain — all parallel, never block feed
-  ;(async () => {
-    try {
-      const currentUser = await UserService.getCurrentUser();
-      currentUserId = currentUser.id;
-      // Keep startup sync light: defer heavy chat graph subscriptions until chat tab is opened.
-      // Keep live DM notifications enabled even if chain init fails.
-      await Promise.allSettled([
-        chainStore.initialize(),
-        ensureBackgroundChatInitialized(),
-      ]);
-      if (activeTab.value === 'chat') {
-        await ensureChatInitialized();
-      }
-    } catch (err) {
-      console.warn('Heavy init error (non-critical):', err);
-    }
-  })();
+  // STEP 3: User + chat + chain — runs now if already logged in; otherwise the
+  // auth watcher below fires it right after the user passes the identity gate.
+  void initUserScopedServices();
 
   await feedPromise;
   if (!HOME_GUN_FEED_ENABLED && combinedFeed.value.length === 0) {
