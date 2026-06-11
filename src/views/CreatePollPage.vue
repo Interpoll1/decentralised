@@ -14,39 +14,38 @@
       </ion-toolbar>
     </ion-header>
     <ion-content>
-      <!-- Community Selection -->
-      <ion-item button @click="showCommunityPicker">
-        <ion-label>
-          <h3>{{ selectedCommunity ? selectedCommunity.displayName : 'Select a community' }}</h3>
-          <p v-if="selectedCommunity">{{ selectedCommunity.id }}</p>
-        </ion-label>
-        <ion-icon :icon="chevronDownOutline" slot="end"></ion-icon>
-      </ion-item>
+      <div class="page-shell page-shell--form form-grid">
 
-      <!-- Poll Question -->
-      <ion-item>
-        <ion-label position="stacked">Question *</ion-label>
-        <ion-input 
-          v-model="question" 
-          placeholder="What would you like to ask?"
-          :counter="true"
-          maxlength="200"
-        ></ion-input>
-      </ion-item>
+      <!-- Essentials: community, question, options -->
+      <div class="page-panel">
+        <ion-item button lines="none" @click="showCommunityPicker">
+          <ion-label>
+            <h3>{{ selectedCommunity ? selectedCommunity.displayName : 'Select a community' }}</h3>
+            <p v-if="selectedCommunity">{{ selectedCommunity.id }}</p>
+          </ion-label>
+          <ion-icon :icon="chevronDownOutline" slot="end"></ion-icon>
+        </ion-item>
 
-      <!-- Poll Options -->
-      <ion-list>
+        <ion-item>
+          <ion-input
+            v-model="question"
+            label="Question"
+            label-placement="floating"
+            placeholder="What would you like to ask?"
+            maxlength="200"
+          ></ion-input>
+        </ion-item>
+
         <ion-item v-for="(option, index) in options" :key="option.id">
-          <ion-label position="stacked">Option {{ index + 1 }} *</ion-label>
-          <ion-input 
-            v-model="options[index].text" 
+          <ion-input
+            v-model="options[index].text"
             :placeholder="`Option ${index + 1}`"
             maxlength="100"
           >
-            <ion-button 
-              v-if="options.length > 2" 
-              slot="end" 
-              fill="clear" 
+            <ion-button
+              v-if="options.length > 2"
+              slot="end"
+              fill="clear"
               color="danger"
               @click="removeOption(index)"
             >
@@ -54,76 +53,86 @@
             </ion-button>
           </ion-input>
         </ion-item>
-      </ion-list>
 
-      <ion-button 
-        expand="block" 
-        fill="outline" 
-        @click="addOption"
-        :disabled="options.length >= 10"
-      >
-        <ion-icon slot="start" :icon="addCircleOutline"></ion-icon>
-        Add Option ({{ options.length }}/10)
-      </ion-button>
+        <ion-button
+          size="small"
+          fill="outline"
+          class="add-option-btn"
+          @click="addOption"
+          :disabled="options.length >= 10"
+        >
+          <ion-icon slot="start" :icon="addCircleOutline"></ion-icon>
+          Add Option
+        </ion-button>
+      </div>
 
-      <!-- Poll Settings -->
-      <ion-list>
-        <ion-item>
-          <ion-label>Poll Duration</ion-label>
-          <ion-select v-model="duration">
-            <ion-select-option value="1">1 Day</ion-select-option>
-            <ion-select-option value="3">3 Days</ion-select-option>
-            <ion-select-option value="7">7 Days</ion-select-option>
-            <ion-select-option value="14">14 Days</ion-select-option>
-            <ion-select-option value="30">30 Days</ion-select-option>
-          </ion-select>
-        </ion-item>
+      <!-- Settings: good defaults ship collapsed; editing is opt-in -->
+      <div class="page-panel">
+        <button type="button" class="settings-toggle" @click="showSettings = !showSettings">
+          <ion-label>Poll settings</ion-label>
+          <span class="settings-summary">{{ settingsSummary }} · {{ showSettings ? 'Done' : 'Customize' }}</span>
+        </button>
 
-        <ion-item>
-          <ion-toggle v-model="allowMultipleChoices">
-            Allow multiple choices
-          </ion-toggle>
-        </ion-item>
+        <template v-if="showSettings">
+          <ion-item>
+            <ion-select v-model="duration" label="Duration" interface="popover">
+              <ion-select-option value="1">1 Day</ion-select-option>
+              <ion-select-option value="3">3 Days</ion-select-option>
+              <ion-select-option value="7">7 Days</ion-select-option>
+              <ion-select-option value="14">14 Days</ion-select-option>
+              <ion-select-option value="30">30 Days</ion-select-option>
+            </ion-select>
+          </ion-item>
 
-        <ion-item>
-          <ion-toggle v-model="showResultsBeforeVoting">
-            Show results before voting
-          </ion-toggle>
-        </ion-item>
-        <ion-item>
-          <ion-toggle v-model="isPrivate">
-            Make this poll private (invite-only)
-          </ion-toggle>
-        </ion-item>
-        <ion-item v-if="isPrivate">
-          <ion-label class="text-xs text-gray-500">
-            Only people with a unique invite code can vote.
-            Each code can be used once.
-          </ion-label>
-        </ion-item>
-        <ion-item v-if="isPrivate">
-          <ion-label position="stacked">Number of invite codes</ion-label>
-          <ion-input
-            type="number"
-            v-model.number="inviteCodeCount"
-            min="1"
-            max="200"
-            placeholder="20"
-          ></ion-input>
-        </ion-item>
-      </ion-list>
+          <ion-item>
+            <ion-toggle v-model="allowMultipleChoices">
+              Allow multiple choices
+            </ion-toggle>
+          </ion-item>
 
-      <!-- Additional Details (Optional) -->
-      <ion-item>
-        <ion-label position="stacked">Description (Optional)</ion-label>
-        <ion-textarea 
-          v-model="description" 
-          placeholder="Add more context to your poll..."
-          rows="4"
-          maxlength="500"
-          :counter="true"
-        ></ion-textarea>
-      </ion-item>
+          <ion-item>
+            <ion-toggle v-model="showResultsBeforeVoting">
+              Show results before voting
+            </ion-toggle>
+          </ion-item>
+
+          <ion-item>
+            <ion-toggle v-model="isPrivate">
+              Private poll (invite-only)
+            </ion-toggle>
+          </ion-item>
+          <template v-if="isPrivate">
+            <p class="settings-hint">
+              Only people with a unique invite code can vote. Each code can be used once.
+            </p>
+            <ion-item>
+              <ion-input
+                type="number"
+                v-model.number="inviteCodeCount"
+                label="Number of invite codes"
+                label-placement="floating"
+                min="1"
+                max="200"
+                placeholder="20"
+              ></ion-input>
+            </ion-item>
+          </template>
+
+          <ion-item>
+            <ion-textarea
+              v-model="description"
+              label="Description (optional)"
+              label-placement="floating"
+              placeholder="Add more context to your poll..."
+              :rows="2"
+              :auto-grow="true"
+              maxlength="500"
+            ></ion-textarea>
+          </ion-item>
+        </template>
+      </div>
+
+      </div>
     </ion-content>
   </ion-page>
 </template>
@@ -140,7 +149,6 @@ import {
   IonButtons,
   IonBackButton,
   IonButton,
-  IonList,
   IonItem,
   IonLabel,
   IonInput,
@@ -217,6 +225,17 @@ const showResultsBeforeVoting = ref(false);
 const description = ref('');
 const isPrivate = ref(false);
 const inviteCodeCount = ref(20);
+const showSettings = ref(false);
+
+/** One-line digest of the collapsed settings so defaults stay visible at a glance. */
+const settingsSummary = computed(() => {
+  const parts = [
+    `${duration.value} day${duration.value === '1' ? '' : 's'}`,
+    allowMultipleChoices.value ? 'multiple choice' : 'single choice',
+  ];
+  if (isPrivate.value) parts.push('private');
+  return parts.join(' · ');
+});
 const isSubmitting = ref(false);
 
 function escapeHtml(input: string): string {
@@ -457,3 +476,42 @@ watch(
   { immediate: true },
 );
 </script>
+
+<style scoped>
+.add-option-btn {
+  margin-top: 8px;
+}
+
+.settings-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  color: var(--app-text);
+}
+
+.settings-toggle ion-label {
+  font-weight: 600;
+}
+
+.settings-summary {
+  font-size: 13px;
+  color: var(--app-accent);
+}
+
+.settings-toggle + ion-item {
+  margin-top: 12px;
+}
+
+.settings-hint {
+  margin: 8px 2px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--app-text-muted);
+}
+</style>

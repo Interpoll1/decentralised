@@ -20,15 +20,7 @@
     </ion-header>
 
     <ion-content class="ambient-page">
-      <div class="ambient-page__content create-post-page">
-        <section class="create-hero">
-          <span class="surface-label">New post</span>
-          <h1 class="section-heading create-title">Publish to your community</h1>
-          <p class="section-subtitle create-subtitle">
-            Draft a post with a clear title, optional context, and an image preview before broadcasting it to peers.
-          </p>
-        </section>
-
+      <div class="page-shell page-shell--form create-post-page">
         <section class="create-form surface-card">
           <div class="field-stack">
             <ion-item lines="none">
@@ -70,23 +62,17 @@
             </ion-item>
           </div>
 
-          <div class="image-section surface-card">
-            <div class="image-section-header">
-              <div>
-                <span class="surface-label">Media</span>
-                <h2>Add an image</h2>
-              </div>
-              <ion-button
-                fill="clear"
-                size="small"
-                @click="selectImage"
-                v-if="!imagePreview"
-                class="add-image-btn"
-              >
-                <ion-icon slot="start" :icon="imageOutline"></ion-icon>
-                Add Image
-              </ion-button>
-            </div>
+          <div class="image-section">
+            <ion-button
+              fill="outline"
+              size="small"
+              @click="selectImage"
+              v-if="!imagePreview"
+              class="add-image-btn"
+            >
+              <ion-icon slot="start" :icon="imageOutline"></ion-icon>
+              Add image (optional)
+            </ion-button>
 
             <div v-if="imagePreview" class="image-preview-container">
               <img :src="imagePreview" class="image-preview" />
@@ -115,7 +101,7 @@
         @change="handleImageSelect"
       />
 
-      <div class="ambient-page__content create-post-info" v-if="imageFile">
+      <div class="page-shell page-shell--form create-post-info" v-if="imageFile">
         <div class="info-box">
           <ion-icon :icon="informationCircle"></ion-icon>
           <p>Image will be compressed to ~200 KB and stored on GenosDB. Thumbnail (~15 KB) cached locally for fast loading.</p>
@@ -131,23 +117,18 @@
   gap: 24px;
 }
 
-.create-hero {
-  max-width: 760px;
-  padding-top: 8px;
-}
-
-.create-title {
-  margin: 12px 0 10px;
-}
-
-.create-subtitle {
-  max-width: 640px;
-}
-
 .create-form {
   display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  align-items: start;
   gap: 24px;
   padding: 24px;
+}
+
+@media (max-width: 900px) {
+  .create-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .field-stack {
@@ -162,24 +143,11 @@
 .image-section {
   display: grid;
   gap: 16px;
-  padding: 20px;
 }
 
 .add-image-btn {
   margin: 0;
-}
-
-.image-section-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.image-section-header h2 {
-  margin: 6px 0 0;
-  font-size: 20px;
-  letter-spacing: -0.02em;
+  justify-self: start;
 }
 
 .image-preview-container {
@@ -248,15 +216,6 @@
 @media (max-width: 767px) {
   .create-form {
     padding: 18px;
-  }
-
-  .image-section {
-    padding: 16px;
-  }
-
-  .image-section-header {
-    flex-direction: column;
-    align-items: flex-start;
   }
 }
 </style>

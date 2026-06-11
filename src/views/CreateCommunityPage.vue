@@ -9,108 +9,100 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
+    <ion-content>
+      <div class="page-shell page-shell--form form-grid">
 
+      <!-- Basics: one name (the c/ handle is derived automatically) -->
+      <div class="page-panel">
       <p class="page-subtitle">Create a space for people to discuss topics they love</p>
 
-      <!-- Community Name -->
-      <ion-item>
-        <ion-input
-          v-model="name"
-          label="Community Name"
-          label-placement="floating"
-          placeholder="programming"
-          @ionInput="validateName"
-          :maxlength="21"
-        >
-          <div slot="start">c/</div>
-        </ion-input>
-      </ion-item>
-      <p class="helper-text" :class="{ error: nameError }">
-        {{ nameError || 'Lowercase letters, numbers, underscores only. No spaces.' }}
-      </p>
-
-      <!-- Display Name -->
       <ion-item>
         <ion-input
           v-model="displayName"
-          label="Display Name"
+          label="Community name"
           label-placement="floating"
           placeholder="Programming"
           :maxlength="50"
         ></ion-input>
       </ion-item>
+      <p class="helper-text" :class="{ error: !!nameError }">
+        {{ nameError || (slug ? `Will live at c/${slug}` : 'Pick a clear name — the c/ handle is created for you.') }}
+      </p>
 
-      <!-- Description -->
       <ion-item>
         <ion-textarea
           v-model="description"
-          label="Description"
+          label="Description (optional)"
           label-placement="floating"
           placeholder="What is this community about?"
-          :rows="4"
+          :rows="2"
+          :auto-grow="true"
           :maxlength="500"
         ></ion-textarea>
       </ion-item>
+      </div>
 
-      <!-- Rules -->
-      <div class="rules-section">
-        <ion-label>Community Rules</ion-label>
-        <div v-for="(rule, index) in rules" :key="index" class="rule-item">
-          <ion-item>
-            <ion-input
-              v-model="rules[index]"
-              :placeholder="`Rule ${index + 1}`"
-              :maxlength="200"
-            ></ion-input>
-            <ion-button
-              slot="end"
-              fill="clear"
-              color="danger"
-              @click="removeRule(index)"
-              v-if="rules.length > 1"
-            >
-              <ion-icon :icon="closeCircle"></ion-icon>
-            </ion-button>
-          </ion-item>
-        </div>
+      <div class="form-grid__side">
+      <!-- Rules: sensible defaults ship collapsed; editing is opt-in -->
+      <div class="page-panel rules-section">
+        <button type="button" class="rules-toggle" @click="showRules = !showRules">
+          <ion-label>Community rules</ion-label>
+          <span class="rules-summary">{{ rulesSummary }} · {{ showRules ? 'Done' : 'Customize' }}</span>
+        </button>
+        <template v-if="showRules">
+          <div v-for="(rule, index) in rules" :key="index" class="rule-item">
+            <ion-item>
+              <ion-input
+                v-model="rules[index]"
+                :placeholder="`Rule ${index + 1}`"
+                :maxlength="200"
+              ></ion-input>
+              <ion-button
+                slot="end"
+                fill="clear"
+                color="danger"
+                @click="removeRule(index)"
+                v-if="rules.length > 1"
+              >
+                <ion-icon :icon="closeCircle"></ion-icon>
+              </ion-button>
+            </ion-item>
+          </div>
+          <ion-button
+            size="small"
+            fill="outline"
+            @click="addRule"
+            v-if="rules.length < 10"
+          >
+            <ion-icon slot="start" :icon="add"></ion-icon>
+            Add Rule
+          </ion-button>
+        </template>
+      </div>
+
+      <!-- Privacy -->
+      <div class="page-panel privacy-panel">
+        <PrivateCommunityToggle @update:config="privacyConfig = $event" />
+      </div>
+      </div>
+
+      <div class="form-grid__full">
         <ion-button
-          size="small"
-          fill="outline"
-          @click="addRule"
-          v-if="rules.length < 10"
+          expand="block"
+          @click="createCommunity"
+          :disabled="!canCreate || isCreating"
+          class="create-btn"
         >
-          <ion-icon slot="start" :icon="add"></ion-icon>
-          Add Rule
+          <ion-spinner v-if="isCreating" name="crescent" class="mr-2"></ion-spinner>
+          {{ isCreating ? 'Creating...' : 'Create Community' }}
         </ion-button>
+
+        <p class="p2p-note">
+          Stored on GenosDB and synced across all peers — once created, it can't be deleted.
+        </p>
       </div>
 
-      <!-- Info Box -->
-      <div class="info-box">
-        <ion-icon :icon="informationCircle"></ion-icon>
-        <div>
-          <p><strong>Peer-to-Peer Community</strong></p>
-          <p>
-            This community will be stored on GenosDB and synced across all peers.
-            Once created, it cannot be deleted (that's the nature of P2P!).
-          </p>
-        </div>
       </div>
-
-      <!-- Private Community Toggle -->
-      <PrivateCommunityToggle @update:config="privacyConfig = $event" />
-
-      <!-- Create Button -->
-      <ion-button
-        expand="block"
-        @click="createCommunity"
-        :disabled="!canCreate || isCreating"
-        class="create-btn"
-      >
-        <ion-spinner v-if="isCreating" name="crescent" class="mr-2"></ion-spinner>
-        {{ isCreating ? 'Creating...' : 'Create Community' }}
-      </ion-button>
-
     </ion-content>
   </ion-page>
 </template>
@@ -132,53 +124,50 @@
   color: var(--ion-color-danger);
 }
 
-.rules-section {
-  margin: 24px 0;
-}
-
-.rules-section > ion-label {
-  display: block;
-  font-weight: 600;
-  margin-bottom: 12px;
-  padding: 0 16px;
-}
-
 .rule-item {
   margin-bottom: 8px;
 }
 
-.info-box {
+.rules-toggle {
   display: flex;
-  gap: 12px;
-  margin-top: 24px;
-  padding: 16px;
-  background: rgba(var(--ion-card-background-rgb), 0.20);
-  backdrop-filter: blur(14px) saturate(1.4);
-  -webkit-backdrop-filter: blur(14px) saturate(1.4);
-  border: 1px solid var(--glass-border);
-  border-top-color: var(--glass-border-top);
-  border-radius: 14px;
-  box-shadow: var(--glass-highlight);
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  color: var(--app-text);
 }
 
-.info-box ion-icon {
-  flex-shrink: 0;
-  font-size: 24px;
-  color: var(--ion-color-primary);
+.rules-toggle ion-label {
+  font-weight: 600;
 }
 
-.info-box p {
-  margin: 0 0 8px 0;
+.rules-summary {
   font-size: 13px;
-  line-height: 1.4;
+  color: var(--app-accent);
 }
 
-.info-box p:last-child {
-  margin-bottom: 0;
+.rules-toggle + .rule-item {
+  margin-top: 12px;
+}
+
+.privacy-panel {
+  padding: 8px 12px;
 }
 
 .create-btn {
-  margin-top: 24px;
+  margin-top: 4px;
+}
+
+.p2p-note {
+  margin: 10px 0 0;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--app-text-subtle);
 }
 
 .mr-2 {
@@ -210,7 +199,7 @@ import {
   IonSpinner,
   toastController
 } from '@ionic/vue';
-import { add, closeCircle, informationCircle } from 'ionicons/icons';
+import { add, closeCircle } from 'ionicons/icons';
 import { useCommunityStore } from '../stores/communityStore';
 import PrivateCommunityToggle from '../components/PrivateCommunityToggle.vue';
 import type { PrivateCommunityConfig } from '../components/PrivateCommunityToggle.vue';
@@ -218,49 +207,46 @@ import type { PrivateCommunityConfig } from '../components/PrivateCommunityToggl
 const router = useRouter();
 const communityStore = useCommunityStore();
 
-const name = ref('');
 const displayName = ref('');
 const description = ref('');
 const rules = ref(['Be respectful', 'No spam']);
+const showRules = ref(false);
 const isCreating = ref(false);
-const nameError = ref('');
 const privacyConfig = ref<PrivateCommunityConfig>({ isPrivate: false, method: 'invite' });
 
+/**
+ * The c/ handle is derived from the community name automatically (lowercased,
+ * spaces -> underscores, symbols stripped), so users fill in ONE name field
+ * and never have to learn the slug format rules.
+ */
+const slug = computed(() =>
+  displayName.value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9_\s]/g, '')
+    .replace(/\s+/g, '_')
+    .slice(0, 21)
+);
+
+const nameError = computed(() =>
+  displayName.value.trim() !== '' && slug.value.length < 3
+    ? 'Name needs at least 3 letters or numbers'
+    : ''
+);
+
+const rulesSummary = computed(() => {
+  const count = rules.value.filter((r) => r.trim() !== '').length;
+  return `${count} rule${count === 1 ? '' : 's'}`;
+});
+
 const canCreate = computed(() => {
-  const baseValid = name.value.trim() !== '' &&
-    !nameError.value &&
-    displayName.value.trim() !== '' &&
-    description.value.trim() !== '';
-  
+  const baseValid = displayName.value.trim() !== '' && slug.value.length >= 3;
+
   if (privacyConfig.value.isPrivate && privacyConfig.value.method === 'password') {
     return baseValid && (privacyConfig.value.password?.trim().length ?? 0) >= 12;
   }
   return baseValid;
 });
-
-const validateName = () => {
-  const value = name.value.toLowerCase().trim();
-  
-  if (value === '') {
-    nameError.value = '';
-    return;
-  }
-
-  // Check format (only lowercase letters, numbers, underscores)
-  if (!/^[a-z0-9_]+$/.test(value)) {
-    nameError.value = 'Only lowercase letters, numbers, and underscores allowed';
-    return;
-  }
-
-  // Check length
-  if (value.length < 3) {
-    nameError.value = 'Must be at least 3 characters';
-    return;
-  }
-
-  nameError.value = '';
-  name.value = value;
-};
 
 const addRule = () => {
   rules.value.push('');
@@ -278,7 +264,7 @@ const createCommunity = async () => {
   try {
     const validRules = rules.value.filter(r => r.trim() !== '');
     const communityData = {
-      name: name.value.trim(),
+      name: slug.value,
       displayName: displayName.value.trim(),
       description: description.value.trim(),
       rules: validRules
