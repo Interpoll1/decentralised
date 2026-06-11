@@ -15,6 +15,7 @@
     </ion-header>
 
     <ion-content>
+      <div class="page-shell">
       <!-- Profile Header -->
       <div class="profile-header">
         <div class="avatar-container" @click="selectAvatar">
@@ -181,7 +182,7 @@
           </div>
         </div>
       </div>
-
+      </div>
     </ion-content>
   </ion-page>
 </template>
@@ -190,7 +191,13 @@
 /* ── Profile Header ───────────────────────────────── */
 .profile-header {
   text-align: center;
-  padding: 28px 24px 20px;
+  padding: 28px 24px 24px;
+  background:
+    linear-gradient(180deg, var(--app-surface-tint-top), var(--app-surface-tint-bottom)),
+    var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  box-shadow: var(--app-shadow-md), var(--app-shadow-inset);
 }
 
 .avatar-container {
@@ -324,16 +331,20 @@
 }
 
 /* ── Divider ──────────────────────────────────────── */
+/* Dividers are redundant now that each block is a self-contained panel. */
 .divider {
-  height: 8px;
-  background: rgba(var(--ion-text-color-rgb), 0.04);
-  border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.07);
-  border-bottom: 1px solid rgba(var(--ion-text-color-rgb), 0.07);
+  display: none;
 }
 
 /* ── Sections ─────────────────────────────────────── */
 .section {
-  padding: 16px 0;
+  padding: 20px;
+  background:
+    linear-gradient(180deg, var(--app-surface-tint-top), var(--app-surface-tint-bottom)),
+    var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  box-shadow: var(--app-shadow-md), var(--app-shadow-inset);
 }
 
 .section-title {

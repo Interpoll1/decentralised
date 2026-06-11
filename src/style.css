@@ -328,6 +328,30 @@ p {
   padding: 24px 0 120px;
 }
 
+/* Shared shell for the standalone utility pages (Search, Profile, Settings,
+   Chain Explorer). They previously dropped content straight into <ion-content>,
+   so it floated edge-to-edge on the ambient background and felt unfinished.
+   This gives them the Home layout's centered, contained column; `.page-panel`
+   reuses the surface-card look so content reads as panels, not loose elements. */
+.page-shell {
+  width: min(720px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 24px 0 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.page-panel {
+  background:
+    linear-gradient(180deg, var(--app-surface-tint-top), var(--app-surface-tint-bottom)),
+    var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  box-shadow: var(--app-shadow-md), var(--app-shadow-inset);
+  padding: 20px;
+}
+
 .surface-card,
 .glass-panel,
 .glass-card {

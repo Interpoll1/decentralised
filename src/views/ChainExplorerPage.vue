@@ -9,8 +9,9 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
-      <ion-card>
+    <ion-content>
+      <div class="page-shell">
+        <ion-card>
         <ion-card-header>
           <ion-card-title>Blockchain Blocks</ion-card-title>
           <ion-card-subtitle>
@@ -111,6 +112,7 @@
           </div>
         </ion-card-content>
       </ion-card>
+      </div>
     </ion-content>
   </ion-page>
 </template>

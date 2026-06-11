@@ -24,6 +24,7 @@
     </ion-header>
 
     <ion-content>
+      <div class="page-shell page-shell--settings">
       <!-- GENERAL TAB -->
       <div v-if="activeTab === 'general'">
         <!-- Appearance -->
@@ -465,17 +466,29 @@
           </ion-button>
         </div>
       </div>
-
+      </div>
     </ion-content>
   </ion-page>
 </template>
 
 
 <style scoped>
-/* Section Layout */
+/* Section Layout — each tab stacks its sections as spaced panels, matching
+   the Home card language instead of bare full-width rows on the background. */
+.page-shell--settings > div {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .section {
-  padding: 14px;
-  background: transparent;
+  padding: 18px 20px;
+  background:
+    linear-gradient(180deg, var(--app-surface-tint-top), var(--app-surface-tint-bottom)),
+    var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  box-shadow: var(--app-shadow-md), var(--app-shadow-inset);
 }
 
 .section-title {
