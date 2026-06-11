@@ -10,6 +10,7 @@
     </ion-header>
 
     <ion-content>
+      <div class="page-shell">
       <ion-refresher slot="fixed" @ionRefresh="handleRefresh">
         <ion-refresher-content />
       </ion-refresher>
@@ -152,6 +153,7 @@
           </p>
         </ion-content>
       </ion-modal>
+      </div>
     </ion-content>
   </ion-page>
 </template>

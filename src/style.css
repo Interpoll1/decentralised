@@ -334,12 +334,43 @@ p {
    This gives them the Home layout's centered, contained column; `.page-panel`
    reuses the surface-card look so content reads as panels, not loose elements. */
 .page-shell {
-  width: min(720px, calc(100% - 32px));
+  width: min(1140px, calc(100% - 32px));
   margin: 0 auto;
   padding: 24px 0 96px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* Variant for the create/claim flows — slightly tighter than content pages. */
+.page-shell--form {
+  width: min(1080px, calc(100% - 32px));
+}
+
+/* Two-column form layout: essentials lead on the left, secondary panels sit
+   beside them so wide screens are used instead of one tall stack. Collapses
+   to a single column on small screens. */
+.form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.form-grid__side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-grid__full {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 900px) {
+  .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .page-panel {

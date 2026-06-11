@@ -246,9 +246,10 @@ const actionLabel = (actionType: string) => {
 }
 
 .blocks-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
   gap: 12px;
+  align-items: start;
 }
 
 .block-item {

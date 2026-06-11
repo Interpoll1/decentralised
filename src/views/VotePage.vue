@@ -9,7 +9,8 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
+    <ion-content>
+      <div class="page-shell page-shell--form">
       <!-- Loading State -->
       <div v-if="isLoading" class="flex flex-col items-center justify-center py-12">
         <ion-spinner></ion-spinner>
@@ -43,6 +44,7 @@
           :requires-invite-code="displayPoll.isPrivate"
           @vote-submitted="handleVoteSubmitted"
         />
+      </div>
       </div>
     </ion-content>
   </ion-page>

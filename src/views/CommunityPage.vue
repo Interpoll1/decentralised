@@ -15,6 +15,7 @@
     </ion-header>
 
     <ion-content>
+      <div class="page-shell">
       <!-- Community Header -->
       <div v-if="community" class="community-header">
         <div class="community-top">
@@ -193,6 +194,7 @@
         </ol>
       </div>
      
+      </div>
     </ion-content>
   </ion-page>
 </template>

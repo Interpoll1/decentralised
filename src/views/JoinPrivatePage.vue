@@ -9,7 +9,8 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
+    <ion-content>
+      <div class="page-shell page-shell--form">
       <!-- Loading state (auto-joining via invite link) -->
       <div v-if="loading" class="join-loading">
         <ion-spinner name="crescent"></ion-spinner>
@@ -65,6 +66,7 @@
           <ion-spinner v-if="joining" name="crescent" slot="start"></ion-spinner>
           {{ joining ? 'Joining...' : 'Join' }}
         </ion-button>
+      </div>
       </div>
     </ion-content>
   </ion-page>

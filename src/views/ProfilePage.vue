@@ -15,7 +15,8 @@
     </ion-header>
 
     <ion-content>
-      <div class="page-shell">
+      <div class="page-shell profile-grid">
+      <div class="profile-side">
       <!-- Profile Header -->
       <div class="profile-header">
         <div class="avatar-container" @click="selectAvatar">
@@ -66,7 +67,9 @@
         style="display: none"
         @change="handleAvatarSelect"
       />
+      </div>
 
+      <div class="profile-main">
       <div class="divider"></div>
 
       <!-- Edit Profile -->
@@ -183,12 +186,35 @@
         </div>
       </div>
       </div>
+      </div>
     </ion-content>
   </ion-page>
 </template>
 
 <style scoped>
 /* ── Profile Header ───────────────────────────────── */
+/* Identity beside the edit sections on wide screens — their cards, better
+   distributed. Collapses back to a single column on small screens. */
+.profile-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.profile-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .profile-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .profile-header {
   text-align: center;
   padding: 28px 24px 24px;

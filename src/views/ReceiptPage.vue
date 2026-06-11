@@ -9,7 +9,8 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
+    <ion-content>
+      <div class="page-shell page-shell--form">
       <ReceiptViewer :receipt="currentReceipt" />
 
       <ion-card class="mt-4" v-if="!route.params.verificationCode">
@@ -29,6 +30,7 @@
           </ion-button>
         </ion-card-content>
       </ion-card>
+      </div>
     </ion-content>
   </ion-page>
 </template>

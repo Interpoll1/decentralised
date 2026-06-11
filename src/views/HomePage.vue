@@ -1754,6 +1754,15 @@ ion-header.header-hidden {
   color: var(--app-danger);
 }
 
+/* Communities tab: distribute community cards across the width instead of a
+   single vertical stack. Collapses naturally via auto-fill. */
+.communities-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
 @media (min-width: 1024px) {
   .page-layout { gap: 32px; }
   .side-nav    { width: 220px; }

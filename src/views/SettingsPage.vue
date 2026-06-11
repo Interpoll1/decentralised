@@ -476,9 +476,10 @@
 /* Section Layout — each tab stacks its sections as spaced panels, matching
    the Home card language instead of bare full-width rows on the background. */
 .page-shell--settings > div {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
   gap: 16px;
+  align-items: start;
 }
 
 .section {

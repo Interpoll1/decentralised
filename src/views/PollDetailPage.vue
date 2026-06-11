@@ -16,6 +16,7 @@
     </ion-header>
 
     <ion-content>
+      <div class="page-shell">
       <!-- Loading -->
       <div v-if="isLoading" class="loading-container">
         <ion-spinner></ion-spinner>
@@ -240,6 +241,7 @@
             </div>
           </div>
         </div>
+      </div>
       </div>
     </ion-content>
   </ion-page>

@@ -10,6 +10,7 @@
     </ion-header>
 
     <ion-content>
+      <div class="page-shell">
       <!-- Profile Header -->
       <div class="profile-header">
         <div class="avatar-placeholder">
@@ -88,6 +89,7 @@
             :comment="comment"
           />
         </div>
+      </div>
       </div>
     </ion-content>
   </ion-page>

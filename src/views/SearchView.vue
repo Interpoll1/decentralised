@@ -137,9 +137,24 @@ ion-content {
 }
 
 .search-page {
-  max-width: 700px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 16px 16px 40px;
+}
+
+/* Distribute result cards across the width; single column on small screens. */
+.results-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.results-container > .loading-state,
+.results-container > .error-state,
+.results-container > .no-results,
+.results-container > .pagination {
+  grid-column: 1 / -1;
 }
 
 .search-header {

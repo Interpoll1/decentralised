@@ -9,7 +9,8 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
+    <ion-content>
+      <div class="page-shell">
       <!-- Loading -->
       <div v-if="isLoading" class="loading-container">
         <ion-spinner></ion-spinner>
@@ -57,6 +58,7 @@
       <div v-else class="empty-state">
         <p>Poll not found</p>
         <ion-button @click="$router.push('/home')">Go Home</ion-button>
+      </div>
       </div>
     </ion-content>
   </ion-page>
