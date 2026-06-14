@@ -50,3 +50,4 @@ Parses user identity-style usernames (e.g. `viktor@endles.sbs`) into a normalize
 
 - `parseIdentityTrust(rawUsername)` returns `{ identityUsername, issuer, hasIssuer, isTrustedIssuer, trustLevel }`
 - `trustLevel` is `'trusted-issuer'` when issuer domain is in the trusted issuer allowlist, otherwise `'unverified'`
+- `formatTrustedIdentityLabel({ username, issuer })` returns `username@issuer` for trusted profiles, but preserves an already-qualified username so labels do not become duplicated like `name@issuer@issuer`

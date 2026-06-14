@@ -40,7 +40,7 @@
               </ion-chip>
               <span class="separator">•</span>
               <span class="author">u/{{ postAuthorDisplayName }}</span>
-              <span v-if="post?.authorShowRealName" class="identity-badge" :class="postAuthorIdentityClass">
+              <span class="identity-badge" :class="postAuthorIdentityClass">
                 {{ postAuthorIdentityLabel }}
               </span>
               <span class="separator">•</span>
@@ -51,9 +51,7 @@
 
           <div class="post-body">
             <!-- Post Content -->
-            <div v-if="post.content" class="post-content">
-              {{ post.content }}
-            </div>
+            <div v-if="post.content" class="post-content" v-html="autoLink(post.content)"></div>
 
             <!-- Post Image -->
             <div v-if="post.imageThumbnail || post.imageIPFS" class="post-image">
@@ -101,7 +99,7 @@
             <div v-for="commenter in uniqueCommenters" :key="commenter.authorId" class="commenter-chip">
               <span class="commenter-online-dot"></span>
               <span class="commenter-name">u/{{ commenter.displayName }}</span>
-              <span v-if="commenter.authorShowRealName" class="identity-badge" :class="commenter.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'">
+              <span class="identity-badge" :class="commenter.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'">
                 {{ commenter.identityTrustLabel }}
               </span>
               <ion-badge color="medium" class="commenter-count">{{ commenter.commentCount }}</ion-badge>
@@ -163,6 +161,13 @@
 </template>
 
 <script setup lang="ts">
+
+function autoLink(text: string): string {
+  if (!text) return '';
+  // Simple URL regex
+  return text.replace(/(https?:\/\/[\w\-\.\/?#&=;%+~:@,]+[\w\/])/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+}
+
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
@@ -262,7 +267,10 @@ const postAuthorDisplayName = computed(() => {
 const postAuthorIdentityLabel = computed(() =>
   postAuthorTrustLevel.value === 'trusted-issuer'
     ? formatTrustedIdentityLabel({
-      username: post.value?.authorName,
+      username: userStore.profiles[post.value?.authorId || '']?.identityUsername
+        || userStore.profiles[post.value?.authorId || '']?.customUsername
+        || userStore.profiles[post.value?.authorId || '']?.username
+        || post.value?.authorName,
       issuer: userStore.profiles[post.value?.authorId || '']?.identityIssuer,
     })
     : 'Unverified identity'
@@ -285,10 +293,10 @@ const modSettings = computed(() => {
 });
 
 watch(
-  () => [post.value?.authorId, post.value?.authorShowRealName] as const,
-  async ([authorId, showRealName]) => {
+  () => post.value?.authorId,
+  async (authorId) => {
     const requestId = ++postAuthorTrustRequestId;
-    if (!authorId || !showRealName) {
+    if (!authorId) {
       postAuthorTrustLevel.value = 'unverified';
       return;
     }
@@ -364,7 +372,10 @@ const uniqueCommenters = computed(() => {
         existing.identityTrustLevel = userStore.profiles[c.authorId]?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified';
         existing.identityTrustLabel = existing.identityTrustLevel === 'trusted-issuer'
           ? formatTrustedIdentityLabel({
-            username: existing.displayName,
+            username: userStore.profiles[c.authorId]?.identityUsername
+              || userStore.profiles[c.authorId]?.customUsername
+              || userStore.profiles[c.authorId]?.username
+              || existing.displayName,
             issuer: userStore.profiles[c.authorId]?.identityIssuer,
           })
           : 'Unverified identity';
@@ -382,7 +393,10 @@ const uniqueCommenters = computed(() => {
           identityTrustLevel: userStore.profiles[c.authorId]?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified',
           identityTrustLabel: userStore.profiles[c.authorId]?.identityTrustLevel === 'trusted-issuer'
             ? formatTrustedIdentityLabel({
-              username: name,
+              username: userStore.profiles[c.authorId]?.identityUsername
+                || userStore.profiles[c.authorId]?.customUsername
+                || userStore.profiles[c.authorId]?.username
+                || name,
               issuer: userStore.profiles[c.authorId]?.identityIssuer,
             })
             : 'Unverified identity',

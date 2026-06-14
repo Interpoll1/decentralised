@@ -179,14 +179,21 @@
               <p>Loading communities...</p>
             </div>
 
-            <div v-else-if="displayedCommunities.length > 0" class="communities-list">
-              <CommunityCard
-                v-for="community in displayedCommunities"
-                :key="community.id"
-                :community="community"
-                @click="$router.push(`/community/${community.id}`)"
-              />
-            </div>
+            <div v-else-if="displayedCommunities.length > 0" class="communities-list-scrollable">
+  <ion-searchbar
+    v-model="communitySearchQuery"
+    placeholder="Search communities..."
+    @ionInput="handleCommunitySearch"
+    debounce="300"
+    class="community-search-bar"
+  ></ion-searchbar>
+  <CommunityCard
+    v-for="community in filteredCommunities"
+    :key="community.id"
+    :community="community"
+    @click="$router.push(`/community/${community.id}`)"
+  />
+</div>
 
             <div v-else class="empty-state">
               <ion-icon :icon="earthOutline" size="large"></ion-icon>
@@ -515,6 +522,19 @@ const downvotedCache = ref<Set<string>>(new Set(JSON.parse(localStorage.getItem(
 
 // ── Computed ──────────────────────────────────────────────────────────────────
 
+function handleCommunitySearch() {
+  // No-op, search is reactive via v-model and computed
+}
+
+const communitySearchQuery = ref('');
+
+const filteredCommunities = computed(() => {
+  const query = communitySearchQuery.value.trim().toLowerCase();
+  let list = displayedCommunities.value;
+  if (!query) return list;
+  return list.filter(c => c.displayName?.toLowerCase().includes(query) || c.id.toLowerCase().includes(query));
+});
+
 const displayedCommunities = computed(() => {
   if (communityFilter.value === 'joined') {
     return communityStore.communities.filter(c => communityStore.isJoined(c.id));
@@ -627,9 +647,7 @@ watch(
 
 const joinedCommunities = computed(() => communityStore.communities.filter(c => communityStore.isJoined(c.id)));
 
-const sidebarCommunities = computed(() =>
-  communityStore.communities.slice(0, 8)
-)
+const sidebarCommunities = computed(() => communityStore.communities)
 
 // ── Chat list ─────────────────────────────────────────────────────────────────
 
@@ -1521,6 +1539,16 @@ ion-header.header-hidden {
 }
 .tab-intro p  { margin: 0; color: var(--app-text-muted); font-size: 14px; }
 
+.communities-list-scrollable {
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-bottom: 12px;
+}
+
+.community-search-bar {
+  margin: 12px 18px 8px 18px;
+}
+
 .user-search-box {
   margin: 0 16px 12px;
   padding: 6px;
@@ -1779,6 +1807,12 @@ ion-header.header-hidden {
   }
 
   .sidebar-create-btn { margin: 0 10px 10px; }
+
+  .sidebar-communities {
+    max-height: 52vh;
+    overflow-y: auto;
+    padding-bottom: 4px;
+  }
 
   .sidebar-community-item {
     display: flex;
