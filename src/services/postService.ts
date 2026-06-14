@@ -323,7 +323,7 @@ export class PostService {
     // reliable than parsing full-node patches from .on for large communities.
     subscription = communityPostsNode.map().on((_: any, postId: string) => {
       if (!initialLoadDone) return;
-      if (!postId || postId === '_' || initialSeenIds.has(postId) || inFlightIds.has(postId)) return;
+      if (!postId || postId === '_' || inFlightIds.has(postId)) return;
       inFlightIds.add(postId);
       void onceWithTimeout(gun.get('posts').get(postId)).then((postData) => {
         if (postData && postData.id) {
@@ -476,13 +476,26 @@ export class PostService {
         cleanUpdates[key] = updates[key as keyof Post];
       }
     });
+    const cached = postMemoryCache.get(postId);
+    const communityIdFromUpdate = typeof cleanUpdates.communityId === 'string' && cleanUpdates.communityId
+      ? cleanUpdates.communityId
+      : null;
+    const communityIdFromCache = cached?.communityId || null;
+    const resolvedCommunityId = communityIdFromUpdate || communityIdFromCache;
+
     await new Promise<void>((resolve, reject) => {
       gun.get('posts').get(postId).put(cleanUpdates, (ack: any) => {
         if (ack.err) reject(new Error(ack.err)); else resolve();
       });
     });
+    if (resolvedCommunityId) {
+      await new Promise<void>((resolve, reject) => {
+        gun.get('communities').get(resolvedCommunityId).get('posts').get(postId).put(cleanUpdates, (ack: any) => {
+          if (ack.err) reject(new Error(ack.err)); else resolve();
+        });
+      });
+    }
 
-    const cached = postMemoryCache.get(postId);
     if (cached) {
       postMemoryCache.set(postId, { ...cached, ...cleanUpdates });
     }
@@ -502,24 +515,78 @@ export class PostService {
     });
   }
 
-  static async voteOnPost(postId: string, direction: 'up' | 'down', _userId: string): Promise<Post> {
+  static async voteOnPost(postId: string, direction: 'up' | 'down', userId: string): Promise<Post> {
     const post = await PostService.getPost(postId);
     if (!post) throw new Error('Post not found');
-    const newUpvotes   = (post.upvotes   || 0) + (direction === 'up'   ? 1 : 0);
-    const newDownvotes = (post.downvotes || 0) + (direction === 'down' ? 1 : 0);
-    await PostService.updatePost(postId, { upvotes: newUpvotes, downvotes: newDownvotes, score: newUpvotes - newDownvotes });
-    const updated: Post = { ...post, upvotes: newUpvotes, downvotes: newDownvotes, score: newUpvotes - newDownvotes };
+    const gun = GunService.getGun();
+    const voteKey = `vote_${userId}_${postId}`;
+    const existingVote = await onceWithTimeout(gun.get('votes').get(voteKey));
+    let upvotes = post.upvotes || 0;
+    let downvotes = post.downvotes || 0;
+
+    if (existingVote?.type === 'up') {
+      upvotes = Math.max(0, upvotes - 1);
+    } else if (existingVote?.type === 'down') {
+      downvotes = Math.max(0, downvotes - 1);
+    }
+
+    const togglingOffSameVote = existingVote?.type === direction;
+    if (togglingOffSameVote) {
+      await new Promise<void>((resolve, reject) => {
+        gun.get('votes').get(voteKey).put(null, (ack: any) => {
+          if (ack.err) reject(new Error(ack.err)); else resolve();
+        });
+      });
+    } else {
+      if (direction === 'up') {
+        upvotes += 1;
+      } else {
+        downvotes += 1;
+      }
+      await new Promise<void>((resolve, reject) => {
+        gun.get('votes').get(voteKey).put({
+          userId,
+          postId,
+          type: direction,
+          timestamp: Date.now(),
+        }, (ack: any) => {
+          if (ack.err) reject(new Error(ack.err)); else resolve();
+        });
+      });
+    }
+
+    const score = upvotes - downvotes;
+    await PostService.updatePost(postId, { upvotes, downvotes, score });
+    const updated: Post = { ...post, upvotes, downvotes, score };
     postMemoryCache.set(postId, updated);
     return updated;
   }
 
-  static async removeVote(postId: string, direction: 'up' | 'down', _userId: string): Promise<Post> {
+  static async removeVote(postId: string, direction: 'up' | 'down', userId: string): Promise<Post> {
     const post = await PostService.getPost(postId);
     if (!post) throw new Error('Post not found');
-    const newUpvotes   = direction === 'up'   ? Math.max(0, (post.upvotes   || 0) - 1) : (post.upvotes   || 0);
-    const newDownvotes = direction === 'down' ? Math.max(0, (post.downvotes || 0) - 1) : (post.downvotes || 0);
-    await PostService.updatePost(postId, { upvotes: newUpvotes, downvotes: newDownvotes, score: newUpvotes - newDownvotes });
-    const updated: Post = { ...post, upvotes: newUpvotes, downvotes: newDownvotes, score: newUpvotes - newDownvotes };
+    const gun = GunService.getGun();
+    const voteKey = `vote_${userId}_${postId}`;
+    const existingVote = await onceWithTimeout(gun.get('votes').get(voteKey));
+    if (!existingVote?.type || existingVote.type !== direction) {
+      return post;
+    }
+
+    let upvotes = post.upvotes || 0;
+    let downvotes = post.downvotes || 0;
+    if (direction === 'up') {
+      upvotes = Math.max(0, upvotes - 1);
+    } else {
+      downvotes = Math.max(0, downvotes - 1);
+    }
+    await new Promise<void>((resolve, reject) => {
+      gun.get('votes').get(voteKey).put(null, (ack: any) => {
+        if (ack.err) reject(new Error(ack.err)); else resolve();
+      });
+    });
+    const score = upvotes - downvotes;
+    await PostService.updatePost(postId, { upvotes, downvotes, score });
+    const updated: Post = { ...post, upvotes, downvotes, score };
     postMemoryCache.set(postId, updated);
     return updated;
   }

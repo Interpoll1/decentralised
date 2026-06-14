@@ -283,11 +283,8 @@ export const useCommunityStore = defineStore('community', () => {
       if (added > 0) {
         console.log(`✅ Loaded ${added} communities from MySQL fallback`);
       }
-      if (added === 0) {
-        // DB returned no top-level canonical community rows; API snapshot may still have data.
-        return await loadCommunitiesFromApiFallback();
-      }
-      return added;
+      const apiAdded = await loadCommunitiesFromApiFallback();
+      return added + apiAdded;
     } catch (err) {
       console.warn('⚠️  MySQL community fallback failed:', err);
       return await loadCommunitiesFromApiFallback();
@@ -459,21 +456,18 @@ export const useCommunityStore = defineStore('community', () => {
     await syncJoinedPrivateCommunitiesFromKeys();
 
     if (COMMUNITY_GUN_LIVE_ENABLED) {
-      // Optional live mode for diagnostics/back-compat.
+      // Always keep the live subscription active so communities discovered
+      // after bootstrap still flow into the list.
       CommunityService.subscribeToCommunitiesLive((community) => {
         logCommunityIncomingRate();
         void upsertCommunity(community);
       });
 
-      // If Gun gave us nothing (cold relay), fall back to bounded DB snapshot.
       await new Promise(r => setTimeout(r, 1500));
-      if (communities.value.length === 0) {
-        console.log('⚠️  Gun returned no communities — falling back to DB snapshot...');
-        await loadCommunitiesFromDB();
-        // Also warm up posts so the feed isn't empty; run in background and chunked
-        // to avoid flooding Gun + DOM with thousands of records at startup.
-        void startPostsWarmup({ force: !(await hasWarmPostsLoaded()) });
-      }
+      await loadCommunitiesFromDB();
+      // Also warm up posts so the feed isn't empty; run in background and chunked
+      // to avoid flooding Gun + DOM with thousands of records at startup.
+      void startPostsWarmup({ force: !(await hasWarmPostsLoaded()) });
     } else {
       if (isSyncDebugEnabled()) {
         console.log('[SyncDebug] community Gun live subscription disabled; using DB snapshot bootstrap');

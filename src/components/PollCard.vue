@@ -13,7 +13,7 @@
         </div>
         <div class="poll-meta">
           <span class="author">u/{{ authorDisplayName }}</span>
-          <span v-if="poll.authorShowRealName" class="identity-badge" :class="authorIdentityClass">
+          <span class="identity-badge" :class="authorIdentityClass">
             {{ authorIdentityLabel }}
           </span>
           <span class="separator">•</span>
@@ -113,10 +113,10 @@ const authorProfile = ref<UserProfile | null>(null);
 let authorProfileRequestId = 0;
 
 watch(
-  () => [props.poll.authorId, props.poll.authorShowRealName] as const,
-  async ([authorId, authorShowRealName]) => {
+  () => props.poll.authorId,
+  async (authorId) => {
     const requestId = ++authorProfileRequestId;
-    if (!authorId || !authorShowRealName) {
+    if (!authorId) {
       authorProfile.value = null;
       return;
     }
@@ -140,7 +140,10 @@ const authorDisplayName = computed(() => {
 const authorIdentityLabel = computed(() =>
   authorProfile.value?.identityTrustLevel === 'trusted-issuer'
     ? formatTrustedIdentityLabel({
-      username: authorProfile.value?.customUsername || props.poll.authorName,
+      username: authorProfile.value?.identityUsername
+        || authorProfile.value?.customUsername
+        || authorProfile.value?.username
+        || props.poll.authorName,
       issuer: authorProfile.value?.identityIssuer,
     })
     : 'Unverified identity'

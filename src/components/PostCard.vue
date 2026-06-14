@@ -12,7 +12,7 @@
           <span class="community-name">{{ communityName }}</span>
           <span class="separator">•</span>
           <span class="author">u/{{ authorDisplayName }}</span>
-          <span v-if="props.post.authorShowRealName" class="identity-badge" :class="authorIdentityClass">
+          <span class="identity-badge" :class="authorIdentityClass">
             {{ authorIdentityLabel }}
           </span>
           <span class="separator">•</span>
@@ -25,7 +25,7 @@
 
       <h3 class="post-title">{{ post.title }}</h3>
 
-      <p v-if="post.content" class="post-content">{{ truncatedContent }}</p>
+      <p v-if="post.content" class="post-content" v-html="autoLink(truncatedContent)"></p>
 
       <div v-if="post.imageThumbnail || post.imageIPFS">
         <div class="post-image">
@@ -343,6 +343,13 @@
 </style>
 
 <script setup lang="ts">
+
+function autoLink(text: string): string {
+  if (!text) return '';
+  // Simple URL regex
+  return text.replace(/(https?:\/\/[\w\-\.\/?#&=;%+~:@,]+[\w\/])/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+}
+
 import { ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { IonIcon } from '@ionic/vue';
@@ -417,7 +424,10 @@ const authorDisplayName = computed(() => {
 const authorIdentityLabel = computed(() =>
   currentAuthorProfile.value?.identityTrustLevel === 'trusted-issuer'
     ? formatTrustedIdentityLabel({
-      username: currentAuthorProfile.value?.customUsername || props.post.authorName,
+      username: currentAuthorProfile.value?.identityUsername
+        || currentAuthorProfile.value?.customUsername
+        || currentAuthorProfile.value?.username
+        || props.post.authorName,
       issuer: currentAuthorProfile.value?.identityIssuer,
     })
     : 'Unverified identity'

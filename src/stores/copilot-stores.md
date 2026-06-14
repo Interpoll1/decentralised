@@ -40,6 +40,8 @@ Key computed: `polls`, `sortedPolls`
 ## `communityStore.ts` — `useCommunityStore`
 
 - Has a **DB snapshot fallback** via the gun-relay's `/db/search?prefix={namespace}/communities` endpoint. If that DB endpoint is unavailable or returns no canonical community rows, it falls back again to `${config.relay.api}/api/communities`.
+- The DB snapshot now merges with the API snapshot on every bootstrap pass, so communities missing from the bounded MySQL search still get hydrated into the list.
+- `loadCommunities()` keeps a live Gun subscription active alongside the snapshot bootstrap so late-arriving communities continue to appear without waiting for a manual refresh.
 - Post warmup re-puts into Gun remain disabled by default (`localStorage.interpoll_posts_warmup !== 'true'`) to avoid startup floods, but `loadCommunities()` now force-enables warmup when the feed is empty so users still recover posts without manual flags.
 - Post warmup now has an **API fallback**: if `/db/search?prefix={namespace}/posts` is unavailable/empty, it retries with `${config.relay.api}/api/posts?limit=500` and hydrates `gun.get('posts')` in chunks.
 - Community fallback now only accepts canonical top-level community nodes (`{namespace}/communities/{id}` where `id` starts with `c-`) and requires soul/id match, preventing nested poll nodes from being rendered as fake communities.
@@ -61,6 +63,7 @@ Key computed: `polls`, `sortedPolls`
 - `pendingNewPosts` is banner-only state; accepted posts live in `postsMap` and seen IDs are persisted (`seen-post-ids`) so accepted content survives refresh.
 - `createPost()` checks the current user's `showRealName` preference. If false (default), generates a pseudonym from the pre-generated postId + authorId as the `authorName`. If true, uses the user's `customUsername`.
 - `createPost()` now also enforces community membership via locally persisted joined-community state and throws `COMMUNITY_JOIN_REQUIRED` for non-members, preventing invalid post attempts from composer/direct route calls.
+- Post vote totals now stay live for already-loaded posts: community subscriptions no longer ignore repeat post IDs after initial hydration, so vote/score updates for existing posts keep flowing into `postsMap` instead of getting dropped as duplicate IDs.
 - `loadMorePosts()` still paginates by `PAGE_SIZE` (10), but Home feed now controls initial visibility separately (up to 50 items) so users do not need an initial scroll to reveal already-fetched content.
 - Debug instrumentation logs `[PostStoreDebug]` entries for community subscription start/initial completion, injected posts, and visible-count changes to help diagnose feed hydration issues (enabled only when `localStorage.interpoll_post_debug === 'true'`).
 - Sync diagnostics: when `localStorage.interpoll_sync_debug === 'true'`, logs `[SyncRate] post-incoming` and `[SyncRate] post-flush` once per second with queue depth.

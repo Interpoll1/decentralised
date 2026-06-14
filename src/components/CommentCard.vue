@@ -11,7 +11,7 @@
       <div class="comment-header">
         <span class="commenter-dot"></span>
         <span class="author-name">u/{{ displayName }}</span>
-        <span v-if="comment.authorShowRealName" class="identity-badge" :class="authorIdentityClass">
+        <span class="identity-badge" :class="authorIdentityClass">
           {{ authorIdentityLabel }}
         </span>
         <span class="separator">•</span>
@@ -303,10 +303,10 @@ const authorProfile = ref<UserProfile | null>(null);
 let authorProfileRequestId = 0;
 
 watch(
-  () => [props.comment.authorId, props.comment.authorShowRealName] as const,
-  async ([authorId, authorShowRealName]) => {
+  () => props.comment.authorId,
+  async (authorId) => {
     const requestId = ++authorProfileRequestId;
-    if (!authorId || !authorShowRealName) {
+    if (!authorId) {
       authorProfile.value = null;
       return;
     }
@@ -334,7 +334,10 @@ const displayName = computed(() => {
 const authorIdentityLabel = computed(() =>
   authorProfile.value?.identityTrustLevel === 'trusted-issuer'
     ? formatTrustedIdentityLabel({
-      username: authorProfile.value?.customUsername || props.comment.authorName,
+      username: authorProfile.value?.identityUsername
+        || authorProfile.value?.customUsername
+        || authorProfile.value?.username
+        || props.comment.authorName,
       issuer: authorProfile.value?.identityIssuer,
     })
     : 'Unverified identity'

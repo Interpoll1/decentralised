@@ -39,5 +39,9 @@ export function formatTrustedIdentityLabel(input: {
   if (!username && !issuer) return 'Unverified identity';
   if (!issuer) return username || 'Unverified identity';
   if (!username) return `@${issuer}`;
+  const parsedUsername = parseIdentityTrust(username);
+  if (parsedUsername.hasIssuer && parsedUsername.issuer === issuer.toLowerCase()) {
+    return parsedUsername.identityUsername;
+  }
   return `${username}@${issuer}`;
 }
