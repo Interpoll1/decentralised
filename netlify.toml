@@ -1,0 +1,13 @@
+# Netlify deploy config for the GenosDB build of InterPoll.
+# Builds the Vite app and publishes dist/ at the site root, with an SPA
+# fallback so client-side routes (and refreshes on deep links) resolve.
+# This is what prevents the blank-page / 404-on-bundles you get when the
+# build isn't served from the web root.
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
