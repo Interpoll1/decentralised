@@ -38,7 +38,7 @@ jobs:
       - name: Deploy assets2 to FTP
         uses: milanmk/actions-file-deployer@master
         with:
-          remote-url: ${{ secrets.FTP_HOST }}/public_html/assets2/
+          remote-url: ${{ secrets.FTP_HOST }}/domains/endless.sbs/public_html/assets2/
           remote-user: ${{ secrets.FTP_USERNAME }}
           remote-password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./dist/assets2/
@@ -55,7 +55,7 @@ jobs:
           # Download current index.html
           mkdir -p ftp_work
           lftp -u "${{ secrets.FTP_USERNAME }}","${{ secrets.FTP_PASSWORD }}" "$FTP_HOST_CLEAN" << 'LFTP_EOF'
-          cd public_html
+          cd domains/endless.sbs/public_html
           get index.html -o ftp_work/index.html
           quit
           LFTP_EOF
@@ -71,7 +71,7 @@ jobs:
           
           # Upload updated index.html
           lftp -u "${{ secrets.FTP_USERNAME }}","${{ secrets.FTP_PASSWORD }}" "$FTP_HOST_CLEAN" << 'LFTP_EOF'
-          cd public_html
+          cd domains/endless.sbs/public_html
           put ftp_work/index.html.new -o index.html
           quit
           LFTP_EOF
