@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+
+# Routes that need an identity or are private — nothing useful to index
+Disallow: /create-community
+Disallow: /create-poll
+Disallow: /claim-username
+Disallow: /profile
+Disallow: /settings
+Disallow: /search
+Disallow: /chat/
+Disallow: /chatrooms
+Disallow: /chatroom/
+
+Sitemap: https://interpoll-genosdb.netlify.app/sitemap.xml
