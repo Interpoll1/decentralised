@@ -34,15 +34,15 @@ jobs:
           echo "$SCRIPT_TAG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Deploy assets2 to FTP
-        uses: milanmk/actions-file-deployer@master
-        with:
-          remote-url: ${{ secrets.FTP_HOST }}/domains/endless.sbs/public_html/assets2/
-          remote-user: ${{ secrets.FTP_USERNAME }}
-          remote-password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./dist/assets2/
+      - name: Deploy assets2 to FTP using curl
+        run: |
+          # Upload entire assets2 directory
+          cd dist/assets2
+          find . -type f | while read file; do
+            curl -T "$file" "ftp://${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}@${{ secrets.FTP_HOST }}/domains/endless.sbs/public_html/assets2/${file#./}" --create-dirs
+          done
 
-      - name: Prepare index.html with new script tag
+      - name: Deploy index.html to FTP using curl
         run: |
           mkdir -p deploy_index
           # Get the SEO head from the built dist/index.html up to </head>
@@ -51,11 +51,6 @@ jobs:
           echo "    ${{ steps.extract_script.outputs.script_tag }}" >> deploy_index/index.html
           echo "  </body>" >> deploy_index/index.html
           echo "</html>" >> deploy_index/index.html
-
-      - name: Deploy index.html to FTP
-        uses: milanmk/actions-file-deployer@master
-        with:
-          remote-url: ${{ secrets.FTP_HOST }}/domains/endless.sbs/public_html/
-          remote-user: ${{ secrets.FTP_USERNAME }}
-          remote-password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./deploy_index/
+          
+          # Upload index.html
+          curl -T deploy_index/index.html "ftp://${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}@${{ secrets.FTP_HOST }}/domains/endless.sbs/public_html/index.html"
