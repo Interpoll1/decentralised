@@ -11,13 +11,18 @@ import {
   sanitizeSoul, sanitizeLogString,
   setSecurityHeaders, requireSecret, sendError,
   createRateLimitMiddleware, ALLOWED_ORIGINS,
-} from '../security-utils.js';
+} from './security-utils.js';
 import { validateSearchQuery, validateSoulPath } from '../shared-validation/index.js';
 import { ErrorCodes, makeError } from '../shared-validation/errors.js';
+import fs from 'fs';
 
 const PORT = process.env.PORT || 8765;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const RELAY_SERVER_URL = process.env.RELAY_SERVER_URL || 'http://localhost:3001';
+const DATA_DIR = process.env.GUN_DATA_DIR || new URL('./data', import.meta.url).pathname;
+const GUN_FILE = `${DATA_DIR}/radata`;
+
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const app = express();
 
@@ -308,7 +313,7 @@ const server = http.createServer(app);
 const gun = Gun({
   web: server,
   radisk: true,
-  file: 'radata',
+  file: GUN_FILE,
   localStorage: false,
   multicast: false,
   peers: process.env.GUN_PEERS ? process.env.GUN_PEERS.split(',') : [],
@@ -411,8 +416,8 @@ app.get('/db/search', async (req, res) => {
       return res.status(400).json(makeError(ErrorCodes.SCHEMA_INVALID, 'limit must be a positive integer'));
     }
     const [rows] = await db.execute(
-      `SELECT soul, data FROM gun_nodes WHERE soul LIKE ? LIMIT ?`,
-      [`${escapedPrefix}%`, safeLimit]
+      `SELECT soul, data FROM gun_nodes WHERE soul LIKE ? ESCAPE '\\\\' LIMIT ${safeLimit}`,
+      [`${escapedPrefix}%`]
     );
     const results = rows.map(r => {
       try { return { soul: r.soul, data: JSON.parse(r.data) }; }
@@ -568,6 +573,3 @@ setInterval(async () => {
     }
   }
 }, 30000);
-
-
-

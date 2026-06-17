@@ -38,6 +38,7 @@ const wss = new WebSocketServer({ server, maxPayload: WS_MAX_PAYLOAD });
 const clients = new Map();
 const rooms = new Map();
 const oauthStates = new Map();
+const sessions = new Map();
 const activeChatSessions = new Map();
 
 // Anti-spam modules
@@ -59,8 +60,6 @@ setInterval(() => {
     if (now - entry.createdAt > OAUTH_STATE_TTL_MS) oauthStates.delete(state);
   }
 }, 2 * 60_000);
-const peerSpamCleanupTimer = setInterval(() => cleanupPeerSpamState(), 60_000);
-if (peerSpamCleanupTimer.unref) peerSpamCleanupTimer.unref();
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
 const DATA_DIR = new URL('./data', import.meta.url).pathname;
@@ -75,9 +74,6 @@ const VOTE_REGISTRY_TMP_FILE = `${DATA_DIR}/vote-registry.tmp.json`;
 const POLL_POLICY_FILE = `${DATA_DIR}/poll-policy.json`;
 const POLL_POLICY_BACKUP_FILE = `${DATA_DIR}/poll-policy.backup.json`;
 const POLL_POLICY_TMP_FILE = `${DATA_DIR}/poll-policy.tmp.json`;
-const SESSION_STORE_FILE = `${DATA_DIR}/sessions.json`;
-const SESSION_STORE_BACKUP_FILE = `${DATA_DIR}/sessions.backup.json`;
-const SESSION_STORE_TMP_FILE = `${DATA_DIR}/sessions.tmp.json`;
 const MAX_VOTE_REGISTRY = 500_000;
 
 let voteRegistry = new Set();
@@ -104,187 +100,6 @@ const ALLOWED_BROADCAST_TYPES = new Set([
   'snapshot-cancel',
 ]);
 const TRUST_ISSUER_DOMAINS = new Set(['endles.sbs', 'endless.sbs']);
-const PEER_SPAM_WINDOW_MS = 20_000;
-const PEER_SPAM_STATE_TTL_MS = 5 * 60_000;
-const PEER_SPAM_MAX_RECENT = 12;
-const DUPLICATE_SPAM_THRESHOLD = 3;
-const LOW_VARIETY_SPAM_THRESHOLD = 6;
-const SOFT_SPAM_PENALTY_BITS = 2;
-const HARD_SPAM_PENALTY_BITS = 4;
-const SOFT_SPAM_COOLDOWN_SEC = 30;
-const HARD_SPAM_COOLDOWN_SEC = 120;
-const peerSpamState = new Map();
-
-function createPeerSpamState() {
-  return {
-    recent: [],
-    penaltyBits: 0,
-    penaltyExpiresAt: 0,
-    blockedCount: 0,
-    lastActivity: 0,
-  };
-}
-
-function cleanupPeerSpamState(now = Date.now()) {
-  for (const [peerKey, state] of peerSpamState) {
-    if (state.lastActivity && now - state.lastActivity > PEER_SPAM_STATE_TTL_MS) {
-      peerSpamState.delete(peerKey);
-    }
-  }
-}
-
-function getPeerSpamState(peerKey, now = Date.now()) {
-  let state = peerSpamState.get(peerKey);
-  if (!state) {
-    state = createPeerSpamState();
-    peerSpamState.set(peerKey, state);
-  }
-
-  state.recent = state.recent.filter((entry) => now - entry.at <= PEER_SPAM_WINDOW_MS);
-  if (state.penaltyExpiresAt <= now) {
-    state.penaltyBits = 0;
-    state.penaltyExpiresAt = 0;
-  }
-  state.lastActivity = now;
-  return state;
-}
-
-function getPeerSpamPenalty(peerKey, now = Date.now()) {
-  const state = peerSpamState.get(peerKey);
-  if (!state) return 0;
-  if (state.penaltyExpiresAt <= now) {
-    peerSpamState.delete(peerKey);
-    return 0;
-  }
-  state.lastActivity = now;
-  return state.penaltyBits;
-}
-
-function normalizeSpamText(text) {
-  return String(text)
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 4000);
-}
-
-function extractMessageText(data, effectivePayload, effectiveType) {
-  const textParts = [];
-  const pushText = (value) => {
-    if (typeof value !== 'string') return;
-    const clean = value.trim();
-    if (clean) textParts.push(clean.slice(0, 2000));
-  };
-  const pushFields = (value) => {
-    if (!value || typeof value !== 'object') return;
-    pushText(value.title);
-    pushText(value.content);
-    pushText(value.description);
-    pushText(value.question);
-    pushText(value.message);
-    pushText(value.text);
-    pushText(value.body);
-  };
-
-  if (data.type === 'chatroom-message') {
-    if (typeof data.data === 'string') {
-      pushText(data.data);
-    } else {
-      pushFields(data.data);
-    }
-  } else if (data.type === 'new-post') {
-    pushFields(data.post || data);
-  } else if (data.type === 'new-poll') {
-    pushFields(data.poll || data);
-  } else if (data.type === 'new-block') {
-    pushFields(data.data || data);
-  } else if (data.type === 'broadcast') {
-    if (effectiveType === 'new-post') {
-      pushFields(effectivePayload?.post || effectivePayload);
-    } else if (effectiveType === 'new-poll') {
-      pushFields(effectivePayload?.poll || effectivePayload);
-    } else if (typeof effectivePayload === 'string') {
-      pushText(effectivePayload);
-    } else {
-      pushFields(effectivePayload);
-    }
-  }
-
-  return textParts.join(' ').trim();
-}
-
-function evaluateSpamRisk(peerKey, data, effectivePayload, effectiveType) {
-  const type = data.type === 'broadcast' ? effectiveType : data.type;
-  if (!['broadcast', 'new-poll', 'new-block', 'new-post', 'chatroom-message'].includes(data.type) &&
-      !['new-poll', 'new-block', 'new-post'].includes(type)) {
-    return { blocked: false, flagged: false, scoreResult: null, spamPenalty: 0 };
-  }
-
-  const textContent = extractMessageText(data, effectivePayload, effectiveType);
-  if (!textContent) {
-    return { blocked: false, flagged: false, scoreResult: null, spamPenalty: getPeerSpamPenalty(peerKey) };
-  }
-
-  const now = Date.now();
-  const state = getPeerSpamState(peerKey, now);
-  const normalizedText = normalizeSpamText(textContent);
-  const scoreResult = spamScorer.score(textContent);
-  const repeatCount = normalizedText
-    ? state.recent.filter((entry) => entry.fingerprint === normalizedText).length + 1
-    : 1;
-
-  if (normalizedText) {
-    state.recent.push({ fingerprint: normalizedText, at: now });
-    if (state.recent.length > PEER_SPAM_MAX_RECENT) {
-      state.recent = state.recent.slice(-PEER_SPAM_MAX_RECENT);
-    }
-  }
-
-  const uniqueFingerprints = new Set(state.recent.map((entry) => entry.fingerprint)).size;
-  const lowVarietySpam = state.recent.length >= LOW_VARIETY_SPAM_THRESHOLD
-    && uniqueFingerprints <= Math.ceil(state.recent.length / 3);
-  const heavyTerms = spamScorer.shouldDelay(scoreResult);
-  const flaggedTerms = spamScorer.shouldFlag(scoreResult);
-
-  let blocked = false;
-  let reason = '';
-  let spamPenalty = getPeerSpamPenalty(peerKey, now);
-
-  if (heavyTerms) {
-    blocked = true;
-    reason = 'content matched spam terms too aggressively';
-    spamPenalty = Math.max(spamPenalty, HARD_SPAM_PENALTY_BITS);
-  } else if (normalizedText.length >= 12 && repeatCount >= DUPLICATE_SPAM_THRESHOLD) {
-    blocked = true;
-    reason = 'duplicate messages are being sent too quickly';
-    spamPenalty = Math.max(spamPenalty, HARD_SPAM_PENALTY_BITS);
-  } else if (normalizedText.length >= 12 && lowVarietySpam) {
-    blocked = true;
-    reason = 'too many low-variety messages in a short window';
-    spamPenalty = Math.max(spamPenalty, HARD_SPAM_PENALTY_BITS);
-  } else if (flaggedTerms || (normalizedText.length >= 12 && repeatCount === 2)) {
-    spamPenalty = Math.max(spamPenalty, SOFT_SPAM_PENALTY_BITS);
-  }
-
-  if (spamPenalty > 0) {
-    state.penaltyBits = Math.max(state.penaltyBits, spamPenalty);
-    state.penaltyExpiresAt = now + PEER_SPAM_WINDOW_MS;
-  }
-
-  if (blocked) {
-    state.blockedCount++;
-  }
-
-  return {
-    blocked,
-    reason,
-    flagged: flaggedTerms,
-    scoreResult,
-    spamPenalty,
-    repeatCount,
-    lowVarietySpam,
-  };
-}
 
 function loadVoteRegistryFromFile(filePath) {
   const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -437,58 +252,6 @@ function savePollPolicyRegistrySync() {
   } catch (err) {
     console.error('Failed to save poll policy registry:', err.message);
     throw err;
-  }
-
-  function loadSessionStoreFromFile(filePath) {
-    const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    if (!data || typeof data !== 'object' || Array.isArray(data)) {
-      throw new Error('session store is not an object');
-    }
-    sessions.clear();
-    for (const [sessionId, sessionData] of Object.entries(data)) {
-      if (!sessionId || !sessionData || typeof sessionData !== 'object') continue;
-      sessions.set(sessionId, sessionData);
-    }
-  }
-
-  try {
-    if (fs.existsSync(SESSION_STORE_FILE)) {
-      loadSessionStoreFromFile(SESSION_STORE_FILE);
-      console.log(`Loaded ${sessions.size} sessions from disk`);
-    } else if (fs.existsSync(SESSION_STORE_BACKUP_FILE)) {
-      loadSessionStoreFromFile(SESSION_STORE_BACKUP_FILE);
-      console.log(`Recovered ${sessions.size} sessions from backup`);
-    }
-  } catch (err) {
-    console.error('Failed to load primary session store, trying backup:', err.message);
-    try {
-      if (fs.existsSync(SESSION_STORE_BACKUP_FILE)) {
-        loadSessionStoreFromFile(SESSION_STORE_BACKUP_FILE);
-        console.log(`Recovered ${sessions.size} sessions from backup`);
-      }
-    } catch (backupErr) {
-      console.error('Failed to load backup session store:', backupErr.message);
-    }
-  }
-
-  let _sessionStoreSaving = false;
-  function saveSessionStore() {
-    if (_sessionStoreSaving) return;
-    _sessionStoreSaving = true;
-    const data = JSON.stringify(Object.fromEntries(sessions));
-    fs.writeFile(SESSION_STORE_TMP_FILE, data, (err) => {
-      _sessionStoreSaving = false;
-      if (err) {
-        console.error('Failed to save session store:', err.message);
-        return;
-      }
-      try {
-        fs.renameSync(SESSION_STORE_TMP_FILE, SESSION_STORE_FILE);
-        fs.writeFileSync(SESSION_STORE_BACKUP_FILE, data);
-      } catch (writeErr) {
-        console.error('Failed to finalize session store save:', writeErr.message);
-      }
-    });
   }
 }
 
@@ -741,7 +504,6 @@ function saveMessageCache() {
 setInterval(saveMessageCache, 30_000);
 setInterval(saveVoteRegistry, 60_000);
 setInterval(savePollPolicyRegistry, 60_000);
-setInterval(saveSessionStore, 30_000);
 setInterval(() => cleanupPendingVoteReservations(), PENDING_VOTE_CLEANUP_MS);
 
 // ─── MySQL ────────────────────────────────────────────────────────────────────
@@ -885,11 +647,6 @@ function resolveWsIdentityTier(sessionUser, identityUsername) {
   return emailIssuer === claimedIssuer ? 'trusted-issuer' : 'unverified';
 }
 
-function normalizeUsername(username) {
-  const clean = sanitizeString(username || '', 100).trim().toLowerCase();
-  return clean.replace(/\s+/g, '');
-}
-
 // ─── Search ───────────────────────────────────────────────────────────────────
 async function indexContent(type, id, data) {
   if (!db) return;
@@ -1004,7 +761,6 @@ async function setSecureSession(res, req, user) {
     expiresAt,
   };
   sessions.set(sessionId, sessionData);
-  saveSessionStore();
   if (db) {
     await db.execute(
       `INSERT INTO sessions (session_id, user_id, ip_address, user_agent, created_at, expires_at, last_activity) VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -1027,7 +783,6 @@ async function getSecureSession(req) {
   if (!sessionData) return null;
   if (sessionData.expiresAt <= Date.now()) {
     sessions.delete(sid);
-    saveSessionStore();
     if (db) await db.execute(`DELETE FROM sessions WHERE session_id = ?`, [sid]);
     return null;
   }
@@ -1599,7 +1354,6 @@ server.on('request', async (req, res) => {
     const cookie = req.headers['cookie'] || '';
     const sid = cookie.split(';').find(c => c.trim().startsWith('sessionId='))?.split('=')[1];
     if (sid) { sessions.delete(sid); if (db) await db.execute(`DELETE FROM sessions WHERE session_id = ?`, [sid]); }
-    saveSessionStore();
     res.setHeader('Set-Cookie', ['sessionId=; HttpOnly; Path=/; SameSite=None; Secure; Max-Age=0', 'jwt=; Path=/; SameSite=None; Secure; Max-Age=0']);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true })); return;
@@ -2029,8 +1783,6 @@ wss.on('connection', (ws, req) => {
         return;
       }
 
-      const peerKey = peerId || peerIp;
-
       // ─── PoW verification for content messages ────────────────────
       const powPayload = (effectivePayload && typeof effectivePayload.pow === 'object') ? effectivePayload : data;
       if (powChallenge.requiresPow(effectiveType, actionType)) {
@@ -2049,31 +1801,19 @@ wss.on('connection', (ws, req) => {
         }
       }
 
-      // ─── Spam scoring and propagation gate ────────────────────────
-      const spamDecision = evaluateSpamRisk(peerKey, data, effectivePayload, effectiveType);
-      if (spamDecision.flagged && spamDecision.scoreResult) {
-        console.log(`🚩 Flagged content from ${sanitizeLogString(peerKey)}: ${spamDecision.scoreResult.matchCount} matches`);
-        if (data.post && typeof data.post === 'object') data.post._flagged = true;
-        else if (data.poll && typeof data.poll === 'object') data.poll._flagged = true;
-        else if (data.data && typeof data.data === 'object') data.data._flagged = true;
-        else data._flagged = true;
-      }
-      if (spamDecision.blocked) {
-        const penalty = rateLimiter.penalize(peerKey, {
-          minPenaltySec: spamDecision.spamPenalty >= HARD_SPAM_PENALTY_BITS
-            ? HARD_SPAM_COOLDOWN_SEC
-            : SOFT_SPAM_COOLDOWN_SEC,
-        });
-        console.log(`🛑 Dropped spam from ${sanitizeLogString(peerKey)}: ${spamDecision.reason}`);
-        if (ws.readyState === 1) {
-          ws.send(JSON.stringify({
-            type: 'error',
-            code: 'SPAM_BLOCKED',
-            reason: spamDecision.reason,
-            retryAfter: penalty.retryAfter,
-          }));
+      // ─── Spam scoring for content messages ────────────────────────
+      if (data.type === 'broadcast' || data.type === 'new-poll' || data.type === 'new-block' || data.type === 'new-post') {
+        const payload = data.data || data.post || data;
+        const textContent = [payload.title, payload.content, payload.description, payload.question]
+          .filter(Boolean).join(' ');
+        if (textContent) {
+          const scoreResult = spamScorer.score(textContent);
+          if (spamScorer.shouldFlag(scoreResult)) {
+            console.log(`🚩 Flagged content from ${sanitizeLogString(peerId || peerIp)}: ${scoreResult.matchCount} matches`);
+            if (data.data) data.data._flagged = true;
+            else data._flagged = true;
+          }
         }
-        return;
       }
 
       // ── Mandatory integrity pipeline (hashcash) ───────────────────
@@ -2137,32 +1877,6 @@ wss.on('connection', (ws, req) => {
             }
             sessionUserCache = sessionUser;
             userId = sessionSub;
-          }
-          {
-            const requestedUsername = normalizeUsername(data.username || '');
-            if (requestedUsername && db) {
-              const existing = await queryMySQL(
-                `SELECT user_id FROM user_profiles WHERE LOWER(username) = ? LIMIT 1`,
-                [requestedUsername]
-              );
-              if (existing?.length && existing[0].user_id !== userId) {
-                if (ws.readyState === 1) {
-                  ws.send(JSON.stringify({ type: 'error', code: 'USERNAME_TAKEN', reason: 'username is already registered' }));
-                }
-                break;
-              }
-              await db.execute(
-                `INSERT INTO user_profiles (user_id, username, display_name, public_key, last_seen)
-                 VALUES (?, ?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE
-                   username = VALUES(username),
-                   display_name = VALUES(display_name),
-                   public_key = VALUES(public_key),
-                   last_seen = VALUES(last_seen)`,
-                [userId, requestedUsername, sessionUserCache?.name || requestedUsername, data._pub || null, Date.now()]
-              );
-            }
-            if (requestedUsername) data.username = requestedUsername;
           }
           peerId = data.peerId;
           if (clients.has(peerId)) {
@@ -2293,14 +2007,14 @@ wss.on('connection', (ws, req) => {
         case 'request-pow': {
           const deviceId = data.deviceId || peerId;
           const action = data.action || 'default';
-          const botScore = botDetector.getScore(peerKey);
+          const botScore = botDetector.getScore(peerId || peerIp);
           const sessionUser = sessionUserCache || await getSecureSession(req);
           if (sessionUser) sessionUserCache = sessionUser;
           const resolvedTier = resolveWsIdentityTier(sessionUser, data.identityUsername);
           identityTier = resolvedTier;
           const challenge = powChallenge.createChallenge(deviceId, action, {
             botScore,
-            spamPenalty: getPeerSpamPenalty(peerKey),
+            spamPenalty: 0,
             identityTier: resolvedTier,
           });
           if (ws.readyState === 1) {
@@ -2361,7 +2075,6 @@ server.listen(PORT, () => {
 process.on('SIGINT', () => {
   saveMessageCache();
   clearInterval(pingTimer);
-  clearInterval(peerSpamCleanupTimer);
   rateLimiter.destroy();
   botDetector.destroy();
   powChallenge.destroy();
