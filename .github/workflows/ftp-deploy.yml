@@ -29,7 +29,6 @@ jobs:
       - name: Extract script tag from built index.html
         id: extract_script
         run: |
-          # Extract the script tag from dist/index.html
           SCRIPT_TAG=$(grep -oP '<script[^>]*>[^<]*</script>' dist/index.html | tail -1)
           echo "script_tag<<EOF" >> $GITHUB_OUTPUT
           echo "$SCRIPT_TAG" >> $GITHUB_OUTPUT
@@ -43,34 +42,20 @@ jobs:
           remote-password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./dist/assets2/
 
-      - name: Download current index.html and update script tag
+      - name: Prepare index.html with new script tag
         run: |
-          # Install lftp
-          sudo apt-get update && sudo apt-get install -y lftp
-          
-          # Remove ftp:// prefix if user added it
-          FTP_HOST_CLEAN="${{ secrets.FTP_HOST }}"
-          FTP_HOST_CLEAN="${FTP_HOST_CLEAN#ftp://}"
-          FTP_HOST_CLEAN="${FTP_HOST_CLEAN#*@}"
-          
-          echo "Connecting to: $FTP_HOST_CLEAN"
-          
-          # Download current index.html with timeout settings
-          mkdir -p ftp_work
-          lftp -u "${{ secrets.FTP_USERNAME }},${{ secrets.FTP_PASSWORD }}" -e "set net:timeout 10; set net:max-retries 3; cd domains/endless.sbs/public_html; get index.html -o ftp_work/index.html; quit" $FTP_HOST_CLEAN
-          
-          # Replace the script tag while preserving the rest
-          HEAD_CONTENT=$(sed '/<script[^>]*>[^<]*<\/script>$/d' ftp_work/index.html)
-          
-          # Write new index.html with preserved head and new script tag
-          echo "$HEAD_CONTENT" > ftp_work/index.html.new
-          echo "    ${{ steps.extract_script.outputs.script_tag }}" >> ftp_work/index.html.new
-          echo "  </body>" >> ftp_work/index.html.new
-          echo "</html>" >> ftp_work/index.html.new
-          
-          # Upload updated index.html
-          lftp -u "${{ secrets.FTP_USERNAME }},${{ secrets.FTP_PASSWORD }}" -e "set net:timeout 10; set net:max-retries 3; cd domains/endless.sbs/public_html; put ftp_work/index.html.new -o index.html; quit" $FTP_HOST_CLEAN
+          mkdir -p deploy_index
+          # Get the SEO head from the built dist/index.html up to </head>
+          sed '/<script/,$d' dist/index.html > deploy_index/index.html
+          # Add the new script tag and closing tags
+          echo "    ${{ steps.extract_script.outputs.script_tag }}" >> deploy_index/index.html
+          echo "  </body>" >> deploy_index/index.html
+          echo "</html>" >> deploy_index/index.html
 
-      - name: Cleanup
-        if: always()
-        run: rm -rf ftp_work
+      - name: Deploy index.html to FTP
+        uses: milanmk/actions-file-deployer@master
+        with:
+          remote-url: ${{ secrets.FTP_HOST }}/domains/endless.sbs/public_html/
+          remote-user: ${{ secrets.FTP_USERNAME }}
+          remote-password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./deploy_index/
