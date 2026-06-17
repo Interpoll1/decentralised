@@ -39,10 +39,11 @@ jobs:
           # Upload entire assets2 directory
           cd dist/assets2
           find . -type f | while read file; do
-            curl -T "$file" "ftp://${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}@${{ secrets.FTP_HOST }}/domains/endless.sbs/public_html/assets2/${file#./}" --create-dirs
+            echo "Uploading: $file"
+            curl -T "$file" "ftp://${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}@${{ secrets.FTP_HOST }}/domains/endless.sbs/public_html/assets2/${file#./}" --create-dirs -v
           done
 
-      - name: Deploy index.html to FTP using curl
+      - name: Prepare index.html with new script tag
         run: |
           mkdir -p deploy_index
           # Get the SEO head from the built dist/index.html up to </head>
@@ -51,6 +52,12 @@ jobs:
           echo "    ${{ steps.extract_script.outputs.script_tag }}" >> deploy_index/index.html
           echo "  </body>" >> deploy_index/index.html
           echo "</html>" >> deploy_index/index.html
-          
-          # Upload index.html
-          curl -T deploy_index/index.html "ftp://${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}@${{ secrets.FTP_HOST }}/domains/endless.sbs/public_html/index.html"
+
+      - name: Deploy index.html to FTP using curl
+        run: |
+          echo "Uploading index.html"
+          curl -T deploy_index/index.html "ftp://${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}@${{ secrets.FTP_HOST }}/domains/endless.sbs/public_html/index.html" -v
+
+      - name: Cleanup
+        if: always()
+        run: rm -rf deploy_index
