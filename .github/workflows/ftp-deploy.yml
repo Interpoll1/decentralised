@@ -51,14 +51,13 @@ jobs:
           # Remove ftp:// prefix if user added it
           FTP_HOST_CLEAN="${{ secrets.FTP_HOST }}"
           FTP_HOST_CLEAN="${FTP_HOST_CLEAN#ftp://}"
+          FTP_HOST_CLEAN="${FTP_HOST_CLEAN#*@}"
           
-          # Download current index.html
+          echo "Connecting to: $FTP_HOST_CLEAN"
+          
+          # Download current index.html with timeout settings
           mkdir -p ftp_work
-          lftp -u "${{ secrets.FTP_USERNAME }}","${{ secrets.FTP_PASSWORD }}" "$FTP_HOST_CLEAN" << 'LFTP_EOF'
-          cd domains/endless.sbs/public_html
-          get index.html -o ftp_work/index.html
-          quit
-          LFTP_EOF
+          lftp -u "${{ secrets.FTP_USERNAME }},${{ secrets.FTP_PASSWORD }}" -e "set net:timeout 10; set net:max-retries 3; cd domains/endless.sbs/public_html; get index.html -o ftp_work/index.html; quit" $FTP_HOST_CLEAN
           
           # Replace the script tag while preserving the rest
           HEAD_CONTENT=$(sed '/<script[^>]*>[^<]*<\/script>$/d' ftp_work/index.html)
@@ -70,11 +69,7 @@ jobs:
           echo "</html>" >> ftp_work/index.html.new
           
           # Upload updated index.html
-          lftp -u "${{ secrets.FTP_USERNAME }}","${{ secrets.FTP_PASSWORD }}" "$FTP_HOST_CLEAN" << 'LFTP_EOF'
-          cd domains/endless.sbs/public_html
-          put ftp_work/index.html.new -o index.html
-          quit
-          LFTP_EOF
+          lftp -u "${{ secrets.FTP_USERNAME }},${{ secrets.FTP_PASSWORD }}" -e "set net:timeout 10; set net:max-retries 3; cd domains/endless.sbs/public_html; put ftp_work/index.html.new -o index.html; quit" $FTP_HOST_CLEAN
 
       - name: Cleanup
         if: always()
