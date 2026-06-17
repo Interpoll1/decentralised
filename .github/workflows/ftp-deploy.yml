@@ -36,11 +36,15 @@ jobs:
 
       - name: Deploy assets2 to FTP using curl
         run: |
+          # Remove ftp:// prefix if present
+          FTP_HOST_CLEAN="${{ secrets.FTP_HOST }}"
+          FTP_HOST_CLEAN="${FTP_HOST_CLEAN#ftp://}"
+          
           # Upload entire assets2 directory
           cd dist/assets2
           find . -type f | while read file; do
             echo "Uploading: $file"
-            curl -T "$file" "ftp://${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}@${{ secrets.FTP_HOST }}/domains/endless.sbs/public_html/assets2/${file#./}" --create-dirs -v
+            curl -T "$file" "ftp://${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}@${FTP_HOST_CLEAN}/domains/endless.sbs/public_html/assets2/${file#./}" --create-dirs -v
           done
 
       - name: Prepare index.html with new script tag
@@ -55,8 +59,12 @@ jobs:
 
       - name: Deploy index.html to FTP using curl
         run: |
-          echo "Uploading index.html"
-          curl -T deploy_index/index.html "ftp://${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}@${{ secrets.FTP_HOST }}/domains/endless.sbs/public_html/index.html" -v
+          # Remove ftp:// prefix if present
+          FTP_HOST_CLEAN="${{ secrets.FTP_HOST }}"
+          FTP_HOST_CLEAN="${FTP_HOST_CLEAN#ftp://}"
+          
+          echo "Uploading index.html to ${FTP_HOST_CLEAN}"
+          curl -T deploy_index/index.html "ftp://${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}@${FTP_HOST_CLEAN}/domains/endless.sbs/public_html/index.html" -v
 
       - name: Cleanup
         if: always()
