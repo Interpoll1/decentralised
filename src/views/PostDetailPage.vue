@@ -52,9 +52,7 @@
 
           <div class="post-body">
             <!-- Post Content -->
-            <div v-if="post.content" class="post-content">
-              {{ post.content }}
-            </div>
+            <div v-if="post.content" class="post-content markdown-body" v-html="renderMarkdown(post.content)"></div>
 
             <!-- Post Image -->
             <div v-if="post.imageThumbnail || post.imageId" class="post-image">
@@ -186,6 +184,7 @@ import { useUserStore } from '../stores/userStore';
 import CommentCard from '../components/CommentCard.vue';
 import { Post } from '../services/postService';
 import { generatePseudonym } from '../utils/pseudonym';
+import { renderMarkdown } from '../utils/markdown';
 import { ModerationService, moderationVersion } from '../services/moderationService';
 import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 
@@ -615,6 +614,18 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* Rendered Markdown (post body) */
+.post-content.markdown-body { white-space: normal; }
+.post-content :deep(p) { margin: 0 0 10px; }
+.post-content :deep(p:last-child) { margin-bottom: 0; }
+.post-content :deep(h1), .post-content :deep(h2), .post-content :deep(h3) { margin: 14px 0 8px; line-height: 1.3; }
+.post-content :deep(ul), .post-content :deep(ol) { margin: 0 0 10px; padding-left: 22px; }
+.post-content :deep(code) { background: rgba(var(--ion-color-primary-rgb), 0.1); padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
+.post-content :deep(pre) { background: rgba(var(--ion-color-primary-rgb), 0.07); padding: 12px; border-radius: 8px; overflow-x: auto; }
+.post-content :deep(pre code) { background: transparent; padding: 0; }
+.post-content :deep(a) { color: var(--ion-color-primary); }
+.post-content :deep(blockquote) { margin: 0 0 10px; padding-left: 12px; border-left: 3px solid rgba(var(--ion-color-primary-rgb), 0.4); color: var(--ion-color-medium); }
+.post-content :deep(img) { max-width: 100%; border-radius: 8px; }
 .loading-container,
 .empty-state {
   display: flex;

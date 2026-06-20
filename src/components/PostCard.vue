@@ -356,6 +356,7 @@ import {
 import { Post } from '../services/postService';
 import type { FilterAction } from '../services/moderationService';
 import { generatePseudonym } from '../utils/pseudonym';
+import { stripMarkdown } from '../utils/markdown';
 import { useUserStore } from '../stores/userStore';
 import type { UserProfile } from '../services/userService';
 import { formatTrustedIdentityLabel } from '../utils/identityTrust';
@@ -428,7 +429,7 @@ const authorIdentityClass = computed(() =>
 );
 
 const truncatedContent = computed(() => {
-  const content = props.post.content || '';
+  const content = stripMarkdown(props.post.content || '');
   if (content.length <= 200) {
     return content;
   }

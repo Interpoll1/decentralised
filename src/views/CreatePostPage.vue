@@ -50,15 +50,23 @@
             </ion-item>
 
             <ion-item lines="none" class="content-field">
-              <ion-textarea
-                v-model="content"
-                label="Text (optional)"
-                label-placement="floating"
-                placeholder="What's on your mind?"
-                :rows="6"
-                :maxlength="10000"
-                :auto-grow="true"
-              ></ion-textarea>
+              <div class="md-field">
+                <div class="md-field-header">
+                  <span class="md-field-label">Text (optional) · Markdown</span>
+                  <button type="button" class="md-toggle" @click="showPreview = !showPreview">
+                    {{ showPreview ? 'Edit' : 'Preview' }}
+                  </button>
+                </div>
+                <ion-textarea
+                  v-show="!showPreview"
+                  v-model="content"
+                  placeholder="What's on your mind? (Markdown supported)"
+                  :rows="6"
+                  :maxlength="10000"
+                  :auto-grow="true"
+                ></ion-textarea>
+                <div v-show="showPreview" class="md-preview" v-html="contentPreview"></div>
+              </div>
             </ion-item>
           </div>
 
@@ -139,6 +147,31 @@
 .content-field {
   align-items: flex-start;
 }
+
+.md-field { width: 100%; padding: 4px 0; }
+.md-field-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.md-field-label { font-size: 12px; color: var(--ion-color-medium); }
+.md-toggle {
+  background: transparent; border: 0; cursor: pointer;
+  font-size: 12px; font-weight: 600; color: var(--ion-color-primary);
+  padding: 2px 8px; border-radius: 6px;
+}
+.md-toggle:hover { background: rgba(var(--ion-color-primary-rgb), 0.1); }
+.md-preview {
+  min-height: 140px; padding: 10px 12px; font-size: 14px; line-height: 1.55;
+  color: var(--ion-text-color);
+  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08)); border-radius: 10px;
+}
+.md-preview :deep(p) { margin: 0 0 8px; }
+.md-preview :deep(p:last-child) { margin-bottom: 0; }
+.md-preview :deep(h1), .md-preview :deep(h2), .md-preview :deep(h3) { margin: 12px 0 6px; line-height: 1.3; }
+.md-preview :deep(ul), .md-preview :deep(ol) { margin: 0 0 8px; padding-left: 20px; }
+.md-preview :deep(code) { background: rgba(var(--ion-color-primary-rgb), 0.1); padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
+.md-preview :deep(pre) { background: rgba(var(--ion-color-primary-rgb), 0.07); padding: 10px 12px; border-radius: 8px; overflow-x: auto; }
+.md-preview :deep(pre code) { background: transparent; padding: 0; }
+.md-preview :deep(a) { color: var(--ion-color-primary); }
+.md-preview :deep(blockquote) { margin: 0 0 8px; padding-left: 12px; border-left: 3px solid rgba(var(--ion-color-primary-rgb), 0.4); color: var(--ion-color-medium); }
+.md-preview :deep(.md-empty) { color: var(--ion-color-medium); font-style: italic; }
 
 .image-section {
   display: grid;
@@ -246,6 +279,7 @@ import { imageOutline, closeCircle, informationCircle } from 'ionicons/icons';
 import { useCommunityStore } from '../stores/communityStore';
 import { usePostStore } from '../stores/postStore';
 import { checkContent } from '../utils/contentGuard';
+import { renderMarkdown } from '../utils/markdown';
 
 const route = useRoute();
 const router = useRouter();
@@ -256,6 +290,8 @@ const communityId = route.params.communityId as string;
 const selectedCommunity = ref(communityId || '');
 const title = ref('');
 const content = ref('');
+const showPreview = ref(false);
+const contentPreview = computed(() => renderMarkdown(content.value) || '<p class="md-empty">Nothing to preview</p>');
 const imageFile = ref<File | null>(null);
 const imagePreview = ref<string | null>(null);
 const isSubmitting = ref(false);
