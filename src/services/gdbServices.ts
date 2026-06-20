@@ -20,7 +20,7 @@
 const { gdb } = await import(/* @vite-ignore */ `${import.meta.env.BASE_URL}genosdb/index.js`)
 
 /** Database identifier — also serves as the P2P room name. */
-export const GDB_NAME = 'interpoll'
+export const GDB_NAME = 'interpoll-genosdb'
 
 /**
  * Bootstrap superadmin Ethereum addresses.
