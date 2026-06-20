@@ -98,7 +98,7 @@
               <span>Address</span>
             </div>
             <div class="key-display">
-              <code class="key-value">{{ auth.address || 'Not signed in' }}</code>
+              <code class="key-value">{{ auth.address ? auth.abbrAddr : 'Not signed in' }}</code>
               <ion-button v-if="auth.address" fill="clear" size="small" @click="copyAddress">
                 <ion-icon :icon="copyOutline"></ion-icon>
               </ion-button>
