@@ -38,6 +38,22 @@ function spaRouteFallbackPlugin() {
   };
 }
 
+// On build, emit a GitHub Pages SPA fallback: 404.html is a copy of index.html so deep
+// links and refreshes (e.g. /home, /profile) resolve to the app instead of GitHub's own
+// 404 page, and .nojekyll stops Pages from running Jekyll over the output. GitHub Pages
+// has no server-side redirects, so this 404.html is the equivalent of Netlify's
+// `/* -> /index.html` rule. Harmless for other hosts (Netlify uses its own redirect).
+function ghPagesSpaFallbackPlugin() {
+  return {
+    name: 'gh-pages-spa-fallback',
+    async closeBundle() {
+      const outDir = path.resolve(__dirname, 'dist');
+      await fs.copyFile(path.join(outDir, 'index.html'), path.join(outDir, '404.html'));
+      await fs.writeFile(path.join(outDir, '.nojekyll'), '');
+    },
+  };
+}
+
 // GenosDB ships a self-contained dist/ and resolves its own modules at runtime via
 // new URL('./*.min.js', import.meta.url), so it must be served intact from one folder
 // rather than bundled. `scripts/copy-genosdb.mjs` (run by the dev/build npm scripts)
@@ -48,7 +64,7 @@ export default defineConfig({
   // GitHub Pages serves project sites under /<repo>/. Build with GH_PAGES=1 to
   // emit that base; local dev/preview stays at root.
   base: process.env.GH_PAGES === '1' ? '/interpoll-genosdb/' : '/',
-  plugins: [vue(), spaRouteFallbackPlugin()],
+  plugins: [vue(), spaRouteFallbackPlugin(), ghPagesSpaFallbackPlugin()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
