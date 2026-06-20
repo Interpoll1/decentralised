@@ -27,10 +27,10 @@
 
       <p v-if="post.content" class="post-content">{{ truncatedContent }}</p>
 
-      <div v-if="post.imageThumbnail || post.imageIPFS">
+      <div v-if="post.imageThumbnail || post.imageId">
         <div class="post-image">
           <img
-            :src="post.imageThumbnail || getIPFSUrl(post.imageIPFS)"
+            :src="post.imageThumbnail || getImageUrl(post.imageId)"
             :alt="post.title"
           />
         </div>
@@ -478,7 +478,7 @@ function formatNumber(num: number | undefined | null): string {
   return n.toString();
 }
 
-function getIPFSUrl(cid?: string): string {
+function getImageUrl(cid?: string): string {
   if (!cid) return '';
   return `https://ipfs.io/ipfs/${cid}`;
 }

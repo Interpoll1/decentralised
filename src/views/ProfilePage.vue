@@ -456,7 +456,7 @@ import {
 import { UserService } from '../services/userService';
 import type { UserProfile } from '../services/userService';
 import { VoteTrackerService } from '../services/voteTrackerService';
-import { IPFSService } from '../services/ipfsService';
+import { ImageService } from '../services/imageService';
 import { useCommunityStore } from '../stores/communityStore';
 import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 
@@ -554,8 +554,8 @@ async function saveProfile() {
 
     // Upload avatar if changed
     if (avatarFile.value) {
-      const result = await IPFSService.uploadImage(avatarFile.value);
-      updates.avatarIPFS = result.cid;
+      const result = await ImageService.uploadImage(avatarFile.value);
+      updates.avatarId = result.cid;
       updates.avatarThumbnail = result.thumbnail;
     }
 

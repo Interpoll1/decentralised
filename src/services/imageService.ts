@@ -1,12 +1,12 @@
-// src/services/ipfsService.ts — image storage over GenosDB.
+// src/services/imageService.ts — image storage over GenosDB.
 //
 // Images are compressed client-side and stored as base64 inside GenosDB nodes
 // (the worker persists them to OPFS and syncs them P2P), replacing the former
-// Gun `images/<cid>` graph. The class name is kept for call-site compatibility.
+// Gun `images/<cid>` graph (the old "IPFS" naming was a misnomer — no IPFS is involved).
 import { db } from './gdbServices'
 import imageCompression from 'browser-image-compression'
 
-export class IPFSService {
+export class ImageService {
   private static isReady = false
 
   static getReadyStatus(): boolean {

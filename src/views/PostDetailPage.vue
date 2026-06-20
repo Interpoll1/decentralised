@@ -57,9 +57,9 @@
             </div>
 
             <!-- Post Image -->
-            <div v-if="post.imageThumbnail || post.imageIPFS" class="post-image">
+            <div v-if="post.imageThumbnail || post.imageId" class="post-image">
               <img
-                :src="fullImageSrc || post.imageThumbnail || getIPFSUrl(post.imageIPFS)"
+                :src="fullImageSrc || post.imageThumbnail || getImageUrl(post.imageId)"
                 :alt="post.title"
               />
             </div>
@@ -189,7 +189,7 @@ import { generatePseudonym } from '../utils/pseudonym';
 import { ModerationService, moderationVersion } from '../services/moderationService';
 import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 
-import { IPFSService } from '../services/ipfsService';
+import { ImageService } from '../services/imageService';
 import { checkContent } from '../utils/contentGuard';
 
 const route = useRoute();
@@ -210,7 +210,7 @@ let fullImageLoadPromise: Promise<string | null> | null = null;
 
 // Load full-res image from GenosDB to replace thumbnail
 watch(
-  () => post.value?.imageIPFS,
+  () => post.value?.imageId,
   (cid) => {
     fullImageSrc.value = null;
     fullImageLoadPromise = null;
@@ -424,21 +424,21 @@ function formatNumber(num: number | undefined | null): string {
   return n.toString();
 }
 
-function getIPFSUrl(cid?: string): string {
+function getImageUrl(cid?: string): string {
   return cid ? `https://ipfs.io/ipfs/${cid}` : '';
 }
 
 async function loadFullImageSrc(cid: string): Promise<string | null> {
   try {
-    const data = await IPFSService.downloadImage(cid);
-    if (post.value?.imageIPFS === cid && data) {
+    const data = await ImageService.downloadImage(cid);
+    if (post.value?.imageId === cid && data) {
       fullImageSrc.value = data;
     }
     return data || null;
   } catch {
     return null;
   } finally {
-    if (post.value?.imageIPFS === cid) {
+    if (post.value?.imageId === cid) {
       fullImageLoadPromise = null;
     }
   }

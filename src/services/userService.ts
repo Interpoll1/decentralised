@@ -18,7 +18,7 @@ export interface UserProfile {
   identityIssuer?: string
   identityTrustLevel?: 'trusted-issuer' | 'unverified'
   showRealName?: boolean
-  avatarIPFS?: string
+  avatarId?: string
   avatarThumbnail?: string
   bio: string
   createdAt: number

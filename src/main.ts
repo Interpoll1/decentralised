@@ -24,8 +24,8 @@ const app = createApp(App)
 
 router.isReady().then(() => {
   app.mount('#app');
-  // Image uploads still use the IPFS helper; initialise it lazily after paint.
-  import('./services/ipfsService')
-    .then(({ IPFSService }) => IPFSService.initialize?.())
+  // Image uploads use the GenosDB-backed image helper; initialise it lazily after paint.
+  import('./services/imageService')
+    .then(({ ImageService }) => ImageService.initialize?.())
     .catch(() => { /* image hosting optional */ });
 });

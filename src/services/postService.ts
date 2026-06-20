@@ -7,7 +7,7 @@
 // writes to posts + community/posts indexes), once()-with-timeout reads, memory/
 // missing caches, manual Schnorr signing and legacy-cache eviction.
 import { db } from './gdbServices'
-import { IPFSService } from './ipfsService'
+import { ImageService } from './imageService'
 
 export interface Post {
   id: string
@@ -17,7 +17,7 @@ export interface Post {
   authorShowRealName?: boolean
   title: string
   content: string
-  imageIPFS?: string
+  imageId?: string
   imageThumbnail?: string
   createdAt: number
   upvotes: number
@@ -40,7 +40,7 @@ export class PostService {
     imageFile?: File,
     preGeneratedId?: string,
   ): Promise<Post> {
-    const image = imageFile ? await IPFSService.uploadImage(imageFile) : undefined
+    const image = imageFile ? await ImageService.uploadImage(imageFile) : undefined
     const id = preGeneratedId || `post-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
     const record = {
       type: 'post',
@@ -51,7 +51,7 @@ export class PostService {
       authorShowRealName: post.authorShowRealName || false,
       title: post.title || '',
       content: post.content || '',
-      imageIPFS: image?.cid || '',
+      imageId: image?.cid || '',
       imageThumbnail: image?.thumbnail || '',
       createdAt: Date.now(),
     }
