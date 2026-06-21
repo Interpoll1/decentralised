@@ -5,6 +5,7 @@
 // scores derived. Replaces ~600 lines of Gun denormalization, once()-with-timeout
 // reads and manual Schnorr signing.
 import { db } from './gdbServices'
+import { grantCommunityModerators } from './moderationGrants'
 
 export interface Comment {
   id: string
@@ -53,19 +54,23 @@ export class CommentService {
       parentId: data.parentId ?? '',
       createdAt: Date.now(),
     }
-    await db.put(record, id)
+    // ACL-owned by the author, so only they — or a moderator the community owner
+    // delegates `delete` to — can remove it (enforced on every peer).
+    await db.sm.acls.set(record, id)
+    await grantCommunityModerators(id, data.communityId)
     return this.buildComment(record, [])
   }
 
   static async voteOnComment(commentId: string, direction: 'up' | 'down', _userId?: string): Promise<void> {
     const voter = db.sm.getActiveEthAddress()
     if (!voter) throw new Error('Cannot vote: no active identity')
-    await db.put({ type: 'commentVote', commentId, voter, direction, createdAt: Date.now() }, `commentVote:${commentId}:${voter}`)
+    // ACL-owned by the voter, so only they can change or retract it.
+    await db.sm.acls.set({ type: 'commentVote', commentId, voter, direction, createdAt: Date.now() }, `commentVote:${commentId}:${voter}`)
   }
 
   static async removeCommentVote(commentId: string, _userId?: string): Promise<void> {
     const voter = db.sm.getActiveEthAddress()
-    if (voter) await db.remove(`commentVote:${commentId}:${voter}`)
+    if (voter) await db.sm.acls.delete(`commentVote:${commentId}:${voter}`)
   }
 
   static async getAllCommentsInPost(postId: string): Promise<Comment[]> {

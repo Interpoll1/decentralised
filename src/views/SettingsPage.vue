@@ -1421,7 +1421,7 @@ async function resetModerationDefaults() {
 
 // Crypto identity state
 onMounted(async () => {
-  userProfile.value = await UserService.getCurrentUser(true);
+  userProfile.value = await UserService.getCurrentUserWithKarma(true);
   deviceId.value = await VoteTrackerService.getDeviceId();
   void communityStore.loadCommunities();
 

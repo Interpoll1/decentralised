@@ -62,9 +62,16 @@ export class UserService {
     return (result?.value && result.value.id) ? (result.value as UserProfile) : null
   }
 
-  /** Persist a profile node, signed by the active SM identity. */
+  /**
+   * Persist a profile as an ACL-owned node (owner = the profile's address = the
+   * active identity), so no other peer can delete or overwrite it. `karma` is
+   * derived from signed votes and never stored; the ACL bookkeeping fields
+   * (`owner`/`collaborators`) are managed by the SM, so all three are stripped.
+   */
   private static async writeProfile(profile: UserProfile): Promise<void> {
-    await db.put({ type: 'user', ...profile }, profile.id)
+    const { karma, owner, collaborators, ...persisted } =
+      profile as UserProfile & { owner?: string; collaborators?: unknown }
+    await db.sm.acls.set({ type: 'user', ...persisted }, profile.id)
   }
 
   /**
@@ -104,6 +111,13 @@ export class UserService {
     return newProfile
   }
 
+  /** Like getCurrentUser, but with derived karma attached (for the profile views). */
+  static async getCurrentUserWithKarma(forceRefresh = false): Promise<UserProfile | null> {
+    const user = await this.getCurrentUser(forceRefresh)
+    if (!user) return null
+    return { ...user, karma: await this.getKarma(user.id) }
+  }
+
   static async updateProfile(updates: Partial<UserProfile>): Promise<UserProfile> {
     const base = this.currentUser || await this.getCurrentUser()
     if (!base) throw new Error('Cannot update profile: no active identity')
@@ -133,19 +147,31 @@ export class UserService {
   }
 
   /**
-   * Bumps an author's karma. Note: in a strict zero-trust model karma is best
-   * derived from signed votes rather than written onto another user's node;
-   * kept here for behavioural parity and revisited in the voting slice.
+   * Derive a user's karma from signed votes: the net (up − down) across every vote
+   * on their posts and comments — the same way post/comment scores are derived.
+   * Karma is never written onto another user's node, so profiles can be ACL-owned.
+   * Two-step join (votes don't carry the author): find the user's content ids,
+   * then aggregate the votes that reference them.
    */
-  static async incrementKarma(authorId: string, points = 1) {
-    const author = await this.getUser(authorId)
-    if (!author) return
-    const updatedKarma = (author.karma || 0) + points
-    if (this.currentUser && this.currentUser.id === authorId) {
-      await this.updateProfile({ karma: updatedKarma })
-    } else {
-      await this.writeProfile({ ...author, karma: updatedKarma })
+  static async getKarma(userId: string): Promise<number> {
+    if (!userId) return 0
+    const [posts, comments] = await Promise.all([
+      db.map({ query: { type: 'post', authorId: userId } }),
+      db.map({ query: { type: 'comment', authorId: userId } }),
+    ])
+    const postIds = posts.results.map((n: { value: { id: string } }) => n.value.id)
+    const commentIds = comments.results.map((n: { value: { id: string } }) => n.value.id)
+    if (!postIds.length && !commentIds.length) return 0
+
+    const voteQueries: Promise<{ results: Array<{ value: { direction?: string } }> }>[] = []
+    if (postIds.length) voteQueries.push(db.map({ query: { type: 'postVote', postId: { $in: postIds } } }))
+    if (commentIds.length) voteQueries.push(db.map({ query: { type: 'commentVote', commentId: { $in: commentIds } } }))
+
+    let karma = 0
+    for (const { results } of await Promise.all(voteQueries)) {
+      for (const n of results) karma += n.value.direction === 'up' ? 1 : -1
     }
+    return karma
   }
 
   static async getUserStats(userId: string): Promise<UserStats> {
@@ -153,12 +179,13 @@ export class UserService {
     if (!user) {
       return { totalPosts: 0, totalComments: 0, totalUpvotes: 0, totalDownvotes: 0, karma: 0, joinedCommunities: 0 }
     }
+    const karma = await this.getKarma(userId)
     return {
       totalPosts: user.postCount || 0,
       totalComments: user.commentCount || 0,
-      totalUpvotes: user.karma || 0,
+      totalUpvotes: karma,
       totalDownvotes: 0,
-      karma: user.karma || 0,
+      karma,
       joinedCommunities: 0,
     }
   }

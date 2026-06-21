@@ -27,7 +27,9 @@ export class ImageService {
     const thumbnailBase64 = await this.fileToBase64(thumbnail)
     const cid = `img-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
 
-    await db.put({
+    // ACL-owned by the uploader, so no other peer can delete or overwrite it.
+    // pin/unpin keep using db.put — the owner may write their own owned node.
+    await db.sm.acls.set({
       type: 'image',
       id: cid,
       data: fullImageBase64,

@@ -116,26 +116,27 @@ export const usePostStore = defineStore('post', () => {
   }
 
   // ─── Voting ──────────────────────────────────────────────────────────────────
-  async function applyVote(updated: Post | null, postId: string, karmaDelta: number) {
-    if (!updated) return
-    injectPost(updated)
-    await UserService.incrementKarma(updated.authorId, karmaDelta)
+  // Karma is no longer pushed here — it is derived from the signed vote nodes
+  // (UserService.getKarma). Casting a vote just re-injects the post with its
+  // freshly-derived score; the author's karma updates on their next profile read.
+  function applyVote(updated: Post | null) {
+    if (updated) injectPost(updated)
   }
 
   async function voteOnPost(postId: string, direction: 'up' | 'down') {
-    await applyVote(await PostService.voteOnPost(postId, direction), postId, direction === 'up' ? 1 : -1)
+    applyVote(await PostService.voteOnPost(postId, direction))
   }
   async function upvotePost(postId: string) {
-    await applyVote(await PostService.voteOnPost(postId, 'up'), postId, 1)
+    applyVote(await PostService.voteOnPost(postId, 'up'))
   }
   async function downvotePost(postId: string) {
-    await applyVote(await PostService.voteOnPost(postId, 'down'), postId, -1)
+    applyVote(await PostService.voteOnPost(postId, 'down'))
   }
   async function removeUpvote(postId: string) {
-    await applyVote(await PostService.removeVote(postId, 'up'), postId, -1)
+    applyVote(await PostService.removeVote(postId, 'up'))
   }
   async function removeDownvote(postId: string) {
-    await applyVote(await PostService.removeVote(postId, 'down'), postId, 1)
+    applyVote(await PostService.removeVote(postId, 'down'))
   }
 
   // No-ops kept so existing components don't break.

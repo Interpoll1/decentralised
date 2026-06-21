@@ -480,7 +480,7 @@ async function handleAvatarSelect(event: Event) {
 
 async function loadProfile() {
   try {
-    const profile = await UserService.getCurrentUser(true);
+    const profile = await UserService.getCurrentUserWithKarma(true);
     userProfile.value = profile;
     if (!profile) return; // No active identity yet — onboarding gate handles sign-in.
     displayName.value = profile.displayName || profile.username;

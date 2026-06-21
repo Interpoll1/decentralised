@@ -8,6 +8,7 @@
 // missing caches, manual Schnorr signing and legacy-cache eviction.
 import { db } from './gdbServices'
 import { ImageService } from './imageService'
+import { grantCommunityModerators } from './moderationGrants'
 
 export interface Post {
   id: string
@@ -58,7 +59,7 @@ export class PostService {
     // ACL-protected: the author owns the post node, so only they — or a moderator the
     // community owner delegates `delete` to — can remove it (enforced on every peer).
     await db.sm.acls.set(record, id)
-    await this.grantCommunityModerators(id, record.communityId)
+    await grantCommunityModerators(id, record.communityId)
     return this.buildPost(record, [], 0)
   }
 
@@ -86,28 +87,6 @@ export class PostService {
    */
   static async deletePost(postId: string, _communityId?: string): Promise<void> {
     await db.sm.acls.delete(postId)
-  }
-
-  /**
-   * Grant `delete` on a post to its community's owner + moderators, so they can
-   * moderate it (the author is already the owner). The author signs these grants at
-   * post time; community-scoped, best-effort (skips self, tolerates failures, and
-   * only affects posts created after a moderator was added).
-   */
-  private static async grantCommunityModerators(postId: string, communityId: string): Promise<void> {
-    if (!communityId) return
-    const me = db.sm.getActiveEthAddress()
-    const { result } = await db.get(communityId)
-    const value = result?.value as { owner?: string; creatorId?: string; moderators?: string[] } | undefined
-    if (!value) return
-    const targets = new Set<string>()
-    const owner = value.owner || value.creatorId
-    if (owner) targets.add(owner)
-    if (Array.isArray(value.moderators)) value.moderators.forEach(m => m && targets.add(m))
-    for (const addr of targets) {
-      if (!me || addr.toLowerCase() === me.toLowerCase()) continue
-      try { await db.sm.acls.grant(postId, addr, 'delete') } catch { /* best-effort, cooperative */ }
-    }
   }
 
   /** Cast or change a vote (one signed node per identity). */

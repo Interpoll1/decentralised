@@ -57,7 +57,7 @@ export class CommunityService {
 
     // The creator is the first member.
     const me = db.sm.getActiveEthAddress() ?? data.creatorId
-    await db.put({ type: 'membership', communityId: id, member: me, joinedAt: createdAt }, `member:${id}:${me}`)
+    await db.sm.acls.set({ type: 'membership', communityId: id, member: me, joinedAt: createdAt }, `member:${id}:${me}`)
 
     return this.buildCommunity(record, 1)
   }
@@ -72,7 +72,7 @@ export class CommunityService {
   static async joinCommunity(communityId: string, _localFallback?: { memberCount: number }): Promise<void> {
     const me = db.sm.getActiveEthAddress()
     if (!me) throw new Error('Cannot join: no active identity')
-    await db.put({ type: 'membership', communityId, member: me, joinedAt: Date.now() }, `member:${communityId}:${me}`)
+    await db.sm.acls.set({ type: 'membership', communityId, member: me, joinedAt: Date.now() }, `member:${communityId}:${me}`)
   }
 
   // ── Moderators (community-scoped, owner-only via node ACLs) ───────────────────
@@ -189,7 +189,7 @@ export class CommunityService {
     }, id)
 
     const me = db.sm.getActiveEthAddress() ?? data.creatorId
-    await db.put({ type: 'membership', communityId: id, member: me, joinedAt: createdAt }, `member:${id}:${me}`)
+    await db.sm.acls.set({ type: 'membership', communityId: id, member: me, joinedAt: createdAt }, `member:${id}:${me}`)
 
     const keyBase64 = await EncryptionService.exportKey(aesKey)
     await KeyVaultService.storeKey({ id, type: 'community', key: keyBase64, method, label: data.displayName, joinedAt: createdAt })

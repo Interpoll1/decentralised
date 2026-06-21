@@ -75,7 +75,6 @@ export const useCommentStore = defineStore('comment', () => {
   }
 
   async function castVote(commentId: string, direction: 'up' | 'down') {
-    const user = await UserService.getCurrentUser()
     const sameKey = direction === 'up' ? 'upvoted-comments' : 'downvoted-comments'
     const otherKey = direction === 'up' ? 'downvoted-comments' : 'upvoted-comments'
     const had = direction === 'up' ? hasUpvoted(commentId) : hasDownvoted(commentId)
@@ -83,16 +82,11 @@ export const useCommentStore = defineStore('comment', () => {
     setVote(sameKey, commentId, !had)
     if (!had) setVote(otherKey, commentId, false)
 
+    // Karma is derived from these signed vote nodes (UserService.getKarma), not pushed.
     if (had) await CommentService.removeCommentVote(commentId)
     else await CommentService.voteOnComment(commentId, direction)
 
     voteVersion.value++
-
-    const comment = comments.value.find(c => c.id === commentId)
-    if (comment?.authorId && user && comment.authorId !== user.id) {
-      const delta = (direction === 'up' ? 1 : -1) * (had ? -1 : 1)
-      UserService.incrementKarma(comment.authorId, delta).catch(() => {})
-    }
   }
 
   async function upvoteComment(commentId: string) {

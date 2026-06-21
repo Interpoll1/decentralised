@@ -8,6 +8,7 @@
 // maps, putPromise wrappers) and the manual Schnorr signing of every vote: the
 // Security Manager signs each db.put automatically and peers verify it.
 import { db } from './gdbServices'
+import { grantCommunityModerators } from './moderationGrants'
 
 export interface PollOption {
   id: string
@@ -80,9 +81,14 @@ export class PollService {
       requireLogin: !!data.requireLogin,
       isPrivate: !!data.isPrivate,
     }
-    await db.put(record, id)
+    // ACL-owned by the author, so only they — or a moderator the community owner
+    // delegates `delete` to — can remove the poll (enforced on every peer).
+    await db.sm.acls.set(record, id)
+    await grantCommunityModerators(id, data.communityId)
 
-    // Private polls gate voting behind single-use invite codes.
+    // Private polls gate voting behind single-use invite codes. These invite-code
+    // nodes stay plain `db.put`: a voter updates them on consume (a cross-write the
+    // poll owner can't pre-authorize), so they can't be naively ACL-owned.
     if (data.isPrivate && data.inviteCodeCount) {
       await Promise.all(Array.from({ length: data.inviteCodeCount }, () => {
         const code = this.generateCode()
@@ -101,7 +107,9 @@ export class PollService {
   static async vote(pollId: string, optionIds: string[], _userId?: string, _communityId?: string): Promise<void> {
     const voter = db.sm.getActiveEthAddress()
     if (!voter) throw new Error('Cannot vote: no active identity')
-    await db.put({ type: 'vote', pollId, optionIds, voter, createdAt: Date.now() }, `${pollId}:${voter}`)
+    // ACL-owned by the voter (set, not put, so the first vote creates the owned node);
+    // re-voting overwrites in place because the voter is the owner.
+    await db.sm.acls.set({ type: 'vote', pollId, optionIds, voter, createdAt: Date.now() }, `${pollId}:${voter}`)
   }
 
   /** Load a single poll with its derived tally, or null if it does not exist. */
