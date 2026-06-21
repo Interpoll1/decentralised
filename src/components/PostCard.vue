@@ -12,9 +12,6 @@
           <span class="community-name">{{ communityName }}</span>
           <span class="separator">•</span>
           <span class="author">u/{{ authorDisplayName }}</span>
-          <span v-if="props.post.authorShowRealName" class="identity-badge" :class="authorIdentityClass">
-            {{ authorIdentityLabel }}
-          </span>
           <span class="separator">•</span>
           <span class="timestamp">{{ formatTime(post.createdAt) }}</span>
           <span v-if="flagged && filterAction === 'flag'" class="flag-badge" title="Flagged by word filter">
@@ -95,26 +92,6 @@
 .author {
   color: var(--app-text);
   font-weight: 500;
-}
-
-.identity-badge {
-  border-radius: 999px;
-  padding: 4px 9px;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.identity-badge.unverified {
-  background: rgba(var(--ion-color-warning-rgb), 0.12);
-  color: var(--ion-color-warning);
-}
-
-.identity-badge.trusted-issuer {
-  background: rgba(var(--ion-color-success-rgb), 0.14);
-  color: var(--ion-color-success);
 }
 
 .timestamp {
@@ -359,7 +336,6 @@ import { generatePseudonym } from '../utils/pseudonym';
 import { stripMarkdown } from '../utils/markdown';
 import { useUserStore } from '../stores/userStore';
 import type { UserProfile } from '../services/userService';
-import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -414,19 +390,6 @@ const authorDisplayName = computed(() => {
   }
   return props.post.authorName || 'anon';
 });
-
-const authorIdentityLabel = computed(() =>
-  currentAuthorProfile.value?.identityTrustLevel === 'trusted-issuer'
-    ? formatTrustedIdentityLabel({
-      username: currentAuthorProfile.value?.customUsername || props.post.authorName,
-      issuer: currentAuthorProfile.value?.identityIssuer,
-    })
-    : 'Unverified identity'
-);
-
-const authorIdentityClass = computed(() =>
-  currentAuthorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'
-);
 
 const truncatedContent = computed(() => {
   const content = stripMarkdown(props.post.content || '');

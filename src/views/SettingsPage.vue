@@ -63,16 +63,7 @@
                 <UserIdentityBadge
                   v-if="userProfile"
                   :username="userProfile.customUsername || userProfile.username"
-                  :pubkey="publicKeyHex"
                 />
-                <ion-button
-                  fill="outline"
-                  size="small"
-                  class="claim-btn"
-                  @click="$router.push('/claim-username')"
-                >
-                  {{ userProfile?.customUsername ? 'Change' : 'Set username' }}
-                </ion-button>
               </div>
             </div>
             <div class="info-row">
@@ -713,13 +704,6 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 6px;
-}
-
-.claim-btn {
-  --padding-start: 10px;
-  --padding-end: 10px;
-  height: 28px;
-  font-size: 12px;
 }
 
 /* Network Status */

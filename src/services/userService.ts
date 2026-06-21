@@ -5,18 +5,12 @@
 // every write is signed by the SM and verified by peers. This replaces the
 // former Gun + KeyService + StorageService + device-fingerprint stack.
 import { db } from './gdbServices'
-import type { TrustLevel } from './trustService'
-import { parseIdentityTrust } from '@/utils/identityTrust'
 
 export interface UserProfile {
   id: string
   username: string
   customUsername?: string
-  trustLevel?: TrustLevel
   displayName: string
-  identityUsername?: string
-  identityIssuer?: string
-  identityTrustLevel?: 'trusted-issuer' | 'unverified'
   showRealName?: boolean
   avatarId?: string
   avatarThumbnail?: string
@@ -40,16 +34,11 @@ export interface UserStats {
 export class UserService {
   private static currentUser: UserProfile | null = null
 
-  private static deriveIdentityFields(
-    profileLike: Partial<UserProfile>,
-  ): Pick<UserProfile, 'identityUsername' | 'identityIssuer' | 'identityTrustLevel'> {
-    const identityUsername = (profileLike.identityUsername || profileLike.customUsername || profileLike.username || '').trim()
-    const trust = parseIdentityTrust(identityUsername)
-    return {
-      identityUsername: trust.identityUsername,
-      identityIssuer: trust.issuer,
-      identityTrustLevel: trust.trustLevel,
-    }
+  /** Read the SM role for an address from the `user:<address>` node (defaults to 'guest'). */
+  static async getRole(address: string): Promise<string> {
+    if (!address) return 'guest'
+    const { result } = await db.get(`user:${address}`)
+    return (result?.value?.role as string) || 'guest'
   }
 
   /** Read a profile node by address. */
@@ -78,7 +67,7 @@ export class UserService {
 
     const existing = await this.readProfile(address)
     if (existing) {
-      this.currentUser = { ...existing, ...this.deriveIdentityFields(existing) }
+      this.currentUser = existing
       return this.currentUser
     }
 
@@ -94,7 +83,6 @@ export class UserService {
       postCount: 0,
       commentCount: 0,
       publicKey: address,
-      ...this.deriveIdentityFields({ username }),
     }
     await this.writeProfile(newProfile)
     this.currentUser = newProfile
@@ -105,15 +93,7 @@ export class UserService {
     const base = this.currentUser || await this.getCurrentUser()
     if (!base) throw new Error('Cannot update profile: no active identity')
 
-    const merged: UserProfile = { ...base, ...updates }
-    const derived = this.deriveIdentityFields(merged)
-    const updated: UserProfile = {
-      ...merged,
-      identityUsername: merged.identityUsername ?? derived.identityUsername,
-      identityIssuer: merged.identityIssuer ?? derived.identityIssuer,
-      identityTrustLevel: merged.identityTrustLevel ?? derived.identityTrustLevel,
-    }
-
+    const updated: UserProfile = { ...base, ...updates }
     this.currentUser = updated
     await this.writeProfile(updated)
     return updated

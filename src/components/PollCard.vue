@@ -13,9 +13,6 @@
         </div>
         <div class="poll-meta">
           <span class="author">u/{{ authorDisplayName }}</span>
-          <span v-if="poll.authorShowRealName" class="identity-badge" :class="authorIdentityClass">
-            {{ authorIdentityLabel }}
-          </span>
           <span class="separator">•</span>
           <span class="timestamp">{{ formatTime(poll.createdAt) }}</span>
           <span v-if="poll.isExpired" class="expired-badge">Ended</span>
@@ -82,7 +79,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed } from 'vue';
 import { IonIcon, IonButton } from '@ionic/vue';
 
 import {
@@ -96,9 +93,6 @@ import {
 import { Poll } from '../services/pollService';
 import type { FilterAction } from '../services/moderationService';
 import { generatePseudonym } from '../utils/pseudonym';
-import { useUserStore } from '../stores/userStore';
-import type { UserProfile } from '../services/userService';
-import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 
 const props = defineProps<{
   poll: Poll;
@@ -108,24 +102,6 @@ const props = defineProps<{
 defineEmits(['click', 'vote']);
 
 const revealed = ref(false);
-const userStore = useUserStore();
-const authorProfile = ref<UserProfile | null>(null);
-let authorProfileRequestId = 0;
-
-watch(
-  () => [props.poll.authorId, props.poll.authorShowRealName] as const,
-  async ([authorId, authorShowRealName]) => {
-    const requestId = ++authorProfileRequestId;
-    if (!authorId || !authorShowRealName) {
-      authorProfile.value = null;
-      return;
-    }
-    const profile = await userStore.getProfile(authorId);
-    if (requestId !== authorProfileRequestId) return;
-    authorProfile.value = profile;
-  },
-  { immediate: true }
-);
 
 const authorDisplayName = computed(() => {
   if (props.poll.authorShowRealName) {
@@ -136,19 +112,6 @@ const authorDisplayName = computed(() => {
   }
   return props.poll.authorName || 'anon';
 });
-
-const authorIdentityLabel = computed(() =>
-  authorProfile.value?.identityTrustLevel === 'trusted-issuer'
-    ? formatTrustedIdentityLabel({
-      username: authorProfile.value?.customUsername || props.poll.authorName,
-      issuer: authorProfile.value?.identityIssuer,
-    })
-    : 'Unverified identity'
-);
-
-const authorIdentityClass = computed(() =>
-  authorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'
-);
 
 function formatTime(timestamp: number): string {
   const now = Date.now();
@@ -243,7 +206,6 @@ function getTimeRemaining(): string {
   font-weight: 500;
 }
 
-.identity-badge,
 .expired-badge {
   padding: 4px 9px;
   border-radius: 999px;
@@ -252,19 +214,6 @@ function getTimeRemaining(): string {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.identity-badge.unverified {
-  background: rgba(var(--ion-color-warning-rgb), 0.12);
-  color: var(--ion-color-warning);
-}
-
-.identity-badge.trusted-issuer {
-  background: rgba(var(--ion-color-success-rgb), 0.14);
-  color: var(--ion-color-success);
-}
-
-.expired-badge {
   background: rgba(var(--ion-color-medium-rgb), 0.1);
   color: var(--app-text-muted);
 }

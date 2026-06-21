@@ -39,13 +39,6 @@ const routes: Array<RouteRecordRaw> = [
   { path: '/chatrooms', name: 'ChatRoomList', component: () => import('../views/ChatRoomListPage.vue') },
   { path: '/join/:type/:id', name: 'JoinPrivate', component: () => import('../views/JoinPrivatePage.vue') },
 
-  // ── NEW: username claim / trust verification ──────────────────────────────
-  {
-    path: '/claim-username',
-    name: 'ClaimUsername',
-    component: () => import('../views/ClaimUsernamePage.vue')
-  },
-
   // Catch-all
   { path: '/:pathMatch(.*)*', redirect: '/home' }
 ];

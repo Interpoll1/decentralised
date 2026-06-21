@@ -30,9 +30,7 @@
         </div>
         <h1>{{ userProfile?.customUsername || userProfile?.displayName || userProfile?.username }}</h1>
         <p class="username">u/{{ userProfile?.customUsername || userProfile?.username }}</p>
-        <p class="identity-badge" :class="identityBadgeClass">
-          {{ identityBadgeLabel }}
-        </p>
+        <p class="identity-badge role">{{ role }}</p>
         <p v-if="userProfile?.showRealName" class="anonymity-badge named">
           <ion-icon :icon="eyeOutline"></ion-icon> Username visible on posts
         </p>
@@ -296,17 +294,14 @@
   border-radius: 12px;
   font-size: 12px;
   font-weight: 700;
-  text-transform: uppercase;
 }
 
-.identity-badge.unverified {
-  background: rgba(var(--ion-color-warning-rgb), 0.16);
-  color: var(--ion-color-warning-shade);
-}
-
-.identity-badge.trusted-issuer {
-  background: rgba(var(--ion-color-success-rgb), 0.14);
-  color: var(--ion-color-success-shade);
+.identity-badge.role {
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+  background: rgba(var(--ion-color-primary-rgb), 0.12);
+  color: var(--ion-color-primary);
+  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.28);
 }
 
 .anonymity-badge {
@@ -458,11 +453,11 @@ import type { UserProfile } from '../services/userService';
 import { VoteTrackerService } from '../services/voteTrackerService';
 import { ImageService } from '../services/imageService';
 import { useCommunityStore } from '../stores/communityStore';
-import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 
 const communityStore = useCommunityStore();
 
 const userProfile = ref<UserProfile | null>(null);
+const role = ref('guest');
 const displayName = ref('');
 const customUsername = ref('');
 const bio = ref('');
@@ -474,21 +469,6 @@ const avatarFile = ref<File | null>(null);
 const avatarInput = ref<HTMLInputElement | null>(null);
 
 const joinedCommunitiesCount = computed(() => communityStore.joinedCommunities?.size || 0);
-const identityTrust = computed(() => ({
-  trustLevel: userProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified',
-  issuer: userProfile.value?.identityIssuer || '',
-}));
-const identityBadgeLabel = computed(() =>
-  identityTrust.value.trustLevel === 'trusted-issuer'
-    ? formatTrustedIdentityLabel({
-      username: userProfile.value?.customUsername || userProfile.value?.username,
-      issuer: identityTrust.value.issuer,
-    })
-    : 'Unverified identity'
-);
-const identityBadgeClass = computed(() =>
-  identityTrust.value.trustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'
-);
 
 function formatDate(timestamp?: number): string {
   if (!timestamp) return 'Unknown';
@@ -534,6 +514,7 @@ async function loadProfile() {
     customUsername.value = profile.customUsername || '';
     bio.value = profile.bio || '';
     showRealName.value = profile.showRealName || false;
+    role.value = await UserService.getRole(profile.id);
     deviceId.value = await VoteTrackerService.getDeviceId();
   } catch (error) {
     console.error('Error loading profile:', error);
