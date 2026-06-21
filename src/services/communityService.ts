@@ -23,8 +23,8 @@ export interface Community {
   postCount?: number
   /** ACL owner (the creator) — present once the community node is created via `acls.set`. */
   owner?: string
-  /** Moderation map: hidden post id -> moderator address. Only the owner can write it. */
-  hidden?: Record<string, string>
+  /** Moderators the owner has delegated `delete` to (addresses). Only the owner edits this list. */
+  moderators?: string[]
   creatorPubkey?: string
   creatorSignature?: string
   isEncrypted?: boolean
@@ -49,10 +49,10 @@ export class CommunityService {
       creatorId: data.creatorId,
       createdAt,
       postCount: 0,
-      hidden: {},
+      moderators: [],
     }
     // `acls.set` makes the creator the node owner, so only they can later edit the
-    // `hidden` moderation map — the SM middleware rejects writes from anyone else.
+    // `moderators` list — the SM middleware rejects writes from anyone else.
     await db.sm.acls.set(record, id)
 
     // The creator is the first member.
@@ -75,30 +75,28 @@ export class CommunityService {
     await db.put({ type: 'membership', communityId, member: me, joinedAt: Date.now() }, `member:${communityId}:${me}`)
   }
 
-  // ── Moderation (community-scoped, owner-only via node ACLs) ───────────────────
+  // ── Moderators (community-scoped, owner-only via node ACLs) ───────────────────
 
   /**
-   * Hide a post from this community's feed. Writes a signed entry into the
-   * community node's `hidden` map via `acls.set`; the SM middleware enforces that
-   * only the node owner (the creator) may do it. The post is never deleted — its
-   * author still owns it — so this curates the community's view, it does not erase
-   * data. Throws if the caller is not the owner (or the community predates ACLs).
+   * Add a moderator to this community. The list lives on the community node, which is
+   * ACL-owned by the creator, so the SM middleware lets only the owner edit it. New
+   * posts grant these moderators `delete`, so they can remove rule-violating content
+   * in THIS community only — community-scoped delegation, never a global censor.
    */
-  static async hidePost(communityId: string, postId: string): Promise<void> {
-    const me = db.sm.getActiveEthAddress()
-    if (!me) throw new Error('Cannot moderate: no active identity')
+  static async addModerator(communityId: string, address: string): Promise<void> {
     const { result } = await db.get(communityId)
     if (!result?.value) throw new Error('Community not found')
-    const hidden = { ...((result.value.hidden as Record<string, string>) ?? {}), [postId]: me }
-    await db.sm.acls.set({ hidden }, communityId)
+    const current = Array.isArray(result.value.moderators) ? (result.value.moderators as string[]) : []
+    if (current.some(m => m.toLowerCase() === address.toLowerCase())) return
+    await db.sm.acls.set({ moderators: [...current, address] }, communityId)
   }
 
-  /** Restore a hidden post (owner-only, enforced by the ACL middleware). */
-  static async unhidePost(communityId: string, postId: string): Promise<void> {
+  /** Remove a moderator (owner-only, enforced by the ACL middleware). */
+  static async removeModerator(communityId: string, address: string): Promise<void> {
     const { result } = await db.get(communityId)
     if (!result?.value) return
-    const { [postId]: _removed, ...hidden } = (result.value.hidden as Record<string, string>) ?? {}
-    await db.sm.acls.set({ hidden }, communityId)
+    const current = Array.isArray(result.value.moderators) ? (result.value.moderators as string[]) : []
+    await db.sm.acls.set({ moderators: current.filter(m => m.toLowerCase() !== address.toLowerCase()) }, communityId)
   }
 
   /**
@@ -183,7 +181,7 @@ export class CommunityService {
       creatorId: data.creatorId,
       createdAt,
       postCount: 0,
-      hidden: {},
+      moderators: [],
       name: '🔒 Private Community',
       displayName: '🔒 Private Community',
       description: 'This community is encrypted. Use an invite link or password to access.',
@@ -265,7 +263,7 @@ export class CommunityService {
       memberCount,
       postCount: Number(record.postCount) || 0,
       owner: typeof record.owner === 'string' ? record.owner : undefined,
-      hidden: record.hidden && typeof record.hidden === 'object' ? record.hidden : {},
+      moderators: Array.isArray(record.moderators) ? record.moderators : [],
       isEncrypted: record.isEncrypted || false,
       encryptionHint: record.encryptionHint || undefined,
       encryptedMeta: record.encryptedMeta || undefined,

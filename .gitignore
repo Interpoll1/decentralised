@@ -42,3 +42,6 @@ src/services/copilot-services.md
 
 # Generated: GenosDB dist copied for Vite to serve intact (see scripts/copy-genosdb.mjs)
 public/genosdb/
+
+# Deploy artifacts (manual Netlify zip uploads)
+deploy.zip

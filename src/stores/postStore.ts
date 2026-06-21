@@ -10,12 +10,10 @@ import { ref, computed, onScopeDispose } from 'vue'
 import { Post, PostService } from '../services/postService'
 import { UserService } from '../services/userService'
 import { generatePseudonym } from '../utils/pseudonym'
-import { useCommunityStore } from './communityStore'
 
 const PAGE_SIZE = 10
 
 export const usePostStore = defineStore('post', () => {
-  const communityStore = useCommunityStore()
   const postsMap = ref<Map<string, Post>>(new Map())
   const currentPost = ref<Post | null>(null)
   const isLoading = ref(false)
@@ -31,13 +29,7 @@ export const usePostStore = defineStore('post', () => {
 
   // ─── Computed ──────────────────────────────────────────────────────────────
   const posts = computed(() => Array.from(postsMap.value.values()))
-  // Posts a community owner has hidden drop out of every feed — except for the
-  // owner, who keeps seeing them (dimmed, with a Restore action) so it's reversible.
-  const sortedPosts = computed(() =>
-    [...posts.value]
-      .filter(p => !communityStore.isPostHidden(p.communityId, p.id) || communityStore.canModerate(p.communityId))
-      .sort((a, b) => b.createdAt - a.createdAt),
-  )
+  const sortedPosts = computed(() => [...posts.value].sort((a, b) => b.createdAt - a.createdAt))
   const communityPosts = computed(() =>
     currentCommunityId.value
       ? sortedPosts.value.filter(p => p.communityId === currentCommunityId.value)
@@ -107,6 +99,13 @@ export const usePostStore = defineStore('post', () => {
     return post
   }
 
+  /** Remove a post — the author (its owner) or a delegated community moderator. ACL-enforced. */
+  async function deletePost(postId: string) {
+    await PostService.deletePost(postId)
+    postsMap.value.delete(postId)
+    if (currentPost.value?.id === postId) currentPost.value = null
+  }
+
   // ─── Select ──────────────────────────────────────────────────────────────────
   async function selectPost(postId: string) {
     const local = postsMap.value.get(postId)
@@ -155,7 +154,7 @@ export const usePostStore = defineStore('post', () => {
     newPostCount, pendingNewPosts,
     loadPostsForCommunity, loadMorePosts, resetVisibleCount,
     flushNewPosts, injectPost, saveSeenNow, purgeLegacyPosts,
-    createPost, selectPost,
+    createPost, deletePost, selectPost,
     voteOnPost, upvotePost, downvotePost, removeUpvote, removeDownvote,
     refreshPosts,
   }

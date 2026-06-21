@@ -15,7 +15,7 @@
 > the very same app runs on a single peer-to-peer database — **one dependency, zero
 > servers, signed by default**. It's offered as a gift and a showcase, not a
 > replacement: all credit for InterPoll goes to its original author.
-> See **[`WHY-GENOSDB.md`](WHY-GENOSDB.md)** for exactly what changed and why.
+> See **[`WHY-GENOSDB.md`](WHY-GENOSDB.md)** for exactly what changed and why, and **[`CHANGELOG.md`](CHANGELOG.md)** for the running history.
 
 ---
 
@@ -57,6 +57,8 @@ InterPoll takes a different approach, powered by **[GenosDB](https://github.com/
 | **No algorithm** | You see what your community posts. No hidden ranking, no shadow-banning, no promoted content. |
 | **Invite-only polls** | Generate single-use invite codes for private polls. Each code can only be used once. |
 | **Passkey or recovery phrase** | Protect your identity with a WebAuthn passkey (biometrics / hardware key) or a 12-word BIP39 recovery phrase. |
+| **Earned trust (governance)** | Roles aren't handed out — you climb `guest → member → trusted` by participating, under public rules every peer can verify. No central moderator decides who is trusted. |
+| **Community-scoped moderation** | Each community owns its space: its creator (and the moderators they delegate to) can remove content in *that* community only. There is no platform-wide censor. |
 
 ---
 
@@ -72,6 +74,9 @@ Polls, votes, posts, comments, communities and profiles are stored as nodes in a
 
 **3. The mesh (the sync)**
 GenosDB connects peers directly over WebRTC, using decentralised Nostr relays only for discovery (signaling) — never for your data. Changes propagate peer-to-peer in real time, and across your own browser tabs instantly. At scale, an optional cellular-mesh mode (**Cells**) keeps large communities fast by cutting the number of peer connections by orders of magnitude versus a full mesh (the docs cite roughly 100×–1000× fewer for large networks).
+
+**4. Roles & moderation (earned, not granted)**
+New identities start as guests and climb to member, then trusted, by participating — under public governance rules every peer can verify, with no central authority handing out trust. Moderation is per-community: each community owns its node (node-level ACLs), so its creator and the moderators they delegate to can remove content in that community only — never platform-wide.
 
 > **In short:** your polls, posts, comments and vote history exist on your device and on your peers' devices at once. Erasing them would mean erasing every copy simultaneously — sooner or later, a peer with a copy reconnects and reseeds the network.
 
@@ -153,9 +158,9 @@ Everything is a signed GenosDB node, queried reactively with `db.map`:
 | `postService.ts` / `commentService.ts` | Posts and threaded comments with signed voting |
 | `communityService.ts` | Communities, derived membership, private (encrypted) communities |
 | `chatService.ts` / `chatRoomService.ts` | E2E direct messages and encrypted group rooms |
-| `trustService.ts` | Verified usernames via external trust issuers |
+| `gdbServices.ts` (sm config) | RBAC roles + `governanceRules` — the earned `guest → member → trusted` ladder |
 | `encryptionService.ts` / `keyVaultService.ts` | AES-256-GCM encryption and local key vault |
-| `ipfsService.ts` | Image compression and node storage |
+| `imageService.ts` | Image compression and node storage |
 | `moderationService.ts` | Content filtering (word lists, karma thresholds) |
 | `searchService.ts` | Local full-text search over the graph |
 

@@ -56,13 +56,12 @@ export const SUPER_ADMINS = ['0xE5639DfE345F8ab845bEBE63a1C7322F9c6fF5c7']
  *
  *  1. This RBAC ladder + `governanceRules` = network-wide trust that is EARNED
  *     through public, identical-for-everyone rules and granted by a signed
- *     superadmin. It is deliberately NOT a censorship hierarchy: there is no
- *     global `delete`/`deleteAny`, so no actor can quietly erase another's post.
- *  2. Node-level ACLs (`acls: true`) let each community moderate its OWN space:
- *     the creator owns the community node, so only they can hide a post within it
- *     (a signed entry in the node's `hidden` map). Removal is community-scoped,
- *     never central, and never erases the author's signed post — in a zero-trust
- *     graph you cannot delete another peer's data, so moderation curates the view.
+ *     superadmin. `delete` is granted but ALWAYS scoped by node-level ACLs (below),
+ *     so there is no global censor that can erase another's content platform-wide.
+ *  2. Node-level ACLs (`acls: true`) make each post an owned node (author = owner):
+ *     an author deletes their OWN posts, and a community owner can delegate `delete`
+ *     to trusted moderators, who then remove content in THAT community only. Removal
+ *     is community-scoped, never central.
  *
  * `guest` is open (write+link) so anyone participates the moment they exist.
  * `member` and `trusted` are reputation tiers the governance engine grants and
@@ -75,7 +74,7 @@ const ROLES = {
   superadmin: { can: ['assignRole'], inherits: ['trusted'] },
   trusted: { can: ['write', 'link', 'sync'], inherits: ['member'] },
   member: { can: ['write', 'link', 'sync'], inherits: ['guest'] },
-  guest: { can: ['read', 'sync', 'write', 'link'] },
+  guest: { can: ['read', 'sync', 'write', 'link', 'delete'] },
 }
 
 /**

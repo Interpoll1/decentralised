@@ -193,7 +193,24 @@
           <li v-for="(rule, index) in displayCommunity.rules" :key="index">{{ rule }}</li>
         </ol>
       </div>
-     
+
+      <!-- Moderators (owner only) — delegate post removal in this community -->
+      <div v-if="isOwner" class="moderators-section">
+        <h3>Moderators</h3>
+        <p class="mod-help">Delegate post removal in this community to trusted members. A moderator can remove posts here — and only here.</p>
+        <div v-if="moderators.length" class="mod-list">
+          <div v-for="addr in moderators" :key="addr" class="mod-row">
+            <span class="mod-addr">{{ abbr(addr) }}</span>
+            <button class="mod-remove" type="button" @click="removeModerator(addr)">Remove</button>
+          </div>
+        </div>
+        <p v-else class="mod-empty">No moderators yet — you moderate this community.</p>
+        <div class="mod-add">
+          <ion-input v-model="newModerator" placeholder="0x… member address" :clear-input="true"></ion-input>
+          <ion-button size="small" :disabled="!newModerator.trim()" @click="addModerator">Add</ion-button>
+        </div>
+      </div>
+
       </div>
     </ion-content>
   </ion-page>
@@ -424,6 +441,75 @@
 .rules-list li:last-child {
   margin-bottom: 0;
 }
+
+/* ── Moderators ──────────────────────────────────── */
+.moderators-section {
+  padding: 20px 16px;
+  border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
+}
+
+.moderators-section h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.mod-help {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ion-color-medium);
+}
+
+.mod-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.mod-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border: 1px solid rgba(var(--ion-text-color-rgb), 0.1);
+  border-radius: 10px;
+}
+
+.mod-addr {
+  font-family: monospace;
+  font-size: 13px;
+}
+
+.mod-remove {
+  border: none;
+  background: none;
+  color: var(--ion-color-danger);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mod-empty {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--ion-color-medium);
+}
+
+.mod-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mod-add ion-input {
+  flex: 1;
+  --padding-start: 12px;
+  --padding-end: 12px;
+  border: 1px solid rgba(var(--ion-text-color-rgb), 0.12);
+  border-radius: 10px;
+}
 </style>
 
 <script setup lang="ts">
@@ -438,6 +524,7 @@ import {
   IonButtons,
   IonBackButton,
   IonButton,
+  IonInput,
   IonIcon,
   IonCard,
   IonCardHeader,
@@ -463,6 +550,7 @@ import {
   shareSocialOutline,
   keyOutline
 } from 'ionicons/icons';
+import { db } from '../services/gdbServices';
 import { useCommunityStore } from '../stores/communityStore';
 import { usePostStore } from '../stores/postStore';
 import { usePollStore } from '../stores/pollStore';
@@ -913,6 +1001,44 @@ async function toggleJoin() {
     } finally {
       isJoining.value = false;
     }
+  }
+}
+
+// ── Moderators (owner-only — delegate post deletion to trusted members) ──────────
+const newModerator = ref('');
+const moderators = computed(() => community.value?.moderators ?? []);
+const isOwner = computed(() => {
+  const me = db.sm.getActiveEthAddress();
+  const owner = community.value?.owner;
+  return !!me && !!owner && owner.toLowerCase() === me.toLowerCase();
+});
+
+function abbr(addr: string): string {
+  return addr.length > 12 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
+}
+
+async function addModerator() {
+  const addr = newModerator.value.trim();
+  if (!addr) return;
+  try {
+    await communityStore.addModerator(communityId.value, addr);
+    newModerator.value = '';
+    await communityStore.selectCommunity(communityId.value);
+    const toast = await toastController.create({ message: 'Moderator added', duration: 1500 });
+    await toast.present();
+  } catch (e) {
+    const toast = await toastController.create({ message: (e as Error)?.message || 'Could not add moderator', duration: 2500, color: 'danger' });
+    await toast.present();
+  }
+}
+
+async function removeModerator(addr: string) {
+  try {
+    await communityStore.removeModerator(communityId.value, addr);
+    await communityStore.selectCommunity(communityId.value);
+  } catch (e) {
+    const toast = await toastController.create({ message: (e as Error)?.message || 'Could not remove moderator', duration: 2500, color: 'danger' });
+    await toast.present();
   }
 }
 

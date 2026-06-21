@@ -1,6 +1,6 @@
 <!-- In PostCard.vue template -->
 <template>
-  <article class="post-card" :class="{ 'post-removed': isHidden }" v-if="post">
+  <article class="post-card" v-if="post">
     <div v-if="flagged && filterAction === 'blur' && !revealed" class="flagged-overlay" @click.stop="revealed = true">
       <ion-icon :icon="warningOutline"></ion-icon>
       <span>Content hidden by word filter — tap to reveal</span>
@@ -16,9 +16,6 @@
           <span class="timestamp">{{ formatTime(post.createdAt) }}</span>
           <span v-if="flagged && filterAction === 'flag'" class="flag-badge" title="Flagged by word filter">
             <ion-icon :icon="warningOutline"></ion-icon>
-          </span>
-          <span v-if="isHidden" class="removed-badge" title="Removed from this community by its owner">
-            <ion-icon :icon="eyeOffOutline"></ion-icon> removed
           </span>
         </div>
       </div>
@@ -59,14 +56,10 @@
           </div>
         </div>
 
-        <div v-if="canModerate" class="mod-actions">
-          <button v-if="!isHidden" class="mod-button" @click="handleRemove">
+        <div v-if="isAuthor || canModerate" class="mod-actions">
+          <button class="mod-button" @click="handleDelete">
             <ion-icon :icon="trashOutline"></ion-icon>
-            <span>Remove from community</span>
-          </button>
-          <button v-else class="mod-button restore" @click="handleRestore">
-            <ion-icon :icon="arrowUndoOutline"></ion-icon>
-            <span>Restore</span>
+            <span>{{ isAuthor ? 'Delete' : 'Remove from community' }}</span>
           </button>
         </div>
       </div>
@@ -333,25 +326,6 @@
 }
 
 /* ── Moderation ───────────────────────────────────── */
-.post-removed {
-  opacity: 0.5;
-}
-
-.removed-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--ion-color-danger);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.removed-badge ion-icon {
-  font-size: 13px;
-}
-
 .mod-actions {
   margin-top: 12px;
 }
@@ -375,16 +349,6 @@
   background: rgba(var(--ion-color-danger-rgb), 0.14);
 }
 
-.mod-button.restore {
-  background: rgba(var(--ion-color-success-rgb), 0.08);
-  border-color: rgba(var(--ion-color-success-rgb), 0.25);
-  color: var(--ion-color-success);
-}
-
-.mod-button.restore:hover {
-  background: rgba(var(--ion-color-success-rgb), 0.14);
-}
-
 .mod-button ion-icon {
   font-size: 14px;
 }
@@ -393,16 +357,14 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { IonIcon, toastController } from '@ionic/vue';
+import { IonIcon, alertController, toastController } from '@ionic/vue';
 import {
   arrowUpOutline,
   arrowDownOutline,
   chatbubbleOutline,
   trendingUpOutline,
   warningOutline,
-  trashOutline,
-  arrowUndoOutline,
-  eyeOffOutline
+  trashOutline
 } from 'ionicons/icons';
 import { Post } from '../services/postService';
 import type { FilterAction } from '../services/moderationService';
@@ -410,11 +372,14 @@ import { generatePseudonym } from '../utils/pseudonym';
 import { stripMarkdown } from '../utils/markdown';
 import { useUserStore } from '../stores/userStore';
 import { useCommunityStore } from '../stores/communityStore';
+import { usePostStore } from '../stores/postStore';
+import { db } from '../services/gdbServices';
 import type { UserProfile } from '../services/userService';
 
 const router = useRouter();
 const userStore = useUserStore();
 const communityStore = useCommunityStore();
+const postStore = usePostStore();
 const authorProfile = ref<UserProfile | null>(null);
 let authorProfileRequestId = 0;
 
@@ -475,31 +440,46 @@ const truncatedContent = computed(() => {
   return content.substring(0, 200) + '...';
 });
 
-// ── Moderation (community owner only) ──────────────────────────────────────────
-const isHidden = computed(() =>
-  communityStore.isPostHidden(props.post.communityId, props.post.id)
-);
+// ── Deletion: the author removes their own post; a community owner or a moderator
+//    they delegated removes it from their community. Both go through the ACL
+//    middleware (owner or delete-collaborator only — scoped per node, never global).
+const isAuthor = computed(() => {
+  const me = db.sm.getActiveEthAddress();
+  return !!me && props.post.authorId?.toLowerCase() === me.toLowerCase();
+});
 const canModerate = computed(() =>
   communityStore.canModerate(props.post.communityId)
 );
 
-async function moderate(run: () => Promise<void>, failMessage: string) {
-  try {
-    await run();
-  } catch (e) {
-    const toast = await toastController.create({
-      message: (e as Error)?.message || failMessage,
-      duration: 2500,
-      color: 'danger',
-    });
-    await toast.present();
-  }
+async function handleDelete() {
+  const mine = isAuthor.value;
+  const alert = await alertController.create({
+    header: mine ? 'Delete post' : 'Remove from community',
+    message: mine
+      ? 'Delete your post? It is removed from the network.'
+      : 'Remove this post from the community?',
+    buttons: [
+      { text: 'Cancel', role: 'cancel' },
+      {
+        text: mine ? 'Delete' : 'Remove',
+        role: 'destructive',
+        handler: async () => {
+          try {
+            await postStore.deletePost(props.post.id);
+          } catch (e) {
+            const toast = await toastController.create({
+              message: (e as Error)?.message || 'Could not remove the post',
+              duration: 2500,
+              color: 'danger',
+            });
+            await toast.present();
+          }
+        },
+      },
+    ],
+  });
+  await alert.present();
 }
-
-const handleRemove = () =>
-  moderate(() => communityStore.hidePost(props.post.communityId, props.post.id), 'Could not remove post');
-const handleRestore = () =>
-  moderate(() => communityStore.unhidePost(props.post.communityId, props.post.id), 'Could not restore post');
 
 function handleCardClick() {
   router.push(`/post/${props.post.id}`);

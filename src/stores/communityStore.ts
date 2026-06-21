@@ -114,27 +114,24 @@ export const useCommunityStore = defineStore('community', () => {
     if (currentCommunity.value?.id !== communityId) await selectCommunity(communityId)
   }
 
-  // ─── Moderation (community-scoped, owner-only) ───────────────────────────────
-  // Reactive over `communities`, so hiding a post live re-filters every feed.
-  function isPostHidden(communityId: string, postId: string): boolean {
-    const community = communities.value.find(c => c.id === communityId)
-    return !!community?.hidden?.[postId]
-  }
-
-  /** True when the active identity is the community node's ACL owner (its creator). */
+  // ─── Moderation (community-scoped, owner + delegated moderators) ─────────────
+  // Reactive over `communities`, so a moderator change re-evaluates every feed.
+  /** True when the active identity is the community owner OR a delegated moderator. */
   function canModerate(communityId: string): boolean {
     const me = db.sm.getActiveEthAddress()
     if (!me) return false
-    const owner = communities.value.find(c => c.id === communityId)?.owner
-    return !!owner && owner.toLowerCase() === me.toLowerCase()
+    const c = communities.value.find(c => c.id === communityId)
+    if (!c) return false
+    const meL = me.toLowerCase()
+    return c.owner?.toLowerCase() === meL || (c.moderators ?? []).some(m => m.toLowerCase() === meL)
   }
 
-  async function hidePost(communityId: string, postId: string) {
-    await CommunityService.hidePost(communityId, postId)
+  async function addModerator(communityId: string, address: string) {
+    await CommunityService.addModerator(communityId, address)
   }
 
-  async function unhidePost(communityId: string, postId: string) {
-    await CommunityService.unhidePost(communityId, postId)
+  async function removeModerator(communityId: string, address: string) {
+    await CommunityService.removeModerator(communityId, address)
   }
 
   loadJoinedCommunities()
@@ -155,9 +152,8 @@ export const useCommunityStore = defineStore('community', () => {
     syncJoinedPrivateCommunitiesFromKeys,
     isJoined,
     refreshCommunities,
-    isPostHidden,
     canModerate,
-    hidePost,
-    unhidePost,
+    addModerator,
+    removeModerator,
   }
 })

@@ -405,3 +405,35 @@ credit, alongside the others building in the open. If you'd like that, just say
 the word (or open a PR / issue on the GenosDB repo) and we'll add it with pleasure.
 
 — Esteban Fuster Pozzi ([@estebanrfp](https://github.com/estebanrfp)) · GenosDB
+
+---
+
+# Update — beyond the migration: governance and moderation
+
+The migration above proved GenosDB *replaces* InterPoll's old stack. The work since
+proves more: GenosDB carries the app's **hardest** features — earned trust and
+moderation — natively.
+
+## Earned trust, not granted — governance
+
+InterPoll's toughest question is moderation without a central censor. GenosDB's
+**Security Manager + governance rules** answer it as *data, not policy*. We defined a
+public, identical-for-everyone ladder: a settled `guest` becomes a `member`, and a
+`member` climbs to `trusted` by participating (3+ posts), auto-demoting if activity
+drops. A superadmin signs each promotion as a transparent **notary** — it only signs
+what the public rules dictate — and once signed, the role is **synced graph state**
+that propagates and persists across peers *even after the superadmin goes offline*. No
+server decides who is trusted; the public rules do, and every peer verifies it. The
+role badge is **reactive**: a promotion climbs it live, with no refresh, because it
+subscribes to the signed `user:<address>` node over realtime `db.get` (verified
+cross-peer — a role change written on one browser fires the subscription on another).
+
+## Moderation that respects the model — per community, never global
+
+Moderation is **node-level ACLs**, scoped to each community. A community is an
+ACL-owned node (its creator owns it), so only the owner — or a moderator the owner
+*explicitly* delegates to — can act on that community's content, and only that
+community's. There is no global `delete`, no platform-wide censor: each community
+governs its own space, exactly the autonomy a decentralized forum should have. An
+author can always remove their own posts; a community can remove what breaks *its*
+rules — neither is the other's censor.

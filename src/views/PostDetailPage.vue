@@ -7,6 +7,9 @@
         </ion-buttons>
         <ion-title>Post</ion-title>
         <ion-buttons slot="end">
+          <ion-button v-if="canDelete" @click="handleDelete">
+            <ion-icon :icon="trashOutline"></ion-icon>
+          </ion-button>
           <ion-button @click="refreshPost">
             <ion-icon :icon="refreshOutline"></ion-icon>
           </ion-button>
@@ -164,13 +167,14 @@ import {
   IonButtons, IonBackButton, IonButton, IonIcon,
   IonChip,
   IonLabel, IonSpinner, IonTextarea, IonBadge,
-  toastController, actionSheetController
+  toastController, actionSheetController, alertController
 } from '@ionic/vue';
 import {
   peopleOutline, arrowUpOutline, arrowDownOutline,
   trendingUpOutline, chatbubbleOutline, sendOutline,
-  shareSocialOutline, alertCircleOutline, refreshOutline
+  shareSocialOutline, alertCircleOutline, refreshOutline, trashOutline
 } from 'ionicons/icons';
+import { db } from '../services/gdbServices';
 import { usePostStore } from '../stores/postStore';
 import { useCommentStore } from '../stores/commentStore';
 import { useCommunityStore } from '../stores/communityStore';
@@ -239,6 +243,41 @@ const communityName = computed(() => {
   const community = communityStore.communities.find(c => c.id === cid);
   return community?.displayName || cid || 'Community';
 });
+
+// ── Delete / moderation (author owns the post; community owner/mods may remove) ──
+const isAuthor = computed(() => {
+  const me = db.sm.getActiveEthAddress();
+  return !!me && !!post.value?.authorId && post.value.authorId.toLowerCase() === me.toLowerCase();
+});
+const canModerate = computed(() => !!post.value && communityStore.canModerate(post.value.communityId));
+const canDelete = computed(() => isAuthor.value || canModerate.value);
+
+async function handleDelete() {
+  if (!post.value) return;
+  const mine = isAuthor.value;
+  const target = post.value;
+  const alert = await alertController.create({
+    header: mine ? 'Delete post' : 'Remove from community',
+    message: mine ? 'Delete your post? It is removed from the network.' : 'Remove this post from the community?',
+    buttons: [
+      { text: 'Cancel', role: 'cancel' },
+      {
+        text: mine ? 'Delete' : 'Remove',
+        role: 'destructive',
+        handler: async () => {
+          try {
+            await postStore.deletePost(target.id);
+            router.replace(target.communityId ? `/community/${target.communityId}` : '/home');
+          } catch (e) {
+            const toast = await toastController.create({ message: (e as Error)?.message || 'Could not remove the post', duration: 2500, color: 'danger' });
+            await toast.present();
+          }
+        },
+      },
+    ],
+  });
+  await alert.present();
+}
 
 const postAuthorDisplayName = computed(() => {
   if (!post.value) return 'anon';

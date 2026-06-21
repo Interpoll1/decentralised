@@ -55,7 +55,10 @@ export class PostService {
       imageThumbnail: image?.thumbnail || '',
       createdAt: Date.now(),
     }
-    await db.put(record, id)
+    // ACL-protected: the author owns the post node, so only they — or a moderator the
+    // community owner delegates `delete` to — can remove it (enforced on every peer).
+    await db.sm.acls.set(record, id)
+    await this.grantCommunityModerators(id, record.communityId)
     return this.buildPost(record, [], 0)
   }
 
@@ -76,22 +79,50 @@ export class PostService {
     await db.put(next, postId)
   }
 
+  /**
+   * Remove a post. The ACL middleware permits only the owner (the author) or a
+   * delete-collaborator (a moderator the community owner delegated `delete` to) —
+   * scoped per node, never a global censor. Used for both self-delete and moderation.
+   */
   static async deletePost(postId: string, _communityId?: string): Promise<void> {
-    await db.remove(postId)
+    await db.sm.acls.delete(postId)
+  }
+
+  /**
+   * Grant `delete` on a post to its community's owner + moderators, so they can
+   * moderate it (the author is already the owner). The author signs these grants at
+   * post time; community-scoped, best-effort (skips self, tolerates failures, and
+   * only affects posts created after a moderator was added).
+   */
+  private static async grantCommunityModerators(postId: string, communityId: string): Promise<void> {
+    if (!communityId) return
+    const me = db.sm.getActiveEthAddress()
+    const { result } = await db.get(communityId)
+    const value = result?.value as { owner?: string; creatorId?: string; moderators?: string[] } | undefined
+    if (!value) return
+    const targets = new Set<string>()
+    const owner = value.owner || value.creatorId
+    if (owner) targets.add(owner)
+    if (Array.isArray(value.moderators)) value.moderators.forEach(m => m && targets.add(m))
+    for (const addr of targets) {
+      if (!me || addr.toLowerCase() === me.toLowerCase()) continue
+      try { await db.sm.acls.grant(postId, addr, 'delete') } catch { /* best-effort, cooperative */ }
+    }
   }
 
   /** Cast or change a vote (one signed node per identity). */
   static async voteOnPost(postId: string, direction: 'up' | 'down', _userId?: string): Promise<Post> {
     const voter = db.sm.getActiveEthAddress()
     if (!voter) throw new Error('Cannot vote: no active identity')
-    await db.put({ type: 'postVote', postId, voter, direction, createdAt: Date.now() }, `postVote:${postId}:${voter}`)
+    // ACL-owned by the voter, so only they can change or retract it (no peer can delete another's vote).
+    await db.sm.acls.set({ type: 'postVote', postId, voter, direction, createdAt: Date.now() }, `postVote:${postId}:${voter}`)
     return (await this.getPost(postId))!
   }
 
   /** Retract a vote by removing its node. */
   static async removeVote(postId: string, _direction: 'up' | 'down', _userId?: string): Promise<Post> {
     const voter = db.sm.getActiveEthAddress()
-    if (voter) await db.remove(`postVote:${postId}:${voter}`)
+    if (voter) await db.sm.acls.delete(`postVote:${postId}:${voter}`)
     return (await this.getPost(postId))!
   }
 
