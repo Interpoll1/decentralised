@@ -19,8 +19,16 @@
 // copied verbatim into the build by the `genosdb-static` plugin in vite.config.ts.
 const { gdb } = await import(/* @vite-ignore */ `${import.meta.env.BASE_URL}genosdb/index.js`)
 
-/** Database identifier — also serves as the P2P room name. */
-export const GDB_NAME = 'interpoll-genosdb'
+/**
+ * Database identifier — also serves as the P2P room name.
+ *
+ * Bumped to start a fresh room: the previous one accrued roles under genosdb
+ * 0.12.10, whose early governance engine ignored each rule's `if` condition and
+ * promoted every user to `trusted`. On 0.15.5 the engine evaluates `if` as a
+ * real query (so roles are earned) and never touches a superadmin's node, so a
+ * clean room reflects the intended guest → member → trusted progression.
+ */
+export const GDB_NAME = 'interpoll-genosdb-gov'
 
 /**
  * Bootstrap superadmin Ethereum addresses.
