@@ -19,6 +19,9 @@
           <ion-segment-button value="moderation">
             <ion-label>Moderation</ion-label>
           </ion-segment-button>
+          <ion-segment-button value="advanced">
+            <ion-label>Advanced</ion-label>
+          </ion-segment-button>
           <ion-segment-button value="network">
             <ion-label>Network</ion-label>
           </ion-segment-button>
@@ -50,6 +53,38 @@
           <h3 class="section-title">Content Filters</h3>
           <p class="helper-text">
             Content filtering has moved to the <a href="#" class="link-primary" @click.prevent="activeTab = 'moderation'">Moderation</a> tab.
+          </p>
+          <div class="separator"></div>
+        </div>
+
+        <!-- Home Feed Moderation -->
+        <div class="section">
+          <h3 class="section-title">Home Feed Moderation</h3>
+          <p class="section-subtitle">Use a moderation API to hide unwanted posts from the home feed</p>
+          <ion-list>
+            <ion-item>
+              <ion-toggle v-model="modSettings.moderateHomeFeed" @ionChange="saveModerationSettings">
+                Moderate home feed
+              </ion-toggle>
+            </ion-item>
+            <ion-item>
+              <ion-label>API provider</ion-label>
+              <ion-select v-model="modSettings.moderationProvider" @ionChange="onModerationProviderChange">
+                <ion-select-option value="interpoll">InterPoll default API</ion-select-option>
+                <ion-select-option value="custom">Custom API</ion-select-option>
+              </ion-select>
+            </ion-item>
+            <ion-item v-if="modSettings.moderationProvider === 'custom'">
+              <ion-label position="stacked">Custom API base URL</ion-label>
+              <ion-input
+                v-model="modSettings.moderationApiBaseUrl"
+                placeholder="https://example.com/moderation"
+                @ionBlur="saveModerationSettings"
+              ></ion-input>
+            </ion-item>
+          </ion-list>
+          <p class="helper-text">
+            Default API: {{ moderationDefaultApiUrl }}. Custom endpoints must expose the same moderation hash API.
           </p>
           <div class="separator"></div>
         </div>
@@ -337,6 +372,12 @@
 
       <!-- MODERATION TAB -->
       <div v-if="activeTab === 'moderation'">
+        <div class="section">
+          <h3 class="section-title">Home Feed Moderation</h3>
+          <p class="helper-text">Configure this from the <a href="#" class="link-primary" @click.prevent="activeTab = 'general'">General</a> tab.</p>
+          <div class="separator"></div>
+        </div>
+
         <!-- Karma Filter -->
         <div class="section">
           <h3 class="section-title">Karma Filter</h3>
@@ -484,6 +525,59 @@
             <ion-icon slot="start" :icon="refreshOutline"></ion-icon>
             Reset Moderation to Defaults
           </ion-button>
+        </div>
+      </div>
+
+      <!-- ADVANCED TAB -->
+      <div v-if="activeTab === 'advanced'">
+        <div class="section">
+          <h3 class="section-title">Moderation API</h3>
+          <p class="section-subtitle">Authenticate and enable click-to-submit from Home feed</p>
+          <ion-list>
+            <ion-item>
+              <ion-label>Provider</ion-label>
+              <ion-select v-model="modSettings.moderationProvider" @ionChange="saveModerationSettings">
+                <ion-select-option value="interpoll">Interpoll Moderation API</ion-select-option>
+                <ion-select-option value="custom">Custom API</ion-select-option>
+              </ion-select>
+            </ion-item>
+            <ion-item>
+              <ion-label position="stacked">API base URL</ion-label>
+              <ion-input
+                v-model="modSettings.moderationApiBaseUrl"
+                @ionBlur="saveModerationSettings"
+                placeholder="https://interpoll.endless.sbs/moderation"
+              ></ion-input>
+            </ion-item>
+            <ion-item>
+              <ion-label position="stacked">API key</ion-label>
+              <ion-input
+                v-model="moderationApiKeyInput"
+                type="password"
+                placeholder="mod_sk_..."
+              ></ion-input>
+            </ion-item>
+          </ion-list>
+          <div class="button-row">
+            <ion-button size="small" @click="authenticateModerationApi">Authenticate</ion-button>
+            <ion-button size="small" fill="outline" color="medium" @click="clearModerationApiAuth">Clear Auth</ion-button>
+          </div>
+          <p class="helper-text">{{ moderationAuthMessage }}</p>
+          <div class="separator"></div>
+        </div>
+
+        <div class="section">
+          <h3 class="section-title">Manual hash submission</h3>
+          <ion-list>
+            <ion-item>
+              <ion-toggle v-model="modSettings.moderationClickToSubmit" @ionChange="saveModerationSettings">
+                Click post on Home feed to submit post-body hash
+              </ion-toggle>
+            </ion-item>
+          </ion-list>
+          <p class="helper-text">
+            Uses SHA-256 over the post body only (no username/author fields) and sends it to the selected moderation API.
+          </p>
         </div>
       </div>
 
@@ -1809,7 +1903,7 @@ import { BootstrapInviteService, type BootstrapEndpoint } from '../services/boot
 import { useChainStore } from '../stores/chainStore';
 import { useCommunityStore } from '../stores/communityStore';
 import config from '../config';
-import { ModerationService, moderationVersion, type ModerationSettings, type WordCategory } from '../services/moderationService';
+import { ModerationService, moderationVersion, MODERATION_API_DEFAULT_BASE_URL, type ModerationSettings, type WordCategory } from '../services/moderationService';
 import { getEnabledVersions, setEnabledVersions, probeForVersions, availableVersions, type DataVersion } from '../utils/dataVersionSettings';
 import { GUN_NAMESPACE } from '../services/gunService';
 import { useFeedPreferences } from '../composables/useFeedPreferences';
@@ -2002,6 +2096,9 @@ const modSettings = ref<ModerationSettings>(ModerationService.getSettings());
 const newBlockedWord = ref('');
 const newAllowedWord = ref('');
 const testText = ref('');
+const moderationApiKeyInput = ref('');
+const moderationAuthMessage = ref('Not authenticated.');
+const moderationDefaultApiUrl = MODERATION_API_DEFAULT_BASE_URL;
 
 const wordCategories = computed(() => {
   const list = ModerationService.getDefaultWordList();
@@ -2032,7 +2129,20 @@ function onKarmaRangeChange(ev: CustomEvent) {
 }
 
 function saveModerationSettings() {
+  if (modSettings.value.moderationProvider === 'interpoll') {
+    modSettings.value.moderationApiBaseUrl = moderationDefaultApiUrl;
+  }
   ModerationService.saveSettings({ ...modSettings.value });
+  moderationAuthMessage.value = modSettings.value.moderationApiKey.trim()
+    ? 'Authenticated key is stored.'
+    : 'Not authenticated.';
+}
+
+function onModerationProviderChange() {
+  if (modSettings.value.moderationProvider === 'interpoll') {
+    modSettings.value.moderationApiBaseUrl = moderationDefaultApiUrl;
+  }
+  saveModerationSettings();
 }
 
 function toggleCategory(catId: WordCategory, ev: CustomEvent) {
@@ -2078,10 +2188,40 @@ async function resetModerationDefaults() {
   const defaults = ModerationService.getDefaultSettings();
   ModerationService.saveSettings(defaults);
   modSettings.value = ModerationService.getSettings();
+  moderationApiKeyInput.value = '';
+  moderationAuthMessage.value = 'Not authenticated.';
   const toast = await toastController.create({
     message: 'Moderation settings reset to defaults',
     duration: 1500,
     color: 'success'
+  });
+  await toast.present();
+}
+
+async function authenticateModerationApi() {
+  const result = await ModerationService.authenticateModerationApiKey(moderationApiKeyInput.value);
+  moderationAuthMessage.value = result.message;
+  if (result.ok) {
+    modSettings.value = ModerationService.getSettings();
+    moderationApiKeyInput.value = '';
+  }
+  const toast = await toastController.create({
+    message: result.message,
+    duration: 2000,
+    color: result.ok ? 'success' : 'warning',
+  });
+  await toast.present();
+}
+
+async function clearModerationApiAuth() {
+  ModerationService.clearModerationApiKey();
+  modSettings.value = ModerationService.getSettings();
+  moderationApiKeyInput.value = '';
+  moderationAuthMessage.value = 'Not authenticated.';
+  const toast = await toastController.create({
+    message: 'Moderation API authentication cleared',
+    duration: 1800,
+    color: 'success',
   });
   await toast.present();
 }
@@ -2852,6 +2992,9 @@ onMounted(async () => {
 
   // Load moderation settings (may have migrated legacy minUserKarma)
   modSettings.value = ModerationService.getSettings();
+  moderationAuthMessage.value = modSettings.value.moderationApiKey.trim()
+    ? 'Authenticated key is stored.'
+    : 'Not authenticated.';
 
   // Network polling
   refreshNetwork();
