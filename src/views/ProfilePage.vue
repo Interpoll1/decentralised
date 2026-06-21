@@ -31,12 +31,6 @@
         <h1>{{ userProfile?.customUsername || userProfile?.displayName || userProfile?.username }}</h1>
         <p class="username">u/{{ userProfile?.customUsername || userProfile?.username }}</p>
         <p class="identity-badge role">{{ role }}</p>
-        <p v-if="userProfile?.showRealName" class="anonymity-badge named">
-          <ion-icon :icon="eyeOutline"></ion-icon> Username visible on posts
-        </p>
-        <p v-else class="anonymity-badge anonymous">
-          <ion-icon :icon="eyeOffOutline"></ion-icon> Posting anonymously
-        </p>
 
         <div class="stats-row">
           <div class="stat">
@@ -289,7 +283,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin: 0 0 8px;
+  margin: 0 0 16px;
   padding: 4px 10px;
   border-radius: 12px;
   font-size: 12px;
@@ -302,30 +296,6 @@
   background: rgba(var(--ion-color-primary-rgb), 0.12);
   color: var(--ion-color-primary);
   border: 1px solid rgba(var(--ion-color-primary-rgb), 0.28);
-}
-
-.anonymity-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  padding: 4px 10px;
-  border-radius: 12px;
-  margin: 0 0 16px;
-}
-
-.anonymity-badge.anonymous {
-  background: rgba(var(--ion-color-success-rgb), 0.1);
-  color: var(--ion-color-success);
-}
-
-.anonymity-badge.named {
-  background: rgba(var(--ion-color-primary-rgb), 0.1);
-  color: var(--ion-color-primary);
-}
-
-.anonymity-badge ion-icon {
-  font-size: 14px;
 }
 
 .stats-row {
@@ -446,7 +416,7 @@ import {
 import {
   personCircleOutline, settingsOutline, saveOutline, copyOutline,
   documentTextOutline, chatbubbleOutline, trophyOutline, peopleOutline,
-  cameraOutline, eyeOutline, eyeOffOutline
+  cameraOutline
 } from 'ionicons/icons';
 import { db } from '../services/gdbServices';
 import { UserService } from '../services/userService';
