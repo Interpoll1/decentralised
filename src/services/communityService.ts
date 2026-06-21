@@ -21,6 +21,10 @@ export interface Community {
   createdAt: number
   memberCount: number
   postCount?: number
+  /** ACL owner (the creator) — present once the community node is created via `acls.set`. */
+  owner?: string
+  /** Moderation map: hidden post id -> moderator address. Only the owner can write it. */
+  hidden?: Record<string, string>
   creatorPubkey?: string
   creatorSignature?: string
   isEncrypted?: boolean
@@ -45,8 +49,11 @@ export class CommunityService {
       creatorId: data.creatorId,
       createdAt,
       postCount: 0,
+      hidden: {},
     }
-    await db.put(record, id)
+    // `acls.set` makes the creator the node owner, so only they can later edit the
+    // `hidden` moderation map — the SM middleware rejects writes from anyone else.
+    await db.sm.acls.set(record, id)
 
     // The creator is the first member.
     const me = db.sm.getActiveEthAddress() ?? data.creatorId
@@ -66,6 +73,32 @@ export class CommunityService {
     const me = db.sm.getActiveEthAddress()
     if (!me) throw new Error('Cannot join: no active identity')
     await db.put({ type: 'membership', communityId, member: me, joinedAt: Date.now() }, `member:${communityId}:${me}`)
+  }
+
+  // ── Moderation (community-scoped, owner-only via node ACLs) ───────────────────
+
+  /**
+   * Hide a post from this community's feed. Writes a signed entry into the
+   * community node's `hidden` map via `acls.set`; the SM middleware enforces that
+   * only the node owner (the creator) may do it. The post is never deleted — its
+   * author still owns it — so this curates the community's view, it does not erase
+   * data. Throws if the caller is not the owner (or the community predates ACLs).
+   */
+  static async hidePost(communityId: string, postId: string): Promise<void> {
+    const me = db.sm.getActiveEthAddress()
+    if (!me) throw new Error('Cannot moderate: no active identity')
+    const { result } = await db.get(communityId)
+    if (!result?.value) throw new Error('Community not found')
+    const hidden = { ...((result.value.hidden as Record<string, string>) ?? {}), [postId]: me }
+    await db.sm.acls.set({ hidden }, communityId)
+  }
+
+  /** Restore a hidden post (owner-only, enforced by the ACL middleware). */
+  static async unhidePost(communityId: string, postId: string): Promise<void> {
+    const { result } = await db.get(communityId)
+    if (!result?.value) return
+    const { [postId]: _removed, ...hidden } = (result.value.hidden as Record<string, string>) ?? {}
+    await db.sm.acls.set({ hidden }, communityId)
   }
 
   /**
@@ -141,7 +174,7 @@ export class CommunityService {
     const encryptedMeta = await EncryptionService.encrypt(JSON.stringify(meta), aesKey)
     const encryptionHint = password ? 'Password-protected' : 'Invite-only'
 
-    await db.put({
+    await db.sm.acls.set({
       type: 'community',
       id,
       isEncrypted: true,
@@ -150,6 +183,7 @@ export class CommunityService {
       creatorId: data.creatorId,
       createdAt,
       postCount: 0,
+      hidden: {},
       name: '🔒 Private Community',
       displayName: '🔒 Private Community',
       description: 'This community is encrypted. Use an invite link or password to access.',
@@ -230,6 +264,8 @@ export class CommunityService {
       createdAt: record.createdAt || Date.now(),
       memberCount,
       postCount: Number(record.postCount) || 0,
+      owner: typeof record.owner === 'string' ? record.owner : undefined,
+      hidden: record.hidden && typeof record.hidden === 'object' ? record.hidden : {},
       isEncrypted: record.isEncrypted || false,
       encryptionHint: record.encryptionHint || undefined,
       encryptedMeta: record.encryptedMeta || undefined,

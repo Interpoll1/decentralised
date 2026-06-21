@@ -58,9 +58,11 @@ export const SUPER_ADMINS = ['0xE5639DfE345F8ab845bEBE63a1C7322F9c6fF5c7']
  *     through public, identical-for-everyone rules and granted by a signed
  *     superadmin. It is deliberately NOT a censorship hierarchy: there is no
  *     global `delete`/`deleteAny`, so no actor can quietly erase another's post.
- *  2. Node-level ACLs (added per community) will let each community moderate its
- *     OWN space — the creator owns it and can delegate moderators — so removal is
- *     community-scoped, never central. (See GenosDB zero-trust + governance docs.)
+ *  2. Node-level ACLs (`acls: true`) let each community moderate its OWN space:
+ *     the creator owns the community node, so only they can hide a post within it
+ *     (a signed entry in the node's `hidden` map). Removal is community-scoped,
+ *     never central, and never erases the author's signed post — in a zero-trust
+ *     graph you cannot delete another peer's data, so moderation curates the view.
  *
  * `guest` is open (write+link) so anyone participates the moment they exist.
  * `member` and `trusted` are reputation tiers the governance engine grants and
@@ -95,7 +97,7 @@ const GOVERNANCE_RULES = [
 
 export const db = await gdb(GDB_NAME, {
   rtc: true,
-  sm: { superAdmins: SUPER_ADMINS, customRoles: ROLES, governanceRules: GOVERNANCE_RULES },
+  sm: { superAdmins: SUPER_ADMINS, customRoles: ROLES, governanceRules: GOVERNANCE_RULES, acls: true },
 })
 
 // Expose the instance for debugging/inspection (matches the GenosDB examples).

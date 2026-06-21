@@ -10,10 +10,12 @@ import { ref, computed, onScopeDispose } from 'vue'
 import { Post, PostService } from '../services/postService'
 import { UserService } from '../services/userService'
 import { generatePseudonym } from '../utils/pseudonym'
+import { useCommunityStore } from './communityStore'
 
 const PAGE_SIZE = 10
 
 export const usePostStore = defineStore('post', () => {
+  const communityStore = useCommunityStore()
   const postsMap = ref<Map<string, Post>>(new Map())
   const currentPost = ref<Post | null>(null)
   const isLoading = ref(false)
@@ -29,7 +31,13 @@ export const usePostStore = defineStore('post', () => {
 
   // ─── Computed ──────────────────────────────────────────────────────────────
   const posts = computed(() => Array.from(postsMap.value.values()))
-  const sortedPosts = computed(() => [...posts.value].sort((a, b) => b.createdAt - a.createdAt))
+  // Posts a community owner has hidden drop out of every feed — except for the
+  // owner, who keeps seeing them (dimmed, with a Restore action) so it's reversible.
+  const sortedPosts = computed(() =>
+    [...posts.value]
+      .filter(p => !communityStore.isPostHidden(p.communityId, p.id) || communityStore.canModerate(p.communityId))
+      .sort((a, b) => b.createdAt - a.createdAt),
+  )
   const communityPosts = computed(() =>
     currentCommunityId.value
       ? sortedPosts.value.filter(p => p.communityId === currentCommunityId.value)

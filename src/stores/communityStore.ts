@@ -9,6 +9,7 @@ import { defineStore } from 'pinia'
 import { ref, onScopeDispose } from 'vue'
 import { Community, CommunityService } from '../services/communityService'
 import { UserService } from '../services/userService'
+import { db } from '../services/gdbServices'
 
 export const useCommunityStore = defineStore('community', () => {
   const communities = ref<Community[]>([])
@@ -113,6 +114,29 @@ export const useCommunityStore = defineStore('community', () => {
     if (currentCommunity.value?.id !== communityId) await selectCommunity(communityId)
   }
 
+  // ─── Moderation (community-scoped, owner-only) ───────────────────────────────
+  // Reactive over `communities`, so hiding a post live re-filters every feed.
+  function isPostHidden(communityId: string, postId: string): boolean {
+    const community = communities.value.find(c => c.id === communityId)
+    return !!community?.hidden?.[postId]
+  }
+
+  /** True when the active identity is the community node's ACL owner (its creator). */
+  function canModerate(communityId: string): boolean {
+    const me = db.sm.getActiveEthAddress()
+    if (!me) return false
+    const owner = communities.value.find(c => c.id === communityId)?.owner
+    return !!owner && owner.toLowerCase() === me.toLowerCase()
+  }
+
+  async function hidePost(communityId: string, postId: string) {
+    await CommunityService.hidePost(communityId, postId)
+  }
+
+  async function unhidePost(communityId: string, postId: string) {
+    await CommunityService.unhidePost(communityId, postId)
+  }
+
   loadJoinedCommunities()
 
   onScopeDispose(() => { unsubscribe?.() })
@@ -131,5 +155,9 @@ export const useCommunityStore = defineStore('community', () => {
     syncJoinedPrivateCommunitiesFromKeys,
     isJoined,
     refreshCommunities,
+    isPostHidden,
+    canModerate,
+    hidePost,
+    unhidePost,
   }
 })
