@@ -2,7 +2,7 @@
   <ion-page>
     <ion-header :class="{ 'header-hidden': isHeaderHidden }">
       <ion-toolbar>
-        <ion-title class="logo-title">Interpoll</ion-title>
+        <ion-title class="logo-title">InterPoll</ion-title>
         <!-- These buttons are hidden on desktop (768px+) and moved to side-nav -->
         <ion-buttons slot="end" class="header-util-buttons">
           <ion-button @click="$router.push('/search')">
@@ -94,6 +94,29 @@
 
           <!-- HOME TAB -->
           <div v-if="activeTab === 'home'" class="home-tab">
+            <section v-if="tutorialVisible" class="tutorial-card surface-card">
+              <div class="tutorial-card__header">
+                <span class="tutorial-card__eyebrow">Quick tour</span>
+                <button class="tutorial-card__dismiss" @click="skipTutorial">Skip</button>
+              </div>
+
+              <div class="tutorial-card__body">
+                <p class="tutorial-card__step">Step {{ tutorialStep + 1 }} of {{ tutorialSteps.length }}</p>
+                <h3>{{ currentTutorialStep.title }}</h3>
+                <p>{{ currentTutorialStep.body }}</p>
+                <ul class="tutorial-card__list">
+                  <li v-for="item in currentTutorialStep.bullets" :key="item">{{ item }}</li>
+                </ul>
+              </div>
+
+              <div class="tutorial-card__actions">
+                <button class="tutorial-card__secondary" @click="previousTutorialStep">Back</button>
+                <button class="tutorial-card__primary" @click="nextTutorialStep">
+                  {{ tutorialStep === tutorialSteps.length - 1 ? 'Finish' : 'Next' }}
+                </button>
+              </div>
+            </section>
+
             <div class="feed-mode-toggle surface-pill">
               <button
                 class="mode-btn"
@@ -450,6 +473,7 @@ import { Poll } from '../services/pollService';
 import { GunService } from '../services/gunService';
 import { UserService } from '../services/userService';
 import ChatService from '../services/chatService';
+import { ChatInviteService } from '../services/chatInviteService';
 import { warmupFromDB } from '../services/dbWarmup';
 import config from '../config';
 
@@ -463,6 +487,7 @@ const FEED_DEBUG = localStorage.getItem('interpoll_feed_debug') === 'true';
 const SYNC_DEBUG = localStorage.getItem('interpoll_sync_debug') === 'true';
 const HOME_GUN_FEED_ENABLED = localStorage.getItem('interpoll_home_gun_feed') === 'true';
 const FEED_INITIAL_RENDER_TARGET = 50;
+const TUTORIAL_STORAGE_KEY = 'interpoll_home_tutorial_seen';
 
 function feedDebug(label: string, data?: Record<string, unknown>) {
   if (!FEED_DEBUG) return;
@@ -483,6 +508,47 @@ const voteVersion = ref(0);
 const isHeaderHidden = ref(false);
 const isTabBarHidden = ref(false);
 const warmupComplete = ref(false);
+const tutorialVisible = ref(localStorage.getItem(TUTORIAL_STORAGE_KEY) !== 'true');
+const tutorialStep = ref(0);
+const tutorialSteps = [
+  {
+    title: 'Start with the home feed',
+    body: 'InterPoll gathers posts and polls in one flowing feed so you can scan the latest ideas without leaving the page.',
+    bullets: [
+      'Use For You for a curated mix of topics you have joined.',
+      'Switch to Latest when you want the freshest conversations first.',
+      'Tap the new-content banner to reveal anything that arrived while you were away.'
+    ]
+  },
+  {
+    title: 'Discover communities',
+    body: 'Communities are the topic clusters that organize everything. Join a few to focus the feed on what matters to you.',
+    bullets: [
+      'Browse public communities or filter to the ones you already joined.',
+      'Use the search box to find a niche fast.',
+      'Create your own space when you want a dedicated home for a topic.'
+    ]
+  },
+  {
+    title: 'Chat privately',
+    body: 'The chat tab is built for quick, direct conversations without leaving the app.',
+    bullets: [
+      'Search for people by name or username.',
+      'Open a conversation from the recent list whenever a thread starts.',
+      'Unread badges keep follow-up easy on mobile.'
+    ]
+  },
+  {
+    title: 'Create anything you need',
+    body: 'The create tab is your launchpad for building new communities, posting updates, or starting a poll.',
+    bullets: [
+      'Create a community to gather people around a shared topic.',
+      'Publish a post to share news, links, or reflections.',
+      'Open a poll when you want quick feedback from the people already in that space.'
+    ]
+  }
+];
+const currentTutorialStep = computed(() => tutorialSteps[tutorialStep.value]);
 let lastScrollTop = 0;
 const scrollThreshold = 50;
 
@@ -649,6 +715,25 @@ const joinedCommunities = computed(() => communityStore.communities.filter(c => 
 
 const sidebarCommunities = computed(() => communityStore.communities)
 
+function skipTutorial() {
+  localStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
+  tutorialVisible.value = false;
+}
+
+function previousTutorialStep() {
+  if (tutorialStep.value > 0) {
+    tutorialStep.value -= 1;
+  }
+}
+
+function nextTutorialStep() {
+  if (tutorialStep.value < tutorialSteps.length - 1) {
+    tutorialStep.value += 1;
+    return;
+  }
+  skipTutorial();
+}
+
 // ── Chat list ─────────────────────────────────────────────────────────────────
 
 function getRoomId(a: string, b: string) {
@@ -656,6 +741,8 @@ function getRoomId(a: string, b: string) {
 }
 
 const unreadDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const subscribedChatRooms = new Set<string>();
+let chatDiscoverySubscribed = false;
 
 function recomputeUnread(roomId: string, otherUserId: string) {
   // Debounce per room — only compute after 500ms of no new messages
@@ -678,6 +765,7 @@ function recomputeUnread(roomId: string, otherUserId: string) {
 function subscribeToRoom(otherUserId: string, otherName: string, otherPublicKey: string) {
   const gun    = GunService.getGun();
   const roomId = getRoomId(currentUserId, otherUserId);
+  if (subscribedChatRooms.has(roomId)) return;
 
   if (!chatList.value.find(c => c.userId === otherUserId)) {
     chatList.value.push({
@@ -698,7 +786,11 @@ function subscribeToRoom(otherUserId: string, otherName: string, otherPublicKey:
     recomputeUnread(roomId, otherUserId);
   });
 
-  gunListeners.push(() => listener?.off?.());
+  subscribedChatRooms.add(roomId);
+  gunListeners.push(() => {
+    listener?.off?.();
+    subscribedChatRooms.delete(roomId);
+  });
 }
 
 async function loadChatList() {
@@ -719,6 +811,29 @@ async function loadChatList() {
           );
         });
       });
+  });
+}
+
+function ensureChatRoomDiscoverySubscription() {
+  if (chatDiscoverySubscribed || !currentUserId) return;
+  const gun = GunService.getGun();
+  const discoveryListener = gun.get('chats').map().on((roomData: any, roomId: string) => {
+    if (!roomId || roomId === '_' || typeof roomId !== 'string') return;
+    if (!roomId.includes(':') || !roomId.includes(currentUserId)) return;
+    const otherUserId = roomId.split(':').find(id => id !== currentUserId);
+    if (!otherUserId) return;
+    gun.get('users').get(otherUserId).once((userData: any) => {
+      subscribeToRoom(
+        otherUserId,
+        userData?.displayName || userData?.username || otherUserId,
+        userData?.publicKey || '',
+      );
+    });
+  });
+  chatDiscoverySubscribed = true;
+  gunListeners.push(() => {
+    discoveryListener?.off?.();
+    chatDiscoverySubscribed = false;
   });
 }
 
@@ -778,6 +893,8 @@ function ensureBackgroundChatInitialized(): Promise<void> {
       }
       syncDebug('background-chat-init-start');
       await initBackgroundChat();
+      await loadChatList();
+      ensureChatRoomDiscoverySubscription();
       syncDebug('background-chat-init-complete');
     } catch (error) {
       bgChatInitPromise = null;
@@ -807,6 +924,29 @@ function ensureChatInitialized(): Promise<void> {
     }
   })();
   return chatInitPromise;
+}
+
+async function processPendingChatInvites(userId: string) {
+  const invites = await ChatInviteService.getPendingInvites(userId);
+  if (invites.length === 0) return;
+
+  for (const invite of invites.slice(0, 5)) {
+    ChatInviteService.markInviteRead(userId, invite.id);
+    const toast = await toastController.create({
+      message: `💬 Chat invite from u/${invite.fromDisplayName}`,
+      duration: 5000,
+      position: 'top',
+      buttons: [
+        {
+          text: 'Open',
+          handler: () => {
+            void router.push(invite.inviteLink);
+          },
+        },
+      ],
+    });
+    await toast.present();
+  }
 }
 
 // ── Chat navigation ───────────────────────────────────────────────────────────
@@ -1156,6 +1296,7 @@ onMounted(async () => {
     try {
       const currentUser = await UserService.getCurrentUser();
       currentUserId = currentUser.id;
+      await processPendingChatInvites(currentUserId);
       // Keep startup sync light: defer heavy chat graph subscriptions until chat tab is opened.
       // Keep live DM notifications enabled even if chain init fails.
       await Promise.allSettled([
@@ -1215,17 +1356,24 @@ if (FEED_DEBUG) {
 
 <style scoped>
 
-.main-content { padding: 20px; }
+.main-content {
+  padding: 16px 12px 20px;
+}
 
 .logo-title {
   font-family: inherit;
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.03em;
-  margin-left: 20px;
+  margin-left: 0;
   letter-spacing: 0.02em;
   --color: var(--app-text);
   padding-inline-start: 0;
+  padding-inline-end: 8px;
+  max-width: calc(100% - 120px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   background: linear-gradient(to bottom, var(--app-heading-start), var(--app-heading-end));
   -webkit-background-clip: text;
   background-clip: text;
@@ -1243,16 +1391,126 @@ ion-header::after {
 ion-header ion-toolbar {
   --border-width: 0;
   --box-shadow: none;
+  --padding-start: 12px;
+  --padding-end: 12px;
+  padding-inline-start: max(12px, env(safe-area-inset-left));
+  padding-inline-end: max(12px, env(safe-area-inset-right));
+}
+
+.header-util-buttons ion-button {
+  --padding-start: 8px;
+  --padding-end: 8px;
 }
 
 ion-header.header-hidden {
   transform: translateY(-100%);
 }
 
+.tutorial-card {
+  margin: 0 0 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid rgba(var(--app-accent-rgb), 0.16);
+}
+
+.tutorial-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.tutorial-card__eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--app-accent-bright);
+}
+
+.tutorial-card__dismiss {
+  border: none;
+  background: none;
+  color: var(--app-text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.tutorial-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tutorial-card__step {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--app-text-subtle);
+}
+
+.tutorial-card__body h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.tutorial-card__body p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--app-text-muted);
+}
+
+.tutorial-card__list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--app-text-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.tutorial-card__actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.tutorial-card__secondary,
+.tutorial-card__primary {
+  border: none;
+  border-radius: 999px;
+  padding: 9px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tutorial-card__secondary {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--app-text);
+}
+
+.tutorial-card__primary {
+  background: linear-gradient(180deg, var(--app-accent-bright), var(--app-accent));
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(var(--app-accent-rgb), 0.24);
+}
+
 .feed-mode-toggle {
   display: inline-flex;
   gap: 8px;
-  margin: 12px 16px 8px;
+  margin: 4px 0 12px;
   padding: 5px;
 }
 
@@ -1303,6 +1561,7 @@ ion-header.header-hidden {
   align-items: flex-start;
   gap: 20px;
   position: relative;
+  padding-inline: 4px;
 }
 
 .main-content {

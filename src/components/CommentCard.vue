@@ -10,7 +10,17 @@
       <!-- Comment Header -->
       <div class="comment-header">
         <span class="commenter-dot"></span>
-        <span class="author-name">u/{{ displayName }}</span>
+        <span class="author-wrap">
+          <span class="author-name">u/{{ displayName }}</span>
+          <button
+            v-if="canInviteAuthor"
+            class="invite-chat-btn"
+            type="button"
+            @click.stop="sendInviteToCommentAuthor"
+          >
+            Invite to chat
+          </button>
+        </span>
         <span class="identity-badge" :class="authorIdentityClass">
           {{ authorIdentityLabel }}
         </span>
@@ -115,6 +125,31 @@
 .author-name {
   font-weight: 600;
   color: var(--ion-text-color);
+}
+
+.author-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.invite-chat-btn {
+  border: 1px solid rgba(var(--app-accent-rgb), 0.24);
+  background: rgba(var(--app-accent-rgb), 0.12);
+  color: var(--app-accent-bright);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--app-transition);
+}
+
+.comment-header:hover .invite-chat-btn,
+.invite-chat-btn:focus-visible {
+  opacity: 1;
 }
 
 .identity-badge {
@@ -261,10 +296,16 @@
 .flag-badge ion-icon {
   font-size: 13px;
 }
+
+@media (max-width: 576px) {
+  .invite-chat-btn {
+    opacity: 1;
+  }
+}
 </style>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { IonIcon, IonTextarea, IonButton, toastController } from '@ionic/vue';
 import {
   arrowUpOutline,
@@ -281,6 +322,8 @@ import type { FilterAction } from '../services/moderationService';
 import { ModerationService } from '../services/moderationService';
 import { useUserStore } from '../stores/userStore';
 import type { UserProfile } from '../services/userService';
+import { UserService } from '../services/userService';
+import { ChatInviteService } from '../services/chatInviteService';
 import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 import { checkContent } from '../utils/contentGuard';
 
@@ -300,6 +343,7 @@ const showReplyForm = ref(false);
 const replyText = ref('');
 const revealed = ref(false);
 const authorProfile = ref<UserProfile | null>(null);
+const currentUserId = ref('');
 let authorProfileRequestId = 0;
 
 watch(
@@ -347,6 +391,10 @@ const authorIdentityClass = computed(() =>
   authorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'
 );
 
+const canInviteAuthor = computed(() =>
+  !!props.comment.authorId && !!currentUserId.value && props.comment.authorId !== currentUserId.value
+);
+
 const hasUpvoted = computed(() => {
   commentStore.voteVersion; // reactive dependency to trigger re-evaluation on vote changes
   const votedComments = JSON.parse(localStorage.getItem('upvoted-comments') || '[]');
@@ -383,6 +431,26 @@ function toggleReply() {
 function cancelReply() {
   showReplyForm.value = false;
   replyText.value = '';
+}
+
+async function sendInviteToCommentAuthor() {
+  if (!canInviteAuthor.value) return;
+  try {
+    await ChatInviteService.sendInvite(props.comment.authorId);
+    const toast = await toastController.create({
+      message: `Chat invite sent to u/${displayName.value}`,
+      duration: 2200,
+      color: 'success'
+    });
+    await toast.present();
+  } catch {
+    const toast = await toastController.create({
+      message: 'Failed to send chat invite',
+      duration: 2200,
+      color: 'danger'
+    });
+    await toast.present();
+  }
 }
 
 async function submitReply() {
@@ -451,4 +519,13 @@ function formatNumber(num: number | undefined | null): string {
   if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
   return n.toString();
 }
+
+onMounted(async () => {
+  try {
+    const currentUser = await UserService.getCurrentUser();
+    currentUserId.value = currentUser.id;
+  } catch {
+    currentUserId.value = '';
+  }
+});
 </script>

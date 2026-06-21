@@ -29,7 +29,13 @@ class ChatService {
   private keyPair: CryptoKeyPair | null = null;
   private recipientKeys: Map<string, CryptoKey> = new Map();
   private connected: boolean = false;
+  private p2pReady: boolean = false;
   private reconnectTimer: number | null = null;
+  private shuttingDown: boolean = false;
+  private roomUnsubscribers: Map<string, () => void> = new Map();
+  private typingUnsubscribers: Map<string, () => void> = new Map();
+  private readReceiptUnsubscribers: Map<string, () => void> = new Map();
+  private seenMessageIds: Set<string> = new Set();
 
   public onMessage:          ((msg: ChatMessage) => void) | null = null;
   public onTyping:           ((data: { from: string; isTyping: boolean }) => void) | null = null;
@@ -63,7 +69,10 @@ class ChatService {
       gun.get('users').get(this.userId).get('chatPublicKey').put(pubKeyB64);
     }
 
-    this.connect();
+    this.p2pReady = true;
+    this.connected = true;
+    if (this.onConnectionChange) this.onConnectionChange(true);
+    if (this.wsUrl) this.connect();
     return pubKeyB64;
   }
 
@@ -192,6 +201,72 @@ class ChatService {
     return [userA, userB].sort().join(':');
   }
 
+  private subscribeToRoomMessages(roomId: string, recipientId: string): void {
+    if (this.roomUnsubscribers.has(roomId)) return;
+    const gun = GunService.getGun();
+    const listener = gun.get('chats').get(roomId).map().on(async (msg: any) => {
+      if (!msg || !msg.id || !msg.senderId || !msg.recipientId) return;
+      if (msg.senderId !== recipientId || msg.recipientId !== this.userId) return;
+      if (this.seenMessageIds.has(msg.id)) return;
+
+      try {
+        const decrypted = await this.decryptMessage(msg.encryptedForRecipient);
+        this.seenMessageIds.add(msg.id);
+        if (this.onMessage) {
+          this.onMessage({
+            id: msg.id,
+            from: msg.senderId,
+            to: msg.recipientId,
+            message: decrypted,
+            timestamp: msg.timestamp,
+            read: !!msg.readAt,
+            sent: false,
+          });
+        }
+      } catch {
+        // Skip messages that cannot be decrypted (e.g., stale key material)
+      }
+    });
+
+    this.roomUnsubscribers.set(roomId, () => {
+      listener?.off?.();
+      this.roomUnsubscribers.delete(roomId);
+    });
+  }
+
+  private subscribeToTyping(roomId: string, recipientId: string): void {
+    if (this.typingUnsubscribers.has(roomId)) return;
+    const gun = GunService.getGun();
+    const listener = gun.get('chat-presence').get(roomId).get(recipientId).on((state: any) => {
+      if (!state || typeof state.isTyping !== 'boolean') return;
+      const isFresh = typeof state.timestamp === 'number' && (Date.now() - state.timestamp) < 10000;
+      if (this.onTyping) {
+        this.onTyping({ from: recipientId, isTyping: state.isTyping && isFresh });
+      }
+    });
+
+    this.typingUnsubscribers.set(roomId, () => {
+      listener?.off?.();
+      this.typingUnsubscribers.delete(roomId);
+    });
+  }
+
+  private subscribeToReadReceipts(roomId: string, recipientId: string): void {
+    if (this.readReceiptUnsubscribers.has(roomId)) return;
+    const gun = GunService.getGun();
+    const listener = gun.get('chat-read').get(roomId).get(recipientId).on((state: any) => {
+      if (!state || state.to !== this.userId) return;
+      if (this.onReadReceipt) {
+        this.onReadReceipt({ from: recipientId });
+      }
+    });
+
+    this.readReceiptUnsubscribers.set(roomId, () => {
+      listener?.off?.();
+      this.readReceiptUnsubscribers.delete(roomId);
+    });
+  }
+
   private async storeMessageInGun(
     roomId: string,
     messageId: string,
@@ -249,6 +324,7 @@ class ChatService {
         const isSent        = msg.senderId === this.userId;
         const encryptedBlob = isSent ? msg.encryptedForSender : msg.encryptedForRecipient;
         const text          = await this.decryptMessage(encryptedBlob);
+        this.seenMessageIds.add(msg.id);
         result.push({
           id:        msg.id,
           from:      msg.senderId,
@@ -269,11 +345,11 @@ class ChatService {
   // ── WebSocket ───────────────────────────────────────────────────────────────
 
   private connect(): void {
+    if (!this.wsUrl) return;
+    this.shuttingDown = false;
     this.ws = new WebSocket(this.wsUrl);
 
     this.ws.onopen = () => {
-      this.connected = true;
-      if (this.onConnectionChange) this.onConnectionChange(true);
       this.ws!.send(JSON.stringify({ type: 'register', peerId: this.peerId, userId: this.userId }));
     };
 
@@ -285,8 +361,11 @@ class ChatService {
     this.ws.onerror = (err) => console.error('❌ Chat WS error:', err);
 
     this.ws.onclose = () => {
-      this.connected = false;
-      if (this.onConnectionChange) this.onConnectionChange(false);
+      if (this.shuttingDown) return;
+      if (!this.p2pReady) {
+        this.connected = false;
+        if (this.onConnectionChange) this.onConnectionChange(false);
+      }
       this.reconnectTimer = window.setTimeout(() => this.connect(), 2000);
     };
   }
@@ -296,8 +375,10 @@ class ChatService {
       case 'chat-message':
         if (this.onMessage) {
           try {
+            if (this.seenMessageIds.has(data.messageId)) return;
             // Decrypt using our private key (encryptedForRecipient)
             const decrypted = await this.decryptMessage(data.encryptedForRecipient);
+            this.seenMessageIds.add(data.messageId);
             this.onMessage({
               id:        data.messageId,
               from:      data.from,
@@ -335,6 +416,10 @@ class ChatService {
 
     const pubKey = await this.importPublicKey(gunKey);
     this.recipientKeys.set(recipient.userId, pubKey);
+    const roomId = this.getRoomId(this.userId, recipient.userId);
+    this.subscribeToRoomMessages(roomId, recipient.userId);
+    this.subscribeToTyping(roomId, recipient.userId);
+    this.subscribeToReadReceipts(roomId, recipient.userId);
 
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'chat-start', recipientId: recipient.userId }));
@@ -384,18 +469,31 @@ class ChatService {
   }
 
   sendTyping(recipientId: string, isTyping: boolean): void {
+    const gun = GunService.getGun();
+    const roomId = this.getRoomId(this.userId, recipientId);
+    gun.get('chat-presence').get(roomId).get(this.userId).put({
+      from: this.userId,
+      to: recipientId,
+      isTyping,
+      timestamp: Date.now(),
+    });
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'chat-typing', recipientId, isTyping }));
     }
   }
 
   markAsRead(recipientId: string): void {
+    const roomId = this.getRoomId(this.userId, recipientId);
+    const gun = GunService.getGun();
+    gun.get('chat-read').get(roomId).get(this.userId).put({
+      from: this.userId,
+      to: recipientId,
+      timestamp: Date.now(),
+    });
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'chat-read', recipientId }));
     }
     // Mark in GunDB too
-    const gun    = GunService.getGun();
-    const roomId = this.getRoomId(this.userId, recipientId);
     gun.get('chats').get(roomId).map().once((msg: any, msgId: string) => {
       if (msg && msg.recipientId === this.userId && !msg.readAt) {
         gun.get('chats').get(roomId).get(msgId).get('readAt').put(Date.now());
@@ -406,9 +504,18 @@ class ChatService {
   isConnected(): boolean { return this.connected; }
 
   disconnect(): void {
+    this.shuttingDown = true;
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     if (this.ws) { this.ws.close(); this.ws = null; }
+    for (const unsubscribe of this.roomUnsubscribers.values()) unsubscribe();
+    for (const unsubscribe of this.typingUnsubscribers.values()) unsubscribe();
+    for (const unsubscribe of this.readReceiptUnsubscribers.values()) unsubscribe();
+    this.roomUnsubscribers.clear();
+    this.typingUnsubscribers.clear();
+    this.readReceiptUnsubscribers.clear();
     this.connected = false;
+    this.p2pReady = false;
+    if (this.onConnectionChange) this.onConnectionChange(false);
   }
 }
 
