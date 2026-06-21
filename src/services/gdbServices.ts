@@ -44,24 +44,50 @@ export const SUPER_ADMINS = ['0xE5639DfE345F8ab845bEBE63a1C7322F9c6fF5c7']
  *   sign/verify and device-id identity of the former Gun-based stack.
  */
 /**
- * Open-participation roles. InterPoll is a public platform, so the base `guest`
- * role can `write` and `link` — every signed identity can post, vote and comment
- * the moment it exists, with no admin promotion step. Authenticity is unchanged
- * (each operation is still signed and verified by peers); we only relax
- * *authorization* so the network is open by default. Elevated roles remain for
- * moderation/administration.
+ * Roles for an OPEN, governance-driven platform — two complementary layers:
+ *
+ *  1. This RBAC ladder + `governanceRules` = network-wide trust that is EARNED
+ *     through public, identical-for-everyone rules and granted by a signed
+ *     superadmin. It is deliberately NOT a censorship hierarchy: there is no
+ *     global `delete`/`deleteAny`, so no actor can quietly erase another's post.
+ *  2. Node-level ACLs (added per community) will let each community moderate its
+ *     OWN space — the creator owns it and can delegate moderators — so removal is
+ *     community-scoped, never central. (See GenosDB zero-trust + governance docs.)
+ *
+ * `guest` is open (write+link) so anyone participates the moment they exist.
+ * `member` and `trusted` are reputation tiers the governance engine grants and
+ * revokes. `superadmin` is the governance signer/notary: it signs only the role
+ * changes the public rules dictate, and it must be online merely to GRANT a
+ * promotion — once signed, the role becomes synced graph state and propagates and
+ * persists across peers even after the superadmin goes offline.
  */
-const OPEN_ROLES = {
-  superadmin: { can: ['assignRole', 'deleteAny'], inherits: ['admin'] },
-  admin: { can: ['delete'], inherits: ['manager'] },
-  manager: { can: ['publish'], inherits: ['user'] },
-  user: { can: ['write', 'link', 'sync'], inherits: ['guest'] },
+const ROLES = {
+  superadmin: { can: ['assignRole'], inherits: ['trusted'] },
+  trusted: { can: ['write', 'link', 'sync'], inherits: ['member'] },
+  member: { can: ['write', 'link', 'sync'], inherits: ['guest'] },
   guest: { can: ['read', 'sync', 'write', 'link'] },
 }
 
+/**
+ * Public advancement rules (the "constitution"), evaluated against `user:<address>`
+ * nodes by the governance engine while a superadmin is online. Last-match-wins:
+ * climbing a tier overrides the floor, and losing a condition auto-demotes — no
+ * explicit demotion rules needed.
+ */
+const GOVERNANCE_RULES = [
+  // Onboarding: a settled guest becomes a member (time-based for now; becomes
+  // activity-based once the app writes postCount/reputation into the user node).
+  { if: { role: 'guest' }, offsetTimestamp: 10000, then: { assignRole: 'member' } },
+  // Floor: any onboarded member stays at least `member`.
+  { if: { role: { $in: ['member', 'trusted'] } }, then: { assignRole: 'member' } },
+  // Climb: enough reputation -> `trusted` (auto-demotes if it drops). Activates once
+  // the app writes `reputation` into the user node (next phase).
+  { if: { role: { $in: ['member', 'trusted'] }, reputation: { $gte: 10 } }, then: { assignRole: 'trusted' } },
+]
+
 export const db = await gdb(GDB_NAME, {
   rtc: true,
-  sm: { superAdmins: SUPER_ADMINS, customRoles: OPEN_ROLES },
+  sm: { superAdmins: SUPER_ADMINS, customRoles: ROLES, governanceRules: GOVERNANCE_RULES },
 })
 
 // Expose the instance for debugging/inspection (matches the GenosDB examples).
