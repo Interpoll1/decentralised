@@ -22,13 +22,14 @@ const { gdb } = await import(/* @vite-ignore */ `${import.meta.env.BASE_URL}geno
 /**
  * Database identifier — also serves as the P2P room name.
  *
- * Bumped to start a fresh room: the previous one accrued roles under genosdb
- * 0.12.10, whose early governance engine ignored each rule's `if` condition and
- * promoted every user to `trusted`. On 0.15.5 the engine evaluates `if` as a
- * real query (so roles are earned) and never touches a superadmin's node, so a
- * clean room reflects the intended guest → member → trusted progression.
+ * Bumped to start a fresh room so every node is created ACL-owned from the first
+ * write: the zero-trust hardening made profiles, memberships, posts, comments,
+ * polls, votes and images owned by their author/voter — only the owner, or a
+ * community moderator the owner delegates to, can delete them. Nodes in the prior
+ * room predate ACLs (plain, ownerless) and would stay unprotected, so a clean room
+ * keeps the security model intact across the whole demo.
  */
-export const GDB_NAME = 'interpoll-genosdb-gov'
+export const GDB_NAME = 'interpoll-genosdb-acl'
 
 /**
  * Bootstrap superadmin Ethereum addresses.
