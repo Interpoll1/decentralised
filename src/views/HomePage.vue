@@ -416,6 +416,100 @@
 
     </ion-content>
 
+    <ion-modal
+      :is-open="moderationOnboardingOpen"
+      :backdrop-dismiss="false"
+      class="moderation-onboarding-modal"
+      @didDismiss="handleModerationModalDismiss"
+    >
+      <div class="moderation-onboarding-modal__shell">
+        <section class="moderation-onboarding-card surface-card">
+          <div class="moderation-onboarding-card__hero">
+            <div class="moderation-onboarding-card__badge">
+              <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
+            </div>
+            <div class="moderation-onboarding-card__hero-copy">
+              <p class="moderation-onboarding-card__eyebrow">Optional feed cleanup</p>
+              <h2>Want Home to feel a little calmer?</h2>
+              <p>
+                We can quietly hide posts that a moderation service has already flagged so your feed is easier to read.
+                It checks only the post text hash — not your username or profile.
+              </p>
+            </div>
+          </div>
+
+          <div class="moderation-onboarding-card__highlights">
+            <div class="moderation-onboarding-card__highlight">
+              <ion-icon :icon="sparklesOutline"></ion-icon>
+              <span>Cleaner Home feed</span>
+            </div>
+            <div class="moderation-onboarding-card__highlight">
+              <ion-icon :icon="eyeOffOutline"></ion-icon>
+              <span>Hide unwanted posts before they appear</span>
+            </div>
+            <div class="moderation-onboarding-card__highlight">
+              <ion-icon :icon="linkOutline"></ion-icon>
+              <span>You can switch it off anytime in Settings</span>
+            </div>
+          </div>
+
+          <div class="moderation-onboarding-card__choices">
+            <button
+              class="moderation-choice moderation-choice--recommended"
+              :class="{ active: moderationChoice === 'default' }"
+              @click="moderationChoice = 'default'"
+            >
+              <span class="moderation-choice__tag">Recommended</span>
+              <strong>Use the built-in filter</strong>
+              <span>Best for most people. One tap, no setup.</span>
+            </button>
+
+            <button
+              class="moderation-choice"
+              :class="{ active: moderationChoice === 'custom' }"
+              @click="moderationChoice = 'custom'"
+            >
+              <span class="moderation-choice__tag moderation-choice__tag--soft">Advanced</span>
+              <strong>I already have my own moderation service</strong>
+              <span>Paste the address below and we&apos;ll use that instead.</span>
+            </button>
+          </div>
+
+          <div v-if="moderationChoice === 'custom'" class="moderation-onboarding-card__custom">
+            <label for="moderation-api-url">Moderation API address</label>
+            <input
+              id="moderation-api-url"
+              ref="moderationCustomApiInput"
+              v-model="moderationCustomApiUrl"
+              type="url"
+              inputmode="url"
+              placeholder="https://interpoll.endless.sbs/moderation"
+              @input="moderationCustomApiError = ''"
+            >
+            <p class="moderation-onboarding-card__hint">
+              This should be the base address of your moderation API.
+            </p>
+            <p v-if="moderationCustomApiError" class="moderation-onboarding-card__error">
+              {{ moderationCustomApiError }}
+            </p>
+          </div>
+
+          <div class="moderation-onboarding-card__actions">
+            <button class="moderation-onboarding-card__secondary" @click="skipModerationOnboarding">
+              No thanks, show everything
+            </button>
+            <button class="moderation-onboarding-card__primary" :disabled="moderationSaving" @click="confirmModerationOnboarding">
+              {{ moderationSaving ? 'Saving…' : moderationChoice === 'custom' ? 'Use this address' : 'Turn on feed filter' }}
+            </button>
+          </div>
+
+          <p class="moderation-onboarding-card__footer">
+            You can change this later in <strong>Settings → General</strong>.
+          </p>
+        </section>
+      </div>
+    </ion-modal>
+
     <!-- Bottom Nav (mobile only) -->
     <ion-footer class="bottom-nav-footer">
       <div class="bottom-nav" :class="{ 'bottom-nav-hidden': isTabBarHidden }">
@@ -445,10 +539,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,IonBadge,  
-  IonButtons, IonButton, IonIcon, IonSegment, IonSegmentButton, IonFooter,
+  IonButtons, IonButton, IonIcon, IonSegment, IonSegmentButton, IonFooter, IonModal,
   IonLabel, IonSpinner, IonChip, IonSearchbar,
   IonInfiniteScroll, IonInfiniteScrollContent,
   actionSheetController, toastController
@@ -458,7 +552,7 @@ import {
   earthOutline, peopleOutline, home, homeOutline, documentTextOutline,
   chevronForwardOutline, people, addCircle, statsChartOutline,
   checkmarkCircleOutline, searchOutline, chatbubble, chatbubbleOutline,
-  shieldOutline
+  shieldOutline, shieldCheckmarkOutline, sparklesOutline, eyeOffOutline, linkOutline
 } from 'ionicons/icons';
 import { useRouter } from 'vue-router';
 import { useChainStore } from '../stores/chainStore';
@@ -475,6 +569,7 @@ import { UserService } from '../services/userService';
 import ChatService from '../services/chatService';
 import { ChatInviteService } from '../services/chatInviteService';
 import { warmupFromDB } from '../services/dbWarmup';
+import { ModerationService, moderationVersion, MODERATION_API_DEFAULT_BASE_URL } from '../services/moderationService';
 import config from '../config';
 
 const router = useRouter();
@@ -488,6 +583,7 @@ const SYNC_DEBUG = localStorage.getItem('interpoll_sync_debug') === 'true';
 const HOME_GUN_FEED_ENABLED = localStorage.getItem('interpoll_home_gun_feed') === 'true';
 const FEED_INITIAL_RENDER_TARGET = 50;
 const TUTORIAL_STORAGE_KEY = 'interpoll_home_tutorial_seen';
+const MODERATION_ONBOARDING_KEY = 'interpoll_moderation_onboarding_complete';
 
 function feedDebug(label: string, data?: Record<string, unknown>) {
   if (!FEED_DEBUG) return;
@@ -510,6 +606,12 @@ const isTabBarHidden = ref(false);
 const warmupComplete = ref(false);
 const tutorialVisible = ref(localStorage.getItem(TUTORIAL_STORAGE_KEY) !== 'true');
 const tutorialStep = ref(0);
+const moderationOnboardingOpen = ref(false);
+const moderationChoice = ref<'default' | 'custom'>('default');
+const moderationCustomApiUrl = ref('');
+const moderationCustomApiInput = ref<HTMLInputElement | null>(null);
+const moderationCustomApiError = ref('');
+const moderationSaving = ref(false);
 const tutorialSteps = [
   {
     title: 'Start with the home feed',
@@ -556,6 +658,87 @@ const scrollThreshold = 50;
 const feedMode = ref<'for-you' | 'latest'>('for-you')
 function setFeedMode(mode: 'for-you' | 'latest') {
   feedMode.value = mode
+}
+
+function isValidModerationApiUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url.trim());
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function openModerationOnboarding() {
+  if (localStorage.getItem(MODERATION_ONBOARDING_KEY) === 'true') return;
+  if (moderationOnboardingOpen.value) return;
+  moderationChoice.value = 'default';
+  moderationCustomApiUrl.value = '';
+  moderationCustomApiError.value = '';
+  moderationOnboardingOpen.value = true;
+}
+
+watch(moderationChoice, async (choice) => {
+  if (choice !== 'custom') return;
+  moderationCustomApiError.value = '';
+  await nextTick();
+  moderationCustomApiInput.value?.focus();
+  moderationCustomApiInput.value?.select?.();
+});
+
+function closeModerationOnboarding() {
+  moderationOnboardingOpen.value = false;
+}
+
+function saveModerationChoiceEnabled(provider: 'interpoll' | 'custom', baseUrl: string) {
+  ModerationService.saveSettings({
+    moderateHomeFeed: true,
+    moderationProvider: provider,
+    moderationApiBaseUrl: baseUrl,
+  });
+  localStorage.setItem(MODERATION_ONBOARDING_KEY, 'true');
+  closeModerationOnboarding();
+}
+
+function skipModerationOnboarding() {
+  ModerationService.saveSettings({
+    moderateHomeFeed: false,
+    moderationProvider: 'interpoll',
+    moderationApiBaseUrl: MODERATION_API_DEFAULT_BASE_URL,
+  });
+  localStorage.setItem(MODERATION_ONBOARDING_KEY, 'true');
+  closeModerationOnboarding();
+}
+
+function handleModerationModalDismiss() {
+  if (localStorage.getItem(MODERATION_ONBOARDING_KEY) === 'true') return;
+  skipModerationOnboarding();
+}
+
+async function confirmModerationOnboarding() {
+  if (moderationSaving.value) return;
+  moderationSaving.value = true;
+  moderationCustomApiError.value = '';
+
+  try {
+    if (moderationChoice.value === 'custom') {
+      const customUrl = moderationCustomApiUrl.value.trim();
+      if (!customUrl) {
+        moderationCustomApiError.value = 'Please paste a moderation API address.';
+        return;
+      }
+      if (!isValidModerationApiUrl(customUrl)) {
+        moderationCustomApiError.value = 'That address does not look valid.';
+        return;
+      }
+      saveModerationChoiceEnabled('custom', customUrl);
+      return;
+    }
+
+    saveModerationChoiceEnabled('interpoll', MODERATION_API_DEFAULT_BASE_URL);
+  } finally {
+    moderationSaving.value = false;
+  }
 }
 
 // ── Chat state ────────────────────────────────────────────────────────────────
@@ -616,11 +799,12 @@ function seededRandom(index: number): number {
 }
 
 const combinedFeed = computed(() => {
+  moderationVersion.value;
   const items: Array<{ type: 'post' | 'poll'; data: any; createdAt: number }> = []
 
-  postStore.sortedPosts.forEach(post =>
-    items.push({ type: 'post', data: post, createdAt: post.createdAt })
-  )
+  postStore.sortedPosts
+    .filter(post => !ModerationService.isPostBodyBlocked(post.content || ''))
+    .forEach(post => items.push({ type: 'post', data: post, createdAt: post.createdAt }));
   pollStore.sortedPolls.forEach(poll => {
     if (!poll.isPrivate) items.push({ type: 'poll', data: poll, createdAt: poll.createdAt })
   })
@@ -709,6 +893,15 @@ watch(
       ensureInitialFeedVisible('feed-items-increased');
     }
   },
+);
+
+watch(
+  () => [postStore.sortedPosts.length, moderationVersion.value] as const,
+  () => {
+    if (!ModerationService.isHomeFeedModerationEnabled()) return;
+    ModerationService.primeHomeFeedChecks(postStore.sortedPosts.map(post => post.content || ''));
+  },
+  { immediate: true },
 );
 
 const joinedCommunities = computed(() => communityStore.communities.filter(c => communityStore.isJoined(c.id)));
@@ -1122,7 +1315,19 @@ async function handleDownvote(post: Post) {
 function getCommunityName(communityId: string): string {
   return communityStore.communities.find(c => c.id === communityId)?.displayName || communityId;
 }
-function navigateToPost(post: Post) { router.push(`/community/${post.communityId}/post/${post.id}`); }
+async function navigateToPost(post: Post) {
+  if (ModerationService.canSubmitHashesFromHome()) {
+    try {
+      await ModerationService.submitPostBodyHash(post.content || '');
+      (await toastController.create({ message: 'Post hash submitted to moderation API', duration: 1800, color: 'success' })).present();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to submit post hash';
+      (await toastController.create({ message, duration: 2200, color: 'warning' })).present();
+    }
+    return;
+  }
+  router.push(`/community/${post.communityId}/post/${post.id}`);
+}
 function navigateToPoll(poll: Poll) { router.push(`/community/${poll.communityId}/poll/${poll.id}`); }
 
 // ── Community subscriptions ───────────────────────────────────────────────────
@@ -1254,6 +1459,8 @@ watch(activeTab, (tab) => {
 });
 
 onMounted(async () => {
+  void openModerationOnboarding();
+
   // STEP 1: Fetch posts/polls/communities from API instantly
   const warmupStartedAt = Date.now();
   if (FEED_DEBUG) {
@@ -1285,6 +1492,7 @@ onMounted(async () => {
     syncDebug('home-gun-feed-disabled (set localStorage.interpoll_home_gun_feed=true to enable)');
   }
   warmupComplete.value = true;
+  void openModerationOnboarding();
 
   // STEP 2: Feed communities — watcher handles any NEW ones Gun delivers later
   const feedPromise = (async () => {
@@ -1505,6 +1713,294 @@ ion-header.header-hidden {
   background: linear-gradient(180deg, var(--app-accent-bright), var(--app-accent));
   color: #fff;
   box-shadow: 0 10px 24px rgba(var(--app-accent-rgb), 0.24);
+}
+
+.moderation-onboarding-modal {
+  --width: 100vw;
+  --height: 100vh;
+  --max-width: 100vw;
+  --max-height: 100vh;
+  --border-radius: 0;
+  --background: rgba(10, 15, 28, 0.34);
+}
+
+.moderation-onboarding-modal__shell {
+  width: 100%;
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.moderation-onboarding-card {
+  width: min(620px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at top left, rgba(var(--app-accent-rgb), 0.16), transparent 34%),
+    rgba(var(--ion-background-color-rgb), 0.98);
+  border: 1px solid rgba(var(--ion-text-color-rgb), 0.12);
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
+}
+
+:global(html.dark) .moderation-onboarding-card {
+  background:
+    radial-gradient(circle at top left, rgba(var(--app-accent-rgb), 0.2), transparent 34%),
+    rgba(15, 23, 42, 0.98);
+  border-color: rgba(148, 163, 184, 0.18);
+  box-shadow: 0 28px 90px rgba(2, 6, 23, 0.56);
+}
+
+.moderation-onboarding-card__hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.moderation-onboarding-card__badge {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  color: #fff;
+  background: linear-gradient(180deg, var(--app-accent-bright), var(--app-accent));
+  box-shadow: 0 12px 26px rgba(var(--app-accent-rgb), 0.28);
+}
+
+.moderation-onboarding-card__badge ion-icon {
+  font-size: 24px;
+}
+
+.moderation-onboarding-card__hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.moderation-onboarding-card__eyebrow {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--app-accent-bright);
+}
+
+.moderation-onboarding-card__hero-copy h2 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.15;
+}
+
+.moderation-onboarding-card__hero-copy p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--app-text-muted);
+}
+
+.moderation-onboarding-card__highlights {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.moderation-onboarding-card__highlight {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(var(--ion-text-color-rgb), 0.04);
+  border: 1px solid rgba(var(--ion-text-color-rgb), 0.06);
+}
+
+.moderation-onboarding-card__highlight ion-icon {
+  font-size: 18px;
+  color: var(--app-accent-bright);
+}
+
+.moderation-onboarding-card__highlight span {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--app-text);
+}
+
+.moderation-onboarding-card__choices {
+  display: grid;
+  gap: 10px;
+}
+
+.moderation-choice {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(var(--ion-text-color-rgb), 0.12);
+  background: rgba(var(--ion-text-color-rgb), 0.03);
+  color: var(--ion-text-color);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.moderation-choice:hover {
+  transform: translateY(-1px);
+  border-color: rgba(var(--app-accent-rgb), 0.32);
+  box-shadow: 0 12px 26px rgba(var(--app-accent-rgb), 0.08);
+}
+
+.moderation-choice.active {
+  border-color: rgba(var(--app-accent-rgb), 0.48);
+  background: rgba(var(--app-accent-rgb), 0.08);
+  box-shadow: 0 0 0 1px rgba(var(--app-accent-rgb), 0.16) inset;
+}
+
+.moderation-choice strong {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.moderation-choice span {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--app-text-muted);
+}
+
+.moderation-choice__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--app-accent-bright), var(--app-accent));
+  color: #fff !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.moderation-choice__tag--soft {
+  background: rgba(var(--ion-text-color-rgb), 0.1);
+  color: var(--ion-text-color) !important;
+}
+
+.moderation-onboarding-card__custom {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px 16px;
+  border-radius: 20px;
+  background: rgba(var(--ion-text-color-rgb), 0.04);
+  border: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
+}
+
+.moderation-onboarding-card__custom label {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.moderation-onboarding-card__custom input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgba(var(--ion-text-color-rgb), 0.16);
+  border-radius: 16px;
+  padding: 13px 14px;
+  font-size: 14px;
+  color: var(--ion-text-color);
+  background: rgba(var(--ion-background-color-rgb), 0.92);
+}
+
+.moderation-onboarding-card__custom input:focus {
+  outline: none;
+  border-color: rgba(var(--app-accent-rgb), 0.55);
+  box-shadow: 0 0 0 3px rgba(var(--app-accent-rgb), 0.16);
+}
+
+.moderation-onboarding-card__hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--app-text-muted);
+}
+
+.moderation-onboarding-card__error {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ion-color-danger);
+}
+
+.moderation-onboarding-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.moderation-onboarding-card__secondary,
+.moderation-onboarding-card__primary {
+  flex: 1 1 220px;
+  border: none;
+  border-radius: 999px;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.moderation-onboarding-card__secondary {
+  background: rgba(var(--ion-text-color-rgb), 0.06);
+  color: var(--ion-text-color);
+}
+
+.moderation-onboarding-card__primary {
+  background: linear-gradient(180deg, var(--app-accent-bright), var(--app-accent));
+  color: #fff;
+  box-shadow: 0 12px 30px rgba(var(--app-accent-rgb), 0.24);
+}
+
+.moderation-onboarding-card__primary:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.moderation-onboarding-card__footer {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--app-text-muted);
+}
+
+@media (max-width: 640px) {
+  .moderation-onboarding-card {
+    padding: 18px;
+    border-radius: 24px;
+  }
+
+  .moderation-onboarding-card__hero {
+    flex-direction: column;
+  }
+
+  .moderation-onboarding-card__highlights {
+    grid-template-columns: 1fr;
+  }
+
+  .moderation-onboarding-card__secondary,
+  .moderation-onboarding-card__primary {
+    flex-basis: 100%;
+  }
 }
 
 .feed-mode-toggle {

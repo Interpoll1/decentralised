@@ -64,6 +64,7 @@ Key computed: `polls`, `sortedPolls`
 - `createPost()` checks the current user's `showRealName` preference. If false (default), generates a pseudonym from the pre-generated postId + authorId as the `authorName`. If true, uses the user's `customUsername`.
 - `createPost()` now also enforces community membership via locally persisted joined-community state and throws `COMMUNITY_JOIN_REQUIRED` for non-members, preventing invalid post attempts from composer/direct route calls.
 - Post vote totals now stay live for already-loaded posts: community subscriptions no longer ignore repeat post IDs after initial hydration, so vote/score updates for existing posts keep flowing into `postsMap` instead of getting dropped as duplicate IDs.
+- Post vote mutations now broadcast `post-updated` over both sync channels, so other tabs/peers refresh like-for-like counts immediately instead of waiting on a stale feed refresh.
 - `loadMorePosts()` still paginates by `PAGE_SIZE` (10), but Home feed now controls initial visibility separately (up to 50 items) so users do not need an initial scroll to reveal already-fetched content.
 - Debug instrumentation logs `[PostStoreDebug]` entries for community subscription start/initial completion, injected posts, and visible-count changes to help diagnose feed hydration issues (enabled only when `localStorage.interpoll_post_debug === 'true'`).
 - Sync diagnostics: when `localStorage.interpoll_sync_debug === 'true'`, logs `[SyncRate] post-incoming` and `[SyncRate] post-flush` once per second with queue depth.

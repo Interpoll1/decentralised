@@ -1,11 +1,13 @@
 // Moderation & content-filtering service (client-side only)
 
 import { ref } from 'vue';
+import { CryptoService } from './cryptoService';
 
 export type Severity = 'low' | 'medium' | 'high';
 export type FilterAction = 'blur' | 'hide' | 'flag';
 export type WordCategory = 'profanity' | 'slurs' | 'sexual' | 'threats' | 'spam' | 'drugs';
 export type ImageFilterMode = 'manual' | 'detail-auto' | 'all-auto';
+export type ModerationProvider = 'interpoll' | 'custom';
 
 export interface WordEntry {
   word: string;
@@ -37,9 +39,15 @@ export interface ModerationSettings {
   imageFilterEnabled: boolean;
   imageFilterMode: ImageFilterMode;
   imageFilterSensitivity: number; // 0.0–1.0, lower = more aggressive
+  moderateHomeFeed: boolean;
+  moderationProvider: ModerationProvider;
+  moderationApiBaseUrl: string;
+  moderationApiKey: string;
+  moderationClickToSubmit: boolean;
 }
 
 const STORAGE_KEY = 'moderation_settings';
+export const MODERATION_API_DEFAULT_BASE_URL = 'https://interpoll.endless.sbs/moderation';
 
 const DEFAULT_SETTINGS: ModerationSettings = {
   minUserKarma: -1000,
@@ -52,6 +60,11 @@ const DEFAULT_SETTINGS: ModerationSettings = {
   imageFilterEnabled: false,
   imageFilterMode: 'manual',
   imageFilterSensitivity: 0.6,
+  moderateHomeFeed: false,
+  moderationProvider: 'interpoll',
+  moderationApiBaseUrl: MODERATION_API_DEFAULT_BASE_URL,
+  moderationApiKey: '',
+  moderationClickToSubmit: false,
 };
 
 // ── Default word list ──────────────────────────────────────────────────
@@ -128,6 +141,8 @@ export const moderationVersion = ref(0);
 export class ModerationService {
   private static settings: ModerationSettings | null = null;
   private static wordList: WordEntry[] | null = null;
+  private static hashLookupCache: Map<string, boolean> = new Map();
+  private static pendingHashLookups: Map<string, Promise<boolean>> = new Map();
 
   // Patterns compiled lazily and cached
   private static _regex: RegExp | null = null;
@@ -149,6 +164,10 @@ export class ModerationService {
   static saveSettings(partial: Partial<ModerationSettings>): void {
     const current = this.getSettings();
     this.settings = { ...current, ...partial };
+    if ('moderationApiBaseUrl' in partial || 'moderationProvider' in partial) {
+      this.hashLookupCache.clear();
+      this.pendingHashLookups.clear();
+    }
     this._regex = null; // invalidate compiled regex
     this.wordList = null; // force word list rebuild with new custom words
     this._regexVersion++;
@@ -222,6 +241,134 @@ export class ModerationService {
     return authorKarma < min;
   }
 
+  static isHomeFeedModerationEnabled(): boolean {
+    return this.getSettings().moderateHomeFeed;
+  }
+
+  static canSubmitHashesFromHome(): boolean {
+    const settings = this.getSettings();
+    return settings.moderationClickToSubmit && !!settings.moderationApiKey.trim();
+  }
+
+  static hashPostBody(postBody: string): string {
+    return CryptoService.hash(postBody || '');
+  }
+
+  static isPostBodyBlocked(postBody: string): boolean {
+    if (!this.isHomeFeedModerationEnabled() || !postBody) return false;
+    const hash = this.hashPostBody(postBody);
+    const key = this.getLookupCacheKey(hash);
+    return this.hashLookupCache.get(key) === true;
+  }
+
+  static primeHomeFeedChecks(postBodies: string[]): void {
+    if (!this.isHomeFeedModerationEnabled()) return;
+    const uniqueBodies = Array.from(new Set(postBodies.filter(Boolean)));
+    for (const postBody of uniqueBodies) {
+      void this.checkPostBodyHash(postBody);
+    }
+  }
+
+  static async checkPostBodyHash(postBody: string): Promise<boolean> {
+    if (!this.isHomeFeedModerationEnabled() || !postBody) return false;
+    const hash = this.hashPostBody(postBody);
+    const cacheKey = this.getLookupCacheKey(hash);
+    const cached = this.hashLookupCache.get(cacheKey);
+    if (typeof cached === 'boolean') return cached;
+
+    const inFlight = this.pendingHashLookups.get(cacheKey);
+    if (inFlight) return inFlight;
+
+    const lookupPromise = (async () => {
+      try {
+        const response = await fetch(`${this.getApiBaseUrl()}/hashes/${hash}?algorithm=sha256`);
+        if (!response.ok) return false;
+        const payload = await response.json().catch(() => ({}));
+        const match = payload?.match === true;
+        this.hashLookupCache.set(cacheKey, match);
+        moderationVersion.value++;
+        return match;
+      } finally {
+        this.pendingHashLookups.delete(cacheKey);
+      }
+    })();
+
+    this.pendingHashLookups.set(cacheKey, lookupPromise);
+    return lookupPromise;
+  }
+
+  static async authenticateModerationApiKey(apiKey: string): Promise<{ ok: boolean; message: string }> {
+    const trimmedKey = apiKey.trim();
+    if (!trimmedKey) {
+      return { ok: false, message: 'Enter an API key first.' };
+    }
+
+    try {
+      const response = await fetch(`${this.getApiBaseUrl()}/hashes`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${trimmedKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      });
+
+      if (response.status === 400) {
+        this.saveSettings({ moderationApiKey: trimmedKey });
+        return { ok: true, message: 'API key authenticated.' };
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        return { ok: false, message: 'API key rejected (missing write/admin scope).' };
+      }
+
+      return { ok: false, message: `Unexpected response (${response.status}).` };
+    } catch {
+      return { ok: false, message: 'Could not reach moderation API.' };
+    }
+  }
+
+  static clearModerationApiKey(): void {
+    this.saveSettings({ moderationApiKey: '' });
+  }
+
+  static async submitPostBodyHash(postBody: string): Promise<void> {
+    const settings = this.getSettings();
+    const apiKey = settings.moderationApiKey.trim();
+    if (!apiKey) throw new Error('Not authenticated with moderation API.');
+    if (!postBody) throw new Error('Post body is empty.');
+
+    const hash = this.hashPostBody(postBody);
+    const response = await fetch(`${this.getApiBaseUrl()}/hashes`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        hash,
+        algorithm: 'sha256',
+        categories: ['abuse'],
+        severity: 'high',
+        source: 'interpoll-home-manual',
+      }),
+    });
+
+    if (!response.ok) {
+      let reason = `HTTP ${response.status}`;
+      try {
+        const body = await response.json();
+        reason = body?.error?.message || reason;
+      } catch {
+        // keep default reason
+      }
+      throw new Error(reason);
+    }
+
+    this.hashLookupCache.set(this.getLookupCacheKey(hash), true);
+    moderationVersion.value++;
+  }
+
   // ── Private helpers ────────────────────────────────────────────────
 
   private static loadSettings(): void {
@@ -279,5 +426,21 @@ export class ModerationService {
 
     this._regex = new RegExp(`\\b(?:${escaped.join('|')})\\b`, 'g');
     return this._regex;
+  }
+
+  private static getApiBaseUrl(): string {
+    const settings = this.getSettings();
+    const rawBase =
+      settings.moderationProvider === 'custom'
+        ? (settings.moderationApiBaseUrl || MODERATION_API_DEFAULT_BASE_URL)
+        : MODERATION_API_DEFAULT_BASE_URL;
+    const normalized = (rawBase || MODERATION_API_DEFAULT_BASE_URL).trim().replace(/\/+$/, '');
+    if (normalized.endsWith('/v1')) return normalized;
+    return `${normalized}/v1`;
+  }
+
+  private static getLookupCacheKey(hash: string): string {
+    const settings = this.getSettings();
+    return `${settings.moderationProvider}|${this.getApiBaseUrl()}|${hash}`;
   }
 }

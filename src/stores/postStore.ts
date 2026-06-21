@@ -108,6 +108,20 @@ export const usePostStore = defineStore('post', () => {
     queueDepth: getPendingIncomingPostCount(),
   }));
 
+  function handlePostSyncUpdate(incomingPost: Post) {
+    if (!incomingPost?.id) return;
+    const communityId = incomingPost.communityId || currentCommunityId.value || '';
+    processIncomingPost(communityId, incomingPost);
+  }
+
+  function broadcastPostUpdate(updatedPost: Post) {
+    BroadcastService.broadcast('post-updated', updatedPost);
+    void WebSocketService.broadcast('post-updated', updatedPost);
+  }
+
+  BroadcastService.subscribe('post-updated', handlePostSyncUpdate);
+  WebSocketService.subscribe('post-updated', handlePostSyncUpdate);
+
   /** Attempt to decrypt an encrypted post and update the store */
   function tryDecryptPost(post: Post) {
     if (!post.isEncrypted || !post.encryptedContent) return;
@@ -472,6 +486,7 @@ export const usePostStore = defineStore('post', () => {
         postsMap.value.set(postId, updated);
         if (currentPost.value?.id === postId) currentPost.value = updated;
         await UserService.incrementKarma(updated.authorId, direction === 'up' ? 1 : -1);
+        broadcastPostUpdate(updated);
       }
     } catch (error) { console.error('Error voting:', error); throw error; }
   }
@@ -484,6 +499,7 @@ export const usePostStore = defineStore('post', () => {
         postsMap.value.set(postId, updated);
         if (currentPost.value?.id === postId) currentPost.value = updated;
         await UserService.incrementKarma(updated.authorId, 1);
+        broadcastPostUpdate(updated);
       }
     } catch (error) { console.error('Error upvoting:', error); throw error; }
   }
@@ -496,6 +512,7 @@ export const usePostStore = defineStore('post', () => {
         postsMap.value.set(postId, updated);
         if (currentPost.value?.id === postId) currentPost.value = updated;
         await UserService.incrementKarma(updated.authorId, -1);
+        broadcastPostUpdate(updated);
       }
     } catch (error) { console.error('Error downvoting:', error); throw error; }
   }
@@ -508,6 +525,7 @@ export const usePostStore = defineStore('post', () => {
         postsMap.value.set(postId, updated);
         if (currentPost.value?.id === postId) currentPost.value = updated;
         await UserService.incrementKarma(updated.authorId, -1);
+        broadcastPostUpdate(updated);
       }
     } catch (error) { console.error('Error removing upvote:', error); throw error; }
   }
@@ -520,6 +538,7 @@ export const usePostStore = defineStore('post', () => {
         postsMap.value.set(postId, updated);
         if (currentPost.value?.id === postId) currentPost.value = updated;
         await UserService.incrementKarma(updated.authorId, 1);
+        broadcastPostUpdate(updated);
       }
     } catch (error) { console.error('Error removing downvote:', error); throw error; }
   }

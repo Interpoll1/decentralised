@@ -399,7 +399,7 @@ export class PostService {
       if (!initialLoadDone) return;
       if (!allPosts) return;
       Object.keys(allPosts).forEach(postId => {
-        if (postId === '_' || initialSeenIds.has(postId) || inFlightIds.has(postId)) return;
+        if (postId === '_' || inFlightIds.has(postId)) return;
         inFlightIds.add(postId);
         void onceWithTimeout(gun.get('posts').get(postId)).then((postData) => {
           if (postData && postData.id) {
