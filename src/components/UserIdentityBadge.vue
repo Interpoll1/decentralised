@@ -7,7 +7,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
 import { UserService } from '@/services/userService';
 import { db } from '@/services/gdbServices';
 
@@ -32,28 +32,36 @@ const props = defineProps<{
 const loading = ref(true);
 const displayName = ref(props.username || '');
 const role = ref('guest');
+let unsub: (() => void) | null = null;
 
 async function resolve() {
   loading.value = true;
+  unsub?.();
+  unsub = null;
   try {
-    if (props.authorId) {
-      const profile = await UserService.getUser(props.authorId);
-      displayName.value = profile?.customUsername || props.username || '';
-      role.value = await UserService.getRole(props.authorId);
-      return;
-    }
+    const address = props.authorId || db.sm.getActiveEthAddress();
+    displayName.value = props.authorId
+      ? (await UserService.getUser(props.authorId))?.customUsername || props.username || ''
+      : props.username || '';
 
-    displayName.value = props.username || '';
-    role.value = await UserService.getRole(db.sm.getActiveEthAddress());
+    if (!address) { role.value = 'guest'; loading.value = false; return; }
+
+    // Realtime: subscribe to the SM role node (`user:<address>`) so a governance
+    // promotion (guest -> member -> trusted) appears live, with no refresh.
+    const { unsubscribe } = await db.get(`user:${address}`, (node: any) => {
+      role.value = node?.value?.role || 'guest';
+      loading.value = false;
+    });
+    unsub = unsubscribe;
   } catch {
     role.value = 'guest';
-  } finally {
     loading.value = false;
   }
 }
 
 onMounted(resolve);
 watch(() => [props.username, props.authorId], resolve);
+onUnmounted(() => unsub?.());
 </script>
 
 <style scoped>

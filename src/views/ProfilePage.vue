@@ -436,7 +436,7 @@
 </style>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonBackButton, IonButton, IonItem, IonLabel,
@@ -448,6 +448,7 @@ import {
   documentTextOutline, chatbubbleOutline, trophyOutline, peopleOutline,
   cameraOutline, eyeOutline, eyeOffOutline
 } from 'ionicons/icons';
+import { db } from '../services/gdbServices';
 import { UserService } from '../services/userService';
 import type { UserProfile } from '../services/userService';
 import { VoteTrackerService } from '../services/voteTrackerService';
@@ -458,6 +459,8 @@ const communityStore = useCommunityStore();
 
 const userProfile = ref<UserProfile | null>(null);
 const role = ref('guest');
+let roleUnsub: (() => void) | null = null;
+onUnmounted(() => roleUnsub?.());
 const displayName = ref('');
 const customUsername = ref('');
 const bio = ref('');
@@ -514,7 +517,12 @@ async function loadProfile() {
     customUsername.value = profile.customUsername || '';
     bio.value = profile.bio || '';
     showRealName.value = profile.showRealName || false;
-    role.value = await UserService.getRole(profile.id);
+    // Realtime: a governance promotion updates this badge live, no refresh.
+    roleUnsub?.();
+    const roleSub = await db.get(`user:${profile.id}`, (node: any) => {
+      role.value = node?.value?.role || 'guest';
+    });
+    roleUnsub = roleSub.unsubscribe;
     deviceId.value = await VoteTrackerService.getDeviceId();
   } catch (error) {
     console.error('Error loading profile:', error);
