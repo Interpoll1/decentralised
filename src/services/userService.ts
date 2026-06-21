@@ -41,6 +41,21 @@ export class UserService {
     return (result?.value?.role as string) || 'guest'
   }
 
+  /**
+   * Increments `postCount` on the active identity's SM role node (`user:<address>`)
+   * so the governance engine can evaluate the member -> trusted rule. Spreads the
+   * existing value — `db.put` replaces the whole node, so `role`/`ethAddress` must
+   * be preserved (per the GenosDB governance docs).
+   */
+  static async recordGovernancePost(): Promise<void> {
+    const address = db.sm.getActiveEthAddress()
+    if (!address) return
+    const id = `user:${address}`
+    const { result } = await db.get(id)
+    const current = (result?.value as Record<string, any>) ?? { ethAddress: address, role: 'guest' }
+    await db.put({ ...current, postCount: (current.postCount || 0) + 1 }, id)
+  }
+
   /** Read a profile node by address. */
   private static async readProfile(address: string): Promise<UserProfile | null> {
     const { result } = await db.get(address)

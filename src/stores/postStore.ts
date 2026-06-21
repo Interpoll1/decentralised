@@ -94,6 +94,7 @@ export const usePostStore = defineStore('post', () => {
       postId,
     )
     await UserService.incrementPostCount()
+    await UserService.recordGovernancePost() // governance metric on the user:<address> node
     injectPost(post)
     return post
   }

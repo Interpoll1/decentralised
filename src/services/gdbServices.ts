@@ -80,9 +80,9 @@ const GOVERNANCE_RULES = [
   { if: { role: 'guest' }, offsetTimestamp: 10000, then: { assignRole: 'member' } },
   // Floor: any onboarded member stays at least `member`.
   { if: { role: { $in: ['member', 'trusted'] } }, then: { assignRole: 'member' } },
-  // Climb: enough reputation -> `trusted` (auto-demotes if it drops). Activates once
-  // the app writes `reputation` into the user node (next phase).
-  { if: { role: { $in: ['member', 'trusted'] }, reputation: { $gte: 10 } }, then: { assignRole: 'trusted' } },
+  // Climb: enough posts -> `trusted` (auto-demotes if the count drops). The author
+  // increments postCount on their own user node when they publish (UserService).
+  { if: { role: { $in: ['member', 'trusted'] }, postCount: { $gte: 3 } }, then: { assignRole: 'trusted' } },
 ]
 
 export const db = await gdb(GDB_NAME, {
