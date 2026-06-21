@@ -37,6 +37,7 @@ InterPoll takes a different approach, powered by **[GenosDB](https://github.com/
 
 - **No single owner.** Data lives on every participant's device and syncs directly peer-to-peer. There is no backend to capture or shut down.
 - **Your vote, signed by you.** Every action is cryptographically signed by an identity that lives only on your device. No peer can forge a vote or post in your name.
+- **Owned by you, not just signed by you.** Your content isn't only unforgeable — it's yours to remove. No peer can delete your post, vote, message or profile; only you, or a moderator a community owner chooses to delegate to.
 - **Posts and comments that persist.** Community discussion is replicated across peers, not trapped in a single vendor database.
 - **Verifiable receipts.** After voting you get a short verification code. Check it in the built-in Chain Explorer any time to confirm your vote is intact.
 - **Works offline.** Lost your connection? Your activity is saved locally and syncs automatically when you reconnect.
@@ -59,6 +60,7 @@ InterPoll takes a different approach, powered by **[GenosDB](https://github.com/
 | **Passkey or recovery phrase** | Protect your identity with a WebAuthn passkey (biometrics / hardware key) or a 12-word BIP39 recovery phrase. |
 | **Earned trust (governance)** | Roles aren't handed out — you climb `guest → member → trusted` by participating, under public rules every peer can verify. No central moderator decides who is trusted. |
 | **Community-scoped moderation** | Each community owns its space: its creator (and the moderators they delegate to) can remove content in *that* community only. There is no platform-wide censor. |
+| **Yours to delete — and only yours** | Every post, comment, vote, poll, profile, message and receipt is owned by your device identity. No other participant can delete or overwrite it; only you, or a community moderator you explicitly delegate to. |
 
 ---
 
