@@ -92,7 +92,8 @@ export const useChainStore = defineStore('chain', () => {
       author: db.sm.getActiveEthAddress() ?? undefined,
       createdAt,
     }
-    const id = await db.put({ type: 'chainAction', ...node })
+    const id = `chain-${createdAt}-${Math.random().toString(36).slice(2, 11)}`
+    await db.sm.acls.set({ type: 'chainAction', ...node }, id)
 
     const verificationCode = CryptoService.generateVerificationCode()
     const receipt: Receipt = {
@@ -105,7 +106,7 @@ export const useChainStore = defineStore('chain', () => {
       pollId: vote.pollId,
     }
     // Persist the receipt so a verification code can be looked up later.
-    await db.put({ type: 'receipt', ...receipt }, `receipt:${CryptoService.verificationCodeToReceiptId(verificationCode)}`)
+    await db.sm.acls.set({ type: 'receipt', ...receipt }, `receipt:${CryptoService.verificationCodeToReceiptId(verificationCode)}`)
     return receipt
   }
 
@@ -118,7 +119,8 @@ export const useChainStore = defineStore('chain', () => {
       author: db.sm.getActiveEthAddress() ?? undefined,
       createdAt,
     }
-    const id = await db.put({ type: 'chainAction', ...node })
+    const id = `chain-${createdAt}-${Math.random().toString(36).slice(2, 11)}`
+    await db.sm.acls.set({ type: 'chainAction', ...node }, id)
     return {
       index: blocks.value.length,
       timestamp: createdAt,
@@ -145,8 +147,15 @@ export const useChainStore = defineStore('chain', () => {
   async function syncBlocks() { await loadBlocks() }
 
   async function resetChain() {
+    // Each chainAction is ACL-owned by its author, so a reset clears only YOUR
+    // actions — you cannot delete another peer's signed log entries.
+    const me = db.sm.getActiveEthAddress()
     const { results } = await db.map({ query: { type: 'chainAction' } })
-    await Promise.all(results.map(n => db.remove(n.id)))
+    await Promise.all(
+      results
+        .filter(n => !me || n.value.author === me)
+        .map(n => db.sm.acls.delete(n.id).catch(() => {})),
+    )
     blocks.value = []
     chainValid.value = true
   }

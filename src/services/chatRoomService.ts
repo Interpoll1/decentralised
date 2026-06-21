@@ -59,15 +59,18 @@ export class ChatRoomService {
     const encryptionHint = password ? 'Password-protected' : 'Invite-only'
     const createdAt = Date.now()
 
-    await db.put({
+    // ACL-owned by the creator; only they can edit the room node. Membership is
+    // modelled as signed `roomMember` nodes (like community memberships), so the
+    // member count is derived — no peer mutates a shared counter.
+    await db.sm.acls.set({
       type: 'chatRoom',
       id: roomId,
       isEncrypted: true,
       encryptionHint,
       encryptedMeta,
       createdAt,
-      memberCount: 1,
     }, roomId)
+    await db.sm.acls.set({ type: 'roomMember', roomId, member: creatorId, joinedAt: createdAt }, `roomMember:${roomId}:${creatorId}`)
 
     const keyBase64 = await EncryptionService.exportKey(aesKey)
     await KeyVaultService.storeKey({ id: roomId, type: 'chatroom', key: keyBase64, method, label: name, joinedAt: Date.now() })
@@ -100,8 +103,11 @@ export class ChatRoomService {
     const keyBase64 = await EncryptionService.exportKey(aesKey)
     await KeyVaultService.storeKey({ id: roomId, type: 'chatroom', key: keyBase64, method, label: meta.name, joinedAt: Date.now() })
 
-    const memberCount = (Number(roomData.memberCount) || 1) + 1
-    await db.put({ ...roomData, memberCount }, roomId)
+    // Join = a signed roomMember node owned by the joiner; the room node (the
+    // creator's) stays untouched. Member count is derived from these nodes.
+    const me = db.sm.getActiveEthAddress()
+    if (me) await db.sm.acls.set({ type: 'roomMember', roomId, member: me, joinedAt: Date.now() }, `roomMember:${roomId}:${me}`)
+    const memberCount = await this.countRoomMembers(roomId)
 
     return {
       id: roomId,
@@ -127,7 +133,8 @@ export class ChatRoomService {
     const encryptedContent = await EncryptionService.encrypt(JSON.stringify(content), aesKey)
     const authTag = await EncryptionService.generateAuthTag(aesKey, msgId, String(timestamp), senderId)
 
-    await db.put({ type: 'chatMessage', id: msgId, roomId, senderId, encryptedContent, authTag, timestamp }, msgId)
+    // ACL-owned by the sender; no other peer can delete or overwrite a room message.
+    await db.sm.acls.set({ type: 'chatMessage', id: msgId, roomId, senderId, encryptedContent, authTag, timestamp }, msgId)
     return { id: msgId, roomId, text, senderId, senderName, timestamp }
   }
 
@@ -181,6 +188,7 @@ export class ChatRoomService {
         } catch { /* fall back to stored label */ }
       }
 
+      const memberCount = await this.countRoomMembers(storedKey.id)
       rooms.push({
         id: storedKey.id,
         name,
@@ -189,14 +197,22 @@ export class ChatRoomService {
         isEncrypted: true,
         encryptionHint: roomData.encryptionHint || '',
         createdAt: roomData.createdAt || storedKey.joinedAt,
-        memberCount: Number(roomData.memberCount) || 1,
+        memberCount,
       })
     }
 
     return rooms.sort((a, b) => b.createdAt - a.createdAt)
   }
 
+  /** Derive a room's member count from its signed roomMember nodes. */
+  private static async countRoomMembers(roomId: string): Promise<number> {
+    const { results } = await db.map({ query: { type: 'roomMember', roomId } })
+    return results.length || 1
+  }
+
   static async leaveRoom(roomId: string): Promise<void> {
+    const me = db.sm.getActiveEthAddress()
+    if (me) await db.sm.acls.delete(`roomMember:${roomId}:${me}`).catch(() => {})
     await KeyVaultService.removeKey(roomId)
   }
 }

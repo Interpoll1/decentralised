@@ -53,7 +53,7 @@ class ChatService {
     // Publish our RSA public key so peers can encrypt to us.
     const { result } = await db.get(`chatKey:${this.userId}`)
     if (result?.value?.key !== pubKeyB64) {
-      await db.put({ type: 'chatKey', userId: this.userId, key: pubKeyB64 }, `chatKey:${this.userId}`)
+      await db.sm.acls.set({ type: 'chatKey', userId: this.userId, key: pubKeyB64 }, `chatKey:${this.userId}`)
     }
 
     // Incoming messages arrive as synced nodes — only surface genuinely new ones.
@@ -161,7 +161,9 @@ class ChatService {
     const timestamp = Date.now()
 
     // The synced node IS the delivery — no relay forwarding needed.
-    await db.put({
+    // ACL-owned by the sender; the recipient gets `write` (not `delete`) so they
+    // can mark it read but cannot remove it, and no other peer can touch it.
+    await db.sm.acls.set({
       type: 'dm',
       id: messageId,
       roomId: this.getRoomId(this.userId, recipientId),
@@ -172,6 +174,7 @@ class ChatService {
       timestamp,
       readAt: null,
     }, messageId)
+    await db.sm.acls.grant(messageId, recipientId, 'write')
 
     return messageId
   }

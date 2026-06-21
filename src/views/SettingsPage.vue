@@ -55,7 +55,7 @@
           <div class="info-grid">
             <div class="info-row">
               <span>Device ID</span>
-              <code>{{ fullDeviceId }}</code>
+              <code>{{ deviceId }}</code>
             </div>
             <div class="info-row identity-row">
               <span>Username</span>
