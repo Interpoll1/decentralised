@@ -11,7 +11,17 @@
         <div class="post-meta">
           <span class="community-name">{{ communityName }}</span>
           <span class="separator">•</span>
-          <span class="author">u/{{ authorDisplayName }}</span>
+          <span class="author-wrap">
+            <span class="author">u/{{ authorDisplayName }}</span>
+            <button
+              v-if="canInviteAuthor"
+              class="invite-chat-btn"
+              type="button"
+              @click.stop="handleInviteToChat"
+            >
+              Invite to chat
+            </button>
+          </span>
           <span class="identity-badge" :class="authorIdentityClass">
             {{ authorIdentityLabel }}
           </span>
@@ -95,6 +105,33 @@
 .author {
   color: var(--app-text);
   font-weight: 500;
+}
+
+.author-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.invite-chat-btn {
+  border: 1px solid rgba(var(--app-accent-rgb), 0.24);
+  background: rgba(var(--app-accent-rgb), 0.1);
+  color: var(--app-accent-bright);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(1px);
+  transition: opacity var(--app-transition), transform var(--app-transition);
+}
+
+.post-meta:hover .invite-chat-btn,
+.invite-chat-btn:focus-visible {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .identity-badge {
@@ -268,6 +305,12 @@
 }
 
 @media (max-width: 576px) {
+  .invite-chat-btn {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
   .post-card {
     margin: 0 0 14px;
     padding: 16px 0 14px;
@@ -350,9 +393,9 @@ function autoLink(text: string): string {
   return text.replace(/(https?:\/\/[\w\-\.\/?#&=;%+~:@,]+[\w\/])/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
 }
 
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { IonIcon } from '@ionic/vue';
+import { IonIcon, toastController } from '@ionic/vue';
 import {
   arrowUpOutline, 
   arrowDownOutline, 
@@ -365,6 +408,8 @@ import type { FilterAction } from '../services/moderationService';
 import { generatePseudonym } from '../utils/pseudonym';
 import { useUserStore } from '../stores/userStore';
 import type { UserProfile } from '../services/userService';
+import { UserService } from '../services/userService';
+import { ChatInviteService } from '../services/chatInviteService';
 import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 
 const router = useRouter();
@@ -382,6 +427,7 @@ const props = defineProps<{
 }>();
 
 const revealed = ref(false);
+const currentUserId = ref('');
 
 const emit = defineEmits(['upvote', 'downvote']);
 
@@ -437,6 +483,10 @@ const authorIdentityClass = computed(() =>
   currentAuthorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'
 );
 
+const canInviteAuthor = computed(() =>
+  !!props.post.authorId && !!currentUserId.value && props.post.authorId !== currentUserId.value
+);
+
 const truncatedContent = computed(() => {
   const content = props.post.content || '';
   if (content.length <= 200) {
@@ -463,6 +513,35 @@ function handleCommentsClick(event: Event) {
   event.stopPropagation();
   router.push(`/post/${props.post.id}`);
 }
+
+async function handleInviteToChat() {
+  if (!canInviteAuthor.value) return;
+  try {
+    await ChatInviteService.sendInvite(props.post.authorId);
+    const toast = await toastController.create({
+      message: `Chat invite sent to u/${authorDisplayName.value}`,
+      duration: 2200,
+      color: 'success',
+    });
+    await toast.present();
+  } catch {
+    const toast = await toastController.create({
+      message: 'Failed to send chat invite',
+      duration: 2200,
+      color: 'danger',
+    });
+    await toast.present();
+  }
+}
+
+onMounted(async () => {
+  try {
+    const currentUser = await UserService.getCurrentUser();
+    currentUserId.value = currentUser.id;
+  } catch {
+    currentUserId.value = '';
+  }
+});
 
 function formatTime(timestamp: number): string {
   const now = Date.now();
