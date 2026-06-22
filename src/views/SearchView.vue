@@ -30,8 +30,9 @@
       <div class="search-filters">
         <select v-model="filterType" @change="handleFilterChange" class="filter-select">
           <option value="">All Types</option>
-          <option value="post">Posts Only</option>
-          <option value="poll">Polls Only</option>
+          <option value="post">Posts</option>
+          <option value="poll">Polls</option>
+          <option value="community">Communities</option>
         </select>
 
         <input
@@ -79,17 +80,18 @@
         >
 
           
-          <h3 class="result-title">{{ result.title || result.question }}</h3>
-          
+          <h3 class="result-title">{{ result.title }}</h3>
+
           <p class="result-content">
-            {{ truncate(result.content || result.description || '', 150) }}
+            {{ truncate(result.content || '', 150) }}
           </p>
-          
+
           <div class="result-meta">
-            <span class="result-author">by {{ formatAddress(result.author) || 'Anonymous' }}</span>
-            <span v-if="result.community" class="result-community">
-              in {{ result.community }}
-            </span>
+            <span v-if="result.type === 'community'" class="result-author">Community</span>
+            <template v-else>
+              <span class="result-author">by {{ formatAddress(result.author) || 'Anonymous' }}</span>
+              <span v-if="result.community" class="result-community">in {{ result.community }}</span>
+            </template>
             <span class="result-date">{{ formatDate(result.created_at) }}</span>
           </div>
         </div>
@@ -593,6 +595,8 @@ const goToPreviousPage = async () => {
 const navigateToResult = (result: any) => {
   if (result.type === 'post') {
     router.push(`/post/${result.id}`);
+  } else if (result.type === 'community') {
+    router.push(`/community/${result.id}`);
   } else {
     router.push({
       path: `/vote/${result.id}`,

@@ -70,7 +70,7 @@ export function useSearch(apiUrl: string = ''): UseSearchReturn {
     error.value = null;
     
     try {
-      const response: SearchResponse = await searchService.searchPage(
+      const response: SearchResponse = await searchService.searchPaginated(
         query,
         page,
         perPage.value,

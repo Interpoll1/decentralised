@@ -8,7 +8,7 @@ import { db } from './gdbServices'
 
 export interface SearchResult {
   id: string
-  type: 'post' | 'poll'
+  type: 'post' | 'poll' | 'community'
   title: string
   content: string
   author: string
@@ -18,7 +18,7 @@ export interface SearchResult {
 }
 
 export interface SearchOptions {
-  type?: 'post' | 'poll'
+  type?: 'post' | 'poll' | 'community'
   community?: string
   limit?: number
   offset?: number
@@ -35,28 +35,37 @@ class SearchService {
 
   async search(query: string, options: SearchOptions = {}): Promise<SearchResponse> {
     if (!query || query.length < 2) throw new Error('Query must be at least 2 characters')
-    const q = query.toLowerCase()
     const results: SearchResult[] = []
+    const want = (t: SearchOptions['type']) => !options.type || options.type === t
 
-    if (!options.type || options.type === 'post') {
-      const { results: posts } = await db.map({ query: { type: 'post' } })
+    // GenosDB native text search (`$text`) — the query filters server-side instead
+    // of fetching every node and matching in JS.
+    if (want('post')) {
+      const q: Record<string, unknown> = { type: 'post', $text: query }
+      if (options.community) q.communityId = options.community
+      const { results: posts } = await db.map({ query: q })
       for (const node of posts) {
         const p: any = node.value
-        if (options.community && p.communityId !== options.community) continue
-        if ((p.title || '').toLowerCase().includes(q) || (p.content || '').toLowerCase().includes(q)) {
-          results.push({ id: p.id, type: 'post', title: p.title || '', content: p.content || '', author: p.authorName || '', community: p.communityId || '', created_at: p.createdAt || 0 })
-        }
+        results.push({ id: p.id, type: 'post', title: p.title || '', content: p.content || '', author: p.authorName || '', community: p.communityId || '', created_at: p.createdAt || 0 })
       }
     }
 
-    if (!options.type || options.type === 'poll') {
-      const { results: polls } = await db.map({ query: { type: 'poll' } })
+    if (want('poll')) {
+      const q: Record<string, unknown> = { type: 'poll', $text: query }
+      if (options.community) q.communityId = options.community
+      const { results: polls } = await db.map({ query: q })
       for (const node of polls) {
         const p: any = node.value
-        if (options.community && p.communityId !== options.community) continue
-        if ((p.question || '').toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q)) {
-          results.push({ id: p.id, type: 'poll', title: p.question || '', content: p.description || '', author: p.authorName || '', community: p.communityId || '', created_at: p.createdAt || 0 })
-        }
+        results.push({ id: p.id, type: 'poll', title: p.question || '', content: p.description || '', author: p.authorName || '', community: p.communityId || '', created_at: p.createdAt || 0 })
+      }
+    }
+
+    // Communities — match by name/description (skipped when scoped to one community).
+    if (want('community') && !options.community) {
+      const { results: communities } = await db.map({ query: { type: 'community', $text: query } })
+      for (const node of communities) {
+        const c: any = node.value
+        results.push({ id: c.id, type: 'community', title: c.displayName || c.name || '', content: c.description || '', author: '', community: c.id || '', created_at: c.createdAt || 0 })
       }
     }
 
