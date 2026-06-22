@@ -120,15 +120,6 @@
         <p class="section-title">Account Information</p>
         <ion-item lines="full">
           <ion-label>
-            <p class="item-label">Device ID</p>
-            <p class="device-id">{{ deviceId }}</p>
-          </ion-label>
-          <ion-button slot="end" fill="clear" @click="copyDeviceId">
-            <ion-icon :icon="copyOutline"></ion-icon>
-          </ion-button>
-        </ion-item>
-        <ion-item lines="full">
-          <ion-label>
             <p class="item-label">Member Since</p>
             <p>{{ formatDate(userProfile?.createdAt) }}</p>
           </ion-label>
@@ -414,14 +405,13 @@ import {
   toastController
 } from '@ionic/vue';
 import {
-  personCircleOutline, settingsOutline, saveOutline, copyOutline,
+  personCircleOutline, settingsOutline, saveOutline,
   documentTextOutline, chatbubbleOutline, trophyOutline, peopleOutline,
   cameraOutline
 } from 'ionicons/icons';
 import { db } from '../services/gdbServices';
 import { UserService } from '../services/userService';
 import type { UserProfile } from '../services/userService';
-import { VoteTrackerService } from '../services/voteTrackerService';
 import { ImageService } from '../services/imageService';
 import { useCommunityStore } from '../stores/communityStore';
 
@@ -435,7 +425,6 @@ const displayName = ref('');
 const customUsername = ref('');
 const bio = ref('');
 const showRealName = ref(false);
-const deviceId = ref('');
 const isSaving = ref(false);
 const avatarPreview = ref<string | null>(null);
 const avatarFile = ref<File | null>(null);
@@ -493,7 +482,6 @@ async function loadProfile() {
       role.value = node?.value?.role || 'guest';
     });
     roleUnsub = roleSub.unsubscribe;
-    deviceId.value = await VoteTrackerService.getDeviceId();
   } catch (error) {
     console.error('Error loading profile:', error);
   }
@@ -529,17 +517,6 @@ async function saveProfile() {
     await toast.present();
   } finally {
     isSaving.value = false;
-  }
-}
-
-async function copyDeviceId() {
-  try {
-    await navigator.clipboard.writeText(deviceId.value);
-    const toast = await toastController.create({ message: 'Device ID copied', duration: 1500 });
-    await toast.present();
-  } catch {
-    const toast = await toastController.create({ message: 'Could not copy — please copy manually', duration: 2000 });
-    await toast.present();
   }
 }
 

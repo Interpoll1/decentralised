@@ -52,10 +52,16 @@
         <!-- Account -->
         <div class="section">
           <h3 class="section-title">Account</h3>
+          <p class="section-subtitle">Your Security Manager identity (Ethereum address)</p>
           <div class="info-grid">
             <div class="info-row">
-              <span>Device ID</span>
-              <code>{{ deviceId }}</code>
+              <span>Address</span>
+              <div class="identity-right">
+                <code class="key-value">{{ auth.address ? auth.abbrAddr : 'Not signed in' }}</code>
+                <ion-button v-if="auth.address" fill="clear" size="small" @click="copyAddress">
+                  <ion-icon :icon="copyOutline"></ion-icon>
+                </ion-button>
+              </div>
             </div>
             <div class="info-row identity-row">
               <span>Username</span>
@@ -76,29 +82,10 @@
             <ion-icon slot="start" :icon="personCircleOutline"></ion-icon>
             Edit Profile
           </ion-button>
-          <div class="separator"></div>
-        </div>
-
-        <!-- Cryptographic Identity -->
-        <div class="section">
-          <h3 class="section-title">Cryptographic Identity</h3>
-          <p class="section-subtitle">Your Security Manager identity (Ethereum address)</p>
-
-          <div class="info-grid">
-            <div class="info-row">
-              <span>Address</span>
-            </div>
-            <div class="key-display">
-              <code class="key-value">{{ auth.address ? auth.abbrAddr : 'Not signed in' }}</code>
-              <ion-button v-if="auth.address" fill="clear" size="small" @click="copyAddress">
-                <ion-icon :icon="copyOutline"></ion-icon>
-              </ion-button>
-            </div>
-            <p class="key-warning mt-12">
-              Your private key never leaves this device — it is protected by your
-              passkey or recovery phrase and signs every action automatically.
-            </p>
-          </div>
+          <p class="key-warning mt-12">
+            Your private key never leaves this device — it is protected by your
+            passkey or recovery phrase and signs every action automatically.
+          </p>
         </div>
       </div>
 
@@ -1204,7 +1191,6 @@ import {
   addOutline
 } from 'ionicons/icons';
 import { UserService } from '../services/userService';
-import { VoteTrackerService } from '../services/voteTrackerService';
 import { useCommunityStore } from '../stores/communityStore';
 import { useAuthStore } from '../stores/authStore';
 import { ModerationService, moderationVersion, type ModerationSettings, type WordCategory } from '../services/moderationService';
@@ -1235,7 +1221,6 @@ const newFeedExcludeKeyword = ref('');
 
 const isDarkMode = ref(false);
 const userProfile = ref<any>(null);
-const deviceId = ref('');
 
 const feedCommunities = computed(() =>
   [...communityStore.communities].sort((a, b) => a.displayName.localeCompare(b.displayName)),
@@ -1422,7 +1407,6 @@ async function resetModerationDefaults() {
 // Crypto identity state
 onMounted(async () => {
   userProfile.value = await UserService.getCurrentUserWithKarma(true);
-  deviceId.value = await VoteTrackerService.getDeviceId();
   void communityStore.loadCommunities();
 
   const storedTheme = localStorage.getItem('theme');
