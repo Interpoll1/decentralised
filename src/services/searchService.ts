@@ -34,48 +34,42 @@ class SearchService {
   constructor(_apiUrl: string = '') {}
 
   /**
-   * Match nodes of `type` where ANY of `fields` contains the (already escaped)
-   * query. Uses GenosDB's `$regex` per field — case-insensitive in the engine —
-   * and de-dupes by id. (`$text` is documented but not implemented in this
-   * engine version; `$regex` on a field is, and it filters in the query.)
+   * Match nodes of `type` where ANY of `fields` contains the query, using
+   * GenosDB's native `$text` operator at field level (`{ field: { $text } }`):
+   * accent-folding, case-insensitive and punctuation-stripping. The fields are
+   * OR-ed into a single query so the engine does the filtering — no per-field
+   * fan-out, no manual de-duplication.
    */
-  private async searchType(type: string, fields: string[], rx: string, community?: string): Promise<any[]> {
-    const seen = new Set<string>()
-    const out: any[] = []
-    for (const field of fields) {
-      const q: Record<string, unknown> = { type, [field]: { $regex: rx } }
-      if (community) q.communityId = community
-      const { results } = await db.map({ query: q })
-      for (const node of results) {
-        const v: any = node.value
-        if (v?.id && !seen.has(v.id)) { seen.add(v.id); out.push(v) }
-      }
+  private async searchType(type: string, fields: string[], query: string, community?: string): Promise<any[]> {
+    const q: Record<string, unknown> = {
+      type,
+      $or: fields.map((field) => ({ [field]: { $text: query } })),
     }
-    return out
+    if (community) q.communityId = community
+    const { results } = await db.map({ query: q })
+    return results.map((node: any) => node.value)
   }
 
   async search(query: string, options: SearchOptions = {}): Promise<SearchResponse> {
     if (!query || query.length < 2) throw new Error('Query must be at least 2 characters')
-    // Escape regex specials; GenosDB applies the `i` flag, so search is case-insensitive.
-    const rx = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const results: SearchResult[] = []
     const want = (t: SearchOptions['type']) => !options.type || options.type === t
 
     if (want('post')) {
-      for (const p of await this.searchType('post', ['title', 'content'], rx, options.community)) {
+      for (const p of await this.searchType('post', ['title', 'content'], query, options.community)) {
         results.push({ id: p.id, type: 'post', title: p.title || '', content: p.content || '', author: p.authorName || '', community: p.communityId || '', created_at: p.createdAt || 0 })
       }
     }
 
     if (want('poll')) {
-      for (const p of await this.searchType('poll', ['question', 'description'], rx, options.community)) {
+      for (const p of await this.searchType('poll', ['question', 'description'], query, options.community)) {
         results.push({ id: p.id, type: 'poll', title: p.question || '', content: p.description || '', author: p.authorName || '', community: p.communityId || '', created_at: p.createdAt || 0 })
       }
     }
 
     // Communities — match by name/description (skipped when scoped to one community).
     if (want('community') && !options.community) {
-      for (const c of await this.searchType('community', ['displayName', 'name', 'description'], rx)) {
+      for (const c of await this.searchType('community', ['displayName', 'name', 'description'], query)) {
         results.push({ id: c.id, type: 'community', title: c.displayName || c.name || '', content: c.description || '', author: '', community: c.id || '', created_at: c.createdAt || 0 })
       }
     }
