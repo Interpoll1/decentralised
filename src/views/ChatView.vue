@@ -74,12 +74,13 @@ import {
 import ChatService, { ChatMessage } from '../services/chatService';
 import { UserService } from '../services/userService';
 import config from '@/config';
+import { formatAddress } from '../utils/address';
 
 const route = useRoute();
 const props = defineProps<{ userId: string }>();
 
 const recipientId = computed(() => props.userId || (route.params.userId as string) || '');
-const recipientName = computed(() => (route.query.name as string) || 'User');
+const recipientName = computed(() => formatAddress(route.query.name as string) || 'User');
 
 const WS_URL = config.relay.websocket;
 

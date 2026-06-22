@@ -77,7 +77,7 @@
                 <div class="hash-row" v-if="block.pubkey">
                   <span class="hash-label">Signer:</span>
                   <code class="hash-value signer-value">
-                    {{ block.pubkey }}
+                    {{ formatAddress(block.pubkey) }}
                   </code>
                 </div>
 
@@ -149,6 +149,7 @@ import {
 } from 'ionicons/icons';
 import { useChainStore } from '../stores/chainStore';
 import { CryptoService } from '../services/cryptoService';
+import { formatAddress } from '../utils/address';
 
 const chainStore = useChainStore();
 const INITIAL_VISIBLE_BLOCKS = 75;

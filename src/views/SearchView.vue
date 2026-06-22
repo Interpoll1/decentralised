@@ -86,7 +86,7 @@
           </p>
           
           <div class="result-meta">
-            <span class="result-author">by {{ result.author || 'Anonymous' }}</span>
+            <span class="result-author">by {{ formatAddress(result.author) || 'Anonymous' }}</span>
             <span v-if="result.community" class="result-community">
               in {{ result.community }}
             </span>
@@ -498,6 +498,7 @@ import {
   IonBadge, IonButton
 } from '@ionic/vue';
 import { useSearch } from '../composables/useSearch';
+import { formatAddress } from '../utils/address';
 
 const router  = useRouter();
 

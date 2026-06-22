@@ -454,6 +454,7 @@ import { db } from '../services/gdbServices';
 import { UserService } from '../services/userService';
 import ChatService from '../services/chatService';
 import config from '../config';
+import { formatAddress } from '../utils/address';
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -725,7 +726,7 @@ async function loadChatList() {
       const other = m.senderId === currentUserId ? m.recipientId : m.senderId;
       let c = convos.get(other);
       if (!c) {
-        c = { userId: other, name: other, lastMessage: '', lastMessageTime: 0, unreadCount: 0, publicKey: '' };
+        c = { userId: other, name: formatAddress(other), lastMessage: '', lastMessageTime: 0, unreadCount: 0, publicKey: '' };
         convos.set(other, c);
       }
       if (m.timestamp > c.lastMessageTime) {
@@ -740,7 +741,7 @@ async function loadChatList() {
       UserService.getUser(c.userId).then((u) => {
         if (!u) return;
         const e = chatList.value.find((x) => x.userId === c.userId);
-        if (e) { e.name = u.displayName || u.username || c.userId; e.publicKey = u.publicKey || ''; }
+        if (e) { e.name = u.displayName || u.username || formatAddress(c.userId); e.publicKey = u.publicKey || ''; }
       });
     }
   };

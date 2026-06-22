@@ -200,7 +200,7 @@
         <p class="mod-help">Delegate post removal in this community to trusted members. A moderator can remove posts here — and only here.</p>
         <div v-if="moderators.length" class="mod-list">
           <div v-for="addr in moderators" :key="addr" class="mod-row">
-            <span class="mod-addr">{{ abbr(addr) }}</span>
+            <span class="mod-addr">{{ formatAddress(addr) }}</span>
             <button class="mod-remove" type="button" @click="removeModerator(addr)">Remove</button>
           </div>
         </div>
@@ -551,6 +551,7 @@ import {
   keyOutline
 } from 'ionicons/icons';
 import { db } from '../services/gdbServices';
+import { formatAddress } from '../utils/address';
 import { useCommunityStore } from '../stores/communityStore';
 import { usePostStore } from '../stores/postStore';
 import { usePollStore } from '../stores/pollStore';
@@ -1012,10 +1013,6 @@ const isOwner = computed(() => {
   const owner = community.value?.owner;
   return !!me && !!owner && owner.toLowerCase() === me.toLowerCase();
 });
-
-function abbr(addr: string): string {
-  return addr.length > 12 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
-}
 
 async function addModerator() {
   const addr = newModerator.value.trim();
