@@ -1,7 +1,7 @@
 <template>
   <ion-app>
     <AppLoader v-if="!appReady" />
-    <ion-router-outlet v-else :animated="true" :animation="pageTransition" />
+    <ion-router-outlet v-else :animated="false" />
     <GlobalCommandPalette :is-open="globalPaletteOpen" @close="closeGlobalPalette" />
     <OnboardingModal />
   </ion-app>
@@ -9,7 +9,6 @@
 
 <script setup lang="ts">
 import { IonApp, IonRouterOutlet } from '@ionic/vue';
-import { createAnimation } from '@ionic/vue';
 import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppLoader from './components/AppLoader.vue';
@@ -40,35 +39,6 @@ function isTypingTarget(event: KeyboardEvent): boolean {
 
 function closeGlobalPalette() {
   globalPaletteOpen.value = false;
-}
-
-function pageTransition(baseEl: HTMLElement, opts: { direction?: string }) {
-  const enteringEl = baseEl.querySelector<HTMLElement>(':scope > .ion-page.ion-page-invisible, :scope > .ion-page:not(.ion-page-hidden)');
-  const leavingEl = baseEl.querySelector<HTMLElement>(':scope > .ion-page.ion-page-hidden, :scope > .ion-page:not(.ion-page-invisible):not(.ion-page-hidden)');
-
-  const enteringAnimation = createAnimation()
-    .addElement(enteringEl ?? baseEl)
-    .duration(220)
-    .easing('cubic-bezier(0.2, 0, 0, 1)')
-    .fromTo('opacity', '0.01', '1');
-
-  const leavingAnimation = createAnimation()
-    .addElement(leavingEl ?? baseEl)
-    .duration(180)
-    .easing('cubic-bezier(0.4, 0, 1, 1)')
-    .fromTo('opacity', '1', '0');
-
-  if (opts.direction === 'back') {
-    enteringAnimation.fromTo('transform', 'translateX(-8px)', 'translateX(0)');
-    leavingAnimation.fromTo('transform', 'translateX(0)', 'translateX(8px)');
-  } else {
-    enteringAnimation.fromTo('transform', 'translateX(8px)', 'translateX(0)');
-    leavingAnimation.fromTo('transform', 'translateX(0)', 'translateX(-8px)');
-  }
-
-  return createAnimation()
-    .addAnimation([leavingAnimation, enteringAnimation])
-    .duration(opts.direction === 'back' ? 220 : 220);
 }
 
 onMounted(async () => {
