@@ -118,22 +118,14 @@
         </ion-button>
       </div>
 
-      <!-- Loading -->
+      <!-- Loading (only blocks when there is nothing to show yet) -->
       <div v-if="showBlockingLoader" class="loading-container">
         <ion-spinner></ion-spinner>
         <p>Loading content...</p>
       </div>
 
-      <div v-else-if="showInlineSyncStatus" class="sync-status">
-        <ion-spinner name="dots"></ion-spinner>
-        <div class="sync-status-copy">
-          <strong>Showing what is ready.</strong>
-          <span>{{ syncStatusText }}</span>
-        </div>
-      </div>
-
       <!-- Content Feed -->
-      <div v-if="displayedContent.length > 0" class="content-feed">
+      <div v-else-if="displayedContent.length > 0" class="content-feed">
         <template v-for="item in displayedContent" :key="`${item.type}-${item.data.id}`">
           <PostCard
             v-if="item.type === 'post'"
@@ -159,13 +151,8 @@
         </template>
       </div>
 
-      <div v-else-if="showPartialSyncStatus" class="partial-loading-state">
-        <ion-spinner name="dots"></ion-spinner>
-        <p>{{ partialLoadText }}</p>
-      </div>
-
       <!-- Empty State -->
-      <div v-else-if="!showProgressiveSyncState && !hasVisibleContent" class="empty-state">
+      <div v-else class="empty-state">
         <ion-icon :icon="documentTextOutline" size="large"></ion-icon>
         <p v-if="contentFilter === 'posts'">No posts yet</p>
         <p v-else-if="contentFilter === 'polls'">No polls yet</p>
@@ -179,11 +166,6 @@
         <ion-button v-else-if="!isJoined" @click="toggleJoin">
           Join to create content
         </ion-button>
-      </div>
-
-      <div v-else-if="showHydratingContentState" class="partial-loading-state">
-        <ion-spinner name="dots"></ion-spinner>
-        <p>Content is loading. It will appear here as soon as it finishes decrypting.</p>
       </div>
 
        <!-- Rules Section -->
@@ -358,37 +340,6 @@
   color: var(--ion-color-medium);
 }
 
-.sync-status,
-.partial-loading-state {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 12px 16px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
-  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.14);
-  color: var(--ion-color-step-700);
-}
-
-.sync-status-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 13px;
-}
-
-.sync-status-copy strong {
-  color: var(--ion-text-color);
-}
-
-.sync-status-copy span,
-.partial-loading-state p {
-  color: var(--ion-color-step-600);
-  margin: 0;
-  line-height: 1.4;
-}
-
 /* ── Locked Hint (inline banner for encrypted communities) ─── */
 .locked-hint {
   display: flex;
@@ -513,7 +464,7 @@
 </style>
 
 <script setup lang="ts">
-import { ref, computed, watchEffect, watch, onUnmounted } from 'vue';
+import { ref, computed, watchEffect, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage,
@@ -589,12 +540,6 @@ const contentFilter = ref<'all' | 'posts' | 'polls'>('all');
 const currentUserId = ref('');
 const voteVersion = ref(0);
 const descriptionExpanded = ref(false);
-type LoadStatus = 'idle' | 'loading' | 'loaded' | 'timed-out' | 'error';
-const postLoadStatus = ref<LoadStatus>('idle');
-const pollLoadStatus = ref<LoadStatus>('idle');
-const isBackgroundSyncing = ref(false);
-const BACKGROUND_SYNC_IDLE_MS = 15000;
-let backgroundSyncIdleTimer: ReturnType<typeof setTimeout> | null = null;
 
 const hasAccess = ref(true);
 const decryptedMeta = ref<Community | null>(null);
@@ -625,78 +570,12 @@ const totalContentCount = computed(() => {
   return communityPosts.value.length + communityPolls.value.length;
 });
 
-const totalLoadedContentCount = computed(() => decryptedPosts.value.length + decryptedPolls.value.length);
-
-const showProgressiveSyncState = computed(() => isLoading.value || isBackgroundSyncing.value);
-
-const showBlockingLoader = computed(() => isLoading.value && !isBackgroundSyncing.value && totalLoadedContentCount.value === 0);
-
 const hasVisibleContent = computed(() => displayedContent.value.length > 0);
 
-const showHydratingContentState = computed(() => {
-  return !showProgressiveSyncState.value && totalContentCount.value > 0 && displayedContent.value.length === 0;
-});
-
-const showPartialSyncStatus = computed(() => {
-  return (showProgressiveSyncState.value && !hasVisibleContent.value) || showHydratingContentState.value;
-});
-
-const showInlineSyncStatus = computed(() => {
-  return showProgressiveSyncState.value && hasVisibleContent.value;
-});
-
-const syncStatusText = computed(() => {
-  const segments: string[] = [];
-
-  if (decryptedPosts.value.length > 0) {
-    segments.push(`${decryptedPosts.value.length} post${decryptedPosts.value.length === 1 ? '' : 's'} loaded`);
-  }
-
-  if (decryptedPolls.value.length > 0) {
-    segments.push(`${decryptedPolls.value.length} poll${decryptedPolls.value.length === 1 ? '' : 's'} loaded`);
-  }
-
-  if (postLoadStatus.value === 'loading') {
-    segments.push('posts still syncing');
-  } else if (postLoadStatus.value === 'timed-out') {
-    segments.push('posts continuing in background');
-  }
-
-  if (pollLoadStatus.value === 'loading') {
-    segments.push('polls still syncing');
-  } else if (pollLoadStatus.value === 'timed-out') {
-    segments.push('polls continuing in background');
-  }
-
-  return segments.join(' · ');
-});
-
-const partialLoadText = computed(() => {
-  if (contentFilter.value === 'posts') {
-    return 'Posts are still syncing. Loaded content will appear here as soon as it arrives.';
-  }
-  if (contentFilter.value === 'polls') {
-    return 'Polls are still syncing. Loaded content will appear here as soon as it arrives.';
-  }
-  return 'Loaded content will appear here progressively while the rest syncs.';
-});
-
-function clearBackgroundSyncIdleTimer() {
-  if (backgroundSyncIdleTimer) {
-    clearTimeout(backgroundSyncIdleTimer);
-    backgroundSyncIdleTimer = null;
-  }
-}
-
-function keepBackgroundSyncVisible() {
-  isBackgroundSyncing.value = true;
-  clearBackgroundSyncIdleTimer();
-  backgroundSyncIdleTimer = setTimeout(() => {
-    if (!isLoading.value && (postLoadStatus.value === 'timed-out' || pollLoadStatus.value === 'timed-out')) {
-      isBackgroundSyncing.value = false;
-    }
-  }, BACKGROUND_SYNC_IDLE_MS);
-}
+// Block the view with a spinner only while the first batch is loading AND there
+// is nothing to show yet. Once any content is present (or loading ends), the feed
+// renders and GenosDB's live subscription keeps it up to date reactively.
+const showBlockingLoader = computed(() => isLoading.value && !hasVisibleContent.value);
 
 const showDescriptionToggle = computed(() => {
   const description = displayCommunity.value?.description ?? '';
@@ -1070,7 +949,6 @@ async function shareInviteLink() {
 }
 
 let loadGeneration = 0;
-let retryTimer: ReturnType<typeof setTimeout> | null = null;
 const COMMUNITY_STORE_BOOTSTRAP_TIMEOUT_MS = 2500;
 const COMMUNITY_DEBUG = typeof window !== 'undefined' && localStorage.getItem('interpoll_community_debug') === 'true';
 
@@ -1084,50 +962,12 @@ function communityDebug(step: string, payload: Record<string, unknown> = {}) {
   });
 }
 
-function scheduleRetryIfEmpty() {
-  if (retryTimer) clearTimeout(retryTimer);
-  retryTimer = null;
-  const shouldRetry =
-    postLoadStatus.value === 'timed-out' ||
-    pollLoadStatus.value === 'timed-out';
-  if (
-    !isLoading.value &&
-    shouldRetry &&
-    !hasVisibleContent.value &&
-    !isBackgroundSyncing.value &&
-    hasAccess.value
-  ) {
-    const gen = loadGeneration;
-    retryTimer = setTimeout(async () => {
-      retryTimer = null;
-      if (
-        gen === loadGeneration &&
-        (postLoadStatus.value === 'timed-out' || pollLoadStatus.value === 'timed-out') &&
-        !hasVisibleContent.value &&
-        !isLoading.value
-      ) {
-        await loadCommunityContent();
-      }
-    }, 3000);
-  }
-}
-
-function shouldRecoverOnFocus(): boolean {
-  return (
-    !hasVisibleContent.value &&
-    !isLoading.value &&
-    hasAccess.value &&
-    (postLoadStatus.value === 'timed-out' || pollLoadStatus.value === 'timed-out')
-  );
-}
-
 function recoverLoadOnFocus() {
-  if (!shouldRecoverOnFocus()) return;
-  communityDebug('focus-recovery-triggered', {
-    postLoadStatus: postLoadStatus.value,
-    pollLoadStatus: pollLoadStatus.value,
-    totalLoadedContentCount: totalLoadedContentCount.value,
-  });
+  // Re-run the initial load if the view is still empty after regaining focus —
+  // covers a live subscription that never delivered (e.g. a transient P2P drop).
+  // The store guards against duplicate subscriptions, so this is cheap.
+  if (hasVisibleContent.value || isLoading.value || !hasAccess.value) return;
+  communityDebug('focus-recovery-triggered');
   void loadCommunityContent();
 }
 
@@ -1159,40 +999,9 @@ function syncDecryptedFromCurrentStoreState() {
   }
 }
 
-function waitForInitialContent(promise: Promise<void>, timeoutMs: number): Promise<'loaded' | 'timed-out'> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => resolve('timed-out'), timeoutMs);
-    promise
-      .then(() => {
-        clearTimeout(timer);
-        resolve('loaded');
-      })
-      .catch((error) => {
-        clearTimeout(timer);
-        reject(error);
-      });
-  });
-}
-
-async function trackInitialLoad(
-  loadPromise: Promise<void>,
-  statusRef: typeof postLoadStatus,
-  gen: number,
-): Promise<'loaded' | 'timed-out' | 'error'> {
-  try {
-    const result = await waitForInitialContent(loadPromise, 7000);
-    if (gen === loadGeneration) {
-      statusRef.value = result === 'loaded' ? 'loaded' : 'timed-out';
-    }
-    return result;
-  } catch (error) {
-    if (gen === loadGeneration) {
-      statusRef.value = 'error';
-    }
-    console.error('Community content stream failed:', error);
-    return 'error';
-  }
-}
+// Fallback so the blocking spinner can't hang on an empty/slow room: the live
+// subscriptions resolve on their first batch, but stay pending on an empty room.
+const INITIAL_LOAD_TIMEOUT_MS = 7000;
 
 async function loadCommunityContent() {
   const gen = ++loadGeneration;
@@ -1202,8 +1011,6 @@ async function loadCommunityContent() {
   });
   isLoading.value = true;
   descriptionExpanded.value = false;
-  postLoadStatus.value = 'loading';
-  pollLoadStatus.value = 'loading';
   decryptedMeta.value = null;
   decryptedPosts.value = [];
   decryptedPolls.value = [];
@@ -1257,38 +1064,23 @@ async function loadCommunityContent() {
 
     if (gen !== loadGeneration) return;
 
-    // Always load posts/polls — encrypted content loads as placeholders
-    // and gets decrypted reactively if user has the key
-    const loadStates = await Promise.all([
-      trackInitialLoad(postStore.loadPostsForCommunity(communityId.value), postLoadStatus, gen),
-      trackInitialLoad(pollStore.loadPollsForCommunity(communityId.value), pollLoadStatus, gen),
+    // Open the live post/poll subscriptions. They resolve on their first batch
+    // (or stay pending on an empty room), so we race a soft timeout to release
+    // the blocking spinner. After that, content keeps arriving reactively via the
+    // store → communityPosts/communityPolls → decrypt watchers → displayedContent.
+    await Promise.race([
+      Promise.all([
+        postStore.loadPostsForCommunity(communityId.value),
+        pollStore.loadPollsForCommunity(communityId.value),
+      ]),
+      new Promise<void>((resolve) => setTimeout(resolve, INITIAL_LOAD_TIMEOUT_MS)),
     ]);
     syncDecryptedFromCurrentStoreState();
     communityDebug('content-load-complete', {
-      loadStates,
-      postLoadStatus: postLoadStatus.value,
-      pollLoadStatus: pollLoadStatus.value,
       totalContentCount: totalContentCount.value,
-      totalLoadedContentCount: totalLoadedContentCount.value,
       displayedCount: displayedContent.value.length,
       hasAccess: hasAccess.value,
     });
-
-    if (gen === loadGeneration && loadStates.includes('timed-out')) {
-      const toast = await toastController.create({
-        message: 'Content is still syncing in the background.',
-        duration: 2500,
-      });
-      await toast.present();
-    }
-
-    if (gen === loadGeneration && loadStates.includes('error')) {
-      const toast = await toastController.create({
-        message: 'Some content failed to load. The page will keep retrying in the background.',
-        duration: 2800,
-      });
-      await toast.present();
-    }
 
   } catch (error) {
     communityDebug('load-error', {
@@ -1304,8 +1096,6 @@ async function loadCommunityContent() {
     communityDebug('load-finished', {
       isCurrentGeneration: gen === loadGeneration,
       isLoading: isLoading.value,
-      postLoadStatus: postLoadStatus.value,
-      pollLoadStatus: pollLoadStatus.value,
     });
     if (gen === loadGeneration) isLoading.value = false;
   }
@@ -1319,42 +1109,16 @@ onIonViewWillEnter(async () => {
   if (!isCurrentCommunity || totalContentCount.value === 0) {
     await loadCommunityContent();
   }
-  scheduleRetryIfEmpty();
 });
 
 onIonViewDidLeave(() => {
   window.removeEventListener('focus', recoverLoadOnFocus);
   document.removeEventListener('visibilitychange', handleVisibilityChange);
-  if (retryTimer) clearTimeout(retryTimer);
-  retryTimer = null;
 });
 
 watch(communityId, async (newId, oldId) => {
   if (newId && newId !== oldId) {
     await loadCommunityContent();
-    scheduleRetryIfEmpty();
   }
-});
-
-watch([postLoadStatus, pollLoadStatus], ([nextPostStatus, nextPollStatus]) => {
-  if (nextPostStatus === 'timed-out' || nextPollStatus === 'timed-out') {
-    keepBackgroundSyncVisible();
-    return;
-  }
-
-  if (!isLoading.value) {
-    isBackgroundSyncing.value = false;
-    clearBackgroundSyncIdleTimer();
-  }
-});
-
-watch(totalLoadedContentCount, (nextCount, previousCount) => {
-  if (!isBackgroundSyncing.value || nextCount === previousCount) return;
-  keepBackgroundSyncVisible();
-});
-
-onUnmounted(() => {
-  clearBackgroundSyncIdleTimer();
-  if (retryTimer) clearTimeout(retryTimer);
 });
 </script>
