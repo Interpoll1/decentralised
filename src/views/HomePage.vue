@@ -357,11 +357,6 @@
               <button class="sidebar-link" @click="activeTab = 'communities'">See all</button>
             </div>
 
-            <ion-button expand="block" size="small" @click="$router.push('/create-community')" class="sidebar-create-btn">
-              <ion-icon slot="start" :icon="addCircleOutline"></ion-icon>
-              Create Community
-            </ion-button>
-
              <div class="sidebar-communities">
                <div
                  v-for="community in sidebarCommunities"
@@ -1805,8 +1800,6 @@ ion-header.header-hidden {
     font-weight: 600;
     padding: 0;
   }
-
-  .sidebar-create-btn { margin: 0 10px 10px; }
 
   .sidebar-community-item {
     display: flex;
