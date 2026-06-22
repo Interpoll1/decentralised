@@ -12,12 +12,10 @@ import { IonApp, IonRouterOutlet } from '@ionic/vue';
 import { createAnimation } from '@ionic/vue';
 import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { useChainStore } from './stores/chainStore';
 import AppLoader from './components/AppLoader.vue';
 import GlobalCommandPalette from './components/GlobalCommandPalette.vue';
 import OnboardingModal from './components/OnboardingModal.vue';
 
-const chainStore = useChainStore();
 const router = useRouter();
 const appReady = ref(false);
 const globalPaletteOpen = ref(false);
@@ -131,11 +129,6 @@ onMounted(async () => {
 
   // GenosDB is ready as soon as its module loads (top-level await); reveal the app.
   appReady.value = true;
-
-  // Initialise the integrity chain (non-blocking; GenosDB syncs it P2P).
-  try {
-    await chainStore.initialize();
-  } catch (_error) {}
 });
 
 onUnmounted(() => {

@@ -14,9 +14,6 @@
           <ion-button @click="$router.push('/settings')">
             <ion-icon :icon="settingsOutline"></ion-icon>
           </ion-button>
-          <ion-button @click="$router.push('/chain-explorer')">
-            <ion-icon :icon="cube"></ion-icon>
-          </ion-button>
         </ion-buttons>
       </ion-toolbar>
     </ion-header>
@@ -78,10 +75,6 @@
           <button class="side-nav-item side-nav-util" @click="$router.push('/settings')">
             <ion-icon :icon="settingsOutline"></ion-icon>
             <span>Settings</span>
-          </button>
-          <button class="side-nav-item side-nav-util" @click="$router.push('/chain-explorer')">
-            <ion-icon :icon="cube"></ion-icon>
-            <span>Chain Explorer</span>
           </button>
           <button class="side-nav-item side-nav-util" @click="$router.push('/resilience')">
             <ion-icon :icon="shieldOutline"></ion-icon>
@@ -428,7 +421,7 @@ import {
   actionSheetController, toastController
 } from '@ionic/vue';
 import {
-  cube, personCircleOutline, settingsOutline, addCircleOutline,
+  personCircleOutline, settingsOutline, addCircleOutline,
   earthOutline, peopleOutline, home, homeOutline, documentTextOutline,
   chevronForwardOutline, people, addCircle, statsChartOutline,
   checkmarkCircleOutline, searchOutline, chatbubble, chatbubbleOutline,
@@ -436,7 +429,6 @@ import {
 } from 'ionicons/icons';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/authStore';
-import { useChainStore } from '../stores/chainStore';
 import { useCommunityStore } from '../stores/communityStore';
 import { usePostStore } from '../stores/postStore';
 import { usePollStore } from '../stores/pollStore';
@@ -453,13 +445,12 @@ import { formatAddress } from '../utils/address';
 
 const router = useRouter();
 const auth = useAuthStore();
-const chainStore = useChainStore();
 
 /**
- * Identity-scoped startup: tamper-evident chain log + background chat (DM
- * notifications). HomePage mounts underneath the identity gate, so this is a
- * no-op until an identity is active — the `auth.isLoggedIn` watcher re-fires
- * it right after login, and `handleLogout` re-arms it for the next identity.
+ * Identity-scoped startup: background chat (DM notifications). HomePage mounts
+ * underneath the identity gate, so this is a no-op until an identity is active —
+ * the `auth.isLoggedIn` watcher re-fires it right after login, and
+ * `handleLogout` re-arms it for the next identity.
  */
 let userServicesInitDone = false;
 async function initUserScopedServices() {
@@ -470,11 +461,8 @@ async function initUserScopedServices() {
     userServicesInitDone = true;
     currentUserId = currentUser.id;
     // Keep startup sync light: defer heavy chat graph subscriptions until the
-    // chat tab is opened. Keep DM notifications even if chain init fails.
-    await Promise.allSettled([
-      chainStore.initialize(),
-      ensureBackgroundChatInitialized(),
-    ]);
+    // chat tab is opened.
+    await ensureBackgroundChatInitialized();
     if (activeTab.value === 'chat') {
       await ensureChatInitialized();
     }

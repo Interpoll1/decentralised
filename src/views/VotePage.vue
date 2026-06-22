@@ -71,12 +71,10 @@ import {
 import { alertCircle } from 'ionicons/icons';
 import { usePollStore } from '../stores/pollStore';
 import VoteForm from '../components/VoteForm.vue';
-import { useChainStore } from '../stores/chainStore';
 
 const route = useRoute();
 const router = useRouter();
 const pollStore = usePollStore();
-const chainStore = useChainStore();
 const isLoading = ref(true);
 const inviteCode = ref<string>('');
 const displayPoll = computed(() => {
@@ -88,7 +86,6 @@ const displayPoll = computed(() => {
 async function loadVotePage() {
   isLoading.value = true;
   try {
-    await chainStore.initialize();
     const pollId = route.params.pollId as string;
     inviteCode.value = (route.query.code as string | undefined) || '';
     const communityId = typeof route.query.communityId === 'string' ? route.query.communityId : undefined;
@@ -108,7 +105,7 @@ watch(
   { immediate: true },
 );
 
-const handleVoteSubmitted = (verificationCode: string) => {
-  router.push(`/receipt/${verificationCode}`);
+const handleVoteSubmitted = () => {
+  router.push(`/results/${route.params.pollId}`);
 };
 </script>

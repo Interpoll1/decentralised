@@ -284,20 +284,14 @@ import {
   copyOutline
 } from 'ionicons/icons';
 import { usePollStore } from '../stores/pollStore';
-import { useChainStore } from '../stores/chainStore';
 import { PollService } from '../services/pollService';
 import type { Poll } from '../services/pollService';
 import { UserService } from '../services/userService';
-import { VoteTrackerService } from '../services/voteTrackerService';
-import { AuditService } from '../services/auditService';
-import type { Vote } from '../types/chain';
 import { generatePseudonym } from '../utils/pseudonym';
-import config from '../config';
 
 const route = useRoute();
 const router = useRouter();
 const pollStore = usePollStore();
-const chainStore = useChainStore();
 
 const poll = ref<Poll | null>(null);
 const isLoading = ref(true);
@@ -309,17 +303,6 @@ const currentUserId = ref('');
 const inviteCodes = ref<{ code: string; used: boolean }[]>([]);
 const isLoadingCodes = ref(false);
 const loadPollRequestId = ref(0);
-
-function readVotedPolls(): string[] {
-  try {
-    const raw = localStorage.getItem('voted-polls');
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
 
 const isAuthor = computed(() => {
   if (!poll.value || !currentUserId.value) return false;
@@ -421,23 +404,11 @@ async function submitVote() {
   isSubmitting.value = true
 
   try {
-    const deviceId = await VoteTrackerService.getDeviceId()
-
-    if (await VoteTrackerService.hasVoted(poll.value.id)) {
+    // One vote per identity — the vote node id is deterministic (`pollId:voter`),
+    // so this is an exact check, no device fingerprint.
+    if (await PollService.hasVoted(poll.value.id)) {
       hasVoted.value = true
-      return
-    }
-
-    const authorization = await AuditService.authorizeVote(poll.value.id, deviceId, !!poll.value.requireLogin)
-    if (!authorization.allowed || !authorization.reservationToken) {
-      if (authorization.requiresAuth) {
-        await presentToast('Sign in is required before voting on this poll', 3000)
-        AuditService.saveReturnUrl(route.fullPath)
-        AuditService.startOAuthLogin('google')
-        return
-      }
-      hasVoted.value = authorization.reason?.includes('already') ?? false;
-      await presentToast(authorization.reason || 'Already voted on this poll', 3000)
+      await presentToast('You have already voted on this poll', 3000)
       return
     }
 
@@ -445,104 +416,13 @@ async function submitVote() {
       ? selectedOptions.value
       : [selectedOption.value]
 
-    const choiceText = optionIds
-      .map(id => poll.value!.options.find(o => o.id === id)?.text || id)
-      .join(', ')
-
-    // Chain init with timeout
-    await Promise.race([
-      chainStore.initialize(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('chain timeout')), 5000))
-    ]).catch(() => {})
-
-    const vote: Vote = {
-      pollId: poll.value.id,
-      choice: choiceText,
-      timestamp: Date.now(),
-      deviceId
-    }
-    const receipt = await chainStore.addVote(vote)
-
+    // Cast natively: a signed, ACL-owned `vote` node in GenosDB. The tally is
+    // derived reactively and replicates P2P — no chain, no backend, no receipt.
+    await pollStore.voteOnPoll(poll.value.id, optionIds)
     hasVoted.value = true
-    const votedPolls = readVotedPolls()
-    votedPolls.push(poll.value.id)
-    localStorage.setItem('voted-polls', JSON.stringify(votedPolls));
-    try {
-      await VoteTrackerService.recordVote(poll.value.id, receipt.blockIndex)
-    } catch (recordError) {
-      console.warn('Failed to persist local vote record after chain vote:', recordError)
-    }
+    poll.value = pollStore.pollsMap.get(poll.value.id) || poll.value
 
-    const pollIdForReload = poll.value.id
-    const pollIdForSync = poll.value.id
-    const communityIdForSync = poll.value.communityId
-    const authorIdForSync = poll.value.authorId || ''
-    const gunRelayBase = config.relay.gun.replace(/\/gun$/, '')
-
-    void (async () => {
-      try {
-        const confirmedByBackend = await AuditService.confirmVote(
-          pollIdForSync,
-          deviceId,
-          authorization.reservationToken,
-          !!poll.value?.requireLogin,
-        )
-        if (!confirmedByBackend) {
-          console.warn('Vote confirm request failed after chain vote')
-        }
-      } catch (confirmError) {
-        console.warn('Vote confirm request failed after chain vote:', confirmError)
-      }
-
-      try {
-        await pollStore.voteOnPoll(pollIdForSync, optionIds)
-        if (poll.value?.id === pollIdForSync) {
-          poll.value = pollStore.pollsMap.get(pollIdForSync) || poll.value
-        }
-      } catch (storeError) {
-        console.warn('Gun poll update failed after successful chain vote:', storeError)
-      }
-
-      const syncedPoll = pollStore.pollsMap.get(pollIdForSync) || (poll.value?.id === pollIdForSync ? poll.value : null)
-      if (!syncedPoll) return
-
-      const updatedOptions = syncedPoll.options
-      const newTotalVotes = updatedOptions.reduce((sum, option) => sum + (option.votes || 0), 0)
-
-      // The vote is already persisted and synced P2P by GenosDB — no relay write needed.
-
-      setTimeout(async () => {
-        try {
-          const res = await fetch(`${config.relay.api}/api/poll/${pollIdForReload}`)
-          if (res.ok) {
-            const data = await res.json()
-            if (data?.id && data.options?.length > 0 && (data.totalVotes || 0) >= newTotalVotes) {
-              pollStore.injectPoll({
-                id: data.id, communityId: data.communityId,
-                authorId: authorIdForSync,
-                authorName: data.authorName || 'Anonymous',
-                question: data.question, description: data.description || '',
-                options: data.options,
-                createdAt: data.createdAt || Date.now(),
-                expiresAt: data.expiresAt || Date.now() + 86400000,
-                allowMultipleChoices: !!data.allowMultipleChoices,
-                showResultsBeforeVoting: !!data.showResultsBeforeVoting,
-                requireLogin: false, isPrivate: !!data.isPrivate,
-                totalVotes: data.totalVotes || 0,
-                isExpired: !!data.isExpired,
-              })
-              if (poll.value?.id === pollIdForReload) {
-                poll.value = pollStore.pollsMap.get(pollIdForReload) || poll.value
-              }
-            }
-          }
-        } catch {}
-      }, 3000)
-    })()
-
-    await presentToast('Vote recorded. Network sync will continue in the background.')
-    void router.push(`/receipt/${receipt.verificationCode}`)
-
+    await presentToast('Vote recorded. Results update live across peers.')
   } catch (error) {
     console.error('Vote error:', error);
     await presentToast('Failed to submit vote')
@@ -560,50 +440,18 @@ async function loadPoll() {
   selectedOptions.value = []
   inviteCodes.value = []
   isLoading.value = true
-  // Check local vote state first (fast, no network)
-  const votedPolls = readVotedPolls()
-  const votedLocally = votedPolls.includes(pollId)
-  hasVoted.value = votedLocally
+  hasVoted.value = false
   // ── Step 1: Show from store immediately if available with options ──────────
   const cached = pollStore.pollsMap.get(pollId)
   if (cached && cached.options.length > 0) {
     poll.value = cached
     isLoading.value = false
-    // Still check device vote in background
-    VoteTrackerService.hasVoted(pollId).then(v => {
+    // Check vote state natively (per-identity) in the background
+    PollService.hasVoted(pollId).then(v => {
       if (!isStale() && v) hasVoted.value = true
     })
   }
-  // ── Step 2: If no options in cache, fetch from Nuxt API (fast, ~300ms) ────
-  if (!poll.value || poll.value.options.length === 0) {
-    try {
-      const res = await fetch(`${config.relay.api}/api/poll/${pollId}`)
-      if (isStale()) return
-      if (res.ok) {
-        const data = await res.json()
-        if (isStale()) return
-        if (data?.id && data.options?.length > 0) {
-          // Patch into store
-          pollStore.injectPoll({
-            id: data.id, communityId: data.communityId,
-            authorId: data.authorId || '', authorName: data.authorName || 'Anonymous',
-            question: data.question, description: data.description || '',
-            options: data.options,
-            createdAt: data.createdAt || Date.now(),
-            expiresAt: data.expiresAt || Date.now() + 86400000,
-            allowMultipleChoices: !!data.allowMultipleChoices,
-            showResultsBeforeVoting: !!data.showResultsBeforeVoting,
-            requireLogin: false, isPrivate: !!data.isPrivate,
-            totalVotes: data.totalVotes || 0,
-            isExpired: !!data.isExpired,
-          })
-          poll.value = pollStore.pollsMap.get(pollId) || data
-          isLoading.value = false
-        }
-      }
-    } catch { /* fall through to Gun */ }
-  }
-  // ── Step 3: Gun fetch only if still no data (last resort) ────────────────
+  // ── Step 2: Load from GenosDB if not yet shown (P2P, no backend) ──────────
   if (!poll.value) {
     const communityId = typeof route.params.communityId === 'string' ? route.params.communityId : undefined
     await pollStore.selectPoll(pollId, communityId)
@@ -615,7 +463,7 @@ async function loadPoll() {
   // ── Step 4: Background tasks (non-blocking) ───────────────────────────────
   await Promise.all([
     UserService.getCurrentUser().then(u => { currentUserId.value = u.id }),
-    VoteTrackerService.hasVoted(pollId).then(v => {
+    PollService.hasVoted(pollId).then(v => {
       if (!isStale() && v) hasVoted.value = true
     }),
   ]).catch(() => {})
@@ -703,11 +551,7 @@ async function copyAllLinks() {
 }
 
 onMounted(() => {
-  // Don't await chainStore.initialize() — it's slow and not needed to show the poll
-  // Chain is initialized lazily when user votes
   loadPoll()
-  // Init chain in background
-  chainStore.initialize().catch(() => {})
 })
 
 watch(

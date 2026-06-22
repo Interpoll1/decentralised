@@ -112,6 +112,26 @@ export class PollService {
     await db.sm.acls.set({ type: 'vote', pollId, optionIds, voter, createdAt: Date.now() }, `${pollId}:${voter}`)
   }
 
+  /**
+   * Whether the active identity has already voted on a poll. Native one-vote-per
+   * -identity: the vote node id is deterministic (`pollId:voter`), so this is a
+   * direct lookup — no device fingerprint, no local tally to keep in sync.
+   */
+  static async hasVoted(pollId: string): Promise<boolean> {
+    const voter = db.sm.getActiveEthAddress()
+    if (!voter) return false
+    const { result } = await db.get(`${pollId}:${voter}`)
+    return result?.value?.type === 'vote'
+  }
+
+  /** The option ids the active identity voted for, or [] if they have not voted. */
+  static async getMyVote(pollId: string): Promise<string[]> {
+    const voter = db.sm.getActiveEthAddress()
+    if (!voter) return []
+    const { result } = await db.get(`${pollId}:${voter}`)
+    return result?.value?.type === 'vote' ? (result.value.optionIds ?? []) : []
+  }
+
   /** Load a single poll with its derived tally, or null if it does not exist. */
   static async loadPoll(pollId: string, _communityId?: string): Promise<Poll | null> {
     const { result } = await db.get(pollId)

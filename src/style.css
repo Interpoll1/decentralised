@@ -328,8 +328,8 @@ p {
   padding: 24px 0 120px;
 }
 
-/* Shared shell for the standalone utility pages (Search, Profile, Settings,
-   Chain Explorer). They previously dropped content straight into <ion-content>,
+/* Shared shell for the standalone utility pages (Search, Profile, Settings).
+   They previously dropped content straight into <ion-content>,
    so it floated edge-to-edge on the ambient background and felt unfinished.
    This gives them the Home layout's centered, contained column; `.page-panel`
    reuses the surface-card look so content reads as panels, not loose elements. */
