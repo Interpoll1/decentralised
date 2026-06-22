@@ -5,7 +5,12 @@
         <ion-buttons slot="start">
           <ion-back-button default-href="/home"></ion-back-button>
         </ion-buttons>
-        <ion-title>{{ recipientName }}</ion-title>
+        <ion-title>
+          <span class="peer-chip">
+            <span class="peer-avatar" :style="{ backgroundImage: peerAvatar.gradient }">{{ peerAvatar.initial }}</span>
+            <span class="peer-name">{{ recipientName }}</span>
+          </span>
+        </ion-title>
         <ion-note slot="end" class="connection-status" :class="{ connected }">
           {{ !connected ? 'Connecting...' : !chatReady ? 'Setting up...' : 'Connected' }}
         </ion-note>
@@ -15,25 +20,32 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content ref="content">
+    <ion-content ref="content" :scroll-events="true" @ionScroll="onScroll">
       <div class="chat-container">
 
         <!-- Messages Area -->
         <div ref="messagesContainer" class="messages-area">
           <div
-  v-for="msg in currentMessages"
-  :key="msg.id"
-  class="message"
-  :class="{ sent: msg.sent, received: !msg.sent }"
->
-  <div class="message-content">
-    <p>{{ msg.message }}</p>
-  </div>
-  <div class="message-meta">
-    <span class="message-time">{{ formatTime(msg.timestamp) }}</span>
-    <span v-if="msg.sent" class="message-status">{{ msg.read ? '✓✓' : '✓' }}</span>
-  </div>
-</div>
+            v-for="msg in currentMessages"
+            :key="msg.id"
+            class="message-row"
+            :class="{ sent: msg.sent, received: !msg.sent }"
+          >
+            <span
+              v-if="!msg.sent"
+              class="msg-avatar"
+              :style="{ backgroundImage: peerAvatar.gradient }"
+            >{{ peerAvatar.initial }}</span>
+            <div class="message">
+              <div class="message-content">
+                <p>{{ msg.message }}</p>
+              </div>
+              <div class="message-meta">
+                <span class="message-time">{{ formatTime(msg.timestamp) }}</span>
+                <span v-if="msg.sent" class="message-status">{{ msg.read ? '✓✓' : '✓' }}</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Input Area -->
@@ -74,13 +86,14 @@ import {
 import ChatService, { ChatMessage } from '../services/chatService';
 import { UserService } from '../services/userService';
 import config from '@/config';
-import { formatAddress } from '../utils/address';
+import { formatAddress, addressAvatar } from '../utils/address';
 
 const route = useRoute();
 const props = defineProps<{ userId: string }>();
 
 const recipientId = computed(() => props.userId || (route.params.userId as string) || '');
 const recipientName = computed(() => formatAddress(route.query.name as string) || 'User');
+const peerAvatar = computed(() => addressAvatar(recipientId.value || (route.query.name as string)));
 
 const WS_URL = config.relay.websocket;
 
@@ -89,6 +102,9 @@ const connected      = ref(false);
 const chatReady      = ref(false);
 const messageInput   = ref('');
 const messages       = ref<ChatMessage[]>([]);
+const oldestCursor   = ref<string | null>(null);
+const hasMoreOlder   = ref(false);
+const loadingOlder   = ref(false);
 const typingState    = ref(false);
 const content        = ref<any>(null);
 const typingTimer    = ref<number | null>(null);
@@ -184,13 +200,15 @@ async function initializeChat() {
       return;
     }
 
-    const history = await service.loadHistory(targetUserId);
+    const { messages: history, cursor, hasMore } = await service.loadHistory(targetUserId);
     if (gen !== initGeneration) {
       service.disconnect();
       return;
     }
 
     messages.value = history;
+    oldestCursor.value = cursor;
+    hasMoreOlder.value = hasMore;
     chatReady.value = true;
   } catch (err) {
     console.error('startChat failed:', err);
@@ -238,7 +256,34 @@ const scrollToBottom = () => {
   if (content.value) content.value.$el.scrollToBottom(300);
 };
 
-watch(currentMessages, () => nextTick(() => scrollToBottom()), { deep: true });
+// Auto-scroll to the newest message — but NOT while prepending older history.
+watch(currentMessages, () => { if (!loadingOlder.value) nextTick(() => scrollToBottom()); }, { deep: true });
+
+// Infinite upward scroll: near the top, fetch the previous (older) page via GenosDB
+// cursor pagination and prepend it while preserving the visual scroll position.
+const onScroll = async (ev: CustomEvent) => {
+  const top = (ev.detail as { scrollTop: number }).scrollTop;
+  if (top > 80 || !hasMoreOlder.value || loadingOlder.value || !chatService) return;
+  loadingOlder.value = true;
+  try {
+    const scrollEl = await content.value.$el.getScrollElement();
+    const prevHeight = scrollEl.scrollHeight;
+    const { messages: older, cursor, hasMore } = await chatService.loadHistory(recipientId.value, oldestCursor.value);
+    if (older.length) {
+      messages.value = [...older, ...messages.value];
+      oldestCursor.value = cursor;
+      hasMoreOlder.value = hasMore;
+      await nextTick();
+      scrollEl.scrollTop = scrollEl.scrollHeight - prevHeight; // keep position after prepend
+    } else {
+      hasMoreOlder.value = false;
+    }
+  } catch (err) {
+    console.error('Failed to load older messages:', err);
+  } finally {
+    loadingOlder.value = false;
+  }
+};
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 
@@ -313,16 +358,41 @@ ion-content {
   scrollbar-color: rgba(var(--ion-text-color-rgb), 0.10) transparent;
 }
 
+.message-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 82%;
+  margin-bottom: 8px;
+  animation: bubbleIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.message-row.sent     { align-self: flex-end; flex-direction: row-reverse; }
+.message-row.received { align-self: flex-start; }
+
+.msg-avatar {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background-size: cover;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.20), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
 .message {
   display: flex;
   flex-direction: column;
-  max-width: 72%;
-  animation: bubbleIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
-  margin-bottom: 6px;
+  min-width: 0;
 }
 
-.message.sent     { align-self: flex-end; align-items: flex-end; }
-.message.received { align-self: flex-start; align-items: flex-start; }
+.message-row.sent .message     { align-items: flex-end; }
+.message-row.received .message { align-items: flex-start; }
 
 @keyframes bubbleIn {
   from { opacity: 0; transform: translateY(8px) scale(0.96); }
@@ -402,14 +472,12 @@ ion-content {
   gap: 10px;
   padding: 4px 8px;
   margin: 4px 12px 12px;
-  border-radius: 24px;
-  background: rgba(var(--ion-card-background-rgb), 0.35);
+  border-radius: 26px;
+  background: rgba(var(--ion-card-background-rgb), 0.30);
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  border: 1px solid var(--glass-border);
-  border-top-color: var(--glass-border-top);
-  border-bottom-color: var(--glass-border-bottom);
-  box-shadow: var(--glass-shadow), var(--glass-highlight), var(--glass-inner-glow);
+  border: 1px solid transparent;
+  box-shadow: var(--glass-shadow);
   transition: var(--liquid-transition);
 }
 
@@ -477,6 +545,31 @@ margin-bottom: 7px;
 }
 
 .w-5 { width: 20px; height: 20px; }
+
+.peer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.peer-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  background-size: cover;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.20), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.peer-name {
+  font-size: 16px;
+  font-weight: 600;
+}
 
 .connection-status {
   font-size: 12px;
