@@ -20,7 +20,7 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content ref="content" :scroll-events="true" @ionScroll="onScroll">
+    <ion-content ref="content">
       <div class="chat-container">
 
         <!-- Messages Area -->
@@ -102,9 +102,6 @@ const connected      = ref(false);
 const chatReady      = ref(false);
 const messageInput   = ref('');
 const messages       = ref<ChatMessage[]>([]);
-const oldestCursor   = ref<string | null>(null);
-const hasMoreOlder   = ref(false);
-const loadingOlder   = ref(false);
 const typingState    = ref(false);
 const content        = ref<any>(null);
 const typingTimer    = ref<number | null>(null);
@@ -200,15 +197,13 @@ async function initializeChat() {
       return;
     }
 
-    const { messages: history, cursor, hasMore } = await service.loadHistory(targetUserId);
+    const history = await service.loadHistory(targetUserId);
     if (gen !== initGeneration) {
       service.disconnect();
       return;
     }
 
     messages.value = history;
-    oldestCursor.value = cursor;
-    hasMoreOlder.value = hasMore;
     chatReady.value = true;
   } catch (err) {
     console.error('startChat failed:', err);
@@ -256,34 +251,8 @@ const scrollToBottom = () => {
   if (content.value) content.value.$el.scrollToBottom(300);
 };
 
-// Auto-scroll to the newest message — but NOT while prepending older history.
-watch(currentMessages, () => { if (!loadingOlder.value) nextTick(() => scrollToBottom()); }, { deep: true });
-
-// Infinite upward scroll: near the top, fetch the previous (older) page via GenosDB
-// cursor pagination and prepend it while preserving the visual scroll position.
-const onScroll = async (ev: CustomEvent) => {
-  const top = (ev.detail as { scrollTop: number }).scrollTop;
-  if (top > 80 || !hasMoreOlder.value || loadingOlder.value || !chatService) return;
-  loadingOlder.value = true;
-  try {
-    const scrollEl = await content.value.$el.getScrollElement();
-    const prevHeight = scrollEl.scrollHeight;
-    const { messages: older, cursor, hasMore } = await chatService.loadHistory(recipientId.value, oldestCursor.value);
-    if (older.length) {
-      messages.value = [...older, ...messages.value];
-      oldestCursor.value = cursor;
-      hasMoreOlder.value = hasMore;
-      await nextTick();
-      scrollEl.scrollTop = scrollEl.scrollHeight - prevHeight; // keep position after prepend
-    } else {
-      hasMoreOlder.value = false;
-    }
-  } catch (err) {
-    console.error('Failed to load older messages:', err);
-  } finally {
-    loadingOlder.value = false;
-  }
-};
+// Always keep the newest message in view (on load, on send, on receive).
+watch(currentMessages, () => nextTick(() => scrollToBottom()), { deep: true });
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 

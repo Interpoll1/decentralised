@@ -179,25 +179,10 @@ class ChatService {
     return messageId
   }
 
-  /**
-   * Load a page of history. Fetches newest-first under the hood via GenosDB
-   * cursor-based pagination (a timestamp-desc sort + `$after`), and returns the
-   * page oldest→newest for display. Pass the previous page's `cursor` to fetch
-   * OLDER messages — this is what powers the chat's infinite upward scroll.
-   */
-  async loadHistory(
-    recipientId: string,
-    beforeCursor: string | null = null,
-    limit = 20,
-  ): Promise<{ messages: ChatMessage[]; cursor: string | null; hasMore: boolean }> {
+  /** Load the full conversation history, decrypted and ordered oldest→newest. */
+  async loadHistory(recipientId: string): Promise<ChatMessage[]> {
     const roomId = this.getRoomId(this.userId, recipientId)
-    const opts: Record<string, unknown> = { query: { type: 'dm', roomId }, field: 'timestamp', order: 'desc', $limit: limit }
-    if (beforeCursor) opts.$after = beforeCursor
-    const { results } = await db.map(opts)
-
-    // results: newest→oldest. The cursor for the next (older) page is the last id.
-    const cursor = results.length ? results[results.length - 1].id : null
-    const hasMore = results.length === limit
+    const { results } = await db.map({ query: { type: 'dm', roomId } })
     const raw = results.map((n: any) => n.value).sort((a: any, b: any) => a.timestamp - b.timestamp)
 
     const out: ChatMessage[] = []
@@ -208,7 +193,7 @@ class ChatService {
         out.push({ id: msg.id, from: msg.senderId, to: msg.recipientId, message: text, timestamp: msg.timestamp, read: !!msg.readAt, sent })
       } catch { /* skip messages from a previous keypair */ }
     }
-    return { messages: out, cursor, hasMore }
+    return out
   }
 
   sendTyping(recipientId: string, isTyping: boolean): void {
