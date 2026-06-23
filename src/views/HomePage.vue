@@ -157,19 +157,25 @@
                   :community-name="getCommunityName(item.data.communityId)"
                   :has-upvoted="hasUpvoted(item.data.id)"
                   :has-downvoted="hasDownvoted(item.data.id)"
+                  :show-moderation-action="ModerationService.canSubmitHashesFromHome()"
+                  moderation-action-title="Send this post body hash to the moderation API"
                   @click="navigateToPost(item.data)"
                   @upvote="handleUpvote(item.data)"
                   @downvote="handleDownvote(item.data)"
+                  @moderation-submit="handleModerationSubmit(item.data)"
                   @comments="navigateToPost(item.data)"
                 />
                 <PollCard
                   v-else-if="item.type === 'poll'"
                   :poll="item.data"
                   :community-name="getCommunityName(item.data.communityId)"
-                  @click="navigateToPoll(item.data)"
-                  @vote="navigateToPoll(item.data)"
-                />
-              </template>
+                    :show-moderation-action="ModerationService.canSubmitHashesFromHome()"
+                    moderation-action-title="Send this poll text to the moderation API"
+                    @click="navigateToPoll(item.data)"
+                    @vote="navigateToPoll(item.data)"
+                    @moderation-submit="handleModerationSubmitPoll(item.data)"
+                  />
+                </template>
 
               <ion-infinite-scroll :disabled="!hasMore" @ionInfinite="onInfiniteScroll">
                 <ion-infinite-scroll-content loading-spinner="bubbles" />
@@ -803,10 +809,13 @@ const combinedFeed = computed(() => {
   const items: Array<{ type: 'post' | 'poll'; data: any; createdAt: number }> = []
 
   postStore.sortedPosts
-    .filter(post => !ModerationService.isPostBodyBlocked(post.content || ''))
+    .filter(post => !ModerationService.isPostBodyBlocked(getPostModerationText(post)))
     .forEach(post => items.push({ type: 'post', data: post, createdAt: post.createdAt }));
   pollStore.sortedPolls.forEach(poll => {
-    if (!poll.isPrivate) items.push({ type: 'poll', data: poll, createdAt: poll.createdAt })
+    if (poll.isPrivate) return;
+    if (!ModerationService.isPostBodyBlocked(getPollModerationText(poll))) {
+      items.push({ type: 'poll', data: poll, createdAt: poll.createdAt });
+    }
   })
 
   if (feedMode.value === 'latest') {
@@ -846,6 +855,20 @@ const combinedFeed = computed(() => {
 
   return items.slice(0, postStore.visibleCount)
 })
+
+function getPollModerationText(poll: Poll): string {
+  return [poll.question || '', poll.description || '']
+    .map(part => part.trim())
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function getPostModerationText(post: Post): string {
+  return [post.title || '', post.content || '']
+    .map(part => part.trim())
+    .filter(Boolean)
+    .join('\n\n');
+}
 
 
 const hasMore = computed(() => {
@@ -896,10 +919,13 @@ watch(
 );
 
 watch(
-  () => [postStore.sortedPosts.length, moderationVersion.value] as const,
+  () => [postStore.sortedPosts.length, pollStore.sortedPolls.length, moderationVersion.value] as const,
   () => {
     if (!ModerationService.isHomeFeedModerationEnabled()) return;
-    ModerationService.primeHomeFeedChecks(postStore.sortedPosts.map(post => post.content || ''));
+    ModerationService.primeHomeFeedChecks([
+      ...postStore.sortedPosts.map(getPostModerationText),
+      ...pollStore.sortedPolls.filter(poll => !poll.isPrivate).map(getPollModerationText),
+    ]);
   },
   { immediate: true },
 );
@@ -1316,17 +1342,39 @@ function getCommunityName(communityId: string): string {
   return communityStore.communities.find(c => c.id === communityId)?.displayName || communityId;
 }
 async function navigateToPost(post: Post) {
-  if (ModerationService.canSubmitHashesFromHome()) {
-    try {
-      await ModerationService.submitPostBodyHash(post.content || '');
-      (await toastController.create({ message: 'Post hash submitted to moderation API', duration: 1800, color: 'success' })).present();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to submit post hash';
-      (await toastController.create({ message, duration: 2200, color: 'warning' })).present();
-    }
+  router.push(`/community/${post.communityId}/post/${post.id}`);
+}
+
+async function handleModerationSubmit(post: Post) {
+  const moderationText = getPostModerationText(post);
+  if (!moderationText) {
+    (await toastController.create({ message: 'Post has no text to filter', duration: 1800, color: 'medium' })).present();
     return;
   }
-  router.push(`/community/${post.communityId}/post/${post.id}`);
+
+  try {
+    await ModerationService.submitPostBodyHash(moderationText);
+    (await toastController.create({ message: 'Post hash sent to moderation API', duration: 1800, color: 'success' })).present();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to submit post hash';
+    (await toastController.create({ message, duration: 2200, color: 'warning' })).present();
+  }
+}
+
+async function handleModerationSubmitPoll(poll: Poll) {
+  const moderationText = getPollModerationText(poll);
+  if (!moderationText) {
+    (await toastController.create({ message: 'Poll has no text to filter', duration: 1800, color: 'medium' })).present();
+    return;
+  }
+
+  try {
+    await ModerationService.submitPostBodyHash(moderationText);
+    (await toastController.create({ message: 'Poll text sent to moderation API', duration: 1800, color: 'success' })).present();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to submit poll text';
+    (await toastController.create({ message, duration: 2200, color: 'warning' })).present();
+  }
 }
 function navigateToPoll(poll: Poll) { router.push(`/community/${poll.communityId}/poll/${poll.id}`); }
 

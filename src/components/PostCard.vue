@@ -58,6 +58,16 @@
             <span>{{ formatNumber(post.downvotes) }}</span>
           </button>
 
+          <button
+            v-if="showModerationAction"
+            class="stat-button moderation-action"
+            @click="handleModerationAction"
+            :title="moderationActionTitle"
+          >
+            <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
+            <span>Filter</span>
+          </button>
+
           <button class="stat-button comments" @click="handleCommentsClick">
             <ion-icon :icon="chatbubbleOutline"></ion-icon>
             <span>{{ formatNumber(post.commentCount) }}</span>
@@ -274,6 +284,16 @@
   border-color: rgba(var(--ion-color-primary-rgb), 0.15);
 }
 
+.stat-button.moderation-action {
+  border-color: rgba(var(--ion-color-warning-rgb), 0.18);
+}
+
+.stat-button.moderation-action:hover {
+  background: rgba(var(--ion-color-warning-rgb), 0.08);
+  border-color: rgba(var(--ion-color-warning-rgb), 0.3);
+  color: var(--ion-color-warning);
+}
+
 .stat-button.comments:hover {
   background: rgba(var(--ion-color-primary-rgb), 0.08);
   border-color: rgba(var(--ion-color-primary-rgb), 0.25);
@@ -401,7 +421,8 @@ import {
   arrowDownOutline, 
   chatbubbleOutline, 
   trendingUpOutline,
-  warningOutline
+  warningOutline,
+  shieldCheckmarkOutline
 } from 'ionicons/icons';
 import { Post } from '../services/postService';
 import type { FilterAction } from '../services/moderationService';
@@ -424,12 +445,14 @@ const props = defineProps<{
   hasDownvoted?: boolean;
   flagged?: boolean;
   filterAction?: FilterAction;
+  showModerationAction?: boolean;
+  moderationActionTitle?: string;
 }>();
 
 const revealed = ref(false);
 const currentUserId = ref('');
 
-const emit = defineEmits(['upvote', 'downvote']);
+const emit = defineEmits(['upvote', 'downvote', 'moderation-submit']);
 
 watch(
   () => props.post.authorId,
@@ -512,6 +535,11 @@ function handleDownvote(event: Event) {
 function handleCommentsClick(event: Event) {
   event.stopPropagation();
   router.push(`/post/${props.post.id}`);
+}
+
+function handleModerationAction(event: Event) {
+  event.stopPropagation();
+  emit('moderation-submit');
 }
 
 async function handleInviteToChat() {
