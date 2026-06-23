@@ -72,6 +72,18 @@
           </div>
         </div>
 
+        <ion-button
+          v-if="showModerationAction"
+          fill="clear"
+          size="small"
+          class="moderation-action"
+          :title="moderationActionTitle"
+          @click.stop="$emit('moderation-submit')"
+        >
+          Filter
+          <ion-icon slot="end" :icon="shieldCheckmarkOutline"></ion-icon>
+        </ion-button>
+
         <ion-button fill="clear" size="small" @click.stop="$emit('vote')">
           Vote Now
           <ion-icon slot="end" :icon="chevronForwardOutline"></ion-icon>
@@ -91,7 +103,8 @@ import {
   timeOutline,
   checkmarkDoneOutline,
   chevronForwardOutline,
-  warningOutline
+  warningOutline,
+  shieldCheckmarkOutline
 } from 'ionicons/icons';
 import { Poll } from '../services/pollService';
 import type { FilterAction } from '../services/moderationService';
@@ -104,8 +117,10 @@ const props = defineProps<{
   poll: Poll;
   flagged?: boolean;
   filterAction?: FilterAction;
+  showModerationAction?: boolean;
+  moderationActionTitle?: string;
 }>();
-defineEmits(['click', 'vote']);
+defineEmits(['click', 'vote', 'moderation-submit']);
 
 const revealed = ref(false);
 const userStore = useUserStore();
@@ -350,6 +365,15 @@ function getTimeRemaining(): string {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.moderation-action {
+  --color: var(--ion-color-warning);
+}
+
+.moderation-action::part(native) {
+  border: 1px solid rgba(var(--ion-color-warning-rgb), 0.2);
+  border-radius: 999px;
 }
 
 .stat-item {
