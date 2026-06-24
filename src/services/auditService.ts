@@ -44,7 +44,8 @@ export class AuditService {
 
   /**
    * Ask backend if this device is allowed to vote on a poll.
-   * Fail closed for all backend errors or unexpected responses.
+   * For decentralized resilience, soft backend failures fall back to local/Gun voting
+   * unless auth is explicitly required or backend explicitly reports an already-voted denial.
    */
   static async authorizeVote(
     pollId: string,
@@ -66,11 +67,37 @@ export class AuditService {
       });
 
       if (!res.ok) {
+        let backendReason: string | null = null;
+        try {
+          const parsed = await res.json() as VoteAuthorizeResponse;
+          backendReason = typeof parsed?.reason === 'string' ? parsed.reason : null;
+        } catch {
+          backendReason = null;
+        }
+        const normalizedReason = backendReason?.toLowerCase() || '';
+        const alreadyVotedDenied = normalizedReason.includes('already');
+        const backendUnavailable = res.status === 409 || res.status >= 500;
+        if (res.status === 401) {
+          return {
+            allowed: false,
+            reservationToken: null,
+            reason: 'authentication required',
+            requiresAuth: true,
+          };
+        }
+        if (!alreadyVotedDenied && backendUnavailable) {
+          return {
+            allowed: true,
+            reservationToken: null,
+            reason: 'relay authorization unavailable; continuing decentralized vote',
+            requiresAuth: false,
+          };
+        }
         return {
           allowed: false,
           reservationToken: null,
-          reason: res.status === 401 ? 'authentication required' : 'authorization failed',
-          requiresAuth: res.status === 401,
+          reason: backendReason || 'authorization failed',
+          requiresAuth: false,
         };
       }
 
@@ -87,7 +114,12 @@ export class AuditService {
         requiresAuth: data.requireLogin === true && reason === 'authentication required',
       };
     } catch (_error) {
-      return { allowed: false, reservationToken: null, reason: 'authorization failed', requiresAuth: false };
+      return {
+        allowed: true,
+        reservationToken: null,
+        reason: 'relay authorization unavailable; continuing decentralized vote',
+        requiresAuth: false,
+      };
     }
   }
 

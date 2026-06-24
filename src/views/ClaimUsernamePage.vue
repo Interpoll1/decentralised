@@ -70,7 +70,7 @@
               <ion-label position="stacked">Issuer contact (optional)</ion-label>
               <ion-input
                 v-model="customIssuerContact"
-                placeholder="viktor@endless.sbs"
+                placeholder="admin@example.com"
                 autocomplete="off"
               />
             </ion-item>
@@ -192,7 +192,7 @@
     <ion-alert
       :is-open="showTrustInfo"
       header="What is a trust issuer?"
-      message="A trust issuer is an authority (like viktor@endless.sbs) that endorses your username with a cryptographic certificate. Verification requires solving a ~15-second Proof-of-Work challenge — this deters spam while keeping registration open. Verified users get higher rate limits and a green shield badge."
+      message="A trust issuer is an authority (like admin@endless.sbs) that endorses your username with a cryptographic certificate. Verification requires solving a ~15-second Proof-of-Work challenge — this deters spam while keeping registration open. Verified users get higher rate limits and a green shield badge."
       :buttons="[{ text: 'Got it', role: 'cancel' }]"
       @didDismiss="showTrustInfo = false"
     />
@@ -234,7 +234,7 @@ const claimedVerified = ref(false);
 const claimedCertificate = ref<TrustCertificate | null>(null);
 const showCustomIssuerMenu = ref(false);
 const customIssuerEndpoint = ref('https://interpoll.endless.sbs/trust');
-const customIssuerContact = ref('viktor@endless.sbs');
+const customIssuerContact = ref('');
 const addingCustomIssuer = ref(false);
 const customIssuerError = ref('');
 

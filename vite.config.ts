@@ -2,6 +2,19 @@ import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import path from 'path';
 import fs from 'fs/promises';
+import { execSync } from 'child_process';
+import crypto from 'crypto';
+
+function getBuildHash(): string {
+  try {
+    const commit = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
+    return commit;
+  } catch {
+    const now = new Date().toISOString();
+    const hash = crypto.createHash('sha256').update(now).digest('hex').substring(0, 7);
+    return hash;
+  }
+}
 
 function spaRouteFallbackPlugin() {
   const blockedPrefixes = ['/src/', '/node_modules/', '/@vite/', '/@fs/', '/assets', '/public/'];
@@ -54,7 +67,9 @@ export default defineConfig({
     'process.env': {},
     'process.platform': JSON.stringify('browser'),
     'process.versions': JSON.stringify({}),
-    global: 'globalThis'
+    global: 'globalThis',
+    'import.meta.env.VITE_BUILD_HASH': JSON.stringify(getBuildHash()),
+    'import.meta.env.VITE_BUILD_TIME': JSON.stringify(new Date().toISOString()),
   },
   optimizeDeps: {
     exclude: ['@ionic/vue'],

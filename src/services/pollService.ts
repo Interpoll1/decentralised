@@ -152,6 +152,53 @@ export class PollService {
     return run;
   }
 
+  private static sanitizeForGun<T>(value: T): T {
+    if (Array.isArray(value)) {
+      return value.map((item) => this.sanitizeForGun(item)) as T;
+    }
+    if (value && typeof value === 'object') {
+      const out: Record<string, unknown> = {};
+      Object.entries(value as Record<string, unknown>).forEach(([key, entry]) => {
+        if (entry !== undefined) {
+          out[key] = this.sanitizeForGun(entry);
+        }
+      });
+      return out as T;
+    }
+    return value;
+  }
+
+  private static async registerPollPolicyBestEffort(pollId: string, requireLogin: boolean): Promise<void> {
+    const initialRegistered = await AuditService.registerPollPolicy(pollId, requireLogin);
+    if (initialRegistered) return;
+
+    console.warn(
+      `[PollService] Poll policy registration failed for ${pollId}; continuing decentralized propagation`,
+    );
+    logPollDebug('create', 'Poll policy registration failed; continuing with Gun writes', {
+      pollId,
+      requireLogin,
+    });
+
+    void (async () => {
+      const retryDelaysMs = [1500, 5000, 15000];
+      for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, retryDelaysMs[attempt]));
+        const registered = await AuditService.registerPollPolicy(pollId, requireLogin);
+        if (registered) {
+          logPollDebug('create', 'Poll policy registration retry succeeded', {
+            pollId,
+            attempt: attempt + 1,
+          });
+          return;
+        }
+      }
+      console.warn(
+        `[PollService] Poll policy remained unavailable after retries for ${pollId}; poll stays decentralized and relay-enforced vote policy may be unavailable`,
+      );
+    })();
+  }
+
   private static buildPollRecord(pollData: any, options: PollOption[]): Poll | null {
     if (!pollData?.id || options.length === 0) return null;
     const totalVotes = options.reduce((sum, opt) => sum + (opt.votes || 0), 0);
@@ -546,15 +593,15 @@ export class PollService {
   private static warmPollCache(pollData: any, optionsData?: any) {
     if (!pollData?.id) return;
     const pollNode = this.getPollPath(pollData.id);
-    pollNode.put(pollData);
+    pollNode.put(this.sanitizeForGun(pollData));
     if (optionsData && typeof optionsData === 'object') {
-      pollNode.get('options').put(optionsData);
+      pollNode.get('options').put(this.sanitizeForGun(optionsData));
     }
     if (pollData.communityId) {
       const communityNode = this.getCommunityPollPath(pollData.communityId, pollData.id);
-      communityNode.put(pollData);
+      communityNode.put(this.sanitizeForGun(pollData));
       if (optionsData && typeof optionsData === 'object') {
-        communityNode.get('options').put(optionsData);
+        communityNode.get('options').put(this.sanitizeForGun(optionsData));
       }
     }
   }
@@ -894,10 +941,7 @@ export class PollService {
       contentSignature: poll.contentSignature,
     };
 
-    const policyRegistered = await AuditService.registerPollPolicy(poll.id, poll.requireLogin);
-    if (!policyRegistered) {
-      throw new Error('Failed to register poll policy with relay');
-    }
+    await this.registerPollPolicyBestEffort(poll.id, poll.requireLogin);
 
     const createWriteOptions = { timeoutMs: 15000 } as const;
     const optionWriteOptions = { timeoutMs: 8000, resolveOnTimeout: true } as const;
@@ -1551,7 +1595,7 @@ export class PollService {
         }
         reject(timeoutError);
       }, timeoutMs);
-      node.put(data, (ack: any) => {
+      node.put(this.sanitizeForGun(data), (ack: any) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);

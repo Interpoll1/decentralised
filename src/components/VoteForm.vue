@@ -171,7 +171,7 @@ const submitVote = async () => {
 
     // Ask backend (if available) to enforce one-vote-per-device
     const authorization = await AuditService.authorizeVote(props.poll.id, deviceId, !!(props.poll as any).requireLogin);
-    if (!authorization.allowed || !authorization.reservationToken) {
+    if (!authorization.allowed) {
       if (authorization.requiresAuth) {
         const toast = await toastController.create({
           message: 'Sign in is required before voting on this poll',
@@ -240,18 +240,20 @@ const submitVote = async () => {
         }
       }
 
-      try {
-        const confirmedByBackend = await AuditService.confirmVote(
-          pollIdForSync,
-          deviceId,
-          reservationTokenForSync,
-          !!(props.poll as any).requireLogin,
-        );
-        if (!confirmedByBackend) {
-          console.warn('Vote confirmation request failed after chain vote');
+      if (reservationTokenForSync) {
+        try {
+          const confirmedByBackend = await AuditService.confirmVote(
+            pollIdForSync,
+            deviceId,
+            reservationTokenForSync,
+            !!(props.poll as any).requireLogin,
+          );
+          if (!confirmedByBackend) {
+            console.warn('Vote confirmation request failed after chain vote');
+          }
+        } catch (confirmError) {
+          console.warn('Vote confirmation request failed after chain vote:', confirmError);
         }
-      } catch (confirmError) {
-        console.warn('Vote confirmation request failed after chain vote:', confirmError);
       }
 
       try {
