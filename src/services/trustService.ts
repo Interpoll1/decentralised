@@ -1,7 +1,7 @@
 /**
  * trustService.ts
  *
- * Manages "trust issuers" — external authorities (e.g. viktor@endless.sbs)
+ * Manages "trust issuers" — external authorities (e.g. admin@endless.sbs)
  * whose endorsement elevates a username from UNVERIFIED to VERIFIED.
  *
  * Architecture:
@@ -31,7 +31,7 @@ export type TrustLevel = 'none' | 'verified';
 
 export interface TrustIssuer {
   domain: string;          // e.g. "endless.sbs"
-  contact: string;         // e.g. "viktor@endless.sbs"
+  contact: string;         // e.g. "admin@endless.sbs"
   endpoint: string;        // REST API base, e.g. "https://endless.sbs/trust"
   publicKey: string;       // secp256k1 x-only hex, used to verify certificates
   addedAt: number;
@@ -83,7 +83,7 @@ const CUSTOM_ISSUERS_STORAGE_KEY = 'interpoll_custom_trust_issuers';
 const BUILTIN_ISSUERS: Omit<TrustIssuer, 'addedAt'>[] = [
   {
     domain: 'endless.sbs',
-    contact: 'viktor@endless.sbs',
+    contact: 'admin@endless.sbs',
     endpoint: 'https://interpoll.endless.sbs/trust',
     publicKey: '',
   },

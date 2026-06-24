@@ -464,7 +464,7 @@ async function submitVote() {
     }
 
     const authorization = await AuditService.authorizeVote(poll.value.id, deviceId, !!poll.value.requireLogin)
-    if (!authorization.allowed || !authorization.reservationToken) {
+    if (!authorization.allowed) {
       if (authorization.requiresAuth) {
         await presentToast('Sign in is required before voting on this poll', 3000)
         AuditService.saveReturnUrl(route.fullPath)
@@ -515,18 +515,20 @@ async function submitVote() {
     const gunRelayBase = config.relay.gun.replace(/\/gun$/, '')
 
     void (async () => {
-      try {
-        const confirmedByBackend = await AuditService.confirmVote(
-          pollIdForSync,
-          deviceId,
-          authorization.reservationToken,
-          !!poll.value?.requireLogin,
-        )
-        if (!confirmedByBackend) {
-          console.warn('Vote confirm request failed after chain vote')
+      if (authorization.reservationToken) {
+        try {
+          const confirmedByBackend = await AuditService.confirmVote(
+            pollIdForSync,
+            deviceId,
+            authorization.reservationToken,
+            !!poll.value?.requireLogin,
+          )
+          if (!confirmedByBackend) {
+            console.warn('Vote confirm request failed after chain vote')
+          }
+        } catch (confirmError) {
+          console.warn('Vote confirm request failed after chain vote:', confirmError)
         }
-      } catch (confirmError) {
-        console.warn('Vote confirm request failed after chain vote:', confirmError)
       }
 
       try {

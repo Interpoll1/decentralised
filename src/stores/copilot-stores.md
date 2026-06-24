@@ -31,7 +31,7 @@ Manages polls loaded from GunDB and cross-tab vote updates.
 - Sync diagnostics: when `localStorage.interpoll_sync_debug === 'true'`, logs `[SyncRate] poll-incoming` and `[SyncRate] poll-flush` once per second with queue depth.
 - `pendingNewPolls` only contains truly new arrivals after initial hydration; `flushNewPolls()` moves them into `pollsMap` and persists seen IDs in localStorage.
 - Pagination: `visibleCount` incremented by `PAGE_SIZE` (10).
-- `createPoll()` checks the current user's `showRealName` preference. Same pseudonym-vs-real-name logic as posts.
+- `createPoll()` checks the current user's `showRealName` preference. Same pseudonym-vs-real-name logic as posts, and after success it broadcasts `poll-updated` over both `BroadcastService` and `WebSocketService` so newly created polls appear immediately in other tabs/peers even before Gun live subscriptions settle.
 - After a successful `voteOnPoll()`, the store reloads the canonical poll from `PollService.loadPoll()` and then broadcasts `poll-updated` over both `BroadcastService` and `WebSocketService` so local tabs and online peers converge on the same Gun-backed totals immediately.
 
 Key refs: `pollsMap`, `currentPoll`, `isLoading`, `visibleCount`  

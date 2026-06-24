@@ -348,6 +348,8 @@ export const usePollStore = defineStore('poll', () => {
     pollsMap.value.set(poll.id, poll);
     seenPollIds.add(poll.id);
     saveSeenIds(seenPollIds);
+    BroadcastService.broadcast('poll-updated', poll);
+    void WebSocketService.broadcast('poll-updated', poll);
 
     try {
       const pollEvent = await EventService.createPollEvent({

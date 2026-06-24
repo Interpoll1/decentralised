@@ -1148,6 +1148,25 @@
             class="hidden-input"
             @change="handleImportFile"
           />
+          <div class="separator"></div>
+        </div>
+
+        <!-- Build Info -->
+        <div class="section">
+          <h3 class="section-title">About this build</h3>
+          <ion-list>
+            <ion-item>
+              <ion-label>Build Hash</ion-label>
+              <ion-text slot="end" class="build-hash">{{ buildHash }}</ion-text>
+            </ion-item>
+            <ion-item>
+              <ion-label>Built at</ion-label>
+              <ion-text slot="end" class="build-time">{{ formatBuildTime }}</ion-text>
+            </ion-item>
+          </ion-list>
+          <p class="helper-text">
+            Use these identifiers when reporting issues or checking if you're running the latest version.
+          </p>
         </div>
       </div>
     </ion-content>
@@ -1836,6 +1855,14 @@
   margin-top: 6px;
   line-height: 1.4;
 }
+
+.build-hash,
+.build-time {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  color: var(--ion-color-medium);
+  text-align: right;
+}
 </style>
 
 <script setup lang="ts">
@@ -1869,6 +1896,7 @@ import {
   IonChip,
   IonInput,
   IonSpinner,
+  IonText,
   alertController,
   toastController,
   onIonViewWillEnter
@@ -1908,6 +1936,7 @@ import { getEnabledVersions, setEnabledVersions, probeForVersions, availableVers
 import { GUN_NAMESPACE } from '../services/gunService';
 import { useFeedPreferences } from '../composables/useFeedPreferences';
 import type { FeedMode, FeedRankingWeights } from '../services/feedPreferencesService';
+import { BUILD_HASH, BUILD_TIME } from '../utils/buildHash';
 import UserIdentityBadge from '../components/UserIdentityBadge.vue';
 import { GUN_RELAY_PRESETS, isValidGunUrl, labelForGunUrl, DEFAULT_GUN_PEERS } from '../services/gunRelayPresets';
 
@@ -1947,6 +1976,22 @@ const policy = ref({
 const isDarkMode = ref(false);
 const userProfile = ref<any>(null);
 const deviceId = ref('');
+const buildHash = BUILD_HASH;
+const formatBuildTime = computed(() => {
+  if (BUILD_TIME === 'unknown' || BUILD_TIME === 'development') return BUILD_TIME;
+  try {
+    const date = new Date(BUILD_TIME);
+    return date.toLocaleString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch {
+    return BUILD_TIME;
+  }
+});
 
 // Data version toggles — dynamic, based on GunDB probe
 const currentNamespace = GUN_NAMESPACE;

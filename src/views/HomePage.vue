@@ -620,39 +620,39 @@ const moderationCustomApiError = ref('');
 const moderationSaving = ref(false);
 const tutorialSteps = [
   {
-    title: 'Start with the home feed',
-    body: 'InterPoll gathers posts and polls in one flowing feed so you can scan the latest ideas without leaving the page.',
+    title: 'See what\'s new in your interests',
+    body: 'Your home feed shows you all the latest polls and discussions. You can sort by "For You" (topics you follow) or "Latest" (brand new posts).',
     bullets: [
-      'Use For You for a curated mix of topics you have joined.',
-      'Switch to Latest when you want the freshest conversations first.',
-      'Tap the new-content banner to reveal anything that arrived while you were away.'
+      '"For You" — see posts from communities you joined',
+      '"Latest" — see the newest posts from everyone',
+      'Tap the notification banner to refresh and see new posts'
     ]
   },
   {
-    title: 'Discover communities',
-    body: 'Communities are the topic clusters that organize everything. Join a few to focus the feed on what matters to you.',
+    title: 'Join communities or create your own',
+    body: 'Communities are groups organized around topics. Join a few to see their posts in your feed, or start a new one.',
     bullets: [
-      'Browse public communities or filter to the ones you already joined.',
-      'Use the search box to find a niche fast.',
-      'Create your own space when you want a dedicated home for a topic.'
+      'Browse all communities and join ones you like',
+      'Search to find a community by name',
+      'Create a new community if you don\'t find what you\'re looking for'
     ]
   },
   {
-    title: 'Chat privately',
-    body: 'The chat tab is built for quick, direct conversations without leaving the app.',
+    title: 'Message people directly',
+    body: 'Use Chat to send direct messages to other users. You can have quick one-on-one conversations here.',
     bullets: [
-      'Search for people by name or username.',
-      'Open a conversation from the recent list whenever a thread starts.',
-      'Unread badges keep follow-up easy on mobile.'
+      'Search for people by their name or username',
+      'See your recent conversations in one place',
+      'Unread messages show up as badges'
     ]
   },
   {
-    title: 'Create anything you need',
-    body: 'The create tab is your launchpad for building new communities, posting updates, or starting a poll.',
+    title: 'Create polls, posts, and communities',
+    body: 'The Create button (plus icon) is how you add things. Start a poll to ask for opinions, share a post, or launch a new community.',
     bullets: [
-      'Create a community to gather people around a shared topic.',
-      'Publish a post to share news, links, or reflections.',
-      'Open a poll when you want quick feedback from the people already in that space.'
+      'Start a poll to get feedback from others',
+      'Share a post to discuss news or ideas',
+      'Create a community for a topic that matters to you'
     ]
   }
 ];
