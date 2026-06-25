@@ -76,7 +76,7 @@
       </ion-list>
 
       <!-- FAB: create room -->
-      <ion-fab vertical="bottom" horizontal="end" slot="fixed">
+      <ion-fab v-if="chatRoomStore.rooms.length > 0" vertical="bottom" horizontal="end" slot="fixed">
         <ion-fab-button @click="showCreateModal = true">
           <ion-icon :icon="addOutline" />
         </ion-fab-button>

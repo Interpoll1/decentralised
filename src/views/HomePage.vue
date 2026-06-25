@@ -677,6 +677,9 @@ function isValidModerationApiUrl(url: string): boolean {
 function openModerationOnboarding() {
   if (localStorage.getItem(MODERATION_ONBOARDING_KEY) === 'true') return;
   if (moderationOnboardingOpen.value) return;
+  // Sequence the onboarding flows: the moderation/feed-cleanup prompt must not
+  // stack on top of the quick tour. It opens once the tour is dismissed/finished.
+  if (tutorialVisible.value) return;
   moderationChoice.value = 'default';
   moderationCustomApiUrl.value = '';
   moderationCustomApiError.value = '';
@@ -940,6 +943,8 @@ const sidebarCommunities = computed(() => communityStore.communities)
 function skipTutorial() {
   localStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
   tutorialVisible.value = false;
+  // Tour done — now (and only now) offer the optional feed-cleanup step.
+  void openModerationOnboarding();
 }
 
 function previousTutorialStep() {
@@ -1478,7 +1483,18 @@ async function showPostOptions() {
       ]
     });
     await actionSheet.present();
-  } else { activeTab.value = 'communities'; }
+  } else { await routeToCommunitiesToPost('post'); }
+}
+
+async function routeToCommunitiesToPost(kind: 'post' | 'poll') {
+  activeTab.value = 'communities';
+  const toast = await toastController.create({
+    message: `Join a community first to create a ${kind}.`,
+    duration: 3500,
+    position: 'top',
+    color: 'primary',
+  });
+  await toast.present();
 }
 
 async function showPollOptions() {
@@ -1491,7 +1507,7 @@ async function showPollOptions() {
       ]
     });
     await actionSheet.present();
-  } else { activeTab.value = 'communities'; }
+  } else { await routeToCommunitiesToPost('poll'); }
 }
 
 // ── Watchers & lifecycle ──────────────────────────────────────────────────────

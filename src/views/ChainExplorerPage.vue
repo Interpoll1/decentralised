@@ -14,11 +14,20 @@
         <ion-card-header>
           <ion-card-title>Blockchain Blocks</ion-card-title>
           <ion-card-subtitle>
-            Showing {{ visibleBlocks.length }} of {{ chainStore.blocks.length }} blocks
+            Showing {{ visibleBlocks.length }} of {{ filteredBlocks.length }} blocks
           </ion-card-subtitle>
         </ion-card-header>
 
         <ion-card-content>
+          <ion-searchbar
+            v-model="searchQuery"
+            class="block-search"
+            placeholder="Search by block #, hash, or label"
+            :debounce="150"
+          ></ion-searchbar>
+          <div v-if="searchQuery && filteredBlocks.length === 0" class="no-results">
+            No blocks match “{{ searchQuery }}”.
+          </div>
           <div class="blocks-list">
             <div
               v-for="block in visibleBlocks"
@@ -77,7 +86,7 @@
                 <div class="hash-row">
                   <span class="hash-label">Signature:</span>
                   <code class="hash-value">
-                    {{ fullHash(block.signature) }}
+                    {{ block.signature ? fullHash(block.signature) : (block.index === 0 ? 'None (Genesis Block)' : '—') }}
                   </code>
                 </div>
               </div>
@@ -133,6 +142,7 @@ import {
   IonBadge,
   IonIcon,
   IonButton,
+  IonSearchbar,
 } from '@ionic/vue';
 import {
   shieldCheckmarkOutline,
@@ -147,12 +157,25 @@ const INITIAL_VISIBLE_BLOCKS = 75;
 const LOAD_BATCH_SIZE = 75;
 const visibleCount = ref(INITIAL_VISIBLE_BLOCKS);
 
+const searchQuery = ref('');
+
 const reversedBlocks = computed(() => {
   return [...chainStore.blocks].reverse();
 });
 
-const visibleBlocks = computed(() => reversedBlocks.value.slice(0, visibleCount.value));
-const hasMoreBlocks = computed(() => visibleBlocks.value.length < chainStore.blocks.length);
+const filteredBlocks = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase();
+  if (!q) return reversedBlocks.value;
+  return reversedBlocks.value.filter((b) =>
+    String(b.index) === q ||
+    (b.currentHash || '').toLowerCase().includes(q) ||
+    (b.voteHash || '').toLowerCase().includes(q) ||
+    (b.actionLabel || '').toLowerCase().includes(q),
+  );
+});
+
+const visibleBlocks = computed(() => filteredBlocks.value.slice(0, visibleCount.value));
+const hasMoreBlocks = computed(() => visibleBlocks.value.length < filteredBlocks.value.length);
 
 const loadMoreBlocks = () => {
   visibleCount.value = Math.min(chainStore.blocks.length, visibleCount.value + LOAD_BATCH_SIZE);
@@ -218,6 +241,15 @@ const actionLabel = (actionType: string) => {
 </script>
 
 <style scoped>
+.block-search {
+  padding: 0 0 8px 0;
+}
+.no-results {
+  padding: 16px 4px;
+  font-size: 14px;
+  color: var(--ion-color-medium);
+  text-align: center;
+}
 .blocks-list {
   display: flex;
   flex-direction: column;

@@ -24,6 +24,10 @@
 
       <!-- ── Mode: invite someone ───────────────────────── -->
       <template v-if="mode === 'invite'">
+        <p v-if="!offerText" class="text-xs opacity-70 mb-2">
+          Generate a one-time code to share with the person you want to connect with.
+          They open it, send back a reply, and you're linked directly.
+        </p>
         <ion-button v-if="!offerText" size="small" expand="block" :disabled="busy" @click="startOffer">
           <ion-spinner v-if="busy" name="dots" class="mr-2" /> Create invite link
         </ion-button>
@@ -242,20 +246,27 @@ function reset() {
 .seg {
   display: flex;
   gap: 4px;
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 10px;
   padding: 3px;
 }
 .seg-btn {
   flex: 1;
   font-size: 12px;
-  padding: 6px 8px;
+  font-weight: 600;
+  padding: 7px 8px;
   border-radius: 8px;
-  color: inherit;
-  opacity: 0.7;
+  color: var(--ion-text-color, inherit);
+  opacity: 0.75;
   transition: all 0.15s ease;
 }
-.seg-on {
+.seg-btn:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.06);
+}
+.seg-on,
+.seg-on:hover {
   background: var(--ion-color-primary, #4f7cff);
   color: #fff;
   opacity: 1;

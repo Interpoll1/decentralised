@@ -41,7 +41,7 @@
           <ion-list>
             <ion-item>
               <ion-toggle v-model="isDarkMode" @ionChange="toggleDarkMode">
-                {{ isDarkMode ? 'Dark mode' : 'Light mode' }}
+                Dark mode
               </ion-toggle>
             </ion-item>
           </ion-list>
@@ -117,7 +117,7 @@
             </div>
             <div class="info-row">
               <span>Karma</span>
-              <ion-badge color="primary">{{ userProfile?.karma || 0 }}</ion-badge>
+              <span class="karma-value">{{ userProfile?.karma || 0 }}</span>
             </div>
           </div>
 
@@ -1175,6 +1175,18 @@
 
 
 <style scoped>
+/* Ensure the settings list always scrolls and the last section clears the
+   bottom safe-area inset (Cryptographic Identity was being cut off). */
+ion-content {
+  --overflow: auto;
+  --padding-bottom: calc(32px + env(safe-area-inset-bottom, 0px));
+}
+
+.karma-value {
+  font-weight: 600;
+  color: var(--ion-text-color);
+}
+
 /* Section Layout */
 .section {
   padding: 14px;

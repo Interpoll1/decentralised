@@ -40,7 +40,7 @@
           <ion-label position="stacked">Option {{ index + 1 }} *</ion-label>
           <ion-input 
             v-model="options[index].text" 
-            :placeholder="`Option ${index + 1}`"
+            :placeholder="index === 0 ? 'e.g. Yes' : index === 1 ? 'e.g. No' : 'Add another choice'"
             maxlength="100"
           >
             <ion-button 
@@ -243,9 +243,10 @@ async function showCommunityPicker() {
 
   if (joinedCommunities.length === 0) {
     const toast = await toastController.create({
-      message: 'Please join a community first',
-      duration: 2000,
-      color: 'warning'
+      message: 'Join a community first to create a poll.',
+      duration: 4000,
+      color: 'warning',
+      buttons: [{ text: 'Browse communities', handler: () => { router.push('/home'); } }],
     });
     await toast.present();
     return;
