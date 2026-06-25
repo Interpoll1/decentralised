@@ -442,7 +442,10 @@
           <p class="card-subtitle">Direct browser-to-browser connections that survive relay outages.</p>
         </ion-card-header>
         <ion-card-content>
-          <P2PManualSignal />
+          <div v-if="p2pInvite" class="invite-banner glass-inset">
+            🔗 You opened an invite link — generating your reply below to connect directly.
+          </div>
+          <P2PManualSignal :prefill="p2pInvite" />
         </ion-card-content>
       </ion-card>
 
@@ -568,6 +571,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { useRoute } from 'vue-router';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonCard, IonCardHeader, IonCardTitle, IonCardContent,
@@ -596,6 +600,12 @@ import type { NetworkSnapshot } from '../services/snapshotService';
 import P2PManualSignal from '../components/P2PManualSignal.vue';
 
 // --- State ---
+const route = useRoute();
+// A shared invite link (`/#/resilience?p2p=…`) auto-loads into the mesh component.
+const p2pInvite = computed(() => {
+  const raw = route.query.p2p;
+  return typeof raw === 'string' ? raw : '';
+});
 const relays = ref<RelayEndpoint[]>([]);
 const activeRelay = ref<RelayEndpoint | null>(null);
 const wsConnected = ref(false);
@@ -1174,6 +1184,13 @@ ion-card-header {
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 12px;
+}
+
+.invite-banner {
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  border-left: 3px solid var(--ion-color-primary, #4f7cff);
 }
 
 /* ── Sub-section title ──────────────────────────────────── */

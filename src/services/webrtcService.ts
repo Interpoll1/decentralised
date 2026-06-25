@@ -366,14 +366,45 @@ export class WebRTCService {
     });
   }
 
+  /**
+   * Build a shareable invite/reply link that carries the signaling bundle in the
+   * URL hash. The recipient just opens it — the Resilience page auto-loads the
+   * bundle and (for an offer) generates the reply with no copy/paste required.
+   * Works fully offline: the link is self-contained, no relay involved.
+   */
+  static buildSignalLink(bundleText: string): string {
+    const param = bundleText.trim();
+    if (!param) return '';
+    const origin = typeof location !== 'undefined' ? location.origin : '';
+    // Hash-based query so it survives static hosting / SPA history routing.
+    return `${origin}/#/resilience?p2p=${encodeURIComponent(param)}`;
+  }
+
+  /** Extract a bundle param from an invite link or a raw bundle string. */
+  static extractBundleParam(input: string): string {
+    const trimmed = (input || '').trim();
+    if (!trimmed) return '';
+    const match = trimmed.match(/[?&]p2p=([^&\s]+)/);
+    if (match) {
+      try { return decodeURIComponent(match[1]); } catch { return match[1]; }
+    }
+    return trimmed;
+  }
+
   private static encodeBundle(bundle: ManualBundle): string {
-    return btoa(unescape(encodeURIComponent(JSON.stringify(bundle))));
+    const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(bundle))));
+    // URL-safe so the same string drops cleanly into a link, QR or textarea.
+    return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   }
 
   private static decodeBundle(text: string): ManualBundle {
     let parsed: ManualBundle;
     try {
-      parsed = JSON.parse(decodeURIComponent(escape(atob(text.trim()))));
+      // Accept both URL-safe and standard base64, with or without padding.
+      let b64 = WebRTCService.extractBundleParam(text).replace(/-/g, '+').replace(/_/g, '/');
+      const pad = b64.length % 4;
+      if (pad) b64 += '='.repeat(4 - pad);
+      parsed = JSON.parse(decodeURIComponent(escape(atob(b64))));
     } catch {
       throw new Error('Invalid signaling bundle');
     }
