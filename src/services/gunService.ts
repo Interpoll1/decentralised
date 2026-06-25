@@ -354,6 +354,57 @@ export class GunService {
     } catch { }
   }
 
+  /**
+   * Bridge Gun's wire protocol over an arbitrary transport (used for the WebRTC
+   * mesh). Outbound Gun messages are forwarded through `send`; call the returned
+   * `receive` with messages arriving from peers. Gun's own CRDT + message-id
+   * dedup handle conflict resolution and convergence, so content (polls, posts,
+   * comments) replicates P2P with no Gun relay. A bounded seen-set guards against
+   * trivially reflecting a message straight back to the network.
+   */
+  static attachWireBridge(
+    send: (msg: unknown) => void,
+    options?: { active?: () => boolean },
+  ): { receive: (msg: unknown) => void } {
+    if (!this.gun) this.initialize();
+    const root = this.gun._;
+    const seen = new Set<string>();
+    const MAX_SEEN = 1000;
+    const MAX_WIRE_BYTES = 256 * 1024;
+    const isActive = options?.active;
+
+    const remember = (id: string) => {
+      if (!id) return;
+      seen.add(id);
+      if (seen.size > MAX_SEEN) {
+        const first = seen.values().next().value;
+        if (first) seen.delete(first);
+      }
+    };
+
+    root.on('out', function (this: any, msg: any) {
+      this.to.next(msg); // preserve default outbound handling
+      try {
+        if (isActive && !isActive()) return; // no mesh peers — skip serialization work
+        const id = msg && msg['#'];
+        if (id && seen.has(id)) return; // just heard this from the mesh; don't echo it back
+        const json = JSON.stringify(msg);
+        if (json.length > MAX_WIRE_BYTES) return; // respect datachannel backpressure
+        send(msg);
+      } catch { /* best-effort */ }
+    });
+
+    return {
+      receive: (msg: unknown) => {
+        try {
+          const id = (msg as any)?.['#'];
+          if (id) remember(id);
+          root.on('in', msg);
+        } catch { /* malformed wire message */ }
+      },
+    };
+  }
+
   static cleanup(): void {
     this.isInitialized = false;
   }

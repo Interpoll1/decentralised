@@ -6,6 +6,8 @@ import { ChainService } from '../services/chainService';
 import { StorageService } from '../services/storageService';
 import { BroadcastService } from '../services/broadcastService';
 import { WebSocketService } from '../services/websocketService';
+import { WebRTCService } from '../services/webrtcService';
+import { MeshService } from '../services/meshService';
 import RelayManager from '../services/relayManager';
 import { AuditService } from '../services/auditService';
 import { EventService } from '../services/eventService';
@@ -90,6 +92,10 @@ export const useChainStore = defineStore('chain', () => {
     RelayManager.initialize();
     WebSocketService.initialize();
 
+    // P2P mesh fallback: keeps blocks/events/content syncing when relays are down.
+    await WebRTCService.initialize();
+    MeshService.initialize();
+
     await ChainService.initializeChain();
     await loadBlocks();
 
@@ -153,6 +159,7 @@ export const useChainStore = defineStore('chain', () => {
     logSyncRequestSentRate();
     BroadcastService.broadcast('request-sync', request);
     WebSocketService.broadcast('request-sync', request);
+    WebRTCService.broadcastToAll('request-sync', request);
   }
 
   function setupSyncListeners() {
@@ -169,6 +176,12 @@ export const useChainStore = defineStore('chain', () => {
     // Signed event verification
     BroadcastService.subscribe('new-event', handleNewEvent);
     WebSocketService.subscribe('new-event', handleNewEvent);
+
+    // WebRTC mesh — same idempotent handlers; duplicate delivery is safe.
+    WebRTCService.onMessage('new-block', (d) => { void handleNewBlock(d as ChainBlock); });
+    WebRTCService.onMessage('request-sync', (d) => { void handleSyncRequest(d); });
+    WebRTCService.onMessage('sync-response', (d) => { void handleSyncResponse(d); });
+    WebRTCService.onMessage('new-event', (d) => { void handleNewEvent(d); });
   }
 
   async function handleNewBlock(block: ChainBlock) {
@@ -240,6 +253,7 @@ export const useChainStore = defineStore('chain', () => {
 
     BroadcastService.broadcast('sync-response', response);
     WebSocketService.broadcast('sync-response', response);
+    WebRTCService.broadcastToAll('sync-response', response);
   }
 
   async function handleSyncResponse(data: any) {
@@ -338,8 +352,10 @@ export const useChainStore = defineStore('chain', () => {
     // Broadcast both the block and the signed event
     BroadcastService.broadcast('new-block', block);
     WebSocketService.broadcast('new-block', block);
+    WebRTCService.broadcastToAll('new-block', block);
     BroadcastService.broadcast('new-event', voteEvent);
     WebSocketService.broadcast('new-event', voteEvent);
+    WebRTCService.broadcastToAll('new-event', voteEvent);
 
     const receipt: Receipt = {
       blockIndex: block.index,
@@ -373,6 +389,7 @@ export const useChainStore = defineStore('chain', () => {
 
     BroadcastService.broadcast('new-block', block);
     WebSocketService.broadcast('new-block', block);
+    WebRTCService.broadcastToAll('new-block', block);
 
     return block;
   }

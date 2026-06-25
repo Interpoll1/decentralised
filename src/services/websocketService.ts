@@ -310,7 +310,7 @@ export class WebSocketService {
         websocket: config.relay.websocket,
         gun: config.relay.gun,
         api: config.relay.api,
-        capabilities: ['ws-sync', 'gun-relay', 'relay-api'],
+        capabilities: ['ws-sync', 'gun-relay', 'relay-api', 'webrtc'],
       });
     } catch {
       // Discovery publish failure should not impact websocket sync
@@ -649,6 +649,11 @@ export class WebSocketService {
 
   static getPeerAddresses(): Map<string, { peerId: string; relayUrl: string; gunPeers: string[]; joinedAt: number }> {
     return new Map(this.peerAddresses);
+  }
+
+  /** Peer ids currently known on the relay (excluding ourselves). */
+  static getPeerIds(): string[] {
+    return Array.from(this.peers).filter((id) => id && id !== this.peerId);
   }
 
   static onStatusChange(callback: (status: { connected: boolean; peerCount: number }) => void): () => void {
