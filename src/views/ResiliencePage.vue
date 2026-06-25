@@ -10,34 +10,37 @@
     </ion-header>
 
     <ion-content class="ion-padding">
-      <ion-card>
+      <ion-card class="hero-card">
         <ion-card-header>
-          <ion-card-title>Resilience Center</ion-card-title>
-        </ion-card-header>
-        <ion-card-content>
-          <p class="text-sm opacity-75 mb-3">
+          <ion-card-title class="hero-title">
+            <ion-icon :icon="analyticsOutline" class="hero-icon"></ion-icon>
+            Resilience Center
+          </ion-card-title>
+          <p class="text-sm opacity-60 mt-1">
             Keep your connection healthy, rotate relays quickly, and protect continuity with snapshot backup tools.
           </p>
+        </ion-card-header>
+        <ion-card-content>
           <div class="quick-actions-grid">
             <ion-button :disabled="scanning" @click="scanAllRelays">
               <ion-icon :icon="analyticsOutline" slot="start"></ion-icon>
-              Scan relays
+              Scan Relays
             </ion-button>
             <ion-button fill="outline" :disabled="scanning || relays.length === 0" @click="switchToBestRelay">
               <ion-icon :icon="swapHorizontalOutline" slot="start"></ion-icon>
-              Pick best relay
+              Best Relay
             </ion-button>
             <ion-button fill="outline" :disabled="exporting" @click="exportSnapshot">
               <ion-icon :icon="downloadOutline" slot="start"></ion-icon>
-              Backup snapshot
+              Backup
             </ion-button>
             <ion-button fill="outline" :disabled="sharing" @click="shareWithPeers">
               <ion-icon :icon="sendOutline" slot="start"></ion-icon>
-              Share to peers
+              Share
             </ion-button>
             <ion-button fill="clear" :disabled="probeResults.length === 0" @click="copyRelayReport">
               <ion-icon :icon="copyOutline" slot="start"></ion-icon>
-              Copy relay report
+              Copy Report
             </ion-button>
           </div>
         </ion-card-content>
@@ -46,24 +49,29 @@
       <!-- 1. Network Status -->
       <ion-card>
         <ion-card-header>
-          <ion-card-title>Network Status</ion-card-title>
-        </ion-card-header>
-        <ion-card-content>
-          <p class="text-sm opacity-75 mb-3">
+          <div class="card-header-row">
+            <ion-card-title>Network Status</ion-card-title>
+            <div class="flex items-center gap-2">
+              <ion-badge :color="wsConnected ? 'success' : 'danger'">
+                {{ wsConnected ? 'Connected' : 'Disconnected' }}
+              </ion-badge>
+              <ion-badge v-if="isTor" color="dark">
+                <ion-icon :icon="fingerPrintOutline" class="mr-1"></ion-icon> Tor
+              </ion-badge>
+            </div>
+          </div>
+          <p class="card-subtitle">
             Check live WebSocket health, peer reachability, and censorship signals across your configured relays.
           </p>
-          <div class="flex items-center gap-3 mb-3">
-            <ion-badge :color="wsConnected ? 'success' : 'danger'">
-              {{ wsConnected ? 'Connected' : 'Disconnected' }}
-            </ion-badge>
-            <span class="text-sm opacity-70">{{ peerCount }} peer{{ peerCount !== 1 ? 's' : '' }}</span>
-            <ion-badge v-if="isTor" color="dark" class="ml-auto">
-              <ion-icon :icon="fingerPrintOutline" class="mr-1"></ion-icon> Tor Browser
-            </ion-badge>
+        </ion-card-header>
+        <ion-card-content>
+          <div class="status-bar mb-3">
+            <div class="status-bar-item">
+              <span class="status-dot" :class="wsConnected ? 'online' : 'offline'"></span>
+              <span class="text-sm">{{ peerCount }} peer{{ peerCount !== 1 ? 's' : '' }}</span>
+            </div>
+            <span v-if="lastScanAt" class="text-xs opacity-50">Last scan: {{ lastScanAt }}</span>
           </div>
-          <p v-if="lastScanAt" class="text-xs opacity-60 mb-2">
-            Last full scan: {{ lastScanAt }}
-          </p>
 
           <ion-button expand="block" :disabled="scanning" @click="scanAllRelays">
             <ion-spinner v-if="scanning" name="crescent" class="mr-2"></ion-spinner>
@@ -124,11 +132,11 @@
       <ion-card>
         <ion-card-header>
           <ion-card-title>Relay Management</ion-card-title>
-        </ion-card-header>
-        <ion-card-content>
-          <p class="text-sm opacity-75 mb-3">
+          <p class="card-subtitle">
             Add fallback relays, probe individual endpoints, and switch instantly when performance drops.
           </p>
+        </ion-card-header>
+        <ion-card-content>
           <ion-list>
             <ion-item
               v-for="relay in relays"
@@ -177,8 +185,8 @@
           </ion-item>
 
           <!-- Add Relay form -->
-          <div class="mt-4 p-3 glass-inset">
-            <h3 class="font-semibold mb-2">Add Relay</h3>
+          <div class="mt-4 glass-inset p-4">
+            <h3 class="subsection-title">Add Relay</h3>
             <ion-input
               v-model="newRelay.label"
               placeholder="Label"
@@ -216,18 +224,18 @@
       <!-- 3. Gun DB Relay Network -->
       <ion-card>
         <ion-card-header>
-          <div class="flex items-center justify-between">
+          <div class="card-header-row">
             <ion-card-title>GunDB Relay Network</ion-card-title>
-            <ion-badge :color="gunConnectedCount > 0 ? 'success' : 'danger'" class="text-sm">
+            <ion-badge :color="gunConnectedCount > 0 ? 'success' : 'danger'" class="stat-badge">
               {{ gunConnectedCount }}/{{ gunPeerUrls.length }} live
               <span v-if="gunAvgLatency != null"> · {{ gunAvgLatency }}ms</span>
             </ion-badge>
           </div>
-        </ion-card-header>
-        <ion-card-content>
-          <p class="text-sm opacity-75 mb-3">
+          <p class="card-subtitle">
             Gun connects to all peers simultaneously. Data syncs across all relays — the more peers, the more resilient the network.
           </p>
+        </ion-card-header>
+        <ion-card-content>
 
           <!-- Live peer grid -->
           <div class="gun-relay-grid">
@@ -303,8 +311,8 @@
           </div>
 
           <!-- Add from presets -->
-          <div class="mt-4 p-3 glass-inset">
-            <h3 class="font-semibold mb-2">Add Gun Peer</h3>
+          <div class="mt-4 glass-inset p-4">
+            <h3 class="subsection-title">Add Gun Peer</h3>
             <div class="flex gap-2 mb-2">
               <select v-model="selectedGunPreset" class="gun-preset-select flex-1 text-sm">
                 <option value="">— pick a preset —</option>
@@ -334,25 +342,31 @@
       <ion-card>
         <ion-card-header>
           <ion-card-title>Snapshot Manager</ion-card-title>
-        </ion-card-header>
-        <ion-card-content>
-          <p class="text-sm opacity-75 mb-3">
+          <p class="card-subtitle">
             Export encrypted local state backups, import trusted snapshots, and share state for fast peer recovery.
           </p>
+        </ion-card-header>
+        <ion-card-content>
           <!-- Export -->
-          <div class="mb-4">
-            <h3 class="font-semibold mb-2">Export</h3>
+          <div class="snapshot-section">
+            <h3 class="subsection-title">
+              <ion-icon :icon="downloadOutline"></ion-icon>
+              Export
+            </h3>
             <ion-button expand="block" :disabled="exporting" @click="exportSnapshot">
               <ion-spinner v-if="exporting" name="crescent" class="mr-2"></ion-spinner>
-              <ion-icon v-else :icon="downloadOutline" class="mr-2"></ion-icon>
+              <ion-icon v-else :icon="downloadOutline" slot="start"></ion-icon>
               {{ exporting ? 'Exporting…' : 'Export Full Snapshot' }}
             </ion-button>
           </div>
 
           <!-- Import -->
-          <div class="mb-4">
-            <h3 class="font-semibold mb-2">Import</h3>
-            <div class="mb-2 p-2 glass-inset text-xs opacity-70 border border-yellow-500/20">
+          <div class="snapshot-section">
+            <h3 class="subsection-title">
+              <ion-icon :icon="cloudUploadOutline"></ion-icon>
+              Import
+            </h3>
+            <div class="warn-box mb-3">
               <ion-icon :icon="shieldCheckmarkOutline" class="mr-1 align-middle" />
               Only import snapshots from people you trust. A malicious snapshot could inject harmful content into your local data.
             </div>
@@ -360,7 +374,7 @@
               ref="fileInputRef"
               type="file"
               accept=".json"
-              class="hidden"
+              style="display: none"
               @change="handleFileSelect"
             />
             <ion-button expand="block" :disabled="importing" fill="outline" @click="triggerFileInput">
@@ -381,8 +395,11 @@
           </div>
 
           <!-- P2P Share -->
-          <div>
-            <h3 class="font-semibold mb-2">P2P Share</h3>
+          <div class="snapshot-section">
+            <h3 class="subsection-title">
+              <ion-icon :icon="sendOutline"></ion-icon>
+              P2P Share
+            </h3>
             <ion-button expand="block" :disabled="sharing" fill="outline" @click="shareWithPeers">
               <ion-spinner v-if="sharing" name="crescent" class="mr-2"></ion-spinner>
               {{ sharing ? 'Sharing…' : 'Share with Peers' }}
@@ -418,15 +435,24 @@
         </ion-card-content>
       </ion-card>
 
-      <!-- 4. Advanced Tools -->
+      <!-- 5. Peer-to-Peer Mesh -->
+      <ion-card>
+        <ion-card-header>
+          <ion-card-title>Peer-to-Peer Mesh</ion-card-title>
+          <p class="card-subtitle">Direct browser-to-browser connections that survive relay outages.</p>
+        </ion-card-header>
+        <ion-card-content>
+          <P2PManualSignal />
+        </ion-card-content>
+      </ion-card>
+
+      <!-- 6. Advanced Tools -->
       <ion-card>
         <ion-card-header>
           <ion-card-title>Advanced Tools</ion-card-title>
+          <p class="card-subtitle">Optional controls for relay-assisted peer sync and command-line Tor peer operations.</p>
         </ion-card-header>
         <ion-card-content>
-          <p class="text-sm opacity-75 mb-3">
-            Optional controls for relay-assisted peer sync and command-line Tor peer operations.
-          </p>
           <ion-item lines="none">
             <ion-toggle v-model="webrtcEnabled">
               Peer Snapshot Sync
@@ -567,6 +593,7 @@ import { GUN_RELAY_PRESETS, isValidGunUrl, labelForGunUrl, DEFAULT_GUN_PEERS } f
 import type { RelayEndpoint } from '../services/relayManager';
 import type { RelayProbeResult } from '../services/relayHealthService';
 import type { NetworkSnapshot } from '../services/snapshotService';
+import P2PManualSignal from '../components/P2PManualSignal.vue';
 
 // --- State ---
 const relays = ref<RelayEndpoint[]>([]);
@@ -1035,33 +1062,157 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-table th,
-table td {
-  padding: 6px 8px;
-}
+/* ── Base resets ───────────────────────────────────────── */
+ion-item  { --background: transparent; }
+ion-list  { --ion-item-background: transparent; background: transparent; }
 
 code {
   font-family: 'Fira Code', 'Courier New', monospace;
 }
 
+table th, table td {
+  padding: 6px 8px;
+}
+
+/* ── Cards ─────────────────────────────────────────────── */
 ion-card {
-  --background: rgba(var(--ion-color-step-50-rgb, 30, 30, 30), 0.55);
-  backdrop-filter: blur(16px) saturate(1.4);
-  -webkit-backdrop-filter: blur(16px) saturate(1.4);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  --background: rgba(20, 20, 28, 0.72);
+  backdrop-filter: blur(18px) saturate(1.5);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 18px;
+  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255,255,255,0.05);
+  margin-bottom: 12px;
+}
+
+ion-card-header, ion-card-content {
+  --background: transparent;
 }
 
 ion-card-header {
-  --background: transparent;
+  padding-bottom: 8px;
 }
 
-ion-card-content {
-  --background: transparent;
+/* Hero card gets a subtle accent border-top */
+.hero-card {
+  border-top: 2px solid rgba(var(--ion-color-primary-rgb), 0.55);
 }
 
-/* Gun relay grid */
+.hero-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.hero-icon {
+  font-size: 1.3rem;
+  color: var(--ion-color-primary);
+}
+
+/* ── Card header row (title + badge) ───────────────────── */
+.card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.card-subtitle {
+  font-size: 0.8rem;
+  opacity: 0.55;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.stat-badge {
+  font-size: 0.75rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Status bar ─────────────────────────────────────────── */
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+}
+
+.status-bar-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ion-color-medium);
+  flex-shrink: 0;
+}
+
+.status-dot.online  { background: var(--ion-color-success); box-shadow: 0 0 6px rgba(var(--ion-color-success-rgb), 0.6); }
+.status-dot.offline { background: var(--ion-color-danger); }
+
+/* ── Quick-actions grid ─────────────────────────────────── */
+.quick-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+/* ── Glass inset panels ─────────────────────────────────── */
+.glass-inset {
+  background: rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+}
+
+/* ── Sub-section title ──────────────────────────────────── */
+.subsection-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.55;
+  margin-bottom: 10px;
+}
+
+/* ── Snapshot section dividers ──────────────────────────── */
+.snapshot-section {
+  padding-top: 16px;
+  padding-bottom: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.snapshot-section:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+/* ── Warning box ────────────────────────────────────────── */
+.warn-box {
+  padding: 8px 10px;
+  background: rgba(255, 193, 7, 0.06);
+  border: 1px solid rgba(255, 193, 7, 0.18);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  opacity: 0.85;
+  line-height: 1.45;
+}
+
+/* ── Gun relay grid ─────────────────────────────────────── */
 .gun-relay-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1070,9 +1221,7 @@ ion-card-content {
 }
 
 @media (max-width: 480px) {
-  .gun-relay-grid {
-    grid-template-columns: 1fr;
-  }
+  .gun-relay-grid { grid-template-columns: 1fr; }
 }
 
 .gun-relay-card {
@@ -1081,12 +1230,12 @@ ion-card-content {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.03);
-  transition: border-color 0.3s;
+  transition: border-color 0.3s, background 0.3s;
 }
 
 .gun-relay-card--live {
   border-color: rgba(var(--ion-color-success-rgb), 0.3);
-  background: rgba(var(--ion-color-success-rgb), 0.04);
+  background: rgba(var(--ion-color-success-rgb), 0.05);
 }
 
 .gun-relay-header {
@@ -1140,10 +1289,7 @@ ion-card-content {
   margin-bottom: 2px;
 }
 
-.gun-relay-status {
-  font-size: 10px;
-  font-weight: 600;
-}
+.gun-relay-status { font-size: 10px; font-weight: 600; }
 
 .gun-relay-remove {
   position: absolute;
@@ -1155,11 +1301,12 @@ ion-card-content {
   font-size: 12px;
 }
 
+/* ── Gun preset select ──────────────────────────────────── */
 .gun-preset-select {
   font-size: 13px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.05);
   color: var(--ion-text-color);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   padding: 8px 10px;
   border-radius: 8px;
   outline: none;
@@ -1167,34 +1314,12 @@ ion-card-content {
   appearance: none;
 }
 
-ion-item {
-  --background: transparent;
-}
-
-ion-list {
-  --ion-item-background: transparent;
-  background: transparent;
-}
-
-.glass-inset {
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
-}
-
-.quick-actions-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
-}
-
+/* ── Tor command card ───────────────────────────────────── */
 .tor-command-card {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
-  background: rgba(18, 18, 18, 0.45);
-  padding: 12px;
+  background: rgba(12, 12, 18, 0.55);
+  padding: 14px;
 }
 
 .tor-command-header {
@@ -1202,30 +1327,31 @@ ion-list {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .tor-command-title {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.92rem;
+  font-size: 0.88rem;
 }
 
 .tor-command-code {
   display: block;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 10px 12px;
   font-size: 0.78rem;
-  line-height: 1.35;
+  line-height: 1.4;
   word-break: break-all;
+  color: #a5f3fc;
 }
 
 .tor-command-help {
   margin-top: 8px;
   font-size: 0.75rem;
-  opacity: 0.72;
+  opacity: 0.55;
 }
 </style>
