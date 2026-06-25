@@ -377,8 +377,9 @@ GenosDB, and the app compiles, runs and was verified live in the browser.
 `eventService`, `dbWarmup`, `memoryWatchdogService`, `storageManager`,
 `pinningService`, `gunRelayPresets`, `dataVersionSettings`, `webrtcService`,
 `useProofOfWork`, the 3 relay servers, `peer.js`, the anti-abuse scripts, the
-nginx/pm2/nuxt configs, and the entire `KeyService`/`CryptoService` Schnorr stack
-(reduced to small shims only where a non-Gun external protocol still needs them).
+nginx/pm2/nuxt configs, and the entire `KeyService`/`CryptoService` Schnorr stack —
+the Security Manager signs every operation, so the leftover compile-shims
+(`cryptoService`, `keyService`, `useFingerprint`) have since been deleted as dead code.
 
 ## Why we're sharing this
 
