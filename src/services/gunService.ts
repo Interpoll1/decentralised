@@ -2,7 +2,8 @@ import Gun from 'gun';
 import 'gun/sea';
 import config from '../config';
 
-export const GUN_NAMESPACE = 'v3';
+export { GUN_NAMESPACE } from './gunNamespace';
+import { GUN_NAMESPACE } from './gunNamespace';
 
 // Roots that get namespaced under GUN_NAMESPACE — Gun is now live-updates only,
 // not the initial load source. These namespaced paths are still written to on
@@ -397,8 +398,16 @@ export class GunService {
     return {
       receive: (msg: unknown) => {
         try {
-          const id = (msg as any)?.['#'];
-          if (id) remember(id);
+          // Inbound is fully untrusted (any P2P peer). Reject non-Gun-wire shapes
+          // and oversized payloads BEFORE handing them to Gun's core, so a hostile
+          // peer can't exhaust memory or feed garbage into the graph (the outbound
+          // path was already capped; this mirrors it for inbound).
+          if (!msg || typeof msg !== 'object') return;
+          const id = (msg as any)['#'];
+          if (typeof id !== 'string' || !id) return;
+          const json = JSON.stringify(msg);
+          if (json.length > MAX_WIRE_BYTES) return;
+          remember(id);
           root.on('in', msg);
         } catch { /* malformed wire message */ }
       },

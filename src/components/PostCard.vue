@@ -407,12 +407,7 @@
 
 <script setup lang="ts">
 
-function autoLink(text: string): string {
-  if (!text) return '';
-  // Simple URL regex
-  return text.replace(/(https?:\/\/[\w\-\.\/?#&=;%+~:@,]+[\w\/])/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
-}
-
+import { autoLink } from '../utils/safeText';
 import { ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { IonIcon, toastController } from '@ionic/vue';

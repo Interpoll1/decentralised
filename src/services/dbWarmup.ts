@@ -10,7 +10,7 @@
 //   - communities API warmup is enabled; rows are still validated before hydration
 
 import { isVersionEnabled } from '../utils/dataVersionSettings'
-import { GUN_NAMESPACE } from './gunService'
+import { GUN_NAMESPACE } from './gunNamespace'
 import config from '../config'
 
 const WARMUP_POST_LIMIT = 50

@@ -162,12 +162,7 @@
 
 <script setup lang="ts">
 
-function autoLink(text: string): string {
-  if (!text) return '';
-  // Simple URL regex
-  return text.replace(/(https?:\/\/[\w\-\.\/?#&=;%+~:@,]+[\w\/])/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
-}
-
+import { autoLink } from '../utils/safeText';
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {

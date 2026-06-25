@@ -183,11 +183,13 @@ export class StorageService {
     const db = await this.getDB();
     const tx = db.transaction(['metadata'], 'readwrite');
     const store = tx.objectStore('metadata');
-    const allKeys = await store.getAllKeys();
+    // One bulk read instead of N sequential round-trips inside the transaction.
+    const [allKeys, allValues] = await Promise.all([store.getAllKeys(), store.getAll()]);
     let removed = 0;
-    for (const key of allKeys) {
+    for (let i = 0; i < allKeys.length; i++) {
+      const key = allKeys[i];
       try {
-        const val = await store.get(key as IDBValidKey);
+        const val = allValues[i];
         // Heuristic: legacy posts may be stored under keys like 'post:<id>' or in arrays
         if (!val) continue;
         if (typeof key === 'string' && key.startsWith('post-')) {

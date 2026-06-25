@@ -218,6 +218,13 @@ export const usePollStore = defineStore('poll', () => {
   );
 
   const activePolls  = computed(() => sortedPolls.value.filter(p => !p.isExpired));
+  // Public (non-private) poll count — used by the home feed; avoids repeated
+  // .filter() allocations across watchers and computeds on every sync tick.
+  const publicPollCount = computed(() => {
+    let n = 0;
+    for (const p of polls.value) if (!p.isPrivate) n++;
+    return n;
+  });
   const visiblePolls = computed(() => sortedPolls.value.slice(0, visibleCount.value));
   const hasMorePolls = computed(() => visibleCount.value < sortedPolls.value.length);
 
@@ -474,7 +481,7 @@ export const usePollStore = defineStore('poll', () => {
 
   return {
     polls, pollsMap, currentPoll, isLoading,
-    sortedPolls, activePolls,
+    sortedPolls, activePolls, publicPollCount,
     visiblePolls, hasMorePolls, visibleCount,
     newPollCount, pendingNewPolls,
     loadPollsForCommunity, loadMorePolls, resetVisibleCount,

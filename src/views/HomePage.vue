@@ -168,7 +168,6 @@
                 <PollCard
                   v-else-if="item.type === 'poll'"
                   :poll="item.data"
-                  :community-name="getCommunityName(item.data.communityId)"
                     :show-moderation-action="ModerationService.canSubmitHashesFromHome()"
                     moderation-action-title="Send this poll text to the moderation API"
                     @click="navigateToPoll(item.data)"
@@ -824,12 +823,16 @@ const combinedFeed = computed(() => {
     const now = Date.now()
     const maxAge = 30 * 24 * 60 * 60 * 1000
 
+    // Pre-index so the comparator is O(1) per lookup (was O(n) via indexOf,
+    // making the whole sort O(n² log n) and re-running on every Gun sync tick).
+    const indexMap = new Map(items.map((item, i) => [item, i]))
+
     items.sort((a, b) => {
       const scoreA = a.type === 'post' ? (a.data.score ?? 0) : (a.data.totalVotes ?? 0)
       const scoreB = b.type === 'post' ? (b.data.score ?? 0) : (b.data.totalVotes ?? 0)
 
-      const idxA = items.indexOf(a)
-      const idxB = items.indexOf(b)
+      const idxA = indexMap.get(a)!
+      const idxB = indexMap.get(b)!
       const rand = seededRandom(idxA * 31 + idxB)
 
       // ~20% of comparisons: pure discovery slot, ignore score/age entirely
@@ -872,12 +875,12 @@ function getPostModerationText(post: Post): string {
 
 
 const hasMore = computed(() => {
-  const totalItems = postStore.sortedPosts.length + pollStore.sortedPolls.filter(p => !p.isPrivate).length;
+  const totalItems = postStore.sortedPosts.length + pollStore.publicPollCount;
   return postStore.visibleCount < totalItems;
 });
 
 function ensureInitialFeedVisible(reason: string) {
-  const totalItems = postStore.sortedPosts.length + pollStore.sortedPolls.filter(p => !p.isPrivate).length;
+  const totalItems = postStore.sortedPosts.length + pollStore.publicPollCount;
   const target = Math.min(FEED_INITIAL_RENDER_TARGET, totalItems);
   const nextVisible = Math.max(postStore.visibleCount, target);
   if (nextVisible !== postStore.visibleCount) {
@@ -891,7 +894,7 @@ function ensureInitialFeedVisible(reason: string) {
         next: nextVisible,
         totalItems,
         postCount: postStore.sortedPosts.length,
-        publicPollCount: pollStore.sortedPolls.filter(p => !p.isPrivate).length,
+        publicPollCount: pollStore.publicPollCount,
       });
     }
   } else {
@@ -901,14 +904,14 @@ function ensureInitialFeedVisible(reason: string) {
         visibleCount: postStore.visibleCount,
         totalItems,
         postCount: postStore.sortedPosts.length,
-        publicPollCount: pollStore.sortedPolls.filter(p => !p.isPrivate).length,
+        publicPollCount: pollStore.publicPollCount,
       });
     }
   }
 }
 
 watch(
-  () => [postStore.sortedPosts.length, pollStore.sortedPolls.filter(p => !p.isPrivate).length, activeTab.value, warmupComplete.value] as const,
+  () => [postStore.sortedPosts.length, pollStore.publicPollCount, activeTab.value, warmupComplete.value] as const,
   ([postCount, pollCount, tab, isWarm]) => {
     if (tab !== 'home' || !isWarm) return;
     const target = Math.min(FEED_INITIAL_RENDER_TARGET, postCount + pollCount);
@@ -1261,7 +1264,7 @@ async function onInfiniteScroll(event: any) {
   if (FEED_DEBUG) {
     feedDebug('infinite-scroll-start', {
       visibleCountBefore: postStore.visibleCount,
-      totalItems: postStore.sortedPosts.length + pollStore.sortedPolls.filter(p => !p.isPrivate).length,
+      totalItems: postStore.sortedPosts.length + pollStore.publicPollCount,
       combinedFeedLength: combinedFeed.value.length,
     });
   }
@@ -1338,8 +1341,12 @@ async function handleDownvote(post: Post) {
   }
 }
 
+// O(1) community-name lookups instead of a linear find() per feed item per render.
+const communityNameMap = computed(
+  () => new Map(communityStore.communities.map(c => [c.id, c.displayName])),
+);
 function getCommunityName(communityId: string): string {
-  return communityStore.communities.find(c => c.id === communityId)?.displayName || communityId;
+  return communityNameMap.value.get(communityId) || communityId;
 }
 async function navigateToPost(post: Post) {
   router.push(`/community/${post.communityId}/post/${post.id}`);
@@ -1428,7 +1435,7 @@ async function subscribeNewCommunities(communities: typeof communityStore.commun
         timedOut,
         subscribedFromHome: subscribedFromHome.size,
         sortedPosts: postStore.sortedPosts.length,
-        publicPolls: pollStore.sortedPolls.filter(p => !p.isPrivate).length,
+        publicPolls: pollStore.publicPollCount,
         visibleCount: postStore.visibleCount,
         combinedFeedLength: combinedFeed.value.length,
       });
@@ -1457,7 +1464,7 @@ async function tryRecoverEmptyFeedFromGun() {
   syncDebug('home-empty-feed-recovery-complete', {
     combinedFeedLength: combinedFeed.value.length,
     posts: postStore.sortedPosts.length,
-    polls: pollStore.sortedPolls.filter(p => !p.isPrivate).length,
+    polls: pollStore.publicPollCount,
   });
 }
 
@@ -1522,7 +1529,7 @@ onMounted(async () => {
     feedDebug('warmup-finished', {
       durationMs: Date.now() - warmupStartedAt,
       sortedPosts: postStore.sortedPosts.length,
-      publicPolls: pollStore.sortedPolls.filter(p => !p.isPrivate).length,
+      publicPolls: pollStore.publicPollCount,
       combinedFeedLength: combinedFeed.value.length,
       visibleCount: postStore.visibleCount,
     });
@@ -1575,7 +1582,7 @@ onMounted(async () => {
   if (FEED_DEBUG) {
     feedDebug('onMounted-feed-ready', {
       sortedPosts: postStore.sortedPosts.length,
-      publicPolls: pollStore.sortedPolls.filter(p => !p.isPrivate).length,
+      publicPolls: pollStore.publicPollCount,
       combinedFeedLength: combinedFeed.value.length,
       hasMore: hasMore.value,
       visibleCount: postStore.visibleCount,
@@ -1592,7 +1599,7 @@ onUnmounted(() => {
 
 if (FEED_DEBUG) {
   watch(
-    () => [postStore.sortedPosts.length, pollStore.sortedPolls.filter(p => !p.isPrivate).length, postStore.visibleCount, combinedFeed.value.length],
+    () => [postStore.sortedPosts.length, pollStore.publicPollCount, postStore.visibleCount, combinedFeed.value.length],
     ([postCount, pollCount, visibleCount, combinedLength], [prevPostCount, prevPollCount, prevVisibleCount, prevCombinedLength]) => {
       feedDebug('feed-count-change', {
         postCount,

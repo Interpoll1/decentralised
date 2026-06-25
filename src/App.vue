@@ -12,8 +12,6 @@ import { createAnimation } from '@ionic/vue';
 import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useChainStore } from './stores/chainStore';
-import { WebSocketService } from './services/websocketService';
-import { GunService } from './services/gunService';
 import { warmupFromDB } from './services/dbWarmup';
 import AppLoader from './components/AppLoader.vue';
 import GlobalCommandPalette from './components/GlobalCommandPalette.vue';
@@ -146,7 +144,13 @@ onMounted(async () => {
 
   visibilityHandler = () => {
     if (document.visibilityState === 'visible') {
-      setTimeout(() => {
+      setTimeout(async () => {
+        // Loaded lazily so the gun/websocket vendor chunks stay out of the
+        // critical first-paint path (they're only needed on reconnect).
+        const [{ WebSocketService }, { GunService }] = await Promise.all([
+          import('./services/websocketService'),
+          import('./services/gunService'),
+        ]);
         if (!WebSocketService.getConnectionStatus()) WebSocketService.reconnect();
         const gunStats = GunService.getPeerStats();
         if (!gunStats.isConnected) GunService.reconnect();
