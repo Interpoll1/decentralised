@@ -12,10 +12,10 @@
 
 | | InterPoll before | InterPoll on GenosDB |
 |---|---|---|
-| **Runtime dependencies** | **28** | **16** (the UI stack stays untouched) |
+| **Runtime dependencies** | **28** | **18** (the UI stack stays untouched) |
 | ↳ data / P2P / crypto / storage stack | **13** of them | **1** (`genosdb`) |
-| **Service files** (`src/services`) | **~40** | **21** |
-| **Source lines** (`src`, ts+vue) | **~46,000** | **~23,100** (−50%) |
+| **Service files** (`src/services`) | **~40** | **17** |
+| **Source lines** (`src`, ts+vue) | **~46,000** | **~19,800** (−57%) |
 | **Relay servers to run** | **3** + `peer.js` | **0** (Nostr signaling) |
 | **Data-layer bundle** | `gun` + `ipfs-core` + `libp2p-webrtc-star` + `simple-peer` + Node polyfills | **~116 KB gzip** full stack · **26 KB** core |
 
@@ -101,7 +101,7 @@ This isn't only about deleting code — the approach we're sharing makes the app
 - **Scales by design.** The optional cellular mesh (**Cells**) keeps large communities
   fast by cutting peer connections by orders of magnitude vs a full mesh (the docs cite
   roughly 100×–1000× fewer for large networks) — without changing a line of app code.
-- **Half the codebase to maintain.** ~46k → ~23k lines, 40 → 21 services. Less
+- **Half the codebase to maintain.** ~46k → ~19.8k lines, 40 → 17 services. Less
   surface for bugs, faster onboarding for new contributors.
 - **One dependency, zero transitive deps.** A smaller supply-chain and attack
   surface than a multi-library P2P/crypto/storage stack.
@@ -175,7 +175,7 @@ ignore it, or ask me anything.
 | Posts (service + store) | 1,142 | 335 | **−71%** |
 | Comments (service + store) | 915 | 253 | **−72%** |
 | `gunService.ts` → `gdbServices.ts` | 433 | ~30 | **−93%** |
-| Runtime dependencies | 28 | 16 (one of them is `genosdb`) | the 13-dep P2P/crypto stack → **1** |
+| Runtime dependencies | 28 | 18 (one of them is `genosdb`) | the 13-dep P2P/crypto stack → **1** |
 | Relay servers to operate | 3 + `peer.js` | **0** | Nostr signaling |
 
 ## What the previous stack made you build by hand — and what GenosDB does for you
@@ -347,9 +347,9 @@ GenosDB, and the app compiles, runs and was verified live in the browser.
 
 | Metric | Before (Gun) | After (GenosDB) |
 |---|---:|---:|
-| Runtime dependencies | 28 | **16** (the P2P/crypto/storage stack: 13 → **1**, `genosdb`) |
-| Source lines (`src`, ts+vue) | ~46,000 | **~23,100** (−50%) |
-| Service files | ~40 | **21** |
+| Runtime dependencies | 28 | **18** (the P2P/crypto/storage stack: 13 → **1**, `genosdb`) |
+| Source lines (`src`, ts+vue) | ~46,000 | **~19,800** (−57%) |
+| Service files | ~40 | **17** |
 | Relay servers to operate | 3 + `peer.js` | **0** |
 | Gun / IPFS / libp2p deps | many | **none** |
 
