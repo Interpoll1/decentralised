@@ -376,8 +376,9 @@ export class WebRTCService {
     const param = bundleText.trim();
     if (!param) return '';
     const origin = typeof location !== 'undefined' ? location.origin : '';
-    // Hash-based query so it survives static hosting / SPA history routing.
-    return `${origin}/#/resilience?p2p=${encodeURIComponent(param)}`;
+    // History-mode router (createWebHistory) — a plain path, not a hash route,
+    // so the ?p2p= query reaches the Resilience page instead of being stripped.
+    return `${origin}/resilience?p2p=${encodeURIComponent(param)}`;
   }
 
   /** Extract a bundle param from an invite link or a raw bundle string. */

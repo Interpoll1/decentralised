@@ -4,7 +4,9 @@ import { WebRTCService } from '../src/services/webrtcService';
 describe('P2P manual signaling links', () => {
   it('builds a resilience invite link carrying the bundle', () => {
     const link = WebRTCService.buildSignalLink('AbC-_123');
-    expect(link).toContain('/#/resilience?p2p=');
+    // History-mode path (no hash) so the query reaches the route.
+    expect(link).toContain('/resilience?p2p=');
+    expect(link).not.toContain('/#/');
     expect(link).toContain('AbC-_123');
   });
 
