@@ -2287,6 +2287,20 @@ wss.on('connection', (ws, req) => {
             data: data.data,
           });
           break;
+        case 'peer-addresses':
+          if (!peerId) {
+            if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'error', code: 'AUTH_REQUIRED', reason: 'register required before peer-addresses' }));
+            break;
+          }
+          broadcastToOthers(peerId, data);
+          break;
+        case 'server-list':
+          if (!peerId) {
+            if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'error', code: 'AUTH_REQUIRED', reason: 'register required before server-list' }));
+            break;
+          }
+          broadcastToOthers(peerId, data);
+          break;
         case 'ping':
           if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'pong' }));
           break;
