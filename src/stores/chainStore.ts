@@ -8,6 +8,7 @@ import { BroadcastService } from '../services/broadcastService';
 import { WebSocketService } from '../services/websocketService';
 import { WebRTCService } from '../services/webrtcService';
 import { MeshService } from '../services/meshService';
+import { ResilienceService } from '../services/resilienceService';
 import RelayManager from '../services/relayManager';
 import { AuditService } from '../services/auditService';
 import { EventService } from '../services/eventService';
@@ -95,6 +96,10 @@ export const useChainStore = defineStore('chain', () => {
     // P2P mesh fallback: keeps blocks/events/content syncing when relays are down.
     await WebRTCService.initialize();
     MeshService.initialize();
+
+    // Resilience orchestrator: detects total blackout and escalates through
+    // failover → gossip → rendezvous → mesh to reconverge the network.
+    ResilienceService.initialize();
 
     await ChainService.initializeChain();
     await loadBlocks();

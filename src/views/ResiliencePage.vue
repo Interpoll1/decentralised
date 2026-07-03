@@ -128,6 +128,117 @@
         </ion-card-content>
       </ion-card>
 
+      <!-- 1b. Fallback Rendezvous (resilience orchestrator) -->
+      <ion-card>
+        <ion-card-header>
+          <div class="card-header-row">
+            <ion-card-title>
+              <ion-icon :icon="radioOutline" class="mr-1" /> Fallback Rendezvous
+            </ion-card-title>
+            <ion-badge :color="tierColor">{{ tierLabels[resilience.tier] }}</ion-badge>
+          </div>
+          <p class="card-subtitle">
+            When every relay and known peer is blocked, nodes independently derive the same
+            time-rotating rendezvous point and reconverge there — a deterministic, signature-verified
+            fallback so the network heals itself under censorship.
+          </p>
+        </ion-card-header>
+        <ion-card-content>
+          <div class="status-bar mb-3">
+            <div class="status-bar-item">
+              <span class="status-dot" :class="resilience.blackout ? 'offline' : 'online'"></span>
+              <span class="text-sm">{{ resilience.blackout ? 'Blackout detected' : 'Connectivity OK' }}</span>
+            </div>
+            <div class="status-bar-item">
+              <span class="status-dot" :class="resilience.rendezvousActive ? 'online' : 'offline'"></span>
+              <span class="text-sm">Rendezvous {{ resilience.rendezvousActive ? 'active' : 'idle' }}</span>
+            </div>
+            <span class="text-xs opacity-50">Last reconverge: {{ lastReconvergeDisplay }}</span>
+          </div>
+
+          <ion-item lines="none" class="rounded-xl glass-inset mb-3">
+            <ion-label>
+              <h2 class="text-sm">Auto-escalate on blackout</h2>
+              <p class="text-xs opacity-60">Publish/subscribe to rendezvous automatically when isolated.</p>
+            </ion-label>
+            <ion-toggle
+              slot="end"
+              :checked="resilience.autoEnabled"
+              @ionChange="toggleRendezvousAuto($event.detail.checked)"
+            ></ion-toggle>
+          </ion-item>
+
+          <ion-item v-if="isDevBuild" lines="none" class="rounded-xl glass-inset mb-3">
+            <ion-label>
+              <h2 class="text-sm">Dev: allow insecure endpoints</h2>
+              <p class="text-xs opacity-60">
+                Accept ws://localhost in rendezvous so two local browser profiles can reconverge.
+                Dev-only — ignored in production builds.
+              </p>
+            </ion-label>
+            <ion-toggle
+              slot="end"
+              :checked="insecureDiscovery"
+              @ionChange="toggleInsecureDiscovery($event.detail.checked)"
+            ></ion-toggle>
+          </ion-item>
+
+          <div class="flex gap-2">
+            <ion-button expand="block" class="flex-1" :disabled="rendezvousBusy" @click="triggerRendezvous">
+              <ion-spinner v-if="rendezvousBusy" name="crescent" class="mr-2"></ion-spinner>
+              {{ resilience.rendezvousActive ? 'Re-broadcast' : 'Reconnect via rendezvous' }}
+            </ion-button>
+            <ion-button
+              v-if="resilience.rendezvousActive"
+              fill="outline"
+              color="medium"
+              @click="stopRendezvous"
+            >
+              Stop
+            </ion-button>
+          </div>
+
+          <!-- Endpoint reputation -->
+          <div v-if="resilience.reputation.length" class="mt-4">
+            <h3 class="subsection-title">
+              <ion-icon :icon="pulseOutline" class="mr-1" /> Endpoint reputation
+            </h3>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="text-left opacity-70">
+                    <th class="pb-2">Endpoint</th>
+                    <th class="pb-2">Score</th>
+                    <th class="pb-2">OK</th>
+                    <th class="pb-2">Fail</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="rep in resilience.reputation" :key="rep.id" class="border-t border-gray-700/30">
+                    <td class="py-2 truncate max-w-[160px]">{{ rep.id }}</td>
+                    <td>
+                      <div class="flex items-center gap-1">
+                        <ion-icon
+                          :icon="ellipse"
+                          :color="rep.score >= 0.6 ? 'success' : rep.score >= 0.3 ? 'warning' : 'danger'"
+                          size="small"
+                        />
+                        {{ reputationPct(rep.score) }}%
+                      </div>
+                    </td>
+                    <td>{{ rep.successes }}</td>
+                    <td>{{ rep.failures }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <p v-else class="text-xs opacity-50 mt-3">
+            No reputation data yet — scan relays to start scoring endpoint reliability.
+          </p>
+        </ion-card-content>
+      </ion-card>
+
       <!-- 2. Relay Management -->
       <ion-card>
         <ion-card-header>
@@ -581,6 +692,7 @@ import {
   ellipse, warningOutline, lockClosedOutline, checkmarkCircleOutline,
   serverOutline, hardwareChipOutline, shieldCheckmarkOutline, analyticsOutline,
   swapHorizontalOutline, copyOutline, sendOutline, terminalOutline,
+  radioOutline, pulseOutline,
 } from 'ionicons/icons';
 import { RelayManager } from '../services/relayManager';
 import { RelayHealthService } from '../services/relayHealthService';
@@ -588,6 +700,7 @@ import { SnapshotService } from '../services/snapshotService';
 import { SnapshotSyncService } from '../services/snapshotSyncService';
 import { WebSocketService } from '../services/websocketService';
 import { GunService } from '../services/gunService';
+import { ResilienceService, type ResilienceStatus } from '../services/resilienceService';
 import config from '../config';
 import { GUN_RELAY_PRESETS, isValidGunUrl, labelForGunUrl, DEFAULT_GUN_PEERS } from '../services/gunRelayPresets';
 import type { RelayEndpoint } from '../services/relayManager';
@@ -609,6 +722,64 @@ const lastScanAt = ref<string>('');
 
 const autoFailoverEnabled = ref(localStorage.getItem('interpoll_auto_failover') === 'true');
 const newRelay = ref({ label: '', ws: '', gun: '', api: '', isTor: false, priority: 10 });
+
+// --- Fallback Rendezvous (resilience orchestrator) ---
+const resilience = ref<ResilienceStatus>(ResilienceService.getStatus());
+const rendezvousBusy = ref(false);
+const tierLabels: Record<ResilienceStatus['tier'], string> = {
+  relay: 'Relay (normal)',
+  gossip: 'Gossip recovery',
+  rendezvous: 'Rendezvous reconvergence',
+  mesh: 'WebRTC mesh',
+};
+const tierColor = computed(() => {
+  switch (resilience.value.tier) {
+    case 'relay': return 'success';
+    case 'gossip': return 'warning';
+    default: return 'danger';
+  }
+});
+const lastReconvergeDisplay = computed(() =>
+  resilience.value.lastReconvergeAt
+    ? new Date(resilience.value.lastReconvergeAt).toLocaleTimeString()
+    : '—',
+);
+
+function refreshResilience() {
+  resilience.value = ResilienceService.getStatus();
+}
+
+async function triggerRendezvous() {
+  rendezvousBusy.value = true;
+  try {
+    await ResilienceService.activateRendezvous();
+  } finally {
+    rendezvousBusy.value = false;
+    refreshResilience();
+  }
+}
+
+function stopRendezvous() {
+  ResilienceService.deactivateRendezvous();
+  refreshResilience();
+}
+
+function toggleRendezvousAuto(value: boolean) {
+  ResilienceService.setAutoEnabled(value);
+  refreshResilience();
+}
+
+function reputationPct(score: number): number {
+  return Math.round(score * 100);
+}
+
+// Dev-only: relax rendezvous endpoint validation for local two-profile testing.
+const isDevBuild = import.meta.env.DEV;
+const insecureDiscovery = ref(config.allowInsecureDiscovery);
+function toggleInsecureDiscovery(value: boolean) {
+  config.setAllowInsecureDiscovery(value);
+  insecureDiscovery.value = config.allowInsecureDiscovery;
+}
 
 const exporting = ref(false);
 const importing = ref(false);
@@ -1031,16 +1202,21 @@ onMounted(async () => {
   RelayManager.initialize();
   refreshStatus();
   refreshGunStatus();
+  refreshResilience();
 
   cleanups.push(RelayManager.onRelayListChange(() => refreshStatus()));
 
   cleanups.push(WebSocketService.onStatusChange((status) => {
     wsConnected.value = status.connected;
     peerCount.value = status.peerCount;
+    refreshResilience();
   }));
 
-  // Poll Gun peer stats every 4s while page is open
-  gunPollInterval = setInterval(refreshGunStatus, 4000);
+  // Poll Gun peer stats + resilience status every 4s while page is open
+  gunPollInterval = setInterval(() => {
+    refreshGunStatus();
+    refreshResilience();
+  }, 4000);
 
   if (webrtcEnabled.value) {
     try {
