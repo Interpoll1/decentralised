@@ -32,6 +32,9 @@ const RENDEZVOUS_REPUBLISH_MS = 2 * 60_000;
 // Gives rung-1 failover a couple of evaluate ticks to reconnect first, so a
 // transient blip doesn't spin up the rendezvous/mesh machinery.
 const BLACKOUT_GRACE_MS = 30_000;
+// Upper bound on simultaneously-connected Gun peers when auto-widening the
+// signaling substrate, so we don't fan out to an unbounded set of relays.
+const MAX_LIVE_GUN_PEERS = 8;
 
 export type ResilienceTier = 'relay' | 'gossip' | 'rendezvous' | 'mesh';
 
@@ -140,6 +143,7 @@ export class ResilienceService {
     }
 
     DiscoveryService.subscribeRendezvous();
+    this.widenSignalingSubstrate();
     await this.publishRendezvousNow();
 
     if (!this.republishTimer) {
@@ -184,6 +188,33 @@ export class ResilienceService {
     return 'relay';
   }
 
+  /**
+   * Keep the automatic WebRTC signaling substrate broad. Gun is the channel the
+   * mesh uses to auto-dial peers without manual QR/paste, so as long as ONE Gun
+   * relay is reachable, browser-to-browser stays automatic. This learns live
+   * relays from signature-verified peer/rendezvous announcements and adds them to
+   * the running Gun instance via `addPeerDynamic` (same instance — no reconnect,
+   * so no subscription is dropped), capped to a sane number of live peers.
+   */
+  private static widenSignalingSubstrate(): void {
+    try {
+      const current = new Set(GunService.getDetailedPeerStats().map((p) => p.url));
+      let budget = MAX_LIVE_GUN_PEERS - current.size;
+      if (budget <= 0) return;
+      // Entries are already signature- and endpoint-validated by DiscoveryService.
+      for (const entry of DiscoveryService.getEntries()) {
+        if (budget <= 0) break;
+        const url = entry.gun;
+        if (!url || current.has(url)) continue;
+        current.add(url);
+        GunService.addPeerDynamic(url);
+        budget--;
+      }
+    } catch {
+      // Best-effort — widening must never break the evaluate loop.
+    }
+  }
+
   private static detectBlackout(): boolean {
     // Blackout is defined by ACTUAL connectivity, not by whether the address book
     // is empty. A non-empty known-servers list (which always contains at least our
@@ -199,6 +230,10 @@ export class ResilienceService {
     if (this.evaluating) return;
     this.evaluating = true;
     try {
+      // Proactively keep the automatic signaling substrate broad, every tick —
+      // this is what keeps browser-to-browser from needing manual signaling.
+      this.widenSignalingSubstrate();
+
       const wsConnected = WebSocketService.getConnectionStatus();
       const gunConnected = GunService.getPeerStats().isConnected;
       const connected = wsConnected || gunConnected;

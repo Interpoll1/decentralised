@@ -85,3 +85,20 @@ describe('RelayManager.recoverFromBlackout', () => {
     expect(discovery.getEntries).not.toHaveBeenCalled();
   });
 });
+
+describe('RelayManager.gunPoolWith', () => {
+  it('puts the active relay gun first, then the configured pool, deduped', () => {
+    const pool = (RelayManager as any).gunPoolWith('https://active/gun');
+    expect(pool[0]).toBe('https://active/gun');
+    // Configured defaults follow; no duplicates.
+    expect(new Set(pool).size).toBe(pool.length);
+    expect(pool.length).toBeGreaterThan(1);
+  });
+
+  it('does not duplicate the primary when it is already in the pool', () => {
+    const configured = (RelayManager as any).gunPoolWith('x');
+    const primary = configured[1]; // an entry from the configured pool
+    const pool = (RelayManager as any).gunPoolWith(primary);
+    expect(pool.filter((u: string) => u === primary).length).toBe(1);
+  });
+});

@@ -66,6 +66,20 @@ class DiscoveryService {
     if (!this.initialized) {
       this.initialized = true;
       this.startPruneLoop();
+      // A relay switch rebuilds the Gun instance, orphaning our announcement and
+      // rendezvous `.on()` handlers. Re-attach them to the new instance so
+      // peer/relay discovery (and thus automatic mesh dialing) survives switches.
+      GunService.onReconnect(() => {
+        if (this.subscribed) {
+          this.subscribed = false;
+          this.subscribeToAnnouncements();
+        }
+        if (this.rendezvousSubs.size > 0) {
+          // Old chains are bound to the discarded instance; drop and re-attach.
+          this.rendezvousSubs.clear();
+          this.subscribeRendezvous();
+        }
+      });
     }
     if (shouldSubscribe) {
       this.subscribeToAnnouncements();

@@ -229,7 +229,11 @@ export class RelayManager {
       const { WebSocketService } = await import('./websocketService');
       const { GunService } = await import('./gunService');
       WebSocketService.reconnect(relay.ws);
-      GunService.reconnect(relay.gun);
+      // Reconnect Gun to the whole pool (new relay + configured peers), not just
+      // the one relay — Gun is the automatic WebRTC signaling substrate, so
+      // collapsing it to a single peer would make browser-to-browser fall back to
+      // manual whenever that one relay is unreachable.
+      GunService.reconnect(this.gunPoolWith(relay.gun));
 
       this.config.activeRelayId = id;
       this.clearFailure(id);
@@ -694,6 +698,20 @@ export class RelayManager {
    * and uses persistent reputation only as a tiebreaker (proven-good relays win
    * ties). Never reshuffles relays of differing priority.
    */
+  /** Deduped Gun peer set: the active relay's Gun URL first, then the configured
+   *  pool — so switching relays keeps a broad Gun signaling substrate alive. */
+  private static gunPoolWith(primaryGunUrl: string): string[] {
+    const seen = new Set<string>();
+    const pool: string[] = [];
+    for (const url of [primaryGunUrl, ...config.getGunPeers()]) {
+      if (url && !seen.has(url)) {
+        seen.add(url);
+        pool.push(url);
+      }
+    }
+    return pool;
+  }
+
   private static byReputation(relays: RelayEndpoint[]): RelayEndpoint[] {
     return [...relays]
       .map((relay, index) => ({ relay, index, score: PeerReputationService.scoreFor(relay.id) }))

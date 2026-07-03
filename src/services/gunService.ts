@@ -41,6 +41,9 @@ export class GunService {
   private static evicting = false;
   private static isInitialized = false;
   private static gunWarningTraceInstalled = false;
+  /** Callbacks fired after reconnect() rebuilds the Gun instance, so Gun-bound
+   *  subscriptions (signaling inbox, discovery, rendezvous) can re-attach. */
+  private static reconnectListeners = new Set<() => void>();
   /** Latency measurements keyed by peer URL (updated on each connection event) */
   private static peerLatency = new Map<string, number>();
   private static peerConnectTime = new Map<string, number>();
@@ -264,7 +267,25 @@ export class GunService {
     this.proxiedGun = createNamespacedProxy(this.gun, nsNode);
     this.user = this.gun.user();
     this.isInitialized = true;
+
+    // Notify subscribers so they can re-attach to the freshly-built instance —
+    // otherwise Gun-bound `.on()` handlers (signaling inbox, discovery, rendezvous)
+    // stay bound to the discarded instance and silently stop firing.
+    for (const cb of this.reconnectListeners) {
+      try { cb(); } catch { /* a bad listener must not break reconnect */ }
+    }
+
     return this.proxiedGun;
+  }
+
+  /**
+   * Register a callback fired after every reconnect() rebuilds the Gun instance.
+   * Used by Gun-bound subscribers (signaling inbox, discovery, rendezvous) to
+   * re-subscribe against the new instance. Returns an unsubscribe function.
+   */
+  static onReconnect(cb: () => void): () => void {
+    this.reconnectListeners.add(cb);
+    return () => { this.reconnectListeners.delete(cb); };
   }
 
   static getPeerStats(): { isConnected: boolean; peerCount: number; connectedCount: number; avgLatencyMs?: number } {
