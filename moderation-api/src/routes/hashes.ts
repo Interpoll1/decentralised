@@ -5,6 +5,7 @@ import {
   hashAlgorithmSchema,
   isPlausibleHash,
   lookupQuerySchema,
+  normalizeSubmitHashesBody,
   submitHashesBodySchema,
 } from "../validation";
 import { HashRecord, LookupResult } from "../types";
@@ -59,7 +60,8 @@ export function buildHashRoutes(hashStore: HashStore, apiKeyStore: ApiKeyStore):
    * Requires an API key with 'write' or 'admin' scope.
    */
   router.post("/hashes", requireAuth(apiKeyStore, ["write", "admin"]), async (req, res) => {
-    const parsed = submitHashesBodySchema.safeParse(req.body);
+    const normalizedBody = normalizeSubmitHashesBody(req.body);
+    const parsed = submitHashesBodySchema.safeParse(normalizedBody);
     if (!parsed.success) {
       res.status(400).json({
         error: { code: "invalid_body", message: "Request body failed validation.", details: parsed.error.flatten() },

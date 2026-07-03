@@ -2,9 +2,14 @@ import config from '@/config';
 import { CryptoService } from '@/services/cryptoService';
 import { GUN_NAMESPACE, GunService } from '@/services/gunService';
 import { KeyService } from '@/services/keyService';
+import { activeSouls } from '@/utils/rendezvous';
 
 const DISCOVERY_ROOT = 'server-config';
 const DISCOVERY_PATH = 'discovery';
+// Rendezvous ("DGA") sub-path: signed announcements are additionally mirrored
+// under a rotating, deterministically-derived soul so peers can reconverge when
+// the fixed discovery path is censored. See src/utils/rendezvous.ts.
+const RENDEZVOUS_PATH = 'rdv';
 const DEFAULT_TTL_MS = 5 * 60_000;
 const MIN_TTL_MS = 30_000;
 const MAX_TTL_MS = 24 * 60 * 60_000;
@@ -48,6 +53,10 @@ class DiscoveryService {
   private static maxEntries = DEFAULT_MAX_ENTRIES;
   private static entries: Map<string, DiscoveryEntry> = new Map();
   private static pruneTimer: ReturnType<typeof setInterval> | null = null;
+  // Active rendezvous subscriptions, keyed by soul. We hold the Gun chain so we
+  // can `.off()` a soul once it rotates out of the active window (otherwise its
+  // `.on` handler would leak for the life of the session).
+  private static rendezvousSubs: Map<string, { off: () => void }> = new Map();
 
   static async initialize(options?: { maxEntries?: number; subscribeLive?: boolean }): Promise<void> {
     if (typeof options?.maxEntries === 'number' && options.maxEntries > 0) {
@@ -95,6 +104,101 @@ class DiscoveryService {
     await this.putAnnouncement(announcementKey, announcement);
     this.upsertEntry(announcementKey, normalized);
     return normalized;
+  }
+
+  /**
+   * Rendezvous ("DGA") publish: mirror our signed presence announcement under
+   * every currently-active rendezvous soul. Identical signing path to
+   * {@link publishLocalAnnouncement} — the only difference is the rotating Gun
+   * location — so records stay verifiable and poison-resistant.
+   */
+  static async publishRendezvous(input: PublishDiscoveryInput): Promise<DiscoveryEntry | null> {
+    await this.initialize();
+
+    if (!input.nodeId || !input.nodeId.trim()) return null;
+
+    const keyPair = await KeyService.getKeyPair();
+    const payload: DiscoverySignedPayload = {
+      version: 1,
+      nodeId: input.nodeId.trim(),
+      peerId: (input.peerId || input.nodeId).trim(),
+      websocket: input.websocket || config.relay.websocket,
+      gun: input.gun || config.relay.gun,
+      api: input.api || config.relay.api,
+      capabilities: this.normalizeCapabilities(input.capabilities),
+      timestamp: Date.now(),
+      ttlMs: this.clampTtl(input.ttlMs),
+    };
+
+    const signature = CryptoService.sign(this.signingMessage(payload), keyPair.privateKey);
+    const announcement: DiscoveryAnnouncement = {
+      ...payload,
+      signerPubkey: keyPair.publicKey,
+      signature,
+    };
+
+    const normalized = this.normalizeAndValidate(announcement);
+    if (!normalized) return null;
+
+    const announcementKey = this.discoveryKey(normalized);
+    await Promise.all(
+      activeSouls().map((soul) => this.putRendezvous(soul, announcementKey, announcement)),
+    );
+    this.upsertEntry(announcementKey, normalized);
+    return normalized;
+  }
+
+  /**
+   * Rendezvous ("DGA") subscribe: watch every currently-active rendezvous soul
+   * for signed peer announcements. Idempotent per soul, so it is safe to call
+   * repeatedly as epochs roll. Records are gated through the same
+   * {@link normalizeAndValidate} signature/endpoint/TTL checks — a forged record
+   * at a guessed soul is dropped before `cb` ever sees it.
+   */
+  static subscribeRendezvous(cb?: (entry: DiscoveryEntry) => void): void {
+    const active = activeSouls();
+    const activeSet = new Set(active);
+
+    // Tear down subscriptions for souls that have rotated out of the window.
+    for (const [soul, sub] of this.rendezvousSubs.entries()) {
+      if (!activeSet.has(soul)) {
+        try { sub.off(); } catch { /* Gun off() best-effort */ }
+        this.rendezvousSubs.delete(soul);
+      }
+    }
+
+    if (import.meta.env.DEV) {
+      console.debug('[Rendezvous] active souls', active);
+    }
+
+    for (const soul of active) {
+      if (this.rendezvousSubs.has(soul)) continue;
+      try {
+        const chain = GunService.getGun()
+          .get(DISCOVERY_ROOT)
+          .get(RENDEZVOUS_PATH)
+          .get(soul)
+          .map();
+        chain.on((raw: unknown, key: string) => {
+          if (!key || typeof key !== 'string') return;
+          const normalized = this.normalizeAndValidate(raw);
+          if (!normalized) return;
+          if (import.meta.env.DEV) {
+            console.debug('[Rendezvous] validated peer', {
+              soul,
+              peerId: normalized.peerId,
+              websocket: normalized.websocket,
+            });
+          }
+          this.upsertEntry(this.discoveryKey(normalized), normalized);
+          if (cb) cb(normalized);
+        });
+        // Gun chains expose `.off()` to detach the handler above.
+        this.rendezvousSubs.set(soul, { off: () => chain.off() });
+      } catch {
+        // Gun unavailable; keep existing cache.
+      }
+    }
   }
 
   static async refreshFromGun(): Promise<DiscoveryEntry[]> {
@@ -230,6 +334,33 @@ class DiscoveryService {
     });
   }
 
+  private static async putRendezvous(
+    soul: string,
+    key: string,
+    announcement: DiscoveryAnnouncement,
+  ): Promise<void> {
+    const gunAnnouncement: Record<string, unknown> = {
+      ...announcement,
+      // Gun graph writes reject arrays; store deterministic index map instead.
+      capabilities: this.capabilitiesToGunMap(announcement.capabilities),
+    };
+    await new Promise<void>((resolve, reject) => {
+      try {
+        GunService.getGun()
+          .get(DISCOVERY_ROOT)
+          .get(RENDEZVOUS_PATH)
+          .get(soul)
+          .get(key)
+          .put(gunAnnouncement, (ack: { err?: string }) => {
+            if (ack?.err) reject(new Error(ack.err));
+            else resolve();
+          });
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
   private static normalizeAndValidate(raw: unknown): DiscoveryEntry | null {
     if (!raw || typeof raw !== 'object') return null;
 
@@ -352,6 +483,15 @@ class DiscoveryService {
       const ws = new URL(wsUrl);
       const gun = new URL(gunUrl);
       const api = new URL(apiUrl);
+      // Dev-only escape hatch (compile-time disabled in production): also accept
+      // ws://localhost / http://localhost so the rendezvous path validates
+      // between two local browser profiles. See config.allowInsecureDiscovery.
+      if (config.allowInsecureDiscovery) {
+        const wsOk = ws.protocol === 'wss:' || ws.protocol === 'ws:';
+        const gunOk = gun.protocol === 'https:' || gun.protocol === 'http:';
+        const apiOk = api.protocol === 'https:' || api.protocol === 'http:';
+        return wsOk && gunOk && apiOk;
+      }
       return ws.protocol === 'wss:' && gun.protocol === 'https:' && api.protocol === 'https:';
     } catch {
       return false;

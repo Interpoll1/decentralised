@@ -13,6 +13,11 @@ const STORAGE_KEY = 'interpoll_relay_config';
 const ENCRYPTION_STORAGE_KEY = 'interpoll_encryption_config';
 // v3 — removed dead Heroku relays; existing installs get clean defaults
 const GUN_PEERS_STORAGE_KEY = 'interpoll_gun_peers_v3';
+// Dev-only: relax discovery/rendezvous endpoint-scheme validation so ws://localhost
+// endpoints validate between two local browser profiles. HARD-GATED on a dev build
+// (`import.meta.env.DEV`), so a production bundle ignores the flag entirely and an
+// attacker cannot enable insecure endpoints by planting this localStorage key.
+const DEV_INSECURE_DISCOVERY_KEY = 'interpoll_rdv_dev_insecure';
 
 interface RelayOverrides {
   websocket?: string;
@@ -185,6 +190,33 @@ const config = {
   /** Get current encryption config */
   getEncryptionConfig(): EncryptionConfig {
     return { ...encryptionConfig };
+  },
+
+  /**
+   * Dev-only escape hatch: when true, discovery/rendezvous accepts insecure
+   * (`ws://` / `http://`) endpoints so the rendezvous path can be exercised
+   * locally between two browser profiles. Always false in a production build —
+   * `import.meta.env.DEV` is compile-time `false` there, so the localStorage flag
+   * has no effect and cannot be abused to inject non-TLS endpoints.
+   */
+  get allowInsecureDiscovery(): boolean {
+    if (!import.meta.env.DEV) return false;
+    try {
+      return localStorage.getItem(DEV_INSECURE_DISCOVERY_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  },
+
+  /** Toggle the dev-only insecure-discovery flag (no-op in production builds). */
+  setAllowInsecureDiscovery(value: boolean) {
+    if (!import.meta.env.DEV) return;
+    try {
+      if (value) localStorage.setItem(DEV_INSECURE_DISCOVERY_KEY, 'true');
+      else localStorage.removeItem(DEV_INSECURE_DISCOVERY_KEY);
+    } catch {
+      // Storage unavailable — nothing to persist.
+    }
   },
 };
 

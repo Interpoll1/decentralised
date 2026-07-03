@@ -1,6 +1,7 @@
 //services/websocketService.ts
 import config from '../config';
 import DiscoveryService from './discoveryService';
+import { PeerReputationService } from './peerReputationService';
 
 /** Message types that may require proof-of-work on the relay server.
  *  Must stay in sync with POW_REQUIRED_TYPES in src/services/powService.ts. */
@@ -423,10 +424,11 @@ export class WebSocketService {
     const key = server.websocket;
     const existing = this.knownServers.get(key);
     if (!existing) {
-      // Evict oldest entry if at capacity
+      // Evict at capacity, preferring the lowest-reputation known server so
+      // proven-good endpoints survive; fall back to oldest-inserted on a tie.
       if (this.knownServers.size >= this.MAX_KNOWN_SERVERS) {
-        const oldestKey = this.knownServers.keys().next().value;
-        if (oldestKey) this.knownServers.delete(oldestKey);
+        const evictKey = this.lowestReputationKnownServerKey();
+        if (evictKey) this.knownServers.delete(evictKey);
       }
       this.knownServers.set(key, {
         ...server,
@@ -442,6 +444,24 @@ export class WebSocketService {
       });
     }
     this.saveKnownServers();
+  }
+
+  /**
+   * Pick the known-server key with the worst reputation (keyed by ws URL). The
+   * Map preserves insertion order, so the first-scanned lowest score is also the
+   * oldest among equals — giving oldest-inserted eviction as the natural tiebreak.
+   */
+  private static lowestReputationKnownServerKey(): string | undefined {
+    let worstKey: string | undefined;
+    let worstScore = Infinity;
+    for (const key of this.knownServers.keys()) {
+      const score = PeerReputationService.scoreFor(key);
+      if (score < worstScore) {
+        worstScore = score;
+        worstKey = key;
+      }
+    }
+    return worstKey ?? this.knownServers.keys().next().value;
   }
 
   static removeKnownServer(websocketUrl: string) {
