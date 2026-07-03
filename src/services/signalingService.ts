@@ -79,6 +79,14 @@ export class SignalingService {
 
     // Tier 2: Gun inbox addressed to our pubkey.
     this.subscribeGunInbox();
+
+    // A relay switch rebuilds the Gun instance, orphaning the inbox subscription
+    // above. Re-attach it to the new instance so automatic (non-manual) WebRTC
+    // signaling keeps working across relay changes.
+    GunService.onReconnect(() => {
+      this.gunSubscribed = false;
+      this.subscribeGunInbox();
+    });
   }
 
   static getMyPubkey(): string {

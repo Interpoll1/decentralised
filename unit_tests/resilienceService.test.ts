@@ -10,7 +10,11 @@ const { ws, gun, relayManager, discovery, mesh, reputation } = vi.hoisted(() => 
     getKnownServers: vi.fn(() => [] as unknown[]),
     onStatusChange: vi.fn(() => () => {}),
   },
-  gun: { getPeerStats: vi.fn(() => ({ isConnected: false, peerCount: 0, connectedCount: 0 })) },
+  gun: {
+    getPeerStats: vi.fn(() => ({ isConnected: false, peerCount: 0, connectedCount: 0 })),
+    getDetailedPeerStats: vi.fn(() => [] as Array<{ url: string; connected: boolean }>),
+    addPeerDynamic: vi.fn(),
+  },
   relayManager: {
     autoFailover: vi.fn(async () => {}),
     recoverFromBlackout: vi.fn(async () => false),
@@ -19,6 +23,7 @@ const { ws, gun, relayManager, discovery, mesh, reputation } = vi.hoisted(() => 
     refreshFromGun: vi.fn(async () => []),
     publishRendezvous: vi.fn(async () => null),
     subscribeRendezvous: vi.fn(),
+    getEntries: vi.fn(() => [] as Array<{ gun: string }>),
   },
   mesh: {
     setEnabled: vi.fn(),
@@ -145,5 +150,35 @@ describe('ResilienceService escalation ladder', () => {
     await (ResilienceService as any).evaluate();
     expect(relayManager.recoverFromBlackout).not.toHaveBeenCalled();
     expect(discovery.publishRendezvous).not.toHaveBeenCalled();
+  });
+});
+
+describe('ResilienceService signaling-substrate widening', () => {
+  it('adds new discovery-learned Gun relays to the live pool (keeps mesh signaling alive)', async () => {
+    gun.getDetailedPeerStats.mockReturnValue([{ url: 'https://a/gun', connected: true }]);
+    discovery.getEntries.mockReturnValue([
+      { gun: 'https://a/gun' }, // already connected → skipped
+      { gun: 'https://b/gun' },
+      { gun: 'https://c/gun' },
+    ]);
+    setConnected(true, 1); // healthy: widening still runs proactively
+
+    await (ResilienceService as any).evaluate();
+
+    expect(gun.addPeerDynamic).toHaveBeenCalledWith('https://b/gun');
+    expect(gun.addPeerDynamic).toHaveBeenCalledWith('https://c/gun');
+    expect(gun.addPeerDynamic).not.toHaveBeenCalledWith('https://a/gun');
+  });
+
+  it('respects the max-live-peers cap', async () => {
+    // Already at capacity (8) → nothing added.
+    gun.getDetailedPeerStats.mockReturnValue(
+      Array.from({ length: 8 }, (_, i) => ({ url: `https://p${i}/gun`, connected: true })),
+    );
+    discovery.getEntries.mockReturnValue([{ gun: 'https://new/gun' }]);
+
+    (ResilienceService as any).widenSignalingSubstrate();
+
+    expect(gun.addPeerDynamic).not.toHaveBeenCalled();
   });
 });
