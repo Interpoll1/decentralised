@@ -9,7 +9,10 @@ Single file: `index.ts`. Uses `@ionic/vue-router` (`createRouter` from Ionic for
 | Path | Name | Component | Props |
 |---|---|---|---|
 | `/` | — | redirect → `/home` | — |
-| `/home` | `Home` | `HomePage` | — |
+| `/home` | `Home` | `HomePage` | Active tab persisted in `?tab=` query (`communities`/`chat`/`create`; absent = home) |
+| `/communities` | — | redirect → `/home?tab=communities` | — |
+| `/chat` | — | redirect → `/home?tab=chat` | — |
+| `/create` | — | redirect → `/home?tab=create` | — |
 | `/community/:communityId` | `Community` | `CommunityPage` | `communityId` via route fn |
 | `/community/:communityId/create-post` | `CreatePost` | `CreatePostPage` | `true` |
 | `/community/:communityId/poll/:pollId` | `PollDetail` | `PollDetailPage` | `true` |

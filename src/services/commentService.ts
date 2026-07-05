@@ -235,6 +235,7 @@ export function subscribeToCommentsInPost(
               communityId: commentData.communityId,
               authorId: commentData.authorId,
               authorName: commentData.authorName,
+              authorShowRealName: commentData.authorShowRealName === true,
               content: commentData.content,
               parentId: commentData.parentId && commentData.parentId !== 'null' && commentData.parentId !== '' ? commentData.parentId : undefined,
               createdAt: commentData.createdAt,
@@ -286,6 +287,7 @@ export async function getAllCommentsInPost(postId: string): Promise<Comment[]> {
                   communityId: commentData.communityId,
                   authorId: commentData.authorId,
                   authorName: commentData.authorName,
+                  authorShowRealName: commentData.authorShowRealName === true,
                   content: commentData.content,
                   // CRITICAL: Only set parentId if it actually exists (not null, undefined, or empty string)
                   parentId: commentData.parentId && commentData.parentId !== 'null' && commentData.parentId !== '' ? commentData.parentId : undefined,

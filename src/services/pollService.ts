@@ -1,4 +1,4 @@
-import { GunService } from './gunService';
+import { GunService, GUN_NAMESPACE } from './gunService';
 import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
 import { StorageService } from './storageService';
@@ -42,6 +42,8 @@ export interface Poll {
   isEncrypted?: boolean;
   encryptedContent?: string;
   authTag?: string;
+  /** Whether the relay independently confirmed it holds this poll (set on creation). */
+  relayConfirmed?: boolean;
 }
 
 const pollActiveListeners = new Map<string, any>();
@@ -142,6 +144,39 @@ export class PollService {
   private static get gun() { return GunService.getGun(); }
   private static localPollBackupWriteQueue: Promise<void> = Promise.resolve();
   private static getPollPath(pollId: string) { return this.gun.get('polls').get(pollId); }
+
+  /**
+   * Ask the relay's DB mirror whether a poll actually reached it. Gun put acks
+   * fire once local storage accepts the write and read-backs are served from
+   * the local graph, so neither proves the relay holds the data — only an
+   * independent read like this can. Returns true (relay has it), false
+   * (endpoint reachable but poll absent after retries), or null when the
+   * endpoint is unreachable/has no DB (inconclusive).
+   */
+  static async verifyRelayPersistence(pollId: string, deadlineMs = 8000): Promise<boolean | null> {
+    const soul = encodeURIComponent(`${GUN_NAMESPACE}/polls/${pollId}`);
+    const url = `${getGunRelayBase()}/db/soul?soul=${soul}`;
+    const deadline = Date.now() + deadlineMs;
+    const retryDelayMs = 1500;
+    let endpointReachable = false;
+    for (;;) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3000);
+      try {
+        const res = await fetch(url, { signal: controller.signal });
+        if (res.ok) return true;
+        if (res.status === 404) endpointReachable = true;
+      } catch {
+        // Network error / timeout — endpoint state unknown for this attempt.
+      } finally {
+        clearTimeout(timer);
+      }
+      if (Date.now() + retryDelayMs > deadline) {
+        return endpointReachable ? false : null;
+      }
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+    }
+  }
   private static getCommunityPollPath(communityId: string, pollId: string) {
     return this.gun.get('communities').get(communityId).get('polls').get(pollId);
   }
@@ -1115,8 +1150,14 @@ export class PollService {
       });
     }
 
+    const relayConfirmed = await this.verifyRelayPersistence(pollId);
+    poll.relayConfirmed = relayConfirmed === null
+      ? GunService.getPeerStats().isConnected
+      : relayConfirmed;
+
     logPollDebug('create', 'createPoll completed', {
       pollId,
+      relayConfirmed: poll.relayConfirmed,
       durationMs: Math.round(performance.now() - createStartedAt),
     });
     await this.saveLocalPollBackup(poll);

@@ -294,6 +294,17 @@ function addOption() {
   }
 }
 
+function resetForm() {
+  question.value = '';
+  options.value = [createOptionDraft(), createOptionDraft()];
+  duration.value = '7';
+  allowMultipleChoices.value = false;
+  showResultsBeforeVoting.value = false;
+  description.value = '';
+  isPrivate.value = false;
+  inviteCodeCount.value = 20;
+}
+
 function removeOption(index: number) {
   if (options.value.length > 2) {
     options.value.splice(index, 1);
@@ -422,6 +433,13 @@ async function createPoll() {
       });
 
       await alert.present();
+    } else if (poll.relayConfirmed === false) {
+      const toast = await toastController.create({
+        message: 'Poll saved on this device, but the relay hasn\'t confirmed it yet — it may not be visible to others until the connection recovers.',
+        duration: 4000,
+        color: 'warning'
+      });
+      await toast.present();
     } else {
       const toast = await toastController.create({
         message: 'Poll created successfully',
@@ -431,12 +449,16 @@ async function createPoll() {
       await toast.present();
     }
 
+    const communityId = selectedCommunity.value?.id;
+    resetForm();
+
     // Navigate to poll detail for private polls (so author can manage invite codes),
-    // or community page for public polls
-    if (isPrivate.value) {
-      router.push(`/community/${selectedCommunity.value?.id}/poll/${poll.id}`);
+    // or community page for public polls. Replace so Back doesn't return to a
+    // consumed form where a second tap would create a duplicate poll.
+    if (poll.isPrivate) {
+      await router.replace(`/community/${communityId}/poll/${poll.id}`);
     } else {
-      router.push(`/community/${selectedCommunity.value?.id}`);
+      await router.replace(`/community/${communityId}`);
     }
   } catch (error) {
     logPollDebug('ui', 'Submit failed', {
