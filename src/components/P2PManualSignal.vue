@@ -48,7 +48,7 @@
         </template>
       </div>
 
-      <p v-if="statusMsg" class="text-xs mt-2" :class="statusOk ? 'text-green-400' : 'text-red-400'">
+      <p v-if="statusMsg" class="text-xs mt-2 signal-status" :class="statusOk ? 'signal-status--ok' : 'signal-status--error'">
         {{ statusMsg }}
       </p>
     </div>
@@ -152,6 +152,12 @@ async function copy(text: string) {
 </script>
 
 <style scoped>
+.signal-status--ok {
+  color: var(--app-success);
+}
+.signal-status--error {
+  color: var(--app-danger);
+}
 .signal-box {
   width: 100%;
   min-height: 64px;

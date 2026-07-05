@@ -771,6 +771,14 @@ function hasDownvoted(postId: string): boolean {
   return votedPosts.includes(postId);
 }
 
+async function presentVoteToast(message: string, expectedVersion: number) {
+  const toast = await toastController.create({ message, duration: 1500 });
+  // Skip if a newer vote action has since superseded this one, to avoid a stale toast.
+  if (voteVersion.value === expectedVersion) {
+    await toast.present();
+  }
+}
+
 async function handleUpvote(post: Post) {
   try {
     if (hasUpvoted(post.id)) {
@@ -779,14 +787,10 @@ async function handleUpvote(post: Post) {
       const filtered = votedPosts.filter((id: string) => id !== post.id);
       localStorage.setItem('upvoted-posts', JSON.stringify(filtered));
       voteVersion.value++;
+      const version = voteVersion.value;
 
       await postStore.removeUpvote(post.id);
-
-      const toast = await toastController.create({
-        message: 'Upvote removed',
-        duration: 1500,
-      });
-      await toast.present();
+      await presentVoteToast('Upvote removed', version);
     } else {
       // Clear downvote from localStorage first if needed
       const downvotedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
@@ -800,18 +804,14 @@ async function handleUpvote(post: Post) {
       votedPosts.push(post.id);
       localStorage.setItem('upvoted-posts', JSON.stringify(votedPosts));
       voteVersion.value++;
+      const version = voteVersion.value;
 
       // Clear existing downvote in store if needed
       if (downvotedPosts.includes(post.id)) {
         await postStore.removeDownvote(post.id);
       }
       await postStore.upvotePost(post.id);
-
-      const toast = await toastController.create({
-        message: 'Upvoted',
-        duration: 1500,
-      });
-      await toast.present();
+      await presentVoteToast('Upvoted', version);
     }
   } catch (error) {
     voteVersion.value++;
@@ -832,14 +832,10 @@ async function handleDownvote(post: Post) {
       const filtered = votedPosts.filter((id: string) => id !== post.id);
       localStorage.setItem('downvoted-posts', JSON.stringify(filtered));
       voteVersion.value++;
+      const version = voteVersion.value;
 
       await postStore.removeDownvote(post.id);
-
-      const toast = await toastController.create({
-        message: 'Downvote removed',
-        duration: 1500,
-      });
-      await toast.present();
+      await presentVoteToast('Downvote removed', version);
     } else {
       // Clear upvote from localStorage first if needed
       const upvotedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
@@ -853,18 +849,14 @@ async function handleDownvote(post: Post) {
       votedPosts.push(post.id);
       localStorage.setItem('downvoted-posts', JSON.stringify(votedPosts));
       voteVersion.value++;
+      const version = voteVersion.value;
 
       // Clear existing upvote in store if needed
       if (upvotedPosts.includes(post.id)) {
         await postStore.removeUpvote(post.id);
       }
       await postStore.downvotePost(post.id);
-
-      const toast = await toastController.create({
-        message: 'Downvoted',
-        duration: 1500,
-      });
-      await toast.present();
+      await presentVoteToast('Downvoted', version);
     }
   } catch (error) {
     voteVersion.value++;

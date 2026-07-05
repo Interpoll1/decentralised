@@ -52,6 +52,8 @@ export class AuditService {
     deviceId: string,
     requireLogin = false,
   ): Promise<{ allowed: boolean; reservationToken: string | null; reason: string | null; requiresAuth: boolean }> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
     try {
       const body = await IntegrityService.seal(
         { pollId, deviceId, requireLogin } as Record<string, unknown>,
@@ -64,6 +66,7 @@ export class AuditService {
         },
         credentials: 'include',
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
 
       if (!res.ok) {
@@ -120,6 +123,8 @@ export class AuditService {
         reason: 'relay authorization unavailable; continuing decentralized vote',
         requiresAuth: false,
       };
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -129,6 +134,8 @@ export class AuditService {
     reservationToken: string,
     requireLogin = false,
   ): Promise<boolean> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
     try {
       const body = await IntegrityService.seal(
         { pollId, deviceId, reservationToken, requireLogin } as Record<string, unknown>,
@@ -139,6 +146,7 @@ export class AuditService {
         headers: {
           'Content-Type': 'application/json',
         },
+        signal: controller.signal,
         credentials: 'include',
         body: JSON.stringify(body),
       });
@@ -151,10 +159,14 @@ export class AuditService {
       return data.ok === true;
     } catch (_error) {
       return false;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
   static async registerPollPolicy(pollId: string, requireLogin: boolean): Promise<boolean> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2500);
     try {
       const body = await IntegrityService.seal(
         { pollId, requireLogin } as Record<string, unknown>,
@@ -165,10 +177,13 @@ export class AuditService {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
       return res.ok;
     } catch {
       return false;
+    } finally {
+      clearTimeout(timer);
     }
   }
 

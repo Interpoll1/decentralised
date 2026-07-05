@@ -58,5 +58,22 @@ router.isReady().then(() => {
         /* best-effort purge */
       }
     })();
+    // Restore the last local snapshot (offline resilience / network re-seed) and
+    // start automatic snapshot persistence.
+    (async () => {
+      try {
+        const { SnapshotAutoService } = await import('./services/snapshotAutoService');
+        const restored = await SnapshotAutoService.restore();
+        if (restored) {
+          try {
+            const { useChainStore } = await import('./stores/chainStore');
+            await useChainStore().loadBlocks();
+          } catch { /* store not ready; blocks load on next chain read */ }
+        }
+        SnapshotAutoService.initialize();
+      } catch (err) {
+        console.warn('[Startup] Snapshot auto-restore failed:', err);
+      }
+    })();
   }, 0);
 })

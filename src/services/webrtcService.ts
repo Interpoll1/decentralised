@@ -11,14 +11,9 @@
  * descriptor so answers/ICE go back over a channel the peer can hear.
  */
 
-import { SignalingService, type SignalTarget, type InboundSignal } from '@/services/signalingService';
+import { SignalingService, MESH_SIGNAL_TYPE, type SignalTarget, type InboundSignal } from '@/services/signalingService';
+import config from '@/config';
 
-const STUN_SERVERS: RTCConfiguration = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-  ],
-};
 
 const STORAGE_KEY = 'interpoll_mesh_enabled';
 const CHANNEL_LABEL = 'interpoll-data';
@@ -53,6 +48,11 @@ export class WebRTCService {
 
     await SignalingService.initialize();
     SignalingService.onSignal((sig) => { void this.handleSignal(sig); });
+
+    // Mesh-relay signaling tier: forward flooded signed envelopes to the
+    // signaling service, which delivers or re-floods them toward their target.
+    this.onMessage(MESH_SIGNAL_TYPE, (env) =>
+      SignalingService.handleRelayEnvelope(env as Record<string, unknown>));
   }
 
   static isEnabled(): boolean {
@@ -298,7 +298,8 @@ export class WebRTCService {
   }
 
   private static createPeerConnection(remoteId: string): RTCPeerConnection {
-    const pc = new RTCPeerConnection(STUN_SERVERS);
+    // ICE servers are config-driven: diverse STUN by default, plus any user TURN.
+    const pc = new RTCPeerConnection({ iceServers: config.getIceServers() });
     this.connections.set(remoteId, pc);
 
     pc.onicecandidate = (event) => {

@@ -21,6 +21,9 @@
 
     <ion-content class="ambient-page">
       <div class="ambient-page__content create-post-page">
+        <div v-if="isSubmittingSlow" class="submit-slow-banner">
+          Still publishing to the network — this can take a few extra seconds on a slow relay.
+        </div>
         <section class="create-hero">
           <span class="surface-label">New post</span>
           <h1 class="section-heading create-title">Publish to your community</h1>
@@ -129,6 +132,15 @@
 .create-post-page {
   display: grid;
   gap: 24px;
+}
+
+.submit-slow-banner {
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--app-warning);
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.3);
 }
 
 .create-hero {
@@ -262,7 +274,7 @@
 </style>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage,
@@ -300,6 +312,21 @@ const content = ref('');
 const imageFile = ref<File | null>(null);
 const imagePreview = ref<string | null>(null);
 const isSubmitting = ref(false);
+const isSubmittingSlow = ref(false);
+let submitSlowTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(isSubmitting, (submitting) => {
+  if (submitSlowTimer) {
+    clearTimeout(submitSlowTimer);
+    submitSlowTimer = null;
+  }
+  isSubmittingSlow.value = false;
+  if (submitting) {
+    submitSlowTimer = setTimeout(() => {
+      isSubmittingSlow.value = true;
+    }, 3000);
+  }
+});
 const isCompressing = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
 
