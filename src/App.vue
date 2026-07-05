@@ -14,6 +14,7 @@ import { useRouter } from 'vue-router';
 import { useChainStore } from './stores/chainStore';
 import { WebSocketService } from './services/websocketService';
 import { GunService } from './services/gunService';
+import { PollService } from './services/pollService';
 import { warmupFromDB } from './services/dbWarmup';
 import AppLoader from './components/AppLoader.vue';
 import GlobalCommandPalette from './components/GlobalCommandPalette.vue';
@@ -24,6 +25,7 @@ const appReady = ref(false);
 const globalPaletteOpen = ref(false);
 
 let visibilityHandler: (() => void) | null = null;
+let wireWatchdogTimer: ReturnType<typeof setInterval> | null = null;
 let internalLinkHandler: ((event: MouseEvent) => void) | null = null;
 let keydownHandler: ((event: KeyboardEvent) => void) | null = null;
 
@@ -154,11 +156,25 @@ onMounted(async () => {
     }
   };
   document.addEventListener('visibilitychange', visibilityHandler);
+
+  // Visibility events alone never fire while the tab stays in the foreground,
+  // so also self-heal dead Gun wires on a timer.
+  wireWatchdogTimer = setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
+    if (!GunService.getPeerStats().isConnected) GunService.reconnect();
+  }, 60_000);
+
+  // Re-push recent polls the relay never confirmed receiving (dead wire or
+  // server-side rate limiting can silently swallow writes on an open socket).
+  PollService.startRepublishLoop();
 });
 
 onUnmounted(() => {
   if (visibilityHandler) {
     document.removeEventListener('visibilitychange', visibilityHandler);
+  }
+  if (wireWatchdogTimer) {
+    clearInterval(wireWatchdogTimer);
   }
   if (internalLinkHandler) {
     document.removeEventListener('click', internalLinkHandler);

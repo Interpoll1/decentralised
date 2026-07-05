@@ -177,6 +177,113 @@ export class PollService {
       await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
     }
   }
+
+  private static republishLoopStarted = false;
+  private static republishInFlight = false;
+  private static republishAttempts = new Map<string, number>();
+  private static readonly REPUBLISH_MAX_ATTEMPTS = 5;
+  private static readonly REPUBLISH_INTERVAL_MS = 120_000;
+
+  /** Gun-shaped shell + options map for (re)writing a poll — redacts encrypted polls exactly like createPoll. */
+  private static toGunPollRecord(poll: Poll): { record: Record<string, unknown>; optionsMap: Record<string, any> } {
+    const persistedOptions = poll.isEncrypted
+      ? poll.options.map((option) => ({ ...option, text: '🔒 Encrypted option', voters: [] as string[] }))
+      : poll.options;
+    const optionsMap = this.buildOptionsMap(persistedOptions);
+    return {
+      optionsMap,
+      record: {
+        id: poll.id,
+        communityId: poll.communityId,
+        authorId: poll.authorId,
+        authorName: poll.isEncrypted ? 'encrypted' : poll.authorName,
+        authorShowRealName: poll.authorShowRealName || false,
+        question: poll.isEncrypted ? '🔒 Encrypted Poll' : poll.question,
+        description: poll.isEncrypted ? '' : (poll.description || ''),
+        createdAt: poll.createdAt,
+        expiresAt: poll.expiresAt,
+        allowMultipleChoices: poll.allowMultipleChoices,
+        showResultsBeforeVoting: poll.showResultsBeforeVoting,
+        requireLogin: !!poll.requireLogin,
+        isPrivate: !!poll.isPrivate,
+        totalVotes: poll.totalVotes || 0,
+        isExpired: !!poll.isExpired,
+        options: optionsMap,
+        isEncrypted: poll.isEncrypted ? true : undefined,
+        encryptedContent: poll.encryptedContent,
+        authTag: poll.authTag,
+        authorPubkey: poll.authorPubkey,
+        contentSignature: poll.contentSignature,
+      },
+    };
+  }
+
+  /**
+   * Re-push recent locally-backed-up polls the relay does not confirm holding.
+   * Gun never retro-syncs puts made while the relay connection was dead — and a
+   * rate-limited relay can drop messages on an open socket — so without this a
+   * poll created during an outage stays invisible to everyone else forever.
+   */
+  static async republishUnconfirmedPolls(): Promise<void> {
+    if (this.republishInFlight || typeof window === 'undefined') return;
+    this.republishInFlight = true;
+    try {
+      const [map, tombstones] = await Promise.all([
+        this.readLocalPollMap(),
+        this.readLocalPollTombstones(),
+      ]);
+      const now = Date.now();
+      const candidates = Object.values(map).filter((entry) => {
+        const poll = entry?.poll;
+        if (!poll?.id || tombstones[poll.id]) return false;
+        const ageMs = now - (Number.isFinite(entry.backedUpAt) ? entry.backedUpAt : poll.createdAt || 0);
+        if (ageMs > LOCAL_POLL_BACKUP_TTL_MS) return false;
+        return (this.republishAttempts.get(poll.id) || 0) < this.REPUBLISH_MAX_ATTEMPTS;
+      });
+      for (const entry of candidates) {
+        const poll = entry.poll;
+        const confirmed = await this.verifyRelayPersistence(poll.id, 4000);
+        if (confirmed === true) {
+          this.republishAttempts.delete(poll.id);
+          continue;
+        }
+        if (confirmed === null) continue; // verification endpoint unreachable — retry next tick
+        this.republishAttempts.set(poll.id, (this.republishAttempts.get(poll.id) || 0) + 1);
+        const { record, optionsMap } = this.toGunPollRecord(poll);
+        this.warmPollCache(record, optionsMap);
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const recheck = await this.verifyRelayPersistence(poll.id, 8000);
+        if (recheck === true) {
+          this.republishAttempts.delete(poll.id);
+          console.info(`[PollService] Republished poll ${poll.id} to relay after missed sync`);
+        } else {
+          logPollDebug('writes', 'Republish attempt did not confirm', {
+            pollId: poll.id,
+            attempt: this.republishAttempts.get(poll.id),
+          });
+        }
+      }
+    } catch (error) {
+      logPollDebug('writes', 'Republish sweep failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      this.republishInFlight = false;
+    }
+  }
+
+  /** Start the background republish loop (idempotent). Also re-sweeps on Gun instance rebuilds. */
+  static startRepublishLoop(): void {
+    if (this.republishLoopStarted || typeof window === 'undefined') return;
+    this.republishLoopStarted = true;
+    GunService.onReconnect(() => { void this.republishUnconfirmedPolls(); });
+    const tick = () => {
+      void this.republishUnconfirmedPolls().finally(() => {
+        setTimeout(tick, this.REPUBLISH_INTERVAL_MS);
+      });
+    };
+    setTimeout(tick, 20_000);
+  }
   private static getCommunityPollPath(communityId: string, pollId: string) {
     return this.gun.get('communities').get(communityId).get('polls').get(pollId);
   }
@@ -1154,6 +1261,10 @@ export class PollService {
     poll.relayConfirmed = relayConfirmed === null
       ? GunService.getPeerStats().isConnected
       : relayConfirmed;
+    if (!poll.relayConfirmed) {
+      this.startRepublishLoop();
+      setTimeout(() => { void this.republishUnconfirmedPolls(); }, 15_000);
+    }
 
     logPollDebug('create', 'createPoll completed', {
       pollId,
