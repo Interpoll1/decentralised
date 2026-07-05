@@ -560,7 +560,7 @@ import {
   checkmarkCircleOutline, searchOutline, chatbubble, chatbubbleOutline,
   shieldOutline, shieldCheckmarkOutline, sparklesOutline, eyeOffOutline, linkOutline
 } from 'ionicons/icons';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useChainStore } from '../stores/chainStore';
 import { useCommunityStore } from '../stores/communityStore';
 import { usePostStore } from '../stores/postStore';
@@ -579,6 +579,7 @@ import { ModerationService, moderationVersion, MODERATION_API_DEFAULT_BASE_URL }
 import config from '../config';
 
 const router = useRouter();
+const route = useRoute();
 const chainStore = useChainStore();
 const communityStore = useCommunityStore();
 const postStore = usePostStore();
@@ -603,8 +604,27 @@ function syncDebug(label: string, data?: Record<string, unknown>) {
   else console.log(`[SyncDebug] ${label}`);
 }
 
-const activeTab = ref('home');
+const HOME_TABS = ['home', 'communities', 'chat', 'create'] as const;
+type HomeTab = typeof HOME_TABS[number];
+function tabFromRoute(): HomeTab {
+  const raw = route.query.tab;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return HOME_TABS.includes(value as HomeTab) ? (value as HomeTab) : 'home';
+}
+
+const activeTab = ref<string>(tabFromRoute());
 const communityFilter = ref('all');
+
+// Keep the tab reflected in the URL so refresh/back/share all restore the view.
+watch(activeTab, (tab) => {
+  if (route.name !== 'Home' || tab === tabFromRoute()) return;
+  void router.push({ query: { ...route.query, tab: tab === 'home' ? undefined : tab } });
+});
+watch(() => route.query.tab, () => {
+  if (route.name !== 'Home') return;
+  const tab = tabFromRoute();
+  if (activeTab.value !== tab) activeTab.value = tab;
+});
 const isLoadingPosts = ref(false);
 const voteVersion = ref(0);
 const isHeaderHidden = ref(false);

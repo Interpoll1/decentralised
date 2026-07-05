@@ -4,6 +4,10 @@ import { RouteRecordRaw } from 'vue-router';
 const routes: Array<RouteRecordRaw> = [
   { path: '/', redirect: '/home' },
   { path: '/home', name: 'Home', component: () => import('../views/HomePage.vue') },
+  // Shareable aliases for the HomePage tabs (tab state lives in the ?tab query)
+  { path: '/communities', redirect: { path: '/home', query: { tab: 'communities' } } },
+  { path: '/chat', redirect: { path: '/home', query: { tab: 'chat' } } },
+  { path: '/create', redirect: { path: '/home', query: { tab: 'create' } } },
   {
     path: '/community/:communityId',
     name: 'Community',
