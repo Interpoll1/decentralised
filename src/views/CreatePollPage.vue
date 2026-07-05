@@ -435,7 +435,7 @@ async function createPoll() {
       await alert.present();
     } else if (poll.relayConfirmed === false) {
       const toast = await toastController.create({
-        message: 'Poll saved on this device, but the relay hasn\'t confirmed it yet — it may not be visible to others until the connection recovers.',
+        message: 'Poll saved — the relay hasn\'t confirmed it yet, so publishing will keep retrying in the background.',
         duration: 4000,
         color: 'warning'
       });
