@@ -6,8 +6,8 @@
           <ion-back-button default-href="/home"></ion-back-button>
         </ion-buttons>
         <ion-title>{{ recipientName }}</ion-title>
-        <ion-note slot="end" class="connection-status" :class="{ connected }">
-          {{ !connected ? 'Connecting...' : !chatReady ? 'Setting up...' : 'Connected' }}
+        <ion-note slot="end" class="connection-status" :class="{ connected: connected && !chatError, error: chatError }">
+          {{ chatError ? 'Failed' : !connected ? 'Connecting...' : !chatReady ? 'Setting up...' : 'Connected' }}
         </ion-note>
       </ion-toolbar>
       <ion-toolbar v-if="isTypingState">
@@ -36,13 +36,17 @@
 </div>
         </div>
 
+        <div v-if="chatError" class="chat-error-banner">
+          {{ chatError }}
+        </div>
+
         <!-- Input Area -->
         <div class="input-area">
           <textarea
             v-model="messageInput"
             @keydown.enter.exact.prevent="handleSend"
             @input="handleTyping"
-            :placeholder="chatReady ? 'Type a message...' : 'Setting up encrypted chat...'"
+            :placeholder="chatError ? 'Chat unavailable' : chatReady ? 'Type a message...' : 'Setting up encrypted chat...'"
             :disabled="!chatReady"
             class="message-input"
             rows="1"
@@ -86,6 +90,7 @@ const WS_URL = config.relay.websocket;
 // ── State ─────────────────────────────────────────────────────────────────────
 const connected      = ref(false);
 const chatReady      = ref(false);
+const chatError      = ref('');
 const messageInput   = ref('');
 const messages       = ref<ChatMessage[]>([]);
 const typingState    = ref(false);
@@ -128,6 +133,7 @@ function resetChatState() {
   messages.value = [];
   connected.value = false;
   chatReady.value = false;
+  chatError.value = '';
   messageInput.value = '';
   typingState.value = false;
 }
@@ -193,6 +199,9 @@ async function initializeChat() {
     chatReady.value = true;
   } catch (err) {
     console.error('startChat failed:', err);
+    chatError.value = err instanceof Error
+      ? err.message
+      : 'Could not start an encrypted chat with this user.';
   }
 
   service.markAsRead(targetUserId);
@@ -492,6 +501,22 @@ margin-bottom: 7px;
   background: rgba(var(--ion-color-success-rgb), 0.12);
   border-color: rgba(var(--ion-color-success-rgb), 0.30);
   color: var(--ion-color-success);
+}
+
+.connection-status.error {
+  background: rgba(var(--ion-color-danger-rgb), 0.12);
+  border-color: rgba(var(--ion-color-danger-rgb), 0.30);
+  color: var(--ion-color-danger);
+}
+
+.chat-error-banner {
+  margin: 0 12px 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--ion-color-danger);
+  background: rgba(var(--ion-color-danger-rgb), 0.12);
+  border: 1px solid rgba(var(--ion-color-danger-rgb), 0.30);
 }
 
 html.dark .message.received .message-content {

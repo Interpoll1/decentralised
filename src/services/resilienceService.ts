@@ -49,6 +49,8 @@ export interface ResilienceStatus {
   autoEnabled: boolean;
   /** Last time we (re)converged connectivity, ms epoch, or null. */
   lastReconvergeAt: number | null;
+  /** Last time rendezvous was actually published/republished, ms epoch, or null. */
+  lastRendezvousAt: number | null;
   /** Top reputation records for display. */
   reputation: Array<ReputationRecord & { id: string }>;
 }
@@ -60,6 +62,7 @@ export class ResilienceService {
   private static blackout = false;
   private static blackoutSince: number | null = null;
   private static lastReconvergeAt: number | null = null;
+  private static lastRendezvousAt: number | null = null;
   private static evaluateTimer: ReturnType<typeof setInterval> | null = null;
   private static republishTimer: ReturnType<typeof setInterval> | null = null;
   private static wsUnsubscribe: (() => void) | null = null;
@@ -122,6 +125,7 @@ export class ResilienceService {
       rendezvousActive: this.rendezvousActive,
       autoEnabled: this.isAutoEnabled(),
       lastReconvergeAt: this.lastReconvergeAt,
+      lastRendezvousAt: this.lastRendezvousAt,
       reputation: PeerReputationService.snapshot().slice(0, 12),
     };
   }
@@ -168,6 +172,7 @@ export class ResilienceService {
         peerId: WebSocketService.getPeerId(),
         capabilities: ['ws-sync', 'gun-relay', 'relay-api', 'webrtc'],
       });
+      this.lastRendezvousAt = Date.now();
     } catch {
       // Publish failure must not break the evaluation loop.
     }

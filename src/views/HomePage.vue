@@ -1286,14 +1286,23 @@ function hasDownvoted(postId: string): boolean {
   return downvotedCache.value.has(postId);
 }
 
+async function presentVoteToast(message: string, expectedVersion: number) {
+  const toast = await toastController.create({ message, duration: 1500 });
+  // Skip if a newer vote action has since superseded this one, to avoid a stale toast.
+  if (voteVersion.value === expectedVersion) {
+    toast.present();
+  }
+}
+
 async function handleUpvote(post: Post) {
   try {
     if (hasUpvoted(post.id)) {
       upvotedCache.value.delete(post.id);
       localStorage.setItem('upvoted-posts', JSON.stringify([...upvotedCache.value]));
       voteVersion.value++;
+      const version = voteVersion.value;
       await postStore.removeUpvote(post.id);
-      (await toastController.create({ message: 'Upvote removed', duration: 1500 })).present();
+      await presentVoteToast('Upvote removed', version);
     } else {
       if (downvotedCache.value.has(post.id)) {
         downvotedCache.value.delete(post.id);
@@ -1303,8 +1312,9 @@ async function handleUpvote(post: Post) {
       upvotedCache.value.add(post.id);
       localStorage.setItem('upvoted-posts', JSON.stringify([...upvotedCache.value]));
       voteVersion.value++;
+      const version = voteVersion.value;
       await postStore.upvotePost(post.id);
-      (await toastController.create({ message: 'Upvoted', duration: 1500 })).present();
+      await presentVoteToast('Upvoted', version);
     }
   } catch {
     voteVersion.value++;
@@ -1318,8 +1328,9 @@ async function handleDownvote(post: Post) {
       downvotedCache.value.delete(post.id);
       localStorage.setItem('downvoted-posts', JSON.stringify([...downvotedCache.value]));
       voteVersion.value++;
+      const version = voteVersion.value;
       await postStore.removeDownvote(post.id);
-      (await toastController.create({ message: 'Downvote removed', duration: 1500 })).present();
+      await presentVoteToast('Downvote removed', version);
     } else {
       if (upvotedCache.value.has(post.id)) {
         upvotedCache.value.delete(post.id);
@@ -1329,8 +1340,9 @@ async function handleDownvote(post: Post) {
       downvotedCache.value.add(post.id);
       localStorage.setItem('downvoted-posts', JSON.stringify([...downvotedCache.value]));
       voteVersion.value++;
+      const version = voteVersion.value;
       await postStore.downvotePost(post.id);
-      (await toastController.create({ message: 'Downvoted', duration: 1500 })).present();
+      await presentVoteToast('Downvoted', version);
     }
   } catch {
     voteVersion.value++;

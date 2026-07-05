@@ -14,6 +14,9 @@
       </ion-toolbar>
     </ion-header>
     <ion-content>
+      <div v-if="isSubmittingSlow" class="submit-slow-banner">
+        Still publishing to the network — this can take a few extra seconds on a slow relay.
+      </div>
       <!-- Community Selection -->
       <ion-item button @click="showCommunityPicker">
         <ion-label>
@@ -218,6 +221,21 @@ const description = ref('');
 const isPrivate = ref(false);
 const inviteCodeCount = ref(20);
 const isSubmitting = ref(false);
+const isSubmittingSlow = ref(false);
+let submitSlowTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(isSubmitting, (submitting) => {
+  if (submitSlowTimer) {
+    clearTimeout(submitSlowTimer);
+    submitSlowTimer = null;
+  }
+  isSubmittingSlow.value = false;
+  if (submitting) {
+    submitSlowTimer = setTimeout(() => {
+      isSubmittingSlow.value = true;
+    }, 3000);
+  }
+});
 
 function escapeHtml(input: string): string {
   return input
@@ -457,3 +475,15 @@ watch(
   { immediate: true },
 );
 </script>
+
+<style scoped>
+.submit-slow-banner {
+  margin: 8px 16px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--app-warning);
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+</style>

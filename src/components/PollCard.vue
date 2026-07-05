@@ -61,6 +61,18 @@
             <span>{{ poll.totalVotes || 0 }} vote{{ (poll.totalVotes || 0) !== 1 ? 's' : '' }}</span>
           </div>
 
+          <div
+            v-if="verifiedTotal > 0"
+            class="stat-item verified-tally"
+            :class="{ inflated: verifiedInflated }"
+            :title="verifiedInflated
+              ? 'Reported total far exceeds cryptographically verified votes — treat with caution'
+              : verifiedTotal + ' vote(s) cryptographically verified from signed events'"
+          >
+            <ion-icon :icon="verifiedInflated ? warningOutline : shieldCheckmarkOutline"></ion-icon>
+            <span>{{ verifiedTotal }} verified</span>
+          </div>
+
           <div class="stat-item">
             <ion-icon :icon="timeOutline"></ion-icon>
             <span>{{ getTimeRemaining() }}</span>
@@ -107,6 +119,7 @@ import {
   shieldCheckmarkOutline
 } from 'ionicons/icons';
 import { Poll } from '../services/pollService';
+import { VoteTallyService } from '../services/voteTallyService';
 import type { FilterAction } from '../services/moderationService';
 import { generatePseudonym } from '../utils/pseudonym';
 import { useUserStore } from '../stores/userStore';
@@ -121,6 +134,18 @@ const props = defineProps<{
   moderationActionTitle?: string;
 }>();
 defineEmits(['click', 'vote', 'moderation-submit']);
+
+// Verified vote tally (CRITICAL-2): counts derived from Schnorr-signed vote
+// events, cross-checked against the forgeable Gun total. Re-evaluated whenever the
+// reported total changes (the signed events typically arrive around the same time).
+const verifiedTotal = computed(() => {
+  void props.poll.totalVotes;
+  return VoteTallyService.getVerifiedTotal(props.poll.id);
+});
+const verifiedInflated = computed(() => {
+  void props.poll.totalVotes;
+  return VoteTallyService.looksInflated(props.poll.id, props.poll.totalVotes || 0);
+});
 
 const revealed = ref(false);
 const userStore = useUserStore();
@@ -391,6 +416,23 @@ function getTimeRemaining(): string {
 
 .stat-item ion-icon {
   color: var(--app-text-subtle);
+}
+
+.verified-tally {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.25);
+  background: rgba(52, 211, 153, 0.08);
+}
+.verified-tally ion-icon {
+  color: #34d399;
+}
+.verified-tally.inflated {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.3);
+  background: rgba(251, 191, 36, 0.1);
+}
+.verified-tally.inflated ion-icon {
+  color: #fbbf24;
 }
 
 .flagged-overlay {

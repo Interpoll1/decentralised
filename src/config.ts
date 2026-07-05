@@ -18,6 +18,33 @@ const GUN_PEERS_STORAGE_KEY = 'interpoll_gun_peers_v3';
 // (`import.meta.env.DEV`), so a production bundle ignores the flag entirely and an
 // attacker cannot enable insecure endpoints by planting this localStorage key.
 const DEV_INSECURE_DISCOVERY_KEY = 'interpoll_rdv_dev_insecure';
+const ICE_SERVERS_STORAGE_KEY = 'interpoll_ice_servers';
+
+// Diverse public STUN across independent providers, so no single vendor outage
+// blocks NAT traversal. Users can add a TURN entry via setIceServers() for
+// symmetric-NAT / restrictive-firewall cases where STUN alone can't connect.
+const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun.cloudflare.com:3478' },
+  { urls: 'stun:global.stun.twilio.com:3478' },
+  { urls: 'stun:stun.nextcloud.com:443' },
+];
+
+function loadIceServers(): RTCIceServer[] | null {
+  try {
+    const raw = localStorage.getItem(ICE_SERVERS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {
+    // Corrupted data; ignore
+  }
+  return null;
+}
+
+let iceServers: RTCIceServer[] | null = loadIceServers();
 
 interface RelayOverrides {
   websocket?: string;
@@ -217,6 +244,34 @@ const config = {
     } catch {
       // Storage unavailable — nothing to persist.
     }
+  },
+
+  /** WebRTC ICE servers (STUN/TURN). Falls back to the diverse default STUN set. */
+  getIceServers(): RTCIceServer[] {
+    if (iceServers && iceServers.length > 0) return [...iceServers];
+    return [...DEFAULT_ICE_SERVERS];
+  },
+
+  /** Override ICE servers (e.g. to add a TURN server). Empty/undefined resets to default. */
+  setIceServers(servers: RTCIceServer[] | null | undefined) {
+    if (!servers || servers.length === 0) {
+      iceServers = null;
+      try { localStorage.removeItem(ICE_SERVERS_STORAGE_KEY); } catch { /* ignore */ }
+      return;
+    }
+    iceServers = servers;
+    try { localStorage.setItem(ICE_SERVERS_STORAGE_KEY, JSON.stringify(servers)); } catch { /* ignore */ }
+  },
+
+  /** Reset ICE servers to the built-in diverse STUN default. */
+  resetIceServers() {
+    iceServers = null;
+    try { localStorage.removeItem(ICE_SERVERS_STORAGE_KEY); } catch { /* ignore */ }
+  },
+
+  /** The built-in default ICE servers (for UI reset/display). */
+  getDefaultIceServers(): RTCIceServer[] {
+    return [...DEFAULT_ICE_SERVERS];
   },
 };
 

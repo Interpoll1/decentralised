@@ -115,13 +115,13 @@
 
           <!-- Censorship detection -->
           <div v-if="censorship" class="mt-3 p-3 rounded-xl text-sm glass-inset">
-            <p v-if="censorship.blocked.length" class="text-red-400 flex items-center gap-1">
+            <p v-if="censorship.blocked.length" class="censorship-status censorship-status--danger flex items-center gap-1">
               <ion-icon :icon="warningOutline" /> {{ censorship.blocked.length }} relay(s) appear blocked from your network.
             </p>
-            <p v-if="censorship.torRequired.length" class="text-yellow-400 flex items-center gap-1">
+            <p v-if="censorship.torRequired.length" class="censorship-status censorship-status--warning flex items-center gap-1">
               <ion-icon :icon="lockClosedOutline" /> {{ censorship.torRequired.length }} relay(s) require Tor to reach.
             </p>
-            <p v-if="!censorship.blocked.length && !censorship.torRequired.length" class="text-green-400 flex items-center gap-1">
+            <p v-if="!censorship.blocked.length && !censorship.torRequired.length" class="censorship-status censorship-status--ok flex items-center gap-1">
               <ion-icon :icon="checkmarkCircleOutline" /> No censorship detected -- all relays reachable.
             </p>
           </div>
@@ -153,7 +153,7 @@
               <span class="status-dot" :class="resilience.rendezvousActive ? 'online' : 'offline'"></span>
               <span class="text-sm">Rendezvous {{ resilience.rendezvousActive ? 'active' : 'idle' }}</span>
             </div>
-            <span class="text-xs opacity-50">Last reconverge: {{ lastReconvergeDisplay }}</span>
+            <span class="text-xs opacity-50">Last reconverge: {{ lastRendezvousDisplay }}</span>
           </div>
 
           <ion-item lines="none" class="rounded-xl glass-inset mb-3">
@@ -208,7 +208,7 @@
                 <thead>
                   <tr class="text-left opacity-70">
                     <th class="pb-2">Endpoint</th>
-                    <th class="pb-2">Score</th>
+                    <th class="pb-2" title="Recency-weighted score — reflects recent attempts more than lifetime history">Recent score</th>
                     <th class="pb-2">OK</th>
                     <th class="pb-2">Fail</th>
                   </tr>
@@ -554,6 +554,24 @@
         </ion-card-header>
         <ion-card-content>
           <P2PManualSignal />
+
+          <!-- NAT traversal: diverse STUN by default + optional TURN for restrictive networks -->
+          <div class="mt-4 glass-inset p-4">
+            <h3 class="subsection-title">NAT Traversal (ICE / TURN)</h3>
+            <p class="text-xs opacity-60 mb-3">
+              Using {{ iceServerCount }} ICE server{{ iceServerCount !== 1 ? 's' : '' }} ({{ turnActive ? 'incl. your TURN' : 'diverse public STUN' }}).
+              Behind a symmetric NAT or strict firewall? Add a TURN server so direct connections can still form.
+            </p>
+            <ion-input v-model="turnUrl" placeholder="turn:turn.example.com:3478" fill="outline" class="mb-2"></ion-input>
+            <div class="flex gap-2 mb-2">
+              <ion-input v-model="turnUsername" placeholder="username (optional)" fill="outline"></ion-input>
+              <ion-input v-model="turnCredential" type="password" placeholder="credential (optional)" fill="outline"></ion-input>
+            </div>
+            <div class="flex gap-2">
+              <ion-button size="small" :disabled="!turnUrl.trim()" @click="saveTurn">Save TURN</ion-button>
+              <ion-button size="small" fill="outline" color="medium" @click="resetTurn">Reset to STUN</ion-button>
+            </div>
+          </div>
         </ion-card-content>
       </ion-card>
 
@@ -739,9 +757,9 @@ const tierColor = computed(() => {
     default: return 'danger';
   }
 });
-const lastReconvergeDisplay = computed(() =>
-  resilience.value.lastReconvergeAt
-    ? new Date(resilience.value.lastReconvergeAt).toLocaleTimeString()
+const lastRendezvousDisplay = computed(() =>
+  resilience.value.lastRendezvousAt
+    ? new Date(resilience.value.lastRendezvousAt).toLocaleTimeString()
     : '—',
 );
 
@@ -809,6 +827,41 @@ const newGunPeerUrl = ref('');
 const selectedGunPreset = ref('');
 const gunStartupProbeRunning = ref(false);
 let gunPollInterval: ReturnType<typeof setInterval> | null = null;
+
+// --- NAT traversal (ICE / TURN) ---
+const turnUrl = ref('');
+const turnUsername = ref('');
+const turnCredential = ref('');
+const iceServerCount = ref(config.getIceServers().length);
+const turnActive = computed(() => config.getIceServers().some((s) => String(s.urls).startsWith('turn:')));
+
+function loadTurnFromConfig() {
+  const existing = config.getIceServers().find((s) => String(s.urls).startsWith('turn:'));
+  if (existing) {
+    turnUrl.value = String(existing.urls);
+    turnUsername.value = existing.username ?? '';
+    turnCredential.value = existing.credential ?? '';
+  }
+  iceServerCount.value = config.getIceServers().length;
+}
+
+function saveTurn() {
+  const url = turnUrl.value.trim();
+  if (!url) return;
+  const entry: RTCIceServer = { urls: url };
+  if (turnUsername.value.trim()) entry.username = turnUsername.value.trim();
+  if (turnCredential.value.trim()) entry.credential = turnCredential.value.trim();
+  config.setIceServers([...config.getDefaultIceServers(), entry]);
+  iceServerCount.value = config.getIceServers().length;
+}
+
+function resetTurn() {
+  config.resetIceServers();
+  turnUrl.value = '';
+  turnUsername.value = '';
+  turnCredential.value = '';
+  iceServerCount.value = config.getIceServers().length;
+}
 
 const availableGunPresets = computed(() =>
   GUN_RELAY_PRESETS.filter(p => !gunPeerUrls.value.includes(p.url))
@@ -1203,6 +1256,7 @@ onMounted(async () => {
   refreshStatus();
   refreshGunStatus();
   refreshResilience();
+  loadTurnFromConfig();
 
   cleanups.push(RelayManager.onRelayListChange(() => refreshStatus()));
 
@@ -1238,6 +1292,10 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.censorship-status--danger { color: var(--app-danger); }
+.censorship-status--warning { color: var(--app-warning); }
+.censorship-status--ok { color: var(--app-success); }
+
 /* ── Base resets ───────────────────────────────────────── */
 ion-item  { --background: transparent; }
 ion-list  { --ion-item-background: transparent; background: transparent; }

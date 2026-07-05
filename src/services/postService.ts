@@ -562,6 +562,20 @@ export class PostService {
     return updated;
   }
 
+  static async incrementCommentCount(postId: string, communityId?: string): Promise<void> {
+    const gun = GunService.getGun();
+    // Read the live Gun value directly rather than via getPost(), whose REST/memory
+    // cache snapshot never reflects comment-count changes and would shadow this update.
+    const current = await onceWithTimeout(gun.get('posts').get(postId));
+    if (!current) return;
+    const commentCount = (current.commentCount || 0) + 1;
+    await PostService.updatePost(postId, { commentCount, communityId: communityId || current.communityId });
+    const cached = postMemoryCache.get(postId);
+    if (cached) {
+      postMemoryCache.set(postId, { ...cached, commentCount });
+    }
+  }
+
   static async removeVote(postId: string, direction: 'up' | 'down', userId: string): Promise<Post> {
     const post = await PostService.getPost(postId);
     if (!post) throw new Error('Post not found');

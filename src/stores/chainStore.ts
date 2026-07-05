@@ -12,6 +12,7 @@ import { ResilienceService } from '../services/resilienceService';
 import RelayManager from '../services/relayManager';
 import { AuditService } from '../services/auditService';
 import { EventService } from '../services/eventService';
+import { VoteTallyService } from '../services/voteTallyService';
 
 export const useChainStore = defineStore('chain', () => {
   const SYNC_REQUEST_BASE_INTERVAL_MS = 1200;
@@ -100,6 +101,9 @@ export const useChainStore = defineStore('chain', () => {
     // Resilience orchestrator: detects total blackout and escalates through
     // failover → gossip → rendezvous → mesh to reconverge the network.
     ResilienceService.initialize();
+
+    // Verified vote tally: aggregate signed kind-101 vote events (CRITICAL-2).
+    void VoteTallyService.initialize();
 
     await ChainService.initializeChain();
     await loadBlocks();
@@ -334,11 +338,9 @@ export const useChainStore = defineStore('chain', () => {
       return;
     }
 
-    console.log(
-      'Verified event: kind=%d from pubkey=%s',
-      eventData.kind,
-      eventData.pubkey?.substring(0, 16),
-    );
+    // Aggregate signed kind-101 vote events into the verified tally (CRITICAL-2)
+    // instead of discarding them, so counts can be cross-checked against Gun.
+    VoteTallyService.ingest(eventData);
   }
 
   async function addVote(vote: Vote): Promise<Receipt> {

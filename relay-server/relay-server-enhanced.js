@@ -78,6 +78,7 @@ const POLL_POLICY_TMP_FILE = `${DATA_DIR}/poll-policy.tmp.json`;
 const SESSION_STORE_FILE = `${DATA_DIR}/sessions.json`;
 const SESSION_STORE_BACKUP_FILE = `${DATA_DIR}/sessions.backup.json`;
 const SESSION_STORE_TMP_FILE = `${DATA_DIR}/sessions.tmp.json`;
+const sessions = new Map();
 const MAX_VOTE_REGISTRY = 500_000;
 
 let voteRegistry = new Set();
@@ -438,8 +439,9 @@ function savePollPolicyRegistrySync() {
     console.error('Failed to save poll policy registry:', err.message);
     throw err;
   }
+}
 
-  function loadSessionStoreFromFile(filePath) {
+function loadSessionStoreFromFile(filePath) {
     const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
     if (!data || typeof data !== 'object' || Array.isArray(data)) {
       throw new Error('session store is not an object');
@@ -490,7 +492,6 @@ function savePollPolicyRegistrySync() {
       }
     });
   }
-}
 
 function cleanupPendingVoteReservations(now = Date.now()) {
   for (const [key, reservation] of pendingVoteReservations) {

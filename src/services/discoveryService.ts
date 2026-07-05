@@ -15,6 +15,11 @@ const MIN_TTL_MS = 30_000;
 const MAX_TTL_MS = 24 * 60 * 60_000;
 const DEFAULT_MAX_ENTRIES = 100;
 const DISCOVERY_DB_FETCH_TIMEOUT_MS = 5000;
+// Hashcash proof-of-work over each announcement's signature. Signing alone is
+// cheap, so a Sybil attacker can flood a rendezvous soul with many fake-but-signed
+// identities; requiring PoW makes each announcement cost real work. ~16 bits ≈ a
+// few ms to solve, negligible for an honest node publishing every couple minutes.
+const POW_DIFFICULTY_BITS = 16;
 
 interface DiscoverySignedPayload {
   version: 1;
@@ -31,6 +36,8 @@ interface DiscoverySignedPayload {
 interface DiscoveryAnnouncement extends DiscoverySignedPayload {
   signerPubkey: string;
   signature: string;
+  /** Hashcash nonce: SHA-256(`${signature}:${pow}`) must have ≥ POW_DIFFICULTY_BITS leading zero bits. */
+  pow: string;
 }
 
 export interface DiscoveryEntry extends DiscoveryAnnouncement {
@@ -109,6 +116,7 @@ class DiscoveryService {
       ...payload,
       signerPubkey: keyPair.publicKey,
       signature,
+      pow: this.computePow(signature),
     };
 
     const normalized = this.normalizeAndValidate(announcement);
@@ -149,6 +157,7 @@ class DiscoveryService {
       ...payload,
       signerPubkey: keyPair.publicKey,
       signature,
+      pow: this.computePow(signature),
     };
 
     const normalized = this.normalizeAndValidate(announcement);
@@ -393,6 +402,7 @@ class DiscoveryService {
 
     const signerPubkey = this.normalizeString(obj.signerPubkey);
     const signature = this.normalizeString(obj.signature);
+    const pow = this.normalizeString(obj.pow);
 
     if (
       !payload.nodeId ||
@@ -414,12 +424,45 @@ class DiscoveryService {
       return null;
     }
 
+    // Sybil gate: reject announcements without sufficient proof-of-work.
+    if (!this.verifyPow(signature, pow)) return null;
+
     return {
       ...payload,
       signerPubkey,
       signature,
+      pow,
       expiresAt,
     };
+  }
+
+  /** Count leading zero bits of a hex-encoded hash. */
+  private static leadingZeroBits(hexHash: string): number {
+    let bits = 0;
+    for (const ch of hexHash) {
+      const nibble = parseInt(ch, 16);
+      if (Number.isNaN(nibble)) break;
+      if (nibble === 0) { bits += 4; continue; }
+      bits += Math.clz32(nibble) - 28; // leading zeros within this 4-bit nibble
+      break;
+    }
+    return bits;
+  }
+
+  /** Solve hashcash over a signature: find a nonce meeting the difficulty. */
+  private static computePow(signature: string): string {
+    for (let n = 0; n < 20_000_000; n++) {
+      const pow = n.toString(36);
+      if (this.leadingZeroBits(CryptoService.hash(`${signature}:${pow}`)) >= POW_DIFFICULTY_BITS) {
+        return pow;
+      }
+    }
+    return '';
+  }
+
+  private static verifyPow(signature: string, pow: string): boolean {
+    if (!pow || typeof pow !== 'string') return false;
+    return this.leadingZeroBits(CryptoService.hash(`${signature}:${pow}`)) >= POW_DIFFICULTY_BITS;
   }
 
   private static signingMessage(payload: DiscoverySignedPayload): string {
