@@ -5,6 +5,9 @@ import { AuditService } from './auditService';
 import { PostService } from './postService';
 import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
+import { canonicalJSON } from '../../shared-validation/canonical.js';
+
+const CURRENT_CANON_VERSION = 2;
 
 function getGun() {
   return GunService.getGun();
@@ -27,6 +30,8 @@ export interface Comment {
   editedAt?: number;
   authorPubkey?: string;
   contentSignature?: string;
+  /** Which canonicalization algorithm contentSignature was produced with. Absent = legacy v1 (buildSignablePayloadV1). */
+  canonVersion?: number;
   isEncrypted?: boolean;
   encryptedContent?: string;    // AES-GCM encrypted comment data
   authTag?: string;             // HMAC anti-sabotage tag
@@ -42,8 +47,18 @@ export interface CreateCommentData {
   parentId?: string;
 }
 
-function buildSignablePayload(c: Pick<Comment, 'content' | 'postId' | 'communityId' | 'createdAt'>): string {
+/** @deprecated Legacy per-service canonicalizer, kept for verifying comments signed before the shared canonicalJSON was adopted. Never sign new comments with this. */
+function buildSignablePayloadV1(c: Pick<Comment, 'content' | 'postId' | 'communityId' | 'createdAt'>): string {
   return JSON.stringify({
+    content: c.content,
+    postId: c.postId,
+    communityId: c.communityId,
+    timestamp: c.createdAt,
+  });
+}
+
+function buildSignablePayload(c: Pick<Comment, 'content' | 'postId' | 'communityId' | 'createdAt'>): string {
+  return canonicalJSON({
     content: c.content,
     postId: c.postId,
     communityId: c.communityId,
@@ -81,6 +96,7 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
     const signature = CryptoService.sign(contentHash, keyPair.privateKey);
     comment.authorPubkey = keyPair.publicKey;
     comment.contentSignature = signature;
+    comment.canonVersion = CURRENT_CANON_VERSION;
   } catch (err) {
     console.warn('Failed to sign comment content:', err);
   }
@@ -467,6 +483,7 @@ export async function editComment(commentId: string, newContent: string): Promis
           const commentNode = getGun().get('comments').get(commentId);
           commentNode.get('authorPubkey').put(keyPair.publicKey);
           commentNode.get('contentSignature').put(signature);
+          commentNode.get('canonVersion').put(CURRENT_CANON_VERSION);
         } catch (_err) {
           // Non-fatal: signature update failed
         }
@@ -556,7 +573,9 @@ export async function getCommentCount(postId: string): Promise<number> {
 export function verifyCommentSignature(comment: Comment): 'verified' | 'unverified' | 'unsigned' {
   if (!comment.authorPubkey || !comment.contentSignature) return 'unsigned';
   try {
-    const contentHash = CryptoService.hash(buildSignablePayload(comment));
+    const contentHash = comment.canonVersion === CURRENT_CANON_VERSION
+      ? CryptoService.hash(buildSignablePayload(comment))
+      : CryptoService.hash(buildSignablePayloadV1(comment));
     const valid = CryptoService.verify(contentHash, comment.contentSignature, comment.authorPubkey);
     return valid ? 'verified' : 'unverified';
   } catch {

@@ -1,6 +1,12 @@
 // src/types/chain.ts
 
-export interface Poll {
+/**
+ * Minimal poll shape used by the local chain/snapshot layer (IndexedDB storage,
+ * chain snapshots). Distinct from the rich, Gun-replicated `Poll` in
+ * `src/types/poll.ts` (used by pollService.ts) — this one only carries what's
+ * needed to validate/replay a local vote against the chain.
+ */
+export interface ChainPollSnapshot {
   id: string;
   title: string;
   description: string;

@@ -1,4 +1,4 @@
-import type { ChainBlock, Vote, Receipt, Poll } from '../types/chain';
+import type { ChainBlock, Vote, Receipt, ChainPollSnapshot } from '../types/chain';
 import type { Post } from './postService';
 import type { Community } from './communityService';
 import type { Comment } from './commentService';
@@ -24,7 +24,7 @@ export interface NetworkSnapshot {
     blocks: ChainBlock[];
     votes: Vote[];
     receipts: Receipt[];
-    polls: Poll[];
+    polls: ChainPollSnapshot[];
   };
   gun: {
     posts: Post[];

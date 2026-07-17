@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://interpoll.protocol/schemas/vote.v1.json",
+  "title": "InterPoll Vote payload (v1)",
+  "description": "The vote payload recorded in the local chain (types/chain.ts Vote) and hashed into a chain block. Normative companion to IPP-03 and IPP-05.",
+  "type": "object",
+  "required": ["pollId", "choice", "timestamp", "deviceId"],
+  "additionalProperties": false,
+  "properties": {
+    "pollId": { "type": "string" },
+    "choice": { "type": "string", "description": "Selected option id/text." },
+    "timestamp": { "type": "number" },
+    "deviceId": {
+      "type": "string",
+      "description": "Device fingerprint hash. Dedup identity precedence prefers the signer pubkey (from the enclosing chain block / vote-cast event) over deviceId — see IPP-05 and IPP-08. deviceId is retained for legacy records and as a fallback signal."
+    }
+  }
+}

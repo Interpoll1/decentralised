@@ -7,7 +7,7 @@ export const GUN_NAMESPACE = 'v3';
 // Roots that get namespaced under GUN_NAMESPACE — Gun is now live-updates only,
 // not the initial load source. These namespaced paths are still written to on
 // createPost/createPoll so Gun relay peers can pick up new content in real time.
-const NAMESPACED_ROOTS = new Set(['posts', 'communities', 'polls', 'postVotes', 'users', 'comments', 'events', 'chatrooms', 'server-config']);
+const NAMESPACED_ROOTS = new Set(['posts', 'communities', 'polls', 'postVotes', 'users', 'comments', 'events', 'chatrooms', 'server-config', 'user-pubkey-index']);
 
 function createNamespacedProxy(gun: any, nsNode: any): any {
   return new Proxy(gun, {

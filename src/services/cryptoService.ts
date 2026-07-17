@@ -61,6 +61,27 @@ export class CryptoService {
     return bytesToHex(sha256(seed)).substring(0, 32);
   }
 
+  // ── Identity backup: private key ↔ BIP-39 recovery phrase ──────────────────
+  // A Schnorr private key is 32 bytes (256 bits) of entropy, which maps to a
+  // 24-word BIP-39 phrase. Distinct from the 12-word receipt codes above.
+
+  // Convert a 32-byte private key (hex) into a 24-word recovery phrase.
+  static privateKeyToMnemonic(privateKeyHex: string): string {
+    if (!/^[0-9a-f]{64}$/i.test(privateKeyHex)) {
+      throw new Error('Invalid private key: must be 64 hex characters');
+    }
+    return bip39.entropyToMnemonic(privateKeyHex.toLowerCase());
+  }
+
+  // Recover a private key (hex) from a 24-word phrase produced by privateKeyToMnemonic.
+  static mnemonicToPrivateKey(mnemonic: string): string {
+    const normalized = mnemonic.trim().toLowerCase().replace(/\s+/g, ' ');
+    if (!bip39.validateMnemonic(normalized)) {
+      throw new Error('Invalid recovery phrase');
+    }
+    return bip39.mnemonicToEntropy(normalized).toLowerCase();
+  }
+
   // Legacy aliases
   static generateMnemonic(): string {
     return this.generateVerificationCode();

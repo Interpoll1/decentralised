@@ -19,6 +19,7 @@ const GUN_PEERS_STORAGE_KEY = 'interpoll_gun_peers_v3';
 // attacker cannot enable insecure endpoints by planting this localStorage key.
 const DEV_INSECURE_DISCOVERY_KEY = 'interpoll_rdv_dev_insecure';
 const ICE_SERVERS_STORAGE_KEY = 'interpoll_ice_servers';
+const IDENTITY_CONFIG_STORAGE_KEY = 'interpoll_identity_config';
 
 // Diverse public STUN across independent providers, so no single vendor outage
 // blocks NAT traversal. Users can add a TURN entry via setIceServers() for
@@ -45,6 +46,24 @@ function loadIceServers(): RTCIceServer[] | null {
 }
 
 let iceServers: RTCIceServer[] | null = loadIceServers();
+
+type IdentityPrimaryKey = 'deviceId' | 'pubkey';
+
+interface IdentityConfig {
+  primaryKey?: IdentityPrimaryKey;
+}
+
+function loadIdentityConfig(): IdentityConfig {
+  try {
+    const raw = localStorage.getItem(IDENTITY_CONFIG_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {
+    // Corrupted data; ignore
+  }
+  return {};
+}
+
+let identityConfig: IdentityConfig = loadIdentityConfig();
 
 interface RelayOverrides {
   websocket?: string;
@@ -139,6 +158,23 @@ const config = {
     get serverPassword() { return encryptionConfig.serverPassword; },
     /** Whether new users need an invite link to access the server */
     get requireInviteToJoin() { return encryptionConfig.requireInviteToJoin ?? false; },
+  },
+
+  /**
+   * Identity model rollout (protocol formalization, Phase 2).
+   * During the migration window this stays 'deviceId' — profiles are keyed by
+   * device fingerprint, and the pubkey is authoritative only for identity
+   * *comparisons*. Flip to 'pubkey' once the by-pubkey index has converged in a
+   * deployment. See src/services/userService.ts and docs/protocol/IPP-01-identity.md.
+   */
+  identity: {
+    get primaryKey(): IdentityPrimaryKey { return identityConfig.primaryKey || 'deviceId'; },
+  },
+
+  /** Set which key is authoritative for actor identity ('deviceId' | 'pubkey'). */
+  setIdentityPrimaryKey(key: IdentityPrimaryKey) {
+    identityConfig = { ...identityConfig, primaryKey: key };
+    try { localStorage.setItem(IDENTITY_CONFIG_STORAGE_KEY, JSON.stringify(identityConfig)); } catch { /* ignore */ }
   },
 
   /** Default (build-time) relay URLs */

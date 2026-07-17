@@ -77,12 +77,12 @@ import { informationCircle, warningOutline } from 'ionicons/icons';
 import { useChainStore } from '../stores/chainStore';
 import { usePollStore } from '../stores/pollStore';
 import { VoteTrackerService } from '../services/voteTrackerService';
-import { Poll, Vote } from '../types/chain';
+import { ChainPollSnapshot, Vote } from '../types/chain';
 import { AuditService } from '../services/auditService';
 import { PollService } from '../services/pollService';
 
 interface Props {
-  poll: Poll;
+  poll: ChainPollSnapshot;
   inviteCode?: string | null;
   requiresInviteCode?: boolean;
 }

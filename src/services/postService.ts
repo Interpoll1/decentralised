@@ -6,6 +6,9 @@ import { isVersionEnabled } from '../utils/dataVersionSettings';
 import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
 import config from '../config';
+import { canonicalJSON } from '../../shared-validation/canonical.js';
+
+const CURRENT_CANON_VERSION = 2;
 
 function getApiBase(): string {
   return config.relay.api;
@@ -31,13 +34,20 @@ export interface Post {
   authTag?: string;
   authorPubkey?: string;
   contentSignature?: string;
+  /** Which canonicalization algorithm contentSignature was produced with. Absent = legacy v1 (canonicalPostPayloadV1). */
+  canonVersion?: number;
   /** Client-side only — which GunDB namespace this post came from */
   dataVersion?: string;
 }
 
-function canonicalPostPayload(post: { authorId: string; title: string; content: string; communityId: string; createdAt: number }): string {
+/** @deprecated Legacy per-service canonicalizer, kept for verifying posts signed before the shared canonicalJSON was adopted. Never sign new posts with this. */
+function canonicalPostPayloadV1(post: { authorId: string; title: string; content: string; communityId: string; createdAt: number }): string {
   const obj = { authorId: post.authorId, communityId: post.communityId, content: post.content, createdAt: post.createdAt, title: post.title };
   return JSON.stringify(obj, Object.keys(obj).sort());
+}
+
+function canonicalPostPayload(post: { authorId: string; title: string; content: string; communityId: string; createdAt: number }): string {
+  return canonicalJSON({ authorId: post.authorId, communityId: post.communityId, content: post.content, createdAt: post.createdAt, title: post.title });
 }
 
 const postActiveListeners = new Map<string, any>();
@@ -189,8 +199,10 @@ export class PostService {
       const signature = CryptoService.sign(contentPayload, keyPair.privateKey);
       newPost.authorPubkey = keyPair.publicKey;
       newPost.contentSignature = signature;
+      newPost.canonVersion = CURRENT_CANON_VERSION;
       cleanPost.authorPubkey = keyPair.publicKey;
       cleanPost.contentSignature = signature;
+      cleanPost.canonVersion = CURRENT_CANON_VERSION;
     } catch (err) {
       console.warn('Failed to sign post content:', err);
     }
@@ -608,7 +620,9 @@ export class PostService {
   static verifyPostSignature(post: Post): 'verified' | 'unverified' | 'unsigned' {
     if (!post.authorPubkey || !post.contentSignature) return 'unsigned';
     try {
-      const contentPayload = canonicalPostPayload(post);
+      const contentPayload = post.canonVersion === CURRENT_CANON_VERSION
+        ? canonicalPostPayload(post)
+        : canonicalPostPayloadV1(post);
       const valid = CryptoService.verify(contentPayload, post.contentSignature, post.authorPubkey);
       return valid ? 'verified' : 'unverified';
     } catch { return 'unverified'; }

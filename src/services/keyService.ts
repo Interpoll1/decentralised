@@ -2,6 +2,7 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { StorageService } from './storageService';
+import { CryptoService } from './cryptoService';
 import type { StoredKeyPair } from '../types/nostr';
 
 export class KeyService {
@@ -73,6 +74,27 @@ export class KeyService {
     this.cachedKeyPair = keyPair;
 
     return keyPair;
+  }
+
+  // ── Portable-identity backup/restore ───────────────────────────────────────
+  // The keypair is the portable protocol identity. These let a user carry it to
+  // another device/browser (the private key never leaves the device otherwise).
+
+  // Export the raw private key (hex) for backup. Handle with care — full identity.
+  static async exportPrivateKey(): Promise<string> {
+    return this.getPrivateKeyHex();
+  }
+
+  // Export the identity as a 24-word BIP-39 recovery phrase (human-copyable backup).
+  static async exportMnemonic(): Promise<string> {
+    const privateKey = await this.getPrivateKeyHex();
+    return CryptoService.privateKeyToMnemonic(privateKey);
+  }
+
+  // Restore identity from a 24-word recovery phrase produced by exportMnemonic().
+  static async importFromMnemonic(mnemonic: string): Promise<StoredKeyPair> {
+    const privateKey = CryptoService.mnemonicToPrivateKey(mnemonic);
+    return this.importPrivateKey(privateKey);
   }
 
   // Check if a key pair already exists

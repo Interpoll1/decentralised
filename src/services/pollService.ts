@@ -4,6 +4,11 @@ import { KeyVaultService } from './keyVaultService';
 import { StorageService } from './storageService';
 import config from '../config';
 import { AuditService } from './auditService';
+import type { Poll, PollOption } from '../types/poll';
+
+// Re-exported for backward compatibility — `src/types/poll.ts` is now the
+// single source of truth for these types; import from there in new code.
+export type { Poll, PollOption };
 
 function getApiBase(): string {
   return config.relay.api;
@@ -11,39 +16,6 @@ function getApiBase(): string {
 
 function getGunRelayBase(): string {
   return config.relay.gun.replace(/\/gun$/, '');
-}
-
-export interface PollOption {
-  id: string;
-  text: string;
-  votes: number;
-  voters: string[];
-}
-
-export interface Poll {
-  id: string;
-  communityId: string;
-  authorId: string;
-  authorName: string;
-  authorShowRealName?: boolean;
-  question: string;
-  description?: string;
-  options: PollOption[];
-  createdAt: number;
-  expiresAt: number;
-  allowMultipleChoices: boolean;
-  showResultsBeforeVoting: boolean;
-  requireLogin: boolean;
-  isPrivate: boolean;
-  totalVotes: number;
-  isExpired: boolean;
-  authorPubkey?: string;
-  contentSignature?: string;
-  isEncrypted?: boolean;
-  encryptedContent?: string;
-  authTag?: string;
-  /** Whether the relay independently confirmed it holds this poll (set on creation). */
-  relayConfirmed?: boolean;
 }
 
 const pollActiveListeners = new Map<string, any>();
