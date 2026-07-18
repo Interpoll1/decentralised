@@ -2,6 +2,7 @@ import { GunService, GUN_NAMESPACE } from './gunService';
 import { IPFSService } from './ipfsService';
 import { CryptoService } from './cryptoService';
 import { KeyService } from './keyService';
+import { StorageService } from './storageService';
 import { isVersionEnabled } from '../utils/dataVersionSettings';
 import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
@@ -10,8 +11,20 @@ import { canonicalJSON } from '../../shared-validation/canonical.js';
 
 const CURRENT_CANON_VERSION = 2;
 
+// Post durability (mirrors pollService's relay-persistence machinery) ──────────
+const LOCAL_POSTS_META_KEY = 'interpoll-local-posts-v1';
+const LOCAL_POSTS_TOMBSTONES_META_KEY = 'interpoll-local-posts-tombstones-v1';
+const LOCAL_POST_BACKUP_TTL_MS = 30 * 60 * 1000;
+
+type LocalPostBackupEntry = { post: Post; backedUpAt: number };
+type LocalPostBackupMap = Record<string, LocalPostBackupEntry>;
+
 function getApiBase(): string {
   return config.relay.api;
+}
+
+function getGunRelayBase(): string {
+  return config.relay.gun.replace(/\/gun$/, '');
 }
 
 export interface Post {
@@ -38,6 +51,8 @@ export interface Post {
   canonVersion?: number;
   /** Client-side only — which GunDB namespace this post came from */
   dataVersion?: string;
+  /** Client-side only — whether the relay independently confirmed it holds this post (set on creation). */
+  relayConfirmed?: boolean;
 }
 
 /** @deprecated Legacy per-service canonicalizer, kept for verifying posts signed before the shared canonicalJSON was adopted. Never sign new posts with this. */
@@ -279,6 +294,21 @@ export class PostService {
 
     postMemoryCache.set(newPost.id, newPost);
     missingPostCache.delete(newPost.id);
+
+    // Durability: back up locally first (so republish can recover it even if the
+    // verification below is slow/fails), then independently confirm the relay
+    // actually holds it. If unconfirmed, start the republish loop so the post is
+    // re-pushed once the relay is reachable rather than being silently lost.
+    await PostService.saveLocalPostBackup(newPost);
+    const relayConfirmed = await PostService.verifyRelayPersistence(newPost.id);
+    newPost.relayConfirmed = relayConfirmed === null
+      ? GunService.getPeerStats().isConnected
+      : relayConfirmed;
+    if (!newPost.relayConfirmed) {
+      PostService.startRepublishLoop();
+      setTimeout(() => { void PostService.republishUnconfirmedPosts(); }, 15_000);
+    }
+
     return newPost;
   }
 
@@ -525,6 +555,8 @@ export class PostService {
         if (ack.err) reject(new Error(ack.err)); else resolve();
       });
     });
+    // Tombstone the local backup so the republish loop cannot resurrect it.
+    await PostService.removeLocalPostBackup(postId);
   }
 
   static async voteOnPost(postId: string, direction: 'up' | 'down', userId: string): Promise<Post> {
@@ -664,5 +696,251 @@ export class PostService {
       if (v1Subscription) v1Subscription.off();
     });
     postActiveListeners.clear();
+  }
+
+  // ── Durability ──────────────────────────────────────────────────────────────
+  // Gun put acks fire on local acceptance and read-backs come from the local
+  // graph, so neither proves the relay stored a post. Without an independent
+  // check + backup + republish, a post created during a relay outage or under
+  // rate-limiting stays only in the author's browser and vanishes for everyone
+  // else. This mirrors the machinery pollService already has.
+
+  private static republishLoopStarted = false;
+  private static republishInFlight = false;
+  private static republishAttempts = new Map<string, number>();
+  private static localPostBackupWriteQueue: Promise<void> = Promise.resolve();
+  private static readonly REPUBLISH_MAX_ATTEMPTS = 5;
+  private static readonly REPUBLISH_INTERVAL_MS = 120_000;
+
+  /**
+   * Ask the relay's DB mirror whether a post actually reached it. Returns true
+   * (relay has it), false (endpoint reachable but post absent after retries), or
+   * null when the endpoint is unreachable/has no DB (inconclusive).
+   */
+  static async verifyRelayPersistence(postId: string, deadlineMs = 8000): Promise<boolean | null> {
+    const soul = encodeURIComponent(`${GUN_NAMESPACE}/posts/${postId}`);
+    const url = `${getGunRelayBase()}/db/soul?soul=${soul}`;
+    const deadline = Date.now() + deadlineMs;
+    const retryDelayMs = 1500;
+    let endpointReachable = false;
+    for (;;) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3000);
+      try {
+        const res = await fetch(url, { signal: controller.signal });
+        if (res.ok) return true;
+        if (res.status === 404) endpointReachable = true;
+      } catch {
+        // Network error / timeout — endpoint state unknown for this attempt.
+      } finally {
+        clearTimeout(timer);
+      }
+      if (Date.now() + retryDelayMs > deadline) {
+        return endpointReachable ? false : null;
+      }
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+    }
+  }
+
+  /** Gun-shaped record for (re)writing a post. Encrypted posts are already
+   *  redacted in the stored Post, so no re-redaction is needed here. */
+  private static toGunPostRecord(post: Post): Record<string, unknown> {
+    const rec: Record<string, unknown> = {
+      id: post.id,
+      communityId: post.communityId,
+      authorId: post.authorId,
+      authorName: post.authorName,
+      authorShowRealName: post.authorShowRealName || false,
+      title: post.title,
+      content: post.content,
+      createdAt: post.createdAt,
+      upvotes: post.upvotes || 0,
+      downvotes: post.downvotes || 0,
+      score: post.score || 0,
+      commentCount: post.commentCount || 0,
+    };
+    if (post.imageIPFS) rec.imageIPFS = post.imageIPFS;
+    if (post.imageThumbnail) rec.imageThumbnail = post.imageThumbnail;
+    if (post.authorPubkey) rec.authorPubkey = post.authorPubkey;
+    if (post.contentSignature) rec.contentSignature = post.contentSignature;
+    if (post.canonVersion) rec.canonVersion = post.canonVersion;
+    if (post.isEncrypted) {
+      rec.isEncrypted = true;
+      if (post.encryptedContent) rec.encryptedContent = post.encryptedContent;
+      if (post.authTag) rec.authTag = post.authTag;
+    }
+    return rec;
+  }
+
+  /** Re-put a post to both the root and community paths. */
+  private static warmPostCache(record: Record<string, unknown>): void {
+    if (!record?.id) return;
+    const gun = GunService.getGun();
+    gun.get('posts').get(record.id as string).put(record);
+    if (record.communityId) {
+      gun.get('communities').get(record.communityId as string).get('posts').get(record.id as string).put(record);
+    }
+  }
+
+  /**
+   * Re-push recent locally-backed-up posts the relay does not confirm holding.
+   * Gun never retro-syncs puts made while the relay connection was dead — and a
+   * rate-limited relay can drop messages on an open socket — so without this a
+   * post created during an outage stays invisible to everyone else.
+   */
+  static async republishUnconfirmedPosts(): Promise<void> {
+    if (this.republishInFlight || typeof window === 'undefined') return;
+    this.republishInFlight = true;
+    try {
+      const [map, tombstones] = await Promise.all([
+        this.readLocalPostMap(),
+        this.readLocalPostTombstones(),
+      ]);
+      const now = Date.now();
+      const candidates = Object.values(map).filter((entry) => {
+        const post = entry?.post;
+        if (!post?.id || tombstones[post.id]) return false;
+        const ageMs = now - (Number.isFinite(entry.backedUpAt) ? entry.backedUpAt : post.createdAt || 0);
+        if (ageMs > LOCAL_POST_BACKUP_TTL_MS) return false;
+        return (this.republishAttempts.get(post.id) || 0) < this.REPUBLISH_MAX_ATTEMPTS;
+      });
+      for (const entry of candidates) {
+        const post = entry.post;
+        const confirmed = await this.verifyRelayPersistence(post.id, 4000);
+        if (confirmed === true) {
+          this.republishAttempts.delete(post.id);
+          continue;
+        }
+        if (confirmed === null) continue; // endpoint unreachable — retry next tick
+        this.republishAttempts.set(post.id, (this.republishAttempts.get(post.id) || 0) + 1);
+        this.warmPostCache(this.toGunPostRecord(post));
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const recheck = await this.verifyRelayPersistence(post.id, 8000);
+        if (recheck === true) {
+          this.republishAttempts.delete(post.id);
+          console.info(`[PostService] Republished post ${post.id} to relay after missed sync`);
+        }
+      }
+    } catch {
+      // best-effort sweep
+    } finally {
+      this.republishInFlight = false;
+    }
+  }
+
+  /** Start the background republish loop (idempotent). Also re-sweeps on Gun reconnects. */
+  static startRepublishLoop(): void {
+    if (this.republishLoopStarted || typeof window === 'undefined') return;
+    this.republishLoopStarted = true;
+    GunService.onReconnect(() => { void this.republishUnconfirmedPosts(); });
+    const tick = () => {
+      void this.republishUnconfirmedPosts().finally(() => {
+        setTimeout(tick, this.REPUBLISH_INTERVAL_MS);
+      });
+    };
+    setTimeout(tick, 20_000);
+  }
+
+  private static enqueueLocalPostBackupWrite(task: () => Promise<void>): Promise<void> {
+    const run = this.localPostBackupWriteQueue.then(task, task);
+    this.localPostBackupWriteQueue = run.catch(() => {});
+    return run;
+  }
+
+  private static async readLocalPostMap(): Promise<LocalPostBackupMap> {
+    try {
+      const raw = await StorageService.getMetadata(LOCAL_POSTS_META_KEY);
+      if (!raw || typeof raw !== 'object') return {};
+      const normalized: LocalPostBackupMap = {};
+      Object.entries(raw as Record<string, any>).forEach(([postId, value]) => {
+        if (!value || typeof value !== 'object' || !value.post || typeof value.post !== 'object') return;
+        const post = value.post as Post;
+        if (!post?.id) return;
+        normalized[postId] = { post, backedUpAt: Number(value.backedUpAt) || post.createdAt || Date.now() };
+      });
+      return normalized;
+    } catch {
+      return {};
+    }
+  }
+
+  private static async readLocalPostTombstones(): Promise<Record<string, number>> {
+    try {
+      const raw = await StorageService.getMetadata(LOCAL_POSTS_TOMBSTONES_META_KEY);
+      if (!raw || typeof raw !== 'object') return {};
+      const normalized: Record<string, number> = {};
+      Object.entries(raw as Record<string, unknown>).forEach(([postId, value]) => {
+        const ts = Number(value);
+        if (Number.isFinite(ts) && ts > 0) normalized[postId] = ts;
+      });
+      return normalized;
+    } catch {
+      return {};
+    }
+  }
+
+  private static localPostBackupSignature(post: Post): string {
+    return JSON.stringify({
+      id: post.id,
+      communityId: post.communityId,
+      title: post.title,
+      content: post.content,
+      upvotes: post.upvotes || 0,
+      downvotes: post.downvotes || 0,
+      score: post.score || 0,
+      commentCount: post.commentCount || 0,
+      isEncrypted: Boolean(post.isEncrypted),
+      encryptedContent: post.encryptedContent || '',
+    });
+  }
+
+  private static async saveLocalPostBackup(post: Post): Promise<void> {
+    if (!post?.id) return;
+    const nextSignature = this.localPostBackupSignature(post);
+    await this.enqueueLocalPostBackupWrite(async () => {
+      try {
+        const [next, tombstones] = await Promise.all([
+          this.readLocalPostMap(),
+          this.readLocalPostTombstones(),
+        ]);
+        delete tombstones[post.id];
+        const existing = next[post.id];
+        if (existing?.post && this.localPostBackupSignature(existing.post) === nextSignature) return;
+        next[post.id] = { post, backedUpAt: Date.now() };
+        const ordered = Object.values(next).sort((a, b) => {
+          const left = Number.isFinite(a.backedUpAt) ? a.backedUpAt : a.post.createdAt;
+          const right = Number.isFinite(b.backedUpAt) ? b.backedUpAt : b.post.createdAt;
+          return right - left;
+        }).slice(0, 500);
+        const compact: LocalPostBackupMap = {};
+        ordered.forEach((item) => { compact[item.post.id] = item; });
+        await StorageService.setMetadata(LOCAL_POSTS_META_KEY, compact);
+        await StorageService.setMetadata(LOCAL_POSTS_TOMBSTONES_META_KEY, tombstones);
+      } catch {
+        // best-effort local backup
+      }
+    });
+  }
+
+  private static async removeLocalPostBackup(postId: string): Promise<void> {
+    await this.enqueueLocalPostBackupWrite(async () => {
+      try {
+        const [map, tombstones] = await Promise.all([
+          this.readLocalPostMap(),
+          this.readLocalPostTombstones(),
+        ]);
+        if (!map[postId] && tombstones[postId]) return;
+        delete map[postId];
+        tombstones[postId] = Date.now();
+        const recentTombstones = Object.entries(tombstones)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 1000)
+          .reduce<Record<string, number>>((acc, [id, ts]) => { acc[id] = ts; return acc; }, {});
+        await StorageService.setMetadata(LOCAL_POSTS_META_KEY, map);
+        await StorageService.setMetadata(LOCAL_POSTS_TOMBSTONES_META_KEY, recentTombstones);
+      } catch {
+        // best-effort cleanup
+      }
+    });
   }
 }
