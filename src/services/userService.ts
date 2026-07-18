@@ -39,6 +39,22 @@ export interface UserStats {
 export class UserService {
   private static currentUser: UserProfile | null = null;
 
+  /**
+   * Secondary reverse index: pubkey → deviceId pointer, stored under the
+   * dedicated `user-pubkey-index` Gun root. Best-effort only (Gun has no
+   * cross-node transactions), so `getUserByPubkey` falls back to a scan.
+   * Written lazily whenever a profile is touched — no bulk backfill.
+   */
+  private static writePubkeyIndex(pubkey: string | undefined, deviceId: string): void {
+    if (!pubkey || !deviceId) return;
+    try {
+      const gun = GunService.getGun();
+      gun.get('user-pubkey-index').get(pubkey).put({ deviceId, updatedAt: Date.now() });
+    } catch {
+      // Secondary index is best-effort; a failed write degrades to a scan, not a break.
+    }
+  }
+
   private static deriveIdentityFields(
     profileLike: Partial<UserProfile>,
   ): Pick<UserProfile, 'identityUsername' | 'identityIssuer' | 'identityTrustLevel'> {
@@ -88,6 +104,7 @@ export class UserService {
         ...derived,
       };
       await gun.get('users').get(deviceId).put(profile);
+      this.writePubkeyIndex(profile.publicKey, deviceId);
       await StorageService.setMetadata(PROFILE_META_KEY, profile);
       this.currentUser = profile;
       return profile;
@@ -108,6 +125,7 @@ export class UserService {
     };
 
     await gun.get('users').get(deviceId).put(newProfile);
+    this.writePubkeyIndex(newProfile.publicKey, deviceId);
     await StorageService.setMetadata(PROFILE_META_KEY, newProfile);
     this.currentUser = newProfile;
 
@@ -130,6 +148,7 @@ export class UserService {
 
     const gun = GunService.getGun();
     await gun.get('users').get(updatedProfile.id).put(updatedProfile);
+    this.writePubkeyIndex(updatedProfile.publicKey, updatedProfile.id);
 
     return updatedProfile;
   }
@@ -150,6 +169,52 @@ export class UserService {
           resolve(null);
         }
       }, 3000);
+    });
+  }
+
+  /**
+   * Resolve a profile by its Schnorr public key. Uses the `user-pubkey-index`
+   * reverse pointer first, then falls back to a `users` scan if the pointer is
+   * missing or stale (the pointer is a best-effort cache, not authoritative).
+   */
+  static async getUserByPubkey(pubkey: string): Promise<UserProfile | null> {
+    if (!pubkey) return null;
+    const gun = GunService.getGun();
+
+    const pointer = await new Promise<{ deviceId?: string } | null>((resolve) => {
+      let done = false;
+      gun.get('user-pubkey-index').get(pubkey).once((data: any) => {
+        if (!done) {
+          done = true;
+          resolve(data && data.deviceId ? data : null);
+        }
+      });
+      setTimeout(() => {
+        if (!done) {
+          done = true;
+          resolve(null);
+        }
+      }, 3000);
+    });
+
+    if (pointer?.deviceId) {
+      const profile = await this.getUser(pointer.deviceId);
+      if (profile) return profile;
+    }
+
+    // Pointer missing/stale — scan for a profile carrying this pubkey.
+    return this.findUserByPubkeyScan(pubkey);
+  }
+
+  private static async findUserByPubkeyScan(pubkey: string): Promise<UserProfile | null> {
+    const gun = GunService.getGun();
+    return new Promise((resolve) => {
+      let found: UserProfile | null = null;
+      gun.get('users').map().once((user: any) => {
+        if (found || !user || user._ || !user.id) return;
+        if (user.publicKey === pubkey) found = user as UserProfile;
+      });
+      setTimeout(() => resolve(found), 1000);
     });
   }
 

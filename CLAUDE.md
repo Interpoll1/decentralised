@@ -1,5 +1,6 @@
 # CLAUDE.md
 
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
@@ -46,7 +47,7 @@ InterPoll has three runtime layers:
    - BroadcastChannel syncs chain state across browser tabs
    - Relay can delay/censor but **cannot forge** a signed action from your device
 
-Read `docs/protocol-whitepaper.md` for the full technical specification.
+Read `docs/protocol/IPP-00-overview.md` (index of the numbered IPP specification series) for the full technical specification. The old single-file `docs/protocol-whitepaper.md` is now a superseded redirect stub.
 
 ---
 
@@ -66,7 +67,7 @@ Read `docs/protocol-whitepaper.md` for the full technical specification.
 npm test -- unit_tests/pow-challenge.test.js
 npm test -- -t "requiresPow"
 ```
-
+run tests after each change. update if needed
 **Type checking:**
 - `npm run build` includes full TypeScript checking.
 - No separate type-check command; linting catches most issues.
@@ -94,7 +95,9 @@ relay-server.js                       Dev WebSocket relay + OAuth + vote authori
 relay-server/relay-server-enhanced.js Production relay with persisted vote registry (gitignored)
 gun-relay-server/                     GunDB relay standalone server
 unit_tests/                           Test files (*.test.ts)
-docs/protocol-whitepaper.md           Full technical specification
+docs/protocol/IPP-00..09-*.md         Numbered IPP protocol specification series
+docs/protocol/schemas/*.v1.json       Machine-readable domain-object schemas
+docs/protocol-whitepaper.md           Superseded redirect stub → docs/protocol/
 .github/copilot-instructions.md       Detailed subsystem guidance
 ```
 
@@ -233,7 +236,8 @@ Set at build time with `VITE_` prefix:
 - `VITE_WS_RELAY_URL` — WebSocket relay (default: `ws://localhost:8080`)
 - `VITE_GUN_RELAY_URL` — GunDB relay (default: `http://localhost:8765/gun`)
 - `VITE_API_BASE_URL` — Backend API (default: `http://localhost:8080`)
-
+### When changing stuff on frontend
+Use the claude in chrome extension to verify what you just did
 Example: `VITE_WS_RELAY_URL=wss://relay.example.com npm run build`
 
 ---
@@ -310,6 +314,6 @@ The relay server production code (`relay-server/`) is gitignored to avoid breaki
 ## See Also
 
 - `README.md` — Feature overview, threat model, quick start
-- `docs/protocol-whitepaper.md` — Full technical specification
+- `docs/protocol/IPP-00-overview.md` — Numbered IPP specification series (supersedes `docs/protocol-whitepaper.md`)
 - `.github/copilot-instructions.md` — Subsystem-specific guidance
 - `unit_tests/` — Example tests and Vitest configuration

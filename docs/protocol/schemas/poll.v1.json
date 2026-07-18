@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://interpoll.protocol/schemas/poll.v1.json",
+  "title": "InterPoll Poll (v1)",
+  "description": "Rich, replicated Poll object as written/read by pollService.ts. Normative companion to IPP-03. Note the wire encoding of PollOption.voters as an object map (see definitions.pollOption).",
+  "type": "object",
+  "required": ["id", "communityId", "authorId", "authorName", "question", "options", "createdAt", "expiresAt", "allowMultipleChoices", "showResultsBeforeVoting", "requireLogin", "isPrivate", "totalVotes", "isExpired"],
+  "properties": {
+    "id": { "type": "string" },
+    "communityId": { "type": "string" },
+    "authorId": { "type": "string", "description": "Currently the deviceId; see IPP-01 identity migration." },
+    "authorName": { "type": "string" },
+    "authorShowRealName": { "type": "boolean" },
+    "question": { "type": "string" },
+    "description": { "type": "string" },
+    "options": { "type": "array", "items": { "$ref": "#/definitions/pollOption" } },
+    "createdAt": { "type": "number" },
+    "expiresAt": { "type": "number" },
+    "allowMultipleChoices": { "type": "boolean" },
+    "showResultsBeforeVoting": { "type": "boolean" },
+    "requireLogin": { "type": "boolean" },
+    "isPrivate": { "type": "boolean" },
+    "totalVotes": { "type": "number", "description": "Client-recomputed counter (read-modify-write, not a CRDT). See IPP-03." },
+    "isExpired": { "type": "boolean" },
+    "authorPubkey": { "type": "string", "description": "Schnorr x-only pubkey (hex) of the signer." },
+    "contentSignature": { "type": "string", "description": "Schnorr signature. NOTE: poll signing currently uses an inline non-canonical serialization, not IPP-02 canonicalJSON — see IPP-03 Current Implementation Note." },
+    "isEncrypted": { "type": "boolean" },
+    "encryptedContent": { "type": "string" },
+    "authTag": { "type": "string" },
+    "relayConfirmed": { "type": "boolean", "description": "Client-side: relay independently confirmed persistence via /db/soul." }
+  },
+  "definitions": {
+    "pollOption": {
+      "type": "object",
+      "required": ["id", "text", "votes"],
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "votes": { "type": "number" },
+        "voters": {
+          "description": "In the application model this is string[]; on the Gun wire it is encoded as an index-keyed object map (numeric-string key -> voterId) because Gun cannot store sparse arrays. Both encodings are shown.",
+          "oneOf": [
+            { "type": "array", "items": { "type": "string" } },
+            { "type": "object", "patternProperties": { "^[0-9]+$": { "type": "string" } }, "additionalProperties": false }
+          ]
+        }
+      }
+    }
+  }
+}

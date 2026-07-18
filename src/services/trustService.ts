@@ -508,6 +508,34 @@ export class TrustService {
     return found;
   }
 
+  /**
+   * The local user's own verified certificate, if any — used to attach a
+   * `trust_cert` tag to their votes (Sybil-resistance `issuer` tier). Returns
+   * null when the user isn't issuer-certified. Verified before returning.
+   */
+  static async getMyCertificate(): Promise<TrustCertificate | null> {
+    const pubkey = await KeyService.getPublicKeyHex();
+    const gun = GunService.getGun();
+    let cert: TrustCertificate | null = null;
+
+    await new Promise<void>((resolve) => {
+      let done = false;
+      gun.get(GUN_USERNAMES_ROOT).map().once((record: any) => {
+        if (cert || !record || record.pubkey !== pubkey || record.level !== 'verified' || !record.certificate) return;
+        try {
+          const parsed: TrustCertificate = typeof record.certificate === 'string'
+            ? JSON.parse(record.certificate) : record.certificate;
+          if (parsed.userPubkey === pubkey) cert = parsed;
+        } catch { /* skip malformed */ }
+      });
+      setTimeout(() => { if (!done) { done = true; resolve(); } }, 2000);
+    });
+
+    if (!cert) return null;
+    const issuers = await this.getIssuers();
+    return issuers.some((i) => this.verifyCertificate(cert as TrustCertificate, i)) ? cert : null;
+  }
+
   // ── PoW solver ─────────────────────────────────────────────────────────────
 
   private static async solvePoW(

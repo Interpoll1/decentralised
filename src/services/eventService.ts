@@ -117,14 +117,26 @@ export class EventService {
     return this.createSignedEvent(unsigned);
   }
 
-  // Create a Vote Cast event (kind 101)
+  // Create a Vote Cast event (kind 101).
+  //
+  // Optional Sybil-resistance evidence is attached as tags, each independently
+  // verifiable at tally time (see voteTierService.ts):
+  //   ['pow', nonce]                 — self-contained vote PoW (votePow.ts)
+  //   ['relay_att', payloadJson, sig]— relay attestation over {voterPubkey,pollId,iat}
+  //   ['trust_cert', certJson]       — issuer certificate binding this pubkey
+  // Evidence is added BEFORE signing, so it is committed by the event id + sig.
   static async createVoteEvent(voteData: {
     pollId: string;
     choice: string;
     optionId?: string;
     deviceId: string;
+    /** When set, solve a self-contained vote PoW at this difficulty and tag it. */
+    powDifficulty?: number;
+    relayAttestation?: { payload: string; sig: string };
+    trustCert?: unknown;
   }): Promise<NostrEvent> {
     const pubkey = await KeyService.getPublicKeyHex();
+    const createdAt = Math.floor(Date.now() / 1000);
 
     const content = JSON.stringify({
       choice: voteData.choice,
@@ -137,10 +149,23 @@ export class EventService {
     if (voteData.optionId) {
       tags.push(['option', voteData.optionId]);
     }
+    if (typeof voteData.powDifficulty === 'number' && voteData.powDifficulty > 0) {
+      // PoW is bound to pubkey|pollId|createdAt (excludes the nonce tag), so it
+      // verifies offline at tally time (voteTierService).
+      const { computeVotePow } = await import('@/utils/votePow');
+      const nonce = await computeVotePow(pubkey, voteData.pollId, createdAt, voteData.powDifficulty);
+      tags.push(['pow', nonce.toString()]);
+    }
+    if (voteData.relayAttestation) {
+      tags.push(['relay_att', voteData.relayAttestation.payload, voteData.relayAttestation.sig]);
+    }
+    if (voteData.trustCert) {
+      tags.push(['trust_cert', JSON.stringify(voteData.trustCert)]);
+    }
 
     const unsigned: UnsignedEvent = {
       pubkey,
-      created_at: Math.floor(Date.now() / 1000),
+      created_at: createdAt,
       kind: EventKind.VOTE_CAST,
       tags,
       content,

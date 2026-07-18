@@ -1,10 +1,35 @@
-import { GunService } from './gunService';
+import { GunService, GUN_NAMESPACE } from './gunService';
 import { CryptoService } from './cryptoService';
 import { KeyService } from './keyService';
 import { AuditService } from './auditService';
 import { PostService } from './postService';
 import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
+import { StorageService } from './storageService';
+import config from '../config';
+import { canonicalJSON } from '../../shared-validation/canonical.js';
+
+const CURRENT_CANON_VERSION = 2;
+
+// Comment durability (mirrors post/poll relay-persistence machinery) ──────────
+const LOCAL_COMMENTS_META_KEY = 'interpoll-local-comments-v1';
+const LOCAL_COMMENTS_TOMBSTONES_META_KEY = 'interpoll-local-comments-tombstones-v1';
+const LOCAL_COMMENT_BACKUP_TTL_MS = 30 * 60 * 1000;
+const REPUBLISH_MAX_ATTEMPTS = 5;
+const REPUBLISH_INTERVAL_MS = 120_000;
+
+type LocalCommentBackupEntry = { comment: Comment; backedUpAt: number };
+type LocalCommentBackupMap = Record<string, LocalCommentBackupEntry>;
+
+let commentRepublishLoopStarted = false;
+let commentRepublishInFlight = false;
+const commentRepublishAttempts = new Map<string, number>();
+const commentIndexRepublished = new Set<string>();
+let localCommentBackupWriteQueue: Promise<void> = Promise.resolve();
+
+function getGunRelayBase(): string {
+  return config.relay.gun.replace(/\/gun$/, '');
+}
 
 function getGun() {
   return GunService.getGun();
@@ -27,6 +52,8 @@ export interface Comment {
   editedAt?: number;
   authorPubkey?: string;
   contentSignature?: string;
+  /** Which canonicalization algorithm contentSignature was produced with. Absent = legacy v1 (buildSignablePayloadV1). */
+  canonVersion?: number;
   isEncrypted?: boolean;
   encryptedContent?: string;    // AES-GCM encrypted comment data
   authTag?: string;             // HMAC anti-sabotage tag
@@ -42,8 +69,18 @@ export interface CreateCommentData {
   parentId?: string;
 }
 
-function buildSignablePayload(c: Pick<Comment, 'content' | 'postId' | 'communityId' | 'createdAt'>): string {
+/** @deprecated Legacy per-service canonicalizer, kept for verifying comments signed before the shared canonicalJSON was adopted. Never sign new comments with this. */
+function buildSignablePayloadV1(c: Pick<Comment, 'content' | 'postId' | 'communityId' | 'createdAt'>): string {
   return JSON.stringify({
+    content: c.content,
+    postId: c.postId,
+    communityId: c.communityId,
+    timestamp: c.createdAt,
+  });
+}
+
+function buildSignablePayload(c: Pick<Comment, 'content' | 'postId' | 'communityId' | 'createdAt'>): string {
+  return canonicalJSON({
     content: c.content,
     postId: c.postId,
     communityId: c.communityId,
@@ -81,6 +118,7 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
     const signature = CryptoService.sign(contentHash, keyPair.privateKey);
     comment.authorPubkey = keyPair.publicKey;
     comment.contentSignature = signature;
+    comment.canonVersion = CURRENT_CANON_VERSION;
   } catch (err) {
     console.warn('Failed to sign comment content:', err);
   }
@@ -182,6 +220,13 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
           // Non-fatal: comment count increment failed
         }
       })();
+
+      // Durability: back up locally and kick the republish loop. Not awaited —
+      // comment creation must stay fast; the loop verifies + re-pushes in the
+      // background. Encrypted comments are redacted before backup (no plaintext).
+      void saveLocalCommentBackup(comment);
+      startCommentRepublishLoop();
+      setTimeout(() => { void republishUnconfirmedComments(); }, 15_000);
 
       resolve(comment);
     }, 100);
@@ -467,9 +512,19 @@ export async function editComment(commentId: string, newContent: string): Promis
           const commentNode = getGun().get('comments').get(commentId);
           commentNode.get('authorPubkey').put(keyPair.publicKey);
           commentNode.get('contentSignature').put(signature);
+          commentNode.get('canonVersion').put(CURRENT_CANON_VERSION);
         } catch (_err) {
           // Non-fatal: signature update failed
         }
+
+        // Refresh the durability backup so a republish carries the edited content.
+        void saveLocalCommentBackup({
+          ...(comment as Comment),
+          id: commentId,
+          content: newContent,
+          edited: true,
+          editedAt: Date.now(),
+        });
 
         resolve();
       });
@@ -499,6 +554,10 @@ export async function deleteComment(commentId: string): Promise<void> {
           .get(commentId)
           .get('deleted')
           .put(true);
+
+        // Tombstone the local backup so the republish loop cannot resurrect
+        // pre-delete content over the '[deleted]' marker.
+        void removeLocalCommentBackup(commentId);
 
         resolve();
       });
@@ -556,7 +615,9 @@ export async function getCommentCount(postId: string): Promise<number> {
 export function verifyCommentSignature(comment: Comment): 'verified' | 'unverified' | 'unsigned' {
   if (!comment.authorPubkey || !comment.contentSignature) return 'unsigned';
   try {
-    const contentHash = CryptoService.hash(buildSignablePayload(comment));
+    const contentHash = comment.canonVersion === CURRENT_CANON_VERSION
+      ? CryptoService.hash(buildSignablePayload(comment))
+      : CryptoService.hash(buildSignablePayloadV1(comment));
     const valid = CryptoService.verify(contentHash, comment.contentSignature, comment.authorPubkey);
     return valid ? 'verified' : 'unverified';
   } catch {
@@ -594,6 +655,221 @@ export async function decryptComment(comment: Comment): Promise<Comment> {
   }
 }
 
+// ── Durability ────────────────────────────────────────────────────────────────
+// Comments, like posts, are written to Gun with acks that only prove local
+// acceptance. Without a backup + relay-persistence check + republish, a comment
+// created during a relay outage or under rate-limiting stays only in the
+// author's browser. Encrypted comments MUST be redacted before backup/republish
+// (the in-memory Comment keeps plaintext; only the Gun writes redact it).
+
+/** Redact an encrypted comment so no plaintext is stored/republished. */
+function redactCommentForWire(c: Comment): Comment {
+  if (!c.isEncrypted) return c;
+  return { ...c, content: '🔒 Encrypted comment', authorName: 'encrypted' };
+}
+
+function toGunCommentRecord(c: Comment): Record<string, unknown> {
+  const r = redactCommentForWire(c);
+  const rec: Record<string, unknown> = {
+    id: r.id,
+    postId: r.postId,
+    communityId: r.communityId,
+    authorId: r.authorId,
+    authorName: r.authorName,
+    authorShowRealName: r.authorShowRealName || false,
+    content: r.content,
+    createdAt: r.createdAt,
+    upvotes: r.upvotes || 0,
+    downvotes: r.downvotes || 0,
+    score: r.score || 0,
+    edited: !!r.edited,
+  };
+  if (r.parentId) rec.parentId = r.parentId;
+  if (r.editedAt) rec.editedAt = r.editedAt;
+  if (r.authorPubkey) rec.authorPubkey = r.authorPubkey;
+  if (r.contentSignature) rec.contentSignature = r.contentSignature;
+  if (r.canonVersion) rec.canonVersion = r.canonVersion;
+  if (r.isEncrypted) {
+    rec.isEncrypted = true;
+    if (r.encryptedContent) rec.encryptedContent = r.encryptedContent;
+    if (r.authTag) rec.authTag = r.authTag;
+  }
+  return rec;
+}
+
+/** Re-put a comment's canonical node and (idempotently) its post-index entry. */
+function warmCommentCache(rec: Record<string, unknown>): void {
+  const id = rec.id as string;
+  if (!id) return;
+  getGun().get('comments').get(id).put(rec);
+  const postId = rec.postId as string | undefined;
+  if (postId && !commentIndexRepublished.has(id)) {
+    // Deterministic key (not .set()) so repeated republishes don't duplicate the index entry.
+    getGun().get('posts').get(postId).get('comments').get(id).put({ commentId: id, createdAt: rec.createdAt });
+    commentIndexRepublished.add(id);
+  }
+}
+
+/** Ask the relay's DB mirror whether a comment actually reached it. */
+async function verifyCommentRelayPersistence(commentId: string, deadlineMs = 8000): Promise<boolean | null> {
+  const soul = encodeURIComponent(`${GUN_NAMESPACE}/comments/${commentId}`);
+  const url = `${getGunRelayBase()}/db/soul?soul=${soul}`;
+  const deadline = Date.now() + deadlineMs;
+  const retryDelayMs = 1500;
+  let endpointReachable = false;
+  for (;;) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      if (res.ok) return true;
+      if (res.status === 404) endpointReachable = true;
+    } catch {
+      // endpoint state unknown this attempt
+    } finally {
+      clearTimeout(timer);
+    }
+    if (Date.now() + retryDelayMs > deadline) return endpointReachable ? false : null;
+    await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+  }
+}
+
+function enqueueLocalCommentBackupWrite(task: () => Promise<void>): Promise<void> {
+  const run = localCommentBackupWriteQueue.then(task, task);
+  localCommentBackupWriteQueue = run.catch(() => {});
+  return run;
+}
+
+async function readLocalCommentMap(): Promise<LocalCommentBackupMap> {
+  try {
+    const raw = await StorageService.getMetadata(LOCAL_COMMENTS_META_KEY);
+    if (!raw || typeof raw !== 'object') return {};
+    const normalized: LocalCommentBackupMap = {};
+    Object.entries(raw as Record<string, any>).forEach(([id, value]) => {
+      if (!value || typeof value !== 'object' || !value.comment || typeof value.comment !== 'object') return;
+      const comment = value.comment as Comment;
+      if (!comment?.id) return;
+      normalized[id] = { comment, backedUpAt: Number(value.backedUpAt) || comment.createdAt || Date.now() };
+    });
+    return normalized;
+  } catch {
+    return {};
+  }
+}
+
+async function readLocalCommentTombstones(): Promise<Record<string, number>> {
+  try {
+    const raw = await StorageService.getMetadata(LOCAL_COMMENTS_TOMBSTONES_META_KEY);
+    if (!raw || typeof raw !== 'object') return {};
+    const normalized: Record<string, number> = {};
+    Object.entries(raw as Record<string, unknown>).forEach(([id, value]) => {
+      const ts = Number(value);
+      if (Number.isFinite(ts) && ts > 0) normalized[id] = ts;
+    });
+    return normalized;
+  } catch {
+    return {};
+  }
+}
+
+function localCommentBackupSignature(c: Comment): string {
+  const r = redactCommentForWire(c);
+  return JSON.stringify({
+    id: r.id, postId: r.postId, content: r.content,
+    upvotes: r.upvotes || 0, downvotes: r.downvotes || 0, score: r.score || 0,
+    edited: !!r.edited, isEncrypted: !!r.isEncrypted, encryptedContent: r.encryptedContent || '',
+  });
+}
+
+async function saveLocalCommentBackup(comment: Comment): Promise<void> {
+  if (!comment?.id) return;
+  const stored = redactCommentForWire(comment); // never persist plaintext for encrypted comments
+  const nextSignature = localCommentBackupSignature(comment);
+  await enqueueLocalCommentBackupWrite(async () => {
+    try {
+      const [next, tombstones] = await Promise.all([readLocalCommentMap(), readLocalCommentTombstones()]);
+      delete tombstones[comment.id];
+      const existing = next[comment.id];
+      if (existing?.comment && localCommentBackupSignature(existing.comment) === nextSignature) return;
+      next[comment.id] = { comment: stored, backedUpAt: Date.now() };
+      const ordered = Object.values(next).sort((a, b) => {
+        const left = Number.isFinite(a.backedUpAt) ? a.backedUpAt : a.comment.createdAt;
+        const right = Number.isFinite(b.backedUpAt) ? b.backedUpAt : b.comment.createdAt;
+        return right - left;
+      }).slice(0, 500);
+      const compact: LocalCommentBackupMap = {};
+      ordered.forEach((item) => { compact[item.comment.id] = item; });
+      await StorageService.setMetadata(LOCAL_COMMENTS_META_KEY, compact);
+      await StorageService.setMetadata(LOCAL_COMMENTS_TOMBSTONES_META_KEY, tombstones);
+    } catch {
+      // best-effort local backup
+    }
+  });
+}
+
+async function removeLocalCommentBackup(commentId: string): Promise<void> {
+  await enqueueLocalCommentBackupWrite(async () => {
+    try {
+      const [map, tombstones] = await Promise.all([readLocalCommentMap(), readLocalCommentTombstones()]);
+      if (!map[commentId] && tombstones[commentId]) return;
+      delete map[commentId];
+      tombstones[commentId] = Date.now();
+      const recentTombstones = Object.entries(tombstones)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 1000)
+        .reduce<Record<string, number>>((acc, [id, ts]) => { acc[id] = ts; return acc; }, {});
+      await StorageService.setMetadata(LOCAL_COMMENTS_META_KEY, map);
+      await StorageService.setMetadata(LOCAL_COMMENTS_TOMBSTONES_META_KEY, recentTombstones);
+    } catch {
+      // best-effort cleanup
+    }
+  });
+}
+
+export async function republishUnconfirmedComments(): Promise<void> {
+  if (commentRepublishInFlight || typeof window === 'undefined') return;
+  commentRepublishInFlight = true;
+  try {
+    const [map, tombstones] = await Promise.all([readLocalCommentMap(), readLocalCommentTombstones()]);
+    const now = Date.now();
+    const candidates = Object.values(map).filter((entry) => {
+      const c = entry?.comment;
+      if (!c?.id || tombstones[c.id]) return false;
+      const ageMs = now - (Number.isFinite(entry.backedUpAt) ? entry.backedUpAt : c.createdAt || 0);
+      if (ageMs > LOCAL_COMMENT_BACKUP_TTL_MS) return false;
+      return (commentRepublishAttempts.get(c.id) || 0) < REPUBLISH_MAX_ATTEMPTS;
+    });
+    for (const entry of candidates) {
+      const c = entry.comment;
+      const confirmed = await verifyCommentRelayPersistence(c.id, 4000);
+      if (confirmed === true) { commentRepublishAttempts.delete(c.id); continue; }
+      if (confirmed === null) continue; // endpoint unreachable — retry next tick
+      commentRepublishAttempts.set(c.id, (commentRepublishAttempts.get(c.id) || 0) + 1);
+      warmCommentCache(toGunCommentRecord(c));
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      const recheck = await verifyCommentRelayPersistence(c.id, 8000);
+      if (recheck === true) {
+        commentRepublishAttempts.delete(c.id);
+        console.info(`[CommentService] Republished comment ${c.id} to relay after missed sync`);
+      }
+    }
+  } catch {
+    // best-effort sweep
+  } finally {
+    commentRepublishInFlight = false;
+  }
+}
+
+export function startCommentRepublishLoop(): void {
+  if (commentRepublishLoopStarted || typeof window === 'undefined') return;
+  commentRepublishLoopStarted = true;
+  GunService.onReconnect(() => { void republishUnconfirmedComments(); });
+  const tick = () => {
+    void republishUnconfirmedComments().finally(() => { setTimeout(tick, REPUBLISH_INTERVAL_MS); });
+  };
+  setTimeout(tick, 20_000);
+}
+
 // Export as CommentService object for compatibility
 export const CommentService = {
   createComment,
@@ -607,5 +883,8 @@ export const CommentService = {
   getUserVote,
   getCommentCount,
   verifyCommentSignature,
-  decryptComment
+  decryptComment,
+  startCommentRepublishLoop,
+  republishUnconfirmedComments,
+  verifyCommentRelayPersistence,
 };

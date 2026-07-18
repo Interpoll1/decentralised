@@ -4,14 +4,14 @@
 
 ## `chain.ts`
 
-Core blockchain types. Import with `import type { ChainBlock, Vote, Receipt, Poll, ActionType } from '@/types/chain'`.
+Core blockchain types. Import with `import type { ChainBlock, Vote, Receipt, ChainPollSnapshot, ActionType } from '@/types/chain'`.
 
 | Type | Notes |
 |---|---|
 | `ChainBlock` | Fields: `index`, `timestamp`, `previousHash`, `voteHash`, `signature`, `currentHash`, `nonce`. Optional: `pubkey` (Schnorr x-only hex), `eventId` (Nostr event ref), `actionType`, `actionLabel`. Legacy blocks omit `pubkey` — they are still valid if hash-chain holds. |
 | `Vote` | `pollId`, `choice`, `timestamp`, `deviceId` |
 | `Receipt` | `blockIndex`, `voteHash`, `chainHeadHash`, `verificationCode`, `timestamp`, `pollId` (`mnemonic` retained as legacy alias) |
-| `Poll` | Minimal chain-layer poll: `id`, `title`, `description`, `options[]`, `createdAt`. **Not** the same as `pollService.ts` `Poll` which has more fields. |
+| `ChainPollSnapshot` | Minimal chain-layer poll: `id`, `title`, `description`, `options[]`, `createdAt`. Used by `storageService.ts` (IndexedDB) and `snapshotService.ts` (chain snapshots) only. Renamed from `Poll` to remove a naming collision with the richer, Gun-replicated `Poll` in `src/types/poll.ts` (used by `pollService.ts`) — the two are not interchangeable. |
 | `ActionType` | `'vote' \| 'community-create' \| 'post-create'` — extend this union to add new block action types. |
 
 ## `nostr.ts`

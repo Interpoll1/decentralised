@@ -77,12 +77,14 @@ import { informationCircle, warningOutline } from 'ionicons/icons';
 import { useChainStore } from '../stores/chainStore';
 import { usePollStore } from '../stores/pollStore';
 import { VoteTrackerService } from '../services/voteTrackerService';
-import { Poll, Vote } from '../types/chain';
+import { ChainPollSnapshot, Vote } from '../types/chain';
 import { AuditService } from '../services/auditService';
 import { PollService } from '../services/pollService';
+import type { Poll } from '../types/poll';
+import { VoteTierService } from '../services/voteTierService';
 
 interface Props {
-  poll: Poll;
+  poll: ChainPollSnapshot;
   inviteCode?: string | null;
   requiresInviteCode?: boolean;
 }
@@ -193,9 +195,15 @@ const submitVote = async () => {
       return;
     }
 
+    // Gather Sybil-resistance evidence for the poll's required tier (issuer cert
+    // if held; solve vote PoW when required). Never blocks — falls back to Open.
+    const evidence = await VoteTierService.gatherEvidence(props.poll as unknown as Poll);
+
     const vote: Vote = {
       pollId: props.poll.id,
       choice: selectedOption.value,
+      optionIds: [selectedOption.value],
+      ...evidence,
       timestamp: Date.now(),
       deviceId
     };

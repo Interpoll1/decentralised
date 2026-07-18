@@ -114,6 +114,32 @@
             placeholder="20"
           ></ion-input>
         </ion-item>
+
+        <!-- Sybil resistance: which votes count as "Verified" -->
+        <ion-item>
+          <ion-select
+            v-model="requiredTier"
+            label="Vote verification"
+            label-placement="stacked"
+            interface="popover"
+          >
+            <ion-select-option value="open">Open — anyone (no verification)</ion-select-option>
+            <ion-select-option value="pow">Proof-of-work — costs each voter some CPU</ion-select-option>
+            <ion-select-option value="relay">Relay-attested — one device / login</ion-select-option>
+            <ion-select-option value="issuer">Verified identity — issuer-certified</ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-item v-if="requiredTier !== 'open'">
+          <ion-toggle v-model="gateSubTierVotes">
+            Exclude unverified votes from the main result
+          </ion-toggle>
+        </ion-item>
+        <ion-item v-if="requiredTier !== 'open'" lines="none">
+          <ion-label class="text-xs text-gray-500">
+            Anyone can still vote without verifying — those votes are counted and
+            shown in a separate “Open” result{{ gateSubTierVotes ? ', but kept out of the main “Verified” tally' : ' alongside the “Verified” tally' }}.
+          </ion-label>
+        </ion-item>
       </ion-list>
 
       <!-- Additional Details (Optional) -->
@@ -220,6 +246,11 @@ const showResultsBeforeVoting = ref(false);
 const description = ref('');
 const isPrivate = ref(false);
 const inviteCodeCount = ref(20);
+// Sybil-resistance policy: which tier a vote must reach to count as "Verified",
+// and whether sub-tier votes are excluded from the main tally (gate) or shown
+// in a separate "Open" track (separate).
+const requiredTier = ref<'open' | 'pow' | 'relay' | 'issuer'>('open');
+const gateSubTierVotes = ref(false);
 const isSubmitting = ref(false);
 const isSubmittingSlow = ref(false);
 let submitSlowTimer: ReturnType<typeof setTimeout> | null = null;
@@ -369,7 +400,10 @@ async function createPoll() {
       showResultsBeforeVoting: showResultsBeforeVoting.value,
       requireLogin: false,
       isPrivate: isPrivate.value,
-      inviteCodeCount: inviteCodeCount.value
+      inviteCodeCount: inviteCodeCount.value,
+      voteTrustPolicy: requiredTier.value === 'open'
+        ? undefined
+        : { requiredTier: requiredTier.value, mode: gateSubTierVotes.value ? 'gate' : 'separate' },
     });
     logPollDebug('ui', 'pollStore.createPoll resolved', {
       pollId: poll.id,

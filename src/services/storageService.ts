@@ -1,5 +1,5 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { ChainBlock, Receipt, Vote, Poll } from '../types/chain';
+import { ChainBlock, Receipt, Vote, ChainPollSnapshot } from '../types/chain';
 import type { StoredEncryptionKey } from '../types/encryption';
 
 interface VotingChainDB extends DBSchema {
@@ -20,7 +20,7 @@ interface VotingChainDB extends DBSchema {
   };
   polls: {
     key: string;
-    value: Poll;
+    value: ChainPollSnapshot;
   };
   metadata: {
     key: string;
@@ -135,7 +135,7 @@ export class StorageService {
   }
 
   // Poll operations
-  static async savePoll(poll: Poll): Promise {
+  static async savePoll(poll: ChainPollSnapshot): Promise {
     const db = await this.getDB();
     await db.put('polls', poll);
   }
