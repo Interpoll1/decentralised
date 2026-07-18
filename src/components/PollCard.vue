@@ -58,7 +58,7 @@
         <div class="poll-stats">
           <div class="stat-item">
             <ion-icon :icon="peopleOutline"></ion-icon>
-            <span>{{ poll.totalVotes || 0 }} vote{{ (poll.totalVotes || 0) !== 1 ? 's' : '' }}</span>
+            <span>{{ displayTotal }} vote{{ displayTotal !== 1 ? 's' : '' }}</span>
           </div>
 
           <div
@@ -119,7 +119,8 @@ import {
   shieldCheckmarkOutline
 } from 'ionicons/icons';
 import { Poll } from '../services/pollService';
-import { VoteTallyService } from '../services/voteTallyService';
+import type { PollOption } from '../types/poll';
+import { useVerifiedPollResults } from '../composables/useVerifiedPollResults';
 import type { FilterAction } from '../services/moderationService';
 import { generatePseudonym } from '../utils/pseudonym';
 import { useUserStore } from '../stores/userStore';
@@ -135,17 +136,13 @@ const props = defineProps<{
 }>();
 defineEmits(['click', 'vote', 'moderation-submit']);
 
-// Verified vote tally (CRITICAL-2): counts derived from Schnorr-signed vote
-// events, cross-checked against the forgeable Gun total. Re-evaluated whenever the
-// reported total changes (the signed events typically arrive around the same time).
-const verifiedTotal = computed(() => {
-  void props.poll.totalVotes;
-  return VoteTallyService.getVerifiedTotal(props.poll.id);
-});
-const verifiedInflated = computed(() => {
-  void props.poll.totalVotes;
-  return VoteTallyService.looksInflated(props.poll.id, props.poll.totalVotes || 0);
-});
+// Verified vote tally (CRITICAL-2): results come from the signed-event tally,
+// not the forgeable Gun counts. `displayTotal` collapses to the verified floor
+// when the reported total reads as inflated; `verifiedInflated` drives the badge.
+const results = useVerifiedPollResults(() => props.poll);
+const verifiedTotal = results.verifiedTotal;
+const displayTotal = results.displayTotal;
+const verifiedInflated = computed(() => results.trust.value === 'inflated');
 
 const revealed = ref(false);
 const userStore = useUserStore();
@@ -210,8 +207,7 @@ function formatTime(timestamp: number): string {
 }
 
 function getOptionPercent(option: { votes: number }): number {
-  if (props.poll.totalVotes === 0) return 0;
-  return (option.votes / props.poll.totalVotes) * 100;
+  return results.percent(option as PollOption);
 }
 
 function getTimeRemaining(): string {

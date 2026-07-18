@@ -36,3 +36,10 @@ nuxt-app
 shared-validation
 src/components/copilot-components.md
 src/services/copilot-services.md
+
+# design-sync (staged scripts, build output, caches)
+.ds-sync/
+ds-bundle/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules

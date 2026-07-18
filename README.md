@@ -83,7 +83,7 @@ InterPoll is designed to be **harder to censor and tamper with than a single-ser
 - Anti-fraud controls (device fingerprinting, two-phase vote authorization, invite codes, OAuth gating) **raise the cost** of duplicate voting — they do not provide one-human-one-vote mathematical guarantees.
 - **Private communities** encrypt content in your browser. The encryption is strong (AES-256-GCM), but if you lose your key, there is no recovery.
 
-For the full technical threat model, see [**`docs/protocol-whitepaper.md`**](docs/protocol-whitepaper.md).
+For the full technical threat model, see the [**IPP specification series**](docs/protocol/IPP-00-overview.md).
 
 ---
 
@@ -155,9 +155,9 @@ npm test          # Run the Vitest test suite
 
 ## Technical deep-dive
 
-For an implementation-aligned protocol specification — including the full block structure, vote flow, sync protocol, encryption details, relay trust model, and threat model — read the whitepaper:
+For an implementation-aligned protocol specification — including the full block structure, vote flow, sync protocol, encryption details, relay trust model, and threat model — read the numbered IPP specification series (RFC 2119-style, NIP-inspired):
 
-**[`docs/protocol-whitepaper.md`](docs/protocol-whitepaper.md)**
+**[`docs/protocol/IPP-00-overview.md`](docs/protocol/IPP-00-overview.md)** (index of all IPP documents)
 
 ### Project layout
 

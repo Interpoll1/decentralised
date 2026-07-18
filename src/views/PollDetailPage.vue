@@ -70,6 +70,17 @@
               <div>
                 <strong>{{ actualTotalVotes }}</strong>
                 <span>Total Votes</span>
+                <span
+                  v-if="verifiedTotal > 0"
+                  class="verified-note"
+                  :class="{ inflated: resultsInflated }"
+                  :title="resultsInflated
+                    ? 'Reported total exceeds cryptographically verified votes — showing the verified floor'
+                    : verifiedTotal + ' vote(s) cryptographically verified from signed events'"
+                >
+                  <ion-icon :icon="resultsInflated ? warningOutline : shieldCheckmarkOutline"></ion-icon>
+                  {{ verifiedTotal }} verified
+                </span>
               </div>
             </div>
             <div class="stat-item">
@@ -218,7 +229,8 @@
             <p>Results are hidden until you vote</p>
           </div>
 
-          <div v-else class="poll-results">
+          <!-- Single-track results (no Sybil policy) -->
+          <div v-else-if="!policyActive" class="poll-results">
             <div
               v-for="option in sortedOptions"
               :key="option.id"
@@ -237,6 +249,55 @@
               <div class="result-votes">
                 {{ option.votes }} vote{{ option.votes !== 1 ? 's' : '' }}
               </div>
+            </div>
+          </div>
+
+          <!-- Dual-track results (creator set a Sybil-resistance policy) -->
+          <div v-else class="poll-results">
+            <div class="policy-banner">
+              <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
+              <span>
+                The creator requires <strong>{{ tierLabel }}</strong> to count as verified.
+                {{ policyIsGate
+                  ? 'Unverified votes are shown separately and kept out of the verified result.'
+                  : 'Verified and open votes are tallied separately below.' }}
+              </span>
+            </div>
+
+            <div class="result-track">
+              <div class="track-title verified">
+                <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
+                Verified · {{ verifiedTrackTotal }} vote{{ verifiedTrackTotal !== 1 ? 's' : '' }}
+              </div>
+              <div v-for="option in verifiedSorted" :key="`v-${option.id}`" class="result-item">
+                <div class="result-header">
+                  <span class="option-text">{{ option.text }}</span>
+                  <span class="option-percent">{{ verifiedPct(option) }}%</span>
+                </div>
+                <div class="result-bar">
+                  <div class="result-fill" :style="{ width: `${verifiedPct(option)}%` }"></div>
+                </div>
+                <div class="result-votes">{{ verifiedCount(option) }} vote{{ verifiedCount(option) !== 1 ? 's' : '' }}</div>
+              </div>
+              <p v-if="verifiedTrackTotal === 0" class="track-empty">No verified votes yet.</p>
+            </div>
+
+            <div class="result-track open">
+              <div class="track-title">
+                Open · {{ openTrackTotal }} vote{{ openTrackTotal !== 1 ? 's' : '' }}
+                <span class="track-note">(unverified — anyone)</span>
+              </div>
+              <div v-for="option in openSorted" :key="`o-${option.id}`" class="result-item">
+                <div class="result-header">
+                  <span class="option-text">{{ option.text }}</span>
+                  <span class="option-percent">{{ openPct(option) }}%</span>
+                </div>
+                <div class="result-bar">
+                  <div class="result-fill open" :style="{ width: `${openPct(option)}%` }"></div>
+                </div>
+                <div class="result-votes">{{ openCount(option) }} vote{{ openCount(option) !== 1 ? 's' : '' }}</div>
+              </div>
+              <p v-if="openTrackTotal === 0" class="track-empty">No open votes yet.</p>
             </div>
           </div>
         </div>
@@ -282,13 +343,18 @@ import {
   eyeOffOutline,
   lockClosedOutline,
   shareOutline,
-  copyOutline
+  copyOutline,
+  warningOutline,
+  shieldCheckmarkOutline
 } from 'ionicons/icons';
 import { usePollStore } from '../stores/pollStore';
 import { useChainStore } from '../stores/chainStore';
 import { useUserStore } from '../stores/userStore';
 import { PollService } from '../services/pollService';
 import type { Poll } from '../services/pollService';
+import type { PollOption } from '../types/poll';
+import { useVerifiedPollResults } from '../composables/useVerifiedPollResults';
+import { VoteTierService } from '../services/voteTierService';
 import { UserService } from '../services/userService';
 import { VoteTrackerService } from '../services/voteTrackerService';
 import { AuditService } from '../services/auditService';
@@ -364,15 +430,31 @@ const canSubmitVote = computed(() => {
   return selectedOption.value !== '';
 });
 
-const sortedOptions = computed(() => {
-  if (!poll.value) return [];
-  return [...poll.value.options].sort((a, b) => b.votes - a.votes);
-});
+// Verified results (CRITICAL-2): the displayed total and result bars are anchored
+// to the signature-verified tally, not the forgeable Gun counts. See
+// useVerifiedPollResults. `actualTotalVotes` collapses to the verified floor when
+// the reported total reads as inflated.
+const results = useVerifiedPollResults(poll);
+const sortedOptions = results.sortedOptions;
+const actualTotalVotes = results.displayTotal;
+const verifiedTotal = results.verifiedTotal;
+const resultsInflated = computed(() => results.trust.value === 'inflated');
 
-const actualTotalVotes = computed(() => {
-  if (!poll.value || !poll.value.options) return 0;
-  return poll.value.options.reduce((sum, option) => sum + (option.votes || 0), 0);
-});
+// Sybil-resistance dual tracks (flattened for the template).
+const policyActive = results.policyActive;
+const TIER_LABELS: Record<string, string> = {
+  open: 'no verification', pow: 'proof-of-work', relay: 'a verified device/login', issuer: 'a verified identity',
+};
+const tierLabel = computed(() => TIER_LABELS[results.policy.value.requiredTier] || results.policy.value.requiredTier);
+const policyIsGate = computed(() => results.policy.value.mode === 'gate');
+const verifiedSorted = computed(() => results.verified.sortedOptions.value);
+const openSorted = computed(() => results.open.sortedOptions.value);
+const verifiedTrackTotal = computed(() => results.verified.total.value);
+const openTrackTotal = computed(() => results.open.total.value);
+const verifiedCount = (o: PollOption) => results.verified.count(o);
+const openCount = (o: PollOption) => results.open.count(o);
+const verifiedPct = (o: PollOption) => Math.round(results.verified.percent(o));
+const openPct = (o: PollOption) => Math.round(results.open.percent(o));
 
 function formatTime(timestamp: number): string {
   const now = Date.now();
@@ -423,10 +505,8 @@ watch(
   { immediate: true }
 );
 
-function getOptionPercent(option: { votes: number }): number {
-  const total = actualTotalVotes.value;
-  if (total === 0) return 0;
-  return Math.round((option.votes / total) * 100);
+function getOptionPercent(option: PollOption): number {
+  return Math.round(results.percent(option));
 }
 
 function blurActiveElement() {
@@ -490,9 +570,13 @@ async function submitVote() {
       new Promise((_, reject) => setTimeout(() => reject(new Error('chain timeout')), 5000))
     ]).catch(() => {})
 
+    const evidence = await VoteTierService.gatherEvidence(poll.value)
+
     const vote: Vote = {
       pollId: poll.value.id,
       choice: choiceText,
+      optionIds,
+      ...evidence,
       timestamp: Date.now(),
       deviceId
     }
@@ -1084,5 +1168,55 @@ watch(
   font-size: 14px;
   color: var(--ion-color-medium);
   line-height: 1.5;
+}
+
+.policy-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  border-radius: 8px;
+  background: var(--ion-color-light);
+  border: 1px solid var(--ion-color-step-150, rgba(0,0,0,0.08));
+  font-size: 13px;
+  line-height: 1.4;
+}
+.policy-banner ion-icon {
+  flex-shrink: 0;
+  font-size: 16px;
+  margin-top: 1px;
+  color: var(--ion-color-success);
+}
+.result-track { margin-bottom: 18px; }
+.result-track.open { opacity: 0.85; }
+.track-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--ion-color-medium);
+}
+.track-title.verified { color: var(--ion-color-success); }
+.track-title ion-icon { font-size: 14px; }
+.track-note { font-weight: 400; opacity: 0.75; }
+.track-empty { font-size: 12px; color: var(--ion-color-medium); margin: 2px 0 0; }
+.result-fill.open { background: var(--ion-color-medium); }
+
+.verified-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--ion-color-success);
+}
+.verified-note ion-icon {
+  font-size: 12px;
+}
+.verified-note.inflated {
+  color: var(--ion-color-warning);
 }
 </style>

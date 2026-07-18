@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://interpoll.protocol/schemas/post.v1.json",
+  "title": "InterPoll Post (v1)",
+  "description": "Replicated Post object as written/read by postService.ts. Normative companion to IPP-03.",
+  "type": "object",
+  "required": ["id", "communityId", "authorId", "authorName", "title", "content", "createdAt", "upvotes", "downvotes", "score", "commentCount"],
+  "properties": {
+    "id": { "type": "string" },
+    "communityId": { "type": "string" },
+    "authorId": { "type": "string", "description": "Currently the deviceId; see IPP-01 identity migration." },
+    "authorName": { "type": "string" },
+    "authorShowRealName": { "type": "boolean" },
+    "title": { "type": "string" },
+    "content": { "type": "string" },
+    "imageIPFS": { "type": "string" },
+    "imageThumbnail": { "type": "string" },
+    "createdAt": { "type": "number" },
+    "upvotes": { "type": "number", "description": "Per-user vote-keyed idempotent counter; recomputed client-side." },
+    "downvotes": { "type": "number" },
+    "score": { "type": "number" },
+    "commentCount": { "type": "number" },
+    "isEncrypted": { "type": "boolean" },
+    "encryptedContent": { "type": "string" },
+    "authTag": { "type": "string" },
+    "authorPubkey": { "type": "string", "description": "Schnorr x-only pubkey (hex) of the signer." },
+    "contentSignature": { "type": "string", "description": "Schnorr signature over IPP-02 canonicalJSON of {authorId, communityId, content, createdAt, title}." },
+    "canonVersion": { "type": "number", "description": "Canonicalization algorithm version for contentSignature. 2 = IPP-02 canonicalJSON. Absent = legacy v1 (canonicalPostPayloadV1). See IPP-02 §6." },
+    "dataVersion": { "type": "string", "description": "Client-side only: which Gun namespace this post came from (e.g. 'v3')." }
+  }
+}

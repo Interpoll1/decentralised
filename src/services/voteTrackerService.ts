@@ -1,11 +1,17 @@
 // src/services/voteTrackerService.ts
-// Prevents same device from voting multiple times on same poll
+// Prevents the same identity from voting multiple times on the same poll.
+// Identity precedence mirrors the relay's `identityKey` (pollId:pubkey, falling
+// back to pollId:deviceId) so client-side and relay-side dedup agree on what
+// "the same voter" means.
 
 import { StorageService } from './storageService';
+import { KeyService } from './keyService';
 
 export interface VoteRecord {
   pollId: string;
   deviceId: string;
+  /** Schnorr pubkey of the voter — portable identity, preferred for dedup. Absent on legacy records. */
+  pubkey?: string;
   timestamp: number;
   blockIndex: number;
 }
@@ -53,40 +59,62 @@ export class VoteTrackerService {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   }
   
-  // Check if device has already voted on this poll
-  static async hasVoted(pollId: string): Promise<boolean> {
+  // Resolve the current voter identity: portable pubkey (preferred) + deviceId (fallback).
+  static async getVoterIdentity(): Promise<{ deviceId: string; pubkey?: string }> {
     const deviceId = await this.getDeviceId();
-    const voteRecords = await StorageService.getMetadata('vote-records') || [];
-    
-    return voteRecords.some((record: VoteRecord) => 
-      record.pollId === pollId && record.deviceId === deviceId
+    let pubkey: string | undefined;
+    try {
+      pubkey = await KeyService.getPublicKeyHex();
+    } catch {
+      pubkey = undefined;
+    }
+    return { deviceId, pubkey };
+  }
+
+  // Does a stored record identify the same voter as `identity`?
+  // Matches on pubkey when both sides have one, else falls back to deviceId —
+  // so legacy records (deviceId only) still block re-votes after migration.
+  private static recordMatchesIdentity(
+    record: VoteRecord,
+    identity: { deviceId: string; pubkey?: string },
+  ): boolean {
+    if (identity.pubkey && record.pubkey && record.pubkey === identity.pubkey) return true;
+    return record.deviceId === identity.deviceId;
+  }
+
+  // Check if this identity has already voted on this poll
+  static async hasVoted(pollId: string): Promise<boolean> {
+    const identity = await this.getVoterIdentity();
+    const voteRecords: VoteRecord[] = await StorageService.getMetadata('vote-records') || [];
+
+    return voteRecords.some((record) =>
+      record.pollId === pollId && this.recordMatchesIdentity(record, identity),
     );
   }
-  
-  // Record that this device voted on this poll
+
+  // Record that this identity voted on this poll
   static async recordVote(pollId: string, blockIndex: number): Promise<void> {
-    const deviceId = await this.getDeviceId();
-    const voteRecords = await StorageService.getMetadata('vote-records') || [];
-    
+    const { deviceId, pubkey } = await this.getVoterIdentity();
+    const voteRecords: VoteRecord[] = await StorageService.getMetadata('vote-records') || [];
+
     const newRecord: VoteRecord = {
       pollId,
       deviceId,
+      pubkey,
       timestamp: Date.now(),
-      blockIndex
+      blockIndex,
     };
-    
+
     voteRecords.push(newRecord);
     await StorageService.setMetadata('vote-records', voteRecords);
   }
-  
-  // Get all votes by this device
+
+  // Get all votes by this identity
   static async getMyVotes(): Promise<VoteRecord[]> {
-    const deviceId = await this.getDeviceId();
-    const voteRecords = await StorageService.getMetadata('vote-records') || [];
-    
-    return voteRecords.filter((record: VoteRecord) => 
-      record.deviceId === deviceId
-    );
+    const identity = await this.getVoterIdentity();
+    const voteRecords: VoteRecord[] = await StorageService.getMetadata('vote-records') || [];
+
+    return voteRecords.filter((record) => this.recordMatchesIdentity(record, identity));
   }
   
   // Clear vote records (admin/testing only)

@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { GunService } from '@/services/gunService';
+import config from '@/config';
 
 /**
  * Exercises GunService.attachWireBridge — the bridge that carries Gun's wire
@@ -69,5 +70,79 @@ describe('GunService.attachWireBridge', () => {
 
     expect(ctx.to.next).toHaveBeenCalledWith(huge); // local handling still happens
     expect(sent).toHaveLength(0); // but it is not shipped to peers
+  });
+});
+
+describe('GunService namespace soul classification', () => {
+  it('accepts in-namespace and system souls, rejects foreign ones', () => {
+    expect(GunService.isInNamespaceSoul('v3')).toBe(true);
+    expect(GunService.isInNamespaceSoul('v3/polls/abc')).toBe(true);
+    expect(GunService.isInNamespaceSoul('v3/communities/c1/polls/p1')).toBe(true);
+    expect(GunService.isInNamespaceSoul('~pubkeyhex')).toBe(true); // SEA user-space
+    expect(GunService.isInNamespaceSoul('_')).toBe(true);          // Gun internal
+
+    expect(GunService.isInNamespaceSoul('evil')).toBe(false);
+    expect(GunService.isInNamespaceSoul('v2/polls/abc')).toBe(false); // wrong namespace
+    expect(GunService.isInNamespaceSoul('')).toBe(false);
+  });
+
+  it('enumerates only the out-of-namespace souls of a put', () => {
+    const msg = { '#': 'm', put: { 'v3/polls/p1': {}, 'evil/root': {}, '~ok': {} } };
+    expect(GunService.outOfNamespaceSouls(msg)).toEqual(['evil/root']);
+    expect(GunService.outOfNamespaceSouls({ '#': 'x' })).toEqual([]); // non-put
+  });
+});
+
+describe('GunService.attachWireBridge namespace filtering', () => {
+  let outHandler: unknown;
+  let inbound: unknown[];
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    inbound = [];
+    const fakeGun = {
+      _: {
+        on(event: string, arg: unknown) {
+          if (event === 'out' && typeof arg === 'function') outHandler = arg;
+          else if (event === 'in') inbound.push(arg);
+        },
+      },
+    };
+    (GunService as unknown as { gun: unknown }).gun = fakeGun;
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+    config.setWireFilterMode('log'); // restore default
+  });
+
+  it('log mode: injects out-of-namespace put but warns', () => {
+    config.setWireFilterMode('log');
+    const bridge = GunService.attachWireBridge(() => {});
+
+    bridge.receive({ '#': 'e1', put: { 'evil/root': { hacked: true } } });
+
+    expect(inbound.some((m) => (m as any)['#'] === 'e1')).toBe(true); // still injected
+    expect(warnSpy).toHaveBeenCalled();
+  });
+
+  it('enforce mode: drops out-of-namespace put, keeps in-namespace put', () => {
+    config.setWireFilterMode('enforce');
+    const bridge = GunService.attachWireBridge(() => {});
+
+    bridge.receive({ '#': 'e2', put: { 'evil/root': { hacked: true } } });
+    expect(inbound.some((m) => (m as any)['#'] === 'e2')).toBe(false); // dropped
+
+    bridge.receive({ '#': 'ok1', put: { 'v3/polls/p1': { votes: 3 } } });
+    expect(inbound.some((m) => (m as any)['#'] === 'ok1')).toBe(true); // legit passes
+  });
+
+  it('off mode: injects everything unconditionally', () => {
+    config.setWireFilterMode('off');
+    const bridge = GunService.attachWireBridge(() => {});
+
+    bridge.receive({ '#': 'e3', put: { 'evil/root': { hacked: true } } });
+    expect(inbound.some((m) => (m as any)['#'] === 'e3')).toBe(true);
   });
 });

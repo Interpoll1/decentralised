@@ -333,6 +333,7 @@ export const usePollStore = defineStore('poll', () => {
     requireLogin: boolean;
     isPrivate: boolean;
     inviteCodeCount?: number;
+    voteTrustPolicy?: import('../types/poll').VoteTrustPolicy;
   }) {
     const user = await UserService.getCurrentUser();
     const showReal = user.showRealName === true;

@@ -344,11 +344,19 @@ export const useChainStore = defineStore('chain', () => {
   }
 
   async function addVote(vote: Vote): Promise<Receipt> {
-    // Create signed vote event
+    // Create signed vote event. Tag the option id only for single-option votes —
+    // a single kind-101 event can carry one `option` tag, so multi-choice votes
+    // fall back to the free-text `choice` (poll-total trust is unaffected either
+    // way; per-option attribution just isn't available for multi-choice).
+    const singleOptionId = vote.optionIds?.length === 1 ? vote.optionIds[0] : undefined;
     const voteEvent = await EventService.createVoteEvent({
       pollId: vote.pollId,
       choice: vote.choice,
+      optionId: singleOptionId,
       deviceId: vote.deviceId,
+      powDifficulty: vote.powDifficulty,
+      trustCert: vote.trustCert,
+      relayAttestation: vote.relayAttestation,
     });
 
     // Add vote to blockchain (signed with real Schnorr key)

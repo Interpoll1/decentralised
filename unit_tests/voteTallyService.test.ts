@@ -25,9 +25,15 @@ beforeEach(() => {
   vi.clearAllMocks();
   eventSvc.verifyEvent.mockReturnValue(true);
   (VoteTallyService as any).polls.clear();
+  (VoteTallyService as any).lastIngestAt.clear();
   const t = (VoteTallyService as any).persistTimer;
   if (t) { clearTimeout(t); (VoteTallyService as any).persistTimer = null; }
 });
+
+/** Force the poll's last-ingest time far into the past so the grace window expires. */
+function expireGrace(pollId: string) {
+  (VoteTallyService as any).lastIngestAt.set(pollId, Date.now() - 60_000);
+}
 
 describe('VoteTallyService', () => {
   it('tallies signed vote events per option', () => {
@@ -75,13 +81,77 @@ describe('VoteTallyService', () => {
     expect(VoteTallyService.getVerifiedTotal('p6')).toBe(0);
   });
 
-  it('flags a Gun total that materially exceeds the verified tally', () => {
+  it('trustState: reported at or below the verified floor is verified', () => {
     for (let i = 0; i < 3; i++) VoteTallyService.ingest(voteEvent({ pollId: 'p7', option: 'A', pubkey: pubkey() }));
-    expect(VoteTallyService.looksInflated('p7', 4)).toBe(false);  // within slack
-    expect(VoteTallyService.looksInflated('p7', 100)).toBe(true); // wildly inflated
+    expect(VoteTallyService.trustState('p7', 3)).toBe('verified');
+    expect(VoteTallyService.trustState('p7', 2)).toBe('verified'); // stale-low Gun total
   });
 
-  it('does not flag when there is no verified evidence yet', () => {
+  it('trustState: unproven surplus is partial during the grace window', () => {
+    for (let i = 0; i < 3; i++) VoteTallyService.ingest(voteEvent({ pollId: 'p8', option: 'A', pubkey: pubkey() }));
+    // Just ingested → in-flight votes plausible → don't alarm.
+    expect(VoteTallyService.trustState('p8', 100)).toBe('partial');
+    expect(VoteTallyService.looksInflated('p8', 100)).toBe(false);
+  });
+
+  it('trustState: unproven surplus becomes inflated once the grace window expires', () => {
+    for (let i = 0; i < 3; i++) VoteTallyService.ingest(voteEvent({ pollId: 'p9', option: 'A', pubkey: pubkey() }));
+    expireGrace('p9');
+    expect(VoteTallyService.trustState('p9', 4)).toBe('inflated');   // any surplus, no slack
+    expect(VoteTallyService.trustState('p9', 100)).toBe('inflated');
+    expect(VoteTallyService.looksInflated('p9', 100)).toBe(true);
+  });
+
+  it('trustState: no verified evidence yet is unverified, never inflated', () => {
+    expect(VoteTallyService.trustState('unknown', 999)).toBe('unverified');
     expect(VoteTallyService.looksInflated('unknown', 999)).toBe(false);
+  });
+
+  it('keeps tallies isolated per poll', () => {
+    VoteTallyService.ingest(voteEvent({ pollId: 'pa', option: 'A', pubkey: pubkey() }));
+    VoteTallyService.ingest(voteEvent({ pollId: 'pb', option: 'A', pubkey: pubkey() }));
+    VoteTallyService.ingest(voteEvent({ pollId: 'pb', option: 'B', pubkey: pubkey() }));
+    expect(VoteTallyService.getVerifiedTotal('pa')).toBe(1);
+    expect(VoteTallyService.getVerifiedTotal('pb')).toBe(2);
+  });
+});
+
+describe('VoteTallyService.getTieredTally (Sybil resistance)', () => {
+  /** Force a stored vote's tier (tier resolution is async off the hot path). */
+  function setTier(pollId: string, voter: string, tier: string) {
+    const rec = (VoteTallyService as any).polls.get(pollId)?.get(voter);
+    if (rec) rec.tier = tier;
+  }
+
+  it('keeps anonymous (potentially-Sybil) votes out of the verified track', () => {
+    // Three Sybil keypairs (no evidence → anonymous) + one issuer-certified voter.
+    for (let i = 0; i < 3; i++) VoteTallyService.ingest(voteEvent({ pollId: 'ps', option: 'A', pubkey: pubkey() }));
+    const certified = pubkey();
+    VoteTallyService.ingest(voteEvent({ pollId: 'ps', option: 'B', pubkey: certified }));
+    setTier('ps', certified, 'issuer');
+
+    const tally = VoteTallyService.getTieredTally('ps', 'issuer');
+    expect(tally.verified.total).toBe(1);              // only the certified vote
+    expect(tally.verified.byOption).toEqual({ B: 1 });
+    expect(tally.open.total).toBe(3);                  // the Sybil keypairs
+    expect(tally.open.byOption).toEqual({ A: 3 });
+  });
+
+  it('open policy puts every valid vote in the verified track', () => {
+    for (let i = 0; i < 2; i++) VoteTallyService.ingest(voteEvent({ pollId: 'po', option: 'A', pubkey: pubkey() }));
+    const tally = VoteTallyService.getTieredTally('po', 'open');
+    expect(tally.verified.total).toBe(2);
+    expect(tally.open.total).toBe(0);
+  });
+
+  it('pow-required: a pow-tier vote is verified, anonymous ones are open', () => {
+    const powVoter = pubkey();
+    VoteTallyService.ingest(voteEvent({ pollId: 'pp', option: 'A', pubkey: powVoter }));
+    VoteTallyService.ingest(voteEvent({ pollId: 'pp', option: 'A', pubkey: pubkey() }));
+    setTier('pp', powVoter, 'pow');
+
+    const tally = VoteTallyService.getTieredTally('pp', 'pow');
+    expect(tally.verified.total).toBe(1);
+    expect(tally.open.total).toBe(1);
   });
 });

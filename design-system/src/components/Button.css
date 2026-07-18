@@ -1,0 +1,114 @@
+.ip-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--ip-font-sans);
+  font-weight: 600;
+  line-height: 1;
+  border-radius: var(--app-radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform var(--app-transition), background var(--app-transition),
+    border-color var(--app-transition), box-shadow var(--app-transition), color var(--app-transition);
+}
+
+.ip-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--app-focus-ring);
+}
+
+.ip-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.ip-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Sizes */
+.ip-btn--sm {
+  font-size: 13px;
+  padding: 7px 12px;
+}
+.ip-btn--md {
+  font-size: 14px;
+  padding: 10px 18px;
+}
+.ip-btn--lg {
+  font-size: 15px;
+  padding: 13px 24px;
+}
+.ip-btn--block {
+  display: flex;
+  width: 100%;
+}
+
+/* Primary — accent filled */
+.ip-btn--primary {
+  background: linear-gradient(180deg, var(--app-accent-bright), var(--app-accent));
+  color: #ffffff;
+  box-shadow: var(--app-shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.ip-btn--primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--app-shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* Secondary — glass surface */
+.ip-btn--secondary {
+  background: linear-gradient(180deg, var(--app-surface-tint-top), var(--app-surface-tint-bottom)),
+    var(--app-surface);
+  color: var(--app-text);
+  border-color: var(--app-border);
+  box-shadow: var(--app-shadow-sm), var(--app-shadow-inset);
+  backdrop-filter: blur(var(--glass-item-blur)) saturate(var(--glass-item-saturation));
+  -webkit-backdrop-filter: blur(var(--glass-item-blur)) saturate(var(--glass-item-saturation));
+}
+.ip-btn--secondary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--app-border-strong);
+  background: var(--app-surface-hover);
+}
+
+/* Ghost — borderless */
+.ip-btn--ghost {
+  background: transparent;
+  color: var(--app-text-muted);
+}
+.ip-btn--ghost:hover:not(:disabled) {
+  background: var(--app-item-surface);
+  color: var(--app-text);
+}
+
+/* Danger */
+.ip-btn--danger {
+  background: rgba(var(--app-danger-rgb), 0.14);
+  color: var(--app-danger);
+  border-color: rgba(var(--app-danger-rgb), 0.32);
+}
+.ip-btn--danger:hover:not(:disabled) {
+  background: rgba(var(--app-danger-rgb), 0.22);
+}
+
+.ip-btn__icon {
+  display: inline-flex;
+  font-size: 1.05em;
+}
+
+.ip-btn__spinner {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: ip-btn-spin 0.7s linear infinite;
+}
+
+@keyframes ip-btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

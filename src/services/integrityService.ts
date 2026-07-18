@@ -1,7 +1,6 @@
 import { CryptoService } from '@/services/cryptoService';
 import { KeyService } from '@/services/keyService';
-
-const META_FIELDS = new Set(['_hash', '_sig', '_pub', '_pow', '_ts', '_nonce']);
+import { canonicalJSON } from '../../shared-validation/canonical.js';
 
 const POW_DIFFICULTY: Record<string, number> = {
   'new-poll': 16,
@@ -35,30 +34,6 @@ export interface IntegrityMeta {
   _pow: string;
   _ts: number;
   _nonce: string;
-}
-
-function stableStringify(val: unknown): string | undefined {
-  if (val === undefined) return undefined;
-  if (val === null) return 'null';
-  if (typeof val !== 'object') return JSON.stringify(val);
-  if (Array.isArray(val)) {
-    return '[' + val.map((v) => stableStringify(v) ?? 'null').join(',') + ']';
-  }
-  const keys = Object.keys(val as Record<string, unknown>).sort();
-  const pairs: string[] = [];
-  for (const k of keys) {
-    const sv = stableStringify((val as Record<string, unknown>)[k]);
-    if (sv !== undefined) pairs.push(JSON.stringify(k) + ':' + sv);
-  }
-  return '{' + pairs.join(',') + '}';
-}
-
-function canonicalJSON(obj: Record<string, unknown>): string {
-  const stripped: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(obj)) {
-    if (!META_FIELDS.has(k)) stripped[k] = v;
-  }
-  return stableStringify(stripped) ?? '{}';
 }
 
 function hasLeadingZeroBits(hashHex: string, bits: number): boolean {

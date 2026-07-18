@@ -15,6 +15,8 @@ import { useChainStore } from './stores/chainStore';
 import { WebSocketService } from './services/websocketService';
 import { GunService } from './services/gunService';
 import { PollService } from './services/pollService';
+import { PostService } from './services/postService';
+import { CommentService } from './services/commentService';
 import { warmupFromDB } from './services/dbWarmup';
 import AppLoader from './components/AppLoader.vue';
 import GlobalCommandPalette from './components/GlobalCommandPalette.vue';
@@ -164,9 +166,11 @@ onMounted(async () => {
     if (!GunService.getPeerStats().isConnected) GunService.reconnect();
   }, 60_000);
 
-  // Re-push recent polls the relay never confirmed receiving (dead wire or
+  // Re-push recent polls/posts the relay never confirmed receiving (dead wire or
   // server-side rate limiting can silently swallow writes on an open socket).
   PollService.startRepublishLoop();
+  PostService.startRepublishLoop();
+  CommentService.startCommentRepublishLoop();
 });
 
 onUnmounted(() => {

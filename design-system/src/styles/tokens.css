@@ -1,0 +1,97 @@
+/*
+ * InterPoll design tokens.
+ * Extracted from the InterPoll app (src/style.css). Linear-style glass UI:
+ * indigo accent (#5e6ad2), translucent glass surfaces, layered soft shadows,
+ * defined radii and motion. Light theme on :root; dark theme on .dark / [data-theme="dark"].
+ */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+:root {
+  color-scheme: light;
+
+  --app-bg-deep: #eef2ff;
+  --app-bg-base: #f5f7fb;
+  --app-bg-elevated: #ffffff;
+  --app-surface: rgba(255, 255, 255, 0.72);
+  --app-surface-strong: rgba(255, 255, 255, 0.88);
+  --app-surface-hover: rgba(255, 255, 255, 0.96);
+  --app-border: rgba(15, 23, 42, 0.08);
+  --app-border-strong: rgba(15, 23, 42, 0.14);
+  --app-border-accent: rgba(94, 106, 210, 0.32);
+  --app-text: #111827;
+  --app-text-muted: #5b6472;
+  --app-text-subtle: rgba(17, 24, 39, 0.56);
+  --app-accent: #5e6ad2;
+  --app-accent-bright: #6872d9;
+  --app-accent-rgb: 94, 106, 210;
+  --app-secondary: #8b5cf6;
+  --app-success: #34d399;
+  --app-success-rgb: 52, 211, 153;
+  --app-warning: #fbbf24;
+  --app-warning-rgb: 251, 191, 36;
+  --app-danger: #f87171;
+  --app-danger-rgb: 248, 113, 113;
+
+  --app-radius-lg: 16px;
+  --app-radius-md: 12px;
+  --app-radius-sm: 10px;
+
+  --app-shadow-sm: 0 0 0 1px rgba(15, 23, 42, 0.04), 0 12px 36px rgba(15, 23, 42, 0.08);
+  --app-shadow-md: 0 0 0 1px rgba(15, 23, 42, 0.06), 0 18px 42px rgba(15, 23, 42, 0.12), 0 0 72px rgba(94, 106, 210, 0.08);
+  --app-shadow-lg: 0 0 0 1px rgba(15, 23, 42, 0.08), 0 24px 60px rgba(15, 23, 42, 0.16), 0 0 90px rgba(94, 106, 210, 0.12);
+  --app-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  --app-focus-ring: 0 0 0 2px rgba(94, 106, 210, 0.55);
+  --app-transition: 240ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  --app-surface-tint-top: rgba(255, 255, 255, 0.18);
+  --app-surface-tint-bottom: rgba(255, 255, 255, 0.03);
+  --app-surface-tint-top-hover: rgba(255, 255, 255, 0.22);
+  --app-surface-tint-bottom-hover: rgba(255, 255, 255, 0.04);
+  --app-pill-surface: rgba(255, 255, 255, 0.55);
+  --app-item-surface: rgba(255, 255, 255, 0.55);
+
+  --app-heading-start: #111827;
+  --app-heading-end: rgba(17, 24, 39, 0.72);
+
+  --glass-blur: 20px;
+  --glass-saturation: 1.2;
+  --glass-item-blur: 16px;
+  --glass-item-saturation: 1.08;
+
+  --ip-font-sans: "Inter", "Geist Sans", system-ui, -apple-system, sans-serif;
+}
+
+.dark,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --app-bg-deep: #000000;
+  --app-bg-base: #000000;
+  --app-bg-elevated: #0a0a0a;
+  --app-surface: #0c0c0e;
+  --app-surface-strong: #121214;
+  --app-surface-hover: #141417;
+  --app-border: rgba(255, 255, 255, 0.08);
+  --app-border-strong: rgba(255, 255, 255, 0.14);
+  --app-border-accent: rgba(94, 106, 210, 0.42);
+  --app-text: #f5f5f6;
+  --app-text-muted: #9096a1;
+  --app-text-subtle: rgba(255, 255, 255, 0.44);
+
+  --app-surface-tint-top: rgba(255, 255, 255, 0.04);
+  --app-surface-tint-bottom: rgba(255, 255, 255, 0.01);
+  --app-surface-tint-top-hover: rgba(255, 255, 255, 0.06);
+  --app-surface-tint-bottom-hover: rgba(255, 255, 255, 0.02);
+  --app-pill-surface: rgba(255, 255, 255, 0.04);
+  --app-item-surface: rgba(255, 255, 255, 0.03);
+
+  --app-heading-start: #ffffff;
+  --app-heading-end: rgba(255, 255, 255, 0.58);
+
+  --app-shadow-sm: 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --app-shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 18px 42px rgba(0, 0, 0, 0.5);
+  --app-shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 60px rgba(0, 0, 0, 0.6);
+  --app-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+  --glass-blur: 12px;
+  --glass-item-blur: 10px;
+}

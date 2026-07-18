@@ -1,0 +1,51 @@
+.ip-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--ip-font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  line-height: 1;
+}
+
+.ip-badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.ip-badge__icon {
+  display: inline-flex;
+  font-size: 1.1em;
+}
+
+.ip-badge--accent {
+  color: var(--app-accent);
+  background: rgba(var(--app-accent-rgb), 0.14);
+  border-color: rgba(var(--app-accent-rgb), 0.28);
+}
+.ip-badge--success {
+  color: var(--app-success);
+  background: rgba(var(--app-success-rgb), 0.15);
+  border-color: rgba(var(--app-success-rgb), 0.3);
+}
+.ip-badge--warning {
+  color: var(--app-warning);
+  background: rgba(var(--app-warning-rgb), 0.16);
+  border-color: rgba(var(--app-warning-rgb), 0.32);
+}
+.ip-badge--danger {
+  color: var(--app-danger);
+  background: rgba(var(--app-danger-rgb), 0.15);
+  border-color: rgba(var(--app-danger-rgb), 0.3);
+}
+.ip-badge--neutral {
+  color: var(--app-text-muted);
+  background: var(--app-pill-surface);
+  border-color: var(--app-border);
+}
