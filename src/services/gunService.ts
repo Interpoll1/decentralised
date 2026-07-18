@@ -383,6 +383,34 @@ export class GunService {
    * comments) replicates P2P with no Gun relay. A bounded seen-set guards against
    * trivially reflecting a message straight back to the network.
    */
+  /**
+   * Whether a Gun soul belongs to this app's namespace (or is a Gun/SEA system
+   * soul). Souls are hierarchical path strings — `v3`, `v3/polls/<id>`,
+   * `v3/communities/<cid>/polls/<pid>` — so a namespace prefix check is exact.
+   * `~`/`_`-prefixed souls are SEA user-space / Gun internals and always allowed
+   * (mirrors the keep-prefixes in evictCache).
+   */
+  static isInNamespaceSoul(soul: string): boolean {
+    if (typeof soul !== 'string' || soul.length === 0) return false;
+    if (soul === GUN_NAMESPACE || soul.startsWith(`${GUN_NAMESPACE}/`)) return true;
+    return soul.startsWith('~') || soul.startsWith('_');
+  }
+
+  /**
+   * Souls in a wire `put` message that fall outside the namespace. A Gun `put`
+   * is `{ [soul]: node }`, so the souls are simply the keys. Returns [] for
+   * non-put messages (handshakes, get requests, acks) — those carry no writes.
+   */
+  static outOfNamespaceSouls(msg: unknown): string[] {
+    const put = (msg as any)?.put;
+    if (!put || typeof put !== 'object') return [];
+    const offenders: string[] = [];
+    for (const soul of Object.keys(put)) {
+      if (!this.isInNamespaceSoul(soul)) offenders.push(soul);
+    }
+    return offenders;
+  }
+
   static attachWireBridge(
     send: (msg: unknown) => void,
     options?: { active?: () => boolean },
@@ -393,6 +421,28 @@ export class GunService {
     const MAX_SEEN = 1000;
     const MAX_WIRE_BYTES = 256 * 1024;
     const isActive = options?.active;
+
+    // Per-soul write-frequency guard: even in-namespace, a peer shouldn't be able
+    // to flood a single soul (e.g. hammering one poll's counts). Bounded to keep
+    // memory flat; counts decay by periodic reset of the window.
+    const soulHits = new Map<string, number>();
+    const SOUL_WINDOW_MS = 10_000;
+    const MAX_SOUL_WRITES_PER_WINDOW = 60;
+    let soulWindowStart = Date.now();
+    const isSoulFlooding = (souls: string[]): boolean => {
+      const now = Date.now();
+      if (now - soulWindowStart > SOUL_WINDOW_MS) {
+        soulHits.clear();
+        soulWindowStart = now;
+      }
+      let flooding = false;
+      for (const soul of souls) {
+        const n = (soulHits.get(soul) || 0) + 1;
+        soulHits.set(soul, n);
+        if (n > MAX_SOUL_WRITES_PER_WINDOW) flooding = true;
+      }
+      return flooding;
+    };
 
     const remember = (id: string) => {
       if (!id) return;
@@ -420,6 +470,30 @@ export class GunService {
         try {
           const id = (msg as any)?.['#'];
           if (id) remember(id);
+
+          // CRITICAL-2: an inbound put should only touch souls in our namespace.
+          // Out-of-namespace souls are graph-pollution / forgery attempts from a
+          // mesh peer. Behavior is gated so we can observe before enforcing.
+          const mode = config.security.wireFilterMode;
+          if (mode !== 'off') {
+            const put = (msg as any)?.put;
+            if (put && typeof put === 'object') {
+              const souls = Object.keys(put);
+              const offenders = souls.filter((s) => !this.isInNamespaceSoul(s));
+              if (offenders.length > 0) {
+                console.warn(
+                  `[GunService] wire put with ${offenders.length} out-of-namespace soul(s) [mode=${mode}]:`,
+                  offenders.slice(0, 5),
+                );
+                if (mode === 'enforce') return; // drop the whole message
+              }
+              if (mode === 'enforce' && isSoulFlooding(souls)) {
+                console.warn('[GunService] dropping wire put — per-soul write flood');
+                return;
+              }
+            }
+          }
+
           root.on('in', msg);
         } catch { /* malformed wire message */ }
       },

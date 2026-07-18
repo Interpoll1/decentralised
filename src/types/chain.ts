@@ -17,6 +17,23 @@ export interface ChainPollSnapshot {
 export interface Vote {
   pollId: string;
   choice: string;
+  /**
+   * IDs of the option(s) this vote selected. Optional for backward compatibility
+   * with older callers/stored votes, but callers should populate it: when exactly
+   * one option is selected, chainService/chainStore tags the signed kind-101 vote
+   * event with it (`['option', id]`), which lets VoteTallyService attribute the
+   * verified count to a specific option instead of falling back to the free-text
+   * `choice` string (which is option *text* in some callers, *id* in others).
+   */
+  optionIds?: string[];
+  /**
+   * Sybil-resistance evidence the caller wants attached to the signed vote event
+   * (see EventService.createVoteEvent / voteTierService). All optional and
+   * additive — absence just yields a lower trust tier, never a blocked vote.
+   */
+  powDifficulty?: number;               // solve a vote PoW at this difficulty
+  trustCert?: unknown;                  // issuer certificate binding this pubkey
+  relayAttestation?: { payload: string; sig: string };
   timestamp: number;
   deviceId: string; // Device fingerprint to prevent double voting
 }

@@ -67,7 +67,7 @@ Read `docs/protocol/IPP-00-overview.md` (index of the numbered IPP specification
 npm test -- unit_tests/pow-challenge.test.js
 npm test -- -t "requiresPow"
 ```
-
+run tests after each change. update if needed
 **Type checking:**
 - `npm run build` includes full TypeScript checking.
 - No separate type-check command; linting catches most issues.
@@ -236,7 +236,8 @@ Set at build time with `VITE_` prefix:
 - `VITE_WS_RELAY_URL` — WebSocket relay (default: `ws://localhost:8080`)
 - `VITE_GUN_RELAY_URL` — GunDB relay (default: `http://localhost:8765/gun`)
 - `VITE_API_BASE_URL` — Backend API (default: `http://localhost:8080`)
-
+### When changing stuff on frontend
+Use the claude in chrome extension to verify what you just did
 Example: `VITE_WS_RELAY_URL=wss://relay.example.com npm run build`
 
 ---

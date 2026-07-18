@@ -4,7 +4,7 @@ import { KeyVaultService } from './keyVaultService';
 import { StorageService } from './storageService';
 import config from '../config';
 import { AuditService } from './auditService';
-import type { Poll, PollOption } from '../types/poll';
+import type { Poll, PollOption, VoteTrustPolicy } from '../types/poll';
 
 // Re-exported for backward compatibility — `src/types/poll.ts` is now the
 // single source of truth for these types; import from there in new code.
@@ -331,7 +331,23 @@ export class PollService {
       authTag: pollData.authTag || undefined,
       authorPubkey: pollData.authorPubkey || undefined,
       contentSignature: pollData.contentSignature || undefined,
+      voteTrustPolicy: this.parseVoteTrustPolicy(pollData.voteTrustPolicy),
     };
+  }
+
+  /** Parse the JSON-string-encoded Sybil-resistance policy stored on the Gun node. */
+  private static parseVoteTrustPolicy(raw: unknown): VoteTrustPolicy | undefined {
+    if (!raw) return undefined;
+    let obj: any = raw;
+    if (typeof raw === 'string') {
+      try { obj = JSON.parse(raw); } catch { return undefined; }
+    }
+    const tiers = ['open', 'pow', 'relay', 'issuer'];
+    const modes = ['separate', 'gate'];
+    if (obj && tiers.includes(obj.requiredTier) && modes.includes(obj.mode)) {
+      return { requiredTier: obj.requiredTier, mode: obj.mode };
+    }
+    return undefined;
   }
 
   private static isOffline(): boolean {
@@ -970,6 +986,7 @@ export class PollService {
     requireLogin: boolean;
     isPrivate: boolean;
     inviteCodeCount?: number;
+    voteTrustPolicy?: VoteTrustPolicy;
   }, preGeneratedId?: string): Promise<Poll> {
     const createStartedAt = performance.now();
     logPollDebug('create', 'createPoll entered', {
@@ -996,13 +1013,18 @@ export class PollService {
       showResultsBeforeVoting: data.showResultsBeforeVoting,
       requireLogin: !!data.requireLogin, isPrivate: !!data.isPrivate,
       totalVotes: 0, isExpired: false,
+      voteTrustPolicy: data.voteTrustPolicy,
     };
 
     try {
       const { KeyService }    = await import('./keyService');
       const { CryptoService } = await import('./cryptoService');
       const keyPair    = await KeyService.getKeyPair();
-      const contentHash = CryptoService.hash(JSON.stringify({ question: poll.question, communityId: poll.communityId, timestamp: poll.createdAt }));
+      // Include the Sybil-resistance policy in the signed content hash so a peer
+      // can't silently weaken it (e.g. downgrade to `open`) — NOTE: poll
+      // signatures are not yet verified on read (see security-debt), so this
+      // signs the policy but full tamper-evidence needs read-side verification.
+      const contentHash = CryptoService.hash(JSON.stringify({ question: poll.question, communityId: poll.communityId, timestamp: poll.createdAt, voteTrustPolicy: poll.voteTrustPolicy || null }));
       const signature  = CryptoService.sign(contentHash, keyPair.privateKey);
       poll.authorPubkey      = keyPair.publicKey;
       poll.contentSignature  = signature;
@@ -1053,6 +1075,7 @@ export class PollService {
       authTag: poll.authTag,
       authorPubkey: poll.authorPubkey,
       contentSignature: poll.contentSignature,
+      voteTrustPolicy: poll.voteTrustPolicy ? JSON.stringify(poll.voteTrustPolicy) : undefined,
     };
 
     await this.registerPollPolicyBestEffort(poll.id, poll.requireLogin);

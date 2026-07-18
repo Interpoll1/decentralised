@@ -20,6 +20,36 @@ const GUN_PEERS_STORAGE_KEY = 'interpoll_gun_peers_v3';
 const DEV_INSECURE_DISCOVERY_KEY = 'interpoll_rdv_dev_insecure';
 const ICE_SERVERS_STORAGE_KEY = 'interpoll_ice_servers';
 const IDENTITY_CONFIG_STORAGE_KEY = 'interpoll_identity_config';
+const WIRE_FILTER_STORAGE_KEY = 'interpoll_wire_filter_mode';
+
+/**
+ * How the WebRTC mesh wire bridge treats inbound Gun `put`s whose souls fall
+ * outside GUN_NAMESPACE (CRITICAL-2 mesh hardening):
+ * - `off`     — no checking (legacy behavior).
+ * - `log`     — inject as before, but console.warn each out-of-namespace soul.
+ *   The default: lets us observe real sync traffic before enforcing.
+ * - `enforce` — drop any message touching an out-of-namespace soul.
+ * Flip to `enforce` once `log` mode shows real P2P traffic produces no warnings.
+ */
+export type WireFilterMode = 'off' | 'log' | 'enforce';
+
+function loadWireFilterMode(): WireFilterMode {
+  try {
+    const raw = localStorage.getItem(WIRE_FILTER_STORAGE_KEY);
+    if (raw === 'off' || raw === 'log' || raw === 'enforce') return raw;
+  } catch {
+    // Storage unavailable; fall through to default.
+  }
+  return 'log';
+}
+
+let wireFilterMode: WireFilterMode = loadWireFilterMode();
+
+const RELAY_ATT_PUBKEY_STORAGE_KEY = 'interpoll_relay_attestation_pubkey';
+function loadRelayAttestationPubkey(): string {
+  try { return localStorage.getItem(RELAY_ATT_PUBKEY_STORAGE_KEY) || ''; } catch { return ''; }
+}
+let relayAttestationPubkey: string = loadRelayAttestationPubkey();
 
 // Diverse public STUN across independent providers, so no single vendor outage
 // blocks NAT traversal. Users can add a TURN entry via setIceServers() for
@@ -175,6 +205,33 @@ const config = {
   setIdentityPrimaryKey(key: IdentityPrimaryKey) {
     identityConfig = { ...identityConfig, primaryKey: key };
     try { localStorage.setItem(IDENTITY_CONFIG_STORAGE_KEY, JSON.stringify(identityConfig)); } catch { /* ignore */ }
+  },
+
+  /** Mesh wire-bridge filtering mode for inbound out-of-namespace Gun puts. */
+  security: {
+    get wireFilterMode(): WireFilterMode { return wireFilterMode; },
+    /**
+     * x-only Schnorr public key (hex) the relay uses to sign vote attestations
+     * (Sybil-resistance `relay` tier). Empty until the relay publishes one and
+     * it is configured here — until then relay-attested votes cannot be verified
+     * and simply fall to a lower tier. See voteTierService.ts.
+     */
+    get relayAttestationPubkey(): string { return relayAttestationPubkey; },
+  },
+
+  /** Set the relay's vote-attestation public key (hex). */
+  setRelayAttestationPubkey(pubkeyHex: string) {
+    relayAttestationPubkey = pubkeyHex || '';
+    try {
+      if (relayAttestationPubkey) localStorage.setItem(RELAY_ATT_PUBKEY_STORAGE_KEY, relayAttestationPubkey);
+      else localStorage.removeItem(RELAY_ATT_PUBKEY_STORAGE_KEY);
+    } catch { /* ignore */ }
+  },
+
+  /** Set the mesh wire-bridge filter mode ('off' | 'log' | 'enforce'). */
+  setWireFilterMode(mode: WireFilterMode) {
+    wireFilterMode = mode;
+    try { localStorage.setItem(WIRE_FILTER_STORAGE_KEY, mode); } catch { /* ignore */ }
   },
 
   /** Default (build-time) relay URLs */

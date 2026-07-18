@@ -1,0 +1,15 @@
+{
+  "pkg": "@interpoll/design-system",
+  "globalName": "InterpollDS",
+  "projectId": "2cba97e3-221b-4e91-aec8-6304124d0c58",
+  "shape": "package",
+  "buildCmd": "npm run build",
+  "tsconfig": "tsconfig.json",
+  "cssEntry": "./dist/style.css",
+  "tokensGlob": "src/styles/tokens.css",
+  "runtimeFontPrefixes": ["Inter", "Geist"],
+  "readmeHeader": ".design-sync/conventions.md",
+  "overrides": {
+    "Modal": { "cardMode": "single", "viewport": "560x380" }
+  }
+}

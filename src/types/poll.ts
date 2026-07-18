@@ -41,4 +41,22 @@ export interface Poll {
   authTag?: string;
   /** Whether the relay independently confirmed it holds this poll (set on creation). */
   relayConfirmed?: boolean;
+  /**
+   * Sybil-resistance policy chosen by the poll creator. Rides inside the signed
+   * poll content so it can't be forged. Absent = legacy poll, treated as
+   * `{ requiredTier: 'open', mode: 'separate' }` (every vote counts, one track).
+   * See voteTierService.ts for tiers and useVerifiedPollResults for display.
+   */
+  voteTrustPolicy?: VoteTrustPolicy;
+}
+
+export interface VoteTrustPolicy {
+  /** Minimum tier a vote must reach to enter the "Verified" result track. */
+  requiredTier: 'open' | 'pow' | 'relay' | 'issuer';
+  /**
+   * `separate` — anyone may vote; sub-tier votes show in a separate "Open" track.
+   * `gate` — sub-tier votes are excluded from the trusted track.
+   * Voting is never blocked outright; `gate` only affects which track counts.
+   */
+  mode: 'separate' | 'gate';
 }
