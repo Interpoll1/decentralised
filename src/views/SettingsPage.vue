@@ -1867,7 +1867,6 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { useRouter } from 'vue-router';
 import {
   IonPage,
   IonHeader,
@@ -1940,7 +1939,6 @@ import { BUILD_HASH, BUILD_TIME } from '../utils/buildHash';
 import UserIdentityBadge from '../components/UserIdentityBadge.vue';
 import { GUN_RELAY_PRESETS, isValidGunUrl, labelForGunUrl, DEFAULT_GUN_PEERS } from '../services/gunRelayPresets';
 
-const router = useRouter();
 const chainStore = useChainStore();
 const communityStore = useCommunityStore();
 const importFileInput = ref<HTMLInputElement | null>(null);
@@ -3192,8 +3190,7 @@ const confirmClearAll = async () => {
           });
           await toast.present();
 
-          await refreshStorageStats();
-          router.push('/home');
+          window.location.href = '/home';
         }
       }
     ]
