@@ -64,7 +64,6 @@ export class AuditService {
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
         body: JSON.stringify(body),
         signal: controller.signal,
       });
@@ -147,7 +146,6 @@ export class AuditService {
           'Content-Type': 'application/json',
         },
         signal: controller.signal,
-        credentials: 'include',
         body: JSON.stringify(body),
       });
 
@@ -175,7 +173,6 @@ export class AuditService {
       const res = await fetch(`${this.getTrustedApiBase()}/api/poll-policy`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(body),
         signal: controller.signal,
       });
@@ -191,7 +188,6 @@ export class AuditService {
     try {
       const res = await fetch(`${this.getTrustedApiBase()}/api/me`, {
         method: 'GET',
-        credentials: 'include',
       });
       if (!res.ok) {
         this.clearCachedCloudUser();

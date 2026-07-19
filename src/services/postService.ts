@@ -119,7 +119,6 @@ async function indexForSearch(type: 'post' | 'poll', id: string, data: any) {
     await fetch(`${getApiBase()}/api/index`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify(body)
     });
   } catch (err) {

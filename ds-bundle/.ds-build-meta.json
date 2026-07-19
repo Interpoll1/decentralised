@@ -1,0 +1,12 @@
+{
+  "namespace": "InterpollDS",
+  "source": "@interpoll/design-system@0.1.0",
+  "shape": "package",
+  "provider": null,
+  "componentCount": 10,
+  "skippedStoryIds": [],
+  "runtimeFontPrefixes": [
+    "Inter",
+    "Geist"
+  ]
+}

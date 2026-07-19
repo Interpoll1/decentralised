@@ -109,35 +109,22 @@ export function parseBodyWithLimit(req, res, maxBytes = 51200) {
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 
 /**
- * Validate and set CORS headers. Returns false if the origin is not allowed.
+ * Set CORS headers. Fully open: any origin, no credentials.
+ * Public decentralized access — any client may read/connect.
+ * NOTE: wildcard '*' is intentionally incompatible with credentials, so cookies
+ * are NOT used cross-origin (the frontend must not send credentials:'include').
  */
-export function setCorsHeaders(req, res) {
-  const origin = req.headers.origin;
-
-  if (origin && ALLOWED_ORIGINS.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  } else if (!origin) {
-    // Same-origin requests (no Origin header) — allow
-    res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGINS[0]);
-  } else {
-    // Unknown origin — deny
-    res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGINS[0]);
-    // Don't set Vary to avoid caching issues; the mismatch will cause the browser to block
-  }
-
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
+export function setCorsHeaders(_req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
-  res.setHeader('Vary', 'Origin');
 }
 
 /**
- * Check if the request origin is allowed. Returns true if allowed.
+ * Origin gate for mutating requests. Fully open — any origin permitted.
  */
-export function isOriginAllowed(req) {
-  const origin = req.headers.origin;
-  if (!origin) return true; // Same-origin or non-browser
-  return ALLOWED_ORIGINS.includes(origin);
+export function isOriginAllowed(_req) {
+  return true;
 }
 
 // ─── Security Headers ─────────────────────────────────────────────────────────

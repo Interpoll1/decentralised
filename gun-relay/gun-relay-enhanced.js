@@ -265,13 +265,8 @@ function wireMySQL(gun) {
 }
 
 // ─── CORS & Security ──────────────────────────────────────────────────────────
-app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) cb(null, true);
-    else cb(new Error('Not allowed by CORS'));
-  },
-  credentials: true,
-}));
+// Fully open CORS: any origin, no credentials (public decentralized access)
+app.use(cors({ origin: '*' }));
 
 // Body size limit
 app.use((req, res, next) => {

@@ -1,0 +1,103 @@
+{
+  "global": "InterpollDS",
+  "pkg": "@interpoll/design-system",
+  "pkgDir": "/home/viktor/Documents/interpoll2/decentralised/design-system",
+  "extraEntries": [],
+  "exported": [
+    "Avatar",
+    "Badge",
+    "Button",
+    "Card",
+    "Input",
+    "Modal",
+    "Pill",
+    "PollCard",
+    "Toolbar",
+    "VoteForm"
+  ],
+  "storybookStatic": null,
+  "keyRecipe": 7,
+  "cfgSliceGlobal": "a139d95ad8ab0a8ba08b44a258c54602e36090304087f48fe923c61aa5a8ae08",
+  "components": [
+    {
+      "name": "Avatar",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "a48ef4b67ecad49f",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Badge",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "84c688104e8c44da",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Button",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "b7a28cada8dcecb6",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Card",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "69e5cb62b4d1c8e0",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Input",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "4c3960098cdf21b7",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Modal",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "5dde9b6472d59d24",
+      "cfgSlice": "a759e58c8036bb1e71bdb1b7e681c803f2dee981cffb185bff0550bffb4f803d",
+      "stories": []
+    },
+    {
+      "name": "Pill",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "b85c5d87038702f1",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "PollCard",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "b1bd3481292e80be",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "Toolbar",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "5f6775c3b9b3705b",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "VoteForm",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "5cb8b998102fdc22",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    }
+  ]
+}
