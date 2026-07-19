@@ -65,7 +65,6 @@ class SearchService {
 
     try {
       const response = await fetch(`${apiBase}/api/search?${params}`, {
-        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -134,7 +133,6 @@ class SearchService {
       const response = await fetch(`${this.getApiBase()}/api/index`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(body),
       });
 

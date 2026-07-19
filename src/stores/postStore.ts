@@ -478,69 +478,95 @@ export const usePostStore = defineStore('post', () => {
 
   // ─── Voting ────────────────────────────────────────────────────────────────
 
+  /** Optimistically apply a vote-count delta to postsMap/currentPost; returns a snapshot to roll back to on error. */
+  function applyOptimisticVoteDelta(postId: string, upvoteDelta: number, downvoteDelta: number): Post | null {
+    const existing = postsMap.value.get(postId);
+    if (!existing) return null;
+    const snapshot = { ...existing };
+    const upvotes = Math.max(0, (existing.upvotes || 0) + upvoteDelta);
+    const downvotes = Math.max(0, (existing.downvotes || 0) + downvoteDelta);
+    const optimistic: Post = { ...existing, upvotes, downvotes, score: upvotes - downvotes };
+    postsMap.value.set(postId, optimistic);
+    if (currentPost.value?.id === postId) currentPost.value = optimistic;
+    return snapshot;
+  }
+
+  function rollbackVote(postId: string, snapshot: Post | null) {
+    if (!snapshot) return;
+    postsMap.value.set(postId, snapshot);
+    if (currentPost.value?.id === postId) currentPost.value = snapshot;
+  }
+
+  function reconcileVote(postId: string, updated: Post | null) {
+    if (!updated) return;
+    postsMap.value.set(postId, updated);
+    if (currentPost.value?.id === postId) currentPost.value = updated;
+    broadcastPostUpdate(updated);
+  }
+
   async function voteOnPost(postId: string, direction: 'up' | 'down') {
+    const snapshot = applyOptimisticVoteDelta(postId, direction === 'up' ? 1 : 0, direction === 'down' ? 1 : 0);
     try {
       const currentUser = await UserService.getCurrentUser();
       const updated = await PostService.voteOnPost(postId, direction, currentUser.id);
-      if (updated) {
-        postsMap.value.set(postId, updated);
-        if (currentPost.value?.id === postId) currentPost.value = updated;
-        await UserService.incrementKarma(updated.authorId, direction === 'up' ? 1 : -1);
-        broadcastPostUpdate(updated);
-      }
-    } catch (error) { console.error('Error voting:', error); throw error; }
+      reconcileVote(postId, updated);
+      if (updated) void UserService.incrementKarma(updated.authorId, direction === 'up' ? 1 : -1).catch(() => {});
+    } catch (error) {
+      rollbackVote(postId, snapshot);
+      console.error('Error voting:', error); throw error;
+    }
   }
 
   async function upvotePost(postId: string) {
+    const snapshot = applyOptimisticVoteDelta(postId, 1, 0);
     try {
       const currentUser = await UserService.getCurrentUser();
       const updated = await PostService.voteOnPost(postId, 'up', currentUser.id);
-      if (updated) {
-        postsMap.value.set(postId, updated);
-        if (currentPost.value?.id === postId) currentPost.value = updated;
-        await UserService.incrementKarma(updated.authorId, 1);
-        broadcastPostUpdate(updated);
-      }
-    } catch (error) { console.error('Error upvoting:', error); throw error; }
+      reconcileVote(postId, updated);
+      if (updated) void UserService.incrementKarma(updated.authorId, 1).catch(() => {});
+    } catch (error) {
+      rollbackVote(postId, snapshot);
+      console.error('Error upvoting:', error); throw error;
+    }
   }
 
   async function downvotePost(postId: string) {
+    const snapshot = applyOptimisticVoteDelta(postId, 0, 1);
     try {
       const currentUser = await UserService.getCurrentUser();
       const updated = await PostService.voteOnPost(postId, 'down', currentUser.id);
-      if (updated) {
-        postsMap.value.set(postId, updated);
-        if (currentPost.value?.id === postId) currentPost.value = updated;
-        await UserService.incrementKarma(updated.authorId, -1);
-        broadcastPostUpdate(updated);
-      }
-    } catch (error) { console.error('Error downvoting:', error); throw error; }
+      reconcileVote(postId, updated);
+      if (updated) void UserService.incrementKarma(updated.authorId, -1).catch(() => {});
+    } catch (error) {
+      rollbackVote(postId, snapshot);
+      console.error('Error downvoting:', error); throw error;
+    }
   }
 
   async function removeUpvote(postId: string) {
+    const snapshot = applyOptimisticVoteDelta(postId, -1, 0);
     try {
       const currentUser = await UserService.getCurrentUser();
       const updated = await PostService.removeVote(postId, 'up', currentUser.id);
-      if (updated) {
-        postsMap.value.set(postId, updated);
-        if (currentPost.value?.id === postId) currentPost.value = updated;
-        await UserService.incrementKarma(updated.authorId, -1);
-        broadcastPostUpdate(updated);
-      }
-    } catch (error) { console.error('Error removing upvote:', error); throw error; }
+      reconcileVote(postId, updated);
+      if (updated) void UserService.incrementKarma(updated.authorId, -1).catch(() => {});
+    } catch (error) {
+      rollbackVote(postId, snapshot);
+      console.error('Error removing upvote:', error); throw error;
+    }
   }
 
   async function removeDownvote(postId: string) {
+    const snapshot = applyOptimisticVoteDelta(postId, 0, -1);
     try {
       const currentUser = await UserService.getCurrentUser();
       const updated = await PostService.removeVote(postId, 'down', currentUser.id);
-      if (updated) {
-        postsMap.value.set(postId, updated);
-        if (currentPost.value?.id === postId) currentPost.value = updated;
-        await UserService.incrementKarma(updated.authorId, 1);
-        broadcastPostUpdate(updated);
-      }
-    } catch (error) { console.error('Error removing downvote:', error); throw error; }
+      reconcileVote(postId, updated);
+      if (updated) void UserService.incrementKarma(updated.authorId, 1).catch(() => {});
+    } catch (error) {
+      rollbackVote(postId, snapshot);
+      console.error('Error removing downvote:', error); throw error;
+    }
   }
 
   // ─── Refresh ───────────────────────────────────────────────────────────────

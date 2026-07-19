@@ -533,13 +533,33 @@ ion-badge {
 ion-toast::part(container),
 ion-alert .alert-wrapper,
 ion-action-sheet .action-sheet-wrapper {
-  background: rgba(10, 10, 12, 0.94);
+  background: var(--app-surface-strong);
   color: var(--app-text);
   border: 1px solid var(--app-border);
   border-radius: 20px;
   box-shadow: var(--app-shadow-lg);
   backdrop-filter: blur(22px);
   -webkit-backdrop-filter: blur(22px);
+}
+
+ion-toast {
+  --border-radius: 20px;
+  z-index: 9999;
+}
+
+ion-toast::part(button) {
+  outline: none;
+}
+
+ion-toast::part(button):focus-visible {
+  box-shadow: var(--app-focus-ring);
+}
+
+@media (max-width: 767px) {
+  ion-toast::part(container) {
+    /* keep the toast above the bottom safe area / tab bar instead of getting clipped at the viewport edge */
+    margin-bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
+  }
 }
 
 :focus-visible {

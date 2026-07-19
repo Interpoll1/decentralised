@@ -1959,11 +1959,7 @@ const pingTimer = setInterval(() => {
 wss.on('close', () => clearInterval(pingTimer));
 
 wss.on('connection', (ws, req) => {
-  const wsOrigin = String(req.headers.origin || '');
-  if (!wsOrigin || !ALLOWED_ORIGINS.includes(wsOrigin)) {
-    ws.close(1008, 'origin not allowed');
-    return;
-  }
+  // Origin check removed — fully open WS access (public decentralized access)
   let peerId = null;
   let userId = null;
   let sessionUserCache = null;
