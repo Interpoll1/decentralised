@@ -33,7 +33,6 @@ storage.txt
 *.sln
 *.sw?
 nuxt-app
-shared-validation
 src/components/copilot-components.md
 src/services/copilot-services.md
 
