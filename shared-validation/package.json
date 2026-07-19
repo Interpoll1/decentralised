@@ -1,0 +1,12 @@
+{
+  "name": "interpoll-shared-validation",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Shared validation, integrity, and security library for InterPoll relay servers",
+  "main": "index.js",
+  "dependencies": {
+    "@noble/curves": "^2.0.1",
+    "@noble/hashes": "^2.0.1",
+    "ajv": "^8.17.1"
+  }
+}
