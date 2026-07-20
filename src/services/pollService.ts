@@ -273,9 +273,19 @@ export class PollService {
     if (value && typeof value === 'object') {
       const out: Record<string, unknown> = {};
       Object.entries(value as Record<string, unknown>).forEach(([key, entry]) => {
-        if (entry !== undefined) {
-          out[key] = this.sanitizeForGun(entry);
+        if (entry === undefined) return;
+        const sanitized = this.sanitizeForGun(entry);
+        // Gun cannot persist an empty-object child node: it emits "0 length key!"
+        // and the enclosing put never receives an ACK. Drop empty-object values.
+        if (
+          sanitized !== null &&
+          typeof sanitized === 'object' &&
+          !Array.isArray(sanitized) &&
+          Object.keys(sanitized as Record<string, unknown>).length === 0
+        ) {
+          return;
         }
+        out[key] = sanitized;
       });
       return out as T;
     }
@@ -587,7 +597,7 @@ export class PollService {
     if (typeof votersData !== 'object') return [];
 
     return Object.entries(votersData)
-      .filter(([key]) => key !== '_')
+      .filter(([key]) => key !== '_' && key !== '#')
       .map(([key, value]) => {
         if (typeof value === 'string') return value;
         if (value === true || value === 1) return key;
@@ -603,12 +613,21 @@ export class PollService {
   }
 
   private static buildOptionsMap(options: PollOption[]): Record<string, any> {
-    return Object.fromEntries(options.map((option, index) => [index, {
-      id: option.id,
-      text: option.text,
-      votes: option.votes || 0,
-      voters: this.buildVotersMap(option.voters || []),
-    }]));
+    return Object.fromEntries(options.map((option, index) => {
+      const votersMap = this.buildVotersMap(option.voters || []);
+      const entry: Record<string, any> = {
+        id: option.id,
+        text: option.text,
+        votes: option.votes || 0,
+      };
+      // Gun refuses to ACK/persist a node that contains an empty-object child
+      // (emits "0 length key!" and the put callback never fires). Only include
+      // the voters sub-node when it actually has entries.
+      if (Object.keys(votersMap).length > 0) {
+        entry.voters = votersMap;
+      }
+      return [index, entry];
+    }));
   }
 
   // ── API poll fetch (metadata fallback only; vote totals are ignored) ─────────
@@ -1315,17 +1334,56 @@ export class PollService {
     return this.buildPollRecord(apiData, apiOptions);
   }
 
+  /**
+   * Read a poll's options by dereferencing each child node.
+   *
+   * When an options map is read cold from a relay, Gun returns the children as
+   * unresolved `{'#': soul}` references rather than inlined objects, so a plain
+   * `.once()` + `parsePollOptions()` sees no `id` on any child and drops every
+   * option (making the whole poll invisible). `.map().once()` resolves each
+   * child soul to its real `{ id, text, votes }` data.
+   */
+  private static readOptionsViaMap(optionsNode: any, timeoutMs = 1800): Promise<PollOption[]> {
+    return new Promise((resolve) => {
+      const collected = new Map<string, PollOption>();
+      let settled = false;
+      let subscription: any;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        if (subscription?.off) subscription.off();
+        const ordered = Array.from(collected.entries())
+          .sort(([a], [b]) => {
+            const na = Number(a); const nb = Number(b);
+            if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+            return a < b ? -1 : a > b ? 1 : 0;
+          })
+          .map(([, option]) => option);
+        resolve(ordered);
+      };
+      subscription = optionsNode.map().once((child: any, key: string) => {
+        if (settled || !child || key === '_' || !child.id) return;
+        collected.set(String(key), {
+          id: child.id,
+          text: child.text || '',
+          votes: child.votes || 0,
+          voters: this.parseVoters(child.voters),
+        });
+      });
+      setTimeout(finish, timeoutMs);
+    });
+  }
+
   static async loadPollOptions(pollId: string, allowApiFallback = true, parentPollData?: any): Promise<PollOption[]> {
     const optionsNode = this.getPollPath(pollId).get('options');
     const optionsData = await this.onceNode<any>(optionsNode, 300);
     const parsed      = this.parsePollOptions(optionsData);
     if (parsed.length > 0) return parsed;
 
-    const liveOptions = await this.waitForNode<any>(
-      optionsNode, (value) => this.parsePollOptions(value).length > 0, 1500,
-    );
-    const liveParsed = this.parsePollOptions(liveOptions);
-    if (liveParsed.length > 0) return liveParsed;
+    // Cold relay reads return child options as unresolved {'#': soul} refs;
+    // dereference each child explicitly so the poll isn't dropped for "0 options".
+    const mapped = await this.readOptionsViaMap(optionsNode, 1800);
+    if (mapped.length > 0) return mapped;
 
     // Root poll writes now redundantly include an inline options map.
     // Use it only after giving the dedicated options child path time to hydrate.
@@ -1350,10 +1408,8 @@ export class PollService {
     const parsed = this.parsePollOptions(optionsData);
     if (parsed.length > 0) return parsed;
 
-    const liveOptions = await this.waitForNode<any>(
-      optionsNode, (value) => this.parsePollOptions(value).length > 0, 1500,
-    );
-    return this.parsePollOptions(liveOptions);
+    // Same cold-relay ref-resolution problem as loadPollOptions; deref children.
+    return this.readOptionsViaMap(optionsNode, 1800);
   }
 
   static async vote(pollId: string, optionIds: string[], voterId: string, communityId?: string): Promise<void> {

@@ -587,7 +587,13 @@ const pollStore = usePollStore();
 
 const FEED_DEBUG = localStorage.getItem('interpoll_feed_debug') === 'true';
 const SYNC_DEBUG = localStorage.getItem('interpoll_sync_debug') === 'true';
-const HOME_GUN_FEED_ENABLED = localStorage.getItem('interpoll_home_gun_feed') === 'true';
+// Home's live Gun feed is ON by default — without it, newly created polls/posts
+// never reach the home feed (they only exist in Gun until the DB/API snapshot
+// catches up), so they appeared only after visiting the community page.
+// Opt out with localStorage.interpoll_home_gun_feed = 'false'.
+const HOME_GUN_FEED_ENABLED = localStorage.getItem('interpoll_home_gun_feed') !== 'false';
+// Bound the startup fan-out that motivated disabling this in the first place.
+const HOME_GUN_FEED_MAX_COMMUNITIES = 8;
 const FEED_INITIAL_RENDER_TARGET = 50;
 const TUTORIAL_STORAGE_KEY = 'interpoll_home_tutorial_seen';
 const MODERATION_ONBOARDING_KEY = 'interpoll_moderation_onboarding_complete';
@@ -1418,7 +1424,14 @@ const GUN_SUBSCRIPTION_TIMEOUT_MS = 8_000;
 const EMPTY_FEED_RECOVERY_TIMEOUT_MS = 4_000;
 
 async function subscribeNewCommunities(communities: typeof communityStore.communities) {
-  const newOnes = communities.filter(c => !subscribedFromHome.has(c.id));
+  const budget = HOME_GUN_FEED_MAX_COMMUNITIES - subscribedFromHome.size;
+  if (budget <= 0) return;
+  // Joined communities first — those are the ones the user expects in their feed.
+  const candidates = communities.filter(c => !subscribedFromHome.has(c.id));
+  const newOnes = [
+    ...candidates.filter(c => communityStore.isJoined(c.id)),
+    ...candidates.filter(c => !communityStore.isJoined(c.id)),
+  ].slice(0, budget);
   if (newOnes.length === 0) return;
   if (FEED_DEBUG) {
     feedDebug('subscribe-new-communities-start', {
@@ -1600,7 +1613,7 @@ onMounted(async () => {
   })();
 
   await feedPromise;
-  if (!HOME_GUN_FEED_ENABLED && combinedFeed.value.length === 0) {
+  if (combinedFeed.value.length === 0) {
     await tryRecoverEmptyFeedFromGun();
     ensureInitialFeedVisible('empty-feed-recovery');
   }
