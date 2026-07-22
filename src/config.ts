@@ -45,6 +45,31 @@ function loadWireFilterMode(): WireFilterMode {
 
 let wireFilterMode: WireFilterMode = loadWireFilterMode();
 
+/**
+ * Anonymity (Tor) Mode.
+ *
+ * A browser web app cannot route its own traffic through Tor — only Tor Browser
+ * or a system Tor proxy / Orbot can. What this flag does is make the app SAFE to
+ * use over Tor by killing the vectors that would otherwise reveal the user's real
+ * IP despite Tor:
+ *   - `getIceServers()` returns `[]`, so no `RTCPeerConnection` can gather
+ *     server-reflexive (real-IP) candidates via STUN.
+ *   - `WebRTCService` refuses to enable/connect (see webrtcService.ts), which
+ *     tears down the peer mesh — WebRTC leaks the real IP even inside Tor Browser,
+ *     which is exactly why Tor Browser disables it.
+ * Relay (WSS/Gun/API) traffic is unaffected: inside Tor Browser it is already
+ * proxied through Tor, and the UI prefers `.onion` relays when available.
+ */
+const ANONYMITY_MODE_KEY = 'interpoll_anonymity_mode';
+function loadAnonymityMode(): boolean {
+  try {
+    return localStorage.getItem(ANONYMITY_MODE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+let anonymityMode: boolean = loadAnonymityMode();
+
 const RELAY_ATT_PUBKEY_STORAGE_KEY = 'interpoll_relay_attestation_pubkey';
 function loadRelayAttestationPubkey(): string {
   try { return localStorage.getItem(RELAY_ATT_PUBKEY_STORAGE_KEY) || ''; } catch { return ''; }
@@ -219,6 +244,22 @@ const config = {
     get relayAttestationPubkey(): string { return relayAttestationPubkey; },
   },
 
+  /**
+   * Anonymity (Tor) Mode. When true, all IP-leaking transports are shut off
+   * (WebRTC/STUN) so the app is safe to use over Tor Browser. See the
+   * ANONYMITY_MODE_KEY block above for the full rationale.
+   */
+  get anonymityMode(): boolean { return anonymityMode; },
+
+  /** Enable/disable Anonymity (Tor) Mode. Persisted to localStorage. */
+  setAnonymityMode(on: boolean) {
+    anonymityMode = !!on;
+    try {
+      if (anonymityMode) localStorage.setItem(ANONYMITY_MODE_KEY, 'true');
+      else localStorage.removeItem(ANONYMITY_MODE_KEY);
+    } catch { /* storage unavailable */ }
+  },
+
   /** Set the relay's vote-attestation public key (hex). */
   setRelayAttestationPubkey(pubkeyHex: string) {
     relayAttestationPubkey = pubkeyHex || '';
@@ -341,6 +382,10 @@ const config = {
 
   /** WebRTC ICE servers (STUN/TURN). Falls back to the diverse default STUN set. */
   getIceServers(): RTCIceServer[] {
+    // Anonymity Mode: never hand out STUN/TURN. Any RTCPeerConnection built with
+    // an empty ICE list cannot gather server-reflexive candidates, so it cannot
+    // leak the user's real public IP while they believe they are anonymous.
+    if (anonymityMode) return [];
     if (iceServers && iceServers.length > 0) return [...iceServers];
     return [...DEFAULT_ICE_SERVERS];
   },

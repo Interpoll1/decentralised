@@ -583,6 +583,68 @@
 
       <!-- NETWORK TAB -->
       <div v-if="activeTab === 'network'">
+        <!-- Privacy & Tor / Anonymity Mode -->
+        <div class="section">
+          <div class="status-header">
+            <h3 class="section-title">Privacy &amp; Tor</h3>
+            <ion-badge :color="anonymityMode ? 'success' : 'medium'">
+              <ion-icon :icon="shieldCheckmarkOutline" class="mr-1" />
+              {{ anonymityMode ? 'Anonymity ON' : 'Anonymity OFF' }}
+            </ion-badge>
+          </div>
+          <p class="section-subtitle">Harden the app for anonymous use over Tor.</p>
+
+          <ion-list>
+            <ion-item lines="none">
+              <ion-toggle v-model="anonymityMode" @ionChange="onAnonymityToggle">
+                Anonymity (Tor) Mode
+              </ion-toggle>
+            </ion-item>
+          </ion-list>
+
+          <div class="tor-explainer">
+            <p>
+              <strong>A web app can't route its own traffic through Tor.</strong>
+              To actually be anonymous, open InterPoll in
+              <a href="https://www.torproject.org" target="_blank" rel="noopener noreferrer" class="link-primary">Tor Browser</a>
+              (or route this browser through Tor / Orbot on mobile).
+            </p>
+            <p>
+              This mode makes the app <em>safe</em> under Tor: it disables the WebRTC
+              peer mesh — which leaks your real IP via STUN even inside Tor Browser —
+              and prefers <code>.onion</code> relays. Peer-to-peer / mesh sync pauses
+              while it's on; relay sync keeps working.
+            </p>
+          </div>
+
+          <div v-if="anonymityMode" class="tor-route-status">
+            <div class="tor-status-line" :class="activeRelayIsOnion ? 'ok' : 'warn'">
+              <ion-icon :icon="activeRelayIsOnion ? lockClosedOutline : warningOutline" />
+              <span v-if="activeRelayIsOnion">
+                Active relay is a <code>.onion</code> address — routed via Tor hidden service.
+              </span>
+              <span v-else>
+                Active relay is <strong>clearnet</strong> — safe only inside Tor Browser.
+                Add a <code>.onion</code> relay in Relay Configuration below for hidden-service routing.
+              </span>
+            </div>
+
+            <ion-button size="small" fill="outline" :disabled="torChecking" @click="checkTorStatus" class="mt-2">
+              <ion-icon slot="start" :icon="refreshOutline" />
+              {{ torChecking ? 'Checking…' : 'Check Tor status' }}
+            </ion-button>
+            <div
+              v-if="torStatus.checked"
+              class="tor-check-result"
+              :class="torStatus.isTor === true ? 'ok' : torStatus.isTor === false ? 'warn' : 'unknown'"
+            >
+              {{ torStatus.note }}
+            </div>
+          </div>
+
+          <div class="separator"></div>
+        </div>
+
         <!-- Connection Status -->
         <div class="section">
           <div class="status-header">
@@ -1228,6 +1290,51 @@
   margin: 8px 0;
   line-height: 1.5;
 }
+
+/* Privacy & Tor */
+.tor-explainer {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ion-color-medium);
+  margin: 4px 0 8px;
+}
+.tor-explainer p { margin: 6px 0; }
+.tor-explainer code,
+.tor-status-line code {
+  font-size: 12px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(var(--ion-text-color-rgb), 0.08);
+}
+.tor-route-status { margin-top: 8px; }
+.tor-status-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+.tor-status-line ion-icon { flex: 0 0 auto; margin-top: 2px; font-size: 18px; }
+.tor-status-line.ok {
+  background: rgba(var(--ion-color-success-rgb), 0.12);
+  color: var(--ion-color-success-shade);
+}
+.tor-status-line.warn {
+  background: rgba(var(--ion-color-warning-rgb), 0.14);
+  color: var(--ion-color-warning-shade);
+}
+.tor-check-result {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+.tor-check-result.ok { background: rgba(var(--ion-color-success-rgb), 0.12); color: var(--ion-color-success-shade); }
+.tor-check-result.warn { background: rgba(var(--ion-color-danger-rgb), 0.12); color: var(--ion-color-danger-shade); }
+.tor-check-result.unknown { background: rgba(var(--ion-text-color-rgb), 0.06); color: var(--ion-color-medium); }
 
 /* Moderation Tab */
 .range-row {
@@ -1946,7 +2053,8 @@ import {
   closeCircleOutline,
   checkmarkCircleOutline,
   addOutline,
-  lockClosedOutline
+  lockClosedOutline,
+  shieldCheckmarkOutline
 } from 'ionicons/icons';
 import { PinningService } from '../services/pinningService';
 import { StorageManager } from '../services/storageManager';
@@ -1958,6 +2066,8 @@ import { StorageService } from '../services/storageService';
 import { KeyService } from '../services/keyService';
 import { RelayManager } from '../services/relayManager';
 import { RelayHealthService } from '../services/relayHealthService';
+import { WebRTCService } from '../services/webrtcService';
+import { MeshService } from '../services/meshService';
 import { BootstrapInviteService, type BootstrapEndpoint } from '../services/bootstrapInviteService';
 import { useChainStore } from '../stores/chainStore';
 import { useCommunityStore } from '../stores/communityStore';
@@ -2432,6 +2542,110 @@ const hasCustomRelay = computed(() => {
   const overrides = config.getRelayOverrides();
   return !!(overrides.websocket || overrides.gun || overrides.api);
 });
+
+// ── Anonymity (Tor) Mode ─────────────────────────────────────
+const anonymityMode = ref(config.anonymityMode);
+const torChecking = ref(false);
+const torStatus = ref<{ checked: boolean; isTor: boolean | null; note: string }>({
+  checked: false,
+  isTor: null,
+  note: '',
+});
+
+/** Match `.onion` hosts (end-of-host boundary avoids matching e.g. "onion.example.com"). */
+function isOnionUrl(url: string): boolean {
+  return /\.onion(?::\d+)?(?:\/|$)/i.test(url || '');
+}
+
+const activeRelayIsOnion = computed(() =>
+  isOnionUrl(config.relay.websocket) &&
+  isOnionUrl(config.relay.gun) &&
+  isOnionUrl(config.relay.api),
+);
+
+/** Switch the active relay to a .onion endpoint if one exists. Returns true if switched. */
+async function preferOnionRelay(): Promise<boolean> {
+  try {
+    const onion = RelayManager.getRelayList().find(
+      (r) => r.isTor || isOnionUrl(r.ws) || isOnionUrl(r.gun) || isOnionUrl(r.api),
+    );
+    const active = RelayManager.getActiveRelay();
+    if (onion && onion.id !== active?.id) {
+      await RelayManager.switchToRelay(onion.id);
+      return true;
+    }
+  } catch (e) {
+    console.warn('[Settings] preferOnionRelay failed', e);
+  }
+  return false;
+}
+
+async function onAnonymityToggle() {
+  const on = anonymityMode.value;
+  config.setAnonymityMode(on);
+
+  if (on) {
+    // Kill the IP-leaking peer mesh immediately (tears down live connections).
+    WebRTCService.setEnabled(false);
+    const switched = await preferOnionRelay();
+    const toast = await toastController.create({
+      message: switched
+        ? 'Anonymity Mode on — mesh disabled, switched to a .onion relay.'
+        : 'Anonymity Mode on — peer mesh disabled. Use Tor Browser and add a .onion relay for full anonymity.',
+      duration: 3500,
+      color: 'success',
+    });
+    await toast.present();
+  } else {
+    // Restore the peer mesh (default-on) so P2P sync resumes.
+    WebRTCService.setEnabled(true);
+    MeshService.initialize();
+    torStatus.value = { checked: false, isTor: null, note: '' };
+    const toast = await toastController.create({
+      message: 'Anonymity Mode off — peer mesh re-enabled.',
+      duration: 2500,
+      color: 'medium',
+    });
+    await toast.present();
+  }
+}
+
+/**
+ * Best-effort, on-demand Tor reachability check. Uses the canonical Tor Project
+ * endpoint. Reads the result only if CORS allows; otherwise reports "unknown"
+ * rather than overclaiming. Never runs automatically (no silent egress).
+ */
+async function checkTorStatus() {
+  torChecking.value = true;
+  torStatus.value = { checked: false, isTor: null, note: '' };
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch('https://check.torproject.org/api/ip', {
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+    clearTimeout(timer);
+    const data = await res.json();
+    const isTor = data?.IsTor === true;
+    torStatus.value = {
+      checked: true,
+      isTor,
+      note: isTor
+        ? 'Confirmed: this browser is reaching the network over Tor.'
+        : 'This browser is NOT on Tor. Open InterPoll in Tor Browser to be anonymous.',
+    };
+  } catch {
+    // CORS-blocked or offline — cannot read the result. Do not overclaim.
+    torStatus.value = {
+      checked: true,
+      isTor: null,
+      note: 'Could not verify automatically. Make sure you opened InterPoll in Tor Browser.',
+    };
+  } finally {
+    torChecking.value = false;
+  }
+}
 
 let statusCleanup: (() => void) | null = null;
 let networkPollInterval: ReturnType<typeof setInterval> | null = null;
