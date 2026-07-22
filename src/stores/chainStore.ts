@@ -13,6 +13,7 @@ import RelayManager from '../services/relayManager';
 import { AuditService } from '../services/auditService';
 import { EventService } from '../services/eventService';
 import { VoteTallyService } from '../services/voteTallyService';
+import config from '../config';
 
 export const useChainStore = defineStore('chain', () => {
   const SYNC_REQUEST_BASE_INTERVAL_MS = 1200;
@@ -95,8 +96,15 @@ export const useChainStore = defineStore('chain', () => {
     WebSocketService.initialize();
 
     // P2P mesh fallback: keeps blocks/events/content syncing when relays are down.
+    // Anonymity (Tor) Mode force-disables it — WebRTC/STUN would leak the real IP
+    // even inside Tor Browser. `WebRTCService.setEnabled` also refuses on its own,
+    // so this is a fast-path guard that avoids spinning up mesh/discovery timers.
     await WebRTCService.initialize();
-    MeshService.initialize();
+    if (config.anonymityMode) {
+      WebRTCService.setEnabled(false);
+    } else {
+      MeshService.initialize();
+    }
 
     // Resilience orchestrator: detects total blackout and escalates through
     // failover → gossip → rendezvous → mesh to reconverge the network.

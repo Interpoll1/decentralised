@@ -60,6 +60,11 @@ export class WebRTCService {
   }
 
   static setEnabled(value: boolean): void {
+    // Anonymity (Tor) Mode hard-override: WebRTC leaks the real IP via STUN even
+    // inside Tor Browser, so the peer mesh must stay OFF regardless of who asks
+    // to enable it (mesh reconcile, blackout recovery, manual QR). This is the
+    // single choke point that keeps every caller leak-safe.
+    if (config.anonymityMode) value = false;
     this.enabled = value;
     try { localStorage.setItem(STORAGE_KEY, String(value)); } catch { /* quota / privacy */ }
     if (!value) this.cleanup();
@@ -70,6 +75,7 @@ export class WebRTCService {
    * `target` tells the signaling layer how to reach them (peerId and/or pubkey).
    */
   static async connectToPeer(remoteId: string, target: SignalTarget = { peerId: remoteId }): Promise<void> {
+    if (config.anonymityMode) return; // no peer connections while anonymised
     if (!this.enabled || this.connections.has(remoteId)) return;
     if (typeof RTCPeerConnection === 'undefined') return;
 
@@ -299,6 +305,9 @@ export class WebRTCService {
 
   private static createPeerConnection(remoteId: string): RTCPeerConnection {
     // ICE servers are config-driven: diverse STUN by default, plus any user TURN.
+    // Invariant: in Anonymity Mode `config.getIceServers()` returns `[]`, so even
+    // if some path reaches here the PC gathers no server-reflexive (real-IP)
+    // candidates. The enable/connect guards above should prevent reaching here.
     const pc = new RTCPeerConnection({ iceServers: config.getIceServers() });
     this.connections.set(remoteId, pc);
 
@@ -385,6 +394,9 @@ export class WebRTCService {
   }
 
   private static ensureEnabled(): void {
+    if (config.anonymityMode) {
+      throw new Error('WebRTC is disabled in Anonymity (Tor) Mode to prevent real-IP leaks. Turn off Anonymity Mode in Settings → Network to use peer-to-peer sync.');
+    }
     if (typeof RTCPeerConnection === 'undefined') throw new Error('WebRTC is not supported in this browser');
     if (!this.enabled) this.setEnabled(true);
   }
