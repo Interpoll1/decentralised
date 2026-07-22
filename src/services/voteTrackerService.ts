@@ -6,6 +6,7 @@
 
 import { StorageService } from './storageService';
 import { KeyService } from './keyService';
+import { CryptoService } from './cryptoService';
 
 export interface VoteRecord {
   pollId: string;
@@ -50,13 +51,24 @@ export class VoteTrackerService {
     return deviceId;
   }
   
-  // Hash the fingerprint
+  // Hash the fingerprint.
+  // `crypto.subtle` is undefined in insecure contexts (plain http://), which
+  // mobile browsers enforce strictly — so fall back to the pure-JS noble
+  // SHA-256 used for all chain hashing. Both produce identical SHA-256 hex, so
+  // a device that once hashed via one path still matches under the other.
   private static async hashFingerprint(data: string): Promise<string> {
-    const encoder = new TextEncoder();
-    const dataBuffer = encoder.encode(data);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    if (typeof crypto !== 'undefined' && crypto.subtle) {
+      try {
+        const dataBuffer = new TextEncoder().encode(data);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
+        return Array.from(new Uint8Array(hashBuffer))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+      } catch {
+        /* fall through to noble */
+      }
+    }
+    return CryptoService.hash(data);
   }
   
   // Resolve the current voter identity: portable pubkey (preferred) + deviceId (fallback).

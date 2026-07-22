@@ -1,7 +1,9 @@
 <template>
   <ion-app>
-    <AppLoader v-if="!appReady" />
-    <ion-router-outlet v-else :animated="true" :animation="pageTransition" />
+    <AppErrorBoundary>
+      <AppLoader v-if="!appReady" />
+      <ion-router-outlet v-else :animated="true" :animation="pageTransition" />
+    </AppErrorBoundary>
     <GlobalCommandPalette :is-open="globalPaletteOpen" @close="closeGlobalPalette" />
   </ion-app>
 </template>
@@ -19,6 +21,7 @@ import { PostService } from './services/postService';
 import { CommentService } from './services/commentService';
 import { warmupFromDB } from './services/dbWarmup';
 import AppLoader from './components/AppLoader.vue';
+import AppErrorBoundary from './components/AppErrorBoundary.vue';
 import GlobalCommandPalette from './components/GlobalCommandPalette.vue';
 
 const chainStore = useChainStore();

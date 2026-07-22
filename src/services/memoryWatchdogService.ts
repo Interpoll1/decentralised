@@ -4,13 +4,21 @@ const WARN_THRESHOLD = 0.60;
 const CRITICAL_THRESHOLD = 0.75;
 const EMERGENCY_THRESHOLD = 0.85;
 
-const CHECK_INTERVAL_MS = 30_000;
-const PERIODIC_GC_INTERVAL_MS = 120_000;
+// Mobile browsers cap tab memory far lower than desktop and (on iOS Safari)
+// expose no `performance.memory`, so we rely on the node-count heuristic there
+// and must react sooner — before the OS freezes/kills the tab.
+const IS_MOBILE = typeof navigator !== 'undefined' &&
+  (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+    (typeof (navigator as any).deviceMemory === 'number' && (navigator as any).deviceMemory <= 4));
 
-// Node-count thresholds for heuristic memory pressure detection (when performance.memory unavailable)
-const HEURISTIC_WARN_NODES = 1200;
-const HEURISTIC_CRITICAL_NODES = 1600;
-const HEURISTIC_EMERGENCY_NODES = 2500;
+const CHECK_INTERVAL_MS = IS_MOBILE ? 15_000 : 30_000;
+const PERIODIC_GC_INTERVAL_MS = IS_MOBILE ? 60_000 : 120_000;
+
+// Node-count thresholds for heuristic memory pressure detection (when performance.memory unavailable).
+// Mobile uses tighter limits so cleanup + Gun eviction kick in well before a freeze.
+const HEURISTIC_WARN_NODES = IS_MOBILE ? 600 : 1200;
+const HEURISTIC_CRITICAL_NODES = IS_MOBILE ? 900 : 1600;
+const HEURISTIC_EMERGENCY_NODES = IS_MOBILE ? 1300 : 2500;
 
 interface MemoryInfo {
   usedJSHeapSize: number;
