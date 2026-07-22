@@ -617,7 +617,11 @@
           <div class="metrics-grid">
             <div class="metric-card">
               <div class="metric-value">{{ networkStatus.peerCount }}</div>
-              <div class="metric-label">Active Peers</div>
+              <div class="metric-label">Relay Peers</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-value">{{ networkStatus.gunConnectedCount }}</div>
+              <div class="metric-label">Sync Peers</div>
             </div>
             <div class="metric-card">
               <div class="metric-value">
@@ -639,6 +643,13 @@
               </div>
               <div class="metric-label">Chain Status</div>
             </div>
+          </div>
+          <div v-if="networkStatus.registrationRejected" class="reg-gate-hint">
+            <ion-icon :icon="lockClosedOutline"></ion-icon>
+            <span>
+              Connected to the relay, but joining its peer list requires signing in.
+              You're still syncing over {{ networkStatus.gunConnectedCount }} Gun peer{{ networkStatus.gunConnectedCount !== 1 ? 's' : '' }} — sign in to also appear in the relay peer network.
+            </span>
           </div>
           <div class="separator"></div>
         </div>
@@ -1412,6 +1423,26 @@
 }
 
 /* Network Status */
+.reg-gate-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 193, 7, 0.06);
+  border: 1px solid rgba(255, 193, 7, 0.18);
+  font-size: 12px;
+  line-height: 1.45;
+  opacity: 0.85;
+}
+
+.reg-gate-hint ion-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--ion-color-warning);
+}
+
 .status-header {
   display: flex;
   justify-content: space-between;
@@ -1914,7 +1945,8 @@ import {
   eyeOutline,
   closeCircleOutline,
   checkmarkCircleOutline,
-  addOutline
+  addOutline,
+  lockClosedOutline
 } from 'ionicons/icons';
 import { PinningService } from '../services/pinningService';
 import { StorageManager } from '../services/storageManager';
@@ -2280,6 +2312,7 @@ const networkStatus = ref({
   connectedWsUrl: '',
   gunConnected: false,
   peerCount: 0,
+  registrationRejected: false,
   gunPeerCount: 0,
   gunConnectedCount: 0,
   gunAvgLatencyMs: undefined as number | undefined,
@@ -2809,6 +2842,7 @@ function refreshNetwork() {
     connectedWsUrl,
     gunConnected: gunStats.isConnected,
     peerCount: WebSocketService.getPeerCount(),
+    registrationRejected: WebSocketService.isRegistrationRejected(),
     gunPeerCount: gunStats.peerCount,
     gunConnectedCount: gunStats.connectedCount,
     gunAvgLatencyMs: gunStats.avgLatencyMs,

@@ -68,9 +68,22 @@
           <div class="status-bar mb-3">
             <div class="status-bar-item">
               <span class="status-dot" :class="wsConnected ? 'online' : 'offline'"></span>
-              <span class="text-sm">{{ peerCount }} peer{{ peerCount !== 1 ? 's' : '' }}</span>
+              <span class="text-sm">{{ peerCount }} relay peer{{ peerCount !== 1 ? 's' : '' }}</span>
+            </div>
+            <div class="status-bar-item">
+              <span class="status-dot" :class="gunConnectedCount > 0 ? 'online' : 'offline'"></span>
+              <span class="text-sm">{{ gunConnectedCount }} sync peer{{ gunConnectedCount !== 1 ? 's' : '' }}</span>
             </div>
             <span v-if="lastScanAt" class="text-xs opacity-50">Last scan: {{ lastScanAt }}</span>
+          </div>
+
+          <!-- Registration gated behind auth: explain the perpetual 0 relay peers -->
+          <div v-if="wsRegistrationRejected" class="mt-1 mb-3 p-2 rounded-lg text-xs glass-inset flex items-center gap-2">
+            <ion-icon :icon="lockClosedOutline" color="warning" />
+            <span class="opacity-80">
+              Connected to the relay, but joining its peer list requires signing in.
+              You're still syncing over {{ gunConnectedCount }} Gun peer{{ gunConnectedCount !== 1 ? 's' : '' }} — sign in to also appear in the relay peer network.
+            </span>
           </div>
 
           <ion-button expand="block" :disabled="scanning" @click="scanAllRelays">
@@ -731,6 +744,7 @@ const relays = ref<RelayEndpoint[]>([]);
 const activeRelay = ref<RelayEndpoint | null>(null);
 const wsConnected = ref(false);
 const peerCount = ref(0);
+const wsRegistrationRejected = ref(false);
 const isTor = ref(false);
 
 const scanning = ref(false);
@@ -1020,6 +1034,7 @@ function refreshStatus() {
   activeRelay.value = RelayManager.getActiveRelay();
   wsConnected.value = WebSocketService.getConnectionStatus();
   peerCount.value = WebSocketService.getPeerCount();
+  wsRegistrationRejected.value = WebSocketService.isRegistrationRejected();
   isTor.value = RelayHealthService.isTorBrowser();
 }
 
@@ -1263,6 +1278,7 @@ onMounted(async () => {
   cleanups.push(WebSocketService.onStatusChange((status) => {
     wsConnected.value = status.connected;
     peerCount.value = status.peerCount;
+    wsRegistrationRejected.value = status.registrationRejected;
     refreshResilience();
   }));
 
