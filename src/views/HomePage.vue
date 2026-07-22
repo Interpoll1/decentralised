@@ -1825,10 +1825,13 @@ ion-header.header-hidden {
   justify-content: center;
   padding: 16px;
   box-sizing: border-box;
+  overflow-y: auto;
 }
 
 .moderation-onboarding-card {
   width: min(620px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
