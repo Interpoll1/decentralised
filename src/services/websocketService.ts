@@ -41,7 +41,12 @@ export class WebSocketService {
   private static peers: Set<string> = new Set();
   private static peerAddresses: Map<string, { peerId: string; relayUrl: string; gunPeers: string[]; joinedAt: number }> = new Map();
   private static readonly MAX_PEER_ADDRESSES = 200;
-  private static statusListeners: Set<(status: { connected: boolean; peerCount: number }) => void> = new Set();
+  // True when the relay rejected our `register` for lack of an authenticated
+  // session. In that state we hold an open socket but are NOT in the relay's
+  // client registry, so we never receive `peer-list` and can never see peers —
+  // the UI needs to know this to explain the perpetual "0 peers".
+  private static registrationRejected = false;
+  private static statusListeners: Set<(status: { connected: boolean; peerCount: number; registrationRejected: boolean }) => void> = new Set();
   private static knownServers: Map<string, KnownServer> = new Map();
   private static readonly MAX_KNOWN_SERVERS = 50;
   private static readonly DISCOVERY_TTL_MS = 5 * 60_000;
@@ -101,6 +106,9 @@ export class WebSocketService {
         if (epoch !== this.connectionEpoch || socket !== this.ws) return;
         this.isConnected = true;
         this.reconnectAttempts = 0;
+        // Optimistically assume registration will succeed; the relay tells us
+        // otherwise via an AUTH_REQUIRED error handled in onmessage.
+        this.registrationRejected = false;
 
         this.peers.add(this.peerId);
         this.notifyStatus();
@@ -153,6 +161,19 @@ export class WebSocketService {
             this.sendToRelay('register', { peerId: this.peerId });
             this.sendToRelay('join-room', { roomId: 'default' });
             this.broadcastAddresses();
+            return;
+          }
+
+          // The relay gates registration (and therefore peer-list, broadcast and
+          // room membership) behind an authenticated session. Without one we stay
+          // connected but invisible to the peer registry — surface it once so the
+          // UI can explain "0 peers" instead of silently misreporting the network.
+          if (message.type === 'error' && message.code === 'AUTH_REQUIRED') {
+            if (!this.registrationRejected) {
+              console.warn('[WS] Relay registration requires an authenticated session — sign in to join the peer network. Gun-layer sync is unaffected.');
+            }
+            this.registrationRejected = true;
+            this.notifyStatus();
             return;
           }
 
@@ -237,6 +258,7 @@ export class WebSocketService {
         this.isConnected = false;
         this.peers.clear();
         this.peerAddresses.clear();
+        this.registrationRejected = false;
         this.stopKeepAlive();
         this.notifyStatus();
 
@@ -676,9 +698,14 @@ export class WebSocketService {
     return Array.from(this.peers).filter((id) => id && id !== this.peerId);
   }
 
-  static onStatusChange(callback: (status: { connected: boolean; peerCount: number }) => void): () => void {
+  /** True when the relay rejected registration for lack of an authenticated session. */
+  static isRegistrationRejected(): boolean {
+    return this.registrationRejected;
+  }
+
+  static onStatusChange(callback: (status: { connected: boolean; peerCount: number; registrationRejected: boolean }) => void): () => void {
     this.statusListeners.add(callback);
-    callback({ connected: this.isConnected, peerCount: this.getPeerCount() });
+    callback({ connected: this.isConnected, peerCount: this.getPeerCount(), registrationRejected: this.registrationRejected });
 
     return () => {
       this.statusListeners.delete(callback);
@@ -730,7 +757,11 @@ export class WebSocketService {
   }
 
   private static notifyStatus() {
-    const snapshot = { connected: this.isConnected, peerCount: this.getPeerCount() };
+    const snapshot = {
+      connected: this.isConnected,
+      peerCount: this.getPeerCount(),
+      registrationRejected: this.registrationRejected,
+    };
     this.statusListeners.forEach((listener) => {
       try {
         listener(snapshot);
