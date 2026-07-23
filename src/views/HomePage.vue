@@ -182,10 +182,20 @@
               </ion-infinite-scroll>
             </div>
 
-            <div v-else class="empty-state">
+            <div v-else class="empty-state empty-state--home">
               <ion-icon :icon="documentTextOutline" size="large"></ion-icon>
               <p>No content yet</p>
-              <p class="subtitle">This may take 5–10 seconds on first visit. Join a community and create the first post or poll!</p>
+              <p class="subtitle">Content syncs from peers and can take 5–10 seconds on first visit. In the meantime:</p>
+              <div class="empty-state__actions">
+                <ion-button @click="activeTab = 'communities'">
+                  <ion-icon slot="start" :icon="peopleOutline"></ion-icon>
+                  Browse communities
+                </ion-button>
+                <ion-button fill="outline" @click="activeTab = 'create'">
+                  <ion-icon slot="start" :icon="addCircleOutline"></ion-icon>
+                  Create the first poll
+                </ion-button>
+              </div>
             </div>
           </div>
 
@@ -704,6 +714,9 @@ function isValidModerationApiUrl(url: string): boolean {
 function openModerationOnboarding() {
   if (localStorage.getItem(MODERATION_ONBOARDING_KEY) === 'true') return;
   if (moderationOnboardingOpen.value) return;
+  // Don't stack the moderation modal on top of the quick-tour card — wait for
+  // it to be dismissed first so first-time visitors see one prompt at a time.
+  if (tutorialVisible.value) return;
   moderationChoice.value = 'default';
   moderationCustomApiUrl.value = '';
   moderationCustomApiError.value = '';
@@ -963,6 +976,7 @@ const sidebarCommunities = computed(() => communityStore.communities)
 function skipTutorial() {
   localStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
   tutorialVisible.value = false;
+  void openModerationOnboarding();
 }
 
 function previousTutorialStep() {
@@ -2212,6 +2226,14 @@ ion-header.header-hidden {
 .empty-hint {
   font-size: 13px;
   color: var(--app-text-subtle);
+}
+
+.empty-state__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 8px;
 }
 
 .communities-toolbar {
