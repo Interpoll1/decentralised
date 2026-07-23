@@ -30,6 +30,21 @@ const app = express();
 let db = null;
 let dbConnected = false;
 
+// MySQL TLS config. Secure by default (verify the server certificate). Provide a
+// CA bundle via MYSQL_SSL_CA for private/self-signed CAs, or explicitly opt out
+// of verification for local dev only with MYSQL_SSL_INSECURE=true. Never silently
+// disable verification, which would allow an on-path attacker to MITM the DB.
+function buildMysqlSsl() {
+  if (process.env.MYSQL_SSL_CA) {
+    return { ca: fs.readFileSync(process.env.MYSQL_SSL_CA), rejectUnauthorized: true };
+  }
+  if (process.env.MYSQL_SSL_INSECURE === 'true') {
+    console.warn('⚠️  MySQL TLS verification DISABLED (MYSQL_SSL_INSECURE=true) — dev only, do not use in production');
+    return { rejectUnauthorized: false };
+  }
+  return { rejectUnauthorized: true };
+}
+
 async function initMySQL() {
   try {
     if (!process.env.MYSQL_HOST) {
@@ -44,7 +59,7 @@ async function initMySQL() {
       port: process.env.MYSQL_PORT ? parseInt(process.env.MYSQL_PORT) : 3306,
       waitForConnections: true,
       connectionLimit: 10,
-      ssl: { rejectUnauthorized: false },
+      ssl: buildMysqlSsl(),
     });
     await db.execute(`
       CREATE TABLE IF NOT EXISTS gun_nodes (

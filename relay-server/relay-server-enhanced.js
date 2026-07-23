@@ -748,6 +748,21 @@ setInterval(() => cleanupPendingVoteReservations(), PENDING_VOTE_CLEANUP_MS);
 // ─── MySQL ────────────────────────────────────────────────────────────────────
 let db = null;
 
+// MySQL TLS config. Secure by default (verify the server certificate). Provide a
+// CA bundle via MYSQL_SSL_CA for private/self-signed CAs, or explicitly opt out
+// of verification for local dev only with MYSQL_SSL_INSECURE=true. Never silently
+// disable verification, which would allow an on-path attacker to MITM the DB.
+function buildMysqlSsl() {
+  if (process.env.MYSQL_SSL_CA) {
+    return { ca: fs.readFileSync(process.env.MYSQL_SSL_CA), rejectUnauthorized: true };
+  }
+  if (process.env.MYSQL_SSL_INSECURE === 'true') {
+    console.warn('⚠️  MySQL TLS verification DISABLED (MYSQL_SSL_INSECURE=true) — dev only, do not use in production');
+    return { rejectUnauthorized: false };
+  }
+  return { rejectUnauthorized: true };
+}
+
 async function initMySQL() {
   if (!process.env.MYSQL_HOST) return;
   try {
@@ -761,7 +776,7 @@ async function initMySQL() {
       connectionLimit: 5,
       enableKeepAlive: true,
       keepAliveInitialDelay: 10000,
-      ssl: { rejectUnauthorized: false },
+      ssl: buildMysqlSsl(),
     });
 
     await db.execute(`
@@ -1124,6 +1139,26 @@ function escapeHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
+// Build the OG/Twitter image URL from an attacker-controlled IPFS CID. The CID
+// is validated against a strict CID charset so it can't break out of the URL /
+// attribute and inject markup into the document head; anything invalid falls
+// back to the default image. escapeHtml is applied as belt-and-suspenders.
+function safeImageUrl(imageIPFS) {
+  const cid = typeof imageIPFS === 'string' ? imageIPFS : '';
+  if (!/^[A-Za-z0-9]{1,128}$/.test(cid)) return `${DOMAIN}/og-default.png`;
+  return escapeHtml(`https://ipfs.io/ipfs/${cid}`);
+}
+
+// Attacker-controlled graph values (e.g. post.createdAt) flow into SSR. A raw
+// `new Date(value).toISOString()` throws RangeError on a non-date, which — with
+// no handler — would crash the process. Parse defensively and never throw.
+function safeIsoDate(value, { dateOnly = false } = {}) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const iso = d.toISOString();
+  return dateOnly ? iso.split('T')[0] : iso;
+}
+
 function buildHtmlShell(head, initData = '') {
   const ASSET_JS  = process.env.ASSET_JS  || '/assets2/index.js';
   const ASSET_CSS = process.env.ASSET_CSS || '/assets2/index.css';
@@ -1145,8 +1180,8 @@ function buildHtmlShell(head, initData = '') {
 function generatePostHTML(post) {
   const desc     = escapeHtml((post.content || '').replace(/\n/g, ' ').slice(0, 160));
   const title    = escapeHtml(post.title);
-  const imageUrl = post.imageIPFS ? `https://ipfs.io/ipfs/${post.imageIPFS}` : `${DOMAIN}/og-default.png`;
-  const postUrl  = `${DOMAIN}/community/${post.communityId || 'general'}/post/${post.id}`;
+  const imageUrl = safeImageUrl(post.imageIPFS);
+  const postUrl  = `${DOMAIN}/community/${escapeHtml(post.communityId || 'general')}/post/${escapeHtml(post.id)}`;
   return buildHtmlShell(`
     <title>${title} — Interpoll</title>
     <meta name="description" content="${desc}" />
@@ -1163,7 +1198,7 @@ function generatePostHTML(post) {
     <meta name="twitter:description" content="${desc}" />
     <meta name="twitter:image" content="${imageUrl}" />
     <meta property="article:author" content="${escapeHtml(post.authorName)}" />
-    <meta property="article:published_time" content="${new Date(post.createdAt).toISOString()}" />`,
+    <meta property="article:published_time" content="${safeIsoDate(post.createdAt)}" />`,
     ` data-initial-post-id="${escapeHtml(post.id)}"`
   );
 }
@@ -1171,7 +1206,7 @@ function generatePostHTML(post) {
 function generatePollHTML(poll) {
   const desc     = escapeHtml((poll.description || `Vote now: ${poll.question}`).slice(0, 160));
   const question = escapeHtml(poll.question);
-  const pollUrl  = `${DOMAIN}/community/${poll.communityId || 'general'}/poll/${poll.id}`;
+  const pollUrl  = `${DOMAIN}/community/${escapeHtml(poll.communityId || 'general')}/poll/${escapeHtml(poll.id)}`;
   return buildHtmlShell(`
     <title>${question} — Interpoll</title>
     <meta name="description" content="${desc}" />
@@ -1258,8 +1293,8 @@ async function generateSitemap() {
       try {
         const d = JSON.parse(row.data);
         if (!d?.id || !d?.displayName) continue;
-        const lastmod = d.createdAt ? new Date(d.createdAt).toISOString().split('T')[0] : now;
-        xml += `  <url><loc>${DOMAIN}/community/${d.id}</loc><lastmod>${lastmod}</lastmod><changefreq>daily</changefreq><priority>0.8</priority></url>\n`;
+        const lastmod = safeIsoDate(d.createdAt, { dateOnly: true }) || now;
+        xml += `  <url><loc>${DOMAIN}/community/${escapeHtml(d.id)}</loc><lastmod>${lastmod}</lastmod><changefreq>daily</changefreq><priority>0.8</priority></url>\n`;
       } catch {}
     }
 
@@ -1270,8 +1305,8 @@ async function generateSitemap() {
         const d = JSON.parse(row.data);
         if (!d?.id || !d?.title || !d?.communityId || seenPosts.has(d.id)) continue;
         seenPosts.add(d.id);
-        const lastmod = d.createdAt ? new Date(d.createdAt).toISOString().split('T')[0] : now;
-        xml += `  <url><loc>${DOMAIN}/community/${d.communityId}/post/${d.id}</loc><lastmod>${lastmod}</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>\n`;
+        const lastmod = safeIsoDate(d.createdAt, { dateOnly: true }) || now;
+        xml += `  <url><loc>${DOMAIN}/community/${escapeHtml(d.communityId)}/post/${escapeHtml(d.id)}</loc><lastmod>${lastmod}</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>\n`;
       } catch {}
     }
 
@@ -1288,8 +1323,8 @@ async function generateSitemap() {
         const d = JSON.parse(row.data);
         if (!d?.id || !d?.question || !d?.communityId || d?.isPrivate || seenPolls.has(d.id)) continue;
         seenPolls.add(d.id);
-        const lastmod = d.createdAt ? new Date(d.createdAt).toISOString().split('T')[0] : now;
-        xml += `  <url><loc>${DOMAIN}/community/${d.communityId}/poll/${d.id}</loc><lastmod>${lastmod}</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>\n`;
+        const lastmod = safeIsoDate(d.createdAt, { dateOnly: true }) || now;
+        xml += `  <url><loc>${DOMAIN}/community/${escapeHtml(d.communityId)}/poll/${escapeHtml(d.id)}</loc><lastmod>${lastmod}</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>\n`;
       } catch {}
     }
 
@@ -2359,6 +2394,17 @@ setInterval(() => {
   const cutoff = Date.now() - SSR_CACHE_TTL;
   for (const [key, val] of ssrCache) { if (val.ts < cutoff) ssrCache.delete(key); }
 }, 7_200_000);
+
+// ─── Crash safety ─────────────────────────────────────────────────────────────
+// Defense-in-depth: a throw while rendering attacker-controlled graph content
+// (e.g. a malformed date in SSR) must never take the whole relay down. Log and
+// keep serving rather than exiting.
+process.on('unhandledRejection', (reason) => {
+  console.error('⚠️  Unhandled rejection (kept alive):', reason instanceof Error ? reason.stack : reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('⚠️  Uncaught exception (kept alive):', err instanceof Error ? err.stack : err);
+});
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 server.listen(PORT, () => {

@@ -554,18 +554,24 @@ export class PollService {
   ): Promise<T | null> {
     return new Promise((resolve) => {
       let settled = false;
-      let subscription: any;
-      const cleanup = () => { if (subscription?.off) subscription.off(); };
-      subscription = node.on((value: T | null) => {
-        if (settled || !predicate(value)) return;
+      // `node.on(cb)` returns the *chain*, and chain.off() detaches every
+      // listener on that soul — including unrelated live feed subscriptions
+      // sharing the same path. Gun binds `this` inside the handler to that one
+      // listener, so `this.off()` detaches only ours.
+      node.on(function (this: any, value: T | null) {
+        // Detach as soon as we're done — either we just resolved, or the
+        // timeout already fired and this is a late event.
+        if (settled) { try { this?.off?.(); } catch { /* already detached */ } return; }
+        if (!predicate(value)) return;
         settled = true;
-        cleanup();
+        try { this?.off?.(); } catch { /* already detached */ }
         resolve(value ?? null);
       });
       setTimeout(() => {
         if (settled) return;
         settled = true;
-        cleanup();
+        // The listener detaches itself on its next fire (see above); we can't
+        // detach it from here without tearing down every listener on the soul.
         resolve(null);
       }, timeoutMs);
     });

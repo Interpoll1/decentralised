@@ -41,6 +41,7 @@ export class GunService {
   private static evicting = false;
   private static isInitialized = false;
   private static gunWarningTraceInstalled = false;
+  private static chainLogMuzzleInstalled = false;
   /** Callbacks fired after reconnect() rebuilds the Gun instance, so Gun-bound
    *  subscriptions (signaling inbox, discovery, rendezvous) can re-attach. */
   private static reconnectListeners = new Set<() => void>();
@@ -55,6 +56,8 @@ export class GunService {
   static initialize() {
     if (this.isInitialized && this.gun) return this.proxiedGun;
     this.installGunWarningTrace();
+
+    this.installGunChainLogMuzzle();
 
     const peers = config.getGunPeers();
     this.gun = Gun({
@@ -73,6 +76,40 @@ export class GunService {
     this.user = this.gun.user();
     this.isInitialized = true;
     return this.proxiedGun;
+  }
+
+  /**
+   * Gun logs `console.log("chain not yet supported for", tmp, '...', msg, cat)`
+   * (gun.js input()) for every message whose node lost its state metadata. Each
+   * of those lines hands the console a live reference to `cat` — the Gun *root*
+   * context — and an open DevTools retains every logged argument forever. Under
+   * a re-sync storm this alone grows the heap by gigabytes, which then trips the
+   * memory watchdog, which evicts more graph nodes, which produces more of these
+   * logs. Collapse the flood to one throttled, reference-free line.
+   */
+  private static installGunChainLogMuzzle(): void {
+    if (this.chainLogMuzzleInstalled) return;
+    if (typeof console === 'undefined') return;
+    this.chainLogMuzzleInstalled = true;
+
+    const originalLog = console.log.bind(console);
+    let suppressed = 0;
+    let lastReport = 0;
+    const REPORT_INTERVAL_MS = 10_000;
+
+    console.log = (...args: unknown[]) => {
+      if (typeof args[0] === 'string' && args[0].startsWith('chain not yet supported for')) {
+        suppressed++;
+        const now = Date.now();
+        if (now - lastReport > REPORT_INTERVAL_MS) {
+          lastReport = now;
+          originalLog(`[GunService] suppressed ${suppressed} "chain not yet supported" Gun logs`);
+          suppressed = 0;
+        }
+        return;
+      }
+      originalLog(...args);
+    };
   }
 
   private static installGunWarningTrace(): void {
@@ -527,6 +564,29 @@ export class GunService {
 
       let evictedCount = 0;
 
+      // Gun keeps a *chain* per soul in `root.next` alongside the data in
+      // `root.graph`. Deleting a graph node while its chain is still live leaves
+      // the chain with no `put`, so every subsequent child update is emitted with
+      // `'>': undefined` — Gun then fails to convert it, logs "chain not yet
+      // supported", and drops the data. Subscribers never resolve, re-request,
+      // and the relay re-sends everything ("syncing 1K+ records a second"), which
+      // grows the heap far faster than the eviction shrank it. So: never evict a
+      // soul whose chain still has listeners, and always drop chain + graph
+      // together (the chain is where the retained memory actually lives).
+      const root: any = this.gun._;
+      const next: Record<string, any> = root.next || {};
+      const hasLiveListeners = (soul: string): boolean => {
+        const chain = next[soul];
+        // `onto` deletes the tag when its last listener detaches, so the presence
+        // of an `in` tag means at least one handler is still attached.
+        return !!(chain && chain.tag && chain.tag.in);
+      };
+      const evict = (key: string) => {
+        delete graph[key];
+        delete next[key];
+        evictedCount++;
+      };
+
       if (level === 'emergency') {
         const keepRoots = new Set([
           GUN_NAMESPACE,
@@ -537,8 +597,8 @@ export class GunService {
         ]);
         for (const key of keys) {
           if (keepRoots.has(key) || keepPrefixes.some(p => key.startsWith(p))) continue;
-          delete graph[key];
-          evictedCount++;
+          if (hasLiveListeners(key)) continue;
+          evict(key);
         }
       } else if (level === 'aggressive') {
         const keepRoots = new Set([
@@ -550,10 +610,8 @@ export class GunService {
         ]);
         for (const key of keys) {
           if (keepRoots.has(key) || keepPrefixes.some(p => key.startsWith(p))) continue;
-          if (key.includes('/')) {
-            delete graph[key];
-            evictedCount++;
-          }
+          if (hasLiveListeners(key)) continue;
+          if (key.includes('/')) evict(key);
         }
       } else {
         const MAX_NODES = 2000;
@@ -561,8 +619,8 @@ export class GunService {
           const toEvict = keys.slice(0, totalBefore - MAX_NODES);
           for (const key of toEvict) {
             if (keepPrefixes.some(p => key.startsWith(p))) continue;
-            delete graph[key];
-            evictedCount++;
+            if (hasLiveListeners(key)) continue;
+            evict(key);
           }
         }
       }

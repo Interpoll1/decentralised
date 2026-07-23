@@ -36,6 +36,9 @@ export class MemoryWatchdogService {
   private static lastResetTime = 0;
   private static readonly RESET_COOLDOWN_MS = 300_000; // 5 min cooldown between Gun resets
   private static started = false;
+  /** Recent heap ratios; the window minimum is the pressure signal (see pressureRatio). */
+  private static recentRatios: number[] = [];
+  private static readonly RATIO_WINDOW = 4;
 
   static start(): void {
     if (this.started) return;
@@ -76,6 +79,23 @@ export class MemoryWatchdogService {
     };
   }
 
+  /**
+   * Pressure signal used for cleanup decisions.
+   *
+   * `usedJSHeapSize` counts garbage that simply hasn't been collected yet. Under
+   * Gun's normal sync churn a single sample swings by well over a gigabyte
+   * between GCs, so reacting to one reading makes the watchdog fire at 85% on a
+   * heap whose live set is a few hundred MB — and its response (evicting Gun
+   * graph nodes) provokes a re-sync storm that produces *more* churn. Using the
+   * lowest reading in a short window approximates the post-GC floor, i.e. the
+   * live set, so only real growth escalates.
+   */
+  private static pressureRatio(current: number): number {
+    this.recentRatios.push(current);
+    if (this.recentRatios.length > this.RATIO_WINDOW) this.recentRatios.shift();
+    return Math.min(...this.recentRatios);
+  }
+
   private static isMemoryAPIAvailable(): boolean {
     return typeof performance !== 'undefined' && 'memory' in performance;
   }
@@ -86,12 +106,13 @@ export class MemoryWatchdogService {
     let level: CleanupLevel = 'none';
 
     if (usage) {
-      // Real memory API available
-      if (usage.ratio >= EMERGENCY_THRESHOLD) {
+      // Real memory API available — judge on the recent floor, not one sample.
+      const ratio = this.pressureRatio(usage.ratio);
+      if (ratio >= EMERGENCY_THRESHOLD) {
         level = 'emergency';
-      } else if (usage.ratio >= CRITICAL_THRESHOLD) {
+      } else if (ratio >= CRITICAL_THRESHOLD) {
         level = 'aggressive';
-      } else if (usage.ratio >= WARN_THRESHOLD) {
+      } else if (ratio >= WARN_THRESHOLD) {
         level = 'light';
       }
     } else {
