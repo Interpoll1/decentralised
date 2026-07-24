@@ -15,11 +15,20 @@ describe('shared-validation/canonical.js', () => {
     expect(out).toBe('{"list":[{"a":2,"b":1},3],"z":{"x":2,"y":1}}');
   });
 
-  it('strips integrity meta fields before canonicalizing', () => {
+  it('strips only the four derived envelope fields', () => {
+    expect([...META_FIELDS].sort()).toEqual(['_hash', '_pow', '_pub', '_sig']);
     for (const field of META_FIELDS) {
       const out = canonicalJSON({ a: 1, [field]: 'should-be-stripped' });
       expect(out).toBe('{"a":1}');
     }
+  });
+
+  it('RETAINS _ts and _nonce so they are covered by the signature (F2)', () => {
+    // These freshness fields must be inside the signed/hashed bytes; if they were
+    // stripped, an attacker could mutate them on a captured message to defeat
+    // replay protection while the signature still verified.
+    const out = canonicalJSON({ a: 1, _ts: 123, _nonce: 'abc' });
+    expect(out).toBe('{"_nonce":"abc","_ts":123,"a":1}');
   });
 
   it('omits undefined values the same way at any depth', () => {

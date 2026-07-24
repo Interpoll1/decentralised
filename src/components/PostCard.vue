@@ -77,6 +77,10 @@
             <ion-icon :icon="trendingUpOutline"></ion-icon>
             <span>{{ post.score }}</span>
           </div>
+
+          <button class="stat-button share" title="Share this post" @click="handleShare">
+            <ion-icon :icon="shareOutline"></ion-icon>
+          </button>
         </div>
       </div>
     </div>
@@ -422,7 +426,8 @@ import {
   chatbubbleOutline, 
   trendingUpOutline,
   warningOutline,
-  shieldCheckmarkOutline
+  shieldCheckmarkOutline,
+  shareOutline
 } from 'ionicons/icons';
 import { Post } from '../services/postService';
 import type { FilterAction } from '../services/moderationService';
@@ -432,6 +437,7 @@ import type { UserProfile } from '../services/userService';
 import { UserService } from '../services/userService';
 import { ChatInviteService } from '../services/chatInviteService';
 import { formatTrustedIdentityLabel } from '../utils/identityTrust';
+import { shareLink } from '../composables/useShare';
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -540,6 +546,11 @@ function handleCommentsClick(event: Event) {
 function handleModerationAction(event: Event) {
   event.stopPropagation();
   emit('moderation-submit');
+}
+
+function handleShare(event: Event) {
+  event.stopPropagation();
+  void shareLink(`/post/${props.post.id}`, props.post.title || 'InterPoll post', 'Check out this post on InterPoll');
 }
 
 async function handleInviteToChat() {

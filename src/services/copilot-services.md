@@ -91,3 +91,41 @@ All services are **static classes** — never instantiated with `new`. Initializ
 | `snapshotSyncService.ts` | `SnapshotSyncService` | Peer-to-peer snapshot transfer over WebSocket. Implements a chunked (32 KB) offer→accept→chunks→complete protocol with SHA-256 integrity verification, structural validation, size limits (50 MB), transfer timeout (2 min), and progress callbacks. Public transfer entrypoints (`offerSnapshot`, `acceptOffer`, `cancelTransfer`) now self-initialize transport subscriptions to avoid hidden ordering dependencies. Cleanup clears transfer/callback state without re-subscribing duplicate WebSocket handlers. Uses dynamic imports for `WebSocketService` to avoid circular deps. |
 | `mnemonicService.ts` | — | Mnemonic receipt lookup helpers. |
 | `dbWarmup.ts` | — | Pre-warms IndexedDB on startup to avoid first-access lag. API warmup for communities/posts/polls is **v2-only** (`/api/communities`, `/api/posts?limit=50`, `/api/polls?limit=50`); for `v3+` namespaces it is intentionally skipped so feed/community data comes only from the active Gun namespace (clean-slate behavior). Emits detailed warmup status logs (`Warmup start/communities/posts/polls/done`) only when `localStorage.interpoll_warmup_debug === 'true'`. |
+
+## Memory pressure: `trimCaches(level)`
+
+Services that hold per-entity caches expose a static
+`trimCaches(level: 'light' | 'aggressive' | 'emergency')`: `PostService`,
+`CommunityService`, `TrustService`, `ModerationService`. These are registered with
+`MemoryWatchdogService.onCleanup()` in `main.ts` — the watchdog's callback registry
+had no subscribers before, so every pressure level only evicted the Gun graph while
+app-level caches grew unbounded for the session.
+
+Convention for a new `trimCaches`:
+- `light` — `prune()` only (drop already-expired entries), never touch live data
+- `aggressive` — shrink or clear derived/lookup caches
+- `emergency` — clear everything re-derivable
+
+Only cache *data*. Never evict subscriptions, in-flight promises, or unsubscriber
+maps: dropping those leaks the underlying listener rather than freeing anything.
+Backing stores are `BoundedMap`/`BoundedSet` (see `src/utils/copilot-utils.md`).
+
+## Search indexing is server-side only
+
+Clients do **not** index content. `gun-relay/gun-relay-enhanced.js` indexes posts
+and polls from its own Gun `put` hook (`maybeIndexNode` → `indexSearchRow`), writing
+`search_index` directly on its MySQL pool. Anything reaching the graph is indexed
+regardless of whether the author was signed in.
+
+Do not reintroduce a client-side `POST /api/index` call. That endpoint is gated on
+`API_INDEX_SECRET`, which a browser cannot hold, so such calls only ever returned
+401 into a swallowed warning — while paying for a PoW `IntegrityService.seal()` on
+the publish path. `SearchService` deliberately has no `indexContent()` method.
+
+## Vote counters: read the live Gun node, never the cached view
+
+`PostService.getPostForCounterUpdate()` exists because `getPost()` prefers the REST
+snapshot and the module cache, neither of which reflects a counter this client just
+wrote. Any read-modify-write of a counter (`voteOnPost`, `removeVote`,
+`incrementCommentCount`) must read the live Gun node, or it will silently revert the
+previous write. `getPost()` remains correct for ordinary cold reads.

@@ -28,6 +28,7 @@
 import { CryptoService } from '@/services/cryptoService';
 import { GunService } from '@/services/gunService';
 import { KeyService } from '@/services/keyService';
+import { BoundedMap, BoundedSet } from '../utils/boundedMap';
 
 /** How a peer can be reached on a signaling channel. */
 export interface SignalTarget {
@@ -93,7 +94,9 @@ export class SignalingService {
   private static myPubkey = '';
   private static myPrivkey = '';
   private static listeners = new Set<(sig: InboundSignal) => void>();
-  private static seen = new Set<string>();
+  // Replay guard. Bounded with a TTL comfortably longer than any signal's useful
+  // life; unbounded before, growing one entry per signal received forever.
+  private static seen = new BoundedSet<string>({ maxSize: 5000, ttlMs: 10 * 60_000 });
   private static gunSubscribed = false;
 
   static async initialize(): Promise<void> {

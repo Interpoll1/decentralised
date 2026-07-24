@@ -18,7 +18,6 @@ import fs from 'fs';
 
 const PORT = process.env.PORT || 8765;
 const NODE_ENV = process.env.NODE_ENV || 'development';
-const RELAY_SERVER_URL = process.env.RELAY_SERVER_URL || 'http://localhost:3001';
 const DATA_DIR = process.env.GUN_DATA_DIR || new URL('./data', import.meta.url).pathname;
 const GUN_FILE = `${DATA_DIR}/radata`;
 
@@ -29,6 +28,21 @@ const app = express();
 // ─── MySQL ────────────────────────────────────────────────────────────────────
 let db = null;
 let dbConnected = false;
+
+// MySQL TLS config. Secure by default (verify the server certificate). Provide a
+// CA bundle via MYSQL_SSL_CA for private/self-signed CAs, or explicitly opt out
+// of verification for local dev only with MYSQL_SSL_INSECURE=true. Never silently
+// disable verification, which would allow an on-path attacker to MITM the DB.
+function buildMysqlSsl() {
+  if (process.env.MYSQL_SSL_CA) {
+    return { ca: fs.readFileSync(process.env.MYSQL_SSL_CA), rejectUnauthorized: true };
+  }
+  if (process.env.MYSQL_SSL_INSECURE === 'true') {
+    console.warn('⚠️  MySQL TLS verification DISABLED (MYSQL_SSL_INSECURE=true) — dev only, do not use in production');
+    return { rejectUnauthorized: false };
+  }
+  return { rejectUnauthorized: true };
+}
 
 async function initMySQL() {
   try {
@@ -44,7 +58,7 @@ async function initMySQL() {
       port: process.env.MYSQL_PORT ? parseInt(process.env.MYSQL_PORT) : 3306,
       waitForConnections: true,
       connectionLimit: 10,
-      ssl: { rejectUnauthorized: false },
+      ssl: buildMysqlSsl(),
     });
     await db.execute(`
       CREATE TABLE IF NOT EXISTS gun_nodes (
@@ -53,11 +67,31 @@ async function initMySQL() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
+    // Kept schema-identical to relay-server/relay-server-enhanced.js. Declared here
+    // too so this process can index without depending on relay-server having booted
+    // first — whichever starts first creates the table, the other is a no-op.
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS search_index (
+        id VARCHAR(100) PRIMARY KEY,
+        type ENUM('post', 'poll') NOT NULL,
+        title TEXT,
+        content TEXT,
+        author VARCHAR(200),
+        community VARCHAR(100),
+        created_at BIGINT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FULLTEXT idx_title_content (title, content),
+        INDEX idx_author (author),
+        INDEX idx_community (community),
+        INDEX idx_created (created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
     dbConnected = true;
-    console.log('✅ MySQL connected');
+    console.log('✅ MySQL connected — search indexing ACTIVE (direct search_index writes)');
     return true;
   } catch (err) {
     console.error('❌ MySQL connection failed:', err.message);
+    console.error('❌ Search indexing DISABLED — /api/search will return stale or empty results');
     dbConnected = false;
     return false;
   }
@@ -66,25 +100,39 @@ async function initMySQL() {
 await initMySQL();
 
 // ─── Search Indexing ──────────────────────────────────────────────────────────
-async function indexToRelayServer(type, id, data) {
-  if (!process.env.API_INDEX_SECRET) {
-    console.warn('⚠️  API_INDEX_SECRET not set — search indexing disabled');
-    return;
-  }
+// This process owns the Gun write path, and relay-server owns /api/search — but
+// both are configured against the same MySQL database, so we write `search_index`
+// directly from our own pool rather than making an authenticated HTTP round-trip
+// to relay-server's /api/index. That endpoint is gated on API_INDEX_SECRET; when
+// the secret was unset this path silently no-opped and nothing was ever indexed.
+// Writing directly removes both the secret and the cross-process dependency.
+//
+// The statement below must stay schema-identical to indexContent() in
+// relay-server/relay-server-enhanced.js, which still writes the same table from
+// its WebSocket handlers and its /api/index admin endpoint.
+async function indexSearchRow(type, id, data) {
+  if (!dbConnected) return false;
   try {
-    const response = await fetch(`${RELAY_SERVER_URL}/api/index`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.API_INDEX_SECRET || ''}`,
-      },
-      body: JSON.stringify({ type, id, data }),
-    });
-    if (!response.ok) {
-      console.warn(`⚠️  Search indexing failed for ${type}:${id} — ${response.status}`);
-    }
+    await db.execute(
+      `INSERT INTO search_index (id, type, title, content, author, community, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         title = VALUES(title), content = VALUES(content),
+         author = VALUES(author), updated_at = NOW()`,
+      [
+        id,
+        type,
+        data.title ?? data.question ?? '',
+        data.content ?? data.description ?? '',
+        data.authorName || 'Anonymous',
+        data.communitySlug || '',
+        data.createdAt || Date.now(),
+      ]
+    );
+    return true;
   } catch (err) {
-    console.error('❌ Search indexing error:', err.message);
+    console.error(`❌ Search indexing error for ${type}:${sanitizeLogString(id)} —`, err.message);
+    return false;
   }
 }
 
@@ -93,7 +141,7 @@ async function maybeIndexNode(soul, fullData) {
   const isPoll = /\/polls\/poll-[^/]+$/.test(soul);
 
   if (isPost && fullData.title) {
-    await indexToRelayServer('post', fullData.id || soul.split('/').pop(), {
+    return indexSearchRow('post', fullData.id || soul.split('/').pop(), {
       title:         fullData.title,
       content:       fullData.content || '',
       authorName:    fullData.authorName || 'Anonymous',
@@ -101,7 +149,7 @@ async function maybeIndexNode(soul, fullData) {
       createdAt:     fullData.createdAt || Date.now(),
     });
   } else if (isPoll && fullData.question) {
-    await indexToRelayServer('poll', fullData.id || soul.split('/').pop(), {
+    return indexSearchRow('poll', fullData.id || soul.split('/').pop(), {
       question:      fullData.question,
       description:   fullData.description || '',
       authorName:    fullData.authorName || 'Anonymous',
@@ -109,6 +157,7 @@ async function maybeIndexNode(soul, fullData) {
       createdAt:     fullData.createdAt || Date.now(),
     });
   }
+  return false;
 }
 
 // ─── Value sanitiser ──────────────────────────────────────────────────────────
@@ -205,11 +254,19 @@ async function backfillSearchIndex() {
         if (isPost && !fullData.title) { skipped++; continue; }
         if (isPoll && !fullData.question) { skipped++; continue; }
 
-        await maybeIndexNode(row.soul, fullData);
-        indexed++;
-        await new Promise(r => setTimeout(r, 50));
+        // Counts actual successful upserts. This previously counted attempts,
+        // which reported a healthy backfill even while every row was silently
+        // dropped by the disabled HTTP indexing path.
+        if (await maybeIndexNode(row.soul, fullData)) indexed++;
+        else skipped++;
+
+        // Yield periodically so a large backfill doesn't starve the event loop.
+        // (The old 50ms per-row sleep paced HTTP calls to relay-server; writes
+        // now go straight to our own pool and need no such throttle.)
+        if (indexed % 100 === 0) await new Promise(r => setImmediate(r));
       } catch (err) {
-        console.error(`❌ Backfill error for ${row.soul}:`, err.message);
+        console.error(`❌ Backfill error for ${sanitizeLogString(row.soul)}:`, err.message);
+        skipped++;
       }
     }
 
@@ -538,7 +595,9 @@ app.get('/', (req, res) => {
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🔫 Enhanced Gun Relay on :${PORT}`);
   console.log(`   DB: ${dbConnected ? '✅ MySQL' : '⚠️ Memory only'}`);
-  console.log(`   Search: ✅ Auto-indexing to ${RELAY_SERVER_URL}`);
+  // Reflect actual state. This line previously claimed auto-indexing was on
+  // unconditionally, while indexing was in fact disabled for want of a secret.
+  console.log(`   Search: ${dbConnected ? '✅ Auto-indexing → search_index (direct)' : '❌ DISABLED (no MySQL)'}`);
   console.log(`   Array guard: ✅ Blocks invalid array writes`);
 
   if (dbConnected) {

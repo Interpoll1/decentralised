@@ -1,4 +1,6 @@
 import type { InviteLinkData } from '../types/encryption';
+import { Capacitor } from '@capacitor/core';
+import config from '../config';
 
 export class InviteLinkService {
   /**
@@ -13,7 +15,12 @@ export class InviteLinkService {
    * @returns full invite URL
    */
   static generateInviteLink(id: string, type: InviteLinkData['type'], base64urlKey: string): string {
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    // In the native shell window.location.origin is `https://localhost`, which
+    // is not an openable link for the recipient — use the canonical public web
+    // origin so shared/QR'd invites resolve on any device.
+    const origin = Capacitor.isNativePlatform()
+      ? config.web.origin
+      : (typeof window !== 'undefined' ? window.location.origin : '');
     return `${origin}/join/${type}/${encodeURIComponent(id)}#${base64urlKey}`;
   }
 
