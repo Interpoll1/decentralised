@@ -1,4 +1,5 @@
 <template>
+  <AuroraBackground />
   <ion-app>
     <AppErrorBoundary>
       <AppLoader v-if="!appReady" />
@@ -23,6 +24,7 @@ import { warmupFromDB } from './services/dbWarmup';
 import AppLoader from './components/AppLoader.vue';
 import AppErrorBoundary from './components/AppErrorBoundary.vue';
 import GlobalCommandPalette from './components/GlobalCommandPalette.vue';
+import AuroraBackground from './components/AuroraBackground.vue';
 
 const chainStore = useChainStore();
 const router = useRouter();
