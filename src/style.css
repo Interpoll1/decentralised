@@ -2,18 +2,18 @@
   color-scheme: light;
   font-family: "Inter", "Geist Sans", system-ui, sans-serif;
 
-  --app-bg-deep: #eef2ff;
-  --app-bg-base: #f5f7fb;
-  --app-bg-elevated: #ffffff;
-  --app-surface: rgba(255, 255, 255, 0.72);
-  --app-surface-strong: rgba(255, 255, 255, 0.88);
-  --app-surface-hover: rgba(255, 255, 255, 0.96);
-  --app-border: rgba(15, 23, 42, 0.08);
-  --app-border-strong: rgba(15, 23, 42, 0.14);
+  --app-bg-deep: #dde4f5;
+  --app-bg-base: #eef2ff;
+  --app-bg-elevated: #f8f9ff;
+  --app-surface: rgba(255, 255, 255, 0.55);
+  --app-surface-strong: rgba(255, 255, 255, 0.72);
+  --app-surface-hover: rgba(255, 255, 255, 0.82);
+  --app-border: rgba(15, 23, 42, 0.07);
+  --app-border-strong: rgba(15, 23, 42, 0.13);
   --app-border-accent: rgba(94, 106, 210, 0.32);
   --app-text: #111827;
   --app-text-muted: #5b6472;
-  --app-text-subtle: rgba(17, 24, 39, 0.56);
+  --app-text-subtle: rgba(17, 24, 39, 0.52);
   --app-accent: #5e6ad2;
   --app-accent-bright: #6872d9;
   --app-accent-rgb: 94, 106, 210;
@@ -26,47 +26,54 @@
   --app-radius-lg: 16px;
   --app-radius-md: 12px;
   --app-radius-sm: 10px;
-  --app-shadow-sm: 0 0 0 1px rgba(15, 23, 42, 0.04), 0 12px 36px rgba(15, 23, 42, 0.08);
-  --app-shadow-md: 0 0 0 1px rgba(15, 23, 42, 0.06), 0 18px 42px rgba(15, 23, 42, 0.12), 0 0 72px rgba(94, 106, 210, 0.08);
-  --app-shadow-lg: 0 0 0 1px rgba(15, 23, 42, 0.08), 0 24px 60px rgba(15, 23, 42, 0.16), 0 0 90px rgba(94, 106, 210, 0.12);
-  --app-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  --app-shadow-sm: 0 0 0 1px rgba(15, 23, 42, 0.04), 0 12px 36px rgba(15, 23, 42, 0.07);
+  --app-shadow-md: 0 0 0 1px rgba(15, 23, 42, 0.05), 0 18px 42px rgba(15, 23, 42, 0.10), 0 0 72px rgba(94, 106, 210, 0.07);
+  --app-shadow-lg: 0 0 0 1px rgba(15, 23, 42, 0.07), 0 24px 60px rgba(15, 23, 42, 0.13), 0 0 90px rgba(94, 106, 210, 0.10);
+  --app-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.80);
   --app-focus-ring: 0 0 0 2px rgba(94, 106, 210, 0.55);
   --app-transition: 240ms cubic-bezier(0.16, 1, 0.3, 1);
-  --app-grid-color: rgba(255, 255, 255, 0.03);
+  --app-grid-color: rgba(94, 106, 210, 0.035);
   --app-noise-opacity: 0.018;
   --app-ambient-spot-1: rgba(94, 106, 210, 0.26);
   --app-ambient-spot-2: rgba(140, 92, 246, 0.12);
   --app-ambient-spot-3: rgba(99, 102, 241, 0.14);
   --app-ambient-spot-4: rgba(94, 106, 210, 0.12);
-  --app-surface-tint-top: rgba(255, 255, 255, 0.18);
-  --app-surface-tint-bottom: rgba(255, 255, 255, 0.03);
-  --app-surface-tint-top-hover: rgba(255, 255, 255, 0.22);
-  --app-surface-tint-bottom-hover: rgba(255, 255, 255, 0.04);
-  --app-pill-surface: rgba(255, 255, 255, 0.04);
-  --app-item-surface: rgba(255, 255, 255, 0.03);
-  --app-search-surface: rgba(255, 255, 255, 0.04);
+  --app-surface-tint-top: rgba(255, 255, 255, 0.70);
+  --app-surface-tint-bottom: rgba(255, 255, 255, 0.30);
+  --app-surface-tint-top-hover: rgba(255, 255, 255, 0.82);
+  --app-surface-tint-bottom-hover: rgba(255, 255, 255, 0.42);
+  --app-pill-surface: rgba(255, 255, 255, 0.50);
+  --app-item-surface: rgba(255, 255, 255, 0.42);
+  --app-search-surface: rgba(255, 255, 255, 0.48);
   --app-heading-start: #111827;
-  --app-heading-end: rgba(17, 24, 39, 0.72);
-  --glass-blur: 20px;
-  --glass-saturation: 1.2;
-  --glass-item-blur: 16px;
-  --glass-item-saturation: 1.08;
-  --toolbar-blur: 18px;
-  --toolbar-saturation: 1.15;
+  --app-heading-end: rgba(17, 24, 39, 0.62);
+  --glass-blur: 22px;
+  --glass-saturation: 1.4;
+  --glass-item-blur: 18px;
+  --glass-item-saturation: 1.18;
+  --toolbar-blur: 20px;
+  --toolbar-saturation: 1.3;
   --glass-border: var(--app-border);
-  --glass-border-top: rgba(255, 255, 255, 0.65);
-  --glass-border-bottom: rgba(15, 23, 42, 0.06);
+  --glass-border-top: rgba(255, 255, 255, 0.85);
+  --glass-border-bottom: rgba(15, 23, 42, 0.05);
   --glass-shadow: var(--app-shadow-md);
   --glass-highlight: var(--app-shadow-inset);
-  --glass-inner-glow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --glass-inner-glow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
   --liquid-transition: all var(--app-transition);
   --liquid-spring: transform var(--app-transition), box-shadow var(--app-transition), border-color var(--app-transition);
 
+  /* light aurora */
+  --aurora-base-bg: #eaedff;
+  --aurora-blend: normal;
+  --aurora-orb1-opacity: 0.28;
+  --aurora-orb2-opacity: 0.22;
+  --aurora-orb3-opacity: 0.18;
+
   --ion-background-color: var(--app-bg-base);
-  --ion-background-color-rgb: 245, 247, 251;
+  --ion-background-color-rgb: 238, 242, 255;
   --ion-card-background: var(--app-surface);
   --ion-card-background-rgb: 255, 255, 255;
-  --ion-item-background: rgba(255, 255, 255, 0.82);
+  --ion-item-background: rgba(255, 255, 255, 0.55);
   --ion-item-background-rgb: 255, 255, 255;
   --ion-text-color: var(--app-text);
   --ion-text-color-rgb: 17, 24, 39;
@@ -127,9 +134,9 @@
   --ion-color-light-shade: #141519;
   --ion-color-light-tint: #2a2b30;
 
-  --ion-toolbar-background: rgba(255, 255, 255, 0.78);
+  --ion-toolbar-background: rgba(255, 255, 255, 0.62);
   --ion-toolbar-color: var(--app-text);
-  --ion-tab-bar-background: rgba(255, 255, 255, 0.9);
+  --ion-tab-bar-background: rgba(255, 255, 255, 0.75);
   --ion-tab-bar-color: var(--app-text-muted);
   --ion-tab-bar-color-selected: var(--app-accent-bright);
   --ion-placeholder-color: var(--app-text-subtle);
@@ -160,47 +167,57 @@ body.dark {
   color-scheme: dark;
   --app-bg-deep: #000000;
   --app-bg-base: #000000;
-  --app-bg-elevated: #000000;
-  --app-surface: #000000;
-  --app-surface-strong: #000000;
-  --app-surface-hover: #000000;
+  --app-bg-elevated: #07080a;
+  --app-surface: rgba(22, 24, 30, 0.50);
+  --app-surface-strong: rgba(30, 32, 40, 0.65);
+  --app-surface-hover: rgba(38, 41, 50, 0.75);
   --app-border: rgba(255, 255, 255, 0.08);
-  --app-border-strong: rgba(255, 255, 255, 0.14);
+  --app-border-strong: rgba(255, 255, 255, 0.16);
   --app-text: #f5f5f6;
   --app-text-muted: #70757f;
   --app-text-subtle: rgba(255, 255, 255, 0.44);
-  --app-grid-color: rgba(255, 255, 255, 0);
-  --app-noise-opacity: 0;
-  --app-ambient-spot-1: rgba(94, 106, 210, 0);
-  --app-ambient-spot-2: rgba(140, 92, 246, 0);
-  --app-ambient-spot-3: rgba(99, 102, 241, 0);
-  --app-ambient-spot-4: rgba(94, 106, 210, 0);
-  --app-surface-tint-top: rgba(255, 255, 255, 0);
-  --app-surface-tint-bottom: rgba(255, 255, 255, 0);
-  --app-surface-tint-top-hover: rgba(255, 255, 255, 0);
-  --app-surface-tint-bottom-hover: rgba(255, 255, 255, 0);
-  --app-pill-surface: #000000;
-  --app-item-surface: #000000;
-  --app-search-surface: #000000;
+  --app-grid-color: rgba(255, 255, 255, 0.025);
+  --app-noise-opacity: 0.02;
+  --app-ambient-spot-1: rgba(94, 106, 210, 0.22);
+  --app-ambient-spot-2: rgba(140, 92, 246, 0.14);
+  --app-ambient-spot-3: rgba(99, 102, 241, 0.16);
+  --app-ambient-spot-4: rgba(94, 106, 210, 0.12);
+  --app-surface-tint-top: rgba(255, 255, 255, 0.07);
+  --app-surface-tint-bottom: rgba(255, 255, 255, 0.015);
+  --app-surface-tint-top-hover: rgba(255, 255, 255, 0.10);
+  --app-surface-tint-bottom-hover: rgba(255, 255, 255, 0.02);
+  --app-pill-surface: rgba(255, 255, 255, 0.06);
+  --app-item-surface: rgba(255, 255, 255, 0.04);
+  --app-search-surface: rgba(255, 255, 255, 0.05);
   --app-heading-start: #ffffff;
   --app-heading-end: rgba(255, 255, 255, 0.58);
-  --app-shadow-sm: 0 0 0 1px rgba(255, 255, 255, 0.04);
-  --app-shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.05);
-  --app-shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.08);
-  --app-shadow-inset: inset 0 0 0 rgba(255, 255, 255, 0);
-  --glass-blur: 0px;
-  --glass-saturation: 1;
-  --glass-item-blur: 0px;
-  --glass-item-saturation: 1;
-  --toolbar-blur: 0px;
-  --toolbar-saturation: 1;
-  --glass-border-top: rgba(255, 255, 255, 0.04);
-  --glass-border-bottom: rgba(255, 255, 255, 0.04);
+  --app-shadow-sm: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 12px 36px rgba(0, 0, 0, 0.5);
+  --app-shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 18px 42px rgba(0, 0, 0, 0.55), 0 0 72px rgba(94, 106, 210, 0.08);
+  --app-shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 90px rgba(94, 106, 210, 0.12);
+  --app-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --glass-blur: 22px;
+  --glass-saturation: 1.4;
+  --glass-item-blur: 18px;
+  --glass-item-saturation: 1.22;
+  --toolbar-blur: 20px;
+  --toolbar-saturation: 1.3;
+  --glass-border-top: rgba(255, 255, 255, 0.16);
+  --glass-border-bottom: rgba(0, 0, 0, 0.3);
+  --glass-inner-glow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+  /* dark aurora */
+  --aurora-base-bg: #07080d;
+  --aurora-blend: screen;
+  --aurora-orb1-opacity: 0.55;
+  --aurora-orb2-opacity: 0.45;
+  --aurora-orb3-opacity: 0.35;
+
   --ion-background-color-rgb: 0, 0, 0;
-  --ion-item-background: #000000;
+  --ion-card-background-rgb: 22, 24, 30;
+  --ion-item-background: rgba(255, 255, 255, 0.04);
   --ion-text-color-rgb: 245, 245, 246;
-  --ion-toolbar-background: #000000;
-  --ion-tab-bar-background: #000000;
+  --ion-toolbar-background: rgba(10, 11, 14, 0.55);
+  --ion-tab-bar-background: rgba(10, 11, 14, 0.70);
   --ion-color-step-50: #050505;
   --ion-color-step-100: #0a0a0a;
   --ion-color-step-150: #111111;
@@ -222,6 +239,8 @@ body.dark {
   --ion-color-step-950: #f8f8f8;
 }
 
+/* base document */
+
 html,
 body,
 #app,
@@ -232,8 +251,7 @@ ion-app,
 
 html,
 body {
-  background:
-    radial-gradient(ellipse at top, var(--app-bg-elevated) 0%, var(--app-bg-base) 45%, var(--app-bg-deep) 100%);
+  background: var(--aurora-base-bg);
   color: var(--app-text);
 }
 
@@ -244,83 +262,160 @@ body {
   font-family: "Inter", "Geist Sans", system-ui, sans-serif;
 }
 
-body::before,
-body::after {
-  content: "";
+/* aurora bg layer, see AuroraBackground.vue */
+
+@keyframes aurora-1 {
+  0%   { transform: translate(0%, 0%)    scale(1);    }
+  33%  { transform: translate(8%, -12%)  scale(1.08); }
+  66%  { transform: translate(-6%, 10%)  scale(0.95); }
+  100% { transform: translate(0%, 0%)    scale(1);    }
+}
+@keyframes aurora-2 {
+  0%   { transform: translate(0%, 0%)    scale(1);    }
+  25%  { transform: translate(-10%, 8%)  scale(1.06); }
+  75%  { transform: translate(12%, -6%)  scale(0.92); }
+  100% { transform: translate(0%, 0%)    scale(1);    }
+}
+@keyframes aurora-3 {
+  0%   { transform: translate(0%, 0%)    scale(1);    }
+  40%  { transform: translate(6%, 14%)   scale(1.1);  }
+  80%  { transform: translate(-8%, -8%)  scale(0.96); }
+  100% { transform: translate(0%, 0%)    scale(1);    }
+}
+@keyframes aurora-drift {
+  0%,100% { opacity: var(--aurora-orb1-opacity); }
+  50%      { opacity: calc(var(--aurora-orb1-opacity) + 0.12); }
+}
+
+.interpoll-aurora {
   position: fixed;
   inset: 0;
+  z-index: 0;
   pointer-events: none;
+  overflow: hidden;
+  background: var(--aurora-base-bg);
 }
 
-body::before {
-  z-index: -2;
-  background:
-    radial-gradient(circle at 50% 10%, var(--app-ambient-spot-1) 0, transparent 34%),
-    radial-gradient(circle at 16% 32%, var(--app-ambient-spot-2) 0, transparent 32%),
-    radial-gradient(circle at 84% 26%, var(--app-ambient-spot-3) 0, transparent 30%),
-    radial-gradient(circle at 70% 82%, var(--app-ambient-spot-4) 0, transparent 28%);
-  filter: blur(72px);
-  transform: translateZ(0);
-  animation: ambientFloat 10s ease-in-out infinite;
-}
-
-body::after {
-  z-index: -1;
-  opacity: 1;
+/* subtle grid overlay */
+.interpoll-aurora::after {
+  content: '';
+  position: absolute;
+  inset: 0;
   background-image:
     linear-gradient(var(--app-grid-color) 1px, transparent 1px),
-    linear-gradient(90deg, var(--app-grid-color) 1px, transparent 1px),
-    radial-gradient(circle at center, rgba(255, 255, 255, var(--app-noise-opacity)) 0, transparent 58%);
-  background-size: 64px 64px, 64px 64px, 180px 180px;
-  background-position: center center;
-  mask-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.35));
+    linear-gradient(90deg, var(--app-grid-color) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: linear-gradient(to bottom, rgba(255,255,255,0.7), rgba(255,255,255,0.15));
 }
 
-@keyframes ambientFloat {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(0, -18px, 0) scale(1.03);
-  }
+.interpoll-aurora .aurora-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  mix-blend-mode: var(--aurora-blend);
 }
 
-* {
-  box-sizing: border-box;
+/* orb 1 */
+.interpoll-aurora .aurora-orb-1 {
+  width: 70vw;
+  height: 60vh;
+  top: -20%;
+  left: -15%;
+  opacity: var(--aurora-orb1-opacity);
+  animation: aurora-1 20s ease-in-out infinite, aurora-drift 14s ease-in-out infinite;
 }
 
-a {
-  color: inherit;
+/* orb 2 */
+.interpoll-aurora .aurora-orb-2 {
+  width: 65vw;
+  height: 65vh;
+  bottom: -25%;
+  right: -10%;
+  opacity: var(--aurora-orb2-opacity);
+  animation: aurora-2 25s ease-in-out infinite, aurora-drift 18s ease-in-out infinite;
+  animation-delay: -6s, -3s;
 }
 
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  color: var(--app-text);
-  margin-top: 0;
+/* orb 3 */
+.interpoll-aurora .aurora-orb-3 {
+  width: 50vw;
+  height: 50vh;
+  top: 20%;
+  right: 5%;
+  opacity: var(--aurora-orb3-opacity);
+  animation: aurora-3 30s ease-in-out infinite, aurora-drift 22s ease-in-out infinite;
+  animation-delay: -12s, -8s;
 }
 
-p {
-  color: var(--app-text-muted);
+/* light theme colors */
+:root .interpoll-aurora .aurora-orb-1 {
+  background: radial-gradient(ellipse at center,
+    rgba(139, 92, 246, 1)   0%,
+    rgba(99,  55, 220, 0.7) 45%,
+    transparent             75%
+  );
+}
+:root .interpoll-aurora .aurora-orb-2 {
+  background: radial-gradient(ellipse at center,
+    rgba(56, 189, 248, 1)   0%,
+    rgba(14, 165, 233, 0.6) 50%,
+    transparent             75%
+  );
+}
+:root .interpoll-aurora .aurora-orb-3 {
+  background: radial-gradient(ellipse at center,
+    rgba(236, 72, 153, 0.9)  0%,
+    rgba(168, 85, 247, 0.55) 50%,
+    transparent              75%
+  );
 }
 
-.ambient-page {
-  --background: transparent;
+/* dark theme colors */
+html.dark .interpoll-aurora .aurora-orb-1,
+body.dark  .interpoll-aurora .aurora-orb-1 {
+  background: radial-gradient(ellipse at center,
+    rgba(99, 55, 220, 1)    0%,
+    rgba(60, 30, 140, 0.65) 45%,
+    transparent             75%
+  );
+}
+html.dark .interpoll-aurora .aurora-orb-2,
+body.dark  .interpoll-aurora .aurora-orb-2 {
+  background: radial-gradient(ellipse at center,
+    rgba(0, 180, 200, 1)    0%,
+    rgba(0, 100, 160, 0.62) 50%,
+    transparent             75%
+  );
+}
+html.dark .interpoll-aurora .aurora-orb-3,
+body.dark  .interpoll-aurora .aurora-orb-3 {
+  background: radial-gradient(ellipse at center,
+    rgba(170, 40, 220, 1)    0%,
+    rgba(100, 20, 180, 0.52) 50%,
+    transparent              75%
+  );
 }
 
-.ambient-page::part(scroll) {
-  background: transparent;
+/* noise */
+.interpoll-aurora .aurora-noise {
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+  opacity: 0.35;
+  mix-blend-mode: overlay;
 }
 
-.ambient-page__content {
-  width: min(1320px, calc(100% - 32px));
-  margin: 0 auto;
-  padding: 24px 0 120px;
+/* above aurora layer */
+ion-app {
+  position: relative;
+  z-index: 1;
+  background: transparent !important;
+  --ion-background-color: transparent;
 }
+
+/* glass surface system */
 
 .surface-card,
 .glass-panel,
@@ -328,7 +423,8 @@ p {
   background:
     linear-gradient(180deg, var(--app-surface-tint-top), var(--app-surface-tint-bottom)),
     var(--app-surface);
-  border: 1px solid var(--app-border);
+  border: 1px solid var(--glass-border-top);
+  border-bottom-color: var(--glass-border-bottom);
   border-radius: var(--app-radius-lg);
   box-shadow: var(--app-shadow-md), var(--app-shadow-inset);
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
@@ -352,6 +448,24 @@ p {
   box-shadow: var(--app-shadow-md), var(--app-shadow-inset);
 }
 
+.glass-surface {
+  background: var(--app-surface) !important;
+  backdrop-filter: blur(24px) saturate(180%) brightness(1.04) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) brightness(1.04) !important;
+  border: 1px solid var(--glass-border-top) !important;
+  border-bottom-color: var(--glass-border-bottom) !important;
+  box-shadow: var(--app-shadow-inset), var(--app-shadow-md) !important;
+}
+
+.glass-surface--strong {
+  background: var(--app-surface-strong) !important;
+  backdrop-filter: blur(32px) saturate(200%) brightness(1.06) !important;
+  -webkit-backdrop-filter: blur(32px) saturate(200%) brightness(1.06) !important;
+  border: 1px solid var(--glass-border-top) !important;
+  border-bottom-color: var(--glass-border-bottom) !important;
+  box-shadow: var(--app-shadow-inset), var(--app-shadow-lg) !important;
+}
+
 .surface-pill {
   display: inline-flex;
   align-items: center;
@@ -361,7 +475,9 @@ p {
   border: 1px solid var(--app-border);
   background: var(--app-pill-surface);
   color: var(--app-text-muted);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .surface-label {
@@ -389,6 +505,24 @@ p {
   color: var(--app-text-muted);
 }
 
+/* page / layout */
+
+.ambient-page {
+  --background: transparent;
+}
+
+.ambient-page::part(scroll) {
+  background: transparent;
+}
+
+.ambient-page__content {
+  width: min(1320px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 24px 0 120px;
+}
+
+/* ionic overrides */
+
 ion-content,
 ion-header,
 ion-toolbar,
@@ -405,6 +539,10 @@ ion-content {
   color: var(--app-text);
 }
 
+ion-content::part(background) {
+  background: transparent;
+}
+
 ion-header::after {
   display: none;
 }
@@ -413,8 +551,8 @@ ion-toolbar {
   --background: var(--ion-toolbar-background);
   --color: var(--ion-toolbar-color);
   --border-width: 0;
-  border-bottom: 1px solid var(--app-border);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--glass-border-top);
+  box-shadow: var(--app-shadow-inset);
   backdrop-filter: blur(var(--toolbar-blur)) saturate(var(--toolbar-saturation));
   -webkit-backdrop-filter: blur(var(--toolbar-blur)) saturate(var(--toolbar-saturation));
 }
@@ -424,6 +562,12 @@ ion-card {
   margin: 0;
   border-radius: var(--app-radius-lg);
   overflow: hidden;
+  background: var(--app-surface) !important;
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation)) !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation)) !important;
+  border: 1px solid var(--glass-border-top) !important;
+  border-bottom-color: var(--glass-border-bottom) !important;
+  box-shadow: var(--app-shadow-inset), var(--app-shadow-md) !important;
 }
 
 ion-item {
@@ -496,9 +640,9 @@ ion-button:not([fill="clear"]):not([fill="outline"]) {
 
 ion-button[fill="clear"]:not([color]),
 ion-button[fill="outline"]:not([color]) {
-  --background: rgba(255, 255, 255, 0.04);
+  --background: var(--app-item-surface);
   --border-color: var(--app-border);
-  --box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
@@ -522,7 +666,7 @@ ion-chip {
   border: 1px solid var(--app-border);
   border-radius: 999px;
   color: var(--app-text);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--app-pill-surface);
 }
 
 ion-badge {
@@ -530,36 +674,154 @@ ion-badge {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
+ion-segment {
+  --background: var(--app-pill-surface);
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border-radius: 999px !important;
+  border: 1px solid var(--app-border) !important;
+}
+
+ion-segment-button {
+  --background-checked: var(--app-surface-strong);
+  --indicator-color: var(--app-surface-strong);
+}
+
+ion-menu,
+ion-split-pane > [slot="start"],
+.side-menu,
+.left-sidebar,
+[class*="sidebar"],
+[class*="nav-panel"] {
+  --background: var(--app-surface) !important;
+  background: var(--app-surface) !important;
+  backdrop-filter: blur(28px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(160%) !important;
+  border-right: 1px solid var(--glass-border-top) !important;
+}
+
+ion-menu ion-content {
+  --background: transparent !important;
+}
+
+.right-panel,
+[class*="right-sidebar"],
+[class*="communities-panel"],
+[class*="sidebar-panel"] {
+  background: var(--app-surface) !important;
+  backdrop-filter: blur(28px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(160%) !important;
+  border-left: 1px solid var(--glass-border-top) !important;
+}
+
+.ambient-page,
+.ambient-page__content,
+[class*="feed"],
+[class*="home-feed"],
+[class*="main-content"] {
+  background: transparent !important;
+}
+
 ion-toast::part(container),
 ion-alert .alert-wrapper,
 ion-action-sheet .action-sheet-wrapper {
   background: var(--app-surface-strong);
   color: var(--app-text);
-  border: 1px solid var(--app-border);
+  border: 1px solid var(--glass-border-top);
   border-radius: 20px;
   box-shadow: var(--app-shadow-lg);
-  backdrop-filter: blur(22px);
-  -webkit-backdrop-filter: blur(22px);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
 }
 
-ion-toast {
-  --border-radius: 20px;
-  z-index: 9999;
+ion-modal::part(content) {
+  background: transparent !important;
 }
 
-ion-toast::part(button) {
-  outline: none;
+ion-modal::part(backdrop) {
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
 }
 
-ion-toast::part(button):focus-visible {
-  box-shadow: var(--app-focus-ring);
+.global-command-palette {
+  background: var(--app-surface-strong) !important;
+  backdrop-filter: blur(40px) saturate(200%) !important;
+  -webkit-backdrop-filter: blur(40px) saturate(200%) !important;
+  border-color: var(--glass-border-top) !important;
 }
 
-@media (max-width: 767px) {
-  ion-toast::part(container) {
-    /* keep the toast above the bottom safe area / tab bar instead of getting clipped at the viewport edge */
-    margin-bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
-  }
+/* poll / post rows */
+
+.poll-card,
+.post-card,
+article[class*="card"],
+[class*="post-row"],
+[class*="poll-row"] {
+  border-bottom-color: var(--app-border) !important;
+  transition: background 0.2s ease;
+}
+
+.poll-card:hover,
+.post-card:hover {
+  background: var(--app-item-surface) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border-radius: 12px;
+}
+
+.poll-footer {
+  border-top-color: var(--app-border) !important;
+}
+
+/* stat / option / community elements */
+
+.stat-item {
+  background: var(--app-item-surface) !important;
+  border-color: var(--app-border) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+}
+
+.option-bar {
+  background: var(--app-item-surface) !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.12) !important;
+}
+
+[class*="community-row"],
+[class*="community-item"] {
+  background: var(--app-item-surface) !important;
+  border-radius: 10px !important;
+  border: 1px solid var(--app-border) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+}
+
+[class*="tab-bar"],
+[class*="feed-tabs"] {
+  background: var(--app-pill-surface) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border-radius: 999px !important;
+  border: 1px solid var(--app-border) !important;
+}
+
+/* misc */
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: inherit;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--app-text);
+  margin-top: 0;
+}
+
+p {
+  color: var(--app-text-muted);
 }
 
 :focus-visible {
@@ -568,8 +830,8 @@ ion-toast::part(button):focus-visible {
 }
 
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -577,13 +839,15 @@ ion-toast::part(button):focus-visible {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--app-border-strong);
   border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--app-text-subtle);
 }
+
+/* responsive */
 
 @media (max-width: 767px) {
   .ambient-page__content {
@@ -594,16 +858,15 @@ ion-toast::part(button):focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body::before {
-    animation: none;
+  .interpoll-aurora .aurora-orb {
+    animation: none !important;
   }
-
   *,
   *::before,
   *::after {
-    transition-duration: 0.01ms;
-    animation-duration: 0.01ms;
-    animation-iteration-count: 1;
-    scroll-behavior: auto;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
   }
 }
