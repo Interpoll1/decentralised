@@ -19,7 +19,6 @@ interface UseSearchReturn {
   nextPage: (query: string, options?: SearchOptions) => Promise<void>;
   previousPage: (query: string, options?: SearchOptions) => Promise<void>;
   clearResults: () => void;
-  indexContent: (type: 'post' | 'poll', id: string, data: any) => Promise<void>;
 }
 
 export function useSearch(apiUrl: string = ''): UseSearchReturn {
@@ -106,14 +105,6 @@ export function useSearch(apiUrl: string = ''): UseSearchReturn {
     currentPage.value = 1;
   };
 
-  const indexContent = async (type: 'post' | 'poll', id: string, data: any) => {
-    try {
-      await searchService.indexContent(type, id, data);
-    } catch (err: any) {
-      console.error('Failed to index content:', err);
-    }
-  };
-
   return {
     searchService,
     results,
@@ -130,6 +121,5 @@ export function useSearch(apiUrl: string = ''): UseSearchReturn {
     nextPage,
     previousPage,
     clearResults,
-    indexContent,
   };
 }

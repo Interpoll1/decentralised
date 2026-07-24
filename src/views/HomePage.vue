@@ -5,6 +5,9 @@
         <ion-title class="logo-title">InterPoll</ion-title>
         <!-- These buttons are hidden on desktop (768px+) and moved to side-nav -->
         <ion-buttons slot="end" class="header-util-buttons">
+          <ion-button v-if="canScanQr" @click="scanQr()" aria-label="Scan QR code">
+            <ion-icon :icon="qrCodeOutline"></ion-icon>
+          </ion-button>
           <ion-button @click="$router.push('/search')">
             <ion-icon :icon="searchOutline"></ion-icon>
           </ion-button>
@@ -67,6 +70,10 @@
           <!-- ── Utility nav items (desktop only, replaces header buttons) ── -->
           <div class="side-nav-divider"></div>
 
+          <button v-if="canScanQr" class="side-nav-item side-nav-util" @click="scanQr()">
+            <ion-icon :icon="qrCodeOutline"></ion-icon>
+            <span>Scan QR</span>
+          </button>
           <button class="side-nav-item side-nav-util" @click="$router.push('/search')">
             <ion-icon :icon="searchOutline"></ion-icon>
             <span>Search</span>
@@ -568,8 +575,10 @@ import {
   earthOutline, peopleOutline, home, homeOutline, documentTextOutline,
   chevronForwardOutline, people, addCircle, statsChartOutline,
   checkmarkCircleOutline, searchOutline, chatbubble, chatbubbleOutline,
-  shieldOutline, shieldCheckmarkOutline, sparklesOutline, eyeOffOutline, linkOutline
+  shieldOutline, shieldCheckmarkOutline, sparklesOutline, eyeOffOutline, linkOutline,
+  qrCodeOutline
 } from 'ionicons/icons';
+import { useQrScan } from '../composables/useQrScan';
 import { useRoute, useRouter } from 'vue-router';
 import { useChainStore } from '../stores/chainStore';
 import { useCommunityStore } from '../stores/communityStore';
@@ -590,6 +599,8 @@ import config from '../config';
 
 const router = useRouter();
 const route = useRoute();
+// Native QR scanning — the button is only shown when supported (in the app).
+const { isSupported: canScanQr, scan: scanQr } = useQrScan();
 const chainStore = useChainStore();
 const communityStore = useCommunityStore();
 const postStore = usePostStore();

@@ -9,6 +9,9 @@
     "dev:gun": "node gun-relay-server/gun-relay.js",
     "dev:peer": "node peer.js",
     "build": "vite build",
+    "build:mobile": "CAP_BUILD=1 vite build",
+    "cap:sync": "npm run build:mobile && cap sync",
+    "cap:android": "npm run cap:sync && cap open android",
     "preview": "vite preview",
     "start": "node relay-server.js",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore",
@@ -16,10 +19,14 @@
     "test:watch": "vitest --config unit_tests/vitest.config.ts"
   },
   "dependencies": {
-    "@capacitor/app": "^5.0.0",
-    "@capacitor/clipboard": "^5.0.0",
-    "@capacitor/core": "^5.6.0",
-    "@capacitor/share": "^5.0.0",
+    "@capacitor-mlkit/barcode-scanning": "^6.2.0",
+    "@capacitor/android": "^6.2.1",
+    "@capacitor/app": "^6.0.3",
+    "@capacitor/browser": "^6.0.6",
+    "@capacitor/clipboard": "^6.0.3",
+    "@capacitor/core": "^6.2.1",
+    "@capacitor/push-notifications": "^6.0.5",
+    "@capacitor/share": "^6.0.4",
     "@ionic/vue": "^8.0.0",
     "@ionic/vue-router": "^8.0.0",
     "@noble/curves": "^2.0.1",
@@ -46,7 +53,8 @@
     "ws": "^8.19.0"
   },
   "devDependencies": {
-    "@capacitor/cli": "^5.6.0",
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^6.2.1",
     "@types/node": "^20.10.0",
     "@vitejs/plugin-vue": "^5.0.0",
     "autoprefixer": "^10.4.16",

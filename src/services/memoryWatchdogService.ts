@@ -32,9 +32,15 @@ export class MemoryWatchdogService {
   private static checkTimer: ReturnType<typeof setInterval> | null = null;
   private static periodicTimer: ReturnType<typeof setInterval> | null = null;
   private static cleanupCallbacks: Array<(level: CleanupLevel) => void> = [];
-  private static lastLevel: CleanupLevel = 'none';
   private static lastResetTime = 0;
   private static readonly RESET_COOLDOWN_MS = 300_000; // 5 min cooldown between Gun resets
+  /** Consecutive emergency checks before forcing a Gun reset. A reset drops the
+   *  graph to a cold state, forcing the relay to re-send everything and the
+   *  community fallback to re-download hundreds of records — which refills the
+   *  heap and re-triggers emergency. Requiring a sustained streak (not just two
+   *  consecutive checks) keeps a transient double-spike from starting that loop. */
+  private static readonly EMERGENCY_STREAK_FOR_RESET = 3;
+  private static emergencyStreak = 0;
   private static started = false;
   /** Recent heap ratios; the window minimum is the pressure signal (see pressureRatio). */
   private static recentRatios: number[] = [];
@@ -128,18 +134,18 @@ export class MemoryWatchdogService {
       this.doCleanup(level);
     }
 
-    if (level === 'emergency' && this.lastLevel === 'emergency') {
+    this.emergencyStreak = level === 'emergency' ? this.emergencyStreak + 1 : 0;
+
+    if (this.emergencyStreak >= this.EMERGENCY_STREAK_FOR_RESET) {
       const now = Date.now();
       if (now - this.lastResetTime > this.RESET_COOLDOWN_MS) {
         console.error('[MemoryWatchdog] Sustained emergency memory pressure — forcing Gun reconnect');
         this.forceGunReset();
         this.lastResetTime = now;
-        this.lastLevel = 'none';
+        this.emergencyStreak = 0;
         return;
       }
     }
-
-    this.lastLevel = level;
   }
 
   private static estimateMemoryPressure(): CleanupLevel {

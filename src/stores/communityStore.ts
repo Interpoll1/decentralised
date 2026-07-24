@@ -380,6 +380,7 @@ export const useCommunityStore = defineStore('community', () => {
   }
 
   async function readExistingPostWithTimeout(gun: GunNodeLike, postId: string): Promise<Record<string, unknown> | null> {
+    if (!postId) return null;
     return await new Promise((resolve) => {
       let settled = false;
       const timer = setTimeout(() => {

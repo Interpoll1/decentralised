@@ -925,32 +925,82 @@ async function indexContent(type, id, data) {
   }
 }
 
+// Build the match predicate for one strategy. The predicate is always wrapped in
+// parentheses before any filter is appended: the LIKE form is a chain of ORs, and
+// an unparenthesized `... OR author LIKE ? AND type = ?` binds AND tighter than
+// OR, so the type/community filters silently leaked (a search filtered to polls
+// would return posts).
+function buildSearchPredicate(strategy, query) {
+  if (strategy === 'fulltext') {
+    const booleanQuery = query.trim().split(/\s+/).slice(0, 20)
+      .map(w => `+${w.replace(/[+\-><()~*"@]/g, '')}*`)
+      .filter(w => w.length > 2)   // bare "+*" is a syntax error in boolean mode
+      .join(' ');
+    if (!booleanQuery) return null;
+    return {
+      where: 'MATCH(title, content) AGAINST(? IN BOOLEAN MODE)',
+      relevance: 'MATCH(title, content) AGAINST(? IN BOOLEAN MODE)',
+      whereParams: [booleanQuery],
+      relevanceParams: [booleanQuery],
+    };
+  }
+  const like = `%${query.replace(/[%_\\]/g, '\\$&')}%`;
+  return {
+    where: 'title LIKE ? OR content LIKE ? OR author LIKE ?',
+    relevance: '1',
+    whereParams: [like, like, like],
+    relevanceParams: [],
+  };
+}
+
+async function runSearchStrategy(strategy, query, filters, limit, offset) {
+  const predicate = buildSearchPredicate(strategy, query);
+  if (!predicate) return null;
+
+  let filterSql = '';
+  const filterParams = [];
+  if (filters.type) { filterSql += ' AND type = ?'; filterParams.push(filters.type); }
+  if (filters.community) {
+    // The `community` column holds community *IDs* (`c-<slug>`), but the UI's
+    // community filter is a free-text box in which people type the bare slug.
+    // Exact equality therefore matched nothing for the common input. Accept the
+    // ID with or without its `c-` prefix — still an exact match on an indexed
+    // column, so no substring cross-matching.
+    const bare = String(filters.community).replace(/^c-/, '');
+    filterSql += ' AND (community = ? OR community = ?)';
+    filterParams.push(bare, `c-${bare}`);
+  }
+
+  const sql = `SELECT id, type, title, content, author, community, created_at, ${predicate.relevance} as relevance`
+    + ` FROM search_index WHERE (${predicate.where})${filterSql}`
+    + ` ORDER BY relevance DESC, created_at DESC LIMIT ? OFFSET ?`;
+  const params = [...predicate.relevanceParams, ...predicate.whereParams, ...filterParams, limit, offset];
+
+  const countSql = `SELECT COUNT(*) as total FROM search_index WHERE (${predicate.where})${filterSql}`;
+  const countParams = [...predicate.whereParams, ...filterParams];
+
+  const results     = await queryMySQL(sql, params);
+  const countResult = await queryMySQL(countSql, countParams);
+  return { results: results || [], total: countResult?.[0]?.total || 0 };
+}
+
 async function searchContent(query, filters = {}) {
   if (!db) return { results: [], total: 0 };
   try {
     const limit  = Math.min(Math.max(1, parseInt(filters.limit  || '20') || 20), 100);
     const offset = Math.max(0, parseInt(filters.offset || '0') || 0);
-    let sql, params, countSql, countParams;
-    if (query.length >= 4) {
-      const booleanQuery = query.trim().split(/\s+/).slice(0, 20).map(w => `+${w.replace(/[+\-><()~*"@]/g, '')}*`).join(' ');
-      sql    = `SELECT id, type, title, content, author, community, created_at, MATCH(title, content) AGAINST(? IN BOOLEAN MODE) as relevance FROM search_index WHERE MATCH(title, content) AGAINST(? IN BOOLEAN MODE)`;
-      params = [booleanQuery, booleanQuery];
-      countSql    = `SELECT COUNT(*) as total FROM search_index WHERE MATCH(title, content) AGAINST(? IN BOOLEAN MODE)`;
-      countParams = [booleanQuery];
-    } else {
-      const like = `%${query.replace(/[%_\\]/g, '\\$&')}%`;
-      sql    = `SELECT id, type, title, content, author, community, created_at, 1 as relevance FROM search_index WHERE title LIKE ? OR content LIKE ? OR author LIKE ?`;
-      params = [like, like, like];
-      countSql    = `SELECT COUNT(*) as total FROM search_index WHERE title LIKE ? OR content LIKE ? OR author LIKE ?`;
-      countParams = [like, like, like];
-    }
-    if (filters.type)      { sql += ' AND type = ?';      params.push(filters.type);      countSql += ' AND type = ?';      countParams.push(filters.type); }
-    if (filters.community) { sql += ' AND community = ?'; params.push(filters.community); countSql += ' AND community = ?'; countParams.push(filters.community); }
-    sql += ` ORDER BY relevance DESC, created_at DESC LIMIT ? OFFSET ?`;
-    params.push(limit, offset);
-    const results     = await queryMySQL(sql, params);
-    const countResult = await queryMySQL(countSql, countParams);
-    return { results: results || [], total: countResult?.[0]?.total || 0 };
+
+    // Try fulltext first, then fall back to substring LIKE when it finds nothing.
+    // Previously the strategy was chosen by query length alone (<4 chars → LIKE,
+    // otherwise → fulltext), which made behaviour change discontinuously at four
+    // characters: a 4+ char term that is an InnoDB stopword or shorter than
+    // innodb_ft_min_token_size matched zero rows and returned empty rather than
+    // degrading to a substring match. Running both makes length irrelevant.
+    const fulltext = await runSearchStrategy('fulltext', query, filters, limit, offset);
+    if (fulltext && fulltext.total > 0) return fulltext;
+
+    const like = await runSearchStrategy('like', query, filters, limit, offset);
+    return like || fulltext || { results: [], total: 0 };
   } catch (err) {
     console.error('❌ Search error:', err.message);
     return { results: [], total: 0 };
@@ -1898,13 +1948,48 @@ server.on('request', async (req, res) => {
     if (!postId || !db) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'not found' })); return; }
     try {
       const escaped = postId.replace(/[%_\\]/g, '\\$&');
-      const rows = await queryMySQL(`SELECT soul, data FROM gun_nodes WHERE soul LIKE ? ESCAPE ? OR soul LIKE ? ESCAPE ? OR soul LIKE ? ESCAPE ? OR soul = ? OR soul = ? OR soul = ? LIMIT 8`, [`v3/communities/%/posts/${escaped}`, '\\', `v2/communities/%/posts/${escaped}`, '\\', `communities/%/posts/${escaped}`, '\\', `v3/posts/${postId}`, `v2/posts/${postId}`, `posts/${postId}`]);
+      // A post is written to several souls at once (the canonical `v3/posts/<id>`
+      // and a per-community mirror), and older namespaces linger. These copies
+      // diverge — vote counts especially — so the row we answer with must be
+      // chosen deterministically. Without the ORDER BY below, MySQL was free to
+      // return them in any order and the reported upvote count flipped between
+      // requests, which then became permanent once a client read a stale count
+      // as the base for its next vote.
+      //
+      // Preference: canonical v3 soul, then the v3 community mirror, then older
+      // namespaces; newest `updated_at` breaks ties within a rank.
+      const rows = await queryMySQL(
+        `SELECT soul, data FROM gun_nodes
+          WHERE soul LIKE ? ESCAPE ? OR soul LIKE ? ESCAPE ? OR soul LIKE ? ESCAPE ?
+             OR soul = ? OR soul = ? OR soul = ?
+          ORDER BY CASE
+            WHEN soul = ?            THEN 0
+            WHEN soul LIKE ? ESCAPE ? THEN 1
+            WHEN soul = ?            THEN 2
+            WHEN soul LIKE ? ESCAPE ? THEN 3
+            WHEN soul = ?            THEN 4
+            ELSE 5
+          END, updated_at DESC
+          LIMIT 8`,
+        [
+          `v3/communities/%/posts/${escaped}`, '\\', `v2/communities/%/posts/${escaped}`, '\\', `communities/%/posts/${escaped}`, '\\',
+          `v3/posts/${postId}`, `v2/posts/${postId}`, `posts/${postId}`,
+          `v3/posts/${postId}`,
+          `v3/communities/%/posts/${escaped}`, '\\',
+          `v2/posts/${postId}`,
+          `v2/communities/%/posts/${escaped}`, '\\',
+          `posts/${postId}`,
+        ]
+      );
       for (const row of rows || []) {
         try {
           const d = JSON.parse(row.data);
           if (!d?.title) continue;
           const isV3 = typeof row.soul === 'string' && row.soul.startsWith('v3/');
-          res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60, stale-while-revalidate=120' });
+          // no-store: this payload carries mutable vote counts. A 60s public cache
+          // meant a refresh after voting served the pre-vote count back, and the
+          // next vote was then computed from it — persisting the regression.
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
           res.end(JSON.stringify({ ...d, id: d.id || postId, ...(isV3 ? { dataVersion: 'v3' } : {}) })); return;
         } catch {}
       }
@@ -1953,8 +2038,13 @@ server.on('request', async (req, res) => {
       const escaped = pollId.replace(/[%_\\]/g, '\\$&');
       // Check both v2/communities/.../polls/ and v2/polls/ paths
       const rows = await queryMySQL(
-        `SELECT data FROM gun_nodes WHERE (soul LIKE ? ESCAPE ? OR soul LIKE ? ESCAPE ? OR soul = ? OR soul = ?) AND soul NOT REGEXP '/options' LIMIT 5`,
-        [`v2/%/polls/${escaped}`, '\\', `communities/%/polls/${escaped}`, '\\', `v2/polls/${pollId}`, `polls/${pollId}`]
+        // ORDER BY for the same reason as /api/post/:id: several souls hold copies
+        // of the same poll and an unordered result made the response arbitrary.
+        `SELECT data FROM gun_nodes WHERE (soul LIKE ? ESCAPE ? OR soul LIKE ? ESCAPE ? OR soul = ? OR soul = ?) AND soul NOT REGEXP '/options'
+          ORDER BY CASE WHEN soul = ? THEN 0 WHEN soul LIKE ? ESCAPE ? THEN 1 ELSE 2 END, updated_at DESC
+          LIMIT 5`,
+        [`v2/%/polls/${escaped}`, '\\', `communities/%/polls/${escaped}`, '\\', `v2/polls/${pollId}`, `polls/${pollId}`,
+         `v2/polls/${pollId}`, `v2/%/polls/${escaped}`, '\\']
       );
       for (const row of rows || []) {
         try {
@@ -1969,7 +2059,9 @@ server.on('request', async (req, res) => {
           for (const optRow of optRows || []) {
             try { const o = JSON.parse(optRow.data); if (o?.id && !options.find(x => x.id === o.id)) options.push({ id: o.id, text: o.text || '', votes: o.votes || 0, voters: [] }); } catch {}
           }
-          res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=30, stale-while-revalidate=60' });
+          // no-store for the same reason as /api/post/:id — `options[].votes` is
+          // mutable state and must not be served from a shared cache.
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
           res.end(JSON.stringify({ ...d, id: d.id || pollId, options })); return;
         } catch {}
       }

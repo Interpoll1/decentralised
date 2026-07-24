@@ -95,3 +95,27 @@ Key computed: `sortedMessages` (chronological order)
 ## `syncStore.ts`
 
 Currently empty/placeholder.
+
+## Memory-pressure trim actions
+
+- `postStore.trimPostsToVisible(extra?)` / `pollStore.trimPollsToVisible(extra?)` —
+  shrink `postsMap`/`pollsMap` to the visible window plus the item being viewed,
+  returning the number dropped. Called from the `MemoryWatchdogService.onCleanup`
+  handler in `main.ts` at `aggressive` and `emergency` only; at `light` the service
+  caches suffice and trimming the feed being read would cost a visible refetch.
+- Both keep any item inside its post-vote protection window — dropping one would
+  discard a local vote count with nothing left to reconcile against.
+
+## Protecting a just-cast vote from stale echoes
+
+Gun re-delivers a post/poll whenever any peer echoes it, and an echo can carry a
+pre-vote snapshot that lands *after* our own write — visibly undoing the user's vote
+seconds later. Both stores guard against this:
+
+- `pollStore` — `recentlyVotedPolls` + `VOTE_PROTECTION_MS` (10s)
+- `postStore` — `locallyVotedAt` + `LOCAL_VOTE_GRACE_MS` (15s), applied by
+  `preserveFreshLocalVote()` in `processIncomingPost`
+
+Within the window, the incoming copy supplies every field *except* `upvotes` /
+`downvotes` / `score`, which stay local. Any new counter surfaced on these objects
+needs adding to that carve-out.

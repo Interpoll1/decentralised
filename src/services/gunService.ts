@@ -97,13 +97,23 @@ export class GunService {
     let lastReport = 0;
     const REPORT_INTERVAL_MS = 10_000;
 
+    // Both of these are the same benign eviction artifact: when a graph node is
+    // evicted while its chain still has a pending get/listener, later updates are
+    // emitted with `'>': undefined`, and Gun logs either "chain not yet supported
+    // for" (input()) or "Invalid get request!" (get()). Neither is an app bug —
+    // no caller is passing an undefined key — so collapse both floods together.
+    const isEvictionArtifact = (first: unknown): boolean =>
+      typeof first === 'string' &&
+      (first.startsWith('chain not yet supported for') ||
+        first.startsWith('Invalid get request!'));
+
     console.log = (...args: unknown[]) => {
-      if (typeof args[0] === 'string' && args[0].startsWith('chain not yet supported for')) {
+      if (isEvictionArtifact(args[0])) {
         suppressed++;
         const now = Date.now();
         if (now - lastReport > REPORT_INTERVAL_MS) {
           lastReport = now;
-          originalLog(`[GunService] suppressed ${suppressed} "chain not yet supported" Gun logs`);
+          originalLog(`[GunService] suppressed ${suppressed} Gun eviction-artifact logs`);
           suppressed = 0;
         }
         return;
@@ -278,10 +288,16 @@ export class GunService {
       ? (Array.isArray(newPeerUrls) ? newPeerUrls : [newPeerUrls])
       : config.getGunPeers();
 
-    // Close existing peer WebSockets before discarding the instance
+    // Close existing peer WebSockets before discarding the instance. Only close
+    // sockets that are actually OPEN or still CONNECTING — calling close() on an
+    // already CLOSING/CLOSED socket (or letting Gun keep sending against it)
+    // produces a flood of "WebSocket is already in CLOSING or CLOSED state".
     if (this.gun?._.opt?.peers) {
       for (const peer of Object.values(this.gun._.opt.peers) as any[]) {
-        try { peer?.wire?.close?.(); } catch { /* ignore */ }
+        try {
+          const wire = peer?.wire;
+          if (wire && (wire.readyState === 0 || wire.readyState === 1)) wire.close();
+        } catch { /* ignore */ }
       }
     }
     this.isInitialized = false;

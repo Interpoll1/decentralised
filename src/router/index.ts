@@ -50,6 +50,10 @@ const routes: Array<RouteRecordRaw> = [
     component: () => import('../views/ClaimUsernamePage.vue')
   },
 
+  // OAuth return handler (previously fell through to the catch-all → /home,
+  // silently dropping the callback). Consumes the return URL / token.
+  { path: '/auth/callback', name: 'AuthCallback', component: () => import('../views/AuthCallbackPage.vue') },
+
   // Catch-all
   { path: '/:pathMatch(.*)*', redirect: '/home' }
 ];
