@@ -16,6 +16,7 @@ import { WebRTCService } from '@/services/webrtcService';
 import { GunService } from '@/services/gunService';
 import { SignalingService, type SignalTarget } from '@/services/signalingService';
 import { DiscoveryService } from '@/services/discoveryService';
+import { BoundedMap } from '../utils/boundedMap';
 
 const STORAGE_KEY = 'interpoll_mesh_enabled';
 const MAX_CONNECTIONS = 10;
@@ -27,7 +28,9 @@ export class MeshService {
   private static initialized = false;
   private static reconcileTimer: ReturnType<typeof setInterval> | null = null;
   private static announceTimer: ReturnType<typeof setInterval> | null = null;
-  private static dialed = new Map<string, number>();
+  // peerId → last dial time. Bounded: one entry per peer ever dialled, cleared
+  // only on full teardown. The TTL exceeds the dial backoff window it gates.
+  private static dialed = new BoundedMap<string, number>({ maxSize: 500, ttlMs: 30 * 60_000 });
   private static wireBridgeAttached = false;
 
   static initialize(): void {

@@ -1,5 +1,10 @@
 const PENALTY_SCHEDULE = [2, 8, 30, 120, 300]; // seconds
 
+// Maximum number of peers to track in memory.
+// When exceeded, the oldest (by last activity) entries are evicted.
+// This prevents unbounded growth under sustained attack traffic.
+const MAX_PEERS = 50_000;
+
 export class RateLimiter {
   constructor(options = {}) {
     this.httpLimit = options.httpLimit ?? 30;
@@ -14,10 +19,29 @@ export class RateLimiter {
   _getEntry(id) {
     let entry = this.peers.get(id);
     if (!entry) {
+      // Evict oldest entry when map is at capacity to bound memory usage
+      if (this.peers.size >= MAX_PEERS) {
+        this._evictOldest();
+      }
       entry = { timestamps: [], violations: 0, lastViolation: 0, cooldownUntil: 0 };
       this.peers.set(id, entry);
     }
     return entry;
+  }
+
+  _evictOldest() {
+    const now = Date.now();
+    let oldestId = null;
+    let oldestActivity = Infinity;
+    for (const [id, entry] of this.peers) {
+      const latestTs = entry.timestamps.length ? entry.timestamps[entry.timestamps.length - 1] : 0;
+      const lastActivity = Math.max(latestTs, entry.lastViolation, entry.cooldownUntil);
+      if (lastActivity < oldestActivity) {
+        oldestActivity = lastActivity;
+        oldestId = id;
+      }
+    }
+    if (oldestId !== null) this.peers.delete(oldestId);
   }
 
   _decayViolations(entry, now) {
@@ -110,6 +134,59 @@ export class RateLimiter {
       if (now - lastActivity > staleThreshold) {
         this.peers.delete(id);
       }
+    }
+  }
+
+  /**
+   * Serialise violation state (not timestamps — those belong to the current window
+   * and are intentionally dropped on restart to avoid holding stale bans forever).
+   * Only peers with active cooldowns or violations are included.
+   *
+   * Usage in bash.sh / the relay entry point:
+   *   const limiter = new RateLimiter();
+   *   if (fs.existsSync(STATE_FILE)) limiter.restore(JSON.parse(fs.readFileSync(STATE_FILE)));
+   *   process.on('SIGTERM', () => fs.writeFileSync(STATE_FILE, JSON.stringify(limiter.dump())));
+   */
+  dump() {
+    const now = Date.now();
+    const out = {};
+    for (const [id, entry] of this.peers) {
+      // Skip fully clean entries — no point persisting them
+      if (entry.violations === 0 && now >= entry.cooldownUntil) continue;
+      // Decay before serialising so restored state is accurate
+      this._decayViolations(entry, now);
+      if (entry.violations === 0 && now >= entry.cooldownUntil) continue;
+      out[id] = {
+        violations: entry.violations,
+        lastViolation: entry.lastViolation,
+        cooldownUntil: entry.cooldownUntil,
+        // timestamps intentionally omitted — they expire with the process
+      };
+    }
+    return out;
+  }
+
+  /**
+   * Restore previously dumped state. Call this immediately after construction,
+   * before the relay starts accepting connections.
+   */
+  restore(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') return;
+    const now = Date.now();
+    for (const [id, saved] of Object.entries(snapshot)) {
+      if (!saved || typeof saved !== 'object') continue;
+      const violations = Number(saved.violations) || 0;
+      const lastViolation = Number(saved.lastViolation) || 0;
+      const cooldownUntil = Number(saved.cooldownUntil) || 0;
+      // Drop entries whose cooldown has already expired and have zero violations
+      if (violations === 0 && now >= cooldownUntil) continue;
+      if (this.peers.size >= MAX_PEERS) this._evictOldest();
+      this.peers.set(id, {
+        timestamps: [], // fresh — don't inherit old window
+        violations,
+        lastViolation,
+        cooldownUntil,
+      });
     }
   }
 
