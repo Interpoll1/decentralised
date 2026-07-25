@@ -594,13 +594,6 @@ export class PollService {
     return Object.fromEntries(voters.map(id => [id, true as const]));
   }
 
-  /** @deprecated kept for backward-compat with legacy reads — new writes use buildVotersSet */
-  private static buildVotersMap(voters: string[]): Record<string, string> {
-    return Object.fromEntries(
-      voters.map((voterId, index) => [index, voterId])
-    );
-  }
-
   private static buildOptionsMap(options: PollOption[]): Record<string, any> {
     return Object.fromEntries(options.map((option, index) => {
       // Gun-native set ({ [voterId]: true }) so future incremental voter writes
