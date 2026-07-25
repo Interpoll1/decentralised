@@ -237,7 +237,51 @@ export class AuditService {
   }
 
   static startOAuthLogin(provider: 'google' | 'microsoft' = 'google'): void {
-    window.location.href = `${this.getTrustedApiBase()}/auth/${provider}/start`;
+    const startUrl = `${this.getTrustedApiBase()}/auth/${provider}/start`;
+
+    // In the native shell a full-page redirect can't come back: the OAuth
+    // callback lands on the web origin (endless.sbs), a different origin than
+    // the app's https://localhost WebView, so the session/redirect is lost.
+    // Instead open the system browser and rely on a deep-link return.
+    //
+    // NOTE (M4 — pending relay change): the relay must honour `platform=native`
+    // by redirecting the callback to `com.interpoll.app://auth/callback?token=…`
+    // (a token in the URL, not a cross-origin cookie). The deep-link listener in
+    // src/native/capacitorApp.ts already routes that return; until the relay is
+    // updated, native OAuth will open the browser but not complete sign-in.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const Cap = (globalThis as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+    if (Cap?.isNativePlatform?.()) {
+      const nativeUrl = `${startUrl}?platform=native&redirect_uri=${encodeURIComponent('com.interpoll.app://auth/callback')}`;
+      import('@capacitor/browser')
+        .then(({ Browser }) => Browser.open({ url: nativeUrl }))
+        .catch(() => { window.location.href = nativeUrl; });
+      return;
+    }
+
+    window.location.href = startUrl;
+  }
+
+  /**
+   * Complete OAuth sign-in on native from a token delivered via deep link
+   * (`com.interpoll.app://auth/callback?token=…`). Called by the deep-link
+   * handler in src/native/capacitorApp.ts.
+   *
+   * TODO (M4 — blocked on relay change): the production relay
+   * (relay-server/relay-server-enhanced.js, gitignored) must be updated to
+   * (a) accept `platform=native` on /auth/{provider}/start, and (b) redirect
+   * the callback to the app scheme with a signed session token instead of
+   * setting a cross-origin cookie. Once the token format is known, exchange /
+   * verify it here and persist the cloud user via the existing session cache
+   * (see verifyCloudSession / CLOUD_USER_KEY). For now this only records the
+   * token so the flow is observable end-to-end.
+   */
+  static async completeNativeOAuth(token: string): Promise<void> {
+    if (!token) return;
+    try {
+      localStorage.setItem('interpoll_pending_native_oauth_token', token);
+    } catch { /* storage unavailable */ }
+    console.info('[Auth] Received native OAuth token (handoff pending relay support)');
   }
 
   private static clearCachedCloudUser(): void {

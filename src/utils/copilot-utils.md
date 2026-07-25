@@ -51,3 +51,29 @@ Parses user identity-style usernames (e.g. `viktor@endles.sbs`) into a normalize
 - `parseIdentityTrust(rawUsername)` returns `{ identityUsername, issuer, hasIssuer, isTrustedIssuer, trustLevel }`
 - `trustLevel` is `'trusted-issuer'` when issuer domain is in the trusted issuer allowlist, otherwise `'unverified'`
 - `formatTrustedIdentityLabel({ username, issuer })` returns `username@issuer` for trusted profiles, but preserves an already-qualified username so labels do not become duplicated like `name@issuer@issuer`
+
+## `boundedMap.ts` — Size- and age-capped caches
+
+`BoundedMap<K, V>` and `BoundedSet<T>` are drop-in replacements for `Map`/`Set` in
+service-level caches. Prefer them over a bare `Map` for anything keyed by an entity
+id (post, comment, community, pubkey, message, nonce): those grow one entry per
+item the session has ever touched, and before this existed nothing ever released
+them — not even at `emergency` memory pressure.
+
+- `new BoundedMap({ maxSize, ttlMs?, onEvict? })` — LRU eviction past `maxSize`;
+  optional per-entry TTL, expired entries read as absent.
+- Map-compatible: `get`/`set`/`has`/`delete`/`clear`/`size`/`keys`/`values`/
+  `entries`/`forEach`/iterator. Iteration skips expired entries.
+- `peek(key)` — read without marking the entry as recently used.
+- `prune()` — drop expired entries eagerly. Lazy expiry only reclaims entries that
+  are read again, so a cache gone cold holds memory until this is called; the
+  memory watchdog calls it at `light` pressure.
+- `trimTo(n)` — shrink to `n` entries, least-recently-used first.
+
+`BoundedSet<T>` is the same thing for membership guards (`add`/`has`/`delete`/
+`clear`/`prune`/`trimTo`/`size`).
+
+**Caveat:** do not bound a cache whose in-memory contents are the source of truth
+for a whole-map persistence write. `VoteTallyService.polls` is deliberately left
+unbounded for this reason — its `persist()` serializes the entire map, so evicting
+an entry from memory would erase those votes from storage on the next write.

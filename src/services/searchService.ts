@@ -116,39 +116,9 @@ class SearchService {
     this.cache.clear();
   }
 
-  async indexContent(type: 'post' | 'poll', id: string, data: any): Promise<{ ok: boolean }> {
-    try {
-      const { IntegrityService } = await import('@/services/integrityService');
-      const body = await IntegrityService.seal(
-        {
-          type,
-          id,
-          data,
-          namespace: GUN_NAMESPACE,
-          dataVersion: GUN_NAMESPACE,
-          version: GUN_NAMESPACE,
-        } as Record<string, unknown>,
-        'index',
-      );
-      const response = await fetch(`${this.getApiBase()}/api/index`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Indexing failed: ${response.statusText}`);
-      }
-
-      // Clear cache when new content is indexed
-      this.clearCache();
-      
-      return await response.json();
-    } catch (err) {
-      console.error('❌ Indexing error:', err);
-      throw err;
-    }
-  }
+  // NOTE: there is deliberately no indexContent() here. Indexing happens on the
+  // relay's Gun write path (gun-relay/gun-relay-enhanced.js, maybeIndexNode); the
+  // /api/index endpoint is secret-gated and unreachable from a browser.
 
   /**
    * Get total pages for pagination

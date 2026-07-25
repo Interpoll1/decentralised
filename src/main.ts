@@ -16,6 +16,71 @@ import App from './App.vue';
 import router from './router';
 import { recordError, reportFatal } from './utils/errorReporting';
 
+type CleanupLevel = 'none' | 'light' | 'aggressive' | 'emergency';
+
+/**
+ * Give the memory watchdog something to actually release.
+ *
+ * The watchdog has always exposed an `onCleanup` registry, but nothing ever
+ * registered with it, so every pressure level — emergency included — only evicted
+ * the Gun graph while app-level state (cached posts, community data, trust
+ * certificates, the store maps) grew for the life of the session. These handlers
+ * close that gap. Everything dropped here is re-derivable from Gun or the relay,
+ * so cleanup costs a refetch, never correctness.
+ *
+ * Imports are dynamic and each handler is independently guarded: a failure to
+ * trim one subsystem must not prevent the others from being trimmed.
+ */
+function registerMemoryCleanupHandlers(watchdog: { onCleanup: (cb: (level: CleanupLevel) => void) => () => void }) {
+  watchdog.onCleanup((level) => {
+    if (level === 'none') return;
+
+    void (async () => {
+      try {
+        const { PostService } = await import('./services/postService');
+        PostService.trimCaches(level);
+      } catch (e) { console.warn('[Cleanup] PostService trim failed:', e); }
+
+      try {
+        const { CommunityService } = await import('./services/communityService');
+        CommunityService.trimCaches(level);
+      } catch (e) { console.warn('[Cleanup] CommunityService trim failed:', e); }
+
+      try {
+        const { TrustService } = await import('./services/trustService');
+        TrustService.trimCaches(level);
+      } catch (e) { console.warn('[Cleanup] TrustService trim failed:', e); }
+
+      try {
+        const { ModerationService } = await import('./services/moderationService');
+        ModerationService.trimCaches(level);
+      } catch (e) { console.warn('[Cleanup] ModerationService trim failed:', e); }
+
+      // Store maps: only shrink once pressure is real. At `light` the bounded
+      // caches above are enough, and trimming the feed the user is reading would
+      // cost a visible refetch for no benefit.
+      if (level === 'aggressive' || level === 'emergency') {
+        try {
+          const { usePostStore } = await import('./stores/postStore');
+          const { usePollStore } = await import('./stores/pollStore');
+          const removedPosts = usePostStore().trimPostsToVisible();
+          const removedPolls = usePollStore().trimPollsToVisible();
+          if (removedPosts || removedPolls) {
+            console.info(`[Cleanup] Trimmed ${removedPosts} posts / ${removedPolls} polls from stores`);
+          }
+        } catch (e) { console.warn('[Cleanup] Store trim failed:', e); }
+      }
+
+      if (level === 'emergency') {
+        try {
+          const { useCommentStore } = await import('./stores/commentStore');
+          useCommentStore().clearComments();
+        } catch (e) { console.warn('[Cleanup] Comment clear failed:', e); }
+      }
+    })();
+  });
+}
+
 // One-time migration
 if (!localStorage.getItem('interpoll_migration_v2')) {
   localStorage.removeItem('seen-post-ids');
@@ -56,6 +121,16 @@ router.isReady().then(() => {
     renderStaticFatal();
     return;
   }
+  // Native-shell (Capacitor) integration: hardware back button, lifecycle.
+  // No-op in the browser.
+  import('./native/capacitorApp').then(({ initCapacitorApp }) => {
+    initCapacitorApp(router).catch(e => console.warn('[Init] Capacitor App init failed:', e));
+  }).catch(() => { /* not in native shell */ });
+  // Push notifications — no-op until Firebase is configured and enabled (M5).
+  import('./native/pushNotifications').then(({ initPushNotifications }) => {
+    initPushNotifications().catch(e => console.warn('[Init] Push init failed:', e));
+  }).catch(() => { /* not in native shell */ });
+
   // Defer after first paint
   setTimeout(() => {
     import('./services/gunService').then(({ GunService }) => {
@@ -64,7 +139,10 @@ router.isReady().then(() => {
       GunService.probePresetsAndExpand().catch(e => console.warn('[Init] GunService probe failed:', e));
     }).catch(e => console.error('[Init] GunService failed:', e));
     import('./services/ipfsService').then(({ IPFSService }) => IPFSService.initialize()).catch(e => console.error('[Init] IPFSService failed:', e));
-    import('./services/memoryWatchdogService').then(({ MemoryWatchdogService }) => MemoryWatchdogService.start()).catch(e => console.error('[Init] MemoryWatchdog failed:', e));
+    import('./services/memoryWatchdogService').then(({ MemoryWatchdogService }) => {
+      registerMemoryCleanupHandlers(MemoryWatchdogService);
+      MemoryWatchdogService.start();
+    }).catch(e => console.error('[Init] MemoryWatchdog failed:', e));
     // Evict legacy/v2 posts from caches on startup
     (async () => {
       try {

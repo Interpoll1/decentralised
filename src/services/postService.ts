@@ -7,6 +7,7 @@ import { isVersionEnabled } from '../utils/dataVersionSettings';
 import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
 import config from '../config';
+import { BoundedMap, BoundedSet } from '../utils/boundedMap';
 import { canonicalJSON } from '../../shared-validation/canonical.js';
 
 const CURRENT_CANON_VERSION = 2;
@@ -69,8 +70,14 @@ const postActiveListeners = new Map<string, any>();
 const MAX_INITIAL_POSTS = 50;
 const MAX_COMMUNITY_INITIAL_POSTS = 120;
 const MISSING_POST_CACHE_TTL_MS = 30_000;
-const missingPostCache = new Map<string, number>();
-const postMemoryCache = new Map<string, Post>();
+
+// Both of these were plain Maps that only ever grew — one entry per post the
+// session had ever rendered or failed to find. On a long feed scroll that is the
+// single largest app-level heap contributor. Bounded now, and reachable from the
+// memory watchdog via PostService.trimCaches().
+const MAX_CACHED_POSTS = 400;
+const missingPostCache = new BoundedSet<string>({ maxSize: 500, ttlMs: MISSING_POST_CACHE_TTL_MS });
+const postMemoryCache = new BoundedMap<string, Post>({ maxSize: MAX_CACHED_POSTS });
 
 // ── Timebox: 400ms (was 800ms) — Gun is now live-updates only ─────────────────
 const INITIAL_LOAD_TIMEBOX_MS = 400;
@@ -109,24 +116,32 @@ async function loadPostIdsInBatches(
   }
 }
 
-async function indexForSearch(type: 'post' | 'poll', id: string, data: any) {
-  try {
-    const { IntegrityService } = await import('@/services/integrityService');
-    const body = await IntegrityService.seal(
-      { type, id, data } as Record<string, unknown>,
-      'index',
-    );
-    await fetch(`${getApiBase()}/api/index`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-  } catch (err) {
-    console.warn('Search indexing failed:', err);
-  }
-}
+// Search indexing is not a client concern. The gun-relay process indexes posts
+// and polls off its own Gun write hook (gun-relay/gun-relay-enhanced.js,
+// maybeIndexNode), so anything that reaches the graph is indexed regardless of
+// whether the author was signed in. The old client-side POST to /api/index could
+// never have worked: that endpoint requires a shared secret a browser cannot hold,
+// so every call returned 401 into a swallowed warning — and it paid for a
+// proof-of-work seal on the publish path to do it.
 
 export class PostService {
+  /**
+   * Release cached post data under memory pressure. Called by the memory watchdog;
+   * see the cleanup registration in main.ts.
+   *
+   * `light` only reclaims entries that have already aged out, `aggressive` shrinks
+   * the live cache, `emergency` drops it entirely (correctness is unaffected —
+   * every entry is re-derivable from Gun or the relay).
+   */
+  static trimCaches(level: 'light' | 'aggressive' | 'emergency'): void {
+    missingPostCache.prune();
+    if (level === 'aggressive') postMemoryCache.trimTo(100);
+    if (level === 'emergency') {
+      postMemoryCache.clear();
+      missingPostCache.clear();
+    }
+  }
+
   /** Evict legacy (non-GUN_NAMESPACE) posts from memory caches and notify UI stores */
   static async evictLegacyPosts(): Promise<void> {
     try {
@@ -283,14 +298,6 @@ export class PostService {
       });
     });
 
-    await indexForSearch('post', newPost.id, {
-      title: cleanPost.title,
-      content: cleanPost.content,
-      authorName: cleanPost.authorName,
-      communitySlug: cleanPost.communityId,
-      createdAt: cleanPost.createdAt
-    });
-
     postMemoryCache.set(newPost.id, newPost);
     missingPostCache.delete(newPost.id);
 
@@ -342,10 +349,10 @@ export class PostService {
 
     communityPostsNode.once((allPosts: any) => {
       if (!allPosts) { checkLoadComplete(); return; }
-      const keys = Object.keys(allPosts).filter(k => k !== '_');
+      const keys = Object.keys(allPosts).filter(k => k && k !== '_');
       void loadPostIdsInBatches(
         keys.slice(0, MAX_COMMUNITY_INITIAL_POSTS),
-        (postId) => onceWithTimeout(gun.get('posts').get(postId)),
+        (postId) => postId ? onceWithTimeout(gun.get('posts').get(postId)) : Promise.resolve(null),
         (postData) => {
           if (postData.id && !initialSeenIds.has(postData.id)) {
             initialSeenIds.add(postData.id);
@@ -362,18 +369,33 @@ export class PostService {
 
     // Live updates: map().on emits one post-id key at a time, which is more
     // reliable than parsing full-node patches from .on for large communities.
+    // Buffer emitted keys and flush on a short timer so a re-sync burst can't fan
+    // out thousands of concurrent gets (the "1K+ records/sec" DOM warning) —
+    // batching also lets duplicate keys collapse before we ever hit the network.
+    const pendingIds = new Set<string>();
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const flushPending = () => {
+      flushTimer = null;
+      const ids = [...pendingIds];
+      pendingIds.clear();
+      for (const postId of ids) {
+        if (inFlightIds.has(postId)) continue;
+        inFlightIds.add(postId);
+        void onceWithTimeout(gun.get('posts').get(postId)).then((postData) => {
+          if (postData && postData.id) {
+            initialSeenIds.add(postData.id);
+            onPost({ ...postData, dataVersion: (postData && postData.dataVersion) ? postData.dataVersion : GUN_NAMESPACE });
+          }
+        }).finally(() => {
+          inFlightIds.delete(postId);
+        });
+      }
+    };
     subscription = communityPostsNode.map().on((_: any, postId: string) => {
       if (!initialLoadDone) return;
       if (!postId || postId === '_' || inFlightIds.has(postId)) return;
-      inFlightIds.add(postId);
-      void onceWithTimeout(gun.get('posts').get(postId)).then((postData) => {
-        if (postData && postData.id) {
-          initialSeenIds.add(postData.id);
-          onPost({ ...postData, dataVersion: (postData && postData.dataVersion) ? postData.dataVersion : GUN_NAMESPACE });
-        }
-      }).finally(() => {
-        inFlightIds.delete(postId);
-      });
+      pendingIds.add(postId);
+      if (!flushTimer) flushTimer = setTimeout(flushPending, 100);
     });
 
     // v1 posts intentionally excluded from community feed — only using GUN v3 namespace
@@ -383,6 +405,7 @@ export class PostService {
 
     return () => {
       clearTimeout(timeboxTimer);
+      if (flushTimer) clearTimeout(flushTimer);
       if (subscription) subscription.off();
       if (v1Subscription) v1Subscription.off();
       postActiveListeners.delete(listenerKey);
@@ -418,10 +441,10 @@ export class PostService {
 
     postsNode.once((allPosts: any) => {
       if (!allPosts) { checkLoadComplete(); return; }
-      const keys = Object.keys(allPosts).filter(k => k !== '_');
+      const keys = Object.keys(allPosts).filter(k => k && k !== '_');
       void loadPostIdsInBatches(
         keys.slice(0, MAX_INITIAL_POSTS),
-        (postId) => onceWithTimeout(gun.get('posts').get(postId)),
+        (postId) => postId ? onceWithTimeout(gun.get('posts').get(postId)) : Promise.resolve(null),
         (postData) => {
           if (postData.id && !initialSeenIds.has(postData.id)) {
             initialSeenIds.add(postData.id);
@@ -440,7 +463,7 @@ export class PostService {
       if (!initialLoadDone) return;
       if (!allPosts) return;
       Object.keys(allPosts).forEach(postId => {
-        if (postId === '_' || inFlightIds.has(postId)) return;
+        if (!postId || postId === '_' || inFlightIds.has(postId)) return;
         inFlightIds.add(postId);
         void onceWithTimeout(gun.get('posts').get(postId)).then((postData) => {
           if (postData && postData.id) {
@@ -471,17 +494,14 @@ export class PostService {
     const cached = postMemoryCache.get(postId);
     if (cached) return cached;
 
-    const missingUntil = missingPostCache.get(postId);
-    const isRecentlyMissing = typeof missingUntil === 'number' && missingUntil > Date.now();
-    if (!isRecentlyMissing) {
-      missingPostCache.delete(postId);
-    }
+    // The set carries its own TTL now, so membership alone answers the question.
+    const isRecentlyMissing = missingPostCache.has(postId);
 
     if (!isRecentlyMissing) {
       try {
-        const res = await fetch(`${getApiBase()}/api/post/${postId}`, {
-          headers: { 'Cache-Control': 'stale-while-revalidate=30' },
-        });
+        // No stale-while-revalidate hint: the response carries mutable vote counts
+        // and the server now sends `no-store` for exactly that reason.
+        const res = await fetch(`${getApiBase()}/api/post/${postId}`);
         if (res.ok) {
           const data = await res.json();
           if (data?.id) {
@@ -491,7 +511,7 @@ export class PostService {
             return post;
           }
         } else if (res.status === 404) {
-          missingPostCache.set(postId, Date.now() + MISSING_POST_CACHE_TTL_MS);
+          missingPostCache.add(postId);
         }
       } catch {}
     }
@@ -505,7 +525,7 @@ export class PostService {
       missingPostCache.delete(postId);
       return post;
     }
-    missingPostCache.set(postId, Date.now() + MISSING_POST_CACHE_TTL_MS);
+    missingPostCache.add(postId);
     return null;
   }
 
@@ -558,8 +578,26 @@ export class PostService {
     await PostService.removeLocalPostBackup(postId);
   }
 
+  /**
+   * Read a post for a read-modify-write of its counters.
+   *
+   * Vote counts must never be based on `getPost()`: that path prefers the REST
+   * snapshot and the module cache, neither of which reflects a count this client
+   * just wrote, so a vote computed from one silently reverts the previous vote.
+   * Same hazard `incrementCommentCount` documents below — read the live Gun node
+   * and only fall back to the cached view if Gun doesn't answer in time.
+   */
+  private static async getPostForCounterUpdate(postId: string): Promise<Post | null> {
+    const gun = GunService.getGun();
+    const live = await onceWithTimeout(gun.get('posts').get(postId));
+    if (live && live.id) {
+      return { ...live, dataVersion: live.dataVersion || GUN_NAMESPACE } as Post;
+    }
+    return PostService.getPost(postId);
+  }
+
   static async voteOnPost(postId: string, direction: 'up' | 'down', userId: string): Promise<Post> {
-    const post = await PostService.getPost(postId);
+    const post = await PostService.getPostForCounterUpdate(postId);
     if (!post) throw new Error('Post not found');
     const gun = GunService.getGun();
     const voteKey = `vote_${userId}_${postId}`;
@@ -620,7 +658,7 @@ export class PostService {
   }
 
   static async removeVote(postId: string, direction: 'up' | 'down', userId: string): Promise<Post> {
-    const post = await PostService.getPost(postId);
+    const post = await PostService.getPostForCounterUpdate(postId);
     if (!post) throw new Error('Post not found');
     const gun = GunService.getGun();
     const voteKey = `vote_${userId}_${postId}`;

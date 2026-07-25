@@ -320,6 +320,32 @@ export const usePollStore = defineStore('poll', () => {
     // across refreshes, so truly new polls after refresh correctly trigger banner
   }
 
+  /**
+   * Shrink pollsMap under memory pressure, keeping the visible window, the poll
+   * being viewed, and any poll inside its post-vote protection window (dropping
+   * one of those would discard a local vote count with nothing to reconcile
+   * against). Everything else re-loads from Gun on scroll.
+   *
+   * Called by the memory watchdog — see the cleanup registration in main.ts.
+   */
+  function trimPollsToVisible(extra = PAGE_SIZE): number {
+    const keep = new Set<string>();
+    const ordered = sortedPolls.value;
+    const limit = Math.min(ordered.length, visibleCount.value + extra);
+    for (let i = 0; i < limit; i++) keep.add(ordered[i].id);
+    if (currentPoll.value) keep.add(currentPoll.value.id);
+    const now = Date.now();
+    for (const [id, votedAt] of recentlyVotedPolls) {
+      if (now - votedAt < VOTE_PROTECTION_MS) keep.add(id);
+    }
+
+    let removed = 0;
+    for (const id of Array.from(pollsMap.value.keys())) {
+      if (!keep.has(id)) { pollsMap.value.delete(id); removed++; }
+    }
+    return removed;
+  }
+
   // ─── Create ────────────────────────────────────────────────────────────────
 
   async function createPoll(data: {
@@ -478,7 +504,7 @@ export const usePollStore = defineStore('poll', () => {
     sortedPolls, activePolls,
     visiblePolls, hasMorePolls, visibleCount,
     newPollCount, pendingNewPolls,
-    loadPollsForCommunity, loadMorePolls, resetVisibleCount,
+    loadPollsForCommunity, loadMorePolls, resetVisibleCount, trimPollsToVisible,
     flushNewPolls, injectPoll, saveSeenNow,
     createPoll, voteOnPoll, selectPoll,
     refreshCommunityPolls,

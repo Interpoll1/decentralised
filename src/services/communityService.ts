@@ -1,5 +1,6 @@
 // src/services/communityService.ts
 import { GunService } from './gunService';
+import { BoundedMap, BoundedSet } from '../utils/boundedMap';
 import { CryptoService } from './cryptoService';
 import { KeyService } from './keyService';
 import { EncryptionService } from './encryptionService';
@@ -27,13 +28,30 @@ export interface Community {
 export class CommunityService {
   private static get gun() { return GunService.getGun(); }
   private static getCommunityNode(id: string) { return this.gun.get('communities').get(id); }
-  private static readonly rulesCache = new Map<string, string[]>();
+  // Bounded: one entry per community ever visited, previously never released.
+  // Subscriptions and in-flight promises below are deliberately NOT bounded —
+  // evicting those would leak the underlying listener rather than free anything.
+  private static readonly rulesCache = new BoundedMap<string, string[]>({ maxSize: 200 });
   private static readonly rulesLoadPromises = new Map<string, Promise<string[]>>();
-  private static readonly rulesLoaded = new Set<string>();
+  private static readonly rulesLoaded = new BoundedSet<string>({ maxSize: 200 });
   private static readonly rulesSubscriptions = new Map<string, any>();
-  private static readonly communityDataCache = new Map<string, any>();
+  private static readonly communityDataCache = new BoundedMap<string, any>({ maxSize: 150 });
   private static readonly liveCallbacks = new Set<(community: Community) => void>();
   private static liveCommunityListener: any = null;
+
+  /**
+   * Release cached community data under memory pressure. Called by the memory
+   * watchdog (see main.ts). Subscriptions are left alone — they are live
+   * listeners, not cached data, and dropping them would break live updates.
+   */
+  static trimCaches(level: 'light' | 'aggressive' | 'emergency'): void {
+    this.rulesCache.prune();
+    this.rulesLoaded.prune();
+    this.communityDataCache.prune();
+    if (level === 'aggressive' || level === 'emergency') {
+      this.communityDataCache.clear();
+    }
+  }
 
   // ─── Create ────────────────────────────────────────────────────────────────
 

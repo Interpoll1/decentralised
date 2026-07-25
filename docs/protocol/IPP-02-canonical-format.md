@@ -1,8 +1,8 @@
 # IPP-02: Canonical Format and Integrity Envelope
 
 **Status:** Draft
-**Version:** 1
-**Supersedes:** `docs/protocol-whitepaper.md` v0.5 (§7.1)
+**Version:** 2
+**Supersedes:** `docs/protocol-whitepaper.md` v0.5 (§7.1); IPP-02 v1 (freshness fields were unsigned)
 
 Requirements language: see [[IPP-00-overview]].
 
@@ -21,8 +21,12 @@ algorithm.
 Given an object, its canonical JSON string MUST be produced by the following
 rules:
 
-1. **Strip integrity meta fields.** Remove the top-level keys `_hash`, `_sig`,
-   `_pub`, `_pow`, `_ts`, `_nonce` (the envelope of §4) before serializing.
+1. **Strip derived envelope fields.** Remove the top-level keys `_hash`, `_sig`,
+   `_pub`, `_pow` (the fields computed and attached *after* signing, per §4)
+   before serializing. The freshness fields `_ts` and `_nonce` are **retained**:
+   they are generated *before* signing and MUST be part of the signed and hashed
+   bytes. (In v1 they were stripped, leaving replay protection unsigned — see the
+   version note below.)
 2. **Objects:** serialize keys in ascending Unicode code-point order (a plain
    lexicographic sort of the UTF-16 key strings). Each key is emitted as
    `JSON.stringify(key)`, followed by `:`, followed by the canonical form of its
@@ -60,20 +64,28 @@ envelope of six reserved top-level fields:
 
 | Field | Meaning |
 |---|---|
-| `_hash` | `SHA-256(canonicalJSON(payload))`, hex |
-| `_sig` | Schnorr signature over the same canonical payload |
+| `_ts` | millisecond Unix timestamp of sealing — **signed** (part of the canonical payload) |
+| `_nonce` | unique per-message value (replay protection) — **signed** |
+| `_hash` | `SHA-256(canonicalJSON(payload + _ts + _nonce))`, hex |
+| `_sig` | Schnorr signature over that same canonical payload (including `_ts`/`_nonce`) |
 | `_pub` | signer x-only public key, hex |
 | `_pow` | hashcash nonce (see [[IPP-08-anti-abuse]]) |
-| `_ts` | millisecond Unix timestamp of sealing |
-| `_nonce` | unique per-message value (replay protection) |
+
+Sealing order matters: `_ts` and `_nonce` are generated **first** and folded into
+the payload; `_hash`, `_sig`, `_pow` are then derived over that payload and
+attached afterward. Only those three derived fields (plus `_pub`) are stripped by
+`canonicalJSON`.
 
 A verifier MUST, for a non-exempt message:
 
-1. recompute `canonicalJSON(payload)` (which strips the six envelope fields),
+1. recompute `canonicalJSON(payload)` (which strips only `_hash`/`_sig`/`_pub`/`_pow`,
+   so `_ts` and `_nonce` remain in the canonical form),
 2. confirm `_hash` equals `SHA-256` of that canonical form,
 3. verify `_sig` against `_pub` over that canonical form,
 4. verify the `_pow` difficulty for the message type ([[IPP-08-anti-abuse]]),
-5. confirm freshness (`_ts` within the accepted window, `_nonce` unseen).
+5. confirm freshness (`_ts` within the accepted window, `_nonce` unseen). Because
+   `_ts`/`_nonce` are now covered by `_sig`, a captured message cannot have them
+   mutated to forge freshness without invalidating the signature.
 
 A verifier MUST reject (fail closed) if any check fails. Certain low-risk message
 types MAY be exempt from signing/PoW; the exempt set is defined in
@@ -114,7 +126,7 @@ historical data.
 
 ## Conformance checklist
 
-- [ ] Canonical JSON strips the six `_`-prefixed envelope fields before serializing.
+- [ ] Canonical JSON strips only the four derived envelope fields (`_hash`/`_sig`/`_pub`/`_pow`); `_ts`/`_nonce` are retained and signed.
 - [ ] Object keys are emitted in ascending code-point order, recursively, at every depth.
 - [ ] `undefined` object values are omitted; `undefined` array elements become `null`.
 - [ ] Content hash is `SHA-256(canonicalJSON(obj))` in lowercase hex.

@@ -5,6 +5,7 @@ import { StorageService } from './storageService';
 import config from '../config';
 import { AuditService } from './auditService';
 import type { Poll, PollOption, VoteTrustPolicy } from '../types/poll';
+import { BoundedMap } from '../utils/boundedMap';
 
 // Re-exported for backward compatibility — `src/types/poll.ts` is now the
 // single source of truth for these types; import from there in new code.
@@ -73,44 +74,13 @@ function logPollDebug(category: PollDebugCategory, message: string, meta?: Recor
   console.log(prefix, message);
 }
 
-async function indexForSearch(type: 'post' | 'poll', id: string, data: any) {
-  try {
-    const startedAt = performance.now();
-    logPollDebug('index', 'Indexing started', { type, id });
-    const { IntegrityService } = await import('@/services/integrityService');
-    const body = await IntegrityService.seal(
-      { type, id, data } as Record<string, unknown>,
-      'index',
-    );
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 2500);
-    const apiUrl = new URL(getApiBase(), typeof window !== 'undefined' ? window.location.origin : undefined);
-    const useCredentials = typeof window !== 'undefined' && apiUrl.origin === window.location.origin;
-    try {
-      await fetch(`${getApiBase()}/api/index`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: useCredentials ? 'include' : 'omit',
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-      logPollDebug('index', 'Indexing completed', {
-        type,
-        id,
-        durationMs: Math.round(performance.now() - startedAt),
-      });
-    } finally {
-      clearTimeout(timer);
-    }
-  } catch (err) {
-    logPollDebug('index', 'Indexing failed', {
-      type,
-      id,
-      error: err instanceof Error ? err.message : String(err),
-    });
-    console.warn('Search indexing failed:', err);
-  }
-}
+// Search indexing is not a client concern. The gun-relay process indexes posts
+// and polls off its own Gun write hook (gun-relay/gun-relay-enhanced.js,
+// maybeIndexNode), so anything that reaches the graph is indexed regardless of
+// whether the author was signed in. The old client-side POST to /api/index could
+// never have worked: that endpoint requires a shared secret a browser cannot hold,
+// so every call returned 401 into a swallowed warning — and it paid for a
+// proof-of-work seal on the publish path to do it.
 
 export class PollService {
   private static get gun() { return GunService.getGun(); }
@@ -152,7 +122,8 @@ export class PollService {
 
   private static republishLoopStarted = false;
   private static republishInFlight = false;
-  private static republishAttempts = new Map<string, number>();
+  // Entries are removed only on success, so failures accumulated for the session.
+  private static republishAttempts = new BoundedMap<string, number>({ maxSize: 500, ttlMs: 60 * 60_000 });
   private static readonly REPUBLISH_MAX_ATTEMPTS = 5;
   private static readonly REPUBLISH_INTERVAL_MS = 120_000;
 
@@ -554,18 +525,24 @@ export class PollService {
   ): Promise<T | null> {
     return new Promise((resolve) => {
       let settled = false;
-      let subscription: any;
-      const cleanup = () => { if (subscription?.off) subscription.off(); };
-      subscription = node.on((value: T | null) => {
-        if (settled || !predicate(value)) return;
+      // `node.on(cb)` returns the *chain*, and chain.off() detaches every
+      // listener on that soul — including unrelated live feed subscriptions
+      // sharing the same path. Gun binds `this` inside the handler to that one
+      // listener, so `this.off()` detaches only ours.
+      node.on(function (this: any, value: T | null) {
+        // Detach as soon as we're done — either we just resolved, or the
+        // timeout already fired and this is a late event.
+        if (settled) { try { this?.off?.(); } catch { /* already detached */ } return; }
+        if (!predicate(value)) return;
         settled = true;
-        cleanup();
+        try { this?.off?.(); } catch { /* already detached */ }
         resolve(value ?? null);
       });
       setTimeout(() => {
         if (settled) return;
         settled = true;
-        cleanup();
+        // The listener detaches itself on its next fire (see above); we can't
+        // detach it from here without tearing down every listener on the soul.
         resolve(null);
       }, timeoutMs);
     });
@@ -1261,15 +1238,6 @@ export class PollService {
       logPollDebug('create', 'Private invite codes generated', { pollId, inviteCount });
     }
 
-    if (!poll.isEncrypted) {
-      void indexForSearch('poll', poll.id, {
-        question: poll.question,
-        description: poll.description || '',
-        authorName: poll.authorName,
-        communitySlug: poll.communityId,
-        createdAt: poll.createdAt,
-      });
-    }
 
     const relayConfirmed = await this.verifyRelayPersistence(pollId);
     poll.relayConfirmed = relayConfirmed === null

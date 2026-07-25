@@ -24,6 +24,7 @@
 import { GunService } from './gunService';
 import { KeyService } from './keyService';
 import { CryptoService } from './cryptoService';
+import { BoundedMap, BoundedSet } from '../utils/boundedMap';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -100,10 +101,18 @@ function certPayload(cert: Omit<TrustCertificate, 'signature'>): string {
 
 export class TrustService {
   private static issuersCache: TrustIssuer[] | null = null;
-  private static certCache = new Map<string, TrustCertificate | null>(); // pubkey → cert
+  // pubkey → cert. Bounded + TTL: previously one entry per user ever encountered,
+  // held for the whole session, and certificates can be revoked upstream anyway.
+  private static certCache = new BoundedMap<string, TrustCertificate | null>({ maxSize: 500, ttlMs: 15 * 60_000 });
   private static readonly ISSUER_REQUEST_TIMEOUT_MS = 20000;
   private static readonly CLAIM_V2_SUPPORT_STORAGE_KEY = 'interpoll_trust_v2_support';
   private static readonly CLAIM_V2_AUTH_PURPOSE = 'interpoll-trust-claim-v2';
+
+  /** Release cached certificates under memory pressure (see main.ts). */
+  static trimCaches(level: 'light' | 'aggressive' | 'emergency'): void {
+    this.certCache.prune();
+    if (level === 'aggressive' || level === 'emergency') this.certCache.clear();
+  }
 
   // ── Issuers ────────────────────────────────────────────────────────────────
 

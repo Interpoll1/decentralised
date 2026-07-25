@@ -52,11 +52,18 @@ function spaRouteFallbackPlugin() {
   };
 }
 
+// When building for the Capacitor native shell we disable the service worker:
+// Workbox precache/navigateFallback fights Capacitor's local asset serving and
+// causes stale-asset / blank-screen issues inside the WebView. Set via the
+// `build:mobile` npm script (CAP_BUILD=1).
+const isNativeBuild = process.env.CAP_BUILD === '1';
+
 export default defineConfig({
   base: '/',
   plugins: [
     vue(),
     spaRouteFallbackPlugin(),
+    ...(isNativeBuild ? [] : [
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
@@ -82,6 +89,7 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // the ionic vendor chunk is ~1.1MB
       },
     }),
+    ]),
   ],
   resolve: {
     alias: {
