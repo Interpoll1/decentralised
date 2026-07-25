@@ -94,6 +94,34 @@ export const usePostStore = defineStore('post', () => {
   const communityArrivalCounts = new Map<string, number>();
   const pendingPostsByCommunity = new Map<string, Map<string, Post>>();
   let pendingPostsFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** postId → when this client last reconciled a vote it made itself. */
+  const locallyVotedAt = new Map<string, number>();
+  const LOCAL_VOTE_GRACE_MS = 15_000;
+
+  /**
+   * Gun re-delivers a post whenever any peer echoes it, and those echoes can carry
+   * a pre-vote snapshot that arrives after our own write. Blindly applying one
+   * undoes a vote the user just cast, on screen, seconds later. Within a short
+   * grace window after a local vote, keep our counters and take everything else
+   * (title, edits, comment count) from the incoming copy.
+   */
+  function preserveFreshLocalVote(incoming: Post): Post {
+    const votedAt = locallyVotedAt.get(incoming.id);
+    if (!votedAt) return incoming;
+    if (Date.now() - votedAt > LOCAL_VOTE_GRACE_MS) {
+      locallyVotedAt.delete(incoming.id);
+      return incoming;
+    }
+    const mine = postsMap.value.get(incoming.id);
+    if (!mine) return incoming;
+    return {
+      ...incoming,
+      upvotes: mine.upvotes,
+      downvotes: mine.downvotes,
+      score: mine.score,
+    };
+  }
   const getPendingIncomingPostCount = () => {
     let total = 0;
     for (const queue of pendingPostsByCommunity.values()) total += queue.size;
@@ -144,7 +172,7 @@ export const usePostStore = defineStore('post', () => {
 
     // Always update existing posts in-place (vote counts, edits)
     if (postsMap.value.has(post.id)) {
-      postsMap.value.set(post.id, post);
+      postsMap.value.set(post.id, preserveFreshLocalVote(post));
       tryDecryptPost(post);
       return;
     }
@@ -404,6 +432,32 @@ export const usePostStore = defineStore('post', () => {
     }
   }
 
+  /**
+   * Shrink postsMap under memory pressure, keeping what the user can actually
+   * reach: everything currently rendered (the visible window), plus the post
+   * being viewed. Anything else is re-fetchable from Gun or the relay on scroll.
+   *
+   * Called by the memory watchdog — see the cleanup registration in main.ts.
+   * Returns the number of posts dropped.
+   */
+  function trimPostsToVisible(extra = PAGE_SIZE): number {
+    const keep = new Set<string>();
+    const ordered = sortedPosts.value;
+    const limit = Math.min(ordered.length, visibleCount.value + extra);
+    for (let i = 0; i < limit; i++) keep.add(ordered[i].id);
+    if (currentPost.value) keep.add(currentPost.value.id);
+    // Never drop a post whose vote we are still protecting from stale echoes;
+    // dropping it would discard the local count with nothing to reconcile against.
+    for (const id of locallyVotedAt.keys()) keep.add(id);
+
+    let removed = 0;
+    for (const id of Array.from(postsMap.value.keys())) {
+      if (!keep.has(id)) { postsMap.value.delete(id); removed++; }
+    }
+    if (removed > 0) postDebug('trim-posts-to-visible', { removed, kept: postsMap.value.size });
+    return removed;
+  }
+
   // ─── Create ────────────────────────────────────────────────────────────────
 
   async function createPost(data: { communityId: string; title: string; content: string; imageFile?: File; }) {
@@ -499,6 +553,7 @@ export const usePostStore = defineStore('post', () => {
 
   function reconcileVote(postId: string, updated: Post | null) {
     if (!updated) return;
+    locallyVotedAt.set(postId, Date.now());
     postsMap.value.set(postId, updated);
     if (currentPost.value?.id === postId) currentPost.value = updated;
     broadcastPostUpdate(updated);
@@ -606,7 +661,7 @@ export const usePostStore = defineStore('post', () => {
     sortedPosts, communityPosts, visiblePosts, hasMorePosts, visibleCount,
     newPostCount, pendingNewPosts,
     loadPostsForCommunity, loadMorePosts, resetVisibleCount,
-    flushNewPosts, injectPost, saveSeenNow, purgeLegacyPosts,
+    flushNewPosts, injectPost, saveSeenNow, purgeLegacyPosts, trimPostsToVisible,
     createPost, selectPost,
     voteOnPost, upvotePost, downvotePost, removeUpvote, removeDownvote,
     refreshPosts,

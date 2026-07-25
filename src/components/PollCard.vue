@@ -96,6 +96,10 @@
           <ion-icon slot="end" :icon="shieldCheckmarkOutline"></ion-icon>
         </ion-button>
 
+        <ion-button fill="clear" size="small" class="share-action" title="Share this poll" @click.stop="handleShare">
+          <ion-icon :icon="shareOutline"></ion-icon>
+        </ion-button>
+
         <ion-button fill="clear" size="small" @click.stop="$emit('vote')">
           Vote Now
           <ion-icon slot="end" :icon="chevronForwardOutline"></ion-icon>
@@ -116,11 +120,13 @@ import {
   checkmarkDoneOutline,
   chevronForwardOutline,
   warningOutline,
-  shieldCheckmarkOutline
+  shieldCheckmarkOutline,
+  shareOutline
 } from 'ionicons/icons';
 import { Poll } from '../services/pollService';
 import type { PollOption } from '../types/poll';
 import { useVerifiedPollResults } from '../composables/useVerifiedPollResults';
+import { shareLink } from '../composables/useShare';
 import type { FilterAction } from '../services/moderationService';
 import { generatePseudonym } from '../utils/pseudonym';
 import { useUserStore } from '../stores/userStore';
@@ -204,6 +210,14 @@ function formatTime(timestamp: number): string {
   if (days < 7) return `${days}d ago`;
 
   return new Date(timestamp).toLocaleDateString();
+}
+
+function handleShare() {
+  const communityId = props.poll.communityId;
+  const url = communityId
+    ? `/community/${communityId}/poll/${props.poll.id}`
+    : `/vote/${props.poll.id}`;
+  void shareLink(url, props.poll.question || 'InterPoll poll', 'Vote on this poll on InterPoll');
 }
 
 function getOptionPercent(option: { votes: number }): number {

@@ -168,6 +168,10 @@ const defaults = {
   gun: 'https://interpoll2.endless.sbs/gun',
   api: 'https://interpoll.endless.sbs',
 };
+
+// Canonical public web origin where the browser build of the app is hosted.
+// Used to construct shareable links from the native app (see config.web).
+const WEB_ORIGIN = 'https://endless.sbs';
 function loadEncryptionConfig(): EncryptionConfig {
   try {
     const raw = localStorage.getItem(ENCRYPTION_STORAGE_KEY);
@@ -203,6 +207,16 @@ const config = {
   /** Trusted backend origin for auth/session-gated requests */
   auth: {
     get api() { return defaults.api; },
+  },
+
+  /**
+   * Canonical public web origin for the app. Used to build shareable links.
+   * In a browser this is just the current origin, but inside the native
+   * (Capacitor) shell `window.location.origin` is `https://localhost`, which
+   * is not a real, openable link — so native shares must use this instead.
+   */
+  web: {
+    get origin() { return WEB_ORIGIN; },
   },
 
   /** Server-wide encryption settings (mutable at runtime) */
