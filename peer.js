@@ -20,6 +20,7 @@ import fs from 'fs';
 import path from 'path';
 import http from 'http';
 import { fileURLToPath } from 'url';
+import { RateLimiter } from './rate-limiter.js';
 console.log('WSS Initialized, this is @thegoodduck and @theendless11, built with love ❤️');
 // ─── Config ──────────────────────────────────────────────────────────────────
 // This peer is made to be run absolutely headlessly without the usual client hosted at endless.sbs so yup btw i added the log 2026-04-10 12:52 whilst at school.
@@ -55,9 +56,10 @@ const ProxiedWebSocket = proxyAgent
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-const BLOCKS_FILE  = path.join(DATA_DIR, 'blocks.json');
-const EVENTS_FILE  = path.join(DATA_DIR, 'events.json');
-const SERVERS_FILE = path.join(DATA_DIR, 'known-servers.json');
+const BLOCKS_FILE       = path.join(DATA_DIR, 'blocks.json');
+const EVENTS_FILE       = path.join(DATA_DIR, 'events.json');
+const SERVERS_FILE      = path.join(DATA_DIR, 'known-servers.json');
+const RATE_LIMITER_FILE = path.join(DATA_DIR, 'rate-limiter-state.json');
 
 // ─── Persistence helpers ─────────────────────────────────────────────────────
 
@@ -72,6 +74,16 @@ function saveJSON(file, data) {
 const blocks       = loadJSON(BLOCKS_FILE,  []);
 const events       = loadJSON(EVENTS_FILE,  []);   // Nostr-style signed events
 let   knownServers = loadJSON(SERVERS_FILE, []);
+
+// ─── Rate limiter (persistent across restarts) ────────────────────────────────
+// State is saved on SIGINT/SIGTERM so banned/penalised peers survive a relay
+// restart instead of getting a clean slate every time the process bounces.
+const rateLimiter = new RateLimiter({ httpLimit: 30, wsLimit: 60, windowMs: 60_000 });
+const savedRateLimiterState = loadJSON(RATE_LIMITER_FILE, null);
+if (savedRateLimiterState) {
+  rateLimiter.restore(savedRateLimiterState);
+  console.log('[rate-limiter] Restored state from disk');
+}
 
 const MAX_BLOCKS = 10000;
 const MAX_EVENTS = 5000;
@@ -400,15 +412,25 @@ connect();
 
 // ─── Stay alive forever ──────────────────────────────────────────────────────
 
-process.on('SIGINT', () => {
-  log('Shutting down ...');
+function gracefulShutdown(signal) {
+  log(`Shutting down (${signal}) ...`);
   saveJSON(BLOCKS_FILE, blocks);
   saveJSON(EVENTS_FILE, events);
   saveJSON(SERVERS_FILE, knownServers);
+  // Persist rate-limiter bans/cooldowns so they survive the restart
+  try {
+    saveJSON(RATE_LIMITER_FILE, rateLimiter.dump());
+  } catch (err) {
+    log(`Failed to save rate-limiter state: ${err.message}`);
+  }
+  rateLimiter.destroy();
   if (ws) ws.close();
   gunServer.close();
   process.exit(0);
-});
+}
+
+process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
 process.on('uncaughtException', (err) => {
   log(`Uncaught: ${err.message}`);
