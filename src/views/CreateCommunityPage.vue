@@ -10,6 +10,7 @@
     </ion-header>
 
     <ion-content class="ion-padding">
+      <DesktopPageShell>
 
       <p class="page-subtitle">Create a space for people to discuss topics they love</p>
 
@@ -51,6 +52,26 @@
           :rows="4"
           :maxlength="500"
         ></ion-textarea>
+      </ion-item>
+
+      <!-- Category -->
+      <ion-item>
+        <ion-select
+          v-model="category"
+          label="Category"
+          label-placement="floating"
+          placeholder="Choose a category"
+          interface="popover"
+        >
+          <ion-select-option v-for="opt in categoryOptions" :key="opt.value" :value="opt.value">
+            {{ opt.label }}
+          </ion-select-option>
+        </ion-select>
+      </ion-item>
+
+      <!-- NSFW toggle -->
+      <ion-item lines="none" class="nsfw-item">
+        <ion-toggle v-model="nsfw">Mark as NSFW</ion-toggle>
       </ion-item>
 
       <!-- Rules -->
@@ -111,6 +132,7 @@
         {{ isCreating ? 'Creating...' : 'Create Community' }}
       </ion-button>
 
+      </DesktopPageShell>
     </ion-content>
   </ion-page>
 </template>
@@ -187,6 +209,7 @@
 </style>
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRouter } from 'vue-router';
 import {
   IonPage,
@@ -204,6 +227,9 @@ import {
   IonItem,
   IonInput,
   IonTextarea,
+  IonSelect,
+  IonSelectOption,
+  IonToggle,
   IonLabel,
   IonButton,
   IonIcon,
@@ -221,10 +247,22 @@ const communityStore = useCommunityStore();
 const name = ref('');
 const displayName = ref('');
 const description = ref('');
+const category = ref('');
+const nsfw = ref(false);
 const rules = ref(['Be respectful', 'No spam']);
 const isCreating = ref(false);
 const nameError = ref('');
 const privacyConfig = ref<PrivateCommunityConfig>({ isPrivate: false, method: 'invite' });
+
+const categoryOptions = [
+  { value: 'technology', label: 'Technology' },
+  { value: 'gaming', label: 'Gaming' },
+  { value: 'science', label: 'Science' },
+  { value: 'politics', label: 'Politics' },
+  { value: 'crypto', label: 'Crypto' },
+  { value: 'sports', label: 'Sports' },
+  { value: 'general', label: 'General' },
+];
 
 const canCreate = computed(() => {
   const baseValid = name.value.trim() !== '' &&
@@ -281,7 +319,9 @@ const createCommunity = async () => {
       name: name.value.trim(),
       displayName: displayName.value.trim(),
       description: description.value.trim(),
-      rules: validRules
+      rules: validRules,
+      category: category.value || undefined,
+      nsfw: nsfw.value,
     };
 
     let communityId: string;
