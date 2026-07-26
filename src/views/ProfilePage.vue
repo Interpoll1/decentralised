@@ -15,6 +15,7 @@
     </ion-header>
 
     <ion-content>
+      <DesktopPageShell>
       <!-- Profile Header -->
       <div class="profile-header">
         <div class="avatar-container" @click="selectAvatar">
@@ -182,6 +183,7 @@
         </div>
       </div>
 
+      </DesktopPageShell>
     </ion-content>
   </ion-page>
 </template>
@@ -405,6 +407,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import DesktopPageShell from '../components/DesktopPageShell.vue';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonBackButton, IonButton, IonItem, IonLabel,
