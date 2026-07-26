@@ -48,32 +48,38 @@
 
       <div class="post-footer" @click.stop>
         <div class="post-stats">
-          <button class="stat-button upvote" @click="handleUpvote" :class="{ active: hasUpvoted }">
-            <ion-icon :icon="arrowUpOutline"></ion-icon>
+          <div class="author-avatar" :title="'u/' + authorDisplayName">
+            {{ authorInitial }}
+          </div>
+
+          <button class="stat-icon-btn heart" @click="handleUpvote" :class="{ active: hasUpvoted }" title="Like">
+            <ion-icon :icon="hasUpvoted ? heart : heartOutline"></ion-icon>
             <span>{{ formatNumber(post.upvotes) }}</span>
           </button>
-          
-          <button class="stat-button downvote" @click="handleDownvote" :class="{ active: hasDownvoted }">
-            <ion-icon :icon="arrowDownOutline"></ion-icon>
-            <span>{{ formatNumber(post.downvotes) }}</span>
+
+          <button class="stat-icon-btn" @click="handleDownvote" :class="{ active: hasDownvoted }" title="Save">
+            <ion-icon :icon="bookmarkOutline"></ion-icon>
           </button>
 
-          <button
-            v-if="showModerationAction"
-            class="stat-button moderation-action"
-            @click="handleModerationAction"
-            :title="moderationActionTitle"
-          >
-            <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
-            <span>Filter</span>
-          </button>
-
-          <button class="stat-button comments" @click="handleCommentsClick">
+          <button class="stat-icon-btn comments" @click="handleCommentsClick" title="Comments">
             <ion-icon :icon="chatbubbleOutline"></ion-icon>
             <span>{{ formatNumber(post.commentCount) }}</span>
           </button>
 
-          <div class="stat-item score">
+          <button class="stat-icon-btn share" @click="handleShare" title="Share">
+            <ion-icon :icon="arrowRedoOutline"></ion-icon>
+          </button>
+
+          <button
+            v-if="showModerationAction"
+            class="stat-icon-btn moderation-action"
+            @click="handleModerationAction"
+            :title="moderationActionTitle"
+          >
+            <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
+          </button>
+
+          <div class="stat-score">
             <ion-icon :icon="trendingUpOutline"></ion-icon>
             <span>{{ post.score }}</span>
           </div>
@@ -85,9 +91,9 @@
 
 <style scoped>
 .post-card {
-  margin: 0 0 24px;
-  padding: 20px 0 18px;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  margin: 0 0 8px;
+  padding: 18px 4px 16px;
+  border-bottom: 1px solid var(--app-border);
 }
 
 .post-header {
@@ -201,17 +207,70 @@
 }
 
 .post-footer {
-  margin-top: 4px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  margin-top: 6px;
+  padding-top: 12px;
 }
 
 .post-stats {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 14px;
   flex-wrap: wrap;
 }
+
+.author-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #6366f1, #8b5cf6);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+}
+
+.stat-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 2px;
+  background: none;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--app-text-muted);
+  cursor: pointer;
+  transition: color var(--app-transition), transform var(--app-transition);
+  -webkit-tap-highlight-color: transparent;
+}
+.stat-icon-btn ion-icon { font-size: 18px; }
+.stat-icon-btn:hover { color: var(--app-text); }
+.stat-icon-btn:active { transform: scale(0.96); }
+.stat-icon-btn.heart,
+.stat-icon-btn.heart ion-icon { color: #a78bfa; }
+.stat-icon-btn.heart:hover,
+.stat-icon-btn.heart:hover ion-icon { color: #c4b5fd; }
+.stat-icon-btn.comments,
+.stat-icon-btn.comments ion-icon { color: #fbbf24; }
+.stat-icon-btn.comments:hover,
+.stat-icon-btn.comments:hover ion-icon { color: #fcd34d; }
+.stat-icon-btn.share { color: #34d399; }
+.stat-icon-btn.share:hover { color: #6ee7b7; }
+
+.stat-score {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #818cf8;
+}
+.stat-score ion-icon { font-size: 16px; }
 
 .stat-button {
   display: flex;
@@ -225,27 +284,6 @@
   font-weight: 600;
   color: var(--app-text-muted);
   cursor: pointer;
-  transition: all var(--app-transition);
-  -webkit-tap-highlight-color: transparent;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-.stat-button:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-.stat-button:active {
-  transform: scale(0.98);
-}
-
-.stat-button ion-icon {
-  font-size: 16px;
-}
-
-.stat-button span {
-  min-width: 16px;
-  text-align: center;
 }
 
 .stat-button.upvote {
@@ -417,12 +455,14 @@ import { ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { IonIcon, toastController } from '@ionic/vue';
 import {
-  arrowUpOutline, 
-  arrowDownOutline, 
-  chatbubbleOutline, 
+  chatbubbleOutline,
   trendingUpOutline,
   warningOutline,
-  shieldCheckmarkOutline
+  shieldCheckmarkOutline,
+  heart,
+  heartOutline,
+  bookmarkOutline,
+  arrowRedoOutline,
 } from 'ionicons/icons';
 import { Post } from '../services/postService';
 import type { FilterAction } from '../services/moderationService';
@@ -490,6 +530,11 @@ const authorDisplayName = computed(() => {
   return props.post.authorName || 'anon';
 });
 
+const authorInitial = computed(() => {
+  const name = authorDisplayName.value || 'a';
+  return name.charAt(0).toUpperCase();
+});
+
 const authorIdentityLabel = computed(() =>
   currentAuthorProfile.value?.identityTrustLevel === 'trusted-issuer'
     ? formatTrustedIdentityLabel({
@@ -535,6 +580,26 @@ function handleDownvote(event: Event) {
 function handleCommentsClick(event: Event) {
   event.stopPropagation();
   router.push(`/post/${props.post.id}`);
+}
+
+async function handleShare(event: Event) {
+  event.stopPropagation();
+  const url = `${window.location.origin}/post/${props.post.id}`;
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: props.post.title, url });
+    } else if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+      const toast = await toastController.create({
+        message: 'Link copied',
+        duration: 1800,
+        color: 'dark',
+      });
+      await toast.present();
+    }
+  } catch {
+    /* user cancelled share */
+  }
 }
 
 function handleModerationAction(event: Event) {
