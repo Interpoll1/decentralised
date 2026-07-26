@@ -15,6 +15,7 @@
     </ion-header>
 
     <ion-content>
+      <DesktopPageShell>
       <!-- Community Header -->
       <div v-if="community" class="community-header">
         <div class="community-top">
@@ -193,6 +194,7 @@
         </ol>
       </div>
      
+      </DesktopPageShell>
     </ion-content>
   </ion-page>
 </template>
@@ -426,6 +428,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watchEffect, watch, onUnmounted } from 'vue';
+import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage,
