@@ -15,6 +15,7 @@
     </ion-header>
 
     <ion-content>
+      <DesktopPageShell>
       <!-- Loading -->
       <div v-if="isLoading" class="loading-container">
         <ion-spinner></ion-spinner>
@@ -156,11 +157,13 @@
           </div>
         </div>
       </div>
+      </DesktopPageShell>
     </ion-content>
   </ion-page>
 </template>
 
 <script setup lang="ts">
+import DesktopPageShell from '../components/DesktopPageShell.vue';
 
 function autoLink(text: string): string {
   if (!text) return '';
