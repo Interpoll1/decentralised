@@ -47,12 +47,12 @@
   --app-search-surface: rgba(255, 255, 255, 0.48);
   --app-heading-start: #111827;
   --app-heading-end: rgba(17, 24, 39, 0.62);
-  --glass-blur: 22px;
-  --glass-saturation: 1.4;
-  --glass-item-blur: 18px;
-  --glass-item-saturation: 1.18;
-  --toolbar-blur: 20px;
-  --toolbar-saturation: 1.3;
+  --glass-blur: 18px;
+  --glass-saturation: 1.15;
+  --glass-item-blur: 14px;
+  --glass-item-saturation: 1.08;
+  --toolbar-blur: 16px;
+  --toolbar-saturation: 1.1;
   --glass-border: var(--app-border);
   --glass-border-top: rgba(255, 255, 255, 0.85);
   --glass-border-bottom: rgba(15, 23, 42, 0.05);
@@ -63,11 +63,11 @@
   --liquid-spring: transform var(--app-transition), box-shadow var(--app-transition), border-color var(--app-transition);
 
   /* light aurora */
-  --aurora-base-bg: #eaedff;
+  --aurora-base-bg: #f2f3f9;
   --aurora-blend: normal;
-  --aurora-orb1-opacity: 0.28;
-  --aurora-orb2-opacity: 0.22;
-  --aurora-orb3-opacity: 0.18;
+  --aurora-orb1-opacity: 0.14;
+  --aurora-orb2-opacity: 0.11;
+  --aurora-orb3-opacity: 0.09;
 
   --ion-background-color: var(--app-bg-base);
   --ion-background-color-rgb: 238, 242, 255;
@@ -168,9 +168,9 @@ body.dark {
   --app-bg-deep: #000000;
   --app-bg-base: #000000;
   --app-bg-elevated: #07080a;
-  --app-surface: rgba(22, 24, 30, 0.50);
-  --app-surface-strong: rgba(30, 32, 40, 0.65);
-  --app-surface-hover: rgba(38, 41, 50, 0.75);
+  --app-surface: rgba(22, 24, 30, 0.66);
+  --app-surface-strong: rgba(30, 32, 40, 0.80);
+  --app-surface-hover: rgba(38, 41, 50, 0.86);
   --app-border: rgba(255, 255, 255, 0.08);
   --app-border-strong: rgba(255, 255, 255, 0.16);
   --app-text: #f5f5f6;
@@ -195,22 +195,22 @@ body.dark {
   --app-shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 18px 42px rgba(0, 0, 0, 0.55), 0 0 72px rgba(94, 106, 210, 0.08);
   --app-shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 90px rgba(94, 106, 210, 0.12);
   --app-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.07);
-  --glass-blur: 22px;
-  --glass-saturation: 1.4;
-  --glass-item-blur: 18px;
-  --glass-item-saturation: 1.22;
-  --toolbar-blur: 20px;
-  --toolbar-saturation: 1.3;
-  --glass-border-top: rgba(255, 255, 255, 0.16);
+  --glass-blur: 18px;
+  --glass-saturation: 1.1;
+  --glass-item-blur: 14px;
+  --glass-item-saturation: 1.05;
+  --toolbar-blur: 16px;
+  --toolbar-saturation: 1.05;
+  --glass-border-top: rgba(255, 255, 255, 0.10);
   --glass-border-bottom: rgba(0, 0, 0, 0.3);
   --glass-inner-glow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 
   /* dark aurora */
-  --aurora-base-bg: #07080d;
-  --aurora-blend: screen;
-  --aurora-orb1-opacity: 0.55;
-  --aurora-orb2-opacity: 0.45;
-  --aurora-orb3-opacity: 0.35;
+  --aurora-base-bg: #0a0b10;
+  --aurora-blend: normal;
+  --aurora-orb1-opacity: 0.16;
+  --aurora-orb2-opacity: 0.12;
+  --aurora-orb3-opacity: 0.10;
 
   --ion-background-color-rgb: 0, 0, 0;
   --ion-card-background-rgb: 22, 24, 30;
@@ -450,8 +450,8 @@ ion-app {
 
 .glass-surface {
   background: var(--app-surface) !important;
-  backdrop-filter: blur(24px) saturate(180%) brightness(1.04) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(180%) brightness(1.04) !important;
+  backdrop-filter: blur(20px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(140%) !important;
   border: 1px solid var(--glass-border-top) !important;
   border-bottom-color: var(--glass-border-bottom) !important;
   box-shadow: var(--app-shadow-inset), var(--app-shadow-md) !important;
@@ -459,8 +459,8 @@ ion-app {
 
 .glass-surface--strong {
   background: var(--app-surface-strong) !important;
-  backdrop-filter: blur(32px) saturate(200%) brightness(1.06) !important;
-  -webkit-backdrop-filter: blur(32px) saturate(200%) brightness(1.06) !important;
+  backdrop-filter: blur(28px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(150%) !important;
   border: 1px solid var(--glass-border-top) !important;
   border-bottom-color: var(--glass-border-bottom) !important;
   box-shadow: var(--app-shadow-inset), var(--app-shadow-lg) !important;
@@ -631,7 +631,7 @@ ion-button:not([fill="clear"]):not([fill="outline"]) {
   --border-radius: 10px;
   --padding-start: 16px;
   --padding-end: 16px;
-  --box-shadow: 0 0 0 1px rgba(94, 106, 210, 0.34), 0 8px 24px rgba(94, 106, 210, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  --box-shadow: 0 0 0 1px rgba(94, 106, 210, 0.30), 0 4px 14px rgba(94, 106, 210, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.14);
   --background: var(--app-accent);
   --background-hover: var(--app-accent-bright);
   --background-activated: #545dbc;
@@ -690,9 +690,7 @@ ion-segment-button {
 ion-menu,
 ion-split-pane > [slot="start"],
 .side-menu,
-.left-sidebar,
-[class*="sidebar"],
-[class*="nav-panel"] {
+.left-sidebar {
   --background: var(--app-surface) !important;
   background: var(--app-surface) !important;
   backdrop-filter: blur(28px) saturate(160%) !important;
@@ -704,10 +702,7 @@ ion-menu ion-content {
   --background: transparent !important;
 }
 
-.right-panel,
-[class*="right-sidebar"],
-[class*="communities-panel"],
-[class*="sidebar-panel"] {
+.right-panel {
   background: var(--app-surface) !important;
   backdrop-filter: blur(28px) saturate(160%) !important;
   -webkit-backdrop-filter: blur(28px) saturate(160%) !important;
@@ -716,9 +711,7 @@ ion-menu ion-content {
 
 .ambient-page,
 .ambient-page__content,
-[class*="feed"],
-[class*="home-feed"],
-[class*="main-content"] {
+.main-content {
   background: transparent !important;
 }
 
@@ -753,10 +746,7 @@ ion-modal::part(backdrop) {
 /* poll / post rows */
 
 .poll-card,
-.post-card,
-article[class*="card"],
-[class*="post-row"],
-[class*="poll-row"] {
+.post-card {
   border-bottom-color: var(--app-border) !important;
   transition: background 0.2s ease;
 }
@@ -787,8 +777,8 @@ article[class*="card"],
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.12) !important;
 }
 
-[class*="community-row"],
-[class*="community-item"] {
+.community-row,
+.community-item {
   background: var(--app-item-surface) !important;
   border-radius: 10px !important;
   border: 1px solid var(--app-border) !important;
@@ -796,8 +786,8 @@ article[class*="card"],
   -webkit-backdrop-filter: blur(12px) !important;
 }
 
-[class*="tab-bar"],
-[class*="feed-tabs"] {
+.tab-bar,
+.feed-tabs {
   background: var(--app-pill-surface) !important;
   backdrop-filter: blur(16px) !important;
   -webkit-backdrop-filter: blur(16px) !important;
