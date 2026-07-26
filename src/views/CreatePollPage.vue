@@ -14,6 +14,7 @@
       </ion-toolbar>
     </ion-header>
     <ion-content>
+      <DesktopPageShell>
       <div v-if="isSubmittingSlow" class="submit-slow-banner">
         Still publishing to the network — this can take a few extra seconds on a slow relay.
       </div>
@@ -153,12 +154,14 @@
           :counter="true"
         ></ion-textarea>
       </ion-item>
+      </DesktopPageShell>
     </ion-content>
   </ion-page>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
+import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage,
