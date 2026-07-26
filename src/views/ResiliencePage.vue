@@ -10,6 +10,7 @@
     </ion-header>
 
     <ion-content class="ion-padding">
+      <DesktopPageShell>
       <ion-card class="hero-card">
         <ion-card-header>
           <ion-card-title class="hero-title">
@@ -704,12 +705,14 @@
         </ion-card-content>
       </ion-card>
 
+      </DesktopPageShell>
     </ion-content>
   </ion-page>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import DesktopPageShell from '../components/DesktopPageShell.vue';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonCard, IonCardHeader, IonCardTitle, IonCardContent,
