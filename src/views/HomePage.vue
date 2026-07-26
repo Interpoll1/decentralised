@@ -26,6 +26,16 @@
 
         <!-- ── LEFT NAV (desktop only) ─────────────────── -->
         <nav class="side-nav surface-card">
+          <div class="side-nav-brand" @click="activeTab = 'home'">
+            <span class="side-nav-brand-mark" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                <path d="M12 3L4 7.5V16.5L12 21L20 16.5V7.5L12 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                <path d="M12 8V16M8.5 10.5L12 12.5L15.5 10.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="side-nav-brand-name">Interpoll</span>
+          </div>
+
           <!-- Primary nav tabs -->
           <button
             class="side-nav-item"
@@ -64,7 +74,24 @@
             <span>Create</span>
           </button>
 
-          <!-- ── Utility nav items (desktop only, replaces header buttons) ── -->
+          <div class="side-nav-divider"></div>
+
+          <p class="side-nav-section-label">Categories</p>
+          <button
+            v-for="cat in feedCategories"
+            :key="cat.id"
+            class="side-nav-item side-nav-util side-nav-category"
+            :class="{ active: selectedCategory === cat.id }"
+            @click="selectCategory(cat.id)"
+          >
+            <ion-icon :icon="cat.icon" :class="cat.tone"></ion-icon>
+            <span>{{ cat.label }}</span>
+          </button>
+          <button class="side-nav-item side-nav-util side-nav-category" @click="selectCategory('all')">
+            <ion-icon :icon="ellipsisHorizontalOutline"></ion-icon>
+            <span>More</span>
+          </button>
+
           <div class="side-nav-divider"></div>
 
           <button class="side-nav-item side-nav-util" @click="$router.push('/search')">
@@ -117,20 +144,44 @@
               </div>
             </section>
 
-            <div class="feed-mode-toggle surface-pill">
+            <div class="feed-toolbar">
+              <div class="feed-mode-toggle surface-pill">
+                <button
+                  class="mode-btn"
+                  :class="{ active: feedMode === 'for-you' }"
+                  @click="setFeedMode('for-you')"
+                >
+                  For You
+                </button>
+                <button
+                  class="mode-btn"
+                  :class="{ active: feedMode === 'latest' }"
+                  @click="setFeedMode('latest')"
+                >
+                  Latest
+                </button>
+              </div>
+            </div>
+
+            <div class="feed-category-tabs">
               <button
-                class="mode-btn"
-                :class="{ active: feedMode === 'for-you' }"
-                @click="setFeedMode('for-you')"
+                class="feed-cat-tab"
+                :class="{ active: selectedCategory === 'all' }"
+                @click="selectCategory('all')"
               >
-                For You
+                All
               </button>
               <button
-                class="mode-btn"
-                :class="{ active: feedMode === 'latest' }"
-                @click="setFeedMode('latest')"
+                v-for="cat in feedCategories"
+                :key="'tab-' + cat.id"
+                class="feed-cat-tab"
+                :class="{ active: selectedCategory === cat.id }"
+                @click="selectCategory(cat.id)"
               >
-                Latest
+                {{ cat.label }}
+              </button>
+              <button class="feed-cat-tab feed-cat-more" type="button" aria-label="More categories">
+                <ion-icon :icon="chevronDownOutline"></ion-icon>
               </button>
             </div>
 
@@ -384,37 +435,90 @@
               <button class="sidebar-link" @click="activeTab = 'communities'">See all</button>
             </div>
 
-            <ion-button expand="block" size="small" @click="$router.push('/create-community')" class="sidebar-create-btn">
-              <ion-icon slot="start" :icon="addCircleOutline"></ion-icon>
+            <button class="sidebar-create-cta" @click="$router.push('/create-community')">
+              <ion-icon :icon="addOutline"></ion-icon>
               Create Community
-            </ion-button>
+            </button>
 
-             <div class="sidebar-communities">
-               <div
-                 v-for="community in sidebarCommunities"
-                 :key="community.id"
-                 class="sidebar-community-item"
-                 @click="$router.push(`/community/${community.id}`)"
-               >
-                <div class="sidebar-community-avatar">
-                  {{ community.displayName?.charAt(0)?.toUpperCase() }}
+            <div class="sidebar-communities">
+              <div
+                v-for="community in sidebarCommunities"
+                :key="community.id"
+                class="sidebar-community-item"
+                @click="$router.push(`/community/${community.id}`)"
+              >
+                <div
+                  class="sidebar-community-avatar"
+                  :class="communityAvatarTone(community)"
+                >
+                  <ion-icon v-if="community.isPrivate" :icon="lockClosedOutline"></ion-icon>
+                  <template v-else>{{ community.displayName?.charAt(0)?.toUpperCase() }}</template>
                 </div>
                 <div class="sidebar-community-info">
-                  <span class="sidebar-community-name">{{ community.displayName }}</span>
+                  <span class="sidebar-community-name">
+                    <span class="sidebar-community-name-text">{{ community.displayName }}</span>
+                    <span
+                      v-if="communityBadge(community)"
+                      class="community-tag"
+                      :class="'tag-' + communityBadge(community)?.tone"
+                    >{{ communityBadge(community)?.label }}</span>
+                  </span>
                   <span class="sidebar-community-meta">{{ community.memberCount || 0 }} members</span>
                 </div>
-                <ion-icon
-                  v-if="communityStore.isJoined(community.id)"
-                  :icon="checkmarkCircleOutline"
-                  class="joined-check"
-                ></ion-icon>
+                <span class="sidebar-member-count">{{ community.memberCount || 0 }}</span>
               </div>
             </div>
           </div>
 
+          <div class="sidebar-section surface-card">
+            <div class="sidebar-header">
+              <span>Trending Categories</span>
+            </div>
+            <div class="trending-list">
+              <button
+                v-for="row in trendingCategories"
+                :key="row.id"
+                class="trending-row"
+                @click="selectCategory(row.id)"
+              >
+                <span class="trending-left">
+                  <ion-icon :icon="row.icon" :class="row.tone"></ion-icon>
+                  <span>{{ row.label }}</span>
+                </span>
+                <span class="trending-meta">{{ row.posts }} posts</span>
+                <ion-icon :icon="chevronForwardOutline" class="trending-chevron"></ion-icon>
+              </button>
+            </div>
+          </div>
+
           <div class="sidebar-section sidebar-about surface-card">
-            <p class="sidebar-about-title">Interpoll</p>
-            <p class="sidebar-about-text">A peer-to-peer community platform built on GunDB. Posts and votes sync across all peers.</p>
+            <div class="sidebar-about-row">
+              <div>
+                <p class="sidebar-about-title">Interpoll</p>
+                <p class="sidebar-about-text">A peer-to-peer community platform built on GunDB. Posts and votes sync across all peers.</p>
+              </div>
+              <div class="sidebar-about-graph" aria-hidden="true">
+                <svg width="56" height="48" viewBox="0 0 56 48" fill="none">
+                  <circle cx="28" cy="24" r="7" fill="url(#g1)"/>
+                  <circle cx="10" cy="12" r="4" fill="#7c8cff" opacity="0.85"/>
+                  <circle cx="46" cy="14" r="4" fill="#a78bfa" opacity="0.85"/>
+                  <circle cx="12" cy="38" r="3.5" fill="#7c8cff" opacity="0.7"/>
+                  <circle cx="44" cy="36" r="3.5" fill="#a78bfa" opacity="0.7"/>
+                  <circle cx="28" cy="6" r="3" fill="#5e6ad2" opacity="0.8"/>
+                  <line x1="28" y1="24" x2="10" y2="12" stroke="#7c8cff" stroke-width="1.2" opacity="0.5"/>
+                  <line x1="28" y1="24" x2="46" y2="14" stroke="#a78bfa" stroke-width="1.2" opacity="0.5"/>
+                  <line x1="28" y1="24" x2="12" y2="38" stroke="#7c8cff" stroke-width="1.2" opacity="0.4"/>
+                  <line x1="28" y1="24" x2="44" y2="36" stroke="#a78bfa" stroke-width="1.2" opacity="0.4"/>
+                  <line x1="28" y1="24" x2="28" y2="6" stroke="#5e6ad2" stroke-width="1.2" opacity="0.45"/>
+                  <defs>
+                    <radialGradient id="g1" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(28 24) rotate(90) scale(7)">
+                      <stop stop-color="#a78bfa"/>
+                      <stop offset="1" stop-color="#5e6ad2"/>
+                    </radialGradient>
+                  </defs>
+                </svg>
+              </div>
+            </div>
           </div>
         </aside>
 
@@ -554,15 +658,18 @@ import {
   actionSheetController, toastController
 } from '@ionic/vue';
 import {
-  cube, personCircleOutline, settingsOutline, addCircleOutline,
+  cube, personCircleOutline, settingsOutline, addCircleOutline, addOutline,
   earthOutline, peopleOutline, home, homeOutline, documentTextOutline,
-  chevronForwardOutline, people, addCircle, statsChartOutline,
-  checkmarkCircleOutline, searchOutline, chatbubble, chatbubbleOutline,
-  shieldOutline, shieldCheckmarkOutline, sparklesOutline, eyeOffOutline, linkOutline
+  chevronForwardOutline, chevronDownOutline, people, addCircle, statsChartOutline,
+  searchOutline, chatbubble, chatbubbleOutline,
+  shieldOutline, shieldCheckmarkOutline, sparklesOutline, eyeOffOutline, linkOutline,
+  codeSlashOutline, gameControllerOutline, flaskOutline, businessOutline,
+  logoBitcoin, trophyOutline, ellipsisHorizontalOutline, lockClosedOutline
 } from 'ionicons/icons';
 import { useRoute, useRouter } from 'vue-router';
 import { useChainStore } from '../stores/chainStore';
 import { useCommunityStore } from '../stores/communityStore';
+import type { Community } from '../services/communityService';
 import { usePostStore } from '../stores/postStore';
 import { usePollStore } from '../stores/pollStore';
 import CommunityCard from '../components/CommunityCard.vue';
@@ -690,6 +797,75 @@ const scrollThreshold = 50;
 const feedMode = ref<'for-you' | 'latest'>('for-you')
 function setFeedMode(mode: 'for-you' | 'latest') {
   feedMode.value = mode
+}
+
+const CATEGORY_IDS = ['technology', 'gaming', 'science', 'politics', 'crypto', 'sports', 'all'] as const;
+function categoryFromRoute(): string {
+  const raw = route.query.category;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return (CATEGORY_IDS as readonly string[]).includes(value as string) ? (value as string) : 'all';
+}
+const selectedCategory = ref<string>(categoryFromRoute())
+watch(() => route.query.category, () => {
+  if (route.name !== 'Home') return;
+  const cat = categoryFromRoute();
+  if (selectedCategory.value !== cat) selectedCategory.value = cat;
+});
+const feedCategories = [
+  { id: 'technology', label: 'Technology', icon: codeSlashOutline, tone: 'tone-technology' },
+  { id: 'gaming', label: 'Gaming', icon: gameControllerOutline, tone: 'tone-gaming' },
+  { id: 'science', label: 'Science', icon: flaskOutline, tone: 'tone-science' },
+  { id: 'politics', label: 'Politics', icon: businessOutline, tone: 'tone-politics' },
+  { id: 'crypto', label: 'Crypto', icon: logoBitcoin, tone: 'tone-crypto' },
+  { id: 'sports', label: 'Sports', icon: trophyOutline, tone: 'tone-sports' },
+] as const
+
+const trendingCategories = [
+  { id: 'technology', label: 'Technology', icon: codeSlashOutline, posts: '1.2k', tone: 'tone-technology' },
+  { id: 'gaming', label: 'Gaming', icon: gameControllerOutline, posts: '964', tone: 'tone-gaming' },
+  { id: 'science', label: 'Science', icon: flaskOutline, posts: '657', tone: 'tone-science' },
+  { id: 'crypto', label: 'Crypto', icon: logoBitcoin, posts: '512', tone: 'tone-crypto' },
+  { id: 'politics', label: 'Politics', icon: businessOutline, posts: '402', tone: 'tone-politics' },
+] as const
+
+function selectCategory(id: string) {
+  selectedCategory.value = id
+  if (activeTab.value !== 'home') activeTab.value = 'home'
+}
+
+function communityBadge(community: Community | null | undefined): { label: string; tone: string } | null {
+  if (community?.isPrivate) return { label: 'Private', tone: 'private' }
+  const cat = String(community?.category || community?.tags?.[0] || '').toLowerCase()
+  if (cat.includes('nsfw') || community?.nsfw) return { label: 'NSFW', tone: 'nsfw' }
+  if (cat.includes('politic')) return { label: 'Politics', tone: 'politics' }
+  if (cat.includes('tech') || cat.includes('programming')) return { label: 'Tech', tone: 'tech' }
+  if (cat) return { label: cat.charAt(0).toUpperCase() + cat.slice(1), tone: 'general' }
+  return { label: 'General', tone: 'general' }
+}
+
+function communityAvatarTone(community: Community | null | undefined): string {
+  if (community?.isPrivate) return 'tone-private'
+  const badge = communityBadge(community)
+  return badge ? `tone-${badge.tone}` : 'tone-general'
+}
+
+function itemMatchesCategory(item: { type: string; data: any }): boolean {
+  if (selectedCategory.value === 'all') return true
+  const cat = selectedCategory.value.toLowerCase()
+  const community = communityStore.communities.find((c: any) => c.id === item.data.communityId)
+  const hay = [
+    community?.category,
+    community?.displayName,
+    community?.name,
+    ...(community?.tags || []),
+    item.data.category,
+    item.data.tags,
+  ]
+    .flat()
+    .filter(Boolean)
+    .map((s: any) => String(s).toLowerCase())
+    .join(' ')
+  return hay.includes(cat)
 }
 
 function isValidModerationApiUrl(url: string): boolean {
@@ -832,6 +1008,7 @@ function seededRandom(index: number): number {
 
 const combinedFeed = computed(() => {
   moderationVersion.value;
+  selectedCategory.value;
   const items: Array<{ type: 'post' | 'poll'; data: any; createdAt: number }> = []
 
   postStore.sortedPosts
@@ -844,18 +1021,20 @@ const combinedFeed = computed(() => {
     }
   })
 
+  const filtered = items.filter(itemMatchesCategory)
+
   if (feedMode.value === 'latest') {
-    items.sort((a, b) => b.createdAt - a.createdAt)
+    filtered.sort((a, b) => b.createdAt - a.createdAt)
   } else {
     const now = Date.now()
     const maxAge = 30 * 24 * 60 * 60 * 1000
 
-    items.sort((a, b) => {
+    filtered.sort((a, b) => {
       const scoreA = a.type === 'post' ? (a.data.score ?? 0) : (a.data.totalVotes ?? 0)
       const scoreB = b.type === 'post' ? (b.data.score ?? 0) : (b.data.totalVotes ?? 0)
 
-      const idxA = items.indexOf(a)
-      const idxB = items.indexOf(b)
+      const idxA = filtered.indexOf(a)
+      const idxB = filtered.indexOf(b)
       const rand = seededRandom(idxA * 31 + idxB)
 
       // ~20% of comparisons: pure discovery slot, ignore score/age entirely
@@ -879,7 +1058,7 @@ const combinedFeed = computed(() => {
     })
   }
 
-  return items.slice(0, postStore.visibleCount)
+  return filtered.slice(0, postStore.visibleCount)
 })
 
 function getPollModerationText(poll: Poll): string {
@@ -2124,6 +2303,58 @@ ion-header.header-hidden {
   box-shadow: 0 0 0 1px rgba(var(--app-accent-rgb), 0.38), 0 8px 24px rgba(var(--app-accent-rgb), 0.28);
 }
 
+.feed-toolbar {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.feed-category-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 4px 4px 14px;
+  margin-bottom: 4px;
+  scrollbar-width: none;
+}
+.feed-category-tabs::-webkit-scrollbar { display: none; }
+
+.feed-cat-tab {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--app-text-muted);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 8px 12px;
+  border-radius: 0;
+  cursor: pointer;
+  position: relative;
+  transition: color var(--app-transition);
+}
+.feed-cat-tab:hover { color: var(--app-text); }
+.feed-cat-tab.active {
+  color: var(--app-text);
+  font-weight: 700;
+}
+.feed-cat-tab.active::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--app-accent-bright), var(--app-accent));
+}
+.feed-cat-more {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 6px;
+}
+.feed-cat-more ion-icon { font-size: 16px; }
+
 .new-content-banner {
   position: sticky;
   top: 12px;
@@ -2551,6 +2782,8 @@ ion-header.header-hidden {
   .logo-title { margin-left: 10%; }
   .bottom-nav-footer { display: none; }
 
+  ion-header { display: none; }
+
   .header-util-buttons { display: none; }
 
   ion-header ion-toolbar {
@@ -2564,12 +2797,50 @@ ion-header.header-hidden {
   .side-nav {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    width: 200px;
+    gap: 2px;
+    width: 220px;
     flex-shrink: 0;
     position: sticky;
     top: 24px;
-    padding: 16px 12px;
+    padding: 16px 12px 20px;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+  }
+
+  .side-nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px 14px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .side-nav-brand-mark {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #a5b4fc;
+    background: linear-gradient(145deg, rgba(94, 106, 210, 0.28), rgba(139, 92, 246, 0.18));
+    border: 1px solid rgba(124, 140, 255, 0.35);
+    box-shadow: 0 8px 20px rgba(94, 106, 210, 0.2);
+  }
+  .side-nav-brand-name {
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--app-text);
+  }
+
+  .side-nav-section-label {
+    margin: 10px 14px 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--app-text-subtle);
   }
 
   .side-nav-item {
@@ -2597,8 +2868,8 @@ ion-header.header-hidden {
   }
 
   .side-nav-item.active {
-    background: rgba(var(--app-accent-rgb), 0.12);
-    border: 1px solid rgba(var(--app-accent-rgb), 0.24);
+    background: rgba(var(--app-accent-rgb), 0.14);
+    border: 1px solid rgba(var(--app-accent-rgb), 0.28);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 12px 24px rgba(var(--app-accent-rgb), 0.12);
     color: var(--app-accent-bright);
     font-weight: 700;
@@ -2611,6 +2882,20 @@ ion-header.header-hidden {
   .side-nav-util ion-icon {
     font-size: 18px;
   }
+  .side-nav-category.active {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    color: var(--app-text);
+    font-weight: 600;
+  }
+
+  .tone-technology { color: #a78bfa; }
+  .tone-gaming     { color: #4ade80; }
+  .tone-science    { color: #38bdf8; }
+  .tone-politics   { color: #fb7185; }
+  .tone-crypto     { color: #fbbf24; }
+  .tone-sports     { color: #2dd4bf; }
 
   .chat-tab { max-width: 700px; margin: 0 auto; }
 }
@@ -2623,7 +2908,7 @@ ion-header.header-hidden {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    width: 280px;
+    width: 320px;
     flex-shrink: 0;
     position: sticky;
     top: 24px;
@@ -2657,10 +2942,27 @@ ion-header.header-hidden {
     padding: 0;
   }
 
-  .sidebar-create-btn { margin: 0 10px 10px; }
+  .sidebar-create-cta {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: calc(100% - 20px);
+    margin: 0 10px 12px;
+    padding: 11px 14px;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #7c6df0, #5e6ad2);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 10px 24px rgba(94, 106, 210, 0.35);
+  }
+  .sidebar-create-cta ion-icon { font-size: 18px; }
 
   .sidebar-communities {
-    max-height: 52vh;
+    max-height: 36vh;
     overflow-y: auto;
     padding-bottom: 4px;
   }
@@ -2669,18 +2971,18 @@ ion-header.header-hidden {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 8px 14px;
+    padding: 9px 14px;
     cursor: pointer;
     transition: background var(--app-transition);
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
   }
   .sidebar-community-item:hover { background: rgba(255, 255, 255, 0.04); }
 
   .sidebar-community-avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    background: rgba(var(--app-accent-rgb), 0.12);
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: rgba(var(--app-accent-rgb), 0.14);
     color: var(--app-accent-bright);
     font-size: 14px;
     font-weight: 700;
@@ -2689,19 +2991,88 @@ ion-header.header-hidden {
     justify-content: center;
     flex-shrink: 0;
   }
+  .sidebar-community-avatar.tone-nsfw { background: rgba(248, 113, 113, 0.16); color: #fb7185; }
+  .sidebar-community-avatar.tone-politics { background: rgba(167, 139, 250, 0.16); color: #c4b5fd; }
+  .sidebar-community-avatar.tone-private { background: rgba(251, 191, 36, 0.14); color: #fbbf24; }
+  .sidebar-community-avatar.tone-tech { background: rgba(56, 189, 248, 0.14); color: #38bdf8; }
+  .sidebar-community-avatar.tone-general { background: rgba(94, 106, 210, 0.14); color: #a5b4fc; }
 
   .sidebar-community-info  { flex: 1; min-width: 0; }
-  .sidebar-community-name  { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sidebar-community-name  {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    min-width: 0;
+  }
+  .sidebar-community-name-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
   .sidebar-community-meta  { display: block; font-size: 12px; color: var(--app-text-muted); }
-  .joined-check            { font-size: 16px; color: var(--app-accent-bright); flex-shrink: 0; }
+  .sidebar-member-count {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--app-text-muted);
+    flex-shrink: 0;
+  }
 
-  .sidebar-about           { padding: 14px; }
-  .sidebar-about-title     { font-family: inherit; font-size: 20px; font-weight: 700; margin: 0 0 6px; }
-  .sidebar-about-text      { font-size: 12px; color: var(--app-text-muted); line-height: 1.6; margin: 0; }
+  .community-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .community-tag.tag-nsfw { background: rgba(248, 113, 113, 0.18); color: #fb7185; }
+  .community-tag.tag-politics { background: rgba(167, 139, 250, 0.18); color: #c4b5fd; }
+  .community-tag.tag-private { background: rgba(251, 191, 36, 0.16); color: #fbbf24; }
+  .community-tag.tag-tech { background: rgba(56, 189, 248, 0.16); color: #38bdf8; }
+  .community-tag.tag-general { background: rgba(94, 106, 210, 0.16); color: #a5b4fc; }
+
+  .trending-list { padding: 2px 0 8px; }
+  .trending-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 14px;
+    background: none;
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    color: var(--app-text);
+    cursor: pointer;
+    text-align: left;
+  }
+  .trending-row:hover { background: rgba(255, 255, 255, 0.04); }
+  .trending-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .trending-left ion-icon { font-size: 18px; color: var(--app-accent-bright); flex-shrink: 0; }
+  .trending-meta { font-size: 12px; color: var(--app-text-muted); }
+  .trending-chevron { font-size: 14px; color: var(--app-text-subtle); }
+
+  .sidebar-about           { padding: 16px; }
+  .sidebar-about-row       { display: flex; gap: 10px; align-items: flex-start; }
+  .sidebar-about-title     { font-family: inherit; font-size: 18px; font-weight: 700; margin: 0 0 6px; }
+  .sidebar-about-text      { font-size: 12px; color: var(--app-text-muted); line-height: 1.55; margin: 0; }
+  .sidebar-about-graph     { flex-shrink: 0; }
 }
 
 @media (min-width: 1280px) {
   .side-nav      { width: 240px; }
-  .right-sidebar { width: 300px; }
+  .right-sidebar { width: 340px; }
 }
 </style>
