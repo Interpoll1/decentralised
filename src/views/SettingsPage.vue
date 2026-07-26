@@ -33,7 +33,7 @@
     </ion-header>
 
     <ion-content>
-      <!-- GENERAL TAB -->
+      <DesktopPageShell>      <!-- GENERAL TAB -->
       <div v-if="activeTab === 'general'">
         <!-- Appearance -->
         <div class="section">
@@ -1242,6 +1242,7 @@
           </p>
         </div>
       </div>
+      </DesktopPageShell>
     </ion-content>
   </ion-page>
 </template>
@@ -2005,6 +2006,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
+import DesktopPageShell from '../components/DesktopPageShell.vue';
 import {
   IonPage,
   IonHeader,
