@@ -10,6 +10,7 @@
     </ion-header>
 
     <ion-content class="ion-padding">
+      <DesktopPageShell>
       <ion-card>
         <ion-card-header>
           <ion-card-title>Blockchain Blocks</ion-card-title>
@@ -111,12 +112,14 @@
           </div>
         </ion-card-content>
       </ion-card>
+      </DesktopPageShell>
     </ion-content>
   </ion-page>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import DesktopPageShell from '../components/DesktopPageShell.vue';
 import {
   IonPage,
   IonHeader,
