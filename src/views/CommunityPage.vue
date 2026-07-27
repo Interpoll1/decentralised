@@ -153,8 +153,12 @@
             :poll="item.data"
             :flagged="item.flagged"
             :filter-action="currentModSettings.wordFilterAction"
+            :has-upvoted="hasUpvotedPoll(item.data.id)"
+            :has-downvoted="hasDownvotedPoll(item.data.id)"
             @click="navigateToPoll(item.data)"
             @vote="navigateToPoll(item.data)"
+            @upvote="handleUpvotePoll(item.data)"
+            @downvote="handleDownvotePoll(item.data)"
           />
         </template>
       </div>
@@ -772,6 +776,70 @@ function hasDownvoted(postId: string): boolean {
   voteVersion.value; // reactive dependency to trigger re-render on vote changes
   const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
   return votedPosts.includes(postId);
+}
+
+function hasUpvotedPoll(pollId: string): boolean {
+  voteVersion.value;
+  const votedPolls = JSON.parse(localStorage.getItem('upvoted-polls') || '[]');
+  return votedPolls.includes(pollId);
+}
+
+function hasDownvotedPoll(pollId: string): boolean {
+  voteVersion.value;
+  const votedPolls = JSON.parse(localStorage.getItem('downvoted-polls') || '[]');
+  return votedPolls.includes(pollId);
+}
+
+async function handleUpvotePoll(poll: Poll) {
+  try {
+    if (hasUpvotedPoll(poll.id)) {
+      const votedPolls = JSON.parse(localStorage.getItem('upvoted-polls') || '[]');
+      localStorage.setItem('upvoted-polls', JSON.stringify(votedPolls.filter((id: string) => id !== poll.id)));
+      voteVersion.value++;
+      await pollStore.voteOnPollContent(poll.id, 'up');
+    } else {
+      const downvotedPolls = JSON.parse(localStorage.getItem('downvoted-polls') || '[]');
+      if (downvotedPolls.includes(poll.id)) {
+        localStorage.setItem('downvoted-polls', JSON.stringify(downvotedPolls.filter((id: string) => id !== poll.id)));
+        await pollStore.voteOnPollContent(poll.id, 'down');
+      }
+      const votedPolls = JSON.parse(localStorage.getItem('upvoted-polls') || '[]');
+      votedPolls.push(poll.id);
+      localStorage.setItem('upvoted-polls', JSON.stringify(votedPolls));
+      voteVersion.value++;
+      await pollStore.upvotePoll(poll.id);
+    }
+  } catch (error) {
+    voteVersion.value++;
+    console.error('Error upvoting poll:', error);
+    (await toastController.create({ message: 'Failed to upvote poll', duration: 2000 })).present();
+  }
+}
+
+async function handleDownvotePoll(poll: Poll) {
+  try {
+    if (hasDownvotedPoll(poll.id)) {
+      const votedPolls = JSON.parse(localStorage.getItem('downvoted-polls') || '[]');
+      localStorage.setItem('downvoted-polls', JSON.stringify(votedPolls.filter((id: string) => id !== poll.id)));
+      voteVersion.value++;
+      await pollStore.voteOnPollContent(poll.id, 'down');
+    } else {
+      const upvotedPolls = JSON.parse(localStorage.getItem('upvoted-polls') || '[]');
+      if (upvotedPolls.includes(poll.id)) {
+        localStorage.setItem('upvoted-polls', JSON.stringify(upvotedPolls.filter((id: string) => id !== poll.id)));
+        await pollStore.voteOnPollContent(poll.id, 'up');
+      }
+      const votedPolls = JSON.parse(localStorage.getItem('downvoted-polls') || '[]');
+      votedPolls.push(poll.id);
+      localStorage.setItem('downvoted-polls', JSON.stringify(votedPolls));
+      voteVersion.value++;
+      await pollStore.downvotePoll(poll.id);
+    }
+  } catch (error) {
+    voteVersion.value++;
+    console.error('Error downvoting poll:', error);
+    (await toastController.create({ message: 'Failed to downvote poll', duration: 2000 })).present();
+  }
 }
 
 async function presentVoteToast(message: string, expectedVersion: number) {

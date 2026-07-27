@@ -336,6 +336,9 @@ export class PollService {
       showResultsBeforeVoting: !!pollData.showResultsBeforeVoting,
       requireLogin: !!pollData.requireLogin, isPrivate: !!pollData.isPrivate,
       totalVotes, isExpired: Date.now() > (pollData.expiresAt || 0),
+      upvotes: pollData.upvotes || 0,
+      downvotes: pollData.downvotes || 0,
+      score: (pollData.upvotes || 0) - (pollData.downvotes || 0),
       isEncrypted: pollData.isEncrypted || false,
       encryptedContent: pollData.encryptedContent || undefined,
       authTag: pollData.authTag || undefined,
@@ -1532,6 +1535,54 @@ export class PollService {
 
   static async voteOnPoll(pollId: string, optionIds: string[], voterId: string, communityId?: string): Promise<void> {
     return this.vote(pollId, optionIds, voterId, communityId);
+  }
+
+  /**
+   * Content-level upvote/downvote on the poll itself (independent of option voting).
+   * Mirrors PostService.voteOnPost's toggle semantics.
+   */
+  static async voteOnPollContent(
+    pollId: string,
+    direction: 'up' | 'down',
+    userId: string,
+    communityId?: string,
+  ): Promise<{ upvotes: number; downvotes: number; score: number }> {
+    const poll = await this.loadPollFromGun(pollId, false, false)
+      ?? (communityId ? await this.loadPollFromCommunityPath(communityId, pollId, false, false) : null);
+    if (!poll) throw new Error('Poll not found');
+
+    const gun = this.gun;
+    const voteKey = `vote_${userId}_poll_${pollId}`;
+    const existingVote = await this.onceNode<any>(gun.get('votes').get(voteKey), 2000);
+    let upvotes = poll.upvotes || 0;
+    let downvotes = poll.downvotes || 0;
+
+    if (existingVote?.type === 'up') {
+      upvotes = Math.max(0, upvotes - 1);
+    } else if (existingVote?.type === 'down') {
+      downvotes = Math.max(0, downvotes - 1);
+    }
+
+    const togglingOffSameVote = existingVote?.type === direction;
+    if (togglingOffSameVote) {
+      await this.putPromise(gun.get('votes').get(voteKey), null, { label: 'poll content vote clear' });
+    } else {
+      if (direction === 'up') upvotes += 1; else downvotes += 1;
+      await this.putPromise(gun.get('votes').get(voteKey), {
+        userId,
+        pollId,
+        type: direction,
+        timestamp: Date.now(),
+      }, { label: 'poll content vote write' });
+    }
+
+    const score = upvotes - downvotes;
+    const patch = { upvotes, downvotes, score };
+    await this.putPromise(this.getPollPath(pollId), patch, { label: 'poll content vote patch (root)' });
+    if (poll.communityId) {
+      await this.putPromise(this.getCommunityPollPath(poll.communityId, pollId), patch, { label: 'poll content vote patch (community)' });
+    }
+    return patch;
   }
 
   static async getInviteCodes(pollId: string): Promise<{ code: string; used: boolean }[]> {
