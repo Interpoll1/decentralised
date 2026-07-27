@@ -487,6 +487,8 @@ export const useCommunityStore = defineStore('community', () => {
     displayName: string;
     description: string;
     rules: string[];
+    category?: string;
+    nsfw?: boolean;
   }) {
     try {
       const community = await CommunityService.createCommunity({
@@ -517,6 +519,8 @@ export const useCommunityStore = defineStore('community', () => {
     displayName: string;
     description: string;
     rules: string[];
+    category?: string;
+    nsfw?: boolean;
   }, password?: string) {
     try {
       const result = await CommunityService.createPrivateCommunity({

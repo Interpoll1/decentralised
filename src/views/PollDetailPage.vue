@@ -16,6 +16,7 @@
     </ion-header>
 
     <ion-content>
+      <DesktopPageShell>
       <!-- Loading -->
       <div v-if="isLoading" class="loading-container">
         <ion-spinner></ion-spinner>
@@ -302,11 +303,13 @@
           </div>
         </div>
       </div>
+      </DesktopPageShell>
     </ion-content>
   </ion-page>
 </template>
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
+import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage,

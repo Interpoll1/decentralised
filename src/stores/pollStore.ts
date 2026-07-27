@@ -443,6 +443,43 @@ export const usePollStore = defineStore('poll', () => {
     }
   }
 
+  async function voteOnPollContent(pollId: string, direction: 'up' | 'down') {
+    const user = await UserService.getCurrentUser();
+    const original = pollsMap.value.get(pollId);
+    const communityId = original?.communityId || currentPoll.value?.communityId;
+
+    if (original) {
+      const upvotes = original.upvotes || 0;
+      const downvotes = original.downvotes || 0;
+      const optimistic: Poll = direction === 'up'
+        ? { ...original, upvotes: upvotes + 1, score: (upvotes + 1) - downvotes }
+        : { ...original, downvotes: downvotes + 1, score: upvotes - (downvotes + 1) };
+      pollsMap.value.set(pollId, optimistic);
+      if (currentPoll.value?.id === pollId) currentPoll.value = optimistic;
+    }
+    try {
+      const patch = await PollService.voteOnPollContent(pollId, direction, user.id, communityId);
+      const current = pollsMap.value.get(pollId);
+      if (current) {
+        const updated = { ...current, ...patch };
+        pollsMap.value.set(pollId, updated);
+        if (currentPoll.value?.id === pollId) currentPoll.value = updated;
+        BroadcastService.broadcast('poll-updated', updated);
+        void WebSocketService.broadcast('poll-updated', updated);
+      }
+    } catch (err) {
+      console.warn('Poll content vote failed — rolling back', err);
+      if (original) {
+        pollsMap.value.set(pollId, original);
+        if (currentPoll.value?.id === pollId) currentPoll.value = original;
+      }
+      throw err;
+    }
+  }
+
+  function upvotePoll(pollId: string) { return voteOnPollContent(pollId, 'up'); }
+  function downvotePoll(pollId: string) { return voteOnPollContent(pollId, 'down'); }
+
   // ─── Select ────────────────────────────────────────────────────────────────
 
   async function selectPoll(pollId: string, communityId?: string) {
@@ -507,6 +544,7 @@ export const usePollStore = defineStore('poll', () => {
     loadPollsForCommunity, loadMorePolls, resetVisibleCount, trimPollsToVisible,
     flushNewPolls, injectPoll, saveSeenNow,
     createPoll, voteOnPoll, selectPoll,
+    voteOnPollContent, upvotePoll, downvotePoll,
     refreshCommunityPolls,
   };
 });
