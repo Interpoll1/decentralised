@@ -611,9 +611,16 @@ export class GunService {
           `${GUN_NAMESPACE}/polls`,
           `${GUN_NAMESPACE}/users`,
         ]);
+        // At emergency severity, a soul with a live `.map().on()` listener (e.g. a
+        // whole-feed subscription) would otherwise be permanently eviction-immune —
+        // on pages that subscribe broadly, that made eviction a total no-op and the
+        // heap climbed until the tab crashed. Force-detach the chain and evict
+        // anyway; staying alive matters more than one subscriber missing an update.
         for (const key of keys) {
           if (keepRoots.has(key) || keepPrefixes.some(p => key.startsWith(p))) continue;
-          if (hasLiveListeners(key)) continue;
+          if (hasLiveListeners(key)) {
+            try { next[key]?.off?.(); } catch { /* best-effort detach */ }
+          }
           evict(key);
         }
       } else if (level === 'aggressive') {

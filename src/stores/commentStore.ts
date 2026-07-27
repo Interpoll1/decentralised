@@ -65,35 +65,41 @@ export const useCommentStore = defineStore('comment', () => {
         // Fall back to one-time fetch only
       }
       
-      // Also do a one-time fetch
-      setTimeout(async () => {
-        try {
-          const allComments = await CommentService.getAllCommentsInPost(postId);
-          
-          allComments.forEach(comment => {
-            if (!seen.has(comment.id)) {
-              seen.add(comment.id);
-              comments.value.push(comment);
-            } else {
-              // Update if already exists
-              const existingIndex = comments.value.findIndex(c => c.id === comment.id);
-              if (existingIndex >= 0) {
-                const existing = comments.value[existingIndex];
-                comments.value[existingIndex] = {
-                  ...comment,
-                  upvotes: Math.max(comment.upvotes || 0, existing.upvotes || 0),
-                  downvotes: Math.max(comment.downvotes || 0, existing.downvotes || 0),
-                  score: (Math.max(comment.upvotes || 0, existing.upvotes || 0)) - (Math.max(comment.downvotes || 0, existing.downvotes || 0))
-                };
+      // One-time fetch, retried with backoff — a single attempt misses comments
+      // whenever the relay's sync hasn't caught up yet (common under load), which
+      // is why comments intermittently failed to appear on reload with no retry.
+      const fetchDelaysMs = [500, 2000, 5000, 10000];
+      (async () => {
+        for (let i = 0; i < fetchDelaysMs.length; i++) {
+          await new Promise((r) => setTimeout(r, fetchDelaysMs[i]));
+          try {
+            const allComments = await CommentService.getAllCommentsInPost(postId);
+
+            allComments.forEach(comment => {
+              if (!seen.has(comment.id)) {
+                seen.add(comment.id);
+                comments.value.push(comment);
+              } else {
+                // Update if already exists
+                const existingIndex = comments.value.findIndex(c => c.id === comment.id);
+                if (existingIndex >= 0) {
+                  const existing = comments.value[existingIndex];
+                  comments.value[existingIndex] = {
+                    ...comment,
+                    upvotes: Math.max(comment.upvotes || 0, existing.upvotes || 0),
+                    downvotes: Math.max(comment.downvotes || 0, existing.downvotes || 0),
+                    score: (Math.max(comment.upvotes || 0, existing.upvotes || 0)) - (Math.max(comment.downvotes || 0, existing.downvotes || 0))
+                  };
+                }
               }
-            }
-          });
-        } catch (fetchErr) {
-          console.error('Error fetching comments:', fetchErr);
-        } finally {
-          isLoading.value = false;
+            });
+          } catch (fetchErr) {
+            console.error('Error fetching comments:', fetchErr);
+          } finally {
+            if (i === 0) isLoading.value = false;
+          }
         }
-      }, 500);
+      })();
       
     } catch (error) {
       console.error('Error loading comments:', error);
