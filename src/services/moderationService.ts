@@ -2,6 +2,7 @@
 
 import { ref } from 'vue';
 import { CryptoService } from './cryptoService';
+import { BoundedMap, BoundedSet } from '../utils/boundedMap';
 
 export type Severity = 'low' | 'medium' | 'high';
 export type FilterAction = 'blur' | 'hide' | 'flag';
@@ -141,8 +142,16 @@ export const moderationVersion = ref(0);
 export class ModerationService {
   private static settings: ModerationSettings | null = null;
   private static wordList: WordEntry[] | null = null;
-  private static hashLookupCache: Map<string, boolean> = new Map();
+  // One entry per content hash checked — unbounded before, and a pure lookup
+  // cache, so eviction only costs a repeat lookup.
+  private static hashLookupCache = new BoundedMap<string, boolean>({ maxSize: 2000, ttlMs: 30 * 60_000 });
   private static pendingHashLookups: Map<string, Promise<boolean>> = new Map();
+
+  /** Release the content-hash lookup cache under memory pressure (see main.ts). */
+  static trimCaches(level: 'light' | 'aggressive' | 'emergency'): void {
+    this.hashLookupCache.prune();
+    if (level === 'aggressive' || level === 'emergency') this.hashLookupCache.clear();
+  }
 
   // Patterns compiled lazily and cached
   private static _regex: RegExp | null = null;

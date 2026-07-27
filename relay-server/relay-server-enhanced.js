@@ -748,6 +748,21 @@ setInterval(() => cleanupPendingVoteReservations(), PENDING_VOTE_CLEANUP_MS);
 // ─── MySQL ────────────────────────────────────────────────────────────────────
 let db = null;
 
+// MySQL TLS config. Secure by default (verify the server certificate). Provide a
+// CA bundle via MYSQL_SSL_CA for private/self-signed CAs, or explicitly opt out
+// of verification for local dev only with MYSQL_SSL_INSECURE=true. Never silently
+// disable verification, which would allow an on-path attacker to MITM the DB.
+function buildMysqlSsl() {
+  if (process.env.MYSQL_SSL_CA) {
+    return { ca: fs.readFileSync(process.env.MYSQL_SSL_CA), rejectUnauthorized: true };
+  }
+  if (process.env.MYSQL_SSL_INSECURE === 'true') {
+    console.warn('⚠️  MySQL TLS verification DISABLED (MYSQL_SSL_INSECURE=true) — dev only, do not use in production');
+    return { rejectUnauthorized: false };
+  }
+  return { rejectUnauthorized: true };
+}
+
 async function initMySQL() {
   if (!process.env.MYSQL_HOST) return;
   try {
@@ -761,7 +776,7 @@ async function initMySQL() {
       connectionLimit: 5,
       enableKeepAlive: true,
       keepAliveInitialDelay: 10000,
-      ssl: { rejectUnauthorized: false },
+      ssl: buildMysqlSsl(),
     });
 
     await db.execute(`
@@ -910,32 +925,82 @@ async function indexContent(type, id, data) {
   }
 }
 
+// Build the match predicate for one strategy. The predicate is always wrapped in
+// parentheses before any filter is appended: the LIKE form is a chain of ORs, and
+// an unparenthesized `... OR author LIKE ? AND type = ?` binds AND tighter than
+// OR, so the type/community filters silently leaked (a search filtered to polls
+// would return posts).
+function buildSearchPredicate(strategy, query) {
+  if (strategy === 'fulltext') {
+    const booleanQuery = query.trim().split(/\s+/).slice(0, 20)
+      .map(w => `+${w.replace(/[+\-><()~*"@]/g, '')}*`)
+      .filter(w => w.length > 2)   // bare "+*" is a syntax error in boolean mode
+      .join(' ');
+    if (!booleanQuery) return null;
+    return {
+      where: 'MATCH(title, content) AGAINST(? IN BOOLEAN MODE)',
+      relevance: 'MATCH(title, content) AGAINST(? IN BOOLEAN MODE)',
+      whereParams: [booleanQuery],
+      relevanceParams: [booleanQuery],
+    };
+  }
+  const like = `%${query.replace(/[%_\\]/g, '\\$&')}%`;
+  return {
+    where: 'title LIKE ? OR content LIKE ? OR author LIKE ?',
+    relevance: '1',
+    whereParams: [like, like, like],
+    relevanceParams: [],
+  };
+}
+
+async function runSearchStrategy(strategy, query, filters, limit, offset) {
+  const predicate = buildSearchPredicate(strategy, query);
+  if (!predicate) return null;
+
+  let filterSql = '';
+  const filterParams = [];
+  if (filters.type) { filterSql += ' AND type = ?'; filterParams.push(filters.type); }
+  if (filters.community) {
+    // The `community` column holds community *IDs* (`c-<slug>`), but the UI's
+    // community filter is a free-text box in which people type the bare slug.
+    // Exact equality therefore matched nothing for the common input. Accept the
+    // ID with or without its `c-` prefix — still an exact match on an indexed
+    // column, so no substring cross-matching.
+    const bare = String(filters.community).replace(/^c-/, '');
+    filterSql += ' AND (community = ? OR community = ?)';
+    filterParams.push(bare, `c-${bare}`);
+  }
+
+  const sql = `SELECT id, type, title, content, author, community, created_at, ${predicate.relevance} as relevance`
+    + ` FROM search_index WHERE (${predicate.where})${filterSql}`
+    + ` ORDER BY relevance DESC, created_at DESC LIMIT ? OFFSET ?`;
+  const params = [...predicate.relevanceParams, ...predicate.whereParams, ...filterParams, limit, offset];
+
+  const countSql = `SELECT COUNT(*) as total FROM search_index WHERE (${predicate.where})${filterSql}`;
+  const countParams = [...predicate.whereParams, ...filterParams];
+
+  const results     = await queryMySQL(sql, params);
+  const countResult = await queryMySQL(countSql, countParams);
+  return { results: results || [], total: countResult?.[0]?.total || 0 };
+}
+
 async function searchContent(query, filters = {}) {
   if (!db) return { results: [], total: 0 };
   try {
     const limit  = Math.min(Math.max(1, parseInt(filters.limit  || '20') || 20), 100);
     const offset = Math.max(0, parseInt(filters.offset || '0') || 0);
-    let sql, params, countSql, countParams;
-    if (query.length >= 4) {
-      const booleanQuery = query.trim().split(/\s+/).slice(0, 20).map(w => `+${w.replace(/[+\-><()~*"@]/g, '')}*`).join(' ');
-      sql    = `SELECT id, type, title, content, author, community, created_at, MATCH(title, content) AGAINST(? IN BOOLEAN MODE) as relevance FROM search_index WHERE MATCH(title, content) AGAINST(? IN BOOLEAN MODE)`;
-      params = [booleanQuery, booleanQuery];
-      countSql    = `SELECT COUNT(*) as total FROM search_index WHERE MATCH(title, content) AGAINST(? IN BOOLEAN MODE)`;
-      countParams = [booleanQuery];
-    } else {
-      const like = `%${query.replace(/[%_\\]/g, '\\$&')}%`;
-      sql    = `SELECT id, type, title, content, author, community, created_at, 1 as relevance FROM search_index WHERE title LIKE ? OR content LIKE ? OR author LIKE ?`;
-      params = [like, like, like];
-      countSql    = `SELECT COUNT(*) as total FROM search_index WHERE title LIKE ? OR content LIKE ? OR author LIKE ?`;
-      countParams = [like, like, like];
-    }
-    if (filters.type)      { sql += ' AND type = ?';      params.push(filters.type);      countSql += ' AND type = ?';      countParams.push(filters.type); }
-    if (filters.community) { sql += ' AND community = ?'; params.push(filters.community); countSql += ' AND community = ?'; countParams.push(filters.community); }
-    sql += ` ORDER BY relevance DESC, created_at DESC LIMIT ? OFFSET ?`;
-    params.push(limit, offset);
-    const results     = await queryMySQL(sql, params);
-    const countResult = await queryMySQL(countSql, countParams);
-    return { results: results || [], total: countResult?.[0]?.total || 0 };
+
+    // Try fulltext first, then fall back to substring LIKE when it finds nothing.
+    // Previously the strategy was chosen by query length alone (<4 chars → LIKE,
+    // otherwise → fulltext), which made behaviour change discontinuously at four
+    // characters: a 4+ char term that is an InnoDB stopword or shorter than
+    // innodb_ft_min_token_size matched zero rows and returned empty rather than
+    // degrading to a substring match. Running both makes length irrelevant.
+    const fulltext = await runSearchStrategy('fulltext', query, filters, limit, offset);
+    if (fulltext && fulltext.total > 0) return fulltext;
+
+    const like = await runSearchStrategy('like', query, filters, limit, offset);
+    return like || fulltext || { results: [], total: 0 };
   } catch (err) {
     console.error('❌ Search error:', err.message);
     return { results: [], total: 0 };
@@ -1124,6 +1189,26 @@ function escapeHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
+// Build the OG/Twitter image URL from an attacker-controlled IPFS CID. The CID
+// is validated against a strict CID charset so it can't break out of the URL /
+// attribute and inject markup into the document head; anything invalid falls
+// back to the default image. escapeHtml is applied as belt-and-suspenders.
+function safeImageUrl(imageIPFS) {
+  const cid = typeof imageIPFS === 'string' ? imageIPFS : '';
+  if (!/^[A-Za-z0-9]{1,128}$/.test(cid)) return `${DOMAIN}/og-default.png`;
+  return escapeHtml(`https://ipfs.io/ipfs/${cid}`);
+}
+
+// Attacker-controlled graph values (e.g. post.createdAt) flow into SSR. A raw
+// `new Date(value).toISOString()` throws RangeError on a non-date, which — with
+// no handler — would crash the process. Parse defensively and never throw.
+function safeIsoDate(value, { dateOnly = false } = {}) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const iso = d.toISOString();
+  return dateOnly ? iso.split('T')[0] : iso;
+}
+
 function buildHtmlShell(head, initData = '') {
   const ASSET_JS  = process.env.ASSET_JS  || '/assets2/index.js';
   const ASSET_CSS = process.env.ASSET_CSS || '/assets2/index.css';
@@ -1145,8 +1230,8 @@ function buildHtmlShell(head, initData = '') {
 function generatePostHTML(post) {
   const desc     = escapeHtml((post.content || '').replace(/\n/g, ' ').slice(0, 160));
   const title    = escapeHtml(post.title);
-  const imageUrl = post.imageIPFS ? `https://ipfs.io/ipfs/${post.imageIPFS}` : `${DOMAIN}/og-default.png`;
-  const postUrl  = `${DOMAIN}/community/${post.communityId || 'general'}/post/${post.id}`;
+  const imageUrl = safeImageUrl(post.imageIPFS);
+  const postUrl  = `${DOMAIN}/community/${escapeHtml(post.communityId || 'general')}/post/${escapeHtml(post.id)}`;
   return buildHtmlShell(`
     <title>${title} — Interpoll</title>
     <meta name="description" content="${desc}" />
@@ -1163,7 +1248,7 @@ function generatePostHTML(post) {
     <meta name="twitter:description" content="${desc}" />
     <meta name="twitter:image" content="${imageUrl}" />
     <meta property="article:author" content="${escapeHtml(post.authorName)}" />
-    <meta property="article:published_time" content="${new Date(post.createdAt).toISOString()}" />`,
+    <meta property="article:published_time" content="${safeIsoDate(post.createdAt)}" />`,
     ` data-initial-post-id="${escapeHtml(post.id)}"`
   );
 }
@@ -1171,7 +1256,7 @@ function generatePostHTML(post) {
 function generatePollHTML(poll) {
   const desc     = escapeHtml((poll.description || `Vote now: ${poll.question}`).slice(0, 160));
   const question = escapeHtml(poll.question);
-  const pollUrl  = `${DOMAIN}/community/${poll.communityId || 'general'}/poll/${poll.id}`;
+  const pollUrl  = `${DOMAIN}/community/${escapeHtml(poll.communityId || 'general')}/poll/${escapeHtml(poll.id)}`;
   return buildHtmlShell(`
     <title>${question} — Interpoll</title>
     <meta name="description" content="${desc}" />
@@ -1258,8 +1343,8 @@ async function generateSitemap() {
       try {
         const d = JSON.parse(row.data);
         if (!d?.id || !d?.displayName) continue;
-        const lastmod = d.createdAt ? new Date(d.createdAt).toISOString().split('T')[0] : now;
-        xml += `  <url><loc>${DOMAIN}/community/${d.id}</loc><lastmod>${lastmod}</lastmod><changefreq>daily</changefreq><priority>0.8</priority></url>\n`;
+        const lastmod = safeIsoDate(d.createdAt, { dateOnly: true }) || now;
+        xml += `  <url><loc>${DOMAIN}/community/${escapeHtml(d.id)}</loc><lastmod>${lastmod}</lastmod><changefreq>daily</changefreq><priority>0.8</priority></url>\n`;
       } catch {}
     }
 
@@ -1270,8 +1355,8 @@ async function generateSitemap() {
         const d = JSON.parse(row.data);
         if (!d?.id || !d?.title || !d?.communityId || seenPosts.has(d.id)) continue;
         seenPosts.add(d.id);
-        const lastmod = d.createdAt ? new Date(d.createdAt).toISOString().split('T')[0] : now;
-        xml += `  <url><loc>${DOMAIN}/community/${d.communityId}/post/${d.id}</loc><lastmod>${lastmod}</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>\n`;
+        const lastmod = safeIsoDate(d.createdAt, { dateOnly: true }) || now;
+        xml += `  <url><loc>${DOMAIN}/community/${escapeHtml(d.communityId)}/post/${escapeHtml(d.id)}</loc><lastmod>${lastmod}</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>\n`;
       } catch {}
     }
 
@@ -1288,8 +1373,8 @@ async function generateSitemap() {
         const d = JSON.parse(row.data);
         if (!d?.id || !d?.question || !d?.communityId || d?.isPrivate || seenPolls.has(d.id)) continue;
         seenPolls.add(d.id);
-        const lastmod = d.createdAt ? new Date(d.createdAt).toISOString().split('T')[0] : now;
-        xml += `  <url><loc>${DOMAIN}/community/${d.communityId}/poll/${d.id}</loc><lastmod>${lastmod}</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>\n`;
+        const lastmod = safeIsoDate(d.createdAt, { dateOnly: true }) || now;
+        xml += `  <url><loc>${DOMAIN}/community/${escapeHtml(d.communityId)}/poll/${escapeHtml(d.id)}</loc><lastmod>${lastmod}</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>\n`;
       } catch {}
     }
 
@@ -1863,13 +1948,48 @@ server.on('request', async (req, res) => {
     if (!postId || !db) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'not found' })); return; }
     try {
       const escaped = postId.replace(/[%_\\]/g, '\\$&');
-      const rows = await queryMySQL(`SELECT soul, data FROM gun_nodes WHERE soul LIKE ? ESCAPE ? OR soul LIKE ? ESCAPE ? OR soul LIKE ? ESCAPE ? OR soul = ? OR soul = ? OR soul = ? LIMIT 8`, [`v3/communities/%/posts/${escaped}`, '\\', `v2/communities/%/posts/${escaped}`, '\\', `communities/%/posts/${escaped}`, '\\', `v3/posts/${postId}`, `v2/posts/${postId}`, `posts/${postId}`]);
+      // A post is written to several souls at once (the canonical `v3/posts/<id>`
+      // and a per-community mirror), and older namespaces linger. These copies
+      // diverge — vote counts especially — so the row we answer with must be
+      // chosen deterministically. Without the ORDER BY below, MySQL was free to
+      // return them in any order and the reported upvote count flipped between
+      // requests, which then became permanent once a client read a stale count
+      // as the base for its next vote.
+      //
+      // Preference: canonical v3 soul, then the v3 community mirror, then older
+      // namespaces; newest `updated_at` breaks ties within a rank.
+      const rows = await queryMySQL(
+        `SELECT soul, data FROM gun_nodes
+          WHERE soul LIKE ? ESCAPE ? OR soul LIKE ? ESCAPE ? OR soul LIKE ? ESCAPE ?
+             OR soul = ? OR soul = ? OR soul = ?
+          ORDER BY CASE
+            WHEN soul = ?            THEN 0
+            WHEN soul LIKE ? ESCAPE ? THEN 1
+            WHEN soul = ?            THEN 2
+            WHEN soul LIKE ? ESCAPE ? THEN 3
+            WHEN soul = ?            THEN 4
+            ELSE 5
+          END, updated_at DESC
+          LIMIT 8`,
+        [
+          `v3/communities/%/posts/${escaped}`, '\\', `v2/communities/%/posts/${escaped}`, '\\', `communities/%/posts/${escaped}`, '\\',
+          `v3/posts/${postId}`, `v2/posts/${postId}`, `posts/${postId}`,
+          `v3/posts/${postId}`,
+          `v3/communities/%/posts/${escaped}`, '\\',
+          `v2/posts/${postId}`,
+          `v2/communities/%/posts/${escaped}`, '\\',
+          `posts/${postId}`,
+        ]
+      );
       for (const row of rows || []) {
         try {
           const d = JSON.parse(row.data);
           if (!d?.title) continue;
           const isV3 = typeof row.soul === 'string' && row.soul.startsWith('v3/');
-          res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60, stale-while-revalidate=120' });
+          // no-store: this payload carries mutable vote counts. A 60s public cache
+          // meant a refresh after voting served the pre-vote count back, and the
+          // next vote was then computed from it — persisting the regression.
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
           res.end(JSON.stringify({ ...d, id: d.id || postId, ...(isV3 ? { dataVersion: 'v3' } : {}) })); return;
         } catch {}
       }
@@ -1918,8 +2038,13 @@ server.on('request', async (req, res) => {
       const escaped = pollId.replace(/[%_\\]/g, '\\$&');
       // Check both v2/communities/.../polls/ and v2/polls/ paths
       const rows = await queryMySQL(
-        `SELECT data FROM gun_nodes WHERE (soul LIKE ? ESCAPE ? OR soul LIKE ? ESCAPE ? OR soul = ? OR soul = ?) AND soul NOT REGEXP '/options' LIMIT 5`,
-        [`v2/%/polls/${escaped}`, '\\', `communities/%/polls/${escaped}`, '\\', `v2/polls/${pollId}`, `polls/${pollId}`]
+        // ORDER BY for the same reason as /api/post/:id: several souls hold copies
+        // of the same poll and an unordered result made the response arbitrary.
+        `SELECT data FROM gun_nodes WHERE (soul LIKE ? ESCAPE ? OR soul LIKE ? ESCAPE ? OR soul = ? OR soul = ?) AND soul NOT REGEXP '/options'
+          ORDER BY CASE WHEN soul = ? THEN 0 WHEN soul LIKE ? ESCAPE ? THEN 1 ELSE 2 END, updated_at DESC
+          LIMIT 5`,
+        [`v2/%/polls/${escaped}`, '\\', `communities/%/polls/${escaped}`, '\\', `v2/polls/${pollId}`, `polls/${pollId}`,
+         `v2/polls/${pollId}`, `v2/%/polls/${escaped}`, '\\']
       );
       for (const row of rows || []) {
         try {
@@ -1934,7 +2059,9 @@ server.on('request', async (req, res) => {
           for (const optRow of optRows || []) {
             try { const o = JSON.parse(optRow.data); if (o?.id && !options.find(x => x.id === o.id)) options.push({ id: o.id, text: o.text || '', votes: o.votes || 0, voters: [] }); } catch {}
           }
-          res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=30, stale-while-revalidate=60' });
+          // no-store for the same reason as /api/post/:id — `options[].votes` is
+          // mutable state and must not be served from a shared cache.
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
           res.end(JSON.stringify({ ...d, id: d.id || pollId, options })); return;
         } catch {}
       }
@@ -2359,6 +2486,17 @@ setInterval(() => {
   const cutoff = Date.now() - SSR_CACHE_TTL;
   for (const [key, val] of ssrCache) { if (val.ts < cutoff) ssrCache.delete(key); }
 }, 7_200_000);
+
+// ─── Crash safety ─────────────────────────────────────────────────────────────
+// Defense-in-depth: a throw while rendering attacker-controlled graph content
+// (e.g. a malformed date in SSR) must never take the whole relay down. Log and
+// keep serving rather than exiting.
+process.on('unhandledRejection', (reason) => {
+  console.error('⚠️  Unhandled rejection (kept alive):', reason instanceof Error ? reason.stack : reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('⚠️  Uncaught exception (kept alive):', err instanceof Error ? err.stack : err);
+});
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 server.listen(PORT, () => {

@@ -2,6 +2,7 @@
 
 import { GunService } from './gunService';
 import { StorageService } from './storageService';
+import { BoundedMap, BoundedSet } from '../utils/boundedMap';
 
 export interface ChatMessage {
   id: string;
@@ -27,7 +28,7 @@ class ChatService {
   private userId: string;
   private peerId: string;
   private keyPair: CryptoKeyPair | null = null;
-  private recipientKeys: Map<string, CryptoKey> = new Map();
+  private recipientKeys = new BoundedMap<string, CryptoKey>({ maxSize: 200 });
   private connected: boolean = false;
   private p2pReady: boolean = false;
   private reconnectTimer: number | null = null;
@@ -35,7 +36,10 @@ class ChatService {
   private roomUnsubscribers: Map<string, () => void> = new Map();
   private typingUnsubscribers: Map<string, () => void> = new Map();
   private readReceiptUnsubscribers: Map<string, () => void> = new Map();
-  private seenMessageIds: Set<string> = new Set();
+  // Duplicate-delivery guard. Was unbounded — one entry per message ever seen,
+  // for the lifetime of the chat session. The TTL is far longer than any plausible
+  // redelivery window, so bounding it cannot reintroduce duplicates in practice.
+  private seenMessageIds = new BoundedSet<string>({ maxSize: 5000, ttlMs: 60 * 60_000 });
 
   public onMessage:          ((msg: ChatMessage) => void) | null = null;
   public onTyping:           ((data: { from: string; isTyping: boolean }) => void) | null = null;
