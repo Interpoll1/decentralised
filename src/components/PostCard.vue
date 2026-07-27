@@ -57,8 +57,9 @@
             <span>{{ formatNumber(post.upvotes) }}</span>
           </button>
 
-          <button class="stat-icon-btn" @click="handleDownvote" :class="{ active: hasDownvoted }" title="Save">
-            <ion-icon :icon="bookmarkOutline"></ion-icon>
+          <button class="stat-icon-btn downvote" @click="handleDownvote" :class="{ active: hasDownvoted }" title="Downvote">
+            <ion-icon :icon="hasDownvoted ? arrowDownCircle : arrowDownCircleOutline"></ion-icon>
+            <span>{{ formatNumber(post.downvotes) }}</span>
           </button>
 
           <button class="stat-icon-btn comments" @click="handleCommentsClick" title="Comments">
@@ -461,7 +462,8 @@ import {
   shieldCheckmarkOutline,
   heart,
   heartOutline,
-  bookmarkOutline,
+  arrowDownCircle,
+  arrowDownCircleOutline,
   arrowRedoOutline,
 } from 'ionicons/icons';
 import { Post } from '../services/postService';

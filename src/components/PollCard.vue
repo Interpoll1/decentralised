@@ -56,6 +56,16 @@
 
       <div class="poll-footer" @click.stop>
         <div class="poll-stats">
+          <button class="stat-icon-btn" @click="$emit('upvote')" :class="{ active: hasUpvoted }" title="Upvote">
+            <ion-icon :icon="hasUpvoted ? arrowUpCircle : arrowUpCircleOutline"></ion-icon>
+            <span>{{ poll.upvotes || 0 }}</span>
+          </button>
+
+          <button class="stat-icon-btn downvote" @click="$emit('downvote')" :class="{ active: hasDownvoted }" title="Downvote">
+            <ion-icon :icon="hasDownvoted ? arrowDownCircle : arrowDownCircleOutline"></ion-icon>
+            <span>{{ poll.downvotes || 0 }}</span>
+          </button>
+
           <div class="stat-item">
             <ion-icon :icon="peopleOutline"></ion-icon>
             <span>{{ displayTotal }} vote{{ displayTotal !== 1 ? 's' : '' }}</span>
@@ -116,7 +126,11 @@ import {
   checkmarkDoneOutline,
   chevronForwardOutline,
   warningOutline,
-  shieldCheckmarkOutline
+  shieldCheckmarkOutline,
+  arrowUpCircle,
+  arrowUpCircleOutline,
+  arrowDownCircle,
+  arrowDownCircleOutline,
 } from 'ionicons/icons';
 import { Poll } from '../services/pollService';
 import type { PollOption } from '../types/poll';
@@ -133,8 +147,10 @@ const props = defineProps<{
   filterAction?: FilterAction;
   showModerationAction?: boolean;
   moderationActionTitle?: string;
+  hasUpvoted?: boolean;
+  hasDownvoted?: boolean;
 }>();
-defineEmits(['click', 'vote', 'moderation-submit']);
+defineEmits(['click', 'vote', 'moderation-submit', 'upvote', 'downvote']);
 
 // Verified vote tally (CRITICAL-2): results come from the signed-event tally,
 // not the forgeable Gun counts. `displayTotal` collapses to the verified floor
@@ -412,6 +428,43 @@ function getTimeRemaining(): string {
 
 .stat-item ion-icon {
   color: var(--app-text-subtle);
+}
+
+.stat-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 11px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--app-text-muted);
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.stat-icon-btn ion-icon {
+  font-size: 16px;
+  color: var(--app-text-subtle);
+}
+
+.stat-icon-btn.active {
+  color: #6366f1;
+  border-color: rgba(99, 102, 241, 0.3);
+  background: rgba(99, 102, 241, 0.1);
+}
+.stat-icon-btn.active ion-icon {
+  color: #6366f1;
+}
+
+.stat-icon-btn.downvote.active {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.1);
+}
+.stat-icon-btn.downvote.active ion-icon {
+  color: #ef4444;
 }
 
 .verified-tally {

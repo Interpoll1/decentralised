@@ -220,10 +220,14 @@
                   v-else-if="item.type === 'poll'"
                   :poll="item.data"
                   :community-name="getCommunityName(item.data.communityId)"
+                    :has-upvoted="hasUpvotedPoll(item.data.id)"
+                    :has-downvoted="hasDownvotedPoll(item.data.id)"
                     :show-moderation-action="ModerationService.canSubmitHashesFromHome()"
                     moderation-action-title="Send this poll text to the moderation API"
                     @click="navigateToPoll(item.data)"
                     @vote="navigateToPoll(item.data)"
+                    @upvote="handleUpvotePoll(item.data)"
+                    @downvote="handleDownvotePoll(item.data)"
                     @moderation-submit="handleModerationSubmitPoll(item.data)"
                   />
                 </template>
@@ -976,6 +980,8 @@ const searchingUsers    = ref(false);
 
 const upvotedCache   = ref<Set<string>>(new Set(JSON.parse(localStorage.getItem('upvoted-posts')   || '[]')));
 const downvotedCache = ref<Set<string>>(new Set(JSON.parse(localStorage.getItem('downvoted-posts') || '[]')));
+const upvotedPollsCache   = ref<Set<string>>(new Set(JSON.parse(localStorage.getItem('upvoted-polls')   || '[]')));
+const downvotedPollsCache = ref<Set<string>>(new Set(JSON.parse(localStorage.getItem('downvoted-polls') || '[]')));
 
 // ── Computed ──────────────────────────────────────────────────────────────────
 
@@ -1006,6 +1012,14 @@ function seededRandom(index: number): number {
   return x - Math.floor(x)
 }
 
+function hashStringToInt(str: string): number {
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 31 + str.charCodeAt(i)) | 0
+  }
+  return hash
+}
+
 const combinedFeed = computed(() => {
   moderationVersion.value;
   selectedCategory.value;
@@ -1029,33 +1043,35 @@ const combinedFeed = computed(() => {
     const now = Date.now()
     const maxAge = 30 * 24 * 60 * 60 * 1000
 
-    filtered.sort((a, b) => {
-      const scoreA = a.type === 'post' ? (a.data.score ?? 0) : (a.data.totalVotes ?? 0)
-      const scoreB = b.type === 'post' ? (b.data.score ?? 0) : (b.data.totalVotes ?? 0)
+    // Precompute a stable weight per item (keyed by item id, not array position)
+    // so re-sorting the same underlying data always yields the same order —
+    // deriving jitter from a mutating indexOf() during sort caused feed items
+    // (especially polls) to visibly reshuffle/flicker on every store update.
+    const weighted = filtered.map(item => {
+      const id = `${item.type}-${item.data.id}`
+      const score = item.type === 'post' ? (item.data.score ?? 0) : (item.data.totalVotes ?? 0)
+      const seed = hashStringToInt(id)
+      const rand = seededRandom(seed)
 
-      const idxA = filtered.indexOf(a)
-      const idxB = filtered.indexOf(b)
-      const rand = seededRandom(idxA * 31 + idxB)
+      // ~20% of items: pure discovery slot, ignore score/age entirely
+      if (rand < 0.2) {
+        return { item, weight: seededRandom(seed + 1) }
+      }
 
-      // ~20% of comparisons: pure discovery slot, ignore score/age entirely
-      if (rand < 0.2) return seededRandom(idxA) - seededRandom(idxB)
-
-      const ageA = Math.max(0, 1 - (now - a.createdAt) / maxAge)
-      const ageB = Math.max(0, 1 - (now - b.createdAt) / maxAge)
+      const age = Math.max(0, 1 - (now - item.createdAt) / maxAge)
 
       // Low engagement boost: score < 5 gets a flat bump
-      const engBoostA = scoreA < 5 ? 0.15 : 0
-      const engBoostB = scoreB < 5 ? 0.15 : 0
+      const engBoost = score < 5 ? 0.15 : 0
 
       // Old content boost: older than 7 days gets a random per-session lift
-      const oldBoostA = (now - a.createdAt) > 7 * 24 * 60 * 60 * 1000 ? seededRandom(idxA + 999) * 0.2 : 0
-      const oldBoostB = (now - b.createdAt) > 7 * 24 * 60 * 60 * 1000 ? seededRandom(idxB + 999) * 0.2 : 0
+      const oldBoost = (now - item.createdAt) > 7 * 24 * 60 * 60 * 1000 ? seededRandom(seed + 999) * 0.2 : 0
 
-      const weightA = ageA * 0.4 + Math.min(scoreA / 20, 1) * 0.25 + seededRandom(idxA) * 0.15 + engBoostA + oldBoostA
-      const weightB = ageB * 0.4 + Math.min(scoreB / 20, 1) * 0.25 + seededRandom(idxB) * 0.15 + engBoostB + oldBoostB
-
-      return weightB - weightA
+      const weight = age * 0.4 + Math.min(score / 20, 1) * 0.25 + seededRandom(seed) * 0.15 + engBoost + oldBoost
+      return { item, weight }
     })
+
+    weighted.sort((a, b) => b.weight - a.weight)
+    return weighted.map(w => w.item).slice(0, postStore.visibleCount)
   }
 
   return filtered.slice(0, postStore.visibleCount)
@@ -1552,6 +1568,63 @@ async function handleDownvote(post: Post) {
   } catch {
     voteVersion.value++;
     (await toastController.create({ message: 'Failed to downvote', duration: 2000 })).present();
+  }
+}
+
+function hasUpvotedPoll(pollId: string): boolean {
+  voteVersion.value;
+  return upvotedPollsCache.value.has(pollId);
+}
+function hasDownvotedPoll(pollId: string): boolean {
+  voteVersion.value;
+  return downvotedPollsCache.value.has(pollId);
+}
+
+async function handleUpvotePoll(poll: Poll) {
+  try {
+    if (hasUpvotedPoll(poll.id)) {
+      upvotedPollsCache.value.delete(poll.id);
+      localStorage.setItem('upvoted-polls', JSON.stringify([...upvotedPollsCache.value]));
+      voteVersion.value++;
+      await pollStore.voteOnPollContent(poll.id, 'up');
+    } else {
+      if (downvotedPollsCache.value.has(poll.id)) {
+        downvotedPollsCache.value.delete(poll.id);
+        localStorage.setItem('downvoted-polls', JSON.stringify([...downvotedPollsCache.value]));
+        await pollStore.voteOnPollContent(poll.id, 'down');
+      }
+      upvotedPollsCache.value.add(poll.id);
+      localStorage.setItem('upvoted-polls', JSON.stringify([...upvotedPollsCache.value]));
+      voteVersion.value++;
+      await pollStore.upvotePoll(poll.id);
+    }
+  } catch {
+    voteVersion.value++;
+    (await toastController.create({ message: 'Failed to upvote poll', duration: 2000 })).present();
+  }
+}
+
+async function handleDownvotePoll(poll: Poll) {
+  try {
+    if (hasDownvotedPoll(poll.id)) {
+      downvotedPollsCache.value.delete(poll.id);
+      localStorage.setItem('downvoted-polls', JSON.stringify([...downvotedPollsCache.value]));
+      voteVersion.value++;
+      await pollStore.voteOnPollContent(poll.id, 'down');
+    } else {
+      if (upvotedPollsCache.value.has(poll.id)) {
+        upvotedPollsCache.value.delete(poll.id);
+        localStorage.setItem('upvoted-polls', JSON.stringify([...upvotedPollsCache.value]));
+        await pollStore.voteOnPollContent(poll.id, 'up');
+      }
+      downvotedPollsCache.value.add(poll.id);
+      localStorage.setItem('downvoted-polls', JSON.stringify([...downvotedPollsCache.value]));
+      voteVersion.value++;
+      await pollStore.downvotePoll(poll.id);
+    }
+  } catch {
+    voteVersion.value++;
+    (await toastController.create({ message: 'Failed to downvote poll', duration: 2000 })).present();
   }
 }
 
