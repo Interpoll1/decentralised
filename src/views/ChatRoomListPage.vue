@@ -14,6 +14,7 @@
         <ion-refresher-content />
       </ion-refresher>
 
+      <DesktopPageShell>
       <!-- Loading -->
       <div v-if="chatRoomStore.loading && chatRoomStore.rooms.length === 0" class="loading-container">
         <ion-spinner />
@@ -81,6 +82,8 @@
           <ion-icon :icon="addOutline" />
         </ion-fab-button>
       </ion-fab>
+
+      </DesktopPageShell>
 
       <!-- Create room modal -->
       <ion-modal :is-open="showCreateModal" @didDismiss="resetForm">
@@ -158,6 +161,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
+import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRouter } from 'vue-router';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,

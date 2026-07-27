@@ -23,6 +23,10 @@ export interface Community {
   isEncrypted?: boolean;
   encryptionHint?: string;
   encryptedMeta?: string;
+  isPrivate?: boolean;
+  category?: string;
+  tags?: string[];
+  nsfw?: boolean;
 }
 
 export class CommunityService {
@@ -58,12 +62,14 @@ export class CommunityService {
   static async createCommunity(data: {
     name: string; displayName: string; description: string;
     rules: string[]; creatorId: string;
+    category?: string; nsfw?: boolean; isPrivate?: boolean;
   }): Promise<Community> {
     const id = `c-${data.name.toLowerCase().replace(/\s+/g, '-')}`;
     const community: Community = {
       id, name: data.name, displayName: data.displayName,
       description: data.description, rules: data.rules,
       creatorId: data.creatorId, createdAt: Date.now(), memberCount: 1, postCount: 0,
+      category: data.category, nsfw: data.nsfw, isPrivate: data.isPrivate,
     };
 
     const gunData: Record<string, any> = {
@@ -71,6 +77,7 @@ export class CommunityService {
       description: community.description, creatorId: community.creatorId,
       createdAt: community.createdAt, memberCount: community.memberCount,
       postCount: community.postCount,
+      category: community.category || null, nsfw: !!community.nsfw, isPrivate: !!community.isPrivate,
     };
 
     // Sign community creation for anti-sabotage verification
@@ -107,6 +114,7 @@ export class CommunityService {
   static async createPrivateCommunity(data: {
     name: string; displayName: string; description: string;
     rules: string[]; creatorId: string;
+    category?: string; nsfw?: boolean;
   }, password?: string): Promise<{ community: Community; inviteLink: string }> {
     if (password !== undefined) {
       password = password.trim();
@@ -140,6 +148,9 @@ export class CommunityService {
     const gunData: Record<string, any> = {
       id,
       isEncrypted: true,
+      isPrivate: true,
+      category: data.category || null,
+      nsfw: !!data.nsfw,
       encryptionHint,
       encryptedMeta,
       creatorId: data.creatorId,
@@ -196,6 +207,9 @@ export class CommunityService {
       memberCount: 1,
       postCount: 0,
       isEncrypted: true,
+      isPrivate: true,
+      category: data.category,
+      nsfw: !!data.nsfw,
       encryptionHint,
       encryptedMeta,
       creatorPubkey: gunData.creatorPubkey,
@@ -525,6 +539,10 @@ export class CommunityService {
       isEncrypted: data.isEncrypted || false,
       encryptionHint: data.encryptionHint || undefined,
       encryptedMeta: data.encryptedMeta || undefined,
+      isPrivate: !!data.isPrivate,
+      category: data.category || undefined,
+      nsfw: !!data.nsfw,
+      tags: Array.isArray(data.tags) ? data.tags : undefined,
     };
   }
 

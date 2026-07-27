@@ -35,6 +35,10 @@ export interface Poll {
   requireLogin: boolean;
   isPrivate: boolean;
   totalVotes: number;
+  /** Content-level upvotes/downvotes on the poll itself (separate from option votes). */
+  upvotes?: number;
+  downvotes?: number;
+  score?: number;
   isExpired: boolean;
   authorPubkey?: string;
   contentSignature?: string;
