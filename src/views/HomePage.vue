@@ -5,6 +5,9 @@
         <ion-title class="logo-title">InterPoll</ion-title>
         <!-- These buttons are hidden on desktop (768px+) and moved to side-nav -->
         <ion-buttons slot="end" class="header-util-buttons">
+          <ion-button v-if="canScanQr" @click="scanQr()" aria-label="Scan QR code">
+            <ion-icon :icon="qrCodeOutline"></ion-icon>
+          </ion-button>
           <ion-button @click="$router.push('/search')">
             <ion-icon :icon="searchOutline"></ion-icon>
           </ion-button>
@@ -94,6 +97,10 @@
 
           <div class="side-nav-divider"></div>
 
+          <button v-if="canScanQr" class="side-nav-item side-nav-util" @click="scanQr()">
+            <ion-icon :icon="qrCodeOutline"></ion-icon>
+            <span>Scan QR</span>
+          </button>
           <button class="side-nav-item side-nav-util" @click="$router.push('/search')">
             <ion-icon :icon="searchOutline"></ion-icon>
             <span>Search</span>
@@ -237,10 +244,20 @@
               </ion-infinite-scroll>
             </div>
 
-            <div v-else class="empty-state">
+            <div v-else class="empty-state empty-state--home">
               <ion-icon :icon="documentTextOutline" size="large"></ion-icon>
               <p>No content yet</p>
-              <p class="subtitle">This may take 5–10 seconds on first visit. Join a community and create the first post or poll!</p>
+              <p class="subtitle">Content syncs from peers and can take 5–10 seconds on first visit. In the meantime:</p>
+              <div class="empty-state__actions">
+                <ion-button @click="activeTab = 'communities'">
+                  <ion-icon slot="start" :icon="peopleOutline"></ion-icon>
+                  Browse communities
+                </ion-button>
+                <ion-button fill="outline" @click="activeTab = 'create'">
+                  <ion-icon slot="start" :icon="addCircleOutline"></ion-icon>
+                  Create the first poll
+                </ion-button>
+              </div>
             </div>
           </div>
 
@@ -668,8 +685,10 @@ import {
   searchOutline, chatbubble, chatbubbleOutline,
   shieldOutline, shieldCheckmarkOutline, sparklesOutline, eyeOffOutline, linkOutline,
   codeSlashOutline, gameControllerOutline, flaskOutline, businessOutline,
-  logoBitcoin, trophyOutline, ellipsisHorizontalOutline, lockClosedOutline
+  logoBitcoin, trophyOutline, ellipsisHorizontalOutline, lockClosedOutline,
+  qrCodeOutline
 } from 'ionicons/icons';
+import { useQrScan } from '../composables/useQrScan';
 import { useRoute, useRouter } from 'vue-router';
 import { useChainStore } from '../stores/chainStore';
 import { useCommunityStore } from '../stores/communityStore';
@@ -691,6 +710,8 @@ import config from '../config';
 
 const router = useRouter();
 const route = useRoute();
+// Native QR scanning — the button is only shown when supported (in the app).
+const { isSupported: canScanQr, scan: scanQr } = useQrScan();
 const chainStore = useChainStore();
 const communityStore = useCommunityStore();
 const postStore = usePostStore();
@@ -884,6 +905,9 @@ function isValidModerationApiUrl(url: string): boolean {
 function openModerationOnboarding() {
   if (localStorage.getItem(MODERATION_ONBOARDING_KEY) === 'true') return;
   if (moderationOnboardingOpen.value) return;
+  // Don't stack the moderation modal on top of the quick-tour card — wait for
+  // it to be dismissed first so first-time visitors see one prompt at a time.
+  if (tutorialVisible.value) return;
   moderationChoice.value = 'default';
   moderationCustomApiUrl.value = '';
   moderationCustomApiError.value = '';
@@ -1158,6 +1182,7 @@ const sidebarCommunities = computed(() => communityStore.communities)
 function skipTutorial() {
   localStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
   tutorialVisible.value = false;
+  void openModerationOnboarding();
 }
 
 function previousTutorialStep() {
@@ -2516,6 +2541,14 @@ ion-header.header-hidden {
 .empty-hint {
   font-size: 13px;
   color: var(--app-text-subtle);
+}
+
+.empty-state__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 8px;
 }
 
 .communities-toolbar {

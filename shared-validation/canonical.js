@@ -3,7 +3,12 @@
 // This is the single source of truth for "canonical JSON"; integrity.js (Node-only)
 // wraps it with crypto.createHash for relay-side hashing.
 
-const META_FIELDS = new Set(['_hash', '_sig', '_pub', '_pow', '_ts', '_nonce']);
+// Only the *derived* envelope fields — those computed and attached AFTER signing —
+// are stripped from the canonical form. `_ts` and `_nonce` are freshness fields
+// that MUST be inside the signed/hashed bytes, otherwise an attacker can mutate
+// them on a captured message to defeat replay protection while the signature
+// still verifies. They are deliberately NOT stripped here.
+const META_FIELDS = new Set(['_hash', '_sig', '_pub', '_pow']);
 
 export function stableStringify(val) {
   if (val === undefined) return undefined;

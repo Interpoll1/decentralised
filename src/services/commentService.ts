@@ -6,6 +6,7 @@ import { PostService } from './postService';
 import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
 import { StorageService } from './storageService';
+import { BoundedMap, BoundedSet } from '../utils/boundedMap';
 import config from '../config';
 import { canonicalJSON } from '../../shared-validation/canonical.js';
 
@@ -23,8 +24,11 @@ type LocalCommentBackupMap = Record<string, LocalCommentBackupEntry>;
 
 let commentRepublishLoopStarted = false;
 let commentRepublishInFlight = false;
-const commentRepublishAttempts = new Map<string, number>();
-const commentIndexRepublished = new Set<string>();
+// Republish bookkeeping: entries are only removed on success, so failures used to
+// accumulate for the life of the session (and commentIndexRepublished was never
+// cleared at all). Both are hints — losing one costs at most a redundant republish.
+const commentRepublishAttempts = new BoundedMap<string, number>({ maxSize: 500, ttlMs: 60 * 60_000 });
+const commentIndexRepublished = new BoundedSet<string>({ maxSize: 1000, ttlMs: 60 * 60_000 });
 let localCommentBackupWriteQueue: Promise<void> = Promise.resolve();
 
 function getGunRelayBase(): string {

@@ -84,6 +84,10 @@
             <ion-icon :icon="trendingUpOutline"></ion-icon>
             <span>{{ post.score }}</span>
           </div>
+
+          <button class="stat-button share" title="Share this post" @click="handleShare">
+            <ion-icon :icon="shareOutline"></ion-icon>
+          </button>
         </div>
       </div>
     </div>
@@ -465,6 +469,7 @@ import {
   arrowDownCircle,
   arrowDownCircleOutline,
   arrowRedoOutline,
+  shareOutline
 } from 'ionicons/icons';
 import { Post } from '../services/postService';
 import type { FilterAction } from '../services/moderationService';
@@ -474,6 +479,7 @@ import type { UserProfile } from '../services/userService';
 import { UserService } from '../services/userService';
 import { ChatInviteService } from '../services/chatInviteService';
 import { formatTrustedIdentityLabel } from '../utils/identityTrust';
+import { shareLink } from '../composables/useShare';
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -584,29 +590,14 @@ function handleCommentsClick(event: Event) {
   router.push(`/post/${props.post.id}`);
 }
 
-async function handleShare(event: Event) {
-  event.stopPropagation();
-  const url = `${window.location.origin}/post/${props.post.id}`;
-  try {
-    if (navigator.share) {
-      await navigator.share({ title: props.post.title, url });
-    } else if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(url);
-      const toast = await toastController.create({
-        message: 'Link copied',
-        duration: 1800,
-        color: 'dark',
-      });
-      await toast.present();
-    }
-  } catch {
-    /* user cancelled share */
-  }
-}
-
 function handleModerationAction(event: Event) {
   event.stopPropagation();
   emit('moderation-submit');
+}
+
+function handleShare(event: Event) {
+  event.stopPropagation();
+  void shareLink(`/post/${props.post.id}`, props.post.title || 'InterPoll post', 'Check out this post on InterPoll');
 }
 
 async function handleInviteToChat() {

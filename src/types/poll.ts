@@ -11,8 +11,10 @@ export interface PollOption {
   /**
    * Voter IDs for this option. Declared as an array for API ergonomics, but
    * Gun cannot reliably store sparse arrays — on the wire, pollService.ts
-   * encodes this as an index-keyed object map (see buildVotersMap/buildOptionsMap
-   * in pollService.ts) and reconstructs the array shape on read.
+   * encodes this as a Gun-native set keyed by voter ID ({ [voterId]: true },
+   * see buildVotersSet/buildOptionsMap in pollService.ts) so a new vote is a
+   * single leaf write. Legacy index-keyed maps are still read back correctly
+   * by parseVoters. The array shape is reconstructed on read.
    */
   voters: string[];
 }
