@@ -1,4 +1,4 @@
-import { GunService, GUN_NAMESPACE } from './gunService';
+import { GunService } from './gunService';
 import { CryptoService } from './cryptoService';
 import { KeyService } from './keyService';
 import { AuditService } from './auditService';
@@ -30,10 +30,6 @@ let commentRepublishInFlight = false;
 const commentRepublishAttempts = new BoundedMap<string, number>({ maxSize: 500, ttlMs: 60 * 60_000 });
 const commentIndexRepublished = new BoundedSet<string>({ maxSize: 1000, ttlMs: 60 * 60_000 });
 let localCommentBackupWriteQueue: Promise<void> = Promise.resolve();
-
-function getGunRelayBase(): string {
-  return config.relay.gun.replace(/\/gun$/, '');
-}
 
 function getGun() {
   return GunService.getGun();
@@ -714,28 +710,29 @@ function warmCommentCache(rec: Record<string, unknown>): void {
   }
 }
 
-/** Ask the relay's DB mirror whether a comment actually reached it. */
+/**
+ * Ask the P2P graph itself whether a comment landed, via Gun's own sync —
+ * not a bespoke relay REST endpoint. `.put()`'s ack fires once any connected
+ * peer (relay or otherwise) has acknowledged the write; a `.once()` read
+ * confirms the node is actually resolvable from the graph. Both paths stay
+ * fully decentralized: no dependency on relay-specific HTTP routes.
+ */
 async function verifyCommentRelayPersistence(commentId: string, deadlineMs = 8000): Promise<boolean | null> {
-  const soul = encodeURIComponent(`${GUN_NAMESPACE}/comments/${commentId}`);
-  const url = `${getGunRelayBase()}/db/soul?soul=${soul}`;
-  const deadline = Date.now() + deadlineMs;
-  const retryDelayMs = 1500;
-  let endpointReachable = false;
-  for (;;) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3000);
-    try {
-      const res = await fetch(url, { signal: controller.signal });
-      if (res.ok) return true;
-      if (res.status === 404) endpointReachable = true;
-    } catch {
-      // endpoint state unknown this attempt
-    } finally {
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      resolve(null);
+    }, deadlineMs);
+
+    getGun().get('comments').get(commentId).once((data: any) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
-    }
-    if (Date.now() + retryDelayMs > deadline) return endpointReachable ? false : null;
-    await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
-  }
+      resolve(!!(data && data.id));
+    });
+  });
 }
 
 function enqueueLocalCommentBackupWrite(task: () => Promise<void>): Promise<void> {
