@@ -440,27 +440,25 @@ watch(
   { immediate: true }
 );
 
+// Single, synchronous computed — async logic is handled by the watch above
 const authorDisplayName = computed(() => {
+  // Case 1: user opted to show real name
   if (props.post.authorShowRealName) {
-    return props.post.authorName || 'anon';
+    return authorProfile.value?.displayName || props.post.authorName || 'anon';
   }
-  // Case 2: look up live customUsername from UserService
-  // (handles old posts that stored a pseudonym but user has since set a customUsername)
-  if (props.post.authorId) {
-    try {
-      const profile = await UserService.getUser(props.post.authorId);
-      if (profile?.customUsername) return profile.customUsername;
-      if (profile?.showRealName && profile?.displayName) return profile.displayName;
-    } catch { /* fall through to pseudonym */ }
+
+  // Case 2: user has a custom username (resolved reactively via watch + authorProfile)
+  if (authorProfile.value?.customUsername) {
+    return authorProfile.value.customUsername;
   }
+
   // Case 3: pseudonym (anonymous post)
   if (props.post.authorId && props.post.id) {
     return generatePseudonym(props.post.id, props.post.authorId);
   }
-  return props.post.authorName || 'anon';
-}
 
-const authorDisplayName = computed(() => resolvedAuthorName.value || props.post.authorName || '…');
+  return props.post.authorName || 'anon';
+});
 
 const authorIdentityLabel = computed(() =>
   authorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'Issuer linked' : 'Unverified identity'
