@@ -1,0 +1,82 @@
+# InterPoll — Apache/LiteSpeed config for the static SPA at endless.sbs
+#
+# Lives in public/ so Vite copies it to dist/ and the deploy workflow ships it.
+# If the server runs nginx, this file is simply ignored — apply the same rules
+# in the nginx site config instead.
+
+# ---------------------------------------------------------------------------
+# 1. Cache policy
+#
+# The rule: anything with a content hash in its name is immutable forever;
+# anything that decides WHICH hashed files to load must be revalidated on
+# every request. Getting this backwards is what pins users to an old build.
+# ---------------------------------------------------------------------------
+<IfModule mod_headers.c>
+    # Entry points — must never be served from cache without revalidation.
+    <FilesMatch "^(index\.html|sw\.js|registerSW\.js|manifest\.webmanifest)$">
+        Header set Cache-Control "no-cache, must-revalidate, max-age=0"
+        Header unset Expires
+        Header unset Pragma
+    </FilesMatch>
+
+    # Workbox runtime is content-hashed but referenced by sw.js — safe to cache.
+    <FilesMatch "^workbox-[0-9a-f]+\.js$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+
+    # Service worker must be allowed to control the whole origin.
+    <FilesMatch "^sw\.js$">
+        Header set Service-Worker-Allowed "/"
+    </FilesMatch>
+</IfModule>
+
+# Hashed build output: filename changes on every content change, so it can be
+# cached forever.
+<IfModule mod_headers.c>
+    <IfModule mod_rewrite.c>
+        RewriteEngine On
+        RewriteCond %{REQUEST_URI} ^/assets2/
+        RewriteRule .* - [E=IMMUTABLE_ASSET:1]
+    </IfModule>
+    Header set Cache-Control "public, max-age=31536000, immutable" env=IMMUTABLE_ASSET
+</IfModule>
+
+# ---------------------------------------------------------------------------
+# 2. MIME types
+# ---------------------------------------------------------------------------
+<IfModule mod_mime.c>
+    AddType application/manifest+json .webmanifest
+    AddType image/svg+xml .svg
+    AddType text/javascript .js
+</IfModule>
+
+# ---------------------------------------------------------------------------
+# 3. SPA fallback
+#
+# Real files and directories are served as-is; everything else renders
+# index.html so client-side routes (/community/x, /poll/y) work on hard reload.
+# ---------------------------------------------------------------------------
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # Never rewrite the service worker or build assets — a 404 that returns
+    # HTML makes the browser try to execute a page as JavaScript.
+    RewriteRule ^(sw\.js|registerSW\.js|manifest\.webmanifest)$ - [L]
+    RewriteRule ^assets2/ - [L]
+
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    RewriteRule . /index.html [L]
+</IfModule>
+
+# ---------------------------------------------------------------------------
+# 4. Compression
+# ---------------------------------------------------------------------------
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/css text/javascript \
+        application/javascript application/json application/manifest+json \
+        image/svg+xml
+</IfModule>
