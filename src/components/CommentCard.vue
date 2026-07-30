@@ -27,6 +27,16 @@
         <span class="separator">•</span>
         <span class="timestamp">{{ formatTime(comment.createdAt) }}</span>
         <span v-if="comment.edited" class="edited-label">(edited)</span>
+        <span
+          v-if="syncState && syncState !== 'confirmed'"
+          class="sync-label"
+          :class="syncState"
+          :title="syncState === 'failed'
+            ? 'Saved on this device, but no relay accepted it yet — it will keep retrying'
+            : 'Saved on this device, still syncing to the network'"
+        >
+          {{ syncState === 'failed' ? 'not synced' : 'sending…' }}
+        </span>
         <span v-if="flagged && filterAction === 'flag'" class="flag-badge" title="Flagged by word filter">
           <ion-icon :icon="warningOutline"></ion-icon>
         </span>
@@ -173,6 +183,21 @@
 .edited-label {
   font-size: 11px;
   color: var(--ion-color-medium);
+}
+
+.sync-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border-radius: 10px;
+  padding: 1px 7px;
+  background: rgba(var(--ion-color-medium-rgb), 0.16);
+  color: var(--ion-color-medium-shade);
+}
+
+.sync-label.failed {
+  background: rgba(var(--ion-color-warning-rgb), 0.16);
+  color: var(--ion-color-warning-shade);
 }
 
 /* ── Content ─────────────────────────────────────── */
@@ -395,17 +420,15 @@ const canInviteAuthor = computed(() =>
   !!props.comment.authorId && !!currentUserId.value && props.comment.authorId !== currentUserId.value
 );
 
-const hasUpvoted = computed(() => {
-  commentStore.voteVersion; // reactive dependency to trigger re-evaluation on vote changes
-  const votedComments = JSON.parse(localStorage.getItem('upvoted-comments') || '[]');
-  return votedComments.includes(props.comment.id);
-});
+// Backed by the store's reactive `myVotes` map. These used to read localStorage
+// inside a computed and touch a `voteVersion` counter to force re-evaluation,
+// which meant the highlight only updated when some *other* vote bumped the
+// counter — voting on a comment often left its own button looking untouched.
+const hasUpvoted = computed(() => commentStore.hasUpvoted(props.comment.id));
+const hasDownvoted = computed(() => commentStore.hasDownvoted(props.comment.id));
 
-const hasDownvoted = computed(() => {
-  commentStore.voteVersion; // reactive dependency to trigger re-evaluation on vote changes
-  const votedComments = JSON.parse(localStorage.getItem('downvoted-comments') || '[]');
-  return votedComments.includes(props.comment.id);
-});
+/** 'pending' | 'published' while this device is still pushing the comment out. */
+const syncState = computed(() => commentStore.statusOf(props.comment.id));
 
 const replies = computed(() => {
   const filtered = commentStore.comments.filter(c => {
@@ -478,12 +501,10 @@ async function submitReply() {
 
     replyText.value = '';
     showReplyForm.value = false;
-
-    // Reload comments to show the new reply
-    setTimeout(() => {
-      commentStore.loadCommentsForPost(props.postId);
-    }, 500);
-
+    // No reload: the store inserts the reply immediately and the live
+    // subscription delivers the graph's copy. Reloading here used to restart the
+    // whole thread load and cancel the in-flight one, which is how a just-posted
+    // reply could flash up and then disappear.
   } catch (error) {
     console.error('Error posting reply:', error);
 

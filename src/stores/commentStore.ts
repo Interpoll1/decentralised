@@ -1,313 +1,353 @@
 // src/stores/commentStore.ts
+//
+// One post's comment thread at a time.
+//
+// The old store raced a live subscription against four staggered refetches, all
+// writing into the same array through a shared `seen` set. A comment that
+// arrived by subscription was never refreshed by a later fetch, a comment that
+// arrived by fetch could be re-added by the subscription, and navigating between
+// posts left the previous post's listeners running. That is where the "comments
+// are super random" behaviour came from.
+//
+// Now: one generation token guards every async step, comments are keyed by id,
+// and the service owns durability. The store renders the local mirror
+// immediately and merges the graph on top as it arrives.
+
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
-import { Comment, CommentService } from '../services/commentService';
+import { computed, ref } from 'vue';
+import { CommentService } from '../services/commentService';
+import type { Comment, SyncStatus } from '../types/social';
 import { generatePseudonym } from '../utils/pseudonym';
 import { UserService } from '../services/userService';
 
-// Helper function to get current user
-function getCurrentUser() {
-  const userStr = localStorage.getItem('currentUser');
-  if (!userStr) {
-    // Create a default anonymous user if none exists
-    const anonUser = {
-      id: `anon_${Date.now()}`,
-      username: 'Anonymous',
-      email: ''
-    };
-    localStorage.setItem('currentUser', JSON.stringify(anonUser));
-    return anonUser;
+/** Vote memory, so a reload does not forget what you already voted on. */
+const UPVOTED_KEY = 'upvoted-comments';
+const DOWNVOTED_KEY = 'downvoted-comments';
+/** Cap the post-load tally refresh — enough for a visible thread, bounded traffic. */
+const TALLY_REFRESH_LIMIT = 30;
+const TALLY_REFRESH_CONCURRENCY = 5;
+
+type VoteChoice = 'up' | 'down' | null;
+
+function readVoteList(key: string): string[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || '[]');
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
+  } catch {
+    return [];
   }
-  return JSON.parse(userStr);
+}
+
+function writeVoteList(key: string, ids: string[]): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(ids));
+  } catch {
+    // Storage full or blocked — Gun still holds the authoritative vote.
+  }
+}
+
+function rememberVote(commentId: string, choice: VoteChoice): void {
+  const up = new Set(readVoteList(UPVOTED_KEY));
+  const down = new Set(readVoteList(DOWNVOTED_KEY));
+  up.delete(commentId);
+  down.delete(commentId);
+  if (choice === 'up') up.add(commentId);
+  if (choice === 'down') down.add(commentId);
+  writeVoteList(UPVOTED_KEY, [...up]);
+  writeVoteList(DOWNVOTED_KEY, [...down]);
 }
 
 export const useCommentStore = defineStore('comment', () => {
   const comments = ref<Comment[]>([]);
   const isLoading = ref(false);
-  const voteVersion = ref(0);
-  let commentUnsub: (() => void) | null = null;
+  const error = ref<string | null>(null);
+  const activePostId = ref<string | null>(null);
+  /** Publish state for comments this device authored, keyed by comment id. */
+  const syncStatus = ref<Record<string, SyncStatus>>({});
+  const myVotes = ref<Record<string, VoteChoice>>({});
 
-  // Load comments for a post
-  async function loadCommentsForPost(postId: string) {
-    isLoading.value = true;
+  let unsubscribe: (() => void) | null = null;
+  /** Guards every async continuation against a post switch mid-flight. */
+  let generation = 0;
 
-    try {
-      // Clear existing comments for this post
-      comments.value = comments.value.filter(c => c.postId !== postId);
-      
-      const seen = new Set<string>();
-      
-      try {
-        // Clean up previous subscription before starting a new one
-        if (commentUnsub) { commentUnsub(); commentUnsub = null; }
-        // Subscribe to real-time updates
-        commentUnsub = CommentService.subscribeToCommentsInPost(postId, (comment) => {
-          if (!seen.has(comment.id)) {
-            seen.add(comment.id);
-            
-            const existingIndex = comments.value.findIndex(c => c.id === comment.id);
-            
-            if (existingIndex >= 0) {
-              // Update existing comment but preserve vote counts if they're higher
-              const existing = comments.value[existingIndex];
-              comments.value[existingIndex] = {
-                ...comment,
-                upvotes: Math.max(comment.upvotes || 0, existing.upvotes || 0),
-                downvotes: Math.max(comment.downvotes || 0, existing.downvotes || 0),
-                score: (Math.max(comment.upvotes || 0, existing.upvotes || 0)) - (Math.max(comment.downvotes || 0, existing.downvotes || 0))
-              };
-            } else {
-              comments.value.push(comment);
-            }
-          }
-        });
-      } catch (err) {
-        // Fall back to one-time fetch only
+  const index = new Map<string, number>();
+
+  function reindex(): void {
+    index.clear();
+    comments.value.forEach((comment, i) => index.set(comment.id, i));
+  }
+
+  /** Newer revision wins; a record without content never replaces one with content. */
+  function upsert(incoming: Comment[]): void {
+    let changed = false;
+    for (const comment of incoming) {
+      const at = index.get(comment.id);
+      if (at === undefined) {
+        index.set(comment.id, comments.value.length);
+        comments.value.push(comment);
+        changed = true;
+        continue;
       }
-      
-      // One-time fetch, retried with backoff — a single attempt misses comments
-      // whenever the relay's sync hasn't caught up yet (common under load), which
-      // is why comments intermittently failed to appear on reload with no retry.
-      const fetchDelaysMs = [500, 2000, 5000, 10000];
-      (async () => {
-        for (let i = 0; i < fetchDelaysMs.length; i++) {
-          await new Promise((r) => setTimeout(r, fetchDelaysMs[i]));
-          try {
-            const allComments = await CommentService.getAllCommentsInPost(postId);
+      const existing = comments.value[at];
+      const incomingRevision = comment.editedAt || comment.createdAt || 0;
+      const existingRevision = existing.editedAt || existing.createdAt || 0;
+      if (incomingRevision < existingRevision) continue;
+      if (!comment.content && existing.content) continue;
+      comments.value[at] = { ...existing, ...comment };
+      changed = true;
+    }
+    if (changed) reindex();
+  }
 
-            allComments.forEach(comment => {
-              if (!seen.has(comment.id)) {
-                seen.add(comment.id);
-                comments.value.push(comment);
-              } else {
-                // Update if already exists
-                const existingIndex = comments.value.findIndex(c => c.id === comment.id);
-                if (existingIndex >= 0) {
-                  const existing = comments.value[existingIndex];
-                  comments.value[existingIndex] = {
-                    ...comment,
-                    upvotes: Math.max(comment.upvotes || 0, existing.upvotes || 0),
-                    downvotes: Math.max(comment.downvotes || 0, existing.downvotes || 0),
-                    score: (Math.max(comment.upvotes || 0, existing.upvotes || 0)) - (Math.max(comment.downvotes || 0, existing.downvotes || 0))
-                  };
-                }
-              }
-            });
-          } catch (fetchErr) {
-            console.error('Error fetching comments:', fetchErr);
-          } finally {
-            if (i === 0) isLoading.value = false;
-          }
-        }
-      })();
-      
-    } catch (error) {
-      console.error('Error loading comments:', error);
-      isLoading.value = false;
+  function teardown(): void {
+    if (unsubscribe) {
+      unsubscribe();
+      unsubscribe = null;
     }
   }
 
-  // Create a comment
+  function seedVotesFromCache(ids: string[]): void {
+    const up = new Set(readVoteList(UPVOTED_KEY));
+    const down = new Set(readVoteList(DOWNVOTED_KEY));
+    for (const id of ids) {
+      if (up.has(id)) myVotes.value[id] = 'up';
+      else if (down.has(id)) myVotes.value[id] = 'down';
+      else if (myVotes.value[id] === undefined) myVotes.value[id] = null;
+    }
+  }
+
+  /**
+   * Refresh scores from the authoritative per-user vote nodes for the top of the
+   * thread. The counters carried on a comment are only a hint written by whoever
+   * voted last; this reconciles them without a read for every comment ever seen.
+   */
+  async function refreshTallies(postId: string, token: number): Promise<void> {
+    const targets = comments.value
+      .filter((c) => c.postId === postId)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, TALLY_REFRESH_LIMIT);
+
+    let cursor = 0;
+    const workers = Array.from(
+      { length: Math.min(TALLY_REFRESH_CONCURRENCY, targets.length) },
+      async () => {
+        for (;;) {
+          const i = cursor++;
+          if (i >= targets.length || token !== generation) return;
+          const comment = targets[i];
+          try {
+            const tally = await CommentService.getCommentTally(comment.id, comment);
+            if (token !== generation) return;
+            upsert([{ ...comment, ...tally }]);
+          } catch {
+            // A tally we cannot read leaves the hint in place.
+          }
+        }
+      },
+    );
+    await Promise.all(workers);
+  }
+
+  async function loadCommentsForPost(postId: string): Promise<void> {
+    if (!postId) return;
+    const token = ++generation;
+
+    teardown();
+    activePostId.value = postId;
+    error.value = null;
+    isLoading.value = true;
+    comments.value = [];
+    reindex();
+
+    try {
+      // 1. Whatever this device already holds — instant, and correct offline.
+      const local = await CommentService.getLocalComments(postId);
+      if (token !== generation) return;
+      upsert(local);
+      seedVotesFromCache(local.map((c) => c.id));
+      isLoading.value = false;
+
+      // 2. Live updates (new comments, edits, deletions, vote hints).
+      unsubscribe = CommentService.subscribeToCommentsInPost(postId, (comment) => {
+        if (token !== generation) return;
+        upsert([comment]);
+        seedVotesFromCache([comment.id]);
+      });
+
+      // 3. The graph's own answer, merged on top.
+      const remote = await CommentService.fetchCommentsFromGun(postId);
+      if (token !== generation) return;
+      upsert(remote);
+      seedVotesFromCache(remote.map((c) => c.id));
+
+      void refreshTallies(postId, token);
+    } catch (err) {
+      if (token !== generation) return;
+      error.value = err instanceof Error ? err.message : 'Failed to load comments';
+      console.error('[commentStore] Failed to load comments:', err);
+    } finally {
+      if (token === generation) isLoading.value = false;
+    }
+  }
+
+  /** Re-run the load for the post currently open (used after memory cleanup). */
+  async function reloadActivePost(): Promise<void> {
+    if (activePostId.value) await loadCommentsForPost(activePostId.value);
+  }
+
   async function createComment(data: {
     postId: string;
     communityId: string;
     content: string;
     parentId?: string;
-  }) {
-    try {
-      // Validate required fields
-      if (!data.postId) {
-        throw new Error('postId is required but was empty or undefined');
-      }
-      if (!data.communityId) {
-        throw new Error('communityId is required but was empty or undefined');
-      }
-      if (!data.content || !data.content.trim()) {
-        throw new Error('content is required');
-      }
-      
-      // Get current user
-      const currentUser = getCurrentUser();
-      const profile = await UserService.getCurrentUser();
-      const showReal = profile.showRealName === true;
-      const authorName = showReal
+  }): Promise<Comment> {
+    if (!data.postId) throw new Error('postId is required');
+    if (!data.communityId) throw new Error('communityId is required');
+    if (!data.content?.trim()) throw new Error('content is required');
+
+    // The device profile id — the same identity posts, polls and karma use. The
+    // old store minted a separate `anon_<timestamp>` id in localStorage, so a
+    // commenter never matched their own profile: identity badges always read
+    // "unverified" and karma landed on an account nobody could look up.
+    const profile = await UserService.getCurrentUser();
+    const showRealName = profile.showRealName === true;
+
+    const comment = await CommentService.createComment({
+      postId: data.postId,
+      communityId: data.communityId,
+      authorId: profile.id,
+      authorName: showRealName
         ? (profile.customUsername || profile.displayName || profile.username)
-        : generatePseudonym(data.postId, currentUser.id);
-      
-      const commentData = {
-        postId: data.postId,
-        communityId: data.communityId,
-        authorId: currentUser.id,
-        authorName,
-        authorShowRealName: showReal,
-        content: data.content,
-        parentId: data.parentId
-      };
-      
-      const comment = await CommentService.createComment(commentData);
+        : generatePseudonym(data.postId, profile.id),
+      authorShowRealName: showRealName,
+      content: data.content.trim(),
+      parentId: data.parentId,
+    });
 
-      // Add to local array
-      const exists = comments.value.find(c => c.id === comment.id);
-      if (!exists) {
-        comments.value.unshift(comment);
-      }
-      
-      return comment;
-    } catch (error) {
-      console.error('Error creating comment:', error);
-      throw error;
+    upsert([comment]);
+    syncStatus.value[comment.id] = 'pending';
+    void trackSync(comment.id);
+    return comment;
+  }
+
+  /** Follow a freshly-posted comment until the relay confirms it (or gives up). */
+  async function trackSync(commentId: string): Promise<void> {
+    for (let attempt = 0; attempt < 12; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, attempt < 3 ? 1_500 : 10_000));
+      const stored = await CommentService.getComment(commentId);
+      if (!stored) return;
+      const row = syncStatus.value[commentId];
+      const next = await currentSyncStatus(commentId);
+      if (next && next !== row) syncStatus.value[commentId] = next;
+      if (next === 'confirmed' || next === 'failed') return;
     }
   }
 
-  // Upvote a comment
-  async function upvoteComment(commentId: string) {
+  async function currentSyncStatus(commentId: string): Promise<SyncStatus | null> {
+    const { StorageService } = await import('../services/storageService');
+    const row = await StorageService.getComment(commentId);
+    return row?.syncStatus ?? null;
+  }
+
+  async function vote(commentId: string, choice: 'up' | 'down'): Promise<void> {
+    const previous = myVotes.value[commentId] ?? null;
+    const next: VoteChoice = previous === choice ? null : choice;
+
+    const at = index.get(commentId);
+    const before = at === undefined ? null : comments.value[at];
+
+    // Optimistic: reflect the click immediately, reconcile with the real tally.
+    myVotes.value[commentId] = next;
+    rememberVote(commentId, next);
+    if (before) {
+      const delta = (kind: 'up' | 'down') =>
+        (next === kind ? 1 : 0) - (previous === kind ? 1 : 0);
+      const upvotes = Math.max(0, (before.upvotes || 0) + delta('up'));
+      const downvotes = Math.max(0, (before.downvotes || 0) + delta('down'));
+      comments.value[at!] = { ...before, upvotes, downvotes, score: upvotes - downvotes };
+    }
+
     try {
-      const currentUser = getCurrentUser();
-      const wasUpvoted = hasUpvoted(commentId);
-      const wasDownvoted = hasDownvoted(commentId);
-
-      // Update localStorage first (optimistic UI)
-      if (wasUpvoted) {
-        const votedComments = JSON.parse(localStorage.getItem('upvoted-comments') || '[]');
-        const filtered = votedComments.filter((id: string) => id !== commentId);
-        localStorage.setItem('upvoted-comments', JSON.stringify(filtered));
-      } else {
-        const votedComments = JSON.parse(localStorage.getItem('upvoted-comments') || '[]');
-        if (!votedComments.includes(commentId)) {
-          votedComments.push(commentId);
-          localStorage.setItem('upvoted-comments', JSON.stringify(votedComments));
-        }
-        // Remove from downvoted if exists
-        if (wasDownvoted) {
-          const downvotedComments = JSON.parse(localStorage.getItem('downvoted-comments') || '[]');
-          const filtered = downvotedComments.filter((id: string) => id !== commentId);
-          localStorage.setItem('downvoted-comments', JSON.stringify(filtered));
-        }
+      const profile = await UserService.getCurrentUser();
+      const tally = await CommentService.voteOnComment(commentId, choice, profile.id);
+      const current = index.get(commentId);
+      if (current !== undefined) {
+        comments.value[current] = { ...comments.value[current], ...tally };
       }
 
-      // Optimistically update local state
-      const comment = comments.value.find(c => c.id === commentId);
-      if (comment) {
-        if (wasUpvoted) {
-          comment.upvotes = Math.max(0, comment.upvotes - 1);
-        } else {
-          comment.upvotes++;
-          if (wasDownvoted) {
-            comment.downvotes = Math.max(0, comment.downvotes - 1);
-          }
-        }
-        comment.score = comment.upvotes - comment.downvotes;
-      }
-
-      voteVersion.value++;
-
-      // Persist to Gun.js
-      await CommentService.voteOnComment(commentId, 'up', currentUser.id);
-
-      // Update author karma
-      if (comment?.authorId && comment.authorId !== currentUser.id) {
-        if (wasUpvoted) {
-          UserService.incrementKarma(comment.authorId, -1).catch(() => {});
-        } else {
-          UserService.incrementKarma(comment.authorId, 1).catch(() => {});
-          if (wasDownvoted) UserService.incrementKarma(comment.authorId, 1).catch(() => {});
+      const author = before?.authorId;
+      if (author && author !== profile.id) {
+        const karmaDelta = (next === 'up' ? 1 : next === 'down' ? -1 : 0)
+          - (previous === 'up' ? 1 : previous === 'down' ? -1 : 0);
+        if (karmaDelta !== 0) {
+          UserService.incrementKarma(author, karmaDelta).catch(() => { /* karma is advisory */ });
         }
       }
-    } catch (error) {
-      voteVersion.value++;
-      console.error('Error upvoting comment:', error);
-      throw error;
+    } catch (err) {
+      // Roll back — a vote that never reached the graph must not linger in the UI.
+      myVotes.value[commentId] = previous;
+      rememberVote(commentId, previous);
+      if (before && at !== undefined) comments.value[at] = before;
+      console.error('[commentStore] Vote failed:', err);
+      throw err;
     }
   }
 
-  // Downvote a comment
-  async function downvoteComment(commentId: string) {
-    try {
-      const currentUser = getCurrentUser();
-      const wasUpvoted = hasUpvoted(commentId);
-      const wasDownvoted = hasDownvoted(commentId);
-
-      // Update localStorage first (optimistic UI)
-      if (wasDownvoted) {
-        const votedComments = JSON.parse(localStorage.getItem('downvoted-comments') || '[]');
-        const filtered = votedComments.filter((id: string) => id !== commentId);
-        localStorage.setItem('downvoted-comments', JSON.stringify(filtered));
-      } else {
-        const votedComments = JSON.parse(localStorage.getItem('downvoted-comments') || '[]');
-        if (!votedComments.includes(commentId)) {
-          votedComments.push(commentId);
-          localStorage.setItem('downvoted-comments', JSON.stringify(votedComments));
-        }
-        // Remove from upvoted if exists
-        if (wasUpvoted) {
-          const upvotedComments = JSON.parse(localStorage.getItem('upvoted-comments') || '[]');
-          const filtered = upvotedComments.filter((id: string) => id !== commentId);
-          localStorage.setItem('upvoted-comments', JSON.stringify(filtered));
-        }
-      }
-
-      // Optimistically update local state
-      const comment = comments.value.find(c => c.id === commentId);
-      if (comment) {
-        if (wasDownvoted) {
-          comment.downvotes = Math.max(0, comment.downvotes - 1);
-        } else {
-          comment.downvotes++;
-          if (wasUpvoted) {
-            comment.upvotes = Math.max(0, comment.upvotes - 1);
-          }
-        }
-        comment.score = comment.upvotes - comment.downvotes;
-      }
-
-      voteVersion.value++;
-
-      // Persist to Gun.js
-      await CommentService.voteOnComment(commentId, 'down', currentUser.id);
-
-      // Update author karma
-      if (comment?.authorId && comment.authorId !== currentUser.id) {
-        if (wasDownvoted) {
-          UserService.incrementKarma(comment.authorId, 1).catch(() => {});
-        } else {
-          UserService.incrementKarma(comment.authorId, -1).catch(() => {});
-          if (wasUpvoted) UserService.incrementKarma(comment.authorId, -1).catch(() => {});
-        }
-      }
-    } catch (error) {
-      voteVersion.value++;
-      console.error('Error downvoting comment:', error);
-      throw error;
-    }
+  async function upvoteComment(commentId: string): Promise<void> {
+    await vote(commentId, 'up');
   }
 
-  // Helper functions to check vote status
+  async function downvoteComment(commentId: string): Promise<void> {
+    await vote(commentId, 'down');
+  }
+
   function hasUpvoted(commentId: string): boolean {
-    const votedComments = JSON.parse(localStorage.getItem('upvoted-comments') || '[]');
-    return votedComments.includes(commentId);
+    return myVotes.value[commentId] === 'up';
   }
 
   function hasDownvoted(commentId: string): boolean {
-    const votedComments = JSON.parse(localStorage.getItem('downvoted-comments') || '[]');
-    return votedComments.includes(commentId);
+    return myVotes.value[commentId] === 'down';
   }
 
-  // Clear comments and unsubscribe from Gun listeners
-  function clearComments() {
-    if (commentUnsub) { commentUnsub(); commentUnsub = null; }
+  /** Comments awaiting relay confirmation — surfaced in the UI as "sending". */
+  const pendingComments = computed(() =>
+    Object.entries(syncStatus.value)
+      .filter(([, status]) => status === 'pending')
+      .map(([id]) => id));
+
+  function statusOf(commentId: string): SyncStatus | null {
+    return syncStatus.value[commentId] ?? null;
+  }
+
+  /**
+   * Drop in-memory comments and stop listening. Called by the memory watchdog at
+   * `emergency` pressure — nothing is lost, because the durable copy is in
+   * IndexedDB and `reloadActivePost()` brings the open thread straight back.
+   */
+  function clearComments(): void {
+    teardown();
+    generation++;
     comments.value = [];
+    index.clear();
+    syncStatus.value = {};
   }
 
   return {
     comments,
     isLoading,
-    voteVersion,
+    error,
+    activePostId,
+    syncStatus,
+    myVotes,
+    pendingComments,
     loadCommentsForPost,
+    reloadActivePost,
     createComment,
     upvoteComment,
     downvoteComment,
     hasUpvoted,
     hasDownvoted,
-    clearComments
+    statusOf,
+    clearComments,
   };
 });

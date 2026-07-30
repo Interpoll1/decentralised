@@ -73,8 +73,14 @@ function registerMemoryCleanupHandlers(watchdog: { onCleanup: (cb: (level: Clean
 
       if (level === 'emergency') {
         try {
+          // Drop the in-memory thread, then bring the open one straight back
+          // from IndexedDB. Nothing is lost — the durable copy lives there, not
+          // in the Gun graph. Before, clearing here left the reader staring at
+          // an empty comment section with nothing re-subscribing.
           const { useCommentStore } = await import('./stores/commentStore');
-          useCommentStore().clearComments();
+          const store = useCommentStore();
+          store.clearComments();
+          void store.reloadActivePost();
         } catch (e) { console.warn('[Cleanup] Comment clear failed:', e); }
       }
     })();

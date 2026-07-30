@@ -552,9 +552,9 @@ async function submitComment() {
     });
     newCommentText.value = '';
     (await toastController.create({ message: 'Comment posted', duration: 2000 })).present();
-    setTimeout(() => {
-      if (post.value) commentStore.loadCommentsForPost(post.value.id);
-    }, 500);
+    // No reload: the store already holds the comment and the live subscription
+    // delivers the graph's copy. The old reload restarted the thread load and
+    // cancelled the in-flight one, so a fresh comment could vanish on screen.
   } catch {
     (await toastController.create({ message: 'Failed to post comment', duration: 2000 })).present();
   }
@@ -562,7 +562,9 @@ async function submitComment() {
 
 async function handleCommentUpvote(comment: any) {
   try {
-    const wasUpvoted = JSON.parse(localStorage.getItem('upvoted-comments') || '[]').includes(comment.id);
+    // Ask the store, not localStorage — the store is the one that knows about
+    // votes cast this session but not yet written back.
+    const wasUpvoted = commentStore.hasUpvoted(comment.id);
     await commentStore.upvoteComment(comment.id);
     (await toastController.create({
       message: wasUpvoted ? 'Upvote removed' : 'Comment upvoted',
@@ -573,7 +575,7 @@ async function handleCommentUpvote(comment: any) {
 
 async function handleCommentDownvote(comment: any) {
   try {
-    const wasDownvoted = JSON.parse(localStorage.getItem('downvoted-comments') || '[]').includes(comment.id);
+    const wasDownvoted = commentStore.hasDownvoted(comment.id);
     await commentStore.downvoteComment(comment.id);
     (await toastController.create({
       message: wasDownvoted ? 'Downvote removed' : 'Comment downvoted',
@@ -619,7 +621,10 @@ async function loadPost() {
     await postStore.selectPost(postId.value);
     post.value = postStore.currentPost;
     if (post.value) {
-      await commentStore.loadCommentsForPost(post.value.id);
+      // Not awaited: the store renders the local mirror first and merges the
+      // graph as it arrives. Awaiting it held the whole page behind the spinner
+      // until the relay answered.
+      void commentStore.loadCommentsForPost(post.value.id);
     }
   } catch { /* silent */ }
   finally {

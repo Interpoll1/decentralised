@@ -20,6 +20,7 @@ import { GunService } from './services/gunService';
 import { PollService } from './services/pollService';
 import { PostService } from './services/postService';
 import { CommentService } from './services/commentService';
+import { ChatRoomService } from './services/chatRoomService';
 import { warmupFromDB } from './services/dbWarmup';
 import AppLoader from './components/AppLoader.vue';
 import AppErrorBoundary from './components/AppErrorBoundary.vue';
@@ -176,6 +177,10 @@ onMounted(async () => {
   PollService.startRepublishLoop();
   PostService.startRepublishLoop();
   CommentService.startCommentRepublishLoop();
+  // Room messages queued offline must go out even if the user never reopens the
+  // room they were written in.
+  ChatRoomService.startOutboxLoop();
+  console.log('App mounted and initialized');
 });
 
 onUnmounted(() => {
