@@ -72,8 +72,41 @@ Key computed: `polls`, `sortedPolls`
 
 ## `commentStore.ts` — `useCommentStore`
 
-- Loads and caches comments keyed by post ID.
-- `createComment()` checks the current user's `showRealName` preference. Same pseudonym-vs-real-name logic as posts.
+Holds **one post's thread at a time**. Rewritten alongside `commentService`.
+
+- **One generation token guards every async continuation.** The old store raced a
+  live subscription against four staggered refetches, all writing into the same
+  array through a shared `seen` set: a comment delivered by subscription was never
+  refreshed by a later fetch, a comment delivered by fetch could be re-added by the
+  subscription, and navigating between posts left the previous post's listeners
+  running. That is where "comments are super random" came from. Any new async work
+  here must capture the token and bail when `token !== generation`.
+- `loadCommentsForPost(postId)` is a fixed sequence: teardown → render
+  `getLocalComments` from IndexedDB (instant, correct offline) → `isLoading = false`
+  → subscribe → merge `fetchCommentsFromGun` on top → `refreshTallies` (top 30,
+  concurrency 5). Comments are keyed by id in a `Map` for O(1) upsert; a record
+  without content never replaces one with content.
+- `createComment()` takes `authorId` from **`UserService.getCurrentUser()`**. It
+  used to mint a separate `anon_<timestamp>` id in localStorage, so a commenter
+  never matched their own profile — identity badges always read "unverified" and
+  karma landed on an account nobody could look up. It still applies the same
+  `showRealName` pseudonym logic as posts.
+- **`voteVersion` is gone.** Vote state lives in the reactive `myVotes` map;
+  components call `hasUpvoted(id)` / `hasDownvoted(id)` rather than reading
+  `upvoted-comments` out of localStorage inside a computed (that only re-evaluated
+  when some *other* vote bumped the counter). `vote()` updates optimistically, then
+  reconciles against the authoritative tally from `CommentService`, rolling back on
+  error.
+- `statusOf(id)` / `pendingComments` surface publish state (`pending` → `published`
+  → `confirmed` / `failed`) so the UI can show "sending…".
+- `clearComments()` is safe to call under memory pressure — the durable copy is in
+  IndexedDB, and `reloadActivePost()` brings the open thread straight back.
+  `main.ts` calls both at `emergency`.
+- **Do not call `loadCommentsForPost` after posting.** The store upserts
+  optimistically and the subscription is live; reloading restarts the load and
+  cancels the in-flight one, which is how a fresh comment could flash up and vanish.
+
+Key refs: `comments`, `isLoading`, `error`, `activePostId`, `syncStatus`, `myVotes`
 
 ## `userStore.ts` — `useUserStore`
 
@@ -86,11 +119,21 @@ Key computed: `polls`, `sortedPolls`
 Manages encrypted chat rooms via `ChatRoomService`.
 
 - **Room lifecycle**: `loadRooms()` fetches joined rooms, `createRoom()` / `joinRoom()` add to the list, `leaveRoom()` removes.
-- **Live messaging**: `enterRoom(room)` subscribes to incoming messages via `ChatRoomService.subscribeToMessages`; `leaveCurrentRoom()` unsubscribes and clears state.
-- **Deduplication**: Both `enterRoom` and `sendMessage` guard against duplicate message IDs before pushing.
+- **`enterRoom(room)` is now async and loads history.** It renders
+  `getLocalHistory()` from IndexedDB first, then subscribes, then merges
+  `loadHistory()` from the graph — guarded by a generation token so switching rooms
+  mid-load cannot cross two conversations. Previously it only opened a live
+  subscription, so a room reopened later showed nothing until someone typed. Callers
+  must `await` it. `leaveCurrentRoom()` bumps the generation, unsubscribes, clears.
+- **Deduplication**: `upsert()` replaces by id everywhere — the same message arrives
+  both from `sendMessage` and from the graph subscription.
+- `trackDelivery()` follows a just-sent message's `syncStatus` in IndexedDB so the
+  bubble stops showing "pending" as soon as the relay confirms, without waiting for
+  the next full room load.
 
-Key refs: `rooms`, `currentRoom`, `messages`, `loading`, `error`
-Key computed: `sortedMessages` (chronological order)
+Key refs: `rooms`, `currentRoom`, `messages`, `loading`, `loadingHistory`, `error`
+Key computed: `sortedMessages` — timestamp → per-sender `seq` → id, matching
+`utils/messageOrder.ts`, so the room reads identically on every device.
 
 ## `syncStore.ts`
 

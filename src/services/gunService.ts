@@ -7,7 +7,12 @@ export const GUN_NAMESPACE = 'v3';
 // Roots that get namespaced under GUN_NAMESPACE — Gun is now live-updates only,
 // not the initial load source. These namespaced paths are still written to on
 // createPost/createPoll so Gun relay peers can pick up new content in real time.
-const NAMESPACED_ROOTS = new Set(['posts', 'communities', 'polls', 'postVotes', 'users', 'comments', 'events', 'chatrooms', 'server-config', 'user-pubkey-index']);
+// `commentVotes`, `chats`, `chat-presence` and `chat-read` were previously
+// written to un-namespaced roots. That put them outside `isInNamespaceSoul()`,
+// so the WebRTC wire bridge drops them in `enforce` mode — comment votes and
+// direct messages could never replicate P2P. They are namespaced now; the chat
+// service still reads the legacy un-namespaced paths so no history is lost.
+const NAMESPACED_ROOTS = new Set(['posts', 'communities', 'polls', 'postVotes', 'users', 'comments', 'commentVotes', 'events', 'chatrooms', 'chats', 'chat-presence', 'chat-read', 'server-config', 'user-pubkey-index']);
 
 function createNamespacedProxy(gun: any, nsNode: any): any {
   return new Proxy(gun, {

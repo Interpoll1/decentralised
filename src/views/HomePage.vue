@@ -704,6 +704,7 @@ import { GunService } from '../services/gunService';
 import { UserService } from '../services/userService';
 import ChatService from '../services/chatService';
 import { ChatInviteService } from '../services/chatInviteService';
+import { StorageService } from '../services/storageService';
 import { warmupFromDB } from '../services/dbWarmup';
 import { ModerationService, moderationVersion, MODERATION_API_DEFAULT_BASE_URL } from '../services/moderationService';
 import config from '../config';
@@ -1209,21 +1210,37 @@ const unreadDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const subscribedChatRooms = new Set<string>();
 let chatDiscoverySubscribed = false;
 
-function recomputeUnread(roomId: string, otherUserId: string) {
-  // Debounce per room — only compute after 500ms of no new messages
+/**
+ * Unread count and last-message preview come from this device's own copy of the
+ * conversation, not from the graph.
+ *
+ * Reading the graph was wrong twice over: it only ever saw messages still
+ * resident in the volatile in-memory graph (so the list emptied out after a
+ * memory-pressure eviction, and showed nothing at all offline), and it counted
+ * unread by looking for a per-message `readAt` that the chat service no longer
+ * writes — read state is a single watermark node now, applied to the local rows.
+ */
+function refreshRoomSummary(roomId: string, otherUserId: string) {
   const existing = unreadDebounceTimers.get(roomId);
   if (existing) clearTimeout(existing);
   unreadDebounceTimers.set(roomId, setTimeout(() => {
-    const gun = GunService.getGun();
-    let unread = 0;
-    gun.get('chats').get(roomId).map().once((msg: any) => {
-      if (msg && msg.recipientId === currentUserId && !msg.readAt) unread++;
-    });
-    setTimeout(() => {
+    void (async () => {
+      const rows = await StorageService.getChatMessagesByRoom(roomId);
+      if (rows.length === 0) return;
+
+      const unread = rows.filter(row => !row.outgoing && !row.readAt).length;
+      const latest = rows.reduce((newest, row) => (row.timestamp > newest.timestamp ? row : newest));
+      const body = latest.text.length > 80 ? `${latest.text.slice(0, 79)}…` : latest.text;
+
       const entry = chatList.value.find(c => c.userId === otherUserId);
-      if (entry) entry.unreadCount = unread;
+      if (!entry) return;
+      entry.unreadCount = unread;
+      if (latest.timestamp >= entry.lastMessageTime) {
+        entry.lastMessageTime = latest.timestamp;
+        entry.lastMessage = latest.outgoing ? `You: ${body}` : body;
+      }
       chatList.value = [...chatList.value].sort((a, b) => b.lastMessageTime - a.lastMessageTime);
-    }, 300);
+    })();
   }, 500));
 }
 
@@ -1240,15 +1257,13 @@ function subscribeToRoom(otherUserId: string, otherName: string, otherPublicKey:
     });
   }
 
+  refreshRoomSummary(roomId, otherUserId);
+
+  // The graph listener is only a trigger: it says "something changed in this
+  // room", and the summary is then read from the decrypted local mirror.
   const listener = gun.get('chats').get(roomId).map().on((msg: any) => {
     if (!msg || !msg.senderId || !msg.timestamp) return;
-    const entry = chatList.value.find(c => c.userId === otherUserId);
-    if (!entry) return;
-    if (msg.timestamp > entry.lastMessageTime) {
-      entry.lastMessageTime = msg.timestamp;
-      entry.lastMessage     = msg.senderId === currentUserId ? 'You: [Encrypted]' : '[Encrypted message]';
-    }
-    recomputeUnread(roomId, otherUserId);
+    refreshRoomSummary(roomId, otherUserId);
   });
 
   subscribedChatRooms.add(roomId);
@@ -1260,6 +1275,31 @@ function subscribeToRoom(otherUserId: string, otherName: string, otherPublicKey:
 
 async function loadChatList() {
   const gun = GunService.getGun();
+
+  // Local first — every conversation this device has ever held, available with
+  // no network and immune to graph eviction.
+  try {
+    const stored = await StorageService.getAllChatMessages();
+    const peers = new Set<string>();
+    for (const row of stored) {
+      if (row.kind !== 'dm') continue;
+      const other = row.roomId.split(':').find(id => id !== currentUserId);
+      if (other) peers.add(other);
+    }
+    for (const otherUserId of peers) {
+      subscribeToRoom(otherUserId, otherUserId, '');
+      gun.get('users').get(otherUserId).once((userData: any) => {
+        const entry = chatList.value.find(c => c.userId === otherUserId);
+        if (entry && userData) {
+          entry.name = userData.displayName || userData.username || otherUserId;
+          entry.publicKey = userData.publicKey || '';
+        }
+      });
+    }
+  } catch (err) {
+    console.warn('[HomePage] Could not read stored conversations:', err);
+  }
+
   gun.get('chats').once((rooms: any) => {
     if (!rooms) return;
     syncDebug('chat-rooms-snapshot', { roomCount: Object.keys(rooms).filter(k => k !== '_').length });
@@ -1308,17 +1348,26 @@ async function initBackgroundChat() {
   bgChatService.onConnectionChange = () => {};
 
   bgChatService.onMessage = (msg) => {
+    // The service now emits our own messages too (they arrive back from the
+    // graph, and from our other devices). Those are not a new conversation and
+    // must never raise an unread badge against ourselves.
+    if (msg.sent) return;
+
     const entry = chatList.value.find(c => c.userId === msg.from);
+    // Decryption already happened in the service, so show the real preview
+    // instead of the "[Encrypted message]" placeholder that was there because
+    // this layer had no way to read the ciphertext.
+    const preview = msg.message.length > 80 ? `${msg.message.slice(0, 79)}…` : msg.message;
 
     if (entry) {
-      entry.lastMessage     = '[Encrypted message]';
+      entry.lastMessage     = preview;
       entry.lastMessageTime = msg.timestamp;
       if (activeTab.value !== 'chat') entry.unreadCount++;
       chatList.value = [...chatList.value].sort((a, b) => b.lastMessageTime - a.lastMessageTime);
     } else {
       chatList.value.unshift({
         userId: msg.from, name: msg.from,
-        lastMessage: '[Encrypted message]',
+        lastMessage: preview,
         lastMessageTime: msg.timestamp,
         unreadCount: activeTab.value === 'chat' ? 0 : 1,
         publicKey: '',
