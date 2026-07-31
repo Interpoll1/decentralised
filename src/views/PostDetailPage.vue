@@ -205,7 +205,10 @@ const commentStore = useCommentStore();
 const communityStore = useCommunityStore();
 const userStore = useUserStore();
 
-const post = ref<Post | null>(null);
+// Tracks the store rather than snapshotting it: the store reassigns
+// `currentPost` on every vote reconciliation and graph update, and a one-time
+// copy left this page showing counts frozen at load time.
+const post = computed<Post | null>(() => postStore.currentPost);
 const isLoading = ref(true);
 const newCommentText = ref('');
 const voteVersion = ref(0);
@@ -410,15 +413,8 @@ const uniqueCommenters = computed(() => {
   return Array.from(authorMap.values()).sort((a, b) => b.commentCount - a.commentCount);
 });
 
-const hasUpvoted = computed(() => {
-  voteVersion.value;
-  return JSON.parse(localStorage.getItem('upvoted-posts') || '[]').includes(postId.value);
-});
-
-const hasDownvoted = computed(() => {
-  voteVersion.value;
-  return JSON.parse(localStorage.getItem('downvoted-posts') || '[]').includes(postId.value);
-});
+const hasUpvoted = computed(() => postStore.myVote(postId.value) === 'up');
+const hasDownvoted = computed(() => postStore.myVote(postId.value) === 'down');
 
 function formatTime(timestamp: number): string {
   const diff = Date.now() - timestamp;
@@ -459,12 +455,6 @@ async function loadFullImageSrc(cid: string): Promise<string | null> {
   }
 }
 
-function toggleLocalStorageItem(key: string, id: string, add: boolean) {
-  const items: string[] = JSON.parse(localStorage.getItem(key) || '[]');
-  const updated = add ? [...items, id] : items.filter(i => i !== id);
-  localStorage.setItem(key, JSON.stringify(updated));
-}
-
 async function presentVoteToast(message: string, expectedVersion: number) {
   const toast = await toastController.create({ message, duration: 1500 });
   // Skip if a newer vote action has since superseded this one, to avoid a stale toast.
@@ -473,68 +463,33 @@ async function presentVoteToast(message: string, expectedVersion: number) {
   }
 }
 
-async function handleUpvote() {
+/**
+ * The store owns both the counts and the optimistic prediction now, so this no
+ * longer hand-computes deltas onto a local copy of the post — the two used to
+ * drift apart whenever the store's reconciliation disagreed with the arithmetic
+ * here (notably on a side switch, which guessed ±2).
+ */
+async function handlePostVote(direction: 'up' | 'down') {
   if (!post.value) return;
+  const id = post.value.id;
+  const wasActive = postStore.myVote(id) === direction;
+  voteVersion.value++;
+  const version = voteVersion.value;
   try {
-    if (hasUpvoted.value) {
-      toggleLocalStorageItem('upvoted-posts', post.value.id, false);
-      // Optimistic update
-      post.value = { ...post.value, upvotes: post.value.upvotes - 1, score: post.value.score - 1 };
-      voteVersion.value++;
-      const version = voteVersion.value;
-      await postStore.removeUpvote(post.value.id);
-      await presentVoteToast('Upvote removed', version);
-    } else {
-      const wasDownvoted = hasDownvoted.value;
-      toggleLocalStorageItem('downvoted-posts', post.value.id, false);
-      toggleLocalStorageItem('upvoted-posts', post.value.id, true);
-      // Optimistic update
-      post.value = { ...post.value,
-        upvotes: post.value.upvotes + 1,
-        downvotes: wasDownvoted ? post.value.downvotes - 1 : post.value.downvotes,
-        score: post.value.score + (wasDownvoted ? 2 : 1),
-      };
-      voteVersion.value++;
-      const version = voteVersion.value;
-      if (wasDownvoted) await postStore.removeDownvote(post.value.id);
-      await postStore.upvotePost(post.value.id);
-      await presentVoteToast('Upvoted', version);
-    }
-  } catch {
-    voteVersion.value++;
+    await postStore.toggleVote(id, direction);
+    const labels = { up: 'Upvote', down: 'Downvote' };
+    await presentVoteToast(wasActive ? `${labels[direction]} removed` : `${labels[direction]}d`, version);
+  } catch (error) {
+    console.error('Error voting:', error);
   }
 }
 
+async function handleUpvote() {
+  await handlePostVote('up');
+}
+
 async function handleDownvote() {
-  if (!post.value) return;
-  try {
-    if (hasDownvoted.value) {
-      toggleLocalStorageItem('downvoted-posts', post.value.id, false);
-      // Optimistic update
-      post.value = { ...post.value, downvotes: post.value.downvotes - 1, score: post.value.score + 1 };
-      voteVersion.value++;
-      const version = voteVersion.value;
-      await postStore.removeDownvote(post.value.id);
-      await presentVoteToast('Downvote removed', version);
-    } else {
-      const wasUpvoted = hasUpvoted.value;
-      toggleLocalStorageItem('upvoted-posts', post.value.id, false);
-      toggleLocalStorageItem('downvoted-posts', post.value.id, true);
-      // Optimistic update
-      post.value = { ...post.value,
-        downvotes: post.value.downvotes + 1,
-        upvotes: wasUpvoted ? post.value.upvotes - 1 : post.value.upvotes,
-        score: post.value.score - (wasUpvoted ? 2 : 1),
-      };
-      voteVersion.value++;
-      const version = voteVersion.value;
-      if (wasUpvoted) await postStore.removeUpvote(post.value.id);
-      await postStore.downvotePost(post.value.id);
-      await presentVoteToast('Downvoted', version);
-    }
-  } catch {
-    voteVersion.value++;
-  }
+  await handlePostVote('down');
 }
 
 async function submitComment() {
@@ -619,8 +574,10 @@ async function loadPost() {
   isLoading.value = true;
   try {
     await postStore.selectPost(postId.value);
-    post.value = postStore.currentPost;
     if (post.value) {
+      // Authoritative counts + this user's real vote state, straight from the
+      // vote set — worth the round trip on a post being read directly.
+      void postStore.refreshVoteState(post.value.id);
       // Not awaited: the store renders the local mirror first and merges the
       // graph as it arrives. Awaiting it held the whole page behind the spinner
       // until the relay answered.
@@ -637,11 +594,18 @@ async function refreshPost() {
   (await toastController.create({ message: 'Post refreshed', duration: 1500 })).present();
 }
 
+let unsubscribeVotes: (() => void) | null = null;
+
 onMounted(async () => {
   await loadPost();
+  // Live counts while the post is on screen — other people's votes land here
+  // without a refresh, and cannot be undone by a stale post-node echo.
+  if (post.value) unsubscribeVotes = postStore.subscribeToVotes(post.value.id);
 });
 
 onUnmounted(() => {
+  unsubscribeVotes?.();
+  unsubscribeVotes = null;
   commentStore.clearComments();
 });
 </script>

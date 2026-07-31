@@ -50,6 +50,13 @@ export class GunService {
   /** Callbacks fired after reconnect() rebuilds the Gun instance, so Gun-bound
    *  subscriptions (signaling inbox, discovery, rendezvous) can re-attach. */
   private static reconnectListeners = new Set<() => void>();
+  /** Wire-bridge configuration, kept so the bridge can be re-installed on the
+   *  fresh root after reconnect() (see attachWireBridge). */
+  private static wireBridgeSend: ((msg: unknown) => void) | null = null;
+  private static wireBridgeOptions: { active?: () => boolean } | undefined;
+  /** Receiver bound to the *current* root; the handle returned to callers
+   *  delegates through this so it never pins a discarded Gun instance. */
+  private static wireBridgeReceive: ((msg: unknown) => void) | null = null;
   /** Latency measurements keyed by peer URL (updated on each connection event) */
   private static peerLatency = new Map<string, number>();
   private static peerConnectTime = new Map<string, number>();
@@ -305,6 +312,17 @@ export class GunService {
         } catch { /* ignore */ }
       }
     }
+    // Strip the discarded instance down to an empty shell *before* dropping our
+    // reference to it. Callers all over the app hold long-lived chains built from
+    // this root (postActiveListeners, pollActiveListeners, chat/discovery subs,
+    // HomePage's map().on handles). Those chains keep `root` — and therefore
+    // `root.graph` and `root.next` — reachable, so simply nulling `this.gun`
+    // leaks the entire in-memory graph on every reconnect. With `radisk` and
+    // `localStorage` disabled the graph is the whole dataset, so each reconnect
+    // used to double the heap: pressure → watchdog reset → old graph retained +
+    // new graph re-synced → more pressure.
+    this.dismantleRoot(this.gun);
+
     this.isInitialized = false;
     this.gun = null;
     this.proxiedGun = null;
@@ -326,6 +344,10 @@ export class GunService {
     this.user = this.gun.user();
     this.isInitialized = true;
 
+    // The old root's 'out' handler died with it — re-install the bridge against
+    // the new one so mesh peers keep receiving our wire traffic.
+    if (this.wireBridgeSend) this.installWireBridge();
+
     // Notify subscribers so they can re-attach to the freshly-built instance —
     // otherwise Gun-bound `.on()` handlers (signaling inbox, discovery, rendezvous)
     // stay bound to the discarded instance and silently stop firing.
@@ -334,6 +356,43 @@ export class GunService {
     }
 
     return this.proxiedGun;
+  }
+
+  /**
+   * Empty out a Gun instance that is about to be discarded.
+   *
+   * Anything the app still holds a chain to will keep the root object itself
+   * alive — that is unavoidable without rewriting every subscriber — but a root
+   * whose graph, chain table, dedup table and event tags have been cleared costs
+   * a few hundred bytes instead of the whole dataset. Detaching each chain first
+   * also stops orphaned handlers from firing against a dead wire.
+   */
+  private static dismantleRoot(gun: any): void {
+    const root = gun?._;
+    if (!root) return;
+    try {
+      const next: Record<string, any> = root.next || {};
+      for (const soul of Object.keys(next)) {
+        try { next[soul]?.off?.(); } catch { /* best-effort detach */ }
+        delete next[soul];
+      }
+    } catch { /* best-effort */ }
+    try {
+      if (root.graph) for (const soul of Object.keys(root.graph)) delete root.graph[soul];
+    } catch { /* best-effort */ }
+    try {
+      // Message-id dedup table — one entry per wire message ever seen.
+      if (root.dup?.s) root.dup.s = {};
+    } catch { /* best-effort */ }
+    try {
+      // Event tags ('in', 'out', 'put', …). The listeners registered here are the
+      // last thing holding closures over the old graph.
+      if (root.tag) for (const tag of Object.keys(root.tag)) delete root.tag[tag];
+    } catch { /* best-effort */ }
+    try {
+      if (root.opt?.peers) for (const id of Object.keys(root.opt.peers)) delete root.opt.peers[id];
+    } catch { /* best-effort */ }
+    try { root.stop = true; } catch { /* best-effort */ }
   }
 
   /**
@@ -407,14 +466,21 @@ export class GunService {
     });
   }
 
-  static subscribe(path: string, callback: (data: any) => void): void {
+  /** Subscribe to a path. Returns an unsubscribe function — call it on teardown,
+   *  otherwise the chain (and the graph it reaches) lives for the session. */
+  static subscribe(path: string, callback: (data: any) => void): () => void {
     try {
-      this.getGun().get(path).on(callback);
-    } catch { }
+      const chain = this.getGun().get(path);
+      chain.on(callback);
+      return () => { try { chain.off(); } catch { /* already detached */ } };
+    } catch {
+      return () => {};
+    }
   }
 
   // Throttled map — prevents 1K+ records/sec DOM warning
-  static map(path: string, callback: (data: any) => void): void {
+  /** Returns an unsubscribe function; it also cancels any pending flush timer. */
+  static map(path: string, callback: (data: any) => void): () => void {
     const batch: any[] = [];
     let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -423,14 +489,22 @@ export class GunService {
     };
 
     try {
-      this.getGun().get(path).map().on((data: any) => {
+      const chain = this.getGun().get(path).map();
+      chain.on((data: any) => {
         if (!data || data._) return;
         batch.push(data);
         if (timer) clearTimeout(timer);
         timer = setTimeout(flush, 100);
         if (batch.length >= 50) { if (timer) clearTimeout(timer); flush(); }
       });
-    } catch { }
+      return () => {
+        if (timer) { clearTimeout(timer); timer = null; }
+        batch.length = 0;
+        try { chain.off(); } catch { /* already detached */ }
+      };
+    } catch {
+      return () => {};
+    }
   }
 
   /**
@@ -473,6 +547,22 @@ export class GunService {
     send: (msg: unknown) => void,
     options?: { active?: () => boolean },
   ): { receive: (msg: unknown) => void } {
+    this.wireBridgeSend = send;
+    this.wireBridgeOptions = options;
+    this.installWireBridge();
+    // The handle is long-lived (the mesh registers it as a WebRTC message
+    // handler for the session), so it must not close over a specific root —
+    // otherwise instance #1 could never be collected and the bridge would go
+    // silently dead after the first reconnect.
+    return { receive: (msg: unknown) => this.wireBridgeReceive?.(msg) };
+  }
+
+  /** Bind the wire bridge to the current Gun root. Called on attach and again
+   *  after every reconnect(). */
+  private static installWireBridge(): void {
+    const send = this.wireBridgeSend;
+    if (!send) return;
+    const options = this.wireBridgeOptions;
     if (!this.gun) this.initialize();
     const root = this.gun._;
     const seen = new Set<string>();
@@ -523,38 +613,36 @@ export class GunService {
       } catch { /* best-effort */ }
     });
 
-    return {
-      receive: (msg: unknown) => {
-        try {
-          const id = (msg as any)?.['#'];
-          if (id) remember(id);
+    this.wireBridgeReceive = (msg: unknown) => {
+      try {
+        const id = (msg as any)?.['#'];
+        if (id) remember(id);
 
-          // CRITICAL-2: an inbound put should only touch souls in our namespace.
-          // Out-of-namespace souls are graph-pollution / forgery attempts from a
-          // mesh peer. Behavior is gated so we can observe before enforcing.
-          const mode = config.security.wireFilterMode;
-          if (mode !== 'off') {
-            const put = (msg as any)?.put;
-            if (put && typeof put === 'object') {
-              const souls = Object.keys(put);
-              const offenders = souls.filter((s) => !this.isInNamespaceSoul(s));
-              if (offenders.length > 0) {
-                console.warn(
-                  `[GunService] wire put with ${offenders.length} out-of-namespace soul(s) [mode=${mode}]:`,
-                  offenders.slice(0, 5),
-                );
-                if (mode === 'enforce') return; // drop the whole message
-              }
-              if (mode === 'enforce' && isSoulFlooding(souls)) {
-                console.warn('[GunService] dropping wire put — per-soul write flood');
-                return;
-              }
+        // CRITICAL-2: an inbound put should only touch souls in our namespace.
+        // Out-of-namespace souls are graph-pollution / forgery attempts from a
+        // mesh peer. Behavior is gated so we can observe before enforcing.
+        const mode = config.security.wireFilterMode;
+        if (mode !== 'off') {
+          const put = (msg as any)?.put;
+          if (put && typeof put === 'object') {
+            const souls = Object.keys(put);
+            const offenders = souls.filter((s) => !this.isInNamespaceSoul(s));
+            if (offenders.length > 0) {
+              console.warn(
+                `[GunService] wire put with ${offenders.length} out-of-namespace soul(s) [mode=${mode}]:`,
+                offenders.slice(0, 5),
+              );
+              if (mode === 'enforce') return; // drop the whole message
+            }
+            if (mode === 'enforce' && isSoulFlooding(souls)) {
+              console.warn('[GunService] dropping wire put — per-soul write flood');
+              return;
             }
           }
+        }
 
-          root.on('in', msg);
-        } catch { /* malformed wire message */ }
-      },
+        root.on('in', msg);
+      } catch { /* malformed wire message */ }
     };
   }
 

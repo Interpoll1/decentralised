@@ -1,4 +1,4 @@
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { useChainStore } from '../stores/chainStore';
 
 export function useChainSync() {
@@ -33,8 +33,17 @@ export function useChainSync() {
     return interval;
   };
 
+  // The handle was previously discarded, so every mount of a consuming component
+  // left a 10 s timer running for the life of the tab, each pinning the chain
+  // store closure.
+  let syncInterval: ReturnType<typeof setInterval> | null = null;
+
   onMounted(() => {
-    startSync();
+    syncInterval = startSync();
+  });
+
+  onUnmounted(() => {
+    if (syncInterval) { clearInterval(syncInterval); syncInterval = null; }
   });
 
   const resetDowngradeAlert = () => {

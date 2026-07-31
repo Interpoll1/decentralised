@@ -56,6 +56,11 @@ function registerMemoryCleanupHandlers(watchdog: { onCleanup: (cb: (level: Clean
         ModerationService.trimCaches(level);
       } catch (e) { console.warn('[Cleanup] ModerationService trim failed:', e); }
 
+      try {
+        const { VoteTallyService } = await import('./services/voteTallyService');
+        VoteTallyService.trimCaches(level);
+      } catch (e) { console.warn('[Cleanup] VoteTallyService trim failed:', e); }
+
       // Store maps: only shrink once pressure is real. At `light` the bounded
       // caches above are enough, and trimming the feed the user is reading would
       // cost a visible refetch for no benefit.
@@ -141,6 +146,10 @@ router.isReady().then(() => {
   setTimeout(() => {
     import('./services/gunService').then(({ GunService }) => {
       GunService.initialize();
+      // Dev-only console handle. Importing the module from DevTools can resolve
+      // to a *second* copy of the class whose `gun` is null, so heap/graph
+      // measurements taken through it silently describe nothing.
+      if (import.meta.env.DEV) (window as any).GunService = GunService;
       // Probe all preset relays in the background; live ones are added to Gun dynamically
       GunService.probePresetsAndExpand().catch(e => console.warn('[Init] GunService probe failed:', e));
     }).catch(e => console.error('[Init] GunService failed:', e));

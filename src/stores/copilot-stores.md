@@ -16,6 +16,8 @@ The most critical store. Owns the local blockchain.
 - **Actions**: `addAction(actionType, data, label)` records non-vote events (community creation, post creation) as blocks.
 - **Nostr events**: Every vote also creates and broadcasts a signed Nostr event via `EventService`.
 
+- **Block storage**: append through `pushBlock()`, never `blocks.value.push()` directly — it keeps the private `blockByIndex` map in sync and `markRaw`s the block. Blocks are immutable once written, so Vue's deep proxy was pure overhead, and lookups by index used to be an `Array.find()` per inbound block (O(n²) over a sync burst). `loadBlocks()`/any re-sort must call `reindexBlocks()`.
+
 Key refs: `blocks`, `isInitialized`, `chainValid`, `isWebSocketConnected`  
 Key computed: `latestBlock`, `chainHead`
 
@@ -146,19 +148,45 @@ Currently empty/placeholder.
   returning the number dropped. Called from the `MemoryWatchdogService.onCleanup`
   handler in `main.ts` at `aggressive` and `emergency` only; at `light` the service
   caches suffice and trimming the feed being read would cost a visible refetch.
-- Both keep any item inside its post-vote protection window — dropping one would
-  discard a local vote count with nothing left to reconcile against.
+- `pollStore` keeps any poll inside its vote protection window (below) — dropping one
+  would discard a local vote count with nothing left to reconcile against. `postStore`
+  no longer needs that carve-out: its counts are derived and survive a trim in
+  `tallies`.
 
 ## Protecting a just-cast vote from stale echoes
 
 Gun re-delivers a post/poll whenever any peer echoes it, and an echo can carry a
 pre-vote snapshot that lands *after* our own write — visibly undoing the user's vote
-seconds later. Both stores guard against this:
+seconds later.
 
-- `pollStore` — `recentlyVotedPolls` + `VOTE_PROTECTION_MS` (10s)
-- `postStore` — `locallyVotedAt` + `LOCAL_VOTE_GRACE_MS` (15s), applied by
-  `preserveFreshLocalVote()` in `processIncomingPost`
+- `pollStore` — still time-based: `recentlyVotedPolls` + `VOTE_PROTECTION_MS` (10s).
+  Within the window the incoming copy supplies every field *except* `upvotes` /
+  `downvotes` / `score`, which stay local. Any new counter surfaced on a poll needs
+  adding to that carve-out. A late echo past the window still reverts the count on
+  screen — the same defect posts had.
+- `postStore` — no window. Counts come from `PostVoteService`'s derived tally, held
+  in `tallies` and overlaid onto every incoming copy by `withKnownTally()` in
+  `processIncomingPost`. A derived tally outranks a post node's advisory counters
+  permanently, so there is no expiry for a late echo to sneak past. The old
+  `locallyVotedAt` / `LOCAL_VOTE_GRACE_MS` (15s) / `preserveFreshLocalVote()` are
+  gone.
 
-Within the window, the incoming copy supplies every field *except* `upvotes` /
-`downvotes` / `score`, which stay local. Any new counter surfaced on these objects
-needs adding to that carve-out.
+## Post vote state
+
+`postStore` is the single decision point for post votes:
+
+- `toggleVote(postId, direction)` — clicking the direction you already hold clears it.
+  Views must not pre-decide vote-vs-unvote and call separate actions; that split
+  (view reading `localStorage`, service reading the graph) is what inverted clicks.
+- `clearVote(postId)`, `myVote(postId)`, `myVotes` (persisted `my-post-votes-v1`),
+  `refreshVoteState(postId)` (authoritative pull — worth it on a detail page),
+  `subscribeToVotes(postId)` (live tally; returns an unsubscribe).
+- `upvotePost` / `downvotePost` / `removeUpvote` / `removeDownvote` are thin aliases
+  kept for older callers; all route through `toggleVote`/`clearVote`.
+- Optimistic counts are predicted from `myVotes` — the same state the button's
+  filled/hollow rendering reads — so the number and the icon cannot disagree while a
+  write is in flight. The prediction is always superseded by the returned tally.
+- Cross-tab: a reconciled vote broadcasts `post-vote-tally` on its own channel.
+  Do not fold tallies out of `post-updated` instead — that message also carries plain
+  Gun echoes from remote peers, whose counter fields are the stale values the tally
+  exists to outrank.

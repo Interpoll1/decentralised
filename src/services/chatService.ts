@@ -347,6 +347,27 @@ class ChatService {
     return GunService.getRawGun().get('chats').get(roomId);
   }
 
+  /**
+   * Record the room under each participant's own room index.
+   *
+   * Without this index the only way to find a user's conversations is to walk
+   * the global `chats` root — which forces Gun to materialise *every* room of
+   * *every* user into the in-memory graph just to filter them client-side, and
+   * that graph is the app's whole dataset (radisk/localStorage are off). The
+   * index is a plain best-effort write: chat still works if it fails, and
+   * discovery falls back to the legacy root scan for pre-index rooms.
+   */
+  private indexRoomForParticipants(roomId: string, ...userIds: string[]): void {
+    try {
+      const gun = GunService.getGun();
+      for (const userId of userIds) {
+        if (!userId) continue;
+        gun.get('users').get(userId).get('rooms').get(roomId)
+          .put({ roomId, updatedAt: Date.now() });
+      }
+    } catch { /* index is an optimisation, never a correctness requirement */ }
+  }
+
   private messageSoul(roomId: string, messageId: string): string {
     return `${GUN_NAMESPACE}/chats/${roomId}/${messageId}`;
   }
@@ -613,6 +634,8 @@ class ChatService {
 
     const ack = await gunPut(this.roomNode(row.roomId).get(row.id), record);
     if (!ack.ok) return fail(ack.err || 'Message could not be written to the graph');
+
+    this.indexRoomForParticipants(row.roomId, this.userId, recipientId);
 
     // Best-effort real-time nudge. The relay gates `register` behind an
     // authenticated session, so this silently does nothing for anonymous users —
