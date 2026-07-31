@@ -1,7 +1,7 @@
 /**
  * trustService.ts
  *
- * Manages "trust issuers" — external authorities (e.g. viktor@endless.sbs)
+ * Manages "trust issuers" — external authorities (e.g. admin@endless.sbs)
  * whose endorsement elevates a username from UNVERIFIED to VERIFIED.
  *
  * Architecture:
@@ -24,6 +24,7 @@
 import { GunService } from './gunService';
 import { KeyService } from './keyService';
 import { CryptoService } from './cryptoService';
+import { BoundedMap, BoundedSet } from '../utils/boundedMap';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -31,7 +32,7 @@ export type TrustLevel = 'none' | 'verified';
 
 export interface TrustIssuer {
   domain: string;          // e.g. "endless.sbs"
-  contact: string;         // e.g. "viktor@endless.sbs"
+  contact: string;         // e.g. "admin@endless.sbs"
   endpoint: string;        // REST API base, e.g. "https://endless.sbs/trust"
   publicKey: string;       // secp256k1 x-only hex, used to verify certificates
   addedAt: number;
@@ -79,6 +80,15 @@ export const TRUST_POW_DIFFICULTY = 22;
 
 const GUN_ISSUERS_ROOT = 'trust-issuers';
 const GUN_USERNAMES_ROOT = 'usernames'; // username → { userId, pubkey, certificate? }
+const CUSTOM_ISSUERS_STORAGE_KEY = 'interpoll_custom_trust_issuers';
+const BUILTIN_ISSUERS: Omit<TrustIssuer, 'addedAt'>[] = [
+  {
+    domain: 'endless.sbs',
+    contact: 'admin@endless.sbs',
+    endpoint: 'https://interpoll.endless.sbs/trust',
+    publicKey: '',
+  },
+];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -91,7 +101,18 @@ function certPayload(cert: Omit<TrustCertificate, 'signature'>): string {
 
 export class TrustService {
   private static issuersCache: TrustIssuer[] | null = null;
-  private static certCache = new Map<string, TrustCertificate | null>(); // pubkey → cert
+  // pubkey → cert. Bounded + TTL: previously one entry per user ever encountered,
+  // held for the whole session, and certificates can be revoked upstream anyway.
+  private static certCache = new BoundedMap<string, TrustCertificate | null>({ maxSize: 500, ttlMs: 15 * 60_000 });
+  private static readonly ISSUER_REQUEST_TIMEOUT_MS = 20000;
+  private static readonly CLAIM_V2_SUPPORT_STORAGE_KEY = 'interpoll_trust_v2_support';
+  private static readonly CLAIM_V2_AUTH_PURPOSE = 'interpoll-trust-claim-v2';
+
+  /** Release cached certificates under memory pressure (see main.ts). */
+  static trimCaches(level: 'light' | 'aggressive' | 'emergency'): void {
+    this.certCache.prune();
+    if (level === 'aggressive' || level === 'emergency') this.certCache.clear();
+  }
 
   // ── Issuers ────────────────────────────────────────────────────────────────
 
@@ -99,17 +120,28 @@ export class TrustService {
   static async getIssuers(): Promise<TrustIssuer[]> {
     if (this.issuersCache) return this.issuersCache;
     const gun = GunService.getGun();
-    const issuers: TrustIssuer[] = [];
+    const gunIssuers: TrustIssuer[] = [];
 
     await new Promise<void>((resolve) => {
       gun.get(GUN_ISSUERS_ROOT).map().once((data: any) => {
-        if (data && data.domain) issuers.push(data as TrustIssuer);
+        if (data && data.domain) gunIssuers.push(data as TrustIssuer);
       });
       setTimeout(resolve, 2000);
     });
 
-    this.issuersCache = issuers;
-    return issuers;
+    const builtinIssuers: TrustIssuer[] = BUILTIN_ISSUERS.map((issuer) => ({
+      ...issuer,
+      addedAt: 0,
+    }));
+    const customIssuers = this.getCustomIssuers();
+    const merged = this.mergeIssuers([...builtinIssuers, ...customIssuers, ...gunIssuers]);
+    const hydrated = await Promise.allSettled(merged.map((issuer) => this.ensureIssuerPublicKey(issuer)));
+    const valid = hydrated
+      .filter((result): result is PromiseFulfilledResult<TrustIssuer> => result.status === 'fulfilled')
+      .map((result) => result.value)
+      .filter((issuer) => this.isValidPublicKey(issuer.publicKey));
+    this.issuersCache = valid;
+    return valid;
   }
 
   /** Register a new trust issuer (admin/bootstrap only). */
@@ -118,6 +150,51 @@ export class TrustService {
     const full: TrustIssuer = { ...issuer, addedAt: Date.now() };
     await gun.get(GUN_ISSUERS_ROOT).get(issuer.domain).put(full);
     this.issuersCache = null; // invalidate
+  }
+
+  /**
+   * Add or update a custom issuer stored locally on this device.
+   * If domain/publicKey are omitted, they are fetched from `${endpoint}/public-key`.
+   */
+  static async addCustomIssuer(input: {
+    endpoint: string;
+    contact?: string;
+    domain?: string;
+    publicKey?: string;
+  }): Promise<TrustIssuer> {
+    const endpoint = this.normalizeEndpoint(input.endpoint);
+    const fallback = (!input.domain || !input.publicKey)
+      ? await this.fetchIssuerMetadata(endpoint)
+      : null;
+    const domain = (input.domain || fallback?.domain || '').trim().toLowerCase();
+    const publicKey = (input.publicKey || fallback?.publicKey || '').trim().toLowerCase();
+    const contact = (input.contact || `issuer@${domain}`).trim();
+    const endpointHost = this.getEndpointHost(endpoint);
+
+    if (!this.isValidIssuerDomain(domain)) {
+      throw new Error('Invalid issuer domain');
+    }
+    if (!this.isDomainBoundToHost(domain, endpointHost)) {
+      throw new Error('Issuer domain must match endpoint host or parent domain');
+    }
+    if (!this.isValidPublicKey(publicKey)) {
+      throw new Error('Invalid issuer public key');
+    }
+
+    const issuer: TrustIssuer = {
+      domain,
+      contact,
+      endpoint,
+      publicKey,
+      addedAt: Date.now(),
+    };
+
+    const customIssuers = this.getCustomIssuers();
+    const nextCustomIssuers = customIssuers.filter((existing) => existing.endpoint !== endpoint);
+    nextCustomIssuers.push(issuer);
+    this.saveCustomIssuers(nextCustomIssuers);
+    this.invalidateCache();
+    return issuer;
   }
 
   // ── Username claims ────────────────────────────────────────────────────────
@@ -166,18 +243,72 @@ export class TrustService {
   ): Promise<{ challengeId: string; prefix: string; difficulty: number; expiresAt: number }> {
     const pubkey = await KeyService.getPublicKeyHex();
 
-    const res = await fetch(`${issuer.endpoint}/challenge`, {
+    const res = await this.fetchWithTimeout(`${issuer.endpoint}/challenge`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, pubkey }),
-    });
+    }, this.ISSUER_REQUEST_TIMEOUT_MS);
 
     if (!res.ok) {
       const err = await res.text().catch(() => res.statusText);
       throw new Error(`Trust issuer challenge failed: ${err}`);
     }
 
-    return res.json();
+    const raw = await res.json();
+    const challengeId = typeof raw?.challengeId === 'string' ? raw.challengeId.trim() : '';
+    const prefix = typeof raw?.prefix === 'string' ? raw.prefix : '';
+    const difficulty = Number(raw?.difficulty);
+    const expiresAt = Number(raw?.expiresAt);
+    const maxExpiry = Date.now() + (30 * 60 * 1000);
+    if (!challengeId || !prefix) throw new Error('Trust issuer returned an invalid challenge payload');
+    if (!Number.isInteger(difficulty) || difficulty < 1 || difficulty > 24) {
+      throw new Error('Trust issuer returned an invalid challenge difficulty');
+    }
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now() || expiresAt > maxExpiry) {
+      throw new Error('Trust issuer returned an invalid challenge expiry');
+    }
+    return { challengeId, prefix, difficulty, expiresAt };
+  }
+
+  private static async requestIssuerChallengeV2(
+    issuer: TrustIssuer,
+    username: string,
+  ): Promise<{ challengeId: string; prefix: string; difficulty: number; expiresAt: number } | null> {
+    const support = this.getClaimV2Support(issuer.endpoint);
+    if (support === false) return null;
+    const pubkey = await KeyService.getPublicKeyHex();
+
+    const res = await this.fetchWithTimeout(`${issuer.endpoint}/challenge-v2`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, pubkey }),
+    }, this.ISSUER_REQUEST_TIMEOUT_MS);
+
+    if (res.status === 404) {
+      this.setClaimV2Support(issuer.endpoint, false);
+      return null;
+    }
+    if (!res.ok) {
+      const err = await res.text().catch(() => res.statusText);
+      throw new Error(`Trust issuer v2 challenge failed: ${err}`);
+    }
+
+    const raw = await res.json();
+    const challengeId = typeof raw?.challengeId === 'string' ? raw.challengeId.trim() : '';
+    const prefix = typeof raw?.prefix === 'string' ? raw.prefix : '';
+    const difficulty = Number(raw?.difficulty);
+    const expiresAt = Number(raw?.expiresAt);
+    const maxExpiry = Date.now() + (30 * 60 * 1000);
+    if (!challengeId || !prefix) throw new Error('Trust issuer v2 returned an invalid challenge payload');
+    if (!Number.isInteger(difficulty) || difficulty < 1 || difficulty > 24) {
+      throw new Error('Trust issuer v2 returned an invalid challenge difficulty');
+    }
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now() || expiresAt > maxExpiry) {
+      throw new Error('Trust issuer v2 returned an invalid challenge expiry');
+    }
+
+    this.setClaimV2Support(issuer.endpoint, true);
+    return { challengeId, prefix, difficulty, expiresAt };
   }
 
   /**
@@ -190,9 +321,66 @@ export class TrustService {
     username: string,
     onProgress?: (nonce: number) => void,
   ): Promise<TrustCertificate> {
-    const challenge = await this.requestIssuerChallenge(issuer, username);
+    const challengeV2 = await this.requestIssuerChallengeV2(issuer, username);
+    if (challengeV2) {
+      const nonce = await this.solvePoW(
+        challengeV2.prefix,
+        challengeV2.difficulty,
+        challengeV2.expiresAt,
+        onProgress,
+      );
+      const pubkey = await KeyService.getPublicKeyHex();
+      const privateKey = await KeyService.getPrivateKeyHex();
+      const authTs = Date.now();
+      const authNonce = CryptoService.hash(`${pubkey}:${challengeV2.challengeId}:${authTs}:${Math.random()}`).slice(0, 32);
+      const authPayload = this.buildClaimV2AuthPayload({
+        challengeId: challengeV2.challengeId,
+        username,
+        pubkey,
+        nonce,
+        authTs,
+        authNonce,
+        issuerDomain: issuer.domain,
+      });
+      const authSig = CryptoService.sign(authPayload, privateKey);
 
-    // Solve PoW
+      const resV2 = await this.fetchWithTimeout(`${issuer.endpoint}/claim-v2`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          challengeId: challengeV2.challengeId,
+          nonce,
+          username,
+          pubkey,
+          authTs,
+          authNonce,
+          authSig,
+        }),
+      }, this.ISSUER_REQUEST_TIMEOUT_MS);
+      if (resV2.status === 404) {
+        this.setClaimV2Support(issuer.endpoint, false);
+        return this.solveAndClaimVerifiedUsernameLegacy(issuer, username, onProgress);
+      }
+      if (!resV2.ok) {
+        const err = await resV2.text().catch(() => resV2.statusText);
+        throw new Error(`Trust issuer v2 claim failed: ${err}`);
+      }
+
+      const certV2: TrustCertificate = await resV2.json();
+      await this.validateClaimedCertificate(certV2, issuer, username, pubkey);
+      this.certCache.set(pubkey, certV2);
+      return certV2;
+    }
+
+    return this.solveAndClaimVerifiedUsernameLegacy(issuer, username, onProgress);
+  }
+
+  private static async solveAndClaimVerifiedUsernameLegacy(
+    issuer: TrustIssuer,
+    username: string,
+    onProgress?: (nonce: number) => void,
+  ): Promise<TrustCertificate> {
+    const challenge = await this.requestIssuerChallenge(issuer, username);
     const nonce = await this.solvePoW(
       challenge.prefix,
       challenge.difficulty,
@@ -201,13 +389,11 @@ export class TrustService {
     );
 
     const pubkey = await KeyService.getPublicKeyHex();
-
-    // Submit proof
-    const res = await fetch(`${issuer.endpoint}/claim`, {
+    const res = await this.fetchWithTimeout(`${issuer.endpoint}/claim`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ challengeId: challenge.challengeId, nonce, username, pubkey }),
-    });
+    }, this.ISSUER_REQUEST_TIMEOUT_MS);
 
     if (!res.ok) {
       const err = await res.text().catch(() => res.statusText);
@@ -215,13 +401,27 @@ export class TrustService {
     }
 
     const cert: TrustCertificate = await res.json();
+    await this.validateClaimedCertificate(cert, issuer, username, pubkey);
+    this.certCache.set(pubkey, cert);
+    return cert;
+  }
 
-    // Verify the certificate locally before storing
+  private static async validateClaimedCertificate(
+    cert: TrustCertificate,
+    issuer: TrustIssuer,
+    username: string,
+    pubkey: string,
+  ): Promise<void> {
+    if (cert.username !== username) {
+      throw new Error('Trust issuer returned certificate for a different username');
+    }
+    if (cert.userPubkey !== pubkey) {
+      throw new Error('Trust issuer returned certificate for a different public key');
+    }
+
     if (!this.verifyCertificate(cert, issuer)) {
       throw new Error('Trust issuer returned an invalid certificate signature');
     }
-
-    // Store in GunDB
     const gun = GunService.getGun();
     await gun.get(GUN_USERNAMES_ROOT).get(username).put({
       pubkey,
@@ -229,9 +429,6 @@ export class TrustService {
       certificate: JSON.stringify(cert),
       claimedAt: Date.now(),
     });
-
-    this.certCache.set(pubkey, cert);
-    return cert;
   }
 
   // ── Verification ───────────────────────────────────────────────────────────
@@ -279,12 +476,15 @@ export class TrustService {
     } catch {
       return { username, level: 'none' };
     }
+    if (cert.username !== username || cert.userPubkey !== record.pubkey) {
+      return { username, level: 'none' };
+    }
 
     const issuers = await this.getIssuers();
-    const issuer = issuers.find(i => i.domain === cert.issuerDomain);
-    if (!issuer) return { username, level: 'none' };
-
-    if (!this.verifyCertificate(cert, issuer)) {
+    const issuer = issuers.find(i =>
+      i.domain === cert.issuerDomain && this.verifyCertificate(cert, i)
+    );
+    if (!issuer) {
       return { username, level: 'none' };
     }
 
@@ -317,6 +517,34 @@ export class TrustService {
     return found;
   }
 
+  /**
+   * The local user's own verified certificate, if any — used to attach a
+   * `trust_cert` tag to their votes (Sybil-resistance `issuer` tier). Returns
+   * null when the user isn't issuer-certified. Verified before returning.
+   */
+  static async getMyCertificate(): Promise<TrustCertificate | null> {
+    const pubkey = await KeyService.getPublicKeyHex();
+    const gun = GunService.getGun();
+    let cert: TrustCertificate | null = null;
+
+    await new Promise<void>((resolve) => {
+      let done = false;
+      gun.get(GUN_USERNAMES_ROOT).map().once((record: any) => {
+        if (cert || !record || record.pubkey !== pubkey || record.level !== 'verified' || !record.certificate) return;
+        try {
+          const parsed: TrustCertificate = typeof record.certificate === 'string'
+            ? JSON.parse(record.certificate) : record.certificate;
+          if (parsed.userPubkey === pubkey) cert = parsed;
+        } catch { /* skip malformed */ }
+      });
+      setTimeout(() => { if (!done) { done = true; resolve(); } }, 2000);
+    });
+
+    if (!cert) return null;
+    const issuers = await this.getIssuers();
+    return issuers.some((i) => this.verifyCertificate(cert as TrustCertificate, i)) ? cert : null;
+  }
+
   // ── PoW solver ─────────────────────────────────────────────────────────────
 
   private static async solvePoW(
@@ -325,11 +553,15 @@ export class TrustService {
     expiresAt: number,
     onProgress?: (nonce: number) => void,
   ): Promise<number> {
-    const BATCH = 5000;
+    const BATCH = 1000;
+    const startedAt = Date.now();
+    const hardDeadline = Math.min(expiresAt, startedAt + (3 * 60 * 1000));
     let nonce = 0;
 
     for (;;) {
-      if (Date.now() > expiresAt) throw new Error('PoW challenge expired during solving');
+      if (Date.now() > hardDeadline) {
+        throw new Error('PoW challenge timed out; retry or use a lower challenge difficulty');
+      }
 
       for (let i = 0; i < BATCH; i++) {
         const hash = CryptoService.hash(prefix + nonce.toString());
@@ -364,5 +596,223 @@ export class TrustService {
   static invalidateCache() {
     this.issuersCache = null;
     this.certCache.clear();
+  }
+
+  private static async ensureIssuerPublicKey(issuer: TrustIssuer): Promise<TrustIssuer> {
+    if (this.isValidPublicKey(issuer.publicKey)) return issuer;
+    try {
+      const metadata = await this.fetchIssuerMetadata(issuer.endpoint);
+      return {
+        ...issuer,
+        domain: issuer.domain || metadata.domain,
+        publicKey: metadata.publicKey,
+      };
+    } catch {
+      return issuer;
+    }
+  }
+
+  private static async fetchIssuerMetadata(endpoint: string): Promise<{ domain: string; publicKey: string }> {
+    const normalized = this.normalizeEndpoint(endpoint);
+    const endpointHost = this.getEndpointHost(normalized);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    let res: Response;
+    try {
+      res = await fetch(`${normalized}/public-key`, { signal: controller.signal });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        throw new Error('Issuer metadata request timed out');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+    }
+    if (!res.ok) {
+      const err = await res.text().catch(() => res.statusText);
+      throw new Error(`Issuer metadata request failed: ${err}`);
+    }
+    const data = await res.json();
+    const domain = typeof data?.issuerDomain === 'string' ? data.issuerDomain.trim().toLowerCase() : '';
+    const publicKey = typeof data?.publicKey === 'string' ? data.publicKey.trim().toLowerCase() : '';
+    if (!this.isValidIssuerDomain(domain)) throw new Error('Issuer metadata has invalid domain');
+    if (!this.isDomainBoundToHost(domain, endpointHost)) {
+      throw new Error('Issuer metadata domain does not match endpoint host');
+    }
+    if (!this.isValidPublicKey(publicKey)) throw new Error('Issuer metadata has invalid public key');
+    return { domain, publicKey };
+  }
+
+  private static mergeIssuers(issuers: TrustIssuer[]): TrustIssuer[] {
+    const map = new Map<string, TrustIssuer>();
+    for (const issuer of issuers) {
+      if (!issuer?.endpoint) continue;
+      let endpoint: string;
+      try {
+        endpoint = this.normalizeEndpoint(issuer.endpoint);
+      } catch {
+        continue;
+      }
+      const key = endpoint.toLowerCase();
+      const existing = map.get(key);
+      if (!existing) {
+        const endpointHost = this.getEndpointHost(endpoint);
+        const candidateDomain = (issuer.domain || '').trim().toLowerCase();
+        if (candidateDomain && !this.isDomainBoundToHost(candidateDomain, endpointHost)) {
+          continue;
+        }
+        map.set(key, {
+          ...issuer,
+          endpoint,
+          domain: candidateDomain || endpointHost,
+          publicKey: (issuer.publicKey || '').trim().toLowerCase(),
+        });
+        continue;
+      }
+      const endpointHost = this.getEndpointHost(endpoint);
+      const candidateDomain = (issuer.domain || existing.domain || '').trim().toLowerCase();
+      if (candidateDomain && !this.isDomainBoundToHost(candidateDomain, endpointHost)) {
+        continue;
+      }
+      map.set(key, {
+        ...existing,
+        ...issuer,
+        endpoint,
+        domain: candidateDomain || endpointHost,
+        publicKey: this.isValidPublicKey(issuer.publicKey) ? issuer.publicKey.toLowerCase() : existing.publicKey,
+        addedAt: Math.max(existing.addedAt || 0, issuer.addedAt || 0),
+      });
+    }
+    return Array.from(map.values()).sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+  }
+
+  private static getCustomIssuers(): TrustIssuer[] {
+    if (typeof localStorage === 'undefined') return [];
+    const raw = localStorage.getItem(CUSTOM_ISSUERS_STORAGE_KEY);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      const valid: TrustIssuer[] = [];
+      for (const issuer of parsed) {
+        if (
+          !issuer ||
+          typeof issuer !== 'object' ||
+          !this.isValidIssuerDomain((issuer as TrustIssuer).domain) ||
+          typeof (issuer as TrustIssuer).contact !== 'string' ||
+          typeof (issuer as TrustIssuer).endpoint !== 'string'
+        ) {
+          continue;
+        }
+        try {
+          valid.push({
+            ...(issuer as TrustIssuer),
+            domain: (issuer as TrustIssuer).domain.trim().toLowerCase(),
+            endpoint: this.normalizeEndpoint((issuer as TrustIssuer).endpoint),
+            publicKey: typeof (issuer as TrustIssuer).publicKey === 'string'
+              ? (issuer as TrustIssuer).publicKey.trim().toLowerCase()
+              : '',
+            addedAt: typeof (issuer as TrustIssuer).addedAt === 'number'
+              ? (issuer as TrustIssuer).addedAt
+              : Date.now(),
+          });
+        } catch {
+          continue;
+        }
+      }
+      return valid;
+    } catch {
+      return [];
+    }
+  }
+
+  private static saveCustomIssuers(issuers: TrustIssuer[]): void {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(CUSTOM_ISSUERS_STORAGE_KEY, JSON.stringify(issuers));
+  }
+
+  private static normalizeEndpoint(endpoint: string): string {
+    const value = endpoint.trim();
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      throw new Error('Invalid issuer endpoint URL');
+    }
+    if (url.protocol !== 'https:') {
+      const isLocalHttp = url.protocol === 'http:' && (url.hostname === 'localhost' || url.hostname === '127.0.0.1');
+      if (!isLocalHttp) {
+        throw new Error('Issuer endpoint must use HTTPS (HTTP allowed only for localhost)');
+      }
+    }
+    url.pathname = url.pathname.replace(/\/+$/, '');
+    return url.toString().replace(/\/+$/, '');
+  }
+
+  private static isValidPublicKey(value: string | undefined): boolean {
+    return typeof value === 'string' && /^[0-9a-f]{64}$/.test(value.trim().toLowerCase());
+  }
+
+  private static isValidIssuerDomain(value: string | undefined): boolean {
+    return typeof value === 'string' && /^[a-z0-9.-]{3,255}$/.test(value.trim().toLowerCase());
+  }
+
+  private static getEndpointHost(endpoint: string): string {
+    return new URL(endpoint).hostname.trim().toLowerCase();
+  }
+
+  private static isDomainBoundToHost(domain: string, endpointHost: string): boolean {
+    if (endpointHost === 'localhost' || endpointHost === '127.0.0.1') return true;
+    return endpointHost === domain || endpointHost.endsWith(`.${domain}`);
+  }
+
+  private static async fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...init, signal: controller.signal });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        throw new Error('Trust issuer request timed out');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private static buildClaimV2AuthPayload(input: {
+    challengeId: string;
+    username: string;
+    pubkey: string;
+    nonce: number;
+    authTs: number;
+    authNonce: string;
+    issuerDomain: string;
+  }): string {
+    const { challengeId, username, pubkey, nonce, authTs, authNonce, issuerDomain } = input;
+    return JSON.stringify({
+      purpose: this.CLAIM_V2_AUTH_PURPOSE,
+      issuerDomain,
+      challengeId,
+      username,
+      pubkey,
+      nonce,
+      authTs,
+      authNonce,
+    });
+  }
+
+  private static getClaimV2Support(endpoint: string): boolean | null {
+    if (typeof sessionStorage === 'undefined') return null;
+    const raw = sessionStorage.getItem(`${this.CLAIM_V2_SUPPORT_STORAGE_KEY}:${endpoint}`);
+    if (raw === 'true') return true;
+    if (raw === 'false') return false;
+    return null;
+  }
+
+  private static setClaimV2Support(endpoint: string, supported: boolean): void {
+    if (typeof sessionStorage === 'undefined') return;
+    sessionStorage.setItem(`${this.CLAIM_V2_SUPPORT_STORAGE_KEY}:${endpoint}`, supported ? 'true' : 'false');
   }
 }

@@ -1,14 +1,25 @@
 import config from '@/config';
 import { CryptoService } from '@/services/cryptoService';
-import { GunService } from '@/services/gunService';
+import { GUN_NAMESPACE, GunService } from '@/services/gunService';
 import { KeyService } from '@/services/keyService';
+import { activeSouls } from '@/utils/rendezvous';
 
 const DISCOVERY_ROOT = 'server-config';
 const DISCOVERY_PATH = 'discovery';
+// Rendezvous ("DGA") sub-path: signed announcements are additionally mirrored
+// under a rotating, deterministically-derived soul so peers can reconverge when
+// the fixed discovery path is censored. See src/utils/rendezvous.ts.
+const RENDEZVOUS_PATH = 'rdv';
 const DEFAULT_TTL_MS = 5 * 60_000;
 const MIN_TTL_MS = 30_000;
 const MAX_TTL_MS = 24 * 60 * 60_000;
 const DEFAULT_MAX_ENTRIES = 100;
+const DISCOVERY_DB_FETCH_TIMEOUT_MS = 5000;
+// Hashcash proof-of-work over each announcement's signature. Signing alone is
+// cheap, so a Sybil attacker can flood a rendezvous soul with many fake-but-signed
+// identities; requiring PoW makes each announcement cost real work. ~16 bits ≈ a
+// few ms to solve, negligible for an honest node publishing every couple minutes.
+const POW_DIFFICULTY_BITS = 16;
 
 interface DiscoverySignedPayload {
   version: 1;
@@ -25,6 +36,8 @@ interface DiscoverySignedPayload {
 interface DiscoveryAnnouncement extends DiscoverySignedPayload {
   signerPubkey: string;
   signature: string;
+  /** Hashcash nonce: SHA-256(`${signature}:${pow}`) must have ≥ POW_DIFFICULTY_BITS leading zero bits. */
+  pow: string;
 }
 
 export interface DiscoveryEntry extends DiscoveryAnnouncement {
@@ -41,21 +54,43 @@ export interface PublishDiscoveryInput {
   ttlMs?: number;
 }
 
-export class DiscoveryService {
+class DiscoveryService {
   private static initialized = false;
   private static subscribed = false;
   private static maxEntries = DEFAULT_MAX_ENTRIES;
   private static entries: Map<string, DiscoveryEntry> = new Map();
   private static pruneTimer: ReturnType<typeof setInterval> | null = null;
+  // Active rendezvous subscriptions, keyed by soul. We hold the Gun chain so we
+  // can `.off()` a soul once it rotates out of the active window (otherwise its
+  // `.on` handler would leak for the life of the session).
+  private static rendezvousSubs: Map<string, { off: () => void }> = new Map();
 
-  static async initialize(options?: { maxEntries?: number }): Promise<void> {
+  static async initialize(options?: { maxEntries?: number; subscribeLive?: boolean }): Promise<void> {
     if (typeof options?.maxEntries === 'number' && options.maxEntries > 0) {
       this.maxEntries = Math.floor(options.maxEntries);
     }
-    if (this.initialized) return;
-    this.initialized = true;
-    this.subscribeToAnnouncements();
-    this.startPruneLoop();
+    const shouldSubscribe = options?.subscribeLive === true;
+    if (!this.initialized) {
+      this.initialized = true;
+      this.startPruneLoop();
+      // A relay switch rebuilds the Gun instance, orphaning our announcement and
+      // rendezvous `.on()` handlers. Re-attach them to the new instance so
+      // peer/relay discovery (and thus automatic mesh dialing) survives switches.
+      GunService.onReconnect(() => {
+        if (this.subscribed) {
+          this.subscribed = false;
+          this.subscribeToAnnouncements();
+        }
+        if (this.rendezvousSubs.size > 0) {
+          // Old chains are bound to the discarded instance; drop and re-attach.
+          this.rendezvousSubs.clear();
+          this.subscribeRendezvous();
+        }
+      });
+    }
+    if (shouldSubscribe) {
+      this.subscribeToAnnouncements();
+    }
   }
 
   static async publishLocalAnnouncement(input: PublishDiscoveryInput): Promise<DiscoveryEntry | null> {
@@ -81,6 +116,7 @@ export class DiscoveryService {
       ...payload,
       signerPubkey: keyPair.publicKey,
       signature,
+      pow: this.computePow(signature),
     };
 
     const normalized = this.normalizeAndValidate(announcement);
@@ -92,8 +128,105 @@ export class DiscoveryService {
     return normalized;
   }
 
+  /**
+   * Rendezvous ("DGA") publish: mirror our signed presence announcement under
+   * every currently-active rendezvous soul. Identical signing path to
+   * {@link publishLocalAnnouncement} — the only difference is the rotating Gun
+   * location — so records stay verifiable and poison-resistant.
+   */
+  static async publishRendezvous(input: PublishDiscoveryInput): Promise<DiscoveryEntry | null> {
+    await this.initialize();
+
+    if (!input.nodeId || !input.nodeId.trim()) return null;
+
+    const keyPair = await KeyService.getKeyPair();
+    const payload: DiscoverySignedPayload = {
+      version: 1,
+      nodeId: input.nodeId.trim(),
+      peerId: (input.peerId || input.nodeId).trim(),
+      websocket: input.websocket || config.relay.websocket,
+      gun: input.gun || config.relay.gun,
+      api: input.api || config.relay.api,
+      capabilities: this.normalizeCapabilities(input.capabilities),
+      timestamp: Date.now(),
+      ttlMs: this.clampTtl(input.ttlMs),
+    };
+
+    const signature = CryptoService.sign(this.signingMessage(payload), keyPair.privateKey);
+    const announcement: DiscoveryAnnouncement = {
+      ...payload,
+      signerPubkey: keyPair.publicKey,
+      signature,
+      pow: this.computePow(signature),
+    };
+
+    const normalized = this.normalizeAndValidate(announcement);
+    if (!normalized) return null;
+
+    const announcementKey = this.discoveryKey(normalized);
+    await Promise.all(
+      activeSouls().map((soul) => this.putRendezvous(soul, announcementKey, announcement)),
+    );
+    this.upsertEntry(announcementKey, normalized);
+    return normalized;
+  }
+
+  /**
+   * Rendezvous ("DGA") subscribe: watch every currently-active rendezvous soul
+   * for signed peer announcements. Idempotent per soul, so it is safe to call
+   * repeatedly as epochs roll. Records are gated through the same
+   * {@link normalizeAndValidate} signature/endpoint/TTL checks — a forged record
+   * at a guessed soul is dropped before `cb` ever sees it.
+   */
+  static subscribeRendezvous(cb?: (entry: DiscoveryEntry) => void): void {
+    const active = activeSouls();
+    const activeSet = new Set(active);
+
+    // Tear down subscriptions for souls that have rotated out of the window.
+    for (const [soul, sub] of this.rendezvousSubs.entries()) {
+      if (!activeSet.has(soul)) {
+        try { sub.off(); } catch { /* Gun off() best-effort */ }
+        this.rendezvousSubs.delete(soul);
+      }
+    }
+
+    if (import.meta.env.DEV) {
+      console.debug('[Rendezvous] active souls', active);
+    }
+
+    for (const soul of active) {
+      if (this.rendezvousSubs.has(soul)) continue;
+      try {
+        const chain = GunService.getGun()
+          .get(DISCOVERY_ROOT)
+          .get(RENDEZVOUS_PATH)
+          .get(soul)
+          .map();
+        chain.on((raw: unknown, key: string) => {
+          if (!key || typeof key !== 'string') return;
+          const normalized = this.normalizeAndValidate(raw);
+          if (!normalized) return;
+          if (import.meta.env.DEV) {
+            console.debug('[Rendezvous] validated peer', {
+              soul,
+              peerId: normalized.peerId,
+              websocket: normalized.websocket,
+            });
+          }
+          this.upsertEntry(this.discoveryKey(normalized), normalized);
+          if (cb) cb(normalized);
+        });
+        // Gun chains expose `.off()` to detach the handler above.
+        this.rendezvousSubs.set(soul, { off: () => chain.off() });
+      } catch {
+        // Gun unavailable; keep existing cache.
+      }
+    }
+  }
+
   static async refreshFromGun(): Promise<DiscoveryEntry[]> {
     await this.initialize();
+    await this.refreshFromRelaySnapshot();
     this.pruneExpiredEntries();
     return this.getEntries();
   }
@@ -123,6 +256,51 @@ export class DiscoveryService {
         });
     } catch {
       // Gun unavailable; keep existing cache
+    }
+  }
+
+  private static async refreshFromRelaySnapshot(): Promise<void> {
+    const relayBase = this.getGunRelayBaseUrl();
+    if (!relayBase) return;
+    const prefix = encodeURIComponent(`${GUN_NAMESPACE}/${DISCOVERY_ROOT}/${DISCOVERY_PATH}`);
+    const path = `${relayBase}/db/search?prefix=${prefix}&limit=${this.maxEntries}`;
+
+    const payload = await this.fetchJsonWithTimeout<{ results?: Array<{ data?: unknown }> }>(
+      path,
+      DISCOVERY_DB_FETCH_TIMEOUT_MS,
+    );
+    if (!payload?.results?.length) return;
+
+    for (const row of payload.results) {
+      const normalized = this.normalizeAndValidate(row?.data);
+      if (!normalized) continue;
+      this.upsertEntry(this.discoveryKey(normalized), normalized);
+    }
+  }
+
+  private static getGunRelayBaseUrl(): string {
+    try {
+      const endpoint = new URL(config.relay.gun);
+      endpoint.pathname = endpoint.pathname.replace(/\/gun\/?$/, '');
+      endpoint.search = '';
+      endpoint.hash = '';
+      return endpoint.toString().replace(/\/$/, '');
+    } catch {
+      return config.relay.gun.replace(/\/gun\/?$/, '').replace(/\/$/, '');
+    }
+  }
+
+  private static async fetchJsonWithTimeout<T>(url: string, timeoutMs: number): Promise<T | null> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) return null;
+      return await response.json() as T;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -179,6 +357,33 @@ export class DiscoveryService {
     });
   }
 
+  private static async putRendezvous(
+    soul: string,
+    key: string,
+    announcement: DiscoveryAnnouncement,
+  ): Promise<void> {
+    const gunAnnouncement: Record<string, unknown> = {
+      ...announcement,
+      // Gun graph writes reject arrays; store deterministic index map instead.
+      capabilities: this.capabilitiesToGunMap(announcement.capabilities),
+    };
+    await new Promise<void>((resolve, reject) => {
+      try {
+        GunService.getGun()
+          .get(DISCOVERY_ROOT)
+          .get(RENDEZVOUS_PATH)
+          .get(soul)
+          .get(key)
+          .put(gunAnnouncement, (ack: { err?: string }) => {
+            if (ack?.err) reject(new Error(ack.err));
+            else resolve();
+          });
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
   private static normalizeAndValidate(raw: unknown): DiscoveryEntry | null {
     if (!raw || typeof raw !== 'object') return null;
 
@@ -197,6 +402,7 @@ export class DiscoveryService {
 
     const signerPubkey = this.normalizeString(obj.signerPubkey);
     const signature = this.normalizeString(obj.signature);
+    const pow = this.normalizeString(obj.pow);
 
     if (
       !payload.nodeId ||
@@ -218,12 +424,45 @@ export class DiscoveryService {
       return null;
     }
 
+    // Sybil gate: reject announcements without sufficient proof-of-work.
+    if (!this.verifyPow(signature, pow)) return null;
+
     return {
       ...payload,
       signerPubkey,
       signature,
+      pow,
       expiresAt,
     };
+  }
+
+  /** Count leading zero bits of a hex-encoded hash. */
+  private static leadingZeroBits(hexHash: string): number {
+    let bits = 0;
+    for (const ch of hexHash) {
+      const nibble = parseInt(ch, 16);
+      if (Number.isNaN(nibble)) break;
+      if (nibble === 0) { bits += 4; continue; }
+      bits += Math.clz32(nibble) - 28; // leading zeros within this 4-bit nibble
+      break;
+    }
+    return bits;
+  }
+
+  /** Solve hashcash over a signature: find a nonce meeting the difficulty. */
+  private static computePow(signature: string): string {
+    for (let n = 0; n < 20_000_000; n++) {
+      const pow = n.toString(36);
+      if (this.leadingZeroBits(CryptoService.hash(`${signature}:${pow}`)) >= POW_DIFFICULTY_BITS) {
+        return pow;
+      }
+    }
+    return '';
+  }
+
+  private static verifyPow(signature: string, pow: string): boolean {
+    if (!pow || typeof pow !== 'string') return false;
+    return this.leadingZeroBits(CryptoService.hash(`${signature}:${pow}`)) >= POW_DIFFICULTY_BITS;
   }
 
   private static signingMessage(payload: DiscoverySignedPayload): string {
@@ -301,6 +540,15 @@ export class DiscoveryService {
       const ws = new URL(wsUrl);
       const gun = new URL(gunUrl);
       const api = new URL(apiUrl);
+      // Dev-only escape hatch (compile-time disabled in production): also accept
+      // ws://localhost / http://localhost so the rendezvous path validates
+      // between two local browser profiles. See config.allowInsecureDiscovery.
+      if (config.allowInsecureDiscovery) {
+        const wsOk = ws.protocol === 'wss:' || ws.protocol === 'ws:';
+        const gunOk = gun.protocol === 'https:' || gun.protocol === 'http:';
+        const apiOk = api.protocol === 'https:' || api.protocol === 'http:';
+        return wsOk && gunOk && apiOk;
+      }
       return ws.protocol === 'wss:' && gun.protocol === 'https:' && api.protocol === 'https:';
     } catch {
       return false;
@@ -311,3 +559,6 @@ export class DiscoveryService {
     return `${entry.signerPubkey}:${entry.nodeId}`;
   }
 }
+
+export { DiscoveryService };
+export default DiscoveryService;

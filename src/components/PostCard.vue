@@ -1,23 +1,30 @@
 <!-- In PostCard.vue template -->
 <template>
-  <div class="post-card" v-if="post">
-    <!-- Flagged content overlay (blur mode) -->
+  <article class="post-card" v-if="post">
     <div v-if="flagged && filterAction === 'blur' && !revealed" class="flagged-overlay" @click.stop="revealed = true">
       <ion-icon :icon="warningOutline"></ion-icon>
       <span>Content hidden by word filter — tap to reveal</span>
     </div>
 
-    <!-- Clickable card content area -->
-    <div @click="handleCardClick" :class="{ 'content-blurred': flagged && filterAction === 'blur' && !revealed }">
-      <!-- Post Header -->
+    <div class="post-body" @click="handleCardClick" :class="{ 'content-blurred': flagged && filterAction === 'blur' && !revealed }">
       <div class="post-header">
         <div class="post-meta">
           <span class="community-name">{{ communityName }}</span>
           <span class="separator">•</span>
-          <UserIdentityBadge
-            :authorId="post.authorId"
-            :username="authorDisplayName"
-          />
+          <span class="author-wrap">
+            <span class="author">u/{{ authorDisplayName }}</span>
+            <button
+              v-if="canInviteAuthor"
+              class="invite-chat-btn"
+              type="button"
+              @click.stop="handleInviteToChat"
+            >
+              Invite to chat
+            </button>
+          </span>
+          <span class="identity-badge" :class="authorIdentityClass">
+            {{ authorIdentityLabel }}
+          </span>
           <span class="separator">•</span>
           <span class="timestamp">{{ formatTime(post.createdAt) }}</span>
           <span v-if="flagged && filterAction === 'flag'" class="flag-badge" title="Flagged by word filter">
@@ -26,13 +33,10 @@
         </div>
       </div>
 
-      <!-- Post Title -->
       <h3 class="post-title">{{ post.title }}</h3>
 
-      <!-- Post Content Preview -->
-      <p v-if="post.content" class="post-content">{{ truncatedContent }}</p>
+      <p v-if="post.content" class="post-content" v-html="autoLink(truncatedContent)"></p>
 
-      <!-- Post Image -->
       <div v-if="post.imageThumbnail || post.imageIPFS">
         <div class="post-image">
           <img
@@ -42,64 +46,63 @@
         </div>
       </div>
 
-      <!-- Post Footer - Not clickable for card navigation -->
       <div class="post-footer" @click.stop>
         <div class="post-stats">
-          <button class="stat-button upvote" @click="handleUpvote" :class="{ active: hasUpvoted }">
-            <ion-icon :icon="arrowUpOutline"></ion-icon>
+          <div class="author-avatar" :title="'u/' + authorDisplayName">
+            {{ authorInitial }}
+          </div>
+
+          <button class="stat-icon-btn heart" @click="handleUpvote" :class="{ active: hasUpvoted }" title="Like">
+            <ion-icon :icon="hasUpvoted ? heart : heartOutline"></ion-icon>
             <span>{{ formatNumber(post.upvotes) }}</span>
           </button>
-          
-          <button class="stat-button downvote" @click="handleDownvote" :class="{ active: hasDownvoted }">
-            <ion-icon :icon="arrowDownOutline"></ion-icon>
+
+          <button class="stat-icon-btn downvote" @click="handleDownvote" :class="{ active: hasDownvoted }" title="Downvote">
+            <ion-icon :icon="hasDownvoted ? arrowDownCircle : arrowDownCircleOutline"></ion-icon>
             <span>{{ formatNumber(post.downvotes) }}</span>
           </button>
 
-          <button class="stat-button comments" @click="handleCommentsClick">
+          <button class="stat-icon-btn comments" @click="handleCommentsClick" title="Comments">
             <ion-icon :icon="chatbubbleOutline"></ion-icon>
             <span>{{ formatNumber(post.commentCount) }}</span>
           </button>
 
-          <div class="stat-item score" style="margin-right: 15px;">
+          <button class="stat-icon-btn share" @click="handleShare" title="Share">
+            <ion-icon :icon="arrowRedoOutline"></ion-icon>
+          </button>
+
+          <button
+            v-if="showModerationAction"
+            class="stat-icon-btn moderation-action"
+            @click="handleModerationAction"
+            :title="moderationActionTitle"
+          >
+            <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
+          </button>
+
+          <div class="stat-score">
             <ion-icon :icon="trendingUpOutline"></ion-icon>
             <span>{{ post.score }}</span>
           </div>
+
+          <button class="stat-button share" title="Share this post" @click="handleShare">
+            <ion-icon :icon="shareOutline"></ion-icon>
+          </button>
         </div>
       </div>
     </div>
-    
-    <!-- Separator line -->
-    <div class="post-separator"></div>
-  </div>
+  </article>
 </template>
 
 <style scoped>
-/* Main Post Card Container */
 .post-card {
-  margin-left: 20px;
-  padding: 8px 0;
-  cursor: pointer;
-  background: transparent;
-  border: none;
+  margin: 0 0 8px;
+  padding: 18px 4px 16px;
+  border-bottom: 1px solid var(--app-border);
 }
 
-.post-separator {
-  height: 0.5px;
-  background: rgba(var(--ion-text-color-rgb), 0.08);
-  margin-top: 16px;
-}
-
-html.dark .post-separator {
-  background: rgba(255, 255, 255, 0.35);
-}
-
-html.dark .post-footer {
-  border-top-color: rgba(255, 255, 255, 0.25);
-}
-
-/* Post Header */
 .post-header {
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .post-meta {
@@ -107,53 +110,98 @@ html.dark .post-footer {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: var(--app-text-muted);
   flex-wrap: wrap;
 }
 
 .community-name {
-  color: var(--ion-color-step-600);
+  color: var(--app-accent-bright);
   font-weight: 600;
 }
 
 .separator {
-  color: var(--ion-color-medium-shade);
+  color: rgba(255, 255, 255, 0.25);
 }
 
 .author {
-  color: var(--ion-color-step-600);
+  color: var(--app-text);
   font-weight: 500;
 }
 
+.author-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.invite-chat-btn {
+  border: 1px solid rgba(var(--app-accent-rgb), 0.24);
+  background: rgba(var(--app-accent-rgb), 0.1);
+  color: var(--app-accent-bright);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(1px);
+  transition: opacity var(--app-transition), transform var(--app-transition);
+}
+
+.post-meta:hover .invite-chat-btn,
+.invite-chat-btn:focus-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.identity-badge {
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.identity-badge.unverified {
+  background: rgba(var(--ion-color-warning-rgb), 0.12);
+  color: var(--ion-color-warning);
+}
+
+.identity-badge.trusted-issuer {
+  background: rgba(var(--ion-color-success-rgb), 0.14);
+  color: var(--ion-color-success);
+}
+
 .timestamp {
-  color: var(--ion-color-medium);
+  color: var(--app-text-subtle);
 }
 
-/* Post Title */
 .post-title {
-  margin: 8px 0;
-  margin-right: 10px;
-  font-size: 18px;
+  margin: 0 0 10px;
+  font-size: 20px;
   font-weight: 600;
-  line-height: 1.4;
-  color: var(--ion-text-color);
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  color: var(--app-text);
 }
 
-/* Post Content */
 .post-content {
-  margin: 8px 0;
+  margin: 0 0 14px;
   font-size: 14px;
-  
-  line-height: 1.5;
-  color: var(--ion-color-step-600);
+  line-height: 1.7;
+  color: var(--app-text-muted);
 }
 
-/* Post Image */
 .post-image {
-  margin: 12px 10px;
-  border-radius: 12px;
+  margin: 0 0 16px;
+  border-radius: 16px;
   overflow: hidden;
-  background: rgba(var(--ion-card-background-rgb), 0.3);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .post-image img {
@@ -163,55 +211,86 @@ html.dark .post-footer {
   object-fit: cover;
 }
 
-/* Post Footer - Voting and Stats */
 .post-footer {
-  margin-top: 1px;
-  padding-top: 4px;
-  
+  margin-top: 6px;
+  padding-top: 12px;
 }
 
 .post-stats {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 14px;
+  flex-wrap: wrap;
 }
 
-/* Stat Buttons Base Styles */
+.author-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #6366f1, #8b5cf6);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+}
+
+.stat-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 2px;
+  background: none;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--app-text-muted);
+  cursor: pointer;
+  transition: color var(--app-transition), transform var(--app-transition);
+  -webkit-tap-highlight-color: transparent;
+}
+.stat-icon-btn ion-icon { font-size: 18px; }
+.stat-icon-btn:hover { color: var(--app-text); }
+.stat-icon-btn:active { transform: scale(0.96); }
+.stat-icon-btn.heart,
+.stat-icon-btn.heart ion-icon { color: #a78bfa; }
+.stat-icon-btn.heart:hover,
+.stat-icon-btn.heart:hover ion-icon { color: #c4b5fd; }
+.stat-icon-btn.comments,
+.stat-icon-btn.comments ion-icon { color: #fbbf24; }
+.stat-icon-btn.comments:hover,
+.stat-icon-btn.comments:hover ion-icon { color: #fcd34d; }
+.stat-icon-btn.share { color: #34d399; }
+.stat-icon-btn.share:hover { color: #6ee7b7; }
+
+.stat-score {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #818cf8;
+}
+.stat-score ion-icon { font-size: 16px; }
+
 .stat-button {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 12px 12px;
-  background: transparent;
-  border: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
-  border-radius: 20px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
   font-size: 13px;
-  font-weight: 500;
-  color: var(--ion-color-medium);
+  font-weight: 600;
+  color: var(--app-text-muted);
   cursor: pointer;
-  transition: all 0.2s ease;
-  -webkit-tap-highlight-color: transparent;
 }
 
-.stat-button:hover {
-  background: rgba(var(--ion-text-color-rgb), 0.04);
-  border-color: rgba(var(--ion-text-color-rgb), 0.12);
-}
-
-.stat-button:active {
-  transform: scale(0.95);
-}
-
-.stat-button ion-icon {
-  font-size: 16px;
-}
-
-.stat-button span {
-  min-width: 16px;
-  text-align: center;
-}
-
-/* Upvote Button */
 .stat-button.upvote {
   border-color: rgba(var(--ion-color-success-rgb), 0.15);
 }
@@ -228,11 +307,6 @@ html.dark .post-footer {
   color: var(--ion-color-success);
 }
 
-.stat-button.upvote.active ion-icon {
-  color: var(--ion-color-success);
-}
-
-/* Downvote Button */
 .stat-button.downvote {
   border-color: rgba(var(--ion-color-danger-rgb), 0.15);
 }
@@ -249,13 +323,18 @@ html.dark .post-footer {
   color: var(--ion-color-danger);
 }
 
-.stat-button.downvote.active ion-icon {
-  color: var(--ion-color-danger);
-}
-
-/* Comments Button */
 .stat-button.comments {
   border-color: rgba(var(--ion-color-primary-rgb), 0.15);
+}
+
+.stat-button.moderation-action {
+  border-color: rgba(var(--ion-color-warning-rgb), 0.18);
+}
+
+.stat-button.moderation-action:hover {
+  background: rgba(var(--ion-color-warning-rgb), 0.08);
+  border-color: rgba(var(--ion-color-warning-rgb), 0.3);
+  color: var(--ion-color-warning);
 }
 
 .stat-button.comments:hover {
@@ -268,19 +347,19 @@ html.dark .post-footer {
   background: rgba(var(--ion-color-primary-rgb), 0.12);
 }
 
-/* Score Display (Non-interactive) */
 .stat-item.score {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 12px;
+  padding: 10px 12px;
   background: rgba(var(--ion-color-tertiary-rgb), 0.08);
   border: 1px solid rgba(var(--ion-color-tertiary-rgb), 0.18);
-  border-radius: 20px;
+  border-radius: 999px;
   font-size: 13px;
   font-weight: 600;
   color: var(--ion-color-tertiary);
   margin-left: auto;
+  margin-right: 0;
 }
 
 .stat-item.score ion-icon {
@@ -288,8 +367,18 @@ html.dark .post-footer {
   color: var(--ion-color-tertiary);
 }
 
-/* Mobile Responsive */
 @media (max-width: 576px) {
+  .invite-chat-btn {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .post-card {
+    margin: 0 0 14px;
+    padding: 16px 0 14px;
+  }
+
   .post-title {
     font-size: 16px;
   }
@@ -304,7 +393,7 @@ html.dark .post-footer {
   }
 
   .stat-button {
-    padding: 5px 10px;
+    padding: 8px 10px;
     font-size: 12px;
   }
 
@@ -318,17 +407,6 @@ html.dark .post-footer {
   }
 }
 
-/* Dark Mode Enhancements */
-html.dark .stat-button {
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-html.dark .stat-button:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.15);
-}
-
-/* Flagged content styles */
 .flagged-overlay {
   display: flex;
   align-items: center;
@@ -365,31 +443,48 @@ html.dark .stat-button:hover {
   font-size: 14px;
 }
 
-/* Accessibility - Focus States */
 .stat-button:focus-visible {
-  outline: 2px solid var(--ion-color-primary);
-  outline-offset: 2px;
+  box-shadow: var(--app-focus-ring);
 }
 </style>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+
+function autoLink(text: string): string {
+  if (!text) return '';
+  // Simple URL regex
+  return text.replace(/(https?:\/\/[\w\-\.\/?#&=;%+~:@,]+[\w\/])/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+}
+
+import { ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { IonIcon } from '@ionic/vue';
+import { IonIcon, toastController } from '@ionic/vue';
 import {
-  arrowUpOutline, 
-  arrowDownOutline, 
-  chatbubbleOutline, 
+  chatbubbleOutline,
   trendingUpOutline,
-  warningOutline
+  warningOutline,
+  shieldCheckmarkOutline,
+  heart,
+  heartOutline,
+  arrowDownCircle,
+  arrowDownCircleOutline,
+  arrowRedoOutline,
+  shareOutline
 } from 'ionicons/icons';
 import { Post } from '../services/postService';
 import type { FilterAction } from '../services/moderationService';
 import { generatePseudonym } from '../utils/pseudonym';
-import UserIdentityBadge from './UserIdentityBadge.vue';
+import { useUserStore } from '../stores/userStore';
+import type { UserProfile } from '../services/userService';
 import { UserService } from '../services/userService';
+import { ChatInviteService } from '../services/chatInviteService';
+import { formatTrustedIdentityLabel } from '../utils/identityTrust';
+import { shareLink } from '../composables/useShare';
 
 const router = useRouter();
+const userStore = useUserStore();
+const authorProfile = ref<UserProfile | null>(null);
+let authorProfileRequestId = 0;
 
 const props = defineProps<{ 
   post: Post;
@@ -398,41 +493,75 @@ const props = defineProps<{
   hasDownvoted?: boolean;
   flagged?: boolean;
   filterAction?: FilterAction;
+  showModerationAction?: boolean;
+  moderationActionTitle?: string;
 }>();
 
 const revealed = ref(false);
+const currentUserId = ref('');
 
-const emit = defineEmits(['upvote', 'downvote']);
+const emit = defineEmits(['upvote', 'downvote', 'moderation-submit']);
 
-// Reactive display name — resolves async for live customUsername lookup
-const resolvedAuthorName = ref<string>('');
+watch(
+  () => props.post.authorId,
+  async (authorId) => {
+    const requestId = ++authorProfileRequestId;
+    if (!authorId) {
+      authorProfile.value = null;
+      return;
+    }
+    const profile = await userStore.getProfile(authorId);
+    if (requestId !== authorProfileRequestId) return;
+    authorProfile.value = profile;
+  },
+  { immediate: true }
+);
 
-onMounted(async () => {
-  resolvedAuthorName.value = await resolveAuthorName();
+const currentAuthorProfile = computed(() => {
+  if (!props.post.authorId) return authorProfile.value;
+  return userStore.profiles[props.post.authorId] || authorProfile.value;
 });
 
-async function resolveAuthorName(): Promise<string> {
-  // Case 1: post was created with showRealName=true (stored name is authoritative)
+const authorDisplayName = computed(() => {
   if (props.post.authorShowRealName) {
     return props.post.authorName || 'anon';
   }
-  // Case 2: look up live customUsername from UserService
-  // (handles old posts that stored a pseudonym but user has since set a customUsername)
-  if (props.post.authorId) {
-    try {
-      const profile = await UserService.getUser(props.post.authorId);
-      if (profile?.customUsername) return profile.customUsername;
-      if (profile?.showRealName && profile?.displayName) return profile.displayName;
-    } catch { /* fall through to pseudonym */ }
+  if (currentAuthorProfile.value?.customUsername) {
+    return currentAuthorProfile.value.customUsername;
   }
-  // Case 3: pseudonym (anonymous post)
+  if (currentAuthorProfile.value?.showRealName && currentAuthorProfile.value?.displayName) {
+    return currentAuthorProfile.value.displayName;
+  }
   if (props.post.authorId && props.post.id) {
     return generatePseudonym(props.post.id, props.post.authorId);
   }
   return props.post.authorName || 'anon';
-}
+});
 
-const authorDisplayName = computed(() => resolvedAuthorName.value || props.post.authorName || '…');
+const authorInitial = computed(() => {
+  const name = authorDisplayName.value || 'a';
+  return name.charAt(0).toUpperCase();
+});
+
+const authorIdentityLabel = computed(() =>
+  currentAuthorProfile.value?.identityTrustLevel === 'trusted-issuer'
+    ? formatTrustedIdentityLabel({
+      username: currentAuthorProfile.value?.identityUsername
+        || currentAuthorProfile.value?.customUsername
+        || currentAuthorProfile.value?.username
+        || props.post.authorName,
+      issuer: currentAuthorProfile.value?.identityIssuer,
+    })
+    : 'Unverified identity'
+);
+
+const authorIdentityClass = computed(() =>
+  currentAuthorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'
+);
+
+const canInviteAuthor = computed(() =>
+  !!props.post.authorId && !!currentUserId.value && props.post.authorId !== currentUserId.value
+);
 
 const truncatedContent = computed(() => {
   const content = props.post.content || '';
@@ -460,6 +589,45 @@ function handleCommentsClick(event: Event) {
   event.stopPropagation();
   router.push(`/post/${props.post.id}`);
 }
+
+function handleModerationAction(event: Event) {
+  event.stopPropagation();
+  emit('moderation-submit');
+}
+
+function handleShare(event: Event) {
+  event.stopPropagation();
+  void shareLink(`/post/${props.post.id}`, props.post.title || 'InterPoll post', 'Check out this post on InterPoll');
+}
+
+async function handleInviteToChat() {
+  if (!canInviteAuthor.value) return;
+  try {
+    await ChatInviteService.sendInvite(props.post.authorId);
+    const toast = await toastController.create({
+      message: `Chat invite sent to u/${authorDisplayName.value}`,
+      duration: 2200,
+      color: 'success',
+    });
+    await toast.present();
+  } catch {
+    const toast = await toastController.create({
+      message: 'Failed to send chat invite',
+      duration: 2200,
+      color: 'danger',
+    });
+    await toast.present();
+  }
+}
+
+onMounted(async () => {
+  try {
+    const currentUser = await UserService.getCurrentUser();
+    currentUserId.value = currentUser.id;
+  } catch {
+    currentUserId.value = '';
+  }
+});
 
 function formatTime(timestamp: number): string {
   const now = Date.now();

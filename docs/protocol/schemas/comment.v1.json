@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://interpoll.protocol/schemas/comment.v1.json",
+  "title": "InterPoll Comment (v1)",
+  "description": "Replicated Comment object as written/read by commentService.ts. Normative companion to IPP-03.",
+  "type": "object",
+  "required": ["id", "postId", "communityId", "authorId", "authorName", "content", "createdAt", "upvotes", "downvotes", "score"],
+  "properties": {
+    "id": { "type": "string" },
+    "postId": { "type": "string" },
+    "communityId": { "type": "string" },
+    "authorId": { "type": "string", "description": "Currently the deviceId; see IPP-01 identity migration." },
+    "authorName": { "type": "string" },
+    "authorShowRealName": { "type": "boolean" },
+    "content": { "type": "string" },
+    "parentId": { "type": "string", "description": "Parent comment id for threaded replies." },
+    "createdAt": { "type": "number" },
+    "upvotes": { "type": "number" },
+    "downvotes": { "type": "number" },
+    "score": { "type": "number" },
+    "edited": { "type": "boolean" },
+    "editedAt": { "type": "number" },
+    "authorPubkey": { "type": "string", "description": "Schnorr x-only pubkey (hex) of the signer." },
+    "contentSignature": { "type": "string", "description": "Schnorr signature over SHA-256 of IPP-02 canonicalJSON of {content, postId, communityId, timestamp:createdAt}." },
+    "canonVersion": { "type": "number", "description": "Canonicalization algorithm version for contentSignature. 2 = IPP-02 canonicalJSON. Absent = legacy v1 (buildSignablePayloadV1). See IPP-02 §6." },
+    "isEncrypted": { "type": "boolean" },
+    "encryptedContent": { "type": "string" },
+    "authTag": { "type": "string" }
+  }
+}

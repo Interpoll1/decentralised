@@ -1,14 +1,32 @@
 import { GunService, GUN_NAMESPACE } from './gunService';
+import { PostVoteService, type PostTally } from './postVoteService';
 import { IPFSService } from './ipfsService';
 import { CryptoService } from './cryptoService';
 import { KeyService } from './keyService';
+import { StorageService } from './storageService';
 import { isVersionEnabled } from '../utils/dataVersionSettings';
 import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
 import config from '../config';
+import { BoundedMap, BoundedSet } from '../utils/boundedMap';
+import { canonicalJSON } from '../../shared-validation/canonical.js';
+
+const CURRENT_CANON_VERSION = 2;
+
+// Post durability (mirrors pollService's relay-persistence machinery) ──────────
+const LOCAL_POSTS_META_KEY = 'interpoll-local-posts-v1';
+const LOCAL_POSTS_TOMBSTONES_META_KEY = 'interpoll-local-posts-tombstones-v1';
+const LOCAL_POST_BACKUP_TTL_MS = 30 * 60 * 1000;
+
+type LocalPostBackupEntry = { post: Post; backedUpAt: number };
+type LocalPostBackupMap = Record<string, LocalPostBackupEntry>;
 
 function getApiBase(): string {
   return config.relay.api;
+}
+
+function getGunRelayBase(): string {
+  return config.relay.gun.replace(/\/gun$/, '');
 }
 
 export interface Post {
@@ -31,17 +49,36 @@ export interface Post {
   authTag?: string;
   authorPubkey?: string;
   contentSignature?: string;
+  /** Which canonicalization algorithm contentSignature was produced with. Absent = legacy v1 (canonicalPostPayloadV1). */
+  canonVersion?: number;
   /** Client-side only — which GunDB namespace this post came from */
   dataVersion?: string;
+  /** Client-side only — whether the relay independently confirmed it holds this post (set on creation). */
+  relayConfirmed?: boolean;
 }
 
-function canonicalPostPayload(post: { authorId: string; title: string; content: string; communityId: string; createdAt: number }): string {
+/** @deprecated Legacy per-service canonicalizer, kept for verifying posts signed before the shared canonicalJSON was adopted. Never sign new posts with this. */
+function canonicalPostPayloadV1(post: { authorId: string; title: string; content: string; communityId: string; createdAt: number }): string {
   const obj = { authorId: post.authorId, communityId: post.communityId, content: post.content, createdAt: post.createdAt, title: post.title };
   return JSON.stringify(obj, Object.keys(obj).sort());
 }
 
+function canonicalPostPayload(post: { authorId: string; title: string; content: string; communityId: string; createdAt: number }): string {
+  return canonicalJSON({ authorId: post.authorId, communityId: post.communityId, content: post.content, createdAt: post.createdAt, title: post.title });
+}
+
 const postActiveListeners = new Map<string, any>();
 const MAX_INITIAL_POSTS = 50;
+const MAX_COMMUNITY_INITIAL_POSTS = 120;
+const MISSING_POST_CACHE_TTL_MS = 30_000;
+
+// Both of these were plain Maps that only ever grew — one entry per post the
+// session had ever rendered or failed to find. On a long feed scroll that is the
+// single largest app-level heap contributor. Bounded now, and reachable from the
+// memory watchdog via PostService.trimCaches().
+const MAX_CACHED_POSTS = 400;
+const missingPostCache = new BoundedSet<string>({ maxSize: 500, ttlMs: MISSING_POST_CACHE_TTL_MS });
+const postMemoryCache = new BoundedMap<string, Post>({ maxSize: MAX_CACHED_POSTS });
 
 // ── Timebox: 400ms (was 800ms) — Gun is now live-updates only ─────────────────
 const INITIAL_LOAD_TIMEBOX_MS = 400;
@@ -80,25 +117,67 @@ async function loadPostIdsInBatches(
   }
 }
 
-async function indexForSearch(type: 'post' | 'poll', id: string, data: any) {
-  try {
-    const { IntegrityService } = await import('@/services/integrityService');
-    const body = await IntegrityService.seal(
-      { type, id, data } as Record<string, unknown>,
-      'index',
-    );
-    await fetch(`${getApiBase()}/api/index`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(body)
-    });
-  } catch (err) {
-    console.warn('Search indexing failed:', err);
-  }
-}
+// Search indexing is not a client concern. The gun-relay process indexes posts
+// and polls off its own Gun write hook (gun-relay/gun-relay-enhanced.js,
+// maybeIndexNode), so anything that reaches the graph is indexed regardless of
+// whether the author was signed in. The old client-side POST to /api/index could
+// never have worked: that endpoint requires a shared secret a browser cannot hold,
+// so every call returned 401 into a swallowed warning — and it paid for a
+// proof-of-work seal on the publish path to do it.
 
 export class PostService {
+  /**
+   * Release cached post data under memory pressure. Called by the memory watchdog;
+   * see the cleanup registration in main.ts.
+   *
+   * `light` only reclaims entries that have already aged out, `aggressive` shrinks
+   * the live cache, `emergency` drops it entirely (correctness is unaffected —
+   * every entry is re-derivable from Gun or the relay).
+   */
+  static trimCaches(level: 'light' | 'aggressive' | 'emergency'): void {
+    missingPostCache.prune();
+    if (level === 'aggressive') postMemoryCache.trimTo(100);
+    if (level === 'emergency') {
+      postMemoryCache.clear();
+      missingPostCache.clear();
+    }
+  }
+
+  /** Evict legacy (non-GUN_NAMESPACE) posts from memory caches and notify UI stores */
+  static async evictLegacyPosts(): Promise<void> {
+    try {
+      // Clear in-memory caches where dataVersion is not current namespace
+      for (const [id, post] of Array.from(postMemoryCache.entries())) {
+        const dv = (post as any).dataVersion || null;
+        if (dv && dv !== GUN_NAMESPACE) postMemoryCache.delete(id);
+      }
+      // Clear missing cache (conservative)
+      missingPostCache.clear();
+
+      // Attempt to purge store-level entries if postStore is available
+      try {
+        const { usePostStore } = await import('../stores/postStore');
+        const postStore = usePostStore();
+        if (postStore && typeof postStore.purgeLegacyPosts === 'function') {
+          const removed = await postStore.purgeLegacyPosts();
+          if (removed > 0) console.info(`[PostService] Purged ${removed} legacy posts from store`);
+        }
+      } catch (err) {
+        // best-effort
+      }
+
+      // Notify UI/store layers to purge their maps (backup)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('evict-legacy-posts', { detail: { namespace: GUN_NAMESPACE } }));
+        try { localStorage.removeItem('seen-post-ids'); } catch {}
+      }
+
+      console.info('[PostService] Evicted legacy posts from memory cache and store');
+    } catch (err) {
+      console.warn('[PostService] Failed to evict legacy posts:', err);
+    }
+  }
+
   static async createPost(
     post: Omit<Post, 'id' | 'createdAt' | 'upvotes' | 'downvotes' | 'score' | 'commentCount'>,
     imageFile?: File,
@@ -150,8 +229,10 @@ export class PostService {
       const signature = CryptoService.sign(contentPayload, keyPair.privateKey);
       newPost.authorPubkey = keyPair.publicKey;
       newPost.contentSignature = signature;
+      newPost.canonVersion = CURRENT_CANON_VERSION;
       cleanPost.authorPubkey = keyPair.publicKey;
       cleanPost.contentSignature = signature;
+      cleanPost.canonVersion = CURRENT_CANON_VERSION;
     } catch (err) {
       console.warn('Failed to sign post content:', err);
     }
@@ -218,13 +299,22 @@ export class PostService {
       });
     });
 
-    await indexForSearch('post', newPost.id, {
-      title: cleanPost.title,
-      content: cleanPost.content,
-      authorName: cleanPost.authorName,
-      communitySlug: cleanPost.communityId,
-      createdAt: cleanPost.createdAt
-    });
+    postMemoryCache.set(newPost.id, newPost);
+    missingPostCache.delete(newPost.id);
+
+    // Durability: back up locally first (so republish can recover it even if the
+    // verification below is slow/fails), then independently confirm the relay
+    // actually holds it. If unconfirmed, start the republish loop so the post is
+    // re-pushed once the relay is reachable rather than being silently lost.
+    await PostService.saveLocalPostBackup(newPost);
+    const relayConfirmed = await PostService.verifyRelayPersistence(newPost.id);
+    newPost.relayConfirmed = relayConfirmed === null
+      ? GunService.getPeerStats().isConnected
+      : relayConfirmed;
+    if (!newPost.relayConfirmed) {
+      PostService.startRepublishLoop();
+      setTimeout(() => { void PostService.republishUnconfirmedPosts(); }, 15_000);
+    }
 
     return newPost;
   }
@@ -260,17 +350,17 @@ export class PostService {
 
     communityPostsNode.once((allPosts: any) => {
       if (!allPosts) { checkLoadComplete(); return; }
-      const keys = Object.keys(allPosts).filter(k => k !== '_');
+      const keys = Object.keys(allPosts).filter(k => k && k !== '_');
       void loadPostIdsInBatches(
-        keys,
-        (postId) => onceWithTimeout(gun.get('posts').get(postId)),
+        keys.slice(0, MAX_COMMUNITY_INITIAL_POSTS),
+        (postId) => postId ? onceWithTimeout(gun.get('posts').get(postId)) : Promise.resolve(null),
         (postData) => {
           if (postData.id && !initialSeenIds.has(postData.id)) {
             initialSeenIds.add(postData.id);
-            collectedPosts.push({ ...postData, dataVersion: GUN_NAMESPACE });
+            collectedPosts.push({ ...postData, dataVersion: (postData && postData.dataVersion) ? postData.dataVersion : GUN_NAMESPACE });
           }
         },
-        100,
+        40,
       ).then(() => {
         collectedPosts.sort((a, b) => b.createdAt - a.createdAt);
         collectedPosts.forEach(p => onPost(p));
@@ -280,62 +370,43 @@ export class PostService {
 
     // Live updates: map().on emits one post-id key at a time, which is more
     // reliable than parsing full-node patches from .on for large communities.
-    subscription = communityPostsNode.map().on((_: any, postId: string) => {
-      if (!postId || postId === '_' || initialSeenIds.has(postId) || inFlightIds.has(postId)) return;
-      inFlightIds.add(postId);
-      void onceWithTimeout(gun.get('posts').get(postId)).then((postData) => {
-        if (postData && postData.id) {
-          initialSeenIds.add(postData.id);
-          onPost({ ...postData, dataVersion: GUN_NAMESPACE });
-        }
-      }).finally(() => {
-        inFlightIds.delete(postId);
-      });
-    });
-
-    if (isVersionEnabled('v1')) {
-      pendingLoads++;
-      const rawGun = GunService.getRawGun();
-      const v1Node = rawGun.get('communities').get(communityId).get('posts');
-      v1Node.once((allPosts: any) => {
-        if (!allPosts) { checkLoadComplete(); return; }
-        const keys = Object.keys(allPosts).filter(k => k !== '_');
-        const v1Collected: Post[] = [];
-        void loadPostIdsInBatches(
-          keys,
-          (postId) => onceWithTimeout(rawGun.get('posts').get(postId)),
-          (postData) => {
-            if (postData.id && !initialSeenIds.has(postData.id)) {
-              initialSeenIds.add(postData.id);
-              v1Collected.push({ ...postData, dataVersion: 'v1' });
-            }
-          },
-          100,
-        ).then(() => {
-          v1Collected.sort((a, b) => b.createdAt - a.createdAt);
-          v1Collected.forEach(p => onPost(p));
-          checkLoadComplete();
-        });
-      });
-      v1Subscription = v1Node.map().on((_: any, postId: string) => {
-        if (!postId || postId === '_' || initialSeenIds.has(postId) || inFlightIds.has(postId)) return;
+    // Buffer emitted keys and flush on a short timer so a re-sync burst can't fan
+    // out thousands of concurrent gets (the "1K+ records/sec" DOM warning) —
+    // batching also lets duplicate keys collapse before we ever hit the network.
+    const pendingIds = new Set<string>();
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const flushPending = () => {
+      flushTimer = null;
+      const ids = [...pendingIds];
+      pendingIds.clear();
+      for (const postId of ids) {
+        if (inFlightIds.has(postId)) continue;
         inFlightIds.add(postId);
-        void onceWithTimeout(rawGun.get('posts').get(postId)).then((postData) => {
+        void onceWithTimeout(gun.get('posts').get(postId)).then((postData) => {
           if (postData && postData.id) {
             initialSeenIds.add(postData.id);
-            onPost({ ...postData, dataVersion: 'v1' });
+            onPost({ ...postData, dataVersion: (postData && postData.dataVersion) ? postData.dataVersion : GUN_NAMESPACE });
           }
         }).finally(() => {
           inFlightIds.delete(postId);
         });
-      });
-    }
+      }
+    };
+    subscription = communityPostsNode.map().on((_: any, postId: string) => {
+      if (!initialLoadDone) return;
+      if (!postId || postId === '_' || inFlightIds.has(postId)) return;
+      pendingIds.add(postId);
+      if (!flushTimer) flushTimer = setTimeout(flushPending, 100);
+    });
+
+    // v1 posts intentionally excluded from community feed — only using GUN v3 namespace
 
     const listenerKey = `${communityId}-posts-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     postActiveListeners.set(listenerKey, { subscription, v1Subscription, timer: timeboxTimer });
 
     return () => {
       clearTimeout(timeboxTimer);
+      if (flushTimer) clearTimeout(flushTimer);
       if (subscription) subscription.off();
       if (v1Subscription) v1Subscription.off();
       postActiveListeners.delete(listenerKey);
@@ -371,14 +442,14 @@ export class PostService {
 
     postsNode.once((allPosts: any) => {
       if (!allPosts) { checkLoadComplete(); return; }
-      const keys = Object.keys(allPosts).filter(k => k !== '_');
+      const keys = Object.keys(allPosts).filter(k => k && k !== '_');
       void loadPostIdsInBatches(
         keys.slice(0, MAX_INITIAL_POSTS),
-        (postId) => onceWithTimeout(gun.get('posts').get(postId)),
+        (postId) => postId ? onceWithTimeout(gun.get('posts').get(postId)) : Promise.resolve(null),
         (postData) => {
           if (postData.id && !initialSeenIds.has(postData.id)) {
             initialSeenIds.add(postData.id);
-            collectedPosts.push({ ...postData, dataVersion: GUN_NAMESPACE });
+            collectedPosts.push({ ...postData, dataVersion: (postData && postData.dataVersion) ? postData.dataVersion : GUN_NAMESPACE });
           }
         },
         50,
@@ -389,68 +460,64 @@ export class PostService {
       });
     });
 
-    subscription = postsNode.on((allPosts: any) => {
-      if (!allPosts) return;
-      Object.keys(allPosts).forEach(postId => {
-        if (postId === '_' || initialSeenIds.has(postId) || inFlightIds.has(postId)) return;
+    // Live updates. This used to be a plain `.on()` on the whole `posts` root
+    // that re-walked *every* key on every root patch and issued a
+    // `gun.get('posts').get(id)` for each — one permanent chain per post in the
+    // graph, so the heap grew with the size of the network rather than with what
+    // the user is actually reading. Use the same batched `map().on` + pendingIds
+    // shape as subscribeToCommunityPosts above: one key per emit, deduped, and
+    // flushed on a short timer so a re-sync burst can't fan out thousands of gets.
+    const pendingIds = new Set<string>();
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const flushPending = () => {
+      flushTimer = null;
+      const ids = [...pendingIds];
+      pendingIds.clear();
+      for (const postId of ids) {
+        if (inFlightIds.has(postId)) continue;
         inFlightIds.add(postId);
         void onceWithTimeout(gun.get('posts').get(postId)).then((postData) => {
           if (postData && postData.id) {
             initialSeenIds.add(postData.id);
-            onPost({ ...postData, dataVersion: GUN_NAMESPACE });
+            onPost({ ...postData, dataVersion: (postData && postData.dataVersion) ? postData.dataVersion : GUN_NAMESPACE });
           }
         }).finally(() => {
           inFlightIds.delete(postId);
         });
-      });
+      }
+    };
+    // Re-hydration cooldown. Gun re-emits a key on every update that touches it
+    // (including its own echoes and any relay re-send), and each emit here costs
+    // a `once()` round-trip plus a fresh object. On the *global* feed root that
+    // is enough allocation churn to outrun the collector even though nothing is
+    // retained. A post that was refetched seconds ago is not refetched again.
+    const REHYDRATE_COOLDOWN_MS = 30_000;
+    const lastHydratedAt = new Map<string, number>();
+    subscription = postsNode.map().on((_: any, postId: string) => {
+      if (!initialLoadDone) return;
+      if (!postId || postId === '_' || inFlightIds.has(postId)) return;
+      const now = Date.now();
+      if (now - (lastHydratedAt.get(postId) ?? 0) < REHYDRATE_COOLDOWN_MS) return;
+      lastHydratedAt.set(postId, now);
+      // Bounded: the map is a rate limiter, not a cache. Oldest entries expire
+      // by cooldown anyway, so dropping them just permits an earlier refetch.
+      if (lastHydratedAt.size > 2000) {
+        for (const [id, at] of lastHydratedAt) {
+          if (now - at > REHYDRATE_COOLDOWN_MS) lastHydratedAt.delete(id);
+        }
+      }
+      pendingIds.add(postId);
+      if (!flushTimer) flushTimer = setTimeout(flushPending, 100);
     });
 
-    if (isVersionEnabled('v1')) {
-      pendingLoads++;
-      const rawGun = GunService.getRawGun();
-      const v1PostsNode = rawGun.get('posts');
-      v1PostsNode.once((allPosts: any) => {
-        if (!allPosts) { checkLoadComplete(); return; }
-        const keys = Object.keys(allPosts).filter(k => k !== '_');
-        const v1Collected: Post[] = [];
-        void loadPostIdsInBatches(
-          keys.slice(0, MAX_INITIAL_POSTS),
-          (postId) => onceWithTimeout(rawGun.get('posts').get(postId)),
-          (postData) => {
-            if (postData.id && !initialSeenIds.has(postData.id)) {
-              initialSeenIds.add(postData.id);
-              v1Collected.push({ ...postData, dataVersion: 'v1' });
-            }
-          },
-          50,
-        ).then(() => {
-          v1Collected.sort((a, b) => b.createdAt - a.createdAt);
-          v1Collected.forEach(p => onPost(p));
-          checkLoadComplete();
-        });
-      });
-      v1Subscription = v1PostsNode.on((allPosts: any) => {
-        if (!allPosts) return;
-        Object.keys(allPosts).forEach(postId => {
-          if (postId === '_' || initialSeenIds.has(postId) || inFlightIds.has(postId)) return;
-          inFlightIds.add(postId);
-          void onceWithTimeout(rawGun.get('posts').get(postId)).then((postData) => {
-            if (postData && postData.id) {
-              initialSeenIds.add(postData.id);
-              onPost({ ...postData, dataVersion: 'v1' });
-            }
-          }).finally(() => {
-            inFlightIds.delete(postId);
-          });
-        });
-      });
-    }
+    // v1 posts intentionally excluded from global feed — only using GUN v3 namespace
 
     const listenerKey = `all-posts-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     postActiveListeners.set(listenerKey, { subscription, v1Subscription, timer: timeboxTimer });
 
     return () => {
       clearTimeout(timeboxTimer);
+      if (flushTimer) clearTimeout(flushTimer);
       if (subscription) subscription.off();
       if (v1Subscription) v1Subscription.off();
       postActiveListeners.delete(listenerKey);
@@ -459,20 +526,41 @@ export class PostService {
 
   // ── API-first getPost with stale-while-revalidate ─────────────────────────
   static async getPost(postId: string): Promise<Post | null> {
-    try {
-      const res = await fetch(`${getApiBase()}/api/post/${postId}`, {
-        headers: { 'Cache-Control': 'stale-while-revalidate=30' },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.id) return { ...data, dataVersion: GUN_NAMESPACE };
-      }
-    } catch {}
+    const cached = postMemoryCache.get(postId);
+    if (cached) return cached;
+
+    // The set carries its own TTL now, so membership alone answers the question.
+    const isRecentlyMissing = missingPostCache.has(postId);
+
+    if (!isRecentlyMissing) {
+      try {
+        // No stale-while-revalidate hint: the response carries mutable vote counts
+        // and the server now sends `no-store` for exactly that reason.
+        const res = await fetch(`${getApiBase()}/api/post/${postId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.id) {
+            const post = { ...data, dataVersion: (data && data.dataVersion) ? data.dataVersion : GUN_NAMESPACE };
+            postMemoryCache.set(postId, post);
+            missingPostCache.delete(postId);
+            return post;
+          }
+        } else if (res.status === 404) {
+          missingPostCache.add(postId);
+        }
+      } catch {}
+    }
 
     // Fallback to Gun (new posts written but not yet indexed)
     const gun = GunService.getGun();
     const postData = await onceWithTimeout(gun.get('posts').get(postId));
-    if (postData && postData.id) return { ...postData, dataVersion: GUN_NAMESPACE };
+    if (postData && postData.id) {
+      const post = { ...postData, dataVersion: (postData && postData.dataVersion) ? postData.dataVersion : GUN_NAMESPACE };
+      postMemoryCache.set(postId, post);
+      missingPostCache.delete(postId);
+      return post;
+    }
+    missingPostCache.add(postId);
     return null;
   }
 
@@ -484,11 +572,29 @@ export class PostService {
         cleanUpdates[key] = updates[key as keyof Post];
       }
     });
+    const cached = postMemoryCache.get(postId);
+    const communityIdFromUpdate = typeof cleanUpdates.communityId === 'string' && cleanUpdates.communityId
+      ? cleanUpdates.communityId
+      : null;
+    const communityIdFromCache = cached?.communityId || null;
+    const resolvedCommunityId = communityIdFromUpdate || communityIdFromCache;
+
     await new Promise<void>((resolve, reject) => {
       gun.get('posts').get(postId).put(cleanUpdates, (ack: any) => {
         if (ack.err) reject(new Error(ack.err)); else resolve();
       });
     });
+    if (resolvedCommunityId) {
+      await new Promise<void>((resolve, reject) => {
+        gun.get('communities').get(resolvedCommunityId).get('posts').get(postId).put(cleanUpdates, (ack: any) => {
+          if (ack.err) reject(new Error(ack.err)); else resolve();
+        });
+      });
+    }
+
+    if (cached) {
+      postMemoryCache.set(postId, { ...cached, ...cleanUpdates });
+    }
   }
 
   static async deletePost(postId: string, communityId: string): Promise<void> {
@@ -503,28 +609,106 @@ export class PostService {
         if (ack.err) reject(new Error(ack.err)); else resolve();
       });
     });
+    // Tombstone the local backup so the republish loop cannot resurrect it.
+    await PostService.removeLocalPostBackup(postId);
   }
 
-  static async voteOnPost(postId: string, direction: 'up' | 'down', _userId: string): Promise<void> {
-    const post = await PostService.getPost(postId);
-    if (!post) throw new Error('Post not found');
-    const newUpvotes   = (post.upvotes   || 0) + (direction === 'up'   ? 1 : 0);
-    const newDownvotes = (post.downvotes || 0) + (direction === 'down' ? 1 : 0);
-    await PostService.updatePost(postId, { upvotes: newUpvotes, downvotes: newDownvotes, score: newUpvotes - newDownvotes });
+  /**
+   * Read a post for the client-side view of a vote result.
+   *
+   * Counters are no longer computed from this — `PostVoteService` derives them
+   * from the per-user vote set — so a stale read can no longer revert a vote.
+   * This only supplies the surrounding post fields to merge the tally into.
+   */
+  private static async getPostForCounterUpdate(postId: string): Promise<Post | null> {
+    const gun = GunService.getGun();
+    const live = await onceWithTimeout(gun.get('posts').get(postId));
+    if (live && live.id) {
+      return { ...live, dataVersion: live.dataVersion || GUN_NAMESPACE } as Post;
+    }
+    return PostService.getPost(postId);
   }
 
-  static async removeVote(postId: string, direction: 'up' | 'down', _userId: string): Promise<void> {
-    const post = await PostService.getPost(postId);
+  private static applyTally(post: Post, tally: PostTally): Post {
+    const updated: Post = { ...post, ...tally };
+    postMemoryCache.set(post.id, updated);
+    return updated;
+  }
+
+  /**
+   * Toggle this user's vote on a post.
+   *
+   * Returns `myVote` alongside the post because the caller cannot predict the
+   * outcome: a click the UI believes is "upvote" is a *clear* if the graph
+   * already holds an upvote from this user. The old signature returned only the
+   * post, so callers guessed from localStorage and rendered +1 while the write
+   * did -1 — the single most visible source of vote flicker.
+   */
+  static async voteOnPost(
+    postId: string,
+    direction: 'up' | 'down',
+    userId: string,
+  ): Promise<{ post: Post; myVote: 'up' | 'down' | null }> {
+    const post = await PostService.getPostForCounterUpdate(postId);
     if (!post) throw new Error('Post not found');
-    const newUpvotes   = direction === 'up'   ? Math.max(0, (post.upvotes   || 0) - 1) : (post.upvotes   || 0);
-    const newDownvotes = direction === 'down' ? Math.max(0, (post.downvotes || 0) - 1) : (post.downvotes || 0);
-    await PostService.updatePost(postId, { upvotes: newUpvotes, downvotes: newDownvotes, score: newUpvotes - newDownvotes });
+    const { tally, myVote } = await PostVoteService.castVote(postId, userId, direction);
+    return { post: PostService.applyTally(post, tally), myVote };
+  }
+
+  static async incrementCommentCount(postId: string, communityId?: string): Promise<void> {
+    const gun = GunService.getGun();
+    // Read the live Gun value directly rather than via getPost(), whose REST/memory
+    // cache snapshot never reflects comment-count changes and would shadow this update.
+    const current = await onceWithTimeout(gun.get('posts').get(postId));
+    if (!current) return;
+    const commentCount = (current.commentCount || 0) + 1;
+    await PostService.updatePost(postId, { commentCount, communityId: communityId || current.communityId });
+    const cached = postMemoryCache.get(postId);
+    if (cached) {
+      postMemoryCache.set(postId, { ...cached, commentCount });
+    }
+  }
+
+  /**
+   * Clear this user's vote, whatever it is.
+   *
+   * `direction` is no longer used to gate the write. The old version returned
+   * the post untouched when the graph read did not confirm a matching vote —
+   * including when the read merely timed out — which left the caller's
+   * optimistic -1 on screen with nothing behind it.
+   */
+  static async removeVote(
+    postId: string,
+    _direction: 'up' | 'down',
+    userId: string,
+  ): Promise<{ post: Post; myVote: 'up' | 'down' | null }> {
+    const post = await PostService.getPostForCounterUpdate(postId);
+    if (!post) throw new Error('Post not found');
+    const { tally, myVote } = await PostVoteService.clearVote(postId, userId);
+    return { post: PostService.applyTally(post, tally), myVote };
+  }
+
+  /** This user's vote as the graph has it — the authority for button state. */
+  static async getMyVote(postId: string, userId: string): Promise<'up' | 'down' | null> {
+    return PostVoteService.getMyVote(postId, userId);
+  }
+
+  /** Authoritative counts, derived from the vote set rather than the stored counters. */
+  static async getTally(postId: string): Promise<PostTally> {
+    return PostVoteService.getTally(postId);
+  }
+
+  /** Live authoritative counts for one post. */
+  static subscribeToVotes(postId: string, callback: (tally: PostTally) => void): () => void {
+    return PostVoteService.subscribeTally(postId, callback);
   }
 
   static verifyPostSignature(post: Post): 'verified' | 'unverified' | 'unsigned' {
     if (!post.authorPubkey || !post.contentSignature) return 'unsigned';
     try {
-      const contentPayload = canonicalPostPayload(post);
+      const contentPayload = post.canonVersion === CURRENT_CANON_VERSION
+        ? canonicalPostPayload(post)
+        : canonicalPostPayloadV1(post);
       const valid = CryptoService.verify(contentPayload, post.contentSignature, post.authorPubkey);
       return valid ? 'verified' : 'unverified';
     } catch { return 'unverified'; }
@@ -566,5 +750,251 @@ export class PostService {
       if (v1Subscription) v1Subscription.off();
     });
     postActiveListeners.clear();
+  }
+
+  // ── Durability ──────────────────────────────────────────────────────────────
+  // Gun put acks fire on local acceptance and read-backs come from the local
+  // graph, so neither proves the relay stored a post. Without an independent
+  // check + backup + republish, a post created during a relay outage or under
+  // rate-limiting stays only in the author's browser and vanishes for everyone
+  // else. This mirrors the machinery pollService already has.
+
+  private static republishLoopStarted = false;
+  private static republishInFlight = false;
+  private static republishAttempts = new Map<string, number>();
+  private static localPostBackupWriteQueue: Promise<void> = Promise.resolve();
+  private static readonly REPUBLISH_MAX_ATTEMPTS = 5;
+  private static readonly REPUBLISH_INTERVAL_MS = 120_000;
+
+  /**
+   * Ask the relay's DB mirror whether a post actually reached it. Returns true
+   * (relay has it), false (endpoint reachable but post absent after retries), or
+   * null when the endpoint is unreachable/has no DB (inconclusive).
+   */
+  static async verifyRelayPersistence(postId: string, deadlineMs = 8000): Promise<boolean | null> {
+    const soul = encodeURIComponent(`${GUN_NAMESPACE}/posts/${postId}`);
+    const url = `${getGunRelayBase()}/db/soul?soul=${soul}`;
+    const deadline = Date.now() + deadlineMs;
+    const retryDelayMs = 1500;
+    let endpointReachable = false;
+    for (;;) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3000);
+      try {
+        const res = await fetch(url, { signal: controller.signal });
+        if (res.ok) return true;
+        if (res.status === 404) endpointReachable = true;
+      } catch {
+        // Network error / timeout — endpoint state unknown for this attempt.
+      } finally {
+        clearTimeout(timer);
+      }
+      if (Date.now() + retryDelayMs > deadline) {
+        return endpointReachable ? false : null;
+      }
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+    }
+  }
+
+  /** Gun-shaped record for (re)writing a post. Encrypted posts are already
+   *  redacted in the stored Post, so no re-redaction is needed here. */
+  private static toGunPostRecord(post: Post): Record<string, unknown> {
+    const rec: Record<string, unknown> = {
+      id: post.id,
+      communityId: post.communityId,
+      authorId: post.authorId,
+      authorName: post.authorName,
+      authorShowRealName: post.authorShowRealName || false,
+      title: post.title,
+      content: post.content,
+      createdAt: post.createdAt,
+      upvotes: post.upvotes || 0,
+      downvotes: post.downvotes || 0,
+      score: post.score || 0,
+      commentCount: post.commentCount || 0,
+    };
+    if (post.imageIPFS) rec.imageIPFS = post.imageIPFS;
+    if (post.imageThumbnail) rec.imageThumbnail = post.imageThumbnail;
+    if (post.authorPubkey) rec.authorPubkey = post.authorPubkey;
+    if (post.contentSignature) rec.contentSignature = post.contentSignature;
+    if (post.canonVersion) rec.canonVersion = post.canonVersion;
+    if (post.isEncrypted) {
+      rec.isEncrypted = true;
+      if (post.encryptedContent) rec.encryptedContent = post.encryptedContent;
+      if (post.authTag) rec.authTag = post.authTag;
+    }
+    return rec;
+  }
+
+  /** Re-put a post to both the root and community paths. */
+  private static warmPostCache(record: Record<string, unknown>): void {
+    if (!record?.id) return;
+    const gun = GunService.getGun();
+    gun.get('posts').get(record.id as string).put(record);
+    if (record.communityId) {
+      gun.get('communities').get(record.communityId as string).get('posts').get(record.id as string).put(record);
+    }
+  }
+
+  /**
+   * Re-push recent locally-backed-up posts the relay does not confirm holding.
+   * Gun never retro-syncs puts made while the relay connection was dead — and a
+   * rate-limited relay can drop messages on an open socket — so without this a
+   * post created during an outage stays invisible to everyone else.
+   */
+  static async republishUnconfirmedPosts(): Promise<void> {
+    if (this.republishInFlight || typeof window === 'undefined') return;
+    this.republishInFlight = true;
+    try {
+      const [map, tombstones] = await Promise.all([
+        this.readLocalPostMap(),
+        this.readLocalPostTombstones(),
+      ]);
+      const now = Date.now();
+      const candidates = Object.values(map).filter((entry) => {
+        const post = entry?.post;
+        if (!post?.id || tombstones[post.id]) return false;
+        const ageMs = now - (Number.isFinite(entry.backedUpAt) ? entry.backedUpAt : post.createdAt || 0);
+        if (ageMs > LOCAL_POST_BACKUP_TTL_MS) return false;
+        return (this.republishAttempts.get(post.id) || 0) < this.REPUBLISH_MAX_ATTEMPTS;
+      });
+      for (const entry of candidates) {
+        const post = entry.post;
+        const confirmed = await this.verifyRelayPersistence(post.id, 4000);
+        if (confirmed === true) {
+          this.republishAttempts.delete(post.id);
+          continue;
+        }
+        if (confirmed === null) continue; // endpoint unreachable — retry next tick
+        this.republishAttempts.set(post.id, (this.republishAttempts.get(post.id) || 0) + 1);
+        this.warmPostCache(this.toGunPostRecord(post));
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const recheck = await this.verifyRelayPersistence(post.id, 8000);
+        if (recheck === true) {
+          this.republishAttempts.delete(post.id);
+          console.info(`[PostService] Republished post ${post.id} to relay after missed sync`);
+        }
+      }
+    } catch {
+      // best-effort sweep
+    } finally {
+      this.republishInFlight = false;
+    }
+  }
+
+  /** Start the background republish loop (idempotent). Also re-sweeps on Gun reconnects. */
+  static startRepublishLoop(): void {
+    if (this.republishLoopStarted || typeof window === 'undefined') return;
+    this.republishLoopStarted = true;
+    GunService.onReconnect(() => { void this.republishUnconfirmedPosts(); });
+    const tick = () => {
+      void this.republishUnconfirmedPosts().finally(() => {
+        setTimeout(tick, this.REPUBLISH_INTERVAL_MS);
+      });
+    };
+    setTimeout(tick, 20_000);
+  }
+
+  private static enqueueLocalPostBackupWrite(task: () => Promise<void>): Promise<void> {
+    const run = this.localPostBackupWriteQueue.then(task, task);
+    this.localPostBackupWriteQueue = run.catch(() => {});
+    return run;
+  }
+
+  private static async readLocalPostMap(): Promise<LocalPostBackupMap> {
+    try {
+      const raw = await StorageService.getMetadata(LOCAL_POSTS_META_KEY);
+      if (!raw || typeof raw !== 'object') return {};
+      const normalized: LocalPostBackupMap = {};
+      Object.entries(raw as Record<string, any>).forEach(([postId, value]) => {
+        if (!value || typeof value !== 'object' || !value.post || typeof value.post !== 'object') return;
+        const post = value.post as Post;
+        if (!post?.id) return;
+        normalized[postId] = { post, backedUpAt: Number(value.backedUpAt) || post.createdAt || Date.now() };
+      });
+      return normalized;
+    } catch {
+      return {};
+    }
+  }
+
+  private static async readLocalPostTombstones(): Promise<Record<string, number>> {
+    try {
+      const raw = await StorageService.getMetadata(LOCAL_POSTS_TOMBSTONES_META_KEY);
+      if (!raw || typeof raw !== 'object') return {};
+      const normalized: Record<string, number> = {};
+      Object.entries(raw as Record<string, unknown>).forEach(([postId, value]) => {
+        const ts = Number(value);
+        if (Number.isFinite(ts) && ts > 0) normalized[postId] = ts;
+      });
+      return normalized;
+    } catch {
+      return {};
+    }
+  }
+
+  private static localPostBackupSignature(post: Post): string {
+    return JSON.stringify({
+      id: post.id,
+      communityId: post.communityId,
+      title: post.title,
+      content: post.content,
+      upvotes: post.upvotes || 0,
+      downvotes: post.downvotes || 0,
+      score: post.score || 0,
+      commentCount: post.commentCount || 0,
+      isEncrypted: Boolean(post.isEncrypted),
+      encryptedContent: post.encryptedContent || '',
+    });
+  }
+
+  private static async saveLocalPostBackup(post: Post): Promise<void> {
+    if (!post?.id) return;
+    const nextSignature = this.localPostBackupSignature(post);
+    await this.enqueueLocalPostBackupWrite(async () => {
+      try {
+        const [next, tombstones] = await Promise.all([
+          this.readLocalPostMap(),
+          this.readLocalPostTombstones(),
+        ]);
+        delete tombstones[post.id];
+        const existing = next[post.id];
+        if (existing?.post && this.localPostBackupSignature(existing.post) === nextSignature) return;
+        next[post.id] = { post, backedUpAt: Date.now() };
+        const ordered = Object.values(next).sort((a, b) => {
+          const left = Number.isFinite(a.backedUpAt) ? a.backedUpAt : a.post.createdAt;
+          const right = Number.isFinite(b.backedUpAt) ? b.backedUpAt : b.post.createdAt;
+          return right - left;
+        }).slice(0, 500);
+        const compact: LocalPostBackupMap = {};
+        ordered.forEach((item) => { compact[item.post.id] = item; });
+        await StorageService.setMetadata(LOCAL_POSTS_META_KEY, compact);
+        await StorageService.setMetadata(LOCAL_POSTS_TOMBSTONES_META_KEY, tombstones);
+      } catch {
+        // best-effort local backup
+      }
+    });
+  }
+
+  private static async removeLocalPostBackup(postId: string): Promise<void> {
+    await this.enqueueLocalPostBackupWrite(async () => {
+      try {
+        const [map, tombstones] = await Promise.all([
+          this.readLocalPostMap(),
+          this.readLocalPostTombstones(),
+        ]);
+        if (!map[postId] && tombstones[postId]) return;
+        delete map[postId];
+        tombstones[postId] = Date.now();
+        const recentTombstones = Object.entries(tombstones)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 1000)
+          .reduce<Record<string, number>>((acc, [id, ts]) => { acc[id] = ts; return acc; }, {});
+        await StorageService.setMetadata(LOCAL_POSTS_META_KEY, map);
+        await StorageService.setMetadata(LOCAL_POSTS_TOMBSTONES_META_KEY, recentTombstones);
+      } catch {
+        // best-effort cleanup
+      }
+    });
   }
 }

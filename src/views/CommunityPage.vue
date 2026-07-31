@@ -15,6 +15,7 @@
     </ion-header>
 
     <ion-content>
+      <DesktopPageShell>
       <!-- Community Header -->
       <div v-if="community" class="community-header">
         <div class="community-top">
@@ -152,8 +153,12 @@
             :poll="item.data"
             :flagged="item.flagged"
             :filter-action="currentModSettings.wordFilterAction"
+            :has-upvoted="hasUpvotedPoll(item.data.id)"
+            :has-downvoted="hasDownvotedPoll(item.data.id)"
             @click="navigateToPoll(item.data)"
             @vote="navigateToPoll(item.data)"
+            @upvote="handleUpvotePoll(item.data)"
+            @downvote="handleDownvotePoll(item.data)"
           />
         </template>
       </div>
@@ -193,6 +198,7 @@
         </ol>
       </div>
      
+      </DesktopPageShell>
     </ion-content>
   </ion-page>
 </template>
@@ -426,6 +432,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watchEffect, watch, onUnmounted } from 'vue';
+import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage,
@@ -759,122 +766,116 @@ const displayedContent = computed(() => {
   );
 });
 
+// Post vote state lives in the store, which reconciles it against the graph.
+// Polls still read the local sets below.
 function hasUpvoted(postId: string): boolean {
-  voteVersion.value; // reactive dependency to trigger re-render on vote changes
-  const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
-  return votedPosts.includes(postId);
+  return postStore.myVote(postId) === 'up';
 }
 
 function hasDownvoted(postId: string): boolean {
-  voteVersion.value; // reactive dependency to trigger re-render on vote changes
-  const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
-  return votedPosts.includes(postId);
+  return postStore.myVote(postId) === 'down';
+}
+
+function hasUpvotedPoll(pollId: string): boolean {
+  voteVersion.value;
+  const votedPolls = JSON.parse(localStorage.getItem('upvoted-polls') || '[]');
+  return votedPolls.includes(pollId);
+}
+
+function hasDownvotedPoll(pollId: string): boolean {
+  voteVersion.value;
+  const votedPolls = JSON.parse(localStorage.getItem('downvoted-polls') || '[]');
+  return votedPolls.includes(pollId);
+}
+
+async function handleUpvotePoll(poll: Poll) {
+  try {
+    if (hasUpvotedPoll(poll.id)) {
+      const votedPolls = JSON.parse(localStorage.getItem('upvoted-polls') || '[]');
+      localStorage.setItem('upvoted-polls', JSON.stringify(votedPolls.filter((id: string) => id !== poll.id)));
+      voteVersion.value++;
+      await pollStore.voteOnPollContent(poll.id, 'up');
+    } else {
+      const downvotedPolls = JSON.parse(localStorage.getItem('downvoted-polls') || '[]');
+      if (downvotedPolls.includes(poll.id)) {
+        localStorage.setItem('downvoted-polls', JSON.stringify(downvotedPolls.filter((id: string) => id !== poll.id)));
+        await pollStore.voteOnPollContent(poll.id, 'down');
+      }
+      const votedPolls = JSON.parse(localStorage.getItem('upvoted-polls') || '[]');
+      votedPolls.push(poll.id);
+      localStorage.setItem('upvoted-polls', JSON.stringify(votedPolls));
+      voteVersion.value++;
+      await pollStore.upvotePoll(poll.id);
+    }
+  } catch (error) {
+    voteVersion.value++;
+    console.error('Error upvoting poll:', error);
+    (await toastController.create({ message: 'Failed to upvote poll', duration: 2000 })).present();
+  }
+}
+
+async function handleDownvotePoll(poll: Poll) {
+  try {
+    if (hasDownvotedPoll(poll.id)) {
+      const votedPolls = JSON.parse(localStorage.getItem('downvoted-polls') || '[]');
+      localStorage.setItem('downvoted-polls', JSON.stringify(votedPolls.filter((id: string) => id !== poll.id)));
+      voteVersion.value++;
+      await pollStore.voteOnPollContent(poll.id, 'down');
+    } else {
+      const upvotedPolls = JSON.parse(localStorage.getItem('upvoted-polls') || '[]');
+      if (upvotedPolls.includes(poll.id)) {
+        localStorage.setItem('upvoted-polls', JSON.stringify(upvotedPolls.filter((id: string) => id !== poll.id)));
+        await pollStore.voteOnPollContent(poll.id, 'up');
+      }
+      const votedPolls = JSON.parse(localStorage.getItem('downvoted-polls') || '[]');
+      votedPolls.push(poll.id);
+      localStorage.setItem('downvoted-polls', JSON.stringify(votedPolls));
+      voteVersion.value++;
+      await pollStore.downvotePoll(poll.id);
+    }
+  } catch (error) {
+    voteVersion.value++;
+    console.error('Error downvoting poll:', error);
+    (await toastController.create({ message: 'Failed to downvote poll', duration: 2000 })).present();
+  }
+}
+
+async function presentVoteToast(message: string, expectedVersion: number) {
+  const toast = await toastController.create({ message, duration: 1500 });
+  // Skip if a newer vote action has since superseded this one, to avoid a stale toast.
+  if (voteVersion.value === expectedVersion) {
+    await toast.present();
+  }
+}
+
+/**
+ * One toggle, one write — see the matching handler in HomePage. Switching sides
+ * no longer issues a remove-then-add pair against the same node.
+ */
+async function handlePostVote(post: Post, direction: 'up' | 'down') {
+  const wasActive = postStore.myVote(post.id) === direction;
+  voteVersion.value++;
+  const version = voteVersion.value;
+  try {
+    await postStore.toggleVote(post.id, direction);
+    const labels = { up: 'Upvote', down: 'Downvote' };
+    await presentVoteToast(wasActive ? `${labels[direction]} removed` : `${labels[direction]}d`, version);
+  } catch (error) {
+    console.error('Error voting:', error);
+    const toast = await toastController.create({
+      message: direction === 'up' ? 'Failed to upvote' : 'Failed to downvote',
+      duration: 2000,
+    });
+    await toast.present();
+  }
 }
 
 async function handleUpvote(post: Post) {
-  try {
-    if (hasUpvoted(post.id)) {
-      // Remove from localStorage first (optimistic UI)
-      const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
-      const filtered = votedPosts.filter((id: string) => id !== post.id);
-      localStorage.setItem('upvoted-posts', JSON.stringify(filtered));
-      voteVersion.value++;
-
-      await postStore.removeUpvote(post.id);
-
-      const toast = await toastController.create({
-        message: 'Upvote removed',
-        duration: 1500,
-      });
-      await toast.present();
-    } else {
-      // Clear downvote from localStorage first if needed
-      const downvotedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
-      if (downvotedPosts.includes(post.id)) {
-        const filtered = downvotedPosts.filter((id: string) => id !== post.id);
-        localStorage.setItem('downvoted-posts', JSON.stringify(filtered));
-      }
-
-      // Add to upvoted localStorage
-      const votedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
-      votedPosts.push(post.id);
-      localStorage.setItem('upvoted-posts', JSON.stringify(votedPosts));
-      voteVersion.value++;
-
-      // Clear existing downvote in store if needed
-      if (downvotedPosts.includes(post.id)) {
-        await postStore.removeDownvote(post.id);
-      }
-      await postStore.upvotePost(post.id);
-
-      const toast = await toastController.create({
-        message: 'Upvoted',
-        duration: 1500,
-      });
-      await toast.present();
-    }
-  } catch (error) {
-    voteVersion.value++;
-    console.error('Error upvoting:', error);
-    const toast = await toastController.create({
-      message: 'Failed to upvote',
-      duration: 2000,
-    });
-    await toast.present();
-  }
+  await handlePostVote(post, 'up');
 }
 
 async function handleDownvote(post: Post) {
-  try {
-    if (hasDownvoted(post.id)) {
-      // Remove from localStorage first (optimistic UI)
-      const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
-      const filtered = votedPosts.filter((id: string) => id !== post.id);
-      localStorage.setItem('downvoted-posts', JSON.stringify(filtered));
-      voteVersion.value++;
-
-      await postStore.removeDownvote(post.id);
-
-      const toast = await toastController.create({
-        message: 'Downvote removed',
-        duration: 1500,
-      });
-      await toast.present();
-    } else {
-      // Clear upvote from localStorage first if needed
-      const upvotedPosts = JSON.parse(localStorage.getItem('upvoted-posts') || '[]');
-      if (upvotedPosts.includes(post.id)) {
-        const filtered = upvotedPosts.filter((id: string) => id !== post.id);
-        localStorage.setItem('upvoted-posts', JSON.stringify(filtered));
-      }
-
-      // Add to downvoted localStorage
-      const votedPosts = JSON.parse(localStorage.getItem('downvoted-posts') || '[]');
-      votedPosts.push(post.id);
-      localStorage.setItem('downvoted-posts', JSON.stringify(votedPosts));
-      voteVersion.value++;
-
-      // Clear existing upvote in store if needed
-      if (upvotedPosts.includes(post.id)) {
-        await postStore.removeUpvote(post.id);
-      }
-      await postStore.downvotePost(post.id);
-
-      const toast = await toastController.create({
-        message: 'Downvoted',
-        duration: 1500,
-      });
-      await toast.present();
-    }
-  } catch (error) {
-    voteVersion.value++;
-    console.error('Error downvoting:', error);
-    const toast = await toastController.create({
-      message: 'Failed to downvote',
-      duration: 2000,
-    });
-    await toast.present();
-  }
+  await handlePostVote(post, 'down');
 }
 
 function formatNumber(num: number | undefined | null): string {

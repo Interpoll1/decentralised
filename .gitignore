@@ -11,6 +11,16 @@ node_modules
 dist
 dist-ssr
 *.local
+.env*
+src/views/.env*
+!.env.example
+!src/views/.env.example
+peer-data/
+radata/
+app/gun-relay-server/radata/
+relay-server/data/
+message-cache.json
+storage.txt
 
 # Editor directories and files
 .vscode/*
@@ -22,13 +32,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-gun-relay-server/radata
-gun-relay-server/radata/!
-gun-relay-server/radata/%1C
-gun-relay-server/radata/!
-gun-relay
 nuxt-app
-relay-server
-shared-validation
 src/components/copilot-components.md
 src/services/copilot-services.md
+
+# design-sync (staged scripts, build output, caches)
+.ds-sync/
+ds-bundle/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules

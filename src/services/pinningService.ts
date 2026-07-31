@@ -62,7 +62,9 @@ export class PinningService {
     const policy = await this.getPolicy();
     if (!policy.autoPruneOldContent) return;
 
-    // Get storage usage
+    // Get storage usage. `navigator.storage` is undefined on some mobile
+    // browsers / insecure contexts, so guard before calling estimate().
+    if (!navigator.storage?.estimate) return;
     const usage = await navigator.storage.estimate();
     const usageMB = (usage.usage || 0) / (1024 * 1024);
 
@@ -73,9 +75,14 @@ export class PinningService {
 
   // Get storage stats
   static async getStorageStats() {
-    const estimate = await navigator.storage.estimate();
     const pinnedContent = await IPFSService.listPinned();
-    
+    // `navigator.storage` is undefined on some mobile browsers / insecure
+    // contexts — report zeroed usage rather than throwing.
+    if (!navigator.storage?.estimate) {
+      return { used: 0, quota: 0, pinnedItems: pinnedContent.length };
+    }
+    const estimate = await navigator.storage.estimate();
+
     return {
       used: (estimate.usage || 0) / (1024 * 1024),
       quota: (estimate.quota || 0) / (1024 * 1024),

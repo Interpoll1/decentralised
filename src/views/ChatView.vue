@@ -6,8 +6,8 @@
           <ion-back-button default-href="/home"></ion-back-button>
         </ion-buttons>
         <ion-title>{{ recipientName }}</ion-title>
-        <ion-note slot="end" class="connection-status" :class="{ connected }">
-          {{ !connected ? 'Connecting...' : !chatReady ? 'Setting up...' : 'Connected' }}
+        <ion-note slot="end" class="connection-status" :class="{ connected: connected && !chatError, error: chatError }">
+          {{ statusLabel }}
         </ion-note>
       </ion-toolbar>
       <ion-toolbar v-if="isTypingState">
@@ -31,9 +31,22 @@
   </div>
   <div class="message-meta">
     <span class="message-time">{{ formatTime(msg.timestamp) }}</span>
-    <span v-if="msg.sent" class="message-status">{{ msg.read ? '✓✓' : '✓' }}</span>
+    <span v-if="msg.sent" class="message-status" :class="{ stalled: msg.status === 'failed' }">
+      {{ deliveryMark(msg) }}
+    </span>
   </div>
 </div>
+        </div>
+
+        <div v-if="chatError" class="chat-error-banner">
+          {{ chatError }}
+        </div>
+        <div v-else-if="recipientKeyMissing" class="chat-warning-banner">
+          {{ recipientName }} hasn’t opened the app yet, so there’s no key to encrypt for them.
+          You can still write — messages are saved here and sent automatically once they appear.
+        </div>
+        <div v-else-if="!connected && chatReady" class="chat-warning-banner">
+          No peers reachable. Messages are queued on this device and sent when a connection returns.
         </div>
 
         <!-- Input Area -->
@@ -42,14 +55,14 @@
             v-model="messageInput"
             @keydown.enter.exact.prevent="handleSend"
             @input="handleTyping"
-            :placeholder="chatReady ? 'Type a message...' : 'Setting up encrypted chat...'"
+            :placeholder="chatError ? 'Chat unavailable' : chatReady ? 'Type a message...' : 'Setting up encrypted chat...'"
             :disabled="!chatReady"
             class="message-input"
             rows="1"
           />
           <button
             @click="handleSend"
-            :disabled="!messageInput.trim() || !connected || !chatReady"
+            :disabled="!messageInput.trim() || !chatReady"
             class="send-button"
           >
             
@@ -71,7 +84,7 @@ import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonBackButton, IonNote, onIonViewWillEnter
 } from '@ionic/vue';
-import ChatService, { ChatMessage } from '../services/chatService';
+import ChatService, { type ChatMessage } from '../services/chatService';
 import { UserService } from '../services/userService';
 import config from '@/config';
 
@@ -84,20 +97,41 @@ const recipientName = computed(() => (route.query.name as string) || 'User');
 const WS_URL = config.relay.websocket;
 
 // ── State ─────────────────────────────────────────────────────────────────────
-const connected      = ref(false);
-const chatReady      = ref(false);
-const messageInput   = ref('');
-const messages       = ref<ChatMessage[]>([]);
-const typingState    = ref(false);
-const content        = ref<any>(null);
-const typingTimer    = ref<number | null>(null);
+const connected           = ref(false);
+const chatReady           = ref(false);
+const chatError           = ref('');
+const recipientKeyMissing = ref(false);
+const messageInput        = ref('');
+const messages            = ref<ChatMessage[]>([]);
+const typingState         = ref(false);
+const content             = ref<any>(null);
+const typingTimer         = ref<number | null>(null);
 
 let chatService: ChatService | null = null;
 let initGeneration = 0;
 
-// Computed helpers for template
 const currentMessages = computed(() => messages.value);
 const isTypingState   = computed(() => typingState.value);
+
+const statusLabel = computed(() => {
+  if (chatError.value) return 'Failed';
+  if (!chatReady.value) return 'Setting up...';
+  return connected.value ? 'Connected' : 'Offline';
+});
+
+/** ✓ written to the graph, ✓✓ read by them, ⋯ still queued, ! gave up retrying. */
+function deliveryMark(msg: ChatMessage): string {
+  if (msg.status === 'failed') return '!';
+  if (msg.status === 'pending') return '⋯';
+  return msg.read ? '✓✓' : '✓';
+}
+
+/** Replace or append by id — the same message can arrive from send and from Gun. */
+function upsertMessage(msg: ChatMessage) {
+  const at = messages.value.findIndex(m => m.id === msg.id);
+  if (at === -1) messages.value.push(msg);
+  else messages.value[at] = { ...messages.value[at], ...msg };
+}
 
 function bindChatCallbacks(service: ChatService) {
   service.onConnectionChange = (status) => {
@@ -105,29 +139,39 @@ function bindChatCallbacks(service: ChatService) {
   };
 
   service.onMessage = (msg: ChatMessage) => {
-    messages.value.push(msg);
+    upsertMessage(msg);
     nextTick(() => scrollToBottom());
+  };
+
+  service.onMessageStatus = ({ id, status, error }) => {
+    const at = messages.value.findIndex(m => m.id === id);
+    if (at !== -1) messages.value[at] = { ...messages.value[at], status, error };
   };
 
   service.onTyping = ({ from, isTyping }) => {
     if (from === recipientId.value) typingState.value = isTyping;
   };
 
-  service.onReadReceipt = ({ from }) => {
-    if (from === recipientId.value) {
-      messages.value.forEach(m => { if (m.sent) m.read = true; });
-    }
+  service.onReadReceipt = ({ from, at }) => {
+    if (from !== recipientId.value) return;
+    // Only messages they could actually have seen — the receipt is a watermark,
+    // not a blanket "everything is read".
+    messages.value.forEach(m => { if (m.sent && m.timestamp <= at) m.read = true; });
   };
 
-  service.onDelivered = ({ messageId }) => {
-    console.log('Delivered:', messageId);
+  service.onRecipientKeyChange = ({ userId, available }) => {
+    if (userId === recipientId.value) recipientKeyMissing.value = !available;
   };
+
+  service.onDelivered = () => { /* the status callback is the authoritative signal */ };
 }
 
 function resetChatState() {
   messages.value = [];
   connected.value = false;
   chatReady.value = false;
+  chatError.value = '';
+  recipientKeyMissing.value = false;
   messageInput.value = '';
   typingState.value = false;
 }
@@ -152,47 +196,33 @@ async function initializeChat() {
   bindChatCallbacks(service);
   chatService = service;
 
-  await service.init();
-  if (gen !== initGeneration) {
-    service.disconnect();
-    return;
-  }
-
-  const didConnect = await waitForConnection();
-  if (gen !== initGeneration) {
-    service.disconnect();
-    return;
-  }
-  if (!didConnect) {
-    const stop = watch(connected, (isConnected) => {
-      if (!isConnected || gen !== initGeneration || chatReady.value) return;
-      stop();
-      void initializeChat();
-    });
-    return;
-  }
-
   try {
-    await service.startChat({
-      userId: targetUserId,
-      name: recipientName.value,
-    });
+    await service.init();
+    if (gen !== initGeneration) { service.disconnect(); return; }
 
-    if (gen !== initGeneration) {
-      service.disconnect();
-      return;
-    }
+    // Local history first: this device's copy is durable and needs no network,
+    // so the conversation is on screen before any peer is contacted. The old
+    // flow blocked here for up to ten seconds waiting for a connection, and
+    // gave up entirely — showing nothing — if none arrived.
+    messages.value = await service.getLocalHistory(targetUserId);
+    if (gen !== initGeneration) { service.disconnect(); return; }
+    chatReady.value = true;
+    recipientKeyMissing.value = !service.hasRecipientKey(targetUserId);
+    scrollToBottom();
+
+    await service.startChat({ userId: targetUserId, name: recipientName.value });
+    if (gen !== initGeneration) { service.disconnect(); return; }
+    recipientKeyMissing.value = !service.hasRecipientKey(targetUserId);
 
     const history = await service.loadHistory(targetUserId);
-    if (gen !== initGeneration) {
-      service.disconnect();
-      return;
-    }
-
-    messages.value = history;
-    chatReady.value = true;
+    if (gen !== initGeneration) { service.disconnect(); return; }
+    history.forEach(upsertMessage);
+    messages.value.sort((a, b) => a.timestamp - b.timestamp);
   } catch (err) {
-    console.error('startChat failed:', err);
+    console.error('Chat setup failed:', err);
+    chatError.value = err instanceof Error
+      ? err.message
+      : 'Could not start an encrypted chat with this user.';
   }
 
   service.markAsRead(targetUserId);
@@ -220,19 +250,6 @@ onUnmounted(() => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function waitForConnection(): Promise<boolean> {
-  return new Promise((resolve) => {
-    if (connected.value) { resolve(true); return; }
-    const stop = watch(connected, (val) => {
-      if (val) { stop(); setTimeout(() => resolve(true), 300); }
-    });
-    setTimeout(() => {
-      stop();
-      resolve(false);
-    }, 10000);
-  });
-}
-
 const scrollToBottom = () => {
   if (content.value) content.value.$el.scrollToBottom(300);
 };
@@ -242,28 +259,24 @@ watch(currentMessages, () => nextTick(() => scrollToBottom()), { deep: true });
 // ── Actions ───────────────────────────────────────────────────────────────────
 
 const handleSend = async () => {
-  if (!messageInput.value.trim() || !connected.value || !chatReady.value || !chatService) return;
+  // Deliberately not gated on `connected`: the message is written to IndexedDB
+  // and retried from the outbox, so composing offline is safe. Blocking here is
+  // what made the composer feel dead whenever no peer happened to be up.
+  if (!messageInput.value.trim() || !chatReady.value || !chatService) return;
 
   const text = messageInput.value.trim();
+  // Clear optimistically so a slow relay never lets the same text be sent twice.
+  messageInput.value = '';
 
   try {
-    const messageId = await chatService.sendMessage(recipientId.value, text);
-
-    messages.value.push({
-      id: messageId,
-      from: 'me',
-      to: recipientId.value,
-      message: text,
-      timestamp: Date.now(),
-      read: false,
-      sent: true,
-    });
-
-    messageInput.value = '';
+    // The service returns the stored message — the single source of this bubble.
+    upsertMessage(await chatService.sendMessage(recipientId.value, text));
     chatService.sendTyping(recipientId.value, false);
     nextTick(() => scrollToBottom());
   } catch (err) {
     console.error('Failed to send message:', err);
+    messageInput.value = text;
+    chatError.value = err instanceof Error ? err.message : 'Message could not be sent';
   }
 };
 
@@ -492,6 +505,38 @@ margin-bottom: 7px;
   background: rgba(var(--ion-color-success-rgb), 0.12);
   border-color: rgba(var(--ion-color-success-rgb), 0.30);
   color: var(--ion-color-success);
+}
+
+.connection-status.error {
+  background: rgba(var(--ion-color-danger-rgb), 0.12);
+  border-color: rgba(var(--ion-color-danger-rgb), 0.30);
+  color: var(--ion-color-danger);
+}
+
+.chat-error-banner {
+  margin: 0 12px 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--ion-color-danger);
+  background: rgba(var(--ion-color-danger-rgb), 0.12);
+  border: 1px solid rgba(var(--ion-color-danger-rgb), 0.30);
+}
+
+.chat-warning-banner {
+  margin: 0 12px 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ion-color-warning-shade);
+  background: rgba(var(--ion-color-warning-rgb), 0.12);
+  border: 1px solid rgba(var(--ion-color-warning-rgb), 0.30);
+}
+
+.message-status.stalled {
+  color: var(--ion-color-warning);
+  font-weight: 700;
 }
 
 html.dark .message.received .message-content {

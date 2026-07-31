@@ -1,35 +1,21 @@
-// src/services/userService.ts
-//
-// Key design decisions vs original:
-//
-//   1. OWN PROFILE: stored in IndexedDB (via StorageService) as source of truth.
-//      Gun is written to for peer discovery but NEVER read back for own profile.
-//      This kills the Gun localStorage-cache race that caused profile to flicker
-//      and revert after writes.
-//
-//   2. OTHER PROFILES: still read from Gun (unchanged behaviour).
-//
-//   3. updateProfile(): merges into in-memory cache directly, persists to
-//      IndexedDB synchronously, writes to Gun async (fire-and-forget).
-//      No stale-cache spread because we never re-read Gun for own profile.
-//
-//   4. getCurrentUser(forceRefresh): forceRefresh now reads from IndexedDB,
-//      not Gun — so it always gets the latest written value immediately.
-
 import { GunService } from './gunService';
 import { VoteTrackerService } from './voteTrackerService';
 import { KeyService } from './keyService';
 import { StorageService } from './storageService';
 import type { TrustLevel } from './trustService';
+import { parseIdentityTrust } from '@/utils/identityTrust';
 
-const PROFILE_META_KEY = 'own-user-profile';
+const PROFILE_META_KEY = 'user-profile';
 
 export interface UserProfile {
   id: string;
-  username: string;           // auto-generated fallback (user_xxxxxxxx)
-  customUsername?: string;    // user-chosen via ClaimUsernamePage
-  trustLevel?: TrustLevel;    // 'none' | 'verified'
+  username: string;
+  customUsername?: string;
+  trustLevel?: TrustLevel;
   displayName: string;
+  identityUsername?: string;
+  identityIssuer?: string;
+  identityTrustLevel?: 'trusted-issuer' | 'unverified';
   showRealName?: boolean;
   avatarIPFS?: string;
   avatarThumbnail?: string;
@@ -38,7 +24,7 @@ export interface UserProfile {
   karma: number;
   postCount: number;
   commentCount: number;
-  publicKey?: string;         // Schnorr x-only public key (safe to share)
+  publicKey?: string;
 }
 
 export interface UserStats {
@@ -51,114 +37,190 @@ export interface UserStats {
 }
 
 export class UserService {
-  // In-memory cache — always reflects the latest written state.
   private static currentUser: UserProfile | null = null;
 
-  // ── Own profile ────────────────────────────────────────────────────────────
-
   /**
-   * Get the current user's profile.
-   *
-   * Priority: in-memory cache → IndexedDB → Gun (first boot only).
-   * forceRefresh skips the in-memory cache but still reads IndexedDB, not Gun.
-   * This means reads are always instant and never race with Gun's local cache.
+   * Secondary reverse index: pubkey → deviceId pointer, stored under the
+   * dedicated `user-pubkey-index` Gun root. Best-effort only (Gun has no
+   * cross-node transactions), so `getUserByPubkey` falls back to a scan.
+   * Written lazily whenever a profile is touched — no bulk backfill.
    */
+  private static writePubkeyIndex(pubkey: string | undefined, deviceId: string): void {
+    if (!pubkey || !deviceId) return;
+    try {
+      const gun = GunService.getGun();
+      gun.get('user-pubkey-index').get(pubkey).put({ deviceId, updatedAt: Date.now() });
+    } catch {
+      // Secondary index is best-effort; a failed write degrades to a scan, not a break.
+    }
+  }
+
+  private static deriveIdentityFields(
+    profileLike: Partial<UserProfile>,
+  ): Pick<UserProfile, 'identityUsername' | 'identityIssuer' | 'identityTrustLevel'> {
+    const identityUsername = (profileLike.identityUsername || profileLike.customUsername || profileLike.username || '').trim();
+    const trust = parseIdentityTrust(identityUsername);
+    return {
+      identityUsername: trust.identityUsername,
+      identityIssuer: trust.issuer,
+      identityTrustLevel: trust.trustLevel,
+    };
+  }
+
   static async getCurrentUser(forceRefresh = false): Promise<UserProfile> {
     if (this.currentUser && !forceRefresh) return this.currentUser;
 
-    // 1. Try IndexedDB (our source of truth for own profile)
     const stored = await StorageService.getMetadata(PROFILE_META_KEY).catch(() => null);
     if (stored && stored.id) {
       this.currentUser = stored as UserProfile;
       return this.currentUser;
     }
 
-    // 2. First boot: read from Gun to migrate existing profile
     const deviceId = await VoteTrackerService.getDeviceId();
     const gun = GunService.getGun();
     const publicKey = await KeyService.getPublicKeyHex();
 
-    const gunProfile = await new Promise<any>((resolve) => {
+    const existingProfile = await new Promise<UserProfile | null>((resolve) => {
       let done = false;
-      // Use .once() — we want a single snapshot, not a live subscription.
-      // Gun .once() returns whatever it has locally or from the network.
       gun.get('users').get(deviceId).once((data: any) => {
-        if (!done) { done = true; resolve(data && data.id ? data : null); }
+        if (!done) {
+          done = true;
+          resolve(data && data.id ? (data as UserProfile) : null);
+        }
       });
-      // Fallback timeout in case Gun returns nothing
-      setTimeout(() => { if (!done) { done = true; resolve(null); } }, 3000);
+      setTimeout(() => {
+        if (!done) {
+          done = true;
+          resolve(null);
+        }
+      }, 3000);
     });
 
-    let profile: UserProfile;
-
-    if (gunProfile) {
-      profile = { ...gunProfile, publicKey: gunProfile.publicKey || publicKey };
-    } else {
-      // Brand new user
-      profile = {
-        id: deviceId,
-        username: `user_${deviceId.substring(0, 8)}`,
-        displayName: `User ${deviceId.substring(0, 8)}`,
-        bio: '',
-        createdAt: Date.now(),
-        karma: 0,
-        postCount: 0,
-        commentCount: 0,
-        publicKey,
-        trustLevel: 'none',
+    if (existingProfile) {
+      const derived = this.deriveIdentityFields(existingProfile);
+      const profile: UserProfile = {
+        ...existingProfile,
+        publicKey: existingProfile.publicKey || publicKey,
+        ...derived,
       };
-      // Write to Gun so peers can discover this user
-      gun.get('users').get(deviceId).put(profile);
+      await gun.get('users').get(deviceId).put(profile);
+      this.writePubkeyIndex(profile.publicKey, deviceId);
+      await StorageService.setMetadata(PROFILE_META_KEY, profile);
+      this.currentUser = profile;
+      return profile;
     }
 
-    // Persist to IndexedDB so future reads are instant and Gun-independent
-    await StorageService.setMetadata(PROFILE_META_KEY, profile).catch(() => {});
-    this.currentUser = profile;
-    return profile;
+    const username = `user_${deviceId.substring(0, 8)}`;
+    const newProfile: UserProfile = {
+      id: deviceId,
+      username,
+      displayName: `User ${deviceId.substring(0, 8)}`,
+      bio: '',
+      createdAt: Date.now(),
+      karma: 0,
+      postCount: 0,
+      commentCount: 0,
+      publicKey,
+      ...this.deriveIdentityFields({ username }),
+    };
+
+    await gun.get('users').get(deviceId).put(newProfile);
+    this.writePubkeyIndex(newProfile.publicKey, deviceId);
+    await StorageService.setMetadata(PROFILE_META_KEY, newProfile);
+    this.currentUser = newProfile;
+
+    return newProfile;
   }
 
-  /**
-   * Update own profile fields.
-   * - Merges into in-memory cache immediately (no re-fetch, no stale spread).
-   * - Persists to IndexedDB synchronously (source of truth).
-   * - Writes to Gun async so peers see the update (fire-and-forget).
-   */
   static async updateProfile(updates: Partial<UserProfile>): Promise<UserProfile> {
-    // Use cached profile directly — never re-read from Gun here
     const base = this.currentUser || await this.getCurrentUser();
-    const updated: UserProfile = { ...base, ...updates };
+    const mergedProfile: UserProfile = { ...base, ...updates };
+    const derivedIdentity = this.deriveIdentityFields(mergedProfile);
+    const updatedProfile: UserProfile = {
+      ...mergedProfile,
+      identityUsername: mergedProfile.identityUsername ?? derivedIdentity.identityUsername,
+      identityIssuer: mergedProfile.identityIssuer ?? derivedIdentity.identityIssuer,
+      identityTrustLevel: mergedProfile.identityTrustLevel ?? derivedIdentity.identityTrustLevel,
+    };
 
-    // 1. Update in-memory cache immediately so any subsequent call sees it
-    this.currentUser = updated;
+    this.currentUser = updatedProfile;
+    await StorageService.setMetadata(PROFILE_META_KEY, updatedProfile);
 
-    // 2. Persist to IndexedDB (source of truth, instant on next read)
-    await StorageService.setMetadata(PROFILE_META_KEY, updated).catch(() => {});
-
-    // 3. Write to Gun async for peer visibility (don't await — don't block UI)
     const gun = GunService.getGun();
-    gun.get('users').get(updated.id).put(updated);
+    await gun.get('users').get(updatedProfile.id).put(updatedProfile);
+    this.writePubkeyIndex(updatedProfile.publicKey, updatedProfile.id);
 
-    return updated;
+    return updatedProfile;
   }
-
-  // ── Other users ────────────────────────────────────────────────────────────
 
   static async getUser(userId: string): Promise<UserProfile | null> {
     const gun = GunService.getGun();
     return new Promise((resolve) => {
       let done = false;
       gun.get('users').get(userId).once((data: any) => {
-        if (!done) { done = true; resolve(data && data.id ? data : null); }
+        if (!done) {
+          done = true;
+          resolve(data && data.id ? (data as UserProfile) : null);
+        }
       });
-      setTimeout(() => { if (!done) { done = true; resolve(null); } }, 3000);
+      setTimeout(() => {
+        if (!done) {
+          done = true;
+          resolve(null);
+        }
+      }, 3000);
+    });
+  }
+
+  /**
+   * Resolve a profile by its Schnorr public key. Uses the `user-pubkey-index`
+   * reverse pointer first, then falls back to a `users` scan if the pointer is
+   * missing or stale (the pointer is a best-effort cache, not authoritative).
+   */
+  static async getUserByPubkey(pubkey: string): Promise<UserProfile | null> {
+    if (!pubkey) return null;
+    const gun = GunService.getGun();
+
+    const pointer = await new Promise<{ deviceId?: string } | null>((resolve) => {
+      let done = false;
+      gun.get('user-pubkey-index').get(pubkey).once((data: any) => {
+        if (!done) {
+          done = true;
+          resolve(data && data.deviceId ? data : null);
+        }
+      });
+      setTimeout(() => {
+        if (!done) {
+          done = true;
+          resolve(null);
+        }
+      }, 3000);
+    });
+
+    if (pointer?.deviceId) {
+      const profile = await this.getUser(pointer.deviceId);
+      if (profile) return profile;
+    }
+
+    // Pointer missing/stale — scan for a profile carrying this pubkey.
+    return this.findUserByPubkeyScan(pubkey);
+  }
+
+  private static async findUserByPubkeyScan(pubkey: string): Promise<UserProfile | null> {
+    const gun = GunService.getGun();
+    return new Promise((resolve) => {
+      let found: UserProfile | null = null;
+      gun.get('users').map().once((user: any) => {
+        if (found || !user || user._ || !user.id) return;
+        if (user.publicKey === pubkey) found = user as UserProfile;
+      });
+      setTimeout(() => resolve(found), 1000);
     });
   }
 
   static getDisplayUsername(profile: UserProfile): string {
     return profile.customUsername || profile.username;
   }
-
-  // ── Counters (still Gun-backed, that's fine for non-critical fields) ──────
 
   static async incrementPostCount() {
     const user = this.currentUser || await this.getCurrentUser();
@@ -174,17 +236,26 @@ export class UserService {
     const gun = GunService.getGun();
     const user = await this.getUser(authorId);
     if (user) {
-      gun.get('users').get(authorId).get('karma').put((user.karma || 0) + points);
-      // If it's our own karma, also update local cache
+      const updatedKarma = (user.karma || 0) + points;
+      await gun.get('users').get(authorId).get('karma').put(updatedKarma);
       if (this.currentUser && this.currentUser.id === authorId) {
-        await this.updateProfile({ karma: (this.currentUser.karma || 0) + points });
+        await this.updateProfile({ karma: updatedKarma });
       }
     }
   }
 
   static async getUserStats(userId: string): Promise<UserStats> {
     const user = await this.getUser(userId);
-    if (!user) return { totalPosts: 0, totalComments: 0, totalUpvotes: 0, totalDownvotes: 0, karma: 0, joinedCommunities: 0 };
+    if (!user) {
+      return {
+        totalPosts: 0,
+        totalComments: 0,
+        totalUpvotes: 0,
+        totalDownvotes: 0,
+        karma: 0,
+        joinedCommunities: 0,
+      };
+    }
     return {
       totalPosts: user.postCount || 0,
       totalComments: user.commentCount || 0,
@@ -200,11 +271,9 @@ export class UserService {
     const users: UserProfile[] = [];
     return new Promise((resolve) => {
       gun.get('users').map().once((user: any) => {
-        if (user && !user._ && (
-          user.username?.includes(query) ||
-          user.customUsername?.includes(query)
-        )) {
-          users.push(user);
+        if (!user || user._ || !user.id) return;
+        if (user.username?.includes(query) || user.customUsername?.includes(query)) {
+          users.push(user as UserProfile);
         }
       });
       setTimeout(() => resolve(users), 1000);

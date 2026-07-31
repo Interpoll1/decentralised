@@ -4,13 +4,21 @@ const WARN_THRESHOLD = 0.60;
 const CRITICAL_THRESHOLD = 0.75;
 const EMERGENCY_THRESHOLD = 0.85;
 
-const CHECK_INTERVAL_MS = 30_000;
-const PERIODIC_GC_INTERVAL_MS = 120_000;
+// Mobile browsers cap tab memory far lower than desktop and (on iOS Safari)
+// expose no `performance.memory`, so we rely on the node-count heuristic there
+// and must react sooner — before the OS freezes/kills the tab.
+const IS_MOBILE = typeof navigator !== 'undefined' &&
+  (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+    (typeof (navigator as any).deviceMemory === 'number' && (navigator as any).deviceMemory <= 4));
 
-// Node-count thresholds for heuristic memory pressure detection (when performance.memory unavailable)
-const HEURISTIC_WARN_NODES = 1200;
-const HEURISTIC_CRITICAL_NODES = 1600;
-const HEURISTIC_EMERGENCY_NODES = 2500;
+const CHECK_INTERVAL_MS = IS_MOBILE ? 15_000 : 30_000;
+const PERIODIC_GC_INTERVAL_MS = IS_MOBILE ? 60_000 : 120_000;
+
+// Node-count thresholds for heuristic memory pressure detection (when performance.memory unavailable).
+// Mobile uses tighter limits so cleanup + Gun eviction kick in well before a freeze.
+const HEURISTIC_WARN_NODES = IS_MOBILE ? 600 : 1200;
+const HEURISTIC_CRITICAL_NODES = IS_MOBILE ? 900 : 1600;
+const HEURISTIC_EMERGENCY_NODES = IS_MOBILE ? 1300 : 2500;
 
 interface MemoryInfo {
   usedJSHeapSize: number;
@@ -24,10 +32,19 @@ export class MemoryWatchdogService {
   private static checkTimer: ReturnType<typeof setInterval> | null = null;
   private static periodicTimer: ReturnType<typeof setInterval> | null = null;
   private static cleanupCallbacks: Array<(level: CleanupLevel) => void> = [];
-  private static lastLevel: CleanupLevel = 'none';
   private static lastResetTime = 0;
   private static readonly RESET_COOLDOWN_MS = 300_000; // 5 min cooldown between Gun resets
+  /** Consecutive emergency checks before forcing a Gun reset. A reset drops the
+   *  graph to a cold state, forcing the relay to re-send everything and the
+   *  community fallback to re-download hundreds of records — which refills the
+   *  heap and re-triggers emergency. Requiring a sustained streak (not just two
+   *  consecutive checks) keeps a transient double-spike from starting that loop. */
+  private static readonly EMERGENCY_STREAK_FOR_RESET = 3;
+  private static emergencyStreak = 0;
   private static started = false;
+  /** Recent heap ratios; the window minimum is the pressure signal (see pressureRatio). */
+  private static recentRatios: number[] = [];
+  private static readonly RATIO_WINDOW = 4;
 
   static start(): void {
     if (this.started) return;
@@ -68,6 +85,23 @@ export class MemoryWatchdogService {
     };
   }
 
+  /**
+   * Pressure signal used for cleanup decisions.
+   *
+   * `usedJSHeapSize` counts garbage that simply hasn't been collected yet. Under
+   * Gun's normal sync churn a single sample swings by well over a gigabyte
+   * between GCs, so reacting to one reading makes the watchdog fire at 85% on a
+   * heap whose live set is a few hundred MB — and its response (evicting Gun
+   * graph nodes) provokes a re-sync storm that produces *more* churn. Using the
+   * lowest reading in a short window approximates the post-GC floor, i.e. the
+   * live set, so only real growth escalates.
+   */
+  private static pressureRatio(current: number): number {
+    this.recentRatios.push(current);
+    if (this.recentRatios.length > this.RATIO_WINDOW) this.recentRatios.shift();
+    return Math.min(...this.recentRatios);
+  }
+
   private static isMemoryAPIAvailable(): boolean {
     return typeof performance !== 'undefined' && 'memory' in performance;
   }
@@ -78,12 +112,13 @@ export class MemoryWatchdogService {
     let level: CleanupLevel = 'none';
 
     if (usage) {
-      // Real memory API available
-      if (usage.ratio >= EMERGENCY_THRESHOLD) {
+      // Real memory API available — judge on the recent floor, not one sample.
+      const ratio = this.pressureRatio(usage.ratio);
+      if (ratio >= EMERGENCY_THRESHOLD) {
         level = 'emergency';
-      } else if (usage.ratio >= CRITICAL_THRESHOLD) {
+      } else if (ratio >= CRITICAL_THRESHOLD) {
         level = 'aggressive';
-      } else if (usage.ratio >= WARN_THRESHOLD) {
+      } else if (ratio >= WARN_THRESHOLD) {
         level = 'light';
       }
     } else {
@@ -99,18 +134,18 @@ export class MemoryWatchdogService {
       this.doCleanup(level);
     }
 
-    if (level === 'emergency' && this.lastLevel === 'emergency') {
+    this.emergencyStreak = level === 'emergency' ? this.emergencyStreak + 1 : 0;
+
+    if (this.emergencyStreak >= this.EMERGENCY_STREAK_FOR_RESET) {
       const now = Date.now();
       if (now - this.lastResetTime > this.RESET_COOLDOWN_MS) {
         console.error('[MemoryWatchdog] Sustained emergency memory pressure — forcing Gun reconnect');
         this.forceGunReset();
         this.lastResetTime = now;
-        this.lastLevel = 'none';
+        this.emergencyStreak = 0;
         return;
       }
     }
-
-    this.lastLevel = level;
   }
 
   private static estimateMemoryPressure(): CleanupLevel {

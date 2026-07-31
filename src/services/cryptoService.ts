@@ -45,20 +45,54 @@ export class CryptoService {
     return this.hash(blockString);
   }
 
-  // Generate 12-word mnemonic
-  static generateMnemonic(): string {
+  // Generate 12-word receipt verification code (BIP-39 word list format)
+  static generateVerificationCode(): string {
     return bip39.generateMnemonic();
   }
 
-  // Validate mnemonic
-  static validateMnemonic(mnemonic: string): boolean {
-    return bip39.validateMnemonic(mnemonic);
+  // Validate receipt verification code format
+  static validateVerificationCode(verificationCode: string): boolean {
+    return bip39.validateMnemonic(verificationCode);
   }
 
-  // Derive receipt ID from mnemonic
-  static mnemonicToReceiptId(mnemonic: string): string {
-    const seed = bip39.mnemonicToSeedSync(mnemonic);
+  // Derive receipt ID from receipt verification code
+  static verificationCodeToReceiptId(verificationCode: string): string {
+    const seed = bip39.mnemonicToSeedSync(verificationCode);
     return bytesToHex(sha256(seed)).substring(0, 32);
+  }
+
+  // ── Identity backup: private key ↔ BIP-39 recovery phrase ──────────────────
+  // A Schnorr private key is 32 bytes (256 bits) of entropy, which maps to a
+  // 24-word BIP-39 phrase. Distinct from the 12-word receipt codes above.
+
+  // Convert a 32-byte private key (hex) into a 24-word recovery phrase.
+  static privateKeyToMnemonic(privateKeyHex: string): string {
+    if (!/^[0-9a-f]{64}$/i.test(privateKeyHex)) {
+      throw new Error('Invalid private key: must be 64 hex characters');
+    }
+    return bip39.entropyToMnemonic(privateKeyHex.toLowerCase());
+  }
+
+  // Recover a private key (hex) from a 24-word phrase produced by privateKeyToMnemonic.
+  static mnemonicToPrivateKey(mnemonic: string): string {
+    const normalized = mnemonic.trim().toLowerCase().replace(/\s+/g, ' ');
+    if (!bip39.validateMnemonic(normalized)) {
+      throw new Error('Invalid recovery phrase');
+    }
+    return bip39.mnemonicToEntropy(normalized).toLowerCase();
+  }
+
+  // Legacy aliases
+  static generateMnemonic(): string {
+    return this.generateVerificationCode();
+  }
+
+  static validateMnemonic(mnemonic: string): boolean {
+    return this.validateVerificationCode(mnemonic);
+  }
+
+  static mnemonicToReceiptId(mnemonic: string): string {
+    return this.verificationCodeToReceiptId(mnemonic);
   }
 
   // Generate browser fingerprint (anonymous)

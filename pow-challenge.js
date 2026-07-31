@@ -10,6 +10,7 @@ import crypto from 'crypto';
 const BASE_DIFFICULTY = 16;
 const MIN_DIFFICULTY = 12;
 const MAX_DIFFICULTY = 24;
+const TRUSTED_ISSUER_DIFFICULTY = 24; // ~15s on average desktop hardware
 const NEW_DEVICE_DIFFICULTY = 14;
 const TRUSTED_THRESHOLD = 50;
 const CHALLENGE_TTL_MS = 60_000;
@@ -20,7 +21,6 @@ const MAX_CHALLENGE_ATTEMPTS = 5;
 const TRUST_STALE_MS = 24 * 60 * 60_000; // 24 hours
 
 const POW_REQUIRED_TYPES = new Set(['broadcast', 'new-poll', 'new-block']);
-
 function countLeadingZeroBits(hexHash) {
   let bits = 0;
   for (const ch of hexHash) {
@@ -101,7 +101,7 @@ export class PowChallenge {
    * @param {{ botScore?: number, spamPenalty?: number }} [opts]
    * @returns {{ challengeId: string, prefix: string, difficulty: number, expiresAt: number }}
    */
-  createChallenge(deviceId, action, { botScore = 0, spamPenalty = 0 } = {}) {
+  createChallenge(deviceId, action, { botScore = 0, spamPenalty = 0, identityTier = 'unverified' } = {}) {
     this._rotateSecretIfNeeded();
 
     const challengeId = crypto.randomBytes(16).toString('hex');
@@ -113,7 +113,10 @@ export class PowChallenge {
       .digest('hex');
 
     const base = this._getBaseDifficulty(deviceId);
-    const difficulty = adjustDifficulty(base, { botScore, spamPenalty });
+    let difficulty = adjustDifficulty(base, { botScore, spamPenalty });
+    if (identityTier === 'trusted-issuer') {
+      difficulty = Math.max(difficulty, TRUSTED_ISSUER_DIFFICULTY);
+    }
     const expiresAt = now + CHALLENGE_TTL_MS;
 
     this._pending.set(challengeId, {
