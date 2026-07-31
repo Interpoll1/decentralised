@@ -28,6 +28,7 @@ export class SnapshotAutoService {
   private static initialized = false;
   private static saving = false;
   private static lastSignature = '';
+  private static lastSaveAt = 0;
 
   /** Start periodic auto-save + save-on-hide. Idempotent. */
   static initialize(): void {
@@ -38,13 +39,27 @@ export class SnapshotAutoService {
 
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
-        if (document.hidden) void this.save();
+        if (document.hidden) void this.saveThrottled();
       });
     }
     if (typeof window !== 'undefined') {
       // pagehide fires on tab close / navigation more reliably than beforeunload.
-      window.addEventListener('pagehide', () => { void this.save(); });
+      window.addEventListener('pagehide', () => { void this.saveThrottled(); });
     }
+  }
+
+  /**
+   * Event-driven save, rate-limited to the periodic interval.
+   *
+   * A save walks the Gun content roots, so it is not cheap. Alt-tabbing fired an
+   * unthrottled one on every single hide, which on an active session meant a
+   * full content enumeration every few seconds.
+   */
+  private static async saveThrottled(): Promise<void> {
+    const now = Date.now();
+    if (now - this.lastSaveAt < SAVE_INTERVAL_MS) return;
+    this.lastSaveAt = now;
+    await this.save();
   }
 
   /** Export current state and persist it locally, skipping unchanged snapshots. */
@@ -52,10 +67,13 @@ export class SnapshotAutoService {
     if (this.saving) return;
     this.saving = true;
     try {
-      const snapshot = await SnapshotService.export();
+      // `lite`: bounded per-root slice, no relay REST fetch. A full export is
+      // reserved for the user-initiated download on the Resilience page.
+      const snapshot = await SnapshotService.export({ lite: true });
       const sig = this.signatureOf(snapshot);
       if (sig === this.lastSignature) return; // nothing material changed
       this.lastSignature = sig;
+      this.lastSaveAt = Date.now();
       await StorageService.setMetadata(SNAPSHOT_KEY, snapshot);
     } catch {
       // Best-effort; a failed auto-save must never surface to the user.

@@ -72,6 +72,8 @@ export class VoteTallyService {
   private static lastIngestAt = new Map<string, number>();
   private static loaded = false;
   private static persistTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Detaches the whole-`events`-root backfill subscription (see backfillFromGun). */
+  private static backfillUnsub: (() => void) | null = null;
 
   /** Load the persisted tally and start backfilling from the Gun events root. */
   static async initialize(): Promise<void> {
@@ -125,6 +127,30 @@ export class VoteTallyService {
         this.schedulePersist();
       }
     }).catch(() => { /* leave at anonymous */ });
+  }
+
+  /**
+   * Drop tallies for polls the session is no longer looking at.
+   *
+   * One nested Map per poll plus one 64-char pubkey key per voter, grown by
+   * `ingest()` and by `backfillFromGun()` over the whole `events` root, with no
+   * ceiling — on a long session this was one of the few caches the memory
+   * watchdog could not reach. Everything dropped here is re-derivable: the tally
+   * is persisted and re-backfilled from Gun, so trimming costs a refetch, never
+   * correctness. Least-recently-ingested polls go first.
+   */
+  static trimCaches(level: 'light' | 'aggressive' | 'emergency'): void {
+    const maxPolls = level === 'light' ? 200 : level === 'aggressive' ? 50 : 10;
+    if (this.polls.size <= maxPolls) return;
+
+    const byRecency = [...this.polls.keys()].sort(
+      (a, b) => (this.lastIngestAt.get(b) ?? 0) - (this.lastIngestAt.get(a) ?? 0),
+    );
+    for (const pollId of byRecency.slice(maxPolls)) {
+      this.polls.delete(pollId);
+      this.lastIngestAt.delete(pollId);
+    }
+    console.info(`[VoteTally] Trimmed to ${this.polls.size} polls (${level})`);
   }
 
   /** Verify an untrusted event (e.g. from Gun) before ingesting it. */
@@ -208,7 +234,8 @@ export class VoteTallyService {
     void (async () => {
       try {
         const { GunService } = await import('@/services/gunService');
-        GunService.map('events', (raw: unknown) => {
+        this.backfillUnsub?.();
+        this.backfillUnsub = GunService.map('events', (raw: unknown) => {
           if (raw && typeof raw === 'object') this.ingestUntrusted(raw as NostrEvent);
         });
       } catch {

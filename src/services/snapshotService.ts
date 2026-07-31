@@ -59,22 +59,59 @@ function sanitizeObject(data: any): Record<string, any> {
   return clean;
 }
 
+/**
+ * Per-root ceilings for an automatic (`lite`) export.
+ *
+ * A full export enumerates every node under `posts`/`communities`/`comments`/
+ * `users`/`events` — which, with radisk and localStorage disabled, means pulling
+ * the network's entire content set into the in-memory Gun graph *and* into JS
+ * arrays. That is acceptable for a user-initiated "download a snapshot" click.
+ * It is not acceptable every five minutes and on every tab-hide, which is what
+ * SnapshotAutoService does; that turned a resilience feature into the app's
+ * largest steady-state memory consumer. The automatic path keeps a bounded,
+ * still-useful slice instead.
+ */
+const LITE_LIMITS: Record<string, number> = {
+  posts: 300,
+  communities: 100,
+  comments: 300,
+  users: 200,
+  events: 200,
+};
+
+/** Cap for the relay REST fallback. 5000 records of posts/communities is several
+ *  MB of JSON per root, and the relay 413s/504s on the larger ones anyway. */
+const RELAY_FETCH_LIMIT = 1000;
+
 export class SnapshotService {
-  private static async enumerateGunNode<T>(rootPath: string, timeout = 5000): Promise<T[]> {
+  private static async enumerateGunNode<T>(
+    rootPath: string,
+    timeout = 5000,
+    max = Infinity,
+  ): Promise<T[]> {
     return new Promise((resolve) => {
       const items: T[] = [];
       let settled = false;
       const gun = GunService.getGun();
+      let timer: ReturnType<typeof setTimeout> | null = null;
+
+      const settle = () => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        resolve(items);
+      };
 
       gun.get(rootPath).map().once((data: any, key: string) => {
         if (settled || !data || key === '_') return;
         items.push(sanitizeObject(data) as T);
+        // Stop as soon as the cap is hit rather than accumulating for the full
+        // timeout and slicing afterwards — the point is to never hold the whole
+        // root in memory at once.
+        if (items.length >= max) settle();
       });
 
-      setTimeout(() => {
-        settled = true;
-        resolve([...items]);
-      }, timeout);
+      timer = setTimeout(settle, timeout);
     });
   }
 
@@ -84,11 +121,16 @@ export class SnapshotService {
         ? config.relay.gun.slice(0, -4)
         : config.relay.gun;
       const encodedPrefix = encodeURIComponent(`${GUN_NAMESPACE}/${path}`);
-      const res = await fetch(`${gunRelayBase}/db/search?prefix=${encodedPrefix}&limit=5000`);
+      const res = await fetch(`${gunRelayBase}/db/search?prefix=${encodedPrefix}&limit=${RELAY_FETCH_LIMIT}`);
       if (!res.ok) return [];
       const data = await res.json();
-      if (!Array.isArray(data)) return [];
-      return data.map((item: any) => sanitizeObject(item) as T);
+      // The relay answers `{ results: [...] }`. This used to test `Array.isArray(data)`
+      // on the envelope and bail, so the "fallback for more complete data" had
+      // silently returned nothing for every root while still downloading and
+      // parsing the entire response body.
+      const rows = Array.isArray(data) ? data : Array.isArray(data?.results) ? data.results : null;
+      if (!rows) return [];
+      return rows.map((item: any) => sanitizeObject(item) as T);
     } catch {
       return [];
     }
@@ -103,7 +145,14 @@ export class SnapshotService {
     return Array.from(map.values());
   }
 
-  static async export(): Promise<NetworkSnapshot> {
+  /**
+   * @param options.lite Bound every collection to {@link LITE_LIMITS} and skip
+   *   the relay REST fallback. Used by the periodic auto-save; a user-initiated
+   *   export still takes everything.
+   */
+  static async export(options?: { lite?: boolean }): Promise<NetworkSnapshot> {
+    const lite = options?.lite === true;
+    const cap = (root: string) => (lite ? LITE_LIMITS[root] ?? Infinity : Infinity);
     // Collect IndexedDB chain data
     const [blocks, polls, receipts] = await Promise.all([
       StorageService.getAllBlocks(),
@@ -120,21 +169,25 @@ export class SnapshotService {
 
     // Collect GunDB data via local enumeration
     const [localPosts, localCommunities, localComments, localUsers, localEvents] = await Promise.all([
-      this.enumerateGunNode<Post>('posts'),
-      this.enumerateGunNode<Community>('communities'),
-      this.enumerateGunNode<Comment>('comments'),
-      this.enumerateGunNode<UserProfile>('users'),
-      this.enumerateGunNode<NostrEvent>('events'),
+      this.enumerateGunNode<Post>('posts', 5000, cap('posts')),
+      this.enumerateGunNode<Community>('communities', 5000, cap('communities')),
+      this.enumerateGunNode<Comment>('comments', 5000, cap('comments')),
+      this.enumerateGunNode<UserProfile>('users', 5000, cap('users')),
+      this.enumerateGunNode<NostrEvent>('events', 5000, cap('events')),
     ]);
 
-    // Fetch from relay REST API as fallback for more complete data
-    const [remotePosts, remoteCommunities, remoteComments, remoteUsers, remoteEvents] = await Promise.all([
-      this.fetchGunRelayData<Post>('posts'),
-      this.fetchGunRelayData<Community>('communities'),
-      this.fetchGunRelayData<Comment>('comments'),
-      this.fetchGunRelayData<UserProfile>('users'),
-      this.fetchGunRelayData<NostrEvent>('events'),
-    ]);
+    // Fetch from relay REST API as fallback for more complete data. Skipped for
+    // a lite export: several MB of JSON per root, every five minutes, to build a
+    // snapshot that is deliberately bounded anyway.
+    const [remotePosts, remoteCommunities, remoteComments, remoteUsers, remoteEvents] = lite
+      ? [[], [], [], [], []] as [Post[], Community[], Comment[], UserProfile[], NostrEvent[]]
+      : await Promise.all([
+        this.fetchGunRelayData<Post>('posts'),
+        this.fetchGunRelayData<Community>('communities'),
+        this.fetchGunRelayData<Comment>('comments'),
+        this.fetchGunRelayData<UserProfile>('users'),
+        this.fetchGunRelayData<NostrEvent>('events'),
+      ]);
 
     const posts = this.mergeById(localPosts, remotePosts);
     const communities = this.mergeById(localCommunities, remoteCommunities);

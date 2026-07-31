@@ -1,4 +1,5 @@
 import { GunService, GUN_NAMESPACE } from './gunService';
+import { PostVoteService, type PostTally } from './postVoteService';
 import { IPFSService } from './ipfsService';
 import { CryptoService } from './cryptoService';
 import { KeyService } from './keyService';
@@ -459,11 +460,21 @@ export class PostService {
       });
     });
 
-    subscription = postsNode.on((allPosts: any) => {
-      if (!initialLoadDone) return;
-      if (!allPosts) return;
-      Object.keys(allPosts).forEach(postId => {
-        if (!postId || postId === '_' || inFlightIds.has(postId)) return;
+    // Live updates. This used to be a plain `.on()` on the whole `posts` root
+    // that re-walked *every* key on every root patch and issued a
+    // `gun.get('posts').get(id)` for each — one permanent chain per post in the
+    // graph, so the heap grew with the size of the network rather than with what
+    // the user is actually reading. Use the same batched `map().on` + pendingIds
+    // shape as subscribeToCommunityPosts above: one key per emit, deduped, and
+    // flushed on a short timer so a re-sync burst can't fan out thousands of gets.
+    const pendingIds = new Set<string>();
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const flushPending = () => {
+      flushTimer = null;
+      const ids = [...pendingIds];
+      pendingIds.clear();
+      for (const postId of ids) {
+        if (inFlightIds.has(postId)) continue;
         inFlightIds.add(postId);
         void onceWithTimeout(gun.get('posts').get(postId)).then((postData) => {
           if (postData && postData.id) {
@@ -473,7 +484,30 @@ export class PostService {
         }).finally(() => {
           inFlightIds.delete(postId);
         });
-      });
+      }
+    };
+    // Re-hydration cooldown. Gun re-emits a key on every update that touches it
+    // (including its own echoes and any relay re-send), and each emit here costs
+    // a `once()` round-trip plus a fresh object. On the *global* feed root that
+    // is enough allocation churn to outrun the collector even though nothing is
+    // retained. A post that was refetched seconds ago is not refetched again.
+    const REHYDRATE_COOLDOWN_MS = 30_000;
+    const lastHydratedAt = new Map<string, number>();
+    subscription = postsNode.map().on((_: any, postId: string) => {
+      if (!initialLoadDone) return;
+      if (!postId || postId === '_' || inFlightIds.has(postId)) return;
+      const now = Date.now();
+      if (now - (lastHydratedAt.get(postId) ?? 0) < REHYDRATE_COOLDOWN_MS) return;
+      lastHydratedAt.set(postId, now);
+      // Bounded: the map is a rate limiter, not a cache. Oldest entries expire
+      // by cooldown anyway, so dropping them just permits an earlier refetch.
+      if (lastHydratedAt.size > 2000) {
+        for (const [id, at] of lastHydratedAt) {
+          if (now - at > REHYDRATE_COOLDOWN_MS) lastHydratedAt.delete(id);
+        }
+      }
+      pendingIds.add(postId);
+      if (!flushTimer) flushTimer = setTimeout(flushPending, 100);
     });
 
     // v1 posts intentionally excluded from global feed — only using GUN v3 namespace
@@ -483,6 +517,7 @@ export class PostService {
 
     return () => {
       clearTimeout(timeboxTimer);
+      if (flushTimer) clearTimeout(flushTimer);
       if (subscription) subscription.off();
       if (v1Subscription) v1Subscription.off();
       postActiveListeners.delete(listenerKey);
@@ -579,13 +614,11 @@ export class PostService {
   }
 
   /**
-   * Read a post for a read-modify-write of its counters.
+   * Read a post for the client-side view of a vote result.
    *
-   * Vote counts must never be based on `getPost()`: that path prefers the REST
-   * snapshot and the module cache, neither of which reflects a count this client
-   * just wrote, so a vote computed from one silently reverts the previous vote.
-   * Same hazard `incrementCommentCount` documents below — read the live Gun node
-   * and only fall back to the cached view if Gun doesn't answer in time.
+   * Counters are no longer computed from this — `PostVoteService` derives them
+   * from the per-user vote set — so a stale read can no longer revert a vote.
+   * This only supplies the surrounding post fields to merge the tally into.
    */
   private static async getPostForCounterUpdate(postId: string): Promise<Post | null> {
     const gun = GunService.getGun();
@@ -596,51 +629,30 @@ export class PostService {
     return PostService.getPost(postId);
   }
 
-  static async voteOnPost(postId: string, direction: 'up' | 'down', userId: string): Promise<Post> {
+  private static applyTally(post: Post, tally: PostTally): Post {
+    const updated: Post = { ...post, ...tally };
+    postMemoryCache.set(post.id, updated);
+    return updated;
+  }
+
+  /**
+   * Toggle this user's vote on a post.
+   *
+   * Returns `myVote` alongside the post because the caller cannot predict the
+   * outcome: a click the UI believes is "upvote" is a *clear* if the graph
+   * already holds an upvote from this user. The old signature returned only the
+   * post, so callers guessed from localStorage and rendered +1 while the write
+   * did -1 — the single most visible source of vote flicker.
+   */
+  static async voteOnPost(
+    postId: string,
+    direction: 'up' | 'down',
+    userId: string,
+  ): Promise<{ post: Post; myVote: 'up' | 'down' | null }> {
     const post = await PostService.getPostForCounterUpdate(postId);
     if (!post) throw new Error('Post not found');
-    const gun = GunService.getGun();
-    const voteKey = `vote_${userId}_${postId}`;
-    const existingVote = await onceWithTimeout(gun.get('votes').get(voteKey));
-    let upvotes = post.upvotes || 0;
-    let downvotes = post.downvotes || 0;
-
-    if (existingVote?.type === 'up') {
-      upvotes = Math.max(0, upvotes - 1);
-    } else if (existingVote?.type === 'down') {
-      downvotes = Math.max(0, downvotes - 1);
-    }
-
-    const togglingOffSameVote = existingVote?.type === direction;
-    if (togglingOffSameVote) {
-      await new Promise<void>((resolve, reject) => {
-        gun.get('votes').get(voteKey).put(null, (ack: any) => {
-          if (ack.err) reject(new Error(ack.err)); else resolve();
-        });
-      });
-    } else {
-      if (direction === 'up') {
-        upvotes += 1;
-      } else {
-        downvotes += 1;
-      }
-      await new Promise<void>((resolve, reject) => {
-        gun.get('votes').get(voteKey).put({
-          userId,
-          postId,
-          type: direction,
-          timestamp: Date.now(),
-        }, (ack: any) => {
-          if (ack.err) reject(new Error(ack.err)); else resolve();
-        });
-      });
-    }
-
-    const score = upvotes - downvotes;
-    await PostService.updatePost(postId, { upvotes, downvotes, score });
-    const updated: Post = { ...post, upvotes, downvotes, score };
-    postMemoryCache.set(postId, updated);
-    return updated;
+    const { tally, myVote } = await PostVoteService.castVote(postId, userId, direction);
+    return { post: PostService.applyTally(post, tally), myVote };
   }
 
   static async incrementCommentCount(postId: string, communityId?: string): Promise<void> {
@@ -657,33 +669,38 @@ export class PostService {
     }
   }
 
-  static async removeVote(postId: string, direction: 'up' | 'down', userId: string): Promise<Post> {
+  /**
+   * Clear this user's vote, whatever it is.
+   *
+   * `direction` is no longer used to gate the write. The old version returned
+   * the post untouched when the graph read did not confirm a matching vote —
+   * including when the read merely timed out — which left the caller's
+   * optimistic -1 on screen with nothing behind it.
+   */
+  static async removeVote(
+    postId: string,
+    _direction: 'up' | 'down',
+    userId: string,
+  ): Promise<{ post: Post; myVote: 'up' | 'down' | null }> {
     const post = await PostService.getPostForCounterUpdate(postId);
     if (!post) throw new Error('Post not found');
-    const gun = GunService.getGun();
-    const voteKey = `vote_${userId}_${postId}`;
-    const existingVote = await onceWithTimeout(gun.get('votes').get(voteKey));
-    if (!existingVote?.type || existingVote.type !== direction) {
-      return post;
-    }
+    const { tally, myVote } = await PostVoteService.clearVote(postId, userId);
+    return { post: PostService.applyTally(post, tally), myVote };
+  }
 
-    let upvotes = post.upvotes || 0;
-    let downvotes = post.downvotes || 0;
-    if (direction === 'up') {
-      upvotes = Math.max(0, upvotes - 1);
-    } else {
-      downvotes = Math.max(0, downvotes - 1);
-    }
-    await new Promise<void>((resolve, reject) => {
-      gun.get('votes').get(voteKey).put(null, (ack: any) => {
-        if (ack.err) reject(new Error(ack.err)); else resolve();
-      });
-    });
-    const score = upvotes - downvotes;
-    await PostService.updatePost(postId, { upvotes, downvotes, score });
-    const updated: Post = { ...post, upvotes, downvotes, score };
-    postMemoryCache.set(postId, updated);
-    return updated;
+  /** This user's vote as the graph has it — the authority for button state. */
+  static async getMyVote(postId: string, userId: string): Promise<'up' | 'down' | null> {
+    return PostVoteService.getMyVote(postId, userId);
+  }
+
+  /** Authoritative counts, derived from the vote set rather than the stored counters. */
+  static async getTally(postId: string): Promise<PostTally> {
+    return PostVoteService.getTally(postId);
+  }
+
+  /** Live authoritative counts for one post. */
+  static subscribeToVotes(postId: string, callback: (tally: PostTally) => void): () => void {
+    return PostVoteService.subscribeTally(postId, callback);
   }
 
   static verifyPostSignature(post: Post): 'verified' | 'unverified' | 'unsigned' {

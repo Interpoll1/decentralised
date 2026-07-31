@@ -1002,9 +1002,9 @@ const userSearchResults = ref<Array<{ id: string; name: string; username: string
 const searchingUsers    = ref(false);
 
 // ── Vote cache ────────────────────────────────────────────────────────────────
+// Posts no longer keep one here — `postStore.myVote()` owns that state and
+// reconciles it against the graph. Polls still use the local sets.
 
-const upvotedCache   = ref<Set<string>>(new Set(JSON.parse(localStorage.getItem('upvoted-posts')   || '[]')));
-const downvotedCache = ref<Set<string>>(new Set(JSON.parse(localStorage.getItem('downvoted-posts') || '[]')));
 const upvotedPollsCache   = ref<Set<string>>(new Set(JSON.parse(localStorage.getItem('upvoted-polls')   || '[]')));
 const downvotedPollsCache = ref<Set<string>>(new Set(JSON.parse(localStorage.getItem('downvoted-polls') || '[]')));
 
@@ -1322,7 +1322,15 @@ async function loadChatList() {
 function ensureChatRoomDiscoverySubscription() {
   if (chatDiscoverySubscribed || !currentUserId) return;
   const gun = GunService.getGun();
-  const discoveryListener = gun.get('chats').map().on((roomData: any, roomId: string) => {
+  // Live discovery runs over *our own* room index (written by ChatService on
+  // send), not the global `chats` root. The old `gun.get('chats').map().on(...)`
+  // pulled every room of every user on the network into the in-memory graph just
+  // to drop all but ours in the filter below — with radisk/localStorage off that
+  // graph is pure heap, and it grew with the network rather than with this user's
+  // conversations. The legacy root scan in loadStoredConversations() still picks
+  // up rooms created before the index existed.
+  const discoveryListener = gun.get('users').get(currentUserId).get('rooms').map()
+    .on((roomData: any, roomId: string) => {
     if (!roomId || roomId === '_' || typeof roomId !== 'string') return;
     if (!roomId.includes(':') || !roomId.includes(currentUserId)) return;
     const otherUserId = roomId.split(':').find(id => id !== currentUserId);
@@ -1572,13 +1580,13 @@ async function onInfiniteScroll(event: any) {
   }
 }
 
+// Post vote state lives in the store, which reconciles it against the graph.
+// Polls still use the local caches below.
 function hasUpvoted(postId: string): boolean {
-  voteVersion.value; // reactive dependency
-  return upvotedCache.value.has(postId);
+  return postStore.myVote(postId) === 'up';
 }
 function hasDownvoted(postId: string): boolean {
-  voteVersion.value;
-  return downvotedCache.value.has(postId);
+  return postStore.myVote(postId) === 'down';
 }
 
 async function presentVoteToast(message: string, expectedVersion: number) {
@@ -1589,61 +1597,29 @@ async function presentVoteToast(message: string, expectedVersion: number) {
   }
 }
 
-async function handleUpvote(post: Post) {
+/**
+ * One toggle, one write. Switching sides is no longer a remove-then-add pair of
+ * writes to the same node — `toggleVote` replaces this user's vote in place, so
+ * the second write can no longer race ahead of the first.
+ */
+async function handlePostVote(post: Post, direction: 'up' | 'down') {
+  const wasActive = postStore.myVote(post.id) === direction;
+  voteVersion.value++;
+  const version = voteVersion.value;
   try {
-    if (hasUpvoted(post.id)) {
-      upvotedCache.value.delete(post.id);
-      localStorage.setItem('upvoted-posts', JSON.stringify([...upvotedCache.value]));
-      voteVersion.value++;
-      const version = voteVersion.value;
-      await postStore.removeUpvote(post.id);
-      await presentVoteToast('Upvote removed', version);
-    } else {
-      if (downvotedCache.value.has(post.id)) {
-        downvotedCache.value.delete(post.id);
-        localStorage.setItem('downvoted-posts', JSON.stringify([...downvotedCache.value]));
-        await postStore.removeDownvote(post.id);
-      }
-      upvotedCache.value.add(post.id);
-      localStorage.setItem('upvoted-posts', JSON.stringify([...upvotedCache.value]));
-      voteVersion.value++;
-      const version = voteVersion.value;
-      await postStore.upvotePost(post.id);
-      await presentVoteToast('Upvoted', version);
-    }
+    await postStore.toggleVote(post.id, direction);
+    const labels = { up: 'Upvote', down: 'Downvote' };
+    await presentVoteToast(wasActive ? `${labels[direction]} removed` : `${labels[direction]}d`, version);
   } catch {
-    voteVersion.value++;
-    (await toastController.create({ message: 'Failed to upvote', duration: 2000 })).present();
+    (await toastController.create({
+      message: direction === 'up' ? 'Failed to upvote' : 'Failed to downvote',
+      duration: 2000,
+    })).present();
   }
 }
 
-async function handleDownvote(post: Post) {
-  try {
-    if (hasDownvoted(post.id)) {
-      downvotedCache.value.delete(post.id);
-      localStorage.setItem('downvoted-posts', JSON.stringify([...downvotedCache.value]));
-      voteVersion.value++;
-      const version = voteVersion.value;
-      await postStore.removeDownvote(post.id);
-      await presentVoteToast('Downvote removed', version);
-    } else {
-      if (upvotedCache.value.has(post.id)) {
-        upvotedCache.value.delete(post.id);
-        localStorage.setItem('upvoted-posts', JSON.stringify([...upvotedCache.value]));
-        await postStore.removeUpvote(post.id);
-      }
-      downvotedCache.value.add(post.id);
-      localStorage.setItem('downvoted-posts', JSON.stringify([...downvotedCache.value]));
-      voteVersion.value++;
-      const version = voteVersion.value;
-      await postStore.downvotePost(post.id);
-      await presentVoteToast('Downvoted', version);
-    }
-  } catch {
-    voteVersion.value++;
-    (await toastController.create({ message: 'Failed to downvote', duration: 2000 })).present();
-  }
-}
+const handleUpvote = (post: Post) => handlePostVote(post, 'up');
+const handleDownvote = (post: Post) => handlePostVote(post, 'down');
 
 function hasUpvotedPoll(pollId: string): boolean {
   voteVersion.value;

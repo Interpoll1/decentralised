@@ -1,6 +1,6 @@
 // src/stores/chainStore.ts
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { ref, computed, markRaw } from 'vue';
 import type { ChainBlock, Vote, Receipt, ActionType } from '../types/chain';
 import { ChainService } from '../services/chainService';
 import { StorageService } from '../services/storageService';
@@ -22,6 +22,24 @@ export const useChainStore = defineStore('chain', () => {
   const SYNC_DEBUG_HEARTBEAT_MS = 3000;
 
   const blocks = ref<ChainBlock[]>([]);
+  /** index → block, kept in sync with `blocks` by pushBlock/loadBlocks.
+   *  handleNewBlock/handleSyncResponse used to `find()` over the whole array per
+   *  incoming block, which made a sync burst O(n²) on a chain that only grows. */
+  const blockByIndex = new Map<number, ChainBlock>();
+
+  /** Append a block to the chain and the index. Blocks are immutable once
+   *  written, so `markRaw` skips Vue's deep proxying — that proxy roughly
+   *  doubled the per-block heap cost for no benefit. */
+  function pushBlock(block: ChainBlock) {
+    const raw = markRaw(block);
+    blocks.value.push(raw);
+    blockByIndex.set(raw.index, raw);
+  }
+
+  function reindexBlocks() {
+    blockByIndex.clear();
+    for (const b of blocks.value) blockByIndex.set(b.index, b);
+  }
   const isInitialized = ref(false);
   const isValidating = ref(false);
   const chainValid = ref(true);
@@ -136,8 +154,9 @@ export const useChainStore = defineStore('chain', () => {
   }
 
   async function loadBlocks() {
-    blocks.value = await StorageService.getAllBlocks();
+    blocks.value = (await StorageService.getAllBlocks()).map(b => markRaw(b));
     blocks.value.sort((a, b) => a.index - b.index);
+    reindexBlocks();
   }
 
   function logSyncIssue(key: string, message: string) {
@@ -205,7 +224,7 @@ export const useChainStore = defineStore('chain', () => {
     if (!block || typeof block !== 'object') return;
     logNewBlockRate();
 
-    const exists = blocks.value.find((b) => b.index === block.index);
+    const exists = blockByIndex.get(block.index);
     if (exists) {
       if (exists.currentHash !== block.currentHash) {
         logSyncIssue(
@@ -220,7 +239,7 @@ export const useChainStore = defineStore('chain', () => {
     if (block.index === 0) {
       if (blocks.value.length === 0 && ChainService.validateGenesisBlock(block, { allowLegacy: true })) {
         await StorageService.saveBlock(block);
-        blocks.value.push(block);
+        pushBlock(block);
       }
       return;
     }
@@ -245,7 +264,7 @@ export const useChainStore = defineStore('chain', () => {
 
     if (ChainService.validateBlock(block, previousBlock)) {
       await StorageService.saveBlock(block);
-      blocks.value.push(block);
+      pushBlock(block);
       markSyncProgress();
     }
   }
@@ -284,7 +303,7 @@ export const useChainStore = defineStore('chain', () => {
     for (const block of sorted) {
       if (!block || typeof block !== 'object') continue;
 
-      const exists = blocks.value.find((b) => b.index === block.index);
+      const exists = blockByIndex.get(block.index);
       if (exists) {
         if (exists.currentHash !== block.currentHash) {
           logSyncIssue(
@@ -300,7 +319,7 @@ export const useChainStore = defineStore('chain', () => {
       if (block.index === 0) {
         if (blocks.value.length === 0 && ChainService.validateGenesisBlock(block, { allowLegacy: true })) {
           await StorageService.saveBlock(block);
-          blocks.value.push(block);
+          pushBlock(block);
           addedCount++;
           markSyncProgress();
         }
@@ -328,7 +347,7 @@ export const useChainStore = defineStore('chain', () => {
 
       if (ChainService.validateBlock(block, latest, { allowLegacy: true })) {
         await StorageService.saveBlock(block);
-        blocks.value.push(block);
+        pushBlock(block);
         addedCount++;
         markSyncProgress();
       }
@@ -336,6 +355,7 @@ export const useChainStore = defineStore('chain', () => {
 
     if (addedCount > 0) {
       blocks.value.sort((a, b) => a.index - b.index);
+      reindexBlocks();
     }
   }
 
@@ -370,7 +390,7 @@ export const useChainStore = defineStore('chain', () => {
     // Add vote to blockchain (signed with real Schnorr key)
     const { block, receipt: verificationCode } = await ChainService.addVote(vote);
 
-    blocks.value.push(block);
+    pushBlock(block);
 
     // Broadcast both the block and the signed event
     BroadcastService.broadcast('new-block', block);
@@ -408,7 +428,7 @@ export const useChainStore = defineStore('chain', () => {
   ): Promise<ChainBlock> {
     const block = await ChainService.addAction(actionType, actionData, actionLabel);
 
-    blocks.value.push(block);
+    pushBlock(block);
 
     BroadcastService.broadcast('new-block', block);
     WebSocketService.broadcast('new-block', block);
