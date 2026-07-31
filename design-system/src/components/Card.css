@@ -1,0 +1,36 @@
+.ip-card {
+  background: linear-gradient(180deg, var(--app-surface-tint-top), var(--app-surface-tint-bottom)),
+    var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  box-shadow: var(--app-shadow-md), var(--app-shadow-inset);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  color: var(--app-text);
+  font-family: var(--ip-font-sans);
+}
+
+.ip-card--pad-none {
+  padding: 0;
+}
+.ip-card--pad-sm {
+  padding: 14px;
+}
+.ip-card--pad-md {
+  padding: 20px;
+}
+.ip-card--pad-lg {
+  padding: 28px;
+}
+
+.ip-card--interactive {
+  transition: transform var(--app-transition), border-color var(--app-transition),
+    background var(--app-transition), box-shadow var(--app-transition);
+  cursor: pointer;
+}
+.ip-card--interactive:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(180deg, var(--app-surface-tint-top-hover), var(--app-surface-tint-bottom-hover)),
+    var(--app-surface-hover);
+  border-color: var(--app-border-strong);
+}

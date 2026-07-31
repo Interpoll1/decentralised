@@ -35,29 +35,29 @@
           <p class="text-sm">{{ formatDate(receipt.timestamp) }}</p>
         </div>
 
-        <div class="mnemonic-box">
+        <div class="verification-code-box">
           <p class="text-xs font-semibold mb-2">
-            Your 12-Word Recovery Phrase
+            Your 12-Word Receipt Verification Code
           </p>
           <div class="grid grid-cols-3 gap-2">
             <div
-              v-for="(word, index) in mnemonicWords"
+              v-for="(word, index) in verificationCodeWords"
               :key="index"
-              class="mnemonic-word"
+              class="verification-code-word"
             >
               <span class="opacity-50">{{ index + 1 }}.</span>
               <span class="font-mono font-semibold ml-1">{{ word }}</span>
             </div>
           </div>
           <p class="text-xs opacity-70 mt-2">
-            Save these words securely. You'll need them to verify your vote.
+            This is a receipt lookup code, not a wallet seed phrase or private key.
           </p>
         </div>
 
         <div class="flex gap-2">
-          <ion-button expand="block" @click="copyMnemonic">
+          <ion-button expand="block" @click="copyVerificationCode">
             <ion-icon slot="start" :icon="copy"></ion-icon>
-            Copy Words
+            Copy Code
           </ion-button>
           
           <ion-button expand="block" fill="outline" @click="shareReceipt">
@@ -95,22 +95,22 @@ const props = defineProps<{
   receipt: Receipt | null;
 }>();
 
-const mnemonicWords = computed(() => {
-  return props.receipt?.mnemonic.split(' ') || [];
+const verificationCodeWords = computed(() => {
+  return props.receipt?.verificationCode.split(' ') || [];
 });
 
 const formatDate = (timestamp: number) => {
   return new Date(timestamp).toLocaleString();
 };
 
-const copyMnemonic = async () => {
+const copyVerificationCode = async () => {
   if (!props.receipt) return;
 
   try {
-    await navigator.clipboard.writeText(props.receipt.mnemonic);
+    await navigator.clipboard.writeText(props.receipt.verificationCode);
     
     const toast = await toastController.create({
-      message: 'Recovery phrase copied to clipboard',
+      message: 'Receipt verification code copied to clipboard',
       duration: 2000,
       color: 'success',
       position: 'bottom'
@@ -134,13 +134,13 @@ const copyMnemonic = async () => {
 const shareReceipt = async () => {
   if (!props.receipt) return;
 
-  const text = `My Vote Receipt\nBlock: #${props.receipt.blockIndex}\nRecovery Phrase: ${props.receipt.mnemonic}`;
+  const text = `My Vote Receipt\nBlock: #${props.receipt.blockIndex}\nVerification Code: ${props.receipt.verificationCode}`;
 
   try {
     if (navigator.share) {
       await navigator.share({ text });
     } else {
-      await copyMnemonic();
+      await copyVerificationCode();
     }
   } catch (error) {
     console.error('Failed to share:', error);
@@ -164,7 +164,7 @@ const shareReceipt = async () => {
   box-shadow: var(--glass-highlight);
 }
 
-.mnemonic-box {
+.verification-code-box {
   padding: 16px;
   background: rgba(var(--ion-color-warning-rgb), 0.05);
   border: 1px solid rgba(var(--ion-color-warning-rgb), 0.12);
@@ -176,7 +176,7 @@ const shareReceipt = async () => {
   box-shadow: var(--glass-inner-glow);
 }
 
-.mnemonic-word {
+.verification-code-word {
   background: rgba(var(--ion-card-background-rgb), 0.22);
   backdrop-filter: blur(10px) saturate(1.3);
   -webkit-backdrop-filter: blur(10px) saturate(1.3);

@@ -1,6 +1,7 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { ChainBlock, Receipt, Vote, Poll } from '../types/chain';
+import { ChainBlock, Receipt, Vote, ChainPollSnapshot } from '../types/chain';
 import type { StoredEncryptionKey } from '../types/encryption';
+import type { StoredComment, StoredChatMessage } from '../types/social';
 
 interface VotingChainDB extends DBSchema {
   blocks: {
@@ -20,7 +21,7 @@ interface VotingChainDB extends DBSchema {
   };
   polls: {
     key: string;
-    value: Poll;
+    value: ChainPollSnapshot;
   };
   metadata: {
     key: string;
@@ -30,41 +31,95 @@ interface VotingChainDB extends DBSchema {
     key: string;
     value: StoredEncryptionKey;
   };
+  comments: {
+    key: string;
+    value: StoredComment;
+    indexes: { 'by-post': string };
+  };
+  'chat-messages': {
+    key: string;
+    value: StoredChatMessage;
+    indexes: { 'by-room': string };
+  };
 }
+
+// How long to wait for IndexedDB to open before assuming it is blocked and
+// falling back to the in-memory store. On some mobile browsers (notably iOS
+// Safari in Private mode) `openDB` never resolves or rejects — it just hangs,
+// which surfaces to the user as the whole app "freezing" on load.
+const IDB_OPEN_TIMEOUT_MS = 4_000;
 
 export class StorageService {
   private static dbPromise: Promise<IDBPDatabase>;
 
+  /** True when the active store is the volatile in-memory fallback (no persistence). */
+  static usingMemoryFallback = false;
+
   static async getDB(): Promise<IDBPDatabase> {
     if (!this.dbPromise) {
-      this.dbPromise = openDB('interpoll-db', 2, {
-        upgrade(db, oldVersion) {
-          if (oldVersion < 1) {
-            // Blocks store
-            const blockStore = db.createObjectStore('blocks', { keyPath: 'index' });
-            blockStore.createIndex('by-hash', 'currentHash');
-
-            // Votes store
-            const voteStore = db.createObjectStore('votes', { keyPath: 'timestamp' });
-            voteStore.createIndex('by-poll', 'pollId');
-
-            // Receipts store
-            const receiptStore = db.createObjectStore('receipts', { keyPath: 'mnemonic' });
-            receiptStore.createIndex('by-block', 'blockIndex');
-
-            // Polls store
-            db.createObjectStore('polls', { keyPath: 'id' });
-
-            // Metadata store
-            db.createObjectStore('metadata');
-          }
-          if (oldVersion < 2) {
-            db.createObjectStore('encryption-keys', { keyPath: 'id' });
-          }
-        },
-      });
+      this.dbPromise = this.openDatabase();
     }
     return this.dbPromise;
+  }
+
+  private static async openDatabase(): Promise<IDBPDatabase> {
+    // Feature-detect: some restricted/mobile contexts expose no IndexedDB at all.
+    const hasIndexedDB = typeof indexedDB !== 'undefined' && indexedDB !== null;
+    if (hasIndexedDB) {
+      try {
+        const open = openDB('interpoll-db', 3, {
+          upgrade(db, oldVersion) {
+            if (oldVersion < 1) {
+              // Blocks store
+              const blockStore = db.createObjectStore('blocks', { keyPath: 'index' });
+              blockStore.createIndex('by-hash', 'currentHash');
+
+              // Votes store
+              const voteStore = db.createObjectStore('votes', { keyPath: 'timestamp' });
+              voteStore.createIndex('by-poll', 'pollId');
+
+              // Receipts store
+              const receiptStore = db.createObjectStore('receipts', { keyPath: 'mnemonic' });
+              receiptStore.createIndex('by-block', 'blockIndex');
+
+              // Polls store
+              db.createObjectStore('polls', { keyPath: 'id' });
+
+              // Metadata store
+              db.createObjectStore('metadata');
+            }
+            if (oldVersion < 2) {
+              db.createObjectStore('encryption-keys', { keyPath: 'id' });
+            }
+            if (oldVersion < 3) {
+              // Durable mirrors for the social layer. Gun runs with
+              // `localStorage:false, radisk:false`, so without these a comment
+              // or message exists only in a volatile in-memory graph that the
+              // memory watchdog is free to evict.
+              const commentStore = db.createObjectStore('comments', { keyPath: 'id' });
+              commentStore.createIndex('by-post', 'postId');
+
+              const chatStore = db.createObjectStore('chat-messages', { keyPath: 'id' });
+              chatStore.createIndex('by-room', 'roomId');
+            }
+          },
+        });
+        // Race the open against a timeout so a hung request can't freeze the app.
+        const db = await Promise.race([
+          open,
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('IndexedDB open timed out')), IDB_OPEN_TIMEOUT_MS),
+          ),
+        ]);
+        return db;
+      } catch (err) {
+        console.warn('[Storage] IndexedDB unavailable — using in-memory fallback (data will not persist):', err);
+      }
+    } else {
+      console.warn('[Storage] IndexedDB not present — using in-memory fallback (data will not persist)');
+    }
+    this.usingMemoryFallback = true;
+    return createInMemoryDB();
   }
 
   // Block operations
@@ -105,21 +160,37 @@ export class StorageService {
   // Receipt operations
   static async saveReceipt(receipt: Receipt): Promise {
     const db = await this.getDB();
-    await db.put('receipts', receipt);
+    const normalizedReceipt: Receipt = {
+      ...receipt,
+      verificationCode: receipt.verificationCode || receipt.mnemonic || '',
+      mnemonic: receipt.mnemonic || receipt.verificationCode,
+    };
+    await db.put('receipts', normalizedReceipt);
   }
 
-  static async getReceipt(mnemonic: string): Promise {
+  static async getReceipt(verificationCode: string): Promise {
     const db = await this.getDB();
-    return db.get('receipts', mnemonic);
+    const receipt = await db.get('receipts', verificationCode);
+    if (!receipt) return undefined;
+    return {
+      ...receipt,
+      verificationCode: receipt.verificationCode || receipt.mnemonic || '',
+      mnemonic: receipt.mnemonic || receipt.verificationCode,
+    };
   }
 
   static async getAllReceipts(): Promise {
     const db = await this.getDB();
-    return db.getAll('receipts');
+    const receipts = await db.getAll('receipts');
+    return receipts.map((receipt: Receipt) => ({
+      ...receipt,
+      verificationCode: receipt.verificationCode || receipt.mnemonic || '',
+      mnemonic: receipt.mnemonic || receipt.verificationCode,
+    }));
   }
 
   // Poll operations
-  static async savePoll(poll: Poll): Promise {
+  static async savePoll(poll: ChainPollSnapshot): Promise {
     const db = await this.getDB();
     await db.put('polls', poll);
   }
@@ -132,6 +203,124 @@ export class StorageService {
   static async getAllPolls(): Promise {
     const db = await this.getDB();
     return db.getAll('polls');
+  }
+
+  // ── Comment mirror ──────────────────────────────────────────────────────────
+  // The local copy of a comment is what the author (and any reader who has seen
+  // it once) renders from. Gun is the replication layer, not the source of truth
+  // for display — it holds nothing across a reload.
+
+  static async saveComment(comment: StoredComment): Promise<void> {
+    const db = await this.getDB();
+    await db.put('comments', comment);
+  }
+
+  static async saveComments(comments: StoredComment[]): Promise<void> {
+    if (comments.length === 0) return;
+    const db = await this.getDB();
+    const tx = db.transaction('comments', 'readwrite');
+    const store = tx.objectStore('comments');
+    await Promise.all(comments.map((comment) => store.put(comment)));
+    await tx.done;
+  }
+
+  static async getComment(id: string): Promise<StoredComment | undefined> {
+    const db = await this.getDB();
+    return db.get('comments', id);
+  }
+
+  static async getCommentsByPost(postId: string): Promise<StoredComment[]> {
+    const db = await this.getDB();
+    return db.getAllFromIndex('comments', 'by-post', postId);
+  }
+
+  static async getAllComments(): Promise<StoredComment[]> {
+    const db = await this.getDB();
+    return db.getAll('comments');
+  }
+
+  static async deleteComment(id: string): Promise<void> {
+    const db = await this.getDB();
+    await db.delete('comments', id);
+  }
+
+  /**
+   * Cap the comment mirror, dropping the oldest rows first. Comments this
+   * device authored are never pruned — they may still be the only copy in
+   * existence if no relay ever confirmed them.
+   */
+  static async pruneComments(maxRows = 5_000): Promise<number> {
+    const all = await this.getAllComments();
+    if (all.length <= maxRows) return 0;
+    const prunable = all
+      .filter((c) => !c.authoredLocally)
+      .sort((a, b) => (a.updatedAt || a.createdAt) - (b.updatedAt || b.createdAt));
+    const excess = Math.min(all.length - maxRows, prunable.length);
+    const db = await this.getDB();
+    for (let i = 0; i < excess; i++) {
+      await db.delete('comments', prunable[i].id);
+    }
+    return excess;
+  }
+
+  // ── Chat message mirror ─────────────────────────────────────────────────────
+
+  static async saveChatMessage(message: StoredChatMessage): Promise<void> {
+    const db = await this.getDB();
+    await db.put('chat-messages', message);
+  }
+
+  static async saveChatMessages(messages: StoredChatMessage[]): Promise<void> {
+    if (messages.length === 0) return;
+    const db = await this.getDB();
+    const tx = db.transaction('chat-messages', 'readwrite');
+    const store = tx.objectStore('chat-messages');
+    await Promise.all(messages.map((message) => store.put(message)));
+    await tx.done;
+  }
+
+  static async getChatMessage(id: string): Promise<StoredChatMessage | undefined> {
+    const db = await this.getDB();
+    return db.get('chat-messages', id);
+  }
+
+  static async getChatMessagesByRoom(roomId: string): Promise<StoredChatMessage[]> {
+    const db = await this.getDB();
+    return db.getAllFromIndex('chat-messages', 'by-room', roomId);
+  }
+
+  static async getAllChatMessages(): Promise<StoredChatMessage[]> {
+    const db = await this.getDB();
+    return db.getAll('chat-messages');
+  }
+
+  static async deleteChatMessage(id: string): Promise<void> {
+    const db = await this.getDB();
+    await db.delete('chat-messages', id);
+  }
+
+  /** Keep at most `maxPerRoom` messages per conversation, oldest dropped first. */
+  static async pruneChatMessages(maxPerRoom = 2_000): Promise<number> {
+    const all = await this.getAllChatMessages();
+    const byRoom = new Map<string, StoredChatMessage[]>();
+    for (const message of all) {
+      const bucket = byRoom.get(message.roomId);
+      if (bucket) bucket.push(message);
+      else byRoom.set(message.roomId, [message]);
+    }
+    const db = await this.getDB();
+    let removed = 0;
+    for (const messages of byRoom.values()) {
+      if (messages.length <= maxPerRoom) continue;
+      messages.sort((a, b) => a.timestamp - b.timestamp || a.seq - b.seq);
+      for (const message of messages.slice(0, messages.length - maxPerRoom)) {
+        // An unsent message is still only held here — never prune it away.
+        if (message.outgoing && message.syncStatus !== 'confirmed' && message.syncStatus !== 'published') continue;
+        await db.delete('chat-messages', message.id);
+        removed++;
+      }
+    }
+    return removed;
   }
 
   // Metadata operations
@@ -148,7 +337,10 @@ export class StorageService {
   // Utility
   static async clearAll(): Promise {
     const db = await this.getDB();
-    const tx = db.transaction(['blocks', 'votes', 'receipts', 'polls', 'metadata', 'encryption-keys'], 'readwrite');
+    const tx = db.transaction(
+      ['blocks', 'votes', 'receipts', 'polls', 'metadata', 'encryption-keys', 'comments', 'chat-messages'],
+      'readwrite',
+    );
     await Promise.all([
       tx.objectStore('blocks').clear(),
       tx.objectStore('votes').clear(),
@@ -156,6 +348,134 @@ export class StorageService {
       tx.objectStore('polls').clear(),
       tx.objectStore('metadata').clear(),
       tx.objectStore('encryption-keys').clear(),
+      tx.objectStore('comments').clear(),
+      tx.objectStore('chat-messages').clear(),
     ]);
   }
+
+  /**
+   * Destructive: remove any persisted legacy posts (v2) from metadata store
+   * This deletes offline copies of posts that were stored under legacy keys.
+   */
+  static async purgePersistedLegacyPosts(currentNamespace: string): Promise<number> {
+    const db = await this.getDB();
+    const tx = db.transaction(['metadata'], 'readwrite');
+    const store = tx.objectStore('metadata');
+    const allKeys = await store.getAllKeys();
+    let removed = 0;
+    for (const key of allKeys) {
+      try {
+        const val = await store.get(key as IDBValidKey);
+        // Heuristic: legacy posts may be stored under keys like 'post:<id>' or in arrays
+        if (!val) continue;
+        if (typeof key === 'string' && key.startsWith('post-')) {
+          // val should have dataVersion; remove if not matching
+          const dv = val && typeof val.dataVersion === 'string' ? val.dataVersion : null;
+          if (dv && dv !== currentNamespace) {
+            await store.delete(key as IDBValidKey);
+            removed++;
+          }
+          if (!dv && Number.parseInt(currentNamespace.replace(/^v/i, ''), 10) >= 3) {
+            // no version and running v3+ -> delete conservatively
+            await store.delete(key as IDBValidKey);
+            removed++;
+          }
+        }
+        // Also handle arrays of posts stored under metadata keys like 'posts-cache'
+        if (typeof val === 'object' && val !== null && Array.isArray((val as any).posts)) {
+          const postsArr = (val as any).posts as any[];
+          const filtered = postsArr.filter(p => {
+            const dv = p && typeof p.dataVersion === 'string' ? p.dataVersion : null;
+            if (dv && dv !== currentNamespace) return false;
+            if (!dv && Number.parseInt(currentNamespace.replace(/^v/i, ''), 10) >= 3) return false;
+            return true;
+          });
+          if (filtered.length !== postsArr.length) {
+            (val as any).posts = filtered;
+            await store.put(val, key as IDBValidKey);
+            removed += (postsArr.length - filtered.length);
+          }
+        }
+      } catch (err) {
+        // best-effort per key
+      }
+    }
+    return removed;
+  }
+}
+
+/**
+ * Minimal in-memory stand-in for the subset of the `idb` API that
+ * `StorageService` uses. Activated only when IndexedDB is missing, throws, or
+ * hangs (e.g. iOS Safari Private mode). Keeps the app functional for the
+ * session — data simply does not persist across reloads.
+ */
+function createInMemoryDB(): IDBPDatabase {
+  const stores: Record<string, Map<any, any>> = {
+    blocks: new Map(),
+    votes: new Map(),
+    receipts: new Map(),
+    polls: new Map(),
+    metadata: new Map(),
+    'encryption-keys': new Map(),
+    comments: new Map(),
+    'chat-messages': new Map(),
+  };
+  // Stores with an inline keyPath derive their key from the value; `metadata`
+  // uses out-of-line (explicit) keys.
+  const keyPaths: Record<string, string | null> = {
+    blocks: 'index',
+    votes: 'timestamp',
+    receipts: 'mnemonic',
+    polls: 'id',
+    metadata: null,
+    'encryption-keys': 'id',
+    comments: 'id',
+    'chat-messages': 'id',
+  };
+  const indexes: Record<string, Record<string, string>> = {
+    blocks: { 'by-hash': 'currentHash' },
+    votes: { 'by-poll': 'pollId' },
+    receipts: { 'by-block': 'blockIndex' },
+    comments: { 'by-post': 'postId' },
+    'chat-messages': { 'by-room': 'roomId' },
+  };
+
+  const resolveKey = (name: string, value: any, explicitKey?: any) => {
+    const kp = keyPaths[name];
+    return kp ? value?.[kp] : explicitKey;
+  };
+  const store = (name: string): Map<any, any> => stores[name] ?? (stores[name] = new Map());
+
+  const objectStore = (name: string) => ({
+    async put(value: any, key?: any) { store(name).set(resolveKey(name, value, key), value); },
+    async get(key: any) { return store(name).get(key); },
+    async delete(key: any) { store(name).delete(key); },
+    async clear() { store(name).clear(); },
+    async getAllKeys() { return [...store(name).keys()]; },
+    async getAll() { return [...store(name).values()]; },
+    async openCursor(_query?: any, direction?: 'next' | 'prev') {
+      const entries = [...store(name).entries()].sort((a, b) =>
+        a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0,
+      );
+      if (direction === 'prev') entries.reverse();
+      return entries.length ? { value: entries[0][1], key: entries[0][0] } : null;
+    },
+  });
+
+  const db: any = {
+    async put(name: string, value: any, key?: any) { store(name).set(resolveKey(name, value, key), value); },
+    async get(name: string, key: any) { return store(name).get(key); },
+    async delete(name: string, key: any) { store(name).delete(key); },
+    async getAll(name: string) { return [...store(name).values()]; },
+    async getAllFromIndex(name: string, index: string, query: any) {
+      const kp = indexes[name]?.[index];
+      const all = [...store(name).values()];
+      return kp ? all.filter((v) => v?.[kp] === query) : all;
+    },
+    transaction(_names: string | string[], _mode?: string) {
+      return { objectStore, done: Promise.resolve() };
+    },
+  };
+  return db as IDBPDatabase;
 }

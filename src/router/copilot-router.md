@@ -9,7 +9,10 @@ Single file: `index.ts`. Uses `@ionic/vue-router` (`createRouter` from Ionic for
 | Path | Name | Component | Props |
 |---|---|---|---|
 | `/` | — | redirect → `/home` | — |
-| `/home` | `Home` | `HomePage` | — |
+| `/home` | `Home` | `HomePage` | Active tab persisted in `?tab=` query (`communities`/`chat`/`create`; absent = home) |
+| `/communities` | — | redirect → `/home?tab=communities` | — |
+| `/chat` | — | redirect → `/home?tab=chat` | — |
+| `/create` | — | redirect → `/home?tab=create` | — |
 | `/community/:communityId` | `Community` | `CommunityPage` | `communityId` via route fn |
 | `/community/:communityId/create-post` | `CreatePost` | `CreatePostPage` | `true` |
 | `/community/:communityId/poll/:pollId` | `PollDetail` | `PollDetailPage` | `true` |
@@ -22,7 +25,7 @@ Single file: `index.ts`. Uses `@ionic/vue-router` (`createRouter` from Ionic for
 | `/chain-explorer` | `ChainExplorer` | `ChainExplorerPage` | — |
 | `/vote/:pollId` | `Vote` | `VotePage` | `true` |
 | `/results/:pollId` | `Results` | `ResultsPage` | `true` |
-| `/receipt/:mnemonic?` | `Receipt` | `ReceiptPage` | — |
+| `/receipt/:verificationCode?` | `Receipt` | `ReceiptPage` | — |
 | `/search` | `Search` | `SearchView` | — |
 | `/chat/:userId` | `Chat` | `ChatView` | `true` |
 | `/chatrooms` | `ChatRoomList` | `ChatRoomListPage` | — |
@@ -34,7 +37,9 @@ Single file: `index.ts`. Uses `@ionic/vue-router` (`createRouter` from Ionic for
 ## Notes
 
 - All components are lazy-loaded.
-- `router.beforeEach` is a passthrough — add auth guards here if needed.
+- `router.beforeEach` is currently a passthrough — add auth guards here if needed.
 - History mode: `createWebHistory('/')` — the server (or `dist/`) must handle SPA fallback.
 - Internal same-origin anchor links are intercepted in `App.vue` and forwarded through Vue Router so `/community/...`, `/chat...`, and `/join/...` links stay in-app instead of forcing a browser reload.
 - `JoinPrivatePage` supports community, chatroom, and server invite routes.
+- `ResiliencePage` is directly routable from `/resilience` (not beta-gated).
+- `App.vue` supplies the Ion router-outlet animation so page swaps use a shorter fade/slide and the outgoing page clears promptly.

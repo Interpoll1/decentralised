@@ -15,6 +15,7 @@
     </ion-header>
 
     <ion-content>
+      <DesktopPageShell>
       <!-- Profile Header -->
       <div class="profile-header">
         <div class="avatar-container" @click="selectAvatar">
@@ -182,6 +183,7 @@
         </div>
       </div>
 
+      </DesktopPageShell>
     </ion-content>
   </ion-page>
 </template>
@@ -405,6 +407,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import DesktopPageShell from '../components/DesktopPageShell.vue';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonBackButton, IonButton, IonItem, IonLabel,
@@ -421,7 +424,7 @@ import type { UserProfile } from '../services/userService';
 import { VoteTrackerService } from '../services/voteTrackerService';
 import { IPFSService } from '../services/ipfsService';
 import { useCommunityStore } from '../stores/communityStore';
-import { parseIdentityTrust } from '../utils/identityTrust';
+import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 
 const communityStore = useCommunityStore();
 
@@ -437,10 +440,16 @@ const avatarFile = ref<File | null>(null);
 const avatarInput = ref<HTMLInputElement | null>(null);
 
 const joinedCommunitiesCount = computed(() => communityStore.joinedCommunities?.size || 0);
-const identityTrust = computed(() => parseIdentityTrust(customUsername.value.trim() || userProfile.value?.username || ''));
+const identityTrust = computed(() => ({
+  trustLevel: userProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified',
+  issuer: userProfile.value?.identityIssuer || '',
+}));
 const identityBadgeLabel = computed(() =>
   identityTrust.value.trustLevel === 'trusted-issuer'
-    ? `Issuer linked (${identityTrust.value.issuer})`
+    ? formatTrustedIdentityLabel({
+      username: userProfile.value?.customUsername || userProfile.value?.username,
+      issuer: identityTrust.value.issuer,
+    })
     : 'Unverified identity'
 );
 const identityBadgeClass = computed(() =>

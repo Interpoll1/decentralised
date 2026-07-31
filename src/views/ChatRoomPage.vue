@@ -56,6 +56,12 @@
               </div>
               <div class="message-meta">
                 <span class="message-time">{{ formatTime(msg.timestamp) }}</span>
+                <span
+                  v-if="msg.status && msg.status !== 'confirmed'"
+                  class="message-status"
+                  :class="{ stalled: msg.status === 'failed' }"
+                  :title="msg.error || 'Saved on this device, still syncing'"
+                >{{ msg.status === 'failed' ? '!' : '⋯' }}</span>
               </div>
             </div>
           </template>
@@ -191,7 +197,10 @@ async function initRoom() {
     }
 
     roomTitle.value = room.name;
-    chatRoomStore.enterRoom(room);
+    // Awaited: `enterRoom` now loads history (local first, then the graph)
+    // instead of only opening a live subscription onto an empty room.
+    await chatRoomStore.enterRoom(room);
+    if (gen !== initGeneration) return;
     await nextTick();
     scrollToBottom();
     isInitialLoad.value = false;
@@ -426,6 +435,17 @@ ion-content {
   color: var(--ion-color-medium);
   opacity: 0.75;
   line-height: 1;
+}
+
+.message-status {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ion-color-medium);
+}
+
+.message-status.stalled {
+  color: var(--ion-color-warning);
+  font-weight: 700;
 }
 
 .input-footer {

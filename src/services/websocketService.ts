@@ -1,6 +1,7 @@
 //services/websocketService.ts
 import config from '../config';
-import { DiscoveryService } from './discoveryService';
+import DiscoveryService from './discoveryService';
+import { PeerReputationService } from './peerReputationService';
 
 /** Message types that may require proof-of-work on the relay server.
  *  Must stay in sync with POW_REQUIRED_TYPES in src/services/powService.ts. */
@@ -20,7 +21,7 @@ export interface KnownServer {
 
 export class WebSocketService {
   private static ws: WebSocket | null = null;
-  private static peerId: string = Math.random().toString(36).substring(7);
+  private static peerId: string = WebSocketService.createPeerId();
   private static callbacks: Map<string, Set<(data: any) => void>> = new Map();
   private static isConnected = false;
   private static reconnectAttempts = 0;
@@ -40,7 +41,12 @@ export class WebSocketService {
   private static peers: Set<string> = new Set();
   private static peerAddresses: Map<string, { peerId: string; relayUrl: string; gunPeers: string[]; joinedAt: number }> = new Map();
   private static readonly MAX_PEER_ADDRESSES = 200;
-  private static statusListeners: Set<(status: { connected: boolean; peerCount: number }) => void> = new Set();
+  // True when the relay rejected our `register` for lack of an authenticated
+  // session. In that state we hold an open socket but are NOT in the relay's
+  // client registry, so we never receive `peer-list` and can never see peers —
+  // the UI needs to know this to explain the perpetual "0 peers".
+  private static registrationRejected = false;
+  private static statusListeners: Set<(status: { connected: boolean; peerCount: number; registrationRejected: boolean }) => void> = new Set();
   private static knownServers: Map<string, KnownServer> = new Map();
   private static readonly MAX_KNOWN_SERVERS = 50;
   private static readonly DISCOVERY_TTL_MS = 5 * 60_000;
@@ -50,6 +56,10 @@ export class WebSocketService {
   private static connectionEpoch = 0;
   private static syncRequestCallback: (() => void) | null = null;
   private static chatRoomListeners: Map<string, Set<(data: any) => void>> = new Map();
+
+  private static createPeerId(): string {
+    return `peer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  }
 
   /**
    * Register a callback that fires on every (re)connect to request incremental sync.
@@ -96,6 +106,9 @@ export class WebSocketService {
         if (epoch !== this.connectionEpoch || socket !== this.ws) return;
         this.isConnected = true;
         this.reconnectAttempts = 0;
+        // Optimistically assume registration will succeed; the relay tells us
+        // otherwise via an AUTH_REQUIRED error handled in onmessage.
+        this.registrationRejected = false;
 
         this.peers.add(this.peerId);
         this.notifyStatus();
@@ -140,6 +153,27 @@ export class WebSocketService {
           const message = JSON.parse(event.data);
 
           if (message.type === 'welcome' || message.type === 'pong') {
+            return;
+          }
+
+          if (message.type === 'error' && message.code === 'PEER_ID_TAKEN') {
+            this.peerId = this.createPeerId();
+            this.sendToRelay('register', { peerId: this.peerId });
+            this.sendToRelay('join-room', { roomId: 'default' });
+            this.broadcastAddresses();
+            return;
+          }
+
+          // The relay gates registration (and therefore peer-list, broadcast and
+          // room membership) behind an authenticated session. Without one we stay
+          // connected but invisible to the peer registry — surface it once so the
+          // UI can explain "0 peers" instead of silently misreporting the network.
+          if (message.type === 'error' && message.code === 'AUTH_REQUIRED') {
+            if (!this.registrationRejected) {
+              console.warn('[WS] Relay registration requires an authenticated session — sign in to join the peer network. Gun-layer sync is unaffected.');
+            }
+            this.registrationRejected = true;
+            this.notifyStatus();
             return;
           }
 
@@ -190,6 +224,7 @@ export class WebSocketService {
                 gunPeers: data.gunPeers || [],
                 joinedAt: data.joinedAt || Date.now(),
               });
+              this.notifyStatus();
             }
           }
 
@@ -223,6 +258,7 @@ export class WebSocketService {
         this.isConnected = false;
         this.peers.clear();
         this.peerAddresses.clear();
+        this.registrationRejected = false;
         this.stopKeepAlive();
         this.notifyStatus();
 
@@ -282,7 +318,7 @@ export class WebSocketService {
 
   private static async bootstrapDiscovery() {
     try {
-      await DiscoveryService.initialize({ maxEntries: this.MAX_KNOWN_SERVERS });
+      await DiscoveryService.initialize({ maxEntries: this.MAX_KNOWN_SERVERS, subscribeLive: false });
       await this.mergeDiscoveryServers();
     } catch {
       // Discovery is optional; continue with server-list fallback
@@ -297,7 +333,7 @@ export class WebSocketService {
         websocket: config.relay.websocket,
         gun: config.relay.gun,
         api: config.relay.api,
-        capabilities: ['ws-sync', 'gun-relay', 'relay-api'],
+        capabilities: ['ws-sync', 'gun-relay', 'relay-api', 'webrtc'],
       });
     } catch {
       // Discovery publish failure should not impact websocket sync
@@ -410,10 +446,11 @@ export class WebSocketService {
     const key = server.websocket;
     const existing = this.knownServers.get(key);
     if (!existing) {
-      // Evict oldest entry if at capacity
+      // Evict at capacity, preferring the lowest-reputation known server so
+      // proven-good endpoints survive; fall back to oldest-inserted on a tie.
       if (this.knownServers.size >= this.MAX_KNOWN_SERVERS) {
-        const oldestKey = this.knownServers.keys().next().value;
-        if (oldestKey) this.knownServers.delete(oldestKey);
+        const evictKey = this.lowestReputationKnownServerKey();
+        if (evictKey) this.knownServers.delete(evictKey);
       }
       this.knownServers.set(key, {
         ...server,
@@ -429,6 +466,24 @@ export class WebSocketService {
       });
     }
     this.saveKnownServers();
+  }
+
+  /**
+   * Pick the known-server key with the worst reputation (keyed by ws URL). The
+   * Map preserves insertion order, so the first-scanned lowest score is also the
+   * oldest among equals — giving oldest-inserted eviction as the natural tiebreak.
+   */
+  private static lowestReputationKnownServerKey(): string | undefined {
+    let worstKey: string | undefined;
+    let worstScore = Infinity;
+    for (const key of this.knownServers.keys()) {
+      const score = PeerReputationService.scoreFor(key);
+      if (score < worstScore) {
+        worstScore = score;
+        worstKey = key;
+      }
+    }
+    return worstKey ?? this.knownServers.keys().next().value;
   }
 
   static removeKnownServer(websocketUrl: string) {
@@ -627,17 +682,30 @@ export class WebSocketService {
   }
 
   static getPeerCount(): number {
-    const totalPeers = this.peers.size || (this.isConnected ? 1 : 0);
-    return Math.max(0, totalPeers - 1);
+    const peerListCount = this.peers.has(this.peerId)
+      ? Math.max(0, this.peers.size - 1)
+      : this.peers.size;
+    const peerAddressCount = this.peerAddresses.size;
+    return Math.max(peerListCount, peerAddressCount);
   }
 
   static getPeerAddresses(): Map<string, { peerId: string; relayUrl: string; gunPeers: string[]; joinedAt: number }> {
     return new Map(this.peerAddresses);
   }
 
-  static onStatusChange(callback: (status: { connected: boolean; peerCount: number }) => void): () => void {
+  /** Peer ids currently known on the relay (excluding ourselves). */
+  static getPeerIds(): string[] {
+    return Array.from(this.peers).filter((id) => id && id !== this.peerId);
+  }
+
+  /** True when the relay rejected registration for lack of an authenticated session. */
+  static isRegistrationRejected(): boolean {
+    return this.registrationRejected;
+  }
+
+  static onStatusChange(callback: (status: { connected: boolean; peerCount: number; registrationRejected: boolean }) => void): () => void {
     this.statusListeners.add(callback);
-    callback({ connected: this.isConnected, peerCount: this.getPeerCount() });
+    callback({ connected: this.isConnected, peerCount: this.getPeerCount(), registrationRejected: this.registrationRejected });
 
     return () => {
       this.statusListeners.delete(callback);
@@ -689,7 +757,11 @@ export class WebSocketService {
   }
 
   private static notifyStatus() {
-    const snapshot = { connected: this.isConnected, peerCount: this.getPeerCount() };
+    const snapshot = {
+      connected: this.isConnected,
+      peerCount: this.getPeerCount(),
+      registrationRejected: this.registrationRejected,
+    };
     this.statusListeners.forEach((listener) => {
       try {
         listener(snapshot);

@@ -20,6 +20,10 @@ export class AuditService {
   private static readonly CLOUD_USER_KEY = 'interpoll_cloud_user';
   private static readonly RETURN_URL_KEY = 'interpoll_auth_return_url';
 
+  private static getTrustedApiBase(): string {
+    return config.auth.api;
+  }
+
   static async logReceipt(type: ReceiptKind, payload: any): Promise<void> {
     try {
       const body = await IntegrityService.seal(
@@ -40,33 +44,62 @@ export class AuditService {
 
   /**
    * Ask backend if this device is allowed to vote on a poll.
-   * Fail closed for all backend errors or unexpected responses.
+   * For decentralized resilience, soft backend failures fall back to local/Gun voting
+   * unless auth is explicitly required or backend explicitly reports an already-voted denial.
    */
   static async authorizeVote(
     pollId: string,
     deviceId: string,
     requireLogin = false,
   ): Promise<{ allowed: boolean; reservationToken: string | null; reason: string | null; requiresAuth: boolean }> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
     try {
       const body = await IntegrityService.seal(
         { pollId, deviceId, requireLogin } as Record<string, unknown>,
         'vote-authorize',
       );
-      const res = await fetch(`${config.relay.api}/api/vote-authorize`, {
+      const res = await fetch(`${this.getTrustedApiBase()}/api/vote-authorize`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
 
       if (!res.ok) {
+        let backendReason: string | null = null;
+        try {
+          const parsed = await res.json() as VoteAuthorizeResponse;
+          backendReason = typeof parsed?.reason === 'string' ? parsed.reason : null;
+        } catch {
+          backendReason = null;
+        }
+        const normalizedReason = backendReason?.toLowerCase() || '';
+        const alreadyVotedDenied = normalizedReason.includes('already');
+        const backendUnavailable = res.status === 409 || res.status >= 500;
+        if (res.status === 401) {
+          return {
+            allowed: false,
+            reservationToken: null,
+            reason: 'authentication required',
+            requiresAuth: true,
+          };
+        }
+        if (!alreadyVotedDenied && backendUnavailable) {
+          return {
+            allowed: true,
+            reservationToken: null,
+            reason: 'relay authorization unavailable; continuing decentralized vote',
+            requiresAuth: false,
+          };
+        }
         return {
           allowed: false,
           reservationToken: null,
-          reason: res.status === 401 ? 'authentication required' : 'authorization failed',
-          requiresAuth: res.status === 401,
+          reason: backendReason || 'authorization failed',
+          requiresAuth: false,
         };
       }
 
@@ -83,7 +116,14 @@ export class AuditService {
         requiresAuth: data.requireLogin === true && reason === 'authentication required',
       };
     } catch (_error) {
-      return { allowed: false, reservationToken: null, reason: 'authorization failed', requiresAuth: false };
+      return {
+        allowed: true,
+        reservationToken: null,
+        reason: 'relay authorization unavailable; continuing decentralized vote',
+        requiresAuth: false,
+      };
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -93,17 +133,19 @@ export class AuditService {
     reservationToken: string,
     requireLogin = false,
   ): Promise<boolean> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
     try {
       const body = await IntegrityService.seal(
         { pollId, deviceId, reservationToken, requireLogin } as Record<string, unknown>,
         'vote-confirm',
       );
-      const res = await fetch(`${config.relay.api}/api/vote-confirm`, {
+      const res = await fetch(`${this.getTrustedApiBase()}/api/vote-confirm`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
+        signal: controller.signal,
         body: JSON.stringify(body),
       });
 
@@ -115,32 +157,37 @@ export class AuditService {
       return data.ok === true;
     } catch (_error) {
       return false;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
   static async registerPollPolicy(pollId: string, requireLogin: boolean): Promise<boolean> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2500);
     try {
       const body = await IntegrityService.seal(
         { pollId, requireLogin } as Record<string, unknown>,
         'poll-policy',
       );
-      const res = await fetch(`${config.relay.api}/api/poll-policy`, {
+      const res = await fetch(`${this.getTrustedApiBase()}/api/poll-policy`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
       return res.ok;
     } catch {
       return false;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
   static async getCloudUser(): Promise<Record<string, unknown> | null> {
     try {
-      const res = await fetch(`${config.relay.api}/api/me`, {
+      const res = await fetch(`${this.getTrustedApiBase()}/api/me`, {
         method: 'GET',
-        credentials: 'include',
       });
       if (!res.ok) {
         this.clearCachedCloudUser();
@@ -190,7 +237,51 @@ export class AuditService {
   }
 
   static startOAuthLogin(provider: 'google' | 'microsoft' = 'google'): void {
-    window.location.href = `${config.relay.api}/auth/${provider}/start`;
+    const startUrl = `${this.getTrustedApiBase()}/auth/${provider}/start`;
+
+    // In the native shell a full-page redirect can't come back: the OAuth
+    // callback lands on the web origin (endless.sbs), a different origin than
+    // the app's https://localhost WebView, so the session/redirect is lost.
+    // Instead open the system browser and rely on a deep-link return.
+    //
+    // NOTE (M4 — pending relay change): the relay must honour `platform=native`
+    // by redirecting the callback to `com.interpoll.app://auth/callback?token=…`
+    // (a token in the URL, not a cross-origin cookie). The deep-link listener in
+    // src/native/capacitorApp.ts already routes that return; until the relay is
+    // updated, native OAuth will open the browser but not complete sign-in.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const Cap = (globalThis as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+    if (Cap?.isNativePlatform?.()) {
+      const nativeUrl = `${startUrl}?platform=native&redirect_uri=${encodeURIComponent('com.interpoll.app://auth/callback')}`;
+      import('@capacitor/browser')
+        .then(({ Browser }) => Browser.open({ url: nativeUrl }))
+        .catch(() => { window.location.href = nativeUrl; });
+      return;
+    }
+
+    window.location.href = startUrl;
+  }
+
+  /**
+   * Complete OAuth sign-in on native from a token delivered via deep link
+   * (`com.interpoll.app://auth/callback?token=…`). Called by the deep-link
+   * handler in src/native/capacitorApp.ts.
+   *
+   * TODO (M4 — blocked on relay change): the production relay
+   * (relay-server/relay-server-enhanced.js, gitignored) must be updated to
+   * (a) accept `platform=native` on /auth/{provider}/start, and (b) redirect
+   * the callback to the app scheme with a signed session token instead of
+   * setting a cross-origin cookie. Once the token format is known, exchange /
+   * verify it here and persist the cloud user via the existing session cache
+   * (see verifyCloudSession / CLOUD_USER_KEY). For now this only records the
+   * token so the flow is observable end-to-end.
+   */
+  static async completeNativeOAuth(token: string): Promise<void> {
+    if (!token) return;
+    try {
+      localStorage.setItem('interpoll_pending_native_oauth_token', token);
+    } catch { /* storage unavailable */ }
+    console.info('[Auth] Received native OAuth token (handoff pending relay support)');
   }
 
   private static clearCachedCloudUser(): void {

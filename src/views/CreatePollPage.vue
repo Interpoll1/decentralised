@@ -14,6 +14,10 @@
       </ion-toolbar>
     </ion-header>
     <ion-content>
+      <DesktopPageShell>
+      <div v-if="isSubmittingSlow" class="submit-slow-banner">
+        Still publishing to the network — this can take a few extra seconds on a slow relay.
+      </div>
       <!-- Community Selection -->
       <ion-item button @click="showCommunityPicker">
         <ion-label>
@@ -111,6 +115,32 @@
             placeholder="20"
           ></ion-input>
         </ion-item>
+
+        <!-- Sybil resistance: which votes count as "Verified" -->
+        <ion-item>
+          <ion-select
+            v-model="requiredTier"
+            label="Vote verification"
+            label-placement="stacked"
+            interface="popover"
+          >
+            <ion-select-option value="open">Open — anyone (no verification)</ion-select-option>
+            <ion-select-option value="pow">Proof-of-work — costs each voter some CPU</ion-select-option>
+            <ion-select-option value="relay">Relay-attested — one device / login</ion-select-option>
+            <ion-select-option value="issuer">Verified identity — issuer-certified</ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-item v-if="requiredTier !== 'open'">
+          <ion-toggle v-model="gateSubTierVotes">
+            Exclude unverified votes from the main result
+          </ion-toggle>
+        </ion-item>
+        <ion-item v-if="requiredTier !== 'open'" lines="none">
+          <ion-label class="text-xs text-gray-500">
+            Anyone can still vote without verifying — those votes are counted and
+            shown in a separate “Open” result{{ gateSubTierVotes ? ', but kept out of the main “Verified” tally' : ' alongside the “Verified” tally' }}.
+          </ion-label>
+        </ion-item>
       </ion-list>
 
       <!-- Additional Details (Optional) -->
@@ -124,12 +154,14 @@
           :counter="true"
         ></ion-textarea>
       </ion-item>
+      </DesktopPageShell>
     </ion-content>
   </ion-page>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
+import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage,
@@ -161,6 +193,7 @@ import {
 import { useCommunityStore } from '../stores/communityStore';
 import { usePollStore } from '../stores/pollStore';
 import { Community } from '../services/communityService';
+import { checkContent, checkOption } from '../utils/contentGuard';
 
 const POLL_DEBUG_KEY = 'interpoll_poll_debug';
 type PollDebugCategory = 'create' | 'writes' | 'index' | 'ui' | 'all';
@@ -216,7 +249,27 @@ const showResultsBeforeVoting = ref(false);
 const description = ref('');
 const isPrivate = ref(false);
 const inviteCodeCount = ref(20);
+// Sybil-resistance policy: which tier a vote must reach to count as "Verified",
+// and whether sub-tier votes are excluded from the main tally (gate) or shown
+// in a separate "Open" track (separate).
+const requiredTier = ref<'open' | 'pow' | 'relay' | 'issuer'>('open');
+const gateSubTierVotes = ref(false);
 const isSubmitting = ref(false);
+const isSubmittingSlow = ref(false);
+let submitSlowTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(isSubmitting, (submitting) => {
+  if (submitSlowTimer) {
+    clearTimeout(submitSlowTimer);
+    submitSlowTimer = null;
+  }
+  isSubmittingSlow.value = false;
+  if (submitting) {
+    submitSlowTimer = setTimeout(() => {
+      isSubmittingSlow.value = true;
+    }, 3000);
+  }
+});
 
 function escapeHtml(input: string): string {
   return input
@@ -275,6 +328,17 @@ function addOption() {
   }
 }
 
+function resetForm() {
+  question.value = '';
+  options.value = [createOptionDraft(), createOptionDraft()];
+  duration.value = '7';
+  allowMultipleChoices.value = false;
+  showResultsBeforeVoting.value = false;
+  description.value = '';
+  isPrivate.value = false;
+  inviteCodeCount.value = 20;
+}
+
 function removeOption(index: number) {
   if (options.value.length > 2) {
     options.value.splice(index, 1);
@@ -301,16 +365,27 @@ async function createPoll() {
 
   try {
     isSubmitting.value = true;
-    logPollDebug('ui', 'Submit started', {
-      communityId: selectedCommunity.value?.id,
-      isPrivate: isPrivate.value,
-      durationDays: duration.value,
-      optionDraftCount: options.value.length,
-    });
-    // Filter out empty options
-    const validOptions = options.value
-      .map(opt => opt.text.trim())
-      .filter(opt => opt.length > 0);
+
+    // Spam check — question
+    const qCheck = checkContent(question.value.trim(), 'title');
+    if (!qCheck.ok) {
+      const toast = await toastController.create({ message: `Question: ${qCheck.reason}`, duration: 2500, color: 'warning' });
+      await toast.present();
+      isSubmitting.value = false;
+      return;
+    }
+
+    // Spam check — each option
+    const validOptions = options.value.map(opt => opt.text.trim()).filter(opt => opt.length > 0);
+    for (const opt of validOptions) {
+      const oCheck = checkOption(opt);
+      if (!oCheck.ok) {
+        const toast = await toastController.create({ message: `Option "${opt.slice(0, 20)}": ${oCheck.reason}`, duration: 2500, color: 'warning' });
+        await toast.present();
+        isSubmitting.value = false;
+        return;
+      }
+    }
     logPollDebug('ui', 'Prepared poll payload', {
       validOptionsCount: validOptions.length,
       hasDescription: Boolean(description.value.trim()),
@@ -328,7 +403,10 @@ async function createPoll() {
       showResultsBeforeVoting: showResultsBeforeVoting.value,
       requireLogin: false,
       isPrivate: isPrivate.value,
-      inviteCodeCount: inviteCodeCount.value
+      inviteCodeCount: inviteCodeCount.value,
+      voteTrustPolicy: requiredTier.value === 'open'
+        ? undefined
+        : { requiredTier: requiredTier.value, mode: gateSubTierVotes.value ? 'gate' : 'separate' },
     });
     logPollDebug('ui', 'pollStore.createPoll resolved', {
       pollId: poll.id,
@@ -392,6 +470,13 @@ async function createPoll() {
       });
 
       await alert.present();
+    } else if (poll.relayConfirmed === false) {
+      const toast = await toastController.create({
+        message: 'Poll saved — the relay hasn\'t confirmed it yet, so publishing will keep retrying in the background.',
+        duration: 4000,
+        color: 'warning'
+      });
+      await toast.present();
     } else {
       const toast = await toastController.create({
         message: 'Poll created successfully',
@@ -401,12 +486,16 @@ async function createPoll() {
       await toast.present();
     }
 
+    const communityId = selectedCommunity.value?.id;
+    resetForm();
+
     // Navigate to poll detail for private polls (so author can manage invite codes),
-    // or community page for public polls
-    if (isPrivate.value) {
-      router.push(`/community/${selectedCommunity.value?.id}/poll/${poll.id}`);
+    // or community page for public polls. Replace so Back doesn't return to a
+    // consumed form where a second tap would create a duplicate poll.
+    if (poll.isPrivate) {
+      await router.replace(`/community/${communityId}/poll/${poll.id}`);
     } else {
-      router.push(`/community/${selectedCommunity.value?.id}`);
+      await router.replace(`/community/${communityId}`);
     }
   } catch (error) {
     logPollDebug('ui', 'Submit failed', {
@@ -445,3 +534,15 @@ watch(
   { immediate: true },
 );
 </script>
+
+<style scoped>
+.submit-slow-banner {
+  margin: 8px 16px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--app-warning);
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+</style>

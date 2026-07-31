@@ -10,13 +10,33 @@
       <!-- Comment Header -->
       <div class="comment-header">
         <span class="commenter-dot"></span>
-        <span class="author-name">u/{{ displayName }}</span>
-        <span v-if="comment.authorShowRealName" class="identity-badge" :class="authorIdentityClass">
+        <span class="author-wrap">
+          <span class="author-name">u/{{ displayName }}</span>
+          <button
+            v-if="canInviteAuthor"
+            class="invite-chat-btn"
+            type="button"
+            @click.stop="sendInviteToCommentAuthor"
+          >
+            Invite to chat
+          </button>
+        </span>
+        <span class="identity-badge" :class="authorIdentityClass">
           {{ authorIdentityLabel }}
         </span>
         <span class="separator">•</span>
         <span class="timestamp">{{ formatTime(comment.createdAt) }}</span>
         <span v-if="comment.edited" class="edited-label">(edited)</span>
+        <span
+          v-if="syncState && syncState !== 'confirmed'"
+          class="sync-label"
+          :class="syncState"
+          :title="syncState === 'failed'
+            ? 'Saved on this device, but no relay accepted it yet — it will keep retrying'
+            : 'Saved on this device, still syncing to the network'"
+        >
+          {{ syncState === 'failed' ? 'not synced' : 'sending…' }}
+        </span>
         <span v-if="flagged && filterAction === 'flag'" class="flag-badge" title="Flagged by word filter">
           <ion-icon :icon="warningOutline"></ion-icon>
         </span>
@@ -88,7 +108,8 @@
 
 <style scoped>
 .comment-card {
-  padding: 12px 16px;
+  padding: 12px 0 14px;
+  margin-bottom: 8px;
   border-bottom: 1px solid rgba(var(--ion-text-color-rgb), 0.07);
 }
 
@@ -116,6 +137,31 @@
   color: var(--ion-text-color);
 }
 
+.author-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.invite-chat-btn {
+  border: 1px solid rgba(var(--app-accent-rgb), 0.24);
+  background: rgba(var(--app-accent-rgb), 0.12);
+  color: var(--app-accent-bright);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--app-transition);
+}
+
+.comment-header:hover .invite-chat-btn,
+.invite-chat-btn:focus-visible {
+  opacity: 1;
+}
+
 .identity-badge {
   border-radius: 10px;
   padding: 1px 8px;
@@ -137,6 +183,21 @@
 .edited-label {
   font-size: 11px;
   color: var(--ion-color-medium);
+}
+
+.sync-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border-radius: 10px;
+  padding: 1px 7px;
+  background: rgba(var(--ion-color-medium-rgb), 0.16);
+  color: var(--ion-color-medium-shade);
+}
+
+.sync-label.failed {
+  background: rgba(var(--ion-color-warning-rgb), 0.16);
+  color: var(--ion-color-warning-shade);
 }
 
 /* ── Content ─────────────────────────────────────── */
@@ -175,7 +236,7 @@
 }
 
 .action-button:hover {
-  background: rgba(var(--ion-text-color-rgb), 0.06);
+  background: rgba(var(--ion-text-color-rgb), 0.04);
 }
 
 .action-button:active {
@@ -203,7 +264,7 @@
 .reply-form {
   margin-top: 10px;
   padding: 10px;
-  background: rgba(var(--ion-text-color-rgb), 0.04);
+  background: rgba(var(--ion-text-color-rgb), 0.03);
   border-radius: 10px;
 }
 
@@ -260,10 +321,16 @@
 .flag-badge ion-icon {
   font-size: 13px;
 }
+
+@media (max-width: 576px) {
+  .invite-chat-btn {
+    opacity: 1;
+  }
+}
 </style>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { IonIcon, IonTextarea, IonButton, toastController } from '@ionic/vue';
 import {
   arrowUpOutline,
@@ -280,6 +347,10 @@ import type { FilterAction } from '../services/moderationService';
 import { ModerationService } from '../services/moderationService';
 import { useUserStore } from '../stores/userStore';
 import type { UserProfile } from '../services/userService';
+import { UserService } from '../services/userService';
+import { ChatInviteService } from '../services/chatInviteService';
+import { formatTrustedIdentityLabel } from '../utils/identityTrust';
+import { checkContent } from '../utils/contentGuard';
 
 const props = defineProps<{
   comment: Comment;
@@ -297,13 +368,14 @@ const showReplyForm = ref(false);
 const replyText = ref('');
 const revealed = ref(false);
 const authorProfile = ref<UserProfile | null>(null);
+const currentUserId = ref('');
 let authorProfileRequestId = 0;
 
 watch(
-  () => [props.comment.authorId, props.comment.authorShowRealName] as const,
-  async ([authorId, authorShowRealName]) => {
+  () => props.comment.authorId,
+  async (authorId) => {
     const requestId = ++authorProfileRequestId;
-    if (!authorId || !authorShowRealName) {
+    if (!authorId) {
       authorProfile.value = null;
       return;
     }
@@ -329,24 +401,34 @@ const displayName = computed(() => {
 });
 
 const authorIdentityLabel = computed(() =>
-  authorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'Issuer linked' : 'Unverified identity'
+  authorProfile.value?.identityTrustLevel === 'trusted-issuer'
+    ? formatTrustedIdentityLabel({
+      username: authorProfile.value?.identityUsername
+        || authorProfile.value?.customUsername
+        || authorProfile.value?.username
+        || props.comment.authorName,
+      issuer: authorProfile.value?.identityIssuer,
+    })
+    : 'Unverified identity'
 );
 
 const authorIdentityClass = computed(() =>
   authorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'
 );
 
-const hasUpvoted = computed(() => {
-  commentStore.voteVersion; // reactive dependency to trigger re-evaluation on vote changes
-  const votedComments = JSON.parse(localStorage.getItem('upvoted-comments') || '[]');
-  return votedComments.includes(props.comment.id);
-});
+const canInviteAuthor = computed(() =>
+  !!props.comment.authorId && !!currentUserId.value && props.comment.authorId !== currentUserId.value
+);
 
-const hasDownvoted = computed(() => {
-  commentStore.voteVersion; // reactive dependency to trigger re-evaluation on vote changes
-  const votedComments = JSON.parse(localStorage.getItem('downvoted-comments') || '[]');
-  return votedComments.includes(props.comment.id);
-});
+// Backed by the store's reactive `myVotes` map. These used to read localStorage
+// inside a computed and touch a `voteVersion` counter to force re-evaluation,
+// which meant the highlight only updated when some *other* vote bumped the
+// counter — voting on a comment often left its own button looking untouched.
+const hasUpvoted = computed(() => commentStore.hasUpvoted(props.comment.id));
+const hasDownvoted = computed(() => commentStore.hasDownvoted(props.comment.id));
+
+/** 'pending' | 'published' while this device is still pushing the comment out. */
+const syncState = computed(() => commentStore.statusOf(props.comment.id));
 
 const replies = computed(() => {
   const filtered = commentStore.comments.filter(c => {
@@ -374,9 +456,34 @@ function cancelReply() {
   replyText.value = '';
 }
 
+async function sendInviteToCommentAuthor() {
+  if (!canInviteAuthor.value) return;
+  try {
+    await ChatInviteService.sendInvite(props.comment.authorId);
+    const toast = await toastController.create({
+      message: `Chat invite sent to u/${displayName.value}`,
+      duration: 2200,
+      color: 'success'
+    });
+    await toast.present();
+  } catch {
+    const toast = await toastController.create({
+      message: 'Failed to send chat invite',
+      duration: 2200,
+      color: 'danger'
+    });
+    await toast.present();
+  }
+}
+
 async function submitReply() {
   if (!replyText.value.trim()) return;
-
+  const guard = checkContent(replyText.value.trim(), 'comment');
+  if (!guard.ok) {
+    const toast = await toastController.create({ message: guard.reason!, duration: 2500, color: 'warning' });
+    await toast.present();
+    return;
+  }
   try {
     await commentStore.createComment({
       postId: props.postId,
@@ -394,12 +501,10 @@ async function submitReply() {
 
     replyText.value = '';
     showReplyForm.value = false;
-
-    // Reload comments to show the new reply
-    setTimeout(() => {
-      commentStore.loadCommentsForPost(props.postId);
-    }, 500);
-
+    // No reload: the store inserts the reply immediately and the live
+    // subscription delivers the graph's copy. Reloading here used to restart the
+    // whole thread load and cancel the in-flight one, which is how a just-posted
+    // reply could flash up and then disappear.
   } catch (error) {
     console.error('Error posting reply:', error);
 
@@ -435,4 +540,13 @@ function formatNumber(num: number | undefined | null): string {
   if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
   return n.toString();
 }
+
+onMounted(async () => {
+  try {
+    const currentUser = await UserService.getCurrentUser();
+    currentUserId.value = currentUser.id;
+  } catch {
+    currentUserId.value = '';
+  }
+});
 </script>

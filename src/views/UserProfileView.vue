@@ -10,6 +10,7 @@
     </ion-header>
 
     <ion-content>
+      <DesktopPageShell>
       <!-- Profile Header -->
       <div class="profile-header">
         <div class="avatar-placeholder">
@@ -82,19 +83,26 @@
           <p>No comments yet</p>
         </div>
         <div v-else class="comments-list">
+          <!-- postId/communityId are required: CommentCard derives the author's
+               per-post pseudonym from postId, so omitting it rendered every
+               comment under the wrong pseudonym on this page. -->
           <CommentCard
             v-for="comment in userComments"
             :key="comment.id"
             :comment="comment"
+            :post-id="comment.postId"
+            :community-id="comment.communityId"
           />
         </div>
       </div>
+      </DesktopPageShell>
     </ion-content>
   </ion-page>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRouter, useRoute } from 'vue-router';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,

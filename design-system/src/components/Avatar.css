@@ -1,0 +1,37 @@
+.ip-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  font-family: var(--ip-font-sans);
+  font-weight: 700;
+  color: #ffffff;
+  background: linear-gradient(150deg, color-mix(in srgb, var(--ip-avatar-color) 85%, white),
+    var(--ip-avatar-color));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 2px 8px rgba(0, 0, 0, 0.18);
+  user-select: none;
+}
+
+.ip-avatar__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ip-avatar--sm {
+  width: 28px;
+  height: 28px;
+  font-size: 11px;
+}
+.ip-avatar--md {
+  width: 40px;
+  height: 40px;
+  font-size: 15px;
+}
+.ip-avatar--lg {
+  width: 56px;
+  height: 56px;
+  font-size: 20px;
+}
