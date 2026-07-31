@@ -1,5 +1,6 @@
 import config from '@/config';
 import type { KnownServer } from './websocketService';
+import { PeerReputationService } from './peerReputationService';
 
 export interface RelayEndpoint {
   id: string;
@@ -228,7 +229,11 @@ export class RelayManager {
       const { WebSocketService } = await import('./websocketService');
       const { GunService } = await import('./gunService');
       WebSocketService.reconnect(relay.ws);
-      GunService.reconnect(relay.gun);
+      // Reconnect Gun to the whole pool (new relay + configured peers), not just
+      // the one relay — Gun is the automatic WebRTC signaling substrate, so
+      // collapsing it to a single peer would make browser-to-browser fall back to
+      // manual whenever that one relay is unreachable.
+      GunService.reconnect(this.gunPoolWith(relay.gun));
 
       this.config.activeRelayId = id;
       this.clearFailure(id);
@@ -362,6 +367,14 @@ export class RelayManager {
       probe.lastSeen = Date.now();
     }
 
+    // Feed the outcome into persistent reputation so failover can prefer
+    // proven-good relays and demote flaky ones over time.
+    if (probe.status === 'offline') {
+      PeerReputationService.recordFailure(relay.id);
+    } else {
+      PeerReputationService.recordSuccess(relay.id);
+    }
+
     const managed = this.config.relays.find((r) => r.id === relay.id);
     if (managed) {
       managed.status = probe.status;
@@ -382,6 +395,64 @@ export class RelayManager {
 
   static async autoFailover(): Promise<void> {
     await this.orchestrateConnectionSwitch('auto-failover');
+  }
+
+  /**
+   * Aggressive last-resort recovery, used ONLY by ResilienceService during a
+   * confirmed total blackout. Unlike normal failover, this dials
+   * signature-verified relay endpoints that peers advertised via rendezvous / Gun
+   * discovery — deliberately bypassing the conservative `allowDiscoveredAutoSwitch`
+   * default and the `source === 'peer'` restriction in `getCandidateOrder`. The
+   * justification is scoped to blackout: the only alternative is zero connectivity,
+   * and every entry is already Schnorr-verified and protocol-safe (via
+   * `DiscoveryService.normalizeAndValidate`). A hostile relay can censor/delay but
+   * cannot forge signed content. Returns true if it managed to connect.
+   */
+  static async recoverFromBlackout(): Promise<boolean> {
+    if (this.switching) return false;
+
+    let entries: import('./discoveryService').DiscoveryEntry[];
+    try {
+      const { DiscoveryService } = await import('./discoveryService');
+      entries = DiscoveryService.getEntries();
+    } catch {
+      return false;
+    }
+    if (!entries.length) return false;
+
+    // Register each verified endpoint as a discovered relay (dedup by ws URL).
+    const candidates: RelayEndpoint[] = [];
+    for (const entry of entries) {
+      const relay = this.upsertDiscoveredRelay({
+        websocket: entry.websocket,
+        gun: entry.gun,
+        api: entry.api,
+        addedBy: entry.peerId || entry.nodeId || 'rendezvous',
+        firstSeen: entry.timestamp,
+        source: 'gun',
+        signatureValid: true,
+        lastVerifiedAt: entry.timestamp,
+        expiresAt: entry.expiresAt,
+      });
+      if (relay && relay.id !== this.config.activeRelayId) candidates.push(relay);
+    }
+    if (!candidates.length) return false;
+
+    for (const candidate of this.byReputation(candidates)) {
+      if (this.isInCooldown(candidate.id)) continue;
+      const probed = await this.probeRelay(candidate);
+      if (probed.status === 'offline') {
+        this.noteFailure(candidate.id);
+        continue;
+      }
+      try {
+        await this.switchToRelay(candidate.id);
+        return true;
+      } catch {
+        // Try the next verified candidate.
+      }
+    }
+    return false;
   }
 
   static cleanup(): void {
@@ -600,7 +671,9 @@ export class RelayManager {
   }
 
   private static async getCandidateOrder(): Promise<RelayEndpoint[]> {
-    const configured = this.getRelayList().filter((r) => r.id !== this.config.activeRelayId);
+    const configured = this.byReputation(
+      this.getRelayList().filter((r) => r.id !== this.config.activeRelayId),
+    );
 
     if (!this.config.transport.preferDecentralized) {
       return configured;
@@ -610,7 +683,7 @@ export class RelayManager {
       return configured;
     }
 
-    const discovered = await this.getFreshVerifiedDiscoveredRelays();
+    const discovered = this.byReputation(await this.getFreshVerifiedDiscoveredRelays());
     if (!this.config.transport.allowWssFallback) {
       return discovered;
     }
@@ -618,6 +691,32 @@ export class RelayManager {
     const discoveredIds = new Set(discovered.map((r) => r.id));
     const fallbackConfigured = configured.filter((r) => !discoveredIds.has(r.id));
     return [...discovered, ...fallbackConfigured];
+  }
+
+  /**
+   * Stable reorder that keeps the existing priority ordering as the primary key
+   * and uses persistent reputation only as a tiebreaker (proven-good relays win
+   * ties). Never reshuffles relays of differing priority.
+   */
+  /** Deduped Gun peer set: the active relay's Gun URL first, then the configured
+   *  pool — so switching relays keeps a broad Gun signaling substrate alive. */
+  private static gunPoolWith(primaryGunUrl: string): string[] {
+    const seen = new Set<string>();
+    const pool: string[] = [];
+    for (const url of [primaryGunUrl, ...config.getGunPeers()]) {
+      if (url && !seen.has(url)) {
+        seen.add(url);
+        pool.push(url);
+      }
+    }
+    return pool;
+  }
+
+  private static byReputation(relays: RelayEndpoint[]): RelayEndpoint[] {
+    return [...relays]
+      .map((relay, index) => ({ relay, index, score: PeerReputationService.scoreFor(relay.id) }))
+      .sort((a, b) => a.relay.priority - b.relay.priority || b.score - a.score || a.index - b.index)
+      .map((entry) => entry.relay);
   }
 
   private static async getFreshVerifiedDiscoveredRelays(): Promise<RelayEndpoint[]> {

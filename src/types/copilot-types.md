@@ -4,14 +4,14 @@
 
 ## `chain.ts`
 
-Core blockchain types. Import with `import type { ChainBlock, Vote, Receipt, Poll, ActionType } from '@/types/chain'`.
+Core blockchain types. Import with `import type { ChainBlock, Vote, Receipt, ChainPollSnapshot, ActionType } from '@/types/chain'`.
 
 | Type | Notes |
 |---|---|
 | `ChainBlock` | Fields: `index`, `timestamp`, `previousHash`, `voteHash`, `signature`, `currentHash`, `nonce`. Optional: `pubkey` (Schnorr x-only hex), `eventId` (Nostr event ref), `actionType`, `actionLabel`. Legacy blocks omit `pubkey` — they are still valid if hash-chain holds. |
 | `Vote` | `pollId`, `choice`, `timestamp`, `deviceId` |
-| `Receipt` | `blockIndex`, `voteHash`, `chainHeadHash`, `mnemonic`, `timestamp`, `pollId` |
-| `Poll` | Minimal chain-layer poll: `id`, `title`, `description`, `options[]`, `createdAt`. **Not** the same as `pollService.ts` `Poll` which has more fields. |
+| `Receipt` | `blockIndex`, `voteHash`, `chainHeadHash`, `verificationCode`, `timestamp`, `pollId` (`mnemonic` retained as legacy alias) |
+| `ChainPollSnapshot` | Minimal chain-layer poll: `id`, `title`, `description`, `options[]`, `createdAt`. Used by `storageService.ts` (IndexedDB) and `snapshotService.ts` (chain snapshots) only. Renamed from `Poll` to remove a naming collision with the richer, Gun-replicated `Poll` in `src/types/poll.ts` (used by `pollService.ts`) — the two are not interchangeable. |
 | `ActionType` | `'vote' \| 'community-create' \| 'post-create'` — extend this union to add new block action types. |
 
 ## `nostr.ts`
@@ -43,6 +43,22 @@ End-to-end encryption types for communities, chat rooms, posts, and server-wide 
 | `ContentSignature` | Anti-sabotage fields for posts/comments: `authorPubkey` (64 hex), `contentSignature` (128 hex Schnorr). |
 | `EncryptedPostData` | Encrypted post in GunDB: `encryptedContent` blob + `authTag`, scoped to `communityId`. |
 | `ServerEncryptionConfig` | Server-wide encryption settings: `encryptAll`, optional `serverPassword` (PBKDF2 input), `requireInviteToJoin`. |
+
+## `social.ts`
+
+Domain types for the social layer (comments and chat). They live here rather than
+in a service so `StorageService` can persist them without importing a service —
+which would close an import cycle (service → storage → service). `commentService`
+re-exports `Comment`, so existing `import type { Comment } from './commentService'`
+keeps working.
+
+| Type | Notes |
+|---|---|
+| `SyncStatus` | `'pending'` (in IndexedDB, no Gun peer has acked) → `'published'` (a peer acked, no relay confirmed) → `'confirmed'` (the relay's DB mirror reports the soul — see `verifySoulOnRelay`) / `'failed'` (retries exhausted; the record is **kept and shown**, never discarded). Records authored elsewhere and merely observed arrive as `confirmed`: they demonstrably exist outside this browser. |
+| `Comment` | The domain comment. `deleted?: boolean` is part of the interface now — `deleteComment` always wrote it, but the old interface did not declare it, so tombstones were invisible to type-checking. |
+| `StoredComment` | `Comment` + `syncStatus`, `syncAttempts`, `lastSyncAt`, `authoredLocally`, `updatedAt`. The row in IndexedDB `comments`. **The local copy is authoritative for display**: Gun has no local persistence, so without this row a comment vanishes from its own author's screen the moment the graph is evicted. `authoredLocally` is what the republish sweep and the pruner key off — only those rows need republishing, and they are never pruned while unconfirmed. |
+| `ChatKind` | `'dm' \| 'room'`. |
+| `StoredChatMessage` | Row in IndexedDB `chat-messages`: `id`, `roomId` (sorted `a:b` pair for DMs, room id for group rooms), `kind`, `senderId`, `senderName?`, `recipientId?`, `text`, `timestamp`, `seq`, `outgoing`, `syncStatus`, `syncAttempts`, `readAt?`, `error?`. **`text` is plaintext, deliberately**: the keys needed to decrypt the ciphertext (the RSA identity keypair, the room AES key) live in the *same* IndexedDB, so storing ciphertext here would protect nothing while costing offline history — clearing site data removes both together. `seq` is a monotonic per-device counter used by `utils/messageOrder.ts` to break ties when clocks collide or skew. |
 
 ## `supabase.ts`
 

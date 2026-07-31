@@ -1,7 +1,21 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
+import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
 import fs from 'fs/promises';
+import { execSync } from 'child_process';
+import crypto from 'crypto';
+
+function getBuildHash(): string {
+  try {
+    const commit = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
+    return commit;
+  } catch {
+    const now = new Date().toISOString();
+    const hash = crypto.createHash('sha256').update(now).digest('hex').substring(0, 7);
+    return hash;
+  }
+}
 
 function spaRouteFallbackPlugin() {
   const blockedPrefixes = ['/src/', '/node_modules/', '/@vite/', '/@fs/', '/assets', '/public/'];
@@ -38,9 +52,45 @@ function spaRouteFallbackPlugin() {
   };
 }
 
+// When building for the Capacitor native shell we disable the service worker:
+// Workbox precache/navigateFallback fights Capacitor's local asset serving and
+// causes stale-asset / blank-screen issues inside the WebView. Set via the
+// `build:mobile` npm script (CAP_BUILD=1).
+const isNativeBuild = process.env.CAP_BUILD === '1';
+
 export default defineConfig({
   base: '/',
-  plugins: [vue(), spaRouteFallbackPlugin()],
+  plugins: [
+    vue(),
+    spaRouteFallbackPlugin(),
+    ...(isNativeBuild ? [] : [
+    VitePWA({
+      registerType: 'autoUpdate',
+      injectRegister: 'auto',
+      manifest: {
+        name: 'InterPoll',
+        short_name: 'InterPoll',
+        description: 'Decentralized, censorship-resistant polling & discussion',
+        theme_color: '#141420',
+        background_color: '#141420',
+        display: 'standalone',
+        start_url: '/',
+        icons: [
+          { src: '/pwa-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' },
+        ],
+      },
+      workbox: {
+        // Precache the app shell so the app LOADS with no network. Dynamic
+        // relay/Gun/API traffic is never precached — those go to the network.
+        globPatterns: ['**/*.{js,css,html,svg,woff2}'],
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/gun/, /^\/api/, /^\/oauth/, /^\/db/],
+        cleanupOutdatedCaches: true,
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // the ionic vendor chunk is ~1.1MB
+      },
+    }),
+    ]),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -54,7 +104,9 @@ export default defineConfig({
     'process.env': {},
     'process.platform': JSON.stringify('browser'),
     'process.versions': JSON.stringify({}),
-    global: 'globalThis'
+    global: 'globalThis',
+    'import.meta.env.VITE_BUILD_HASH': JSON.stringify(getBuildHash()),
+    'import.meta.env.VITE_BUILD_TIME': JSON.stringify(new Date().toISOString()),
   },
   optimizeDeps: {
     exclude: ['@ionic/vue'],

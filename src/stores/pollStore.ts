@@ -11,6 +11,12 @@ import { generatePseudonym } from '../utils/pseudonym';
 
 const PAGE_SIZE      = 10;
 const SEEN_POLLS_KEY = 'seen-poll-ids';
+const INCOMING_POLL_FLUSH_MS = 50;
+const INCOMING_POLL_BATCH_SIZE = 100;
+
+function isSyncDebugEnabled(): boolean {
+  return typeof window !== 'undefined' && window.localStorage.getItem('interpoll_sync_debug') === 'true';
+}
 
 // Same as postStore — filter Gun re-deliveries by session start time
 const APP_START_TIME = Date.now();
@@ -27,6 +33,21 @@ function saveSeenIds(ids: Set<string>) {
     const arr = Array.from(ids).slice(-500);
     localStorage.setItem(SEEN_POLLS_KEY, JSON.stringify(arr));
   } catch {}
+}
+
+function createRateLogger(label: string, snapshot?: () => Record<string, unknown>) {
+  let windowStart = Date.now();
+  let count = 0;
+  return (delta = 1) => {
+    if (!isSyncDebugEnabled()) return;
+    count += delta;
+    const now = Date.now();
+    if (now - windowStart < 1000) return;
+    const payload = snapshot ? snapshot() : {};
+    console.warn(`[SyncRate] ${label}`, { eventsPerSec: count, ...payload });
+    windowStart = now;
+    count = 0;
+  };
 }
 
 export const usePollStore = defineStore('poll', () => {
@@ -47,6 +68,21 @@ export const usePollStore = defineStore('poll', () => {
   // Recently-voted polls: Gun subscription won't overwrite vote counts during this window
   const recentlyVotedPolls = new Map<string, number>();
   const VOTE_PROTECTION_MS = 10_000; // 10s protection window after voting
+  const pendingPollsByCommunity = new Map<string, Map<string, Poll>>();
+  let pendingPollsFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  const getPendingIncomingPollCount = () => {
+    let total = 0;
+    for (const queue of pendingPollsByCommunity.values()) total += queue.size;
+    return total;
+  };
+  const logIncomingPollRate = createRateLogger('poll-incoming', () => ({
+    queueDepth: getPendingIncomingPollCount(),
+    subscribedCommunities: subscribedCommunities.size,
+    pollsInStore: pollsMap.value.size,
+  }));
+  const logPollFlushRate = createRateLogger('poll-flush', () => ({
+    queueDepth: getPendingIncomingPollCount(),
+  }));
 
   function handlePollSyncUpdate(incomingPoll: Poll) {
     if (!incomingPoll?.id || !Array.isArray(incomingPoll.options) || incomingPoll.options.length === 0) {
@@ -84,6 +120,93 @@ export const usePollStore = defineStore('poll', () => {
         }
       }
     }).catch(() => { /* no key or decryption failed — keep encrypted version */ });
+  }
+
+  function processIncomingPoll(communityId: string, poll: Poll) {
+    if (pollsMap.value.has(poll.id)) {
+      const existing = pollsMap.value.get(poll.id)!;
+      const normalizedPoll =
+        existing.communityId && !poll.communityId
+          ? { ...poll, communityId: existing.communityId }
+          : poll;
+      // During vote-protection, block only non-advancing updates.
+      if (isVoteProtected(normalizedPoll.id) && getTotalVotes(normalizedPoll) <= getTotalVotes(existing)) return;
+      // Don't overwrite a poll that has options with one that has none
+      if (existing.options.length > 0 && normalizedPoll.options.length === 0) {
+        return;
+      }
+      pollsMap.value.set(normalizedPoll.id, normalizedPoll);
+      tryDecryptPoll(normalizedPoll);
+      if (currentPoll.value?.id === normalizedPoll.id) {
+        currentPoll.value = normalizedPoll;
+      }
+      return;
+    }
+
+    if (seenPollIds.has(poll.id)) {
+      pollsMap.value.set(poll.id, poll);
+      tryDecryptPoll(poll);
+      return;
+    }
+
+    const isGenuinelyNew = poll.createdAt > APP_START_TIME;
+
+    pollsMap.value.set(poll.id, poll);
+    tryDecryptPoll(poll);
+    seenPollIds.add(poll.id);
+    // Flush persisted seen-IDs immediately for live arrivals
+    if (initialLoadDoneByCommId.get(communityId) && isGenuinelyNew) {
+      saveSeenIds(seenPollIds);
+    }
+    if (currentPoll.value?.id === poll.id) {
+      currentPoll.value = poll;
+    }
+  }
+
+  function scheduleIncomingPollsFlush() {
+    if (pendingPollsFlushTimer) return;
+    pendingPollsFlushTimer = setTimeout(() => {
+      pendingPollsFlushTimer = null;
+      let processed = 0;
+      const queues = Array.from(pendingPollsByCommunity.entries());
+      let cursor = 0;
+      while (processed < INCOMING_POLL_BATCH_SIZE && queues.length > 0) {
+        const [communityId, queue] = queues[cursor];
+        const first = queue.values().next().value as Poll | undefined;
+        if (first) {
+          queue.delete(first.id);
+          processIncomingPoll(communityId, first);
+          processed++;
+        }
+        if (queue.size === 0) {
+          pendingPollsByCommunity.delete(communityId);
+          queues.splice(cursor, 1);
+          if (queues.length === 0) break;
+          if (cursor >= queues.length) cursor = 0;
+          continue;
+        }
+        cursor = (cursor + 1) % queues.length;
+      }
+      if (processed > 0) logPollFlushRate(processed);
+      if (pendingPollsByCommunity.size > 0) scheduleIncomingPollsFlush();
+    }, INCOMING_POLL_FLUSH_MS);
+  }
+
+  function queueIncomingPoll(communityId: string, poll: Poll) {
+    const queue = pendingPollsByCommunity.get(communityId) || new Map<string, Poll>();
+    queue.set(poll.id, poll);
+    pendingPollsByCommunity.set(communityId, queue);
+    logIncomingPollRate();
+    scheduleIncomingPollsFlush();
+  }
+
+  function flushCommunityIncomingPolls(communityId: string) {
+    const queue = pendingPollsByCommunity.get(communityId);
+    if (!queue) return;
+    pendingPollsByCommunity.delete(communityId);
+    for (const poll of queue.values()) {
+      processIncomingPoll(communityId, poll);
+    }
   }
 
   // ─── Computed ──────────────────────────────────────────────────────────────
@@ -134,48 +257,12 @@ export const usePollStore = defineStore('poll', () => {
 
         // Phase 1: shell poll arrives
         (poll) => {
-          if (pollsMap.value.has(poll.id)) {
-            const existing = pollsMap.value.get(poll.id)!;
-            const normalizedPoll =
-              existing.communityId && !poll.communityId
-                ? { ...poll, communityId: existing.communityId }
-                : poll;
-            // During vote-protection, block only non-advancing updates.
-            if (isVoteProtected(normalizedPoll.id) && getTotalVotes(normalizedPoll) <= getTotalVotes(existing)) return;
-            // Don't overwrite a poll that has options with one that has none
-            if (existing.options.length > 0 && normalizedPoll.options.length === 0) {
-              return;
-            }
-            pollsMap.value.set(normalizedPoll.id, normalizedPoll);
-            tryDecryptPoll(normalizedPoll);
-            if (currentPoll.value?.id === normalizedPoll.id) {
-              currentPoll.value = normalizedPoll;
-            }
-            return;
-          }
-
-          if (seenPollIds.has(poll.id)) {
-            pollsMap.value.set(poll.id, poll);
-            tryDecryptPoll(poll);
-            return;
-          }
-
-          const isGenuinelyNew = poll.createdAt > APP_START_TIME;
-
-          pollsMap.value.set(poll.id, poll);
-          tryDecryptPoll(poll);
-          seenPollIds.add(poll.id);
-          // Flush persisted seen-IDs immediately for live arrivals
-          if (initialLoadDoneByCommId.get(communityId) && isGenuinelyNew) {
-            saveSeenIds(seenPollIds);
-          }
-          if (currentPoll.value?.id === poll.id) {
-            currentPoll.value = poll;
-          }
+          queueIncomingPoll(communityId, poll);
         },
 
         // Initial batch done
         () => {
+          flushCommunityIncomingPolls(communityId);
           clearTimeout(timeoutId);
           subscribedCommunities.add(communityId);
           initialLoadDoneByCommId.set(communityId, true);
@@ -233,6 +320,32 @@ export const usePollStore = defineStore('poll', () => {
     // across refreshes, so truly new polls after refresh correctly trigger banner
   }
 
+  /**
+   * Shrink pollsMap under memory pressure, keeping the visible window, the poll
+   * being viewed, and any poll inside its post-vote protection window (dropping
+   * one of those would discard a local vote count with nothing to reconcile
+   * against). Everything else re-loads from Gun on scroll.
+   *
+   * Called by the memory watchdog — see the cleanup registration in main.ts.
+   */
+  function trimPollsToVisible(extra = PAGE_SIZE): number {
+    const keep = new Set<string>();
+    const ordered = sortedPolls.value;
+    const limit = Math.min(ordered.length, visibleCount.value + extra);
+    for (let i = 0; i < limit; i++) keep.add(ordered[i].id);
+    if (currentPoll.value) keep.add(currentPoll.value.id);
+    const now = Date.now();
+    for (const [id, votedAt] of recentlyVotedPolls) {
+      if (now - votedAt < VOTE_PROTECTION_MS) keep.add(id);
+    }
+
+    let removed = 0;
+    for (const id of Array.from(pollsMap.value.keys())) {
+      if (!keep.has(id)) { pollsMap.value.delete(id); removed++; }
+    }
+    return removed;
+  }
+
   // ─── Create ────────────────────────────────────────────────────────────────
 
   async function createPoll(data: {
@@ -246,6 +359,7 @@ export const usePollStore = defineStore('poll', () => {
     requireLogin: boolean;
     isPrivate: boolean;
     inviteCodeCount?: number;
+    voteTrustPolicy?: import('../types/poll').VoteTrustPolicy;
   }) {
     const user = await UserService.getCurrentUser();
     const showReal = user.showRealName === true;
@@ -261,6 +375,8 @@ export const usePollStore = defineStore('poll', () => {
     pollsMap.value.set(poll.id, poll);
     seenPollIds.add(poll.id);
     saveSeenIds(seenPollIds);
+    BroadcastService.broadcast('poll-updated', poll);
+    void WebSocketService.broadcast('poll-updated', poll);
 
     try {
       const pollEvent = await EventService.createPollEvent({
@@ -327,6 +443,43 @@ export const usePollStore = defineStore('poll', () => {
     }
   }
 
+  async function voteOnPollContent(pollId: string, direction: 'up' | 'down') {
+    const user = await UserService.getCurrentUser();
+    const original = pollsMap.value.get(pollId);
+    const communityId = original?.communityId || currentPoll.value?.communityId;
+
+    if (original) {
+      const upvotes = original.upvotes || 0;
+      const downvotes = original.downvotes || 0;
+      const optimistic: Poll = direction === 'up'
+        ? { ...original, upvotes: upvotes + 1, score: (upvotes + 1) - downvotes }
+        : { ...original, downvotes: downvotes + 1, score: upvotes - (downvotes + 1) };
+      pollsMap.value.set(pollId, optimistic);
+      if (currentPoll.value?.id === pollId) currentPoll.value = optimistic;
+    }
+    try {
+      const patch = await PollService.voteOnPollContent(pollId, direction, user.id, communityId);
+      const current = pollsMap.value.get(pollId);
+      if (current) {
+        const updated = { ...current, ...patch };
+        pollsMap.value.set(pollId, updated);
+        if (currentPoll.value?.id === pollId) currentPoll.value = updated;
+        BroadcastService.broadcast('poll-updated', updated);
+        void WebSocketService.broadcast('poll-updated', updated);
+      }
+    } catch (err) {
+      console.warn('Poll content vote failed — rolling back', err);
+      if (original) {
+        pollsMap.value.set(pollId, original);
+        if (currentPoll.value?.id === pollId) currentPoll.value = original;
+      }
+      throw err;
+    }
+  }
+
+  function upvotePoll(pollId: string) { return voteOnPollContent(pollId, 'up'); }
+  function downvotePoll(pollId: string) { return voteOnPollContent(pollId, 'down'); }
+
   // ─── Select ────────────────────────────────────────────────────────────────
 
   async function selectPoll(pollId: string, communityId?: string) {
@@ -354,6 +507,7 @@ export const usePollStore = defineStore('poll', () => {
   // ─── Refresh ───────────────────────────────────────────────────────────────
 
   async function refreshCommunityPolls(communityId: string) {
+    pendingPollsByCommunity.delete(communityId);
     const unsub = unsubscribers.get(communityId);
     if (unsub) unsub();
     unsubscribers.delete(communityId);
@@ -372,6 +526,11 @@ export const usePollStore = defineStore('poll', () => {
   }
 
   onScopeDispose(() => {
+    if (pendingPollsFlushTimer) {
+      clearTimeout(pendingPollsFlushTimer);
+      pendingPollsFlushTimer = null;
+    }
+    pendingPollsByCommunity.clear();
     for (const unsub of unsubscribers.values()) unsub();
     initialLoadDoneByCommId.clear();
     pendingLoads.clear();
@@ -382,9 +541,10 @@ export const usePollStore = defineStore('poll', () => {
     sortedPolls, activePolls,
     visiblePolls, hasMorePolls, visibleCount,
     newPollCount, pendingNewPolls,
-    loadPollsForCommunity, loadMorePolls, resetVisibleCount,
+    loadPollsForCommunity, loadMorePolls, resetVisibleCount, trimPollsToVisible,
     flushNewPolls, injectPoll, saveSeenNow,
     createPoll, voteOnPoll, selectPoll,
+    voteOnPollContent, upvotePoll, downvotePoll,
     refreshCommunityPolls,
   };
 });

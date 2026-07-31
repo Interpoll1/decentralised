@@ -12,15 +12,15 @@
     <ion-content class="ion-padding">
       <ReceiptViewer :receipt="currentReceipt" />
 
-      <ion-card class="mt-4" v-if="!route.params.mnemonic">
+      <ion-card class="mt-4" v-if="!route.params.verificationCode">
         <ion-card-header>
           <ion-card-title>Lookup Receipt</ion-card-title>
         </ion-card-header>
         <ion-card-content>
           <ion-item>
             <ion-textarea
-              v-model="mnemonicInput"
-              placeholder="Enter your 12-word recovery phrase"
+              v-model="verificationCodeInput"
+              placeholder="Enter your 12-word receipt verification code"
               :rows="3"
             ></ion-textarea>
           </ion-item>
@@ -59,17 +59,17 @@ import ReceiptViewer from '../components/ReceiptViewer.vue';
 
 const route = useRoute();
 const currentReceipt = ref<Receipt | null>(null);
-const mnemonicInput = ref('');
+const verificationCodeInput = ref('');
 
 onMounted(async () => {
-  const mnemonic = route.params.mnemonic as string;
-  if (mnemonic) {
-    await loadReceipt(mnemonic);
+  const verificationCode = route.params.verificationCode as string;
+  if (verificationCode) {
+    await loadReceipt(verificationCode);
   }
 });
 
-const loadReceipt = async (mnemonic: string) => {
-  const receipt = await StorageService.getReceipt(mnemonic);
+const loadReceipt = async (verificationCode: string) => {
+  const receipt = await StorageService.getReceipt(verificationCode);
   currentReceipt.value = receipt || null;
 
   if (!receipt) {
@@ -83,7 +83,7 @@ const loadReceipt = async (mnemonic: string) => {
 };
 
 const lookupReceipt = async () => {
-  if (!mnemonicInput.value.trim()) return;
-  await loadReceipt(mnemonicInput.value.trim());
+  if (!verificationCodeInput.value.trim()) return;
+  await loadReceipt(verificationCodeInput.value.trim());
 };
 </script>

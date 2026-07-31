@@ -15,6 +15,7 @@
     </ion-header>
 
     <ion-content>
+      <DesktopPageShell>
       <!-- Loading -->
       <div v-if="isLoading" class="loading-container">
         <ion-spinner></ion-spinner>
@@ -40,7 +41,7 @@
               </ion-chip>
               <span class="separator">•</span>
               <span class="author">u/{{ postAuthorDisplayName }}</span>
-              <span v-if="post?.authorShowRealName" class="identity-badge" :class="postAuthorIdentityClass">
+              <span class="identity-badge" :class="postAuthorIdentityClass">
                 {{ postAuthorIdentityLabel }}
               </span>
               <span class="separator">•</span>
@@ -51,9 +52,7 @@
 
           <div class="post-body">
             <!-- Post Content -->
-            <div v-if="post.content" class="post-content">
-              {{ post.content }}
-            </div>
+            <div v-if="post.content" class="post-content" v-html="autoLink(post.content)"></div>
 
             <!-- Post Image -->
             <div v-if="post.imageThumbnail || post.imageIPFS" class="post-image">
@@ -101,8 +100,8 @@
             <div v-for="commenter in uniqueCommenters" :key="commenter.authorId" class="commenter-chip">
               <span class="commenter-online-dot"></span>
               <span class="commenter-name">u/{{ commenter.displayName }}</span>
-              <span v-if="commenter.authorShowRealName" class="identity-badge" :class="commenter.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'">
-                {{ commenter.identityTrustLevel === 'trusted-issuer' ? 'Issuer linked' : 'Unverified identity' }}
+              <span class="identity-badge" :class="commenter.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'">
+                {{ commenter.identityTrustLabel }}
               </span>
               <ion-badge color="medium" class="commenter-count">{{ commenter.commentCount }}</ion-badge>
             </div>
@@ -158,11 +157,20 @@
           </div>
         </div>
       </div>
+      </DesktopPageShell>
     </ion-content>
   </ion-page>
 </template>
 
 <script setup lang="ts">
+import DesktopPageShell from '../components/DesktopPageShell.vue';
+
+function autoLink(text: string): string {
+  if (!text) return '';
+  // Simple URL regex
+  return text.replace(/(https?:\/\/[\w\-\.\/?#&=;%+~:@,]+[\w\/])/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+}
+
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
@@ -185,8 +193,10 @@ import CommentCard from '../components/CommentCard.vue';
 import { Post } from '../services/postService';
 import { generatePseudonym } from '../utils/pseudonym';
 import { ModerationService, moderationVersion } from '../services/moderationService';
+import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 
 import { IPFSService } from '../services/ipfsService';
+import { checkContent } from '../utils/contentGuard';
 
 const route = useRoute();
 const router = useRouter();
@@ -195,7 +205,10 @@ const commentStore = useCommentStore();
 const communityStore = useCommunityStore();
 const userStore = useUserStore();
 
-const post = ref<Post | null>(null);
+// Tracks the store rather than snapshotting it: the store reassigns
+// `currentPost` on every vote reconciliation and graph update, and a one-time
+// copy left this page showing counts frozen at load time.
+const post = computed<Post | null>(() => postStore.currentPost);
 const isLoading = ref(true);
 const newCommentText = ref('');
 const voteVersion = ref(0);
@@ -258,7 +271,15 @@ const postAuthorDisplayName = computed(() => {
 });
 
 const postAuthorIdentityLabel = computed(() =>
-  postAuthorTrustLevel.value === 'trusted-issuer' ? 'Issuer linked' : 'Unverified identity'
+  postAuthorTrustLevel.value === 'trusted-issuer'
+    ? formatTrustedIdentityLabel({
+      username: userStore.profiles[post.value?.authorId || '']?.identityUsername
+        || userStore.profiles[post.value?.authorId || '']?.customUsername
+        || userStore.profiles[post.value?.authorId || '']?.username
+        || post.value?.authorName,
+      issuer: userStore.profiles[post.value?.authorId || '']?.identityIssuer,
+    })
+    : 'Unverified identity'
 );
 
 const postAuthorIdentityClass = computed(() =>
@@ -278,10 +299,10 @@ const modSettings = computed(() => {
 });
 
 watch(
-  () => [post.value?.authorId, post.value?.authorShowRealName] as const,
-  async ([authorId, showRealName]) => {
+  () => post.value?.authorId,
+  async (authorId) => {
     const requestId = ++postAuthorTrustRequestId;
-    if (!authorId || !showRealName) {
+    if (!authorId) {
       postAuthorTrustLevel.value = 'unverified';
       return;
     }
@@ -335,7 +356,14 @@ function isCommentFlagged(content: string): boolean {
 }
 
 const uniqueCommenters = computed(() => {
-  const authorMap = new Map<string, { authorId: string; displayName: string; commentCount: number; authorShowRealName: boolean; identityTrustLevel: 'trusted-issuer' | 'unverified' }>();
+  const authorMap = new Map<string, {
+    authorId: string;
+    displayName: string;
+    commentCount: number;
+    authorShowRealName: boolean;
+    identityTrustLevel: 'trusted-issuer' | 'unverified';
+    identityTrustLabel: string;
+  }>();
 
   commentStore.comments
     .filter(c => c.postId === postId.value || c.postId === post.value?.id)
@@ -347,6 +375,16 @@ const uniqueCommenters = computed(() => {
           existing.displayName = c.authorName || 'anon';
         }
         existing.authorShowRealName = existing.authorShowRealName || c.authorShowRealName === true;
+        existing.identityTrustLevel = userStore.profiles[c.authorId]?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified';
+        existing.identityTrustLabel = existing.identityTrustLevel === 'trusted-issuer'
+          ? formatTrustedIdentityLabel({
+            username: userStore.profiles[c.authorId]?.identityUsername
+              || userStore.profiles[c.authorId]?.customUsername
+              || userStore.profiles[c.authorId]?.username
+              || existing.displayName,
+            issuer: userStore.profiles[c.authorId]?.identityIssuer,
+          })
+          : 'Unverified identity';
       } else {
         const name = c.authorShowRealName
           ? (c.authorName || 'anon')
@@ -359,6 +397,15 @@ const uniqueCommenters = computed(() => {
           commentCount: 1,
           authorShowRealName: c.authorShowRealName === true,
           identityTrustLevel: userStore.profiles[c.authorId]?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified',
+          identityTrustLabel: userStore.profiles[c.authorId]?.identityTrustLevel === 'trusted-issuer'
+            ? formatTrustedIdentityLabel({
+              username: userStore.profiles[c.authorId]?.identityUsername
+                || userStore.profiles[c.authorId]?.customUsername
+                || userStore.profiles[c.authorId]?.username
+                || name,
+              issuer: userStore.profiles[c.authorId]?.identityIssuer,
+            })
+            : 'Unverified identity',
         });
       }
     });
@@ -366,15 +413,8 @@ const uniqueCommenters = computed(() => {
   return Array.from(authorMap.values()).sort((a, b) => b.commentCount - a.commentCount);
 });
 
-const hasUpvoted = computed(() => {
-  voteVersion.value;
-  return JSON.parse(localStorage.getItem('upvoted-posts') || '[]').includes(postId.value);
-});
-
-const hasDownvoted = computed(() => {
-  voteVersion.value;
-  return JSON.parse(localStorage.getItem('downvoted-posts') || '[]').includes(postId.value);
-});
+const hasUpvoted = computed(() => postStore.myVote(postId.value) === 'up');
+const hasDownvoted = computed(() => postStore.myVote(postId.value) === 'down');
 
 function formatTime(timestamp: number): string {
   const diff = Date.now() - timestamp;
@@ -415,74 +455,50 @@ async function loadFullImageSrc(cid: string): Promise<string | null> {
   }
 }
 
-function toggleLocalStorageItem(key: string, id: string, add: boolean) {
-  const items: string[] = JSON.parse(localStorage.getItem(key) || '[]');
-  const updated = add ? [...items, id] : items.filter(i => i !== id);
-  localStorage.setItem(key, JSON.stringify(updated));
+async function presentVoteToast(message: string, expectedVersion: number) {
+  const toast = await toastController.create({ message, duration: 1500 });
+  // Skip if a newer vote action has since superseded this one, to avoid a stale toast.
+  if (voteVersion.value === expectedVersion) {
+    toast.present();
+  }
+}
+
+/**
+ * The store owns both the counts and the optimistic prediction now, so this no
+ * longer hand-computes deltas onto a local copy of the post — the two used to
+ * drift apart whenever the store's reconciliation disagreed with the arithmetic
+ * here (notably on a side switch, which guessed ±2).
+ */
+async function handlePostVote(direction: 'up' | 'down') {
+  if (!post.value) return;
+  const id = post.value.id;
+  const wasActive = postStore.myVote(id) === direction;
+  voteVersion.value++;
+  const version = voteVersion.value;
+  try {
+    await postStore.toggleVote(id, direction);
+    const labels = { up: 'Upvote', down: 'Downvote' };
+    await presentVoteToast(wasActive ? `${labels[direction]} removed` : `${labels[direction]}d`, version);
+  } catch (error) {
+    console.error('Error voting:', error);
+  }
 }
 
 async function handleUpvote() {
-  if (!post.value) return;
-  try {
-    if (hasUpvoted.value) {
-      toggleLocalStorageItem('upvoted-posts', post.value.id, false);
-      // Optimistic update
-      post.value = { ...post.value, upvotes: post.value.upvotes - 1, score: post.value.score - 1 };
-      voteVersion.value++;
-      postStore.removeUpvote(post.value.id); // fire and forget
-      (await toastController.create({ message: 'Upvote removed', duration: 1500 })).present();
-    } else {
-      const wasDownvoted = hasDownvoted.value;
-      toggleLocalStorageItem('downvoted-posts', post.value.id, false);
-      toggleLocalStorageItem('upvoted-posts', post.value.id, true);
-      // Optimistic update
-      post.value = { ...post.value,
-        upvotes: post.value.upvotes + 1,
-        downvotes: wasDownvoted ? post.value.downvotes - 1 : post.value.downvotes,
-        score: post.value.score + (wasDownvoted ? 2 : 1),
-      };
-      voteVersion.value++;
-      if (wasDownvoted) postStore.removeDownvote(post.value.id); // fire and forget
-      postStore.upvotePost(post.value.id); // fire and forget
-      (await toastController.create({ message: 'Upvoted', duration: 1500 })).present();
-    }
-  } catch {
-    voteVersion.value++;
-  }
+  await handlePostVote('up');
 }
 
 async function handleDownvote() {
-  if (!post.value) return;
-  try {
-    if (hasDownvoted.value) {
-      toggleLocalStorageItem('downvoted-posts', post.value.id, false);
-      // Optimistic update
-      post.value = { ...post.value, downvotes: post.value.downvotes - 1, score: post.value.score + 1 };
-      voteVersion.value++;
-      postStore.removeDownvote(post.value.id); // fire and forget
-      (await toastController.create({ message: 'Downvote removed', duration: 1500 })).present();
-    } else {
-      const wasUpvoted = hasUpvoted.value;
-      toggleLocalStorageItem('upvoted-posts', post.value.id, false);
-      toggleLocalStorageItem('downvoted-posts', post.value.id, true);
-      // Optimistic update
-      post.value = { ...post.value,
-        downvotes: post.value.downvotes + 1,
-        upvotes: wasUpvoted ? post.value.upvotes - 1 : post.value.upvotes,
-        score: post.value.score - (wasUpvoted ? 2 : 1),
-      };
-      voteVersion.value++;
-      if (wasUpvoted) postStore.removeUpvote(post.value.id); // fire and forget
-      postStore.downvotePost(post.value.id); // fire and forget
-      (await toastController.create({ message: 'Downvoted', duration: 1500 })).present();
-    }
-  } catch {
-    voteVersion.value++;
-  }
+  await handlePostVote('down');
 }
 
 async function submitComment() {
   if (!post.value || !newCommentText.value.trim()) return;
+  const guard = checkContent(newCommentText.value.trim(), 'comment');
+  if (!guard.ok) {
+    (await toastController.create({ message: guard.reason!, duration: 2500, color: 'warning' })).present();
+    return;
+  }
   try {
     await commentStore.createComment({
       postId: post.value.id,
@@ -491,9 +507,9 @@ async function submitComment() {
     });
     newCommentText.value = '';
     (await toastController.create({ message: 'Comment posted', duration: 2000 })).present();
-    setTimeout(() => {
-      if (post.value) commentStore.loadCommentsForPost(post.value.id);
-    }, 500);
+    // No reload: the store already holds the comment and the live subscription
+    // delivers the graph's copy. The old reload restarted the thread load and
+    // cancelled the in-flight one, so a fresh comment could vanish on screen.
   } catch {
     (await toastController.create({ message: 'Failed to post comment', duration: 2000 })).present();
   }
@@ -501,7 +517,9 @@ async function submitComment() {
 
 async function handleCommentUpvote(comment: any) {
   try {
-    const wasUpvoted = JSON.parse(localStorage.getItem('upvoted-comments') || '[]').includes(comment.id);
+    // Ask the store, not localStorage — the store is the one that knows about
+    // votes cast this session but not yet written back.
+    const wasUpvoted = commentStore.hasUpvoted(comment.id);
     await commentStore.upvoteComment(comment.id);
     (await toastController.create({
       message: wasUpvoted ? 'Upvote removed' : 'Comment upvoted',
@@ -512,7 +530,7 @@ async function handleCommentUpvote(comment: any) {
 
 async function handleCommentDownvote(comment: any) {
   try {
-    const wasDownvoted = JSON.parse(localStorage.getItem('downvoted-comments') || '[]').includes(comment.id);
+    const wasDownvoted = commentStore.hasDownvoted(comment.id);
     await commentStore.downvoteComment(comment.id);
     (await toastController.create({
       message: wasDownvoted ? 'Downvote removed' : 'Comment downvoted',
@@ -556,9 +574,14 @@ async function loadPost() {
   isLoading.value = true;
   try {
     await postStore.selectPost(postId.value);
-    post.value = postStore.currentPost;
     if (post.value) {
-      await commentStore.loadCommentsForPost(post.value.id);
+      // Authoritative counts + this user's real vote state, straight from the
+      // vote set — worth the round trip on a post being read directly.
+      void postStore.refreshVoteState(post.value.id);
+      // Not awaited: the store renders the local mirror first and merges the
+      // graph as it arrives. Awaiting it held the whole page behind the spinner
+      // until the relay answered.
+      void commentStore.loadCommentsForPost(post.value.id);
     }
   } catch { /* silent */ }
   finally {
@@ -571,11 +594,18 @@ async function refreshPost() {
   (await toastController.create({ message: 'Post refreshed', duration: 1500 })).present();
 }
 
+let unsubscribeVotes: (() => void) | null = null;
+
 onMounted(async () => {
   await loadPost();
+  // Live counts while the post is on screen — other people's votes land here
+  // without a refresh, and cannot be undone by a stale post-node echo.
+  if (post.value) unsubscribeVotes = postStore.subscribeToVotes(post.value.id);
 });
 
 onUnmounted(() => {
+  unsubscribeVotes?.();
+  unsubscribeVotes = null;
   commentStore.clearComments();
 });
 </script>

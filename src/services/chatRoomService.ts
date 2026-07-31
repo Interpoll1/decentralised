@@ -1,7 +1,38 @@
-import { GunService } from './gunService';
+/**
+ * Encrypted group chat rooms — durable, ordered, retried.
+ *
+ * What was wrong:
+ *
+ *   - **Sends were fire-and-forget.** `sendMessage` called `.put()` with no ack
+ *     callback and returned a `DisplayMessage` regardless. The UI showed the
+ *     message as sent whether or not any peer had accepted it, and nothing ever
+ *     retried, so a message written during a blip was gone.
+ *   - **Opening a room loaded no history.** `enterRoom` only subscribed for live
+ *     updates, so a room you opened tomorrow was blank until somebody typed —
+ *     and with `radisk:false`/`localStorage:false` the graph may genuinely hold
+ *     nothing after an eviction.
+ *   - **`memberCount` was a read-modify-write.** Two people joining at once each
+ *     read N and wrote N+1, so one join simply disappeared. Membership is a node
+ *     per user now, and the count is derived by counting them.
+ *   - **Ordering was by timestamp alone**, so a peer with a skewed clock
+ *     reordered the room differently on every screen, and equal timestamps had
+ *     no defined order at all.
+ *   - **Every incoming message re-read the room key from the vault** and
+ *     re-imported it, on the Gun callback path.
+ *
+ * Same shape as the DM service: IndexedDB is the durable copy and the render
+ * source, Gun is replication, and unconfirmed sends retry from an outbox.
+ */
+
+import { GunService, GUN_NAMESPACE } from './gunService';
 import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
 import { InviteLinkService } from './inviteLinkService';
+import { StorageService } from './storageService';
+import { BoundedMap } from '../utils/boundedMap';
+import { gunPut, gunOnce, gunReadChildren, verifySoulOnRelay, toGunRecord } from '../utils/gunAsync';
+import { compareMessages } from '../utils/messageOrder';
+import type { StoredChatMessage, SyncStatus } from '../types/social';
 import type {
   DecryptedChatRoomMeta,
   DecryptedChatRoomMessageContent,
@@ -26,10 +57,90 @@ export interface DisplayMessage {
   senderId: string;
   senderName: string;
   timestamp: number;
+  /** Monotonic per device; disambiguates same-millisecond messages from one sender. */
+  seq?: number;
+  /** Delivery state — set for messages this device sent. */
+  status?: SyncStatus;
+  error?: string;
+}
+
+const OUTBOX_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_SEND_ATTEMPTS = 12;
+const FLUSH_INTERVAL_MS = 60_000;
+const SEQ_STORAGE_KEY = 'chatroom-seq';
+
+/** Imported room keys. Re-deriving one per incoming message was pure overhead. */
+const roomKeys = new BoundedMap<string, CryptoKey>({ maxSize: 100 });
+
+let seqCounter: number | null = null;
+let outboxLoopStarted = false;
+let flushInFlight = false;
+
+function toDisplay(row: StoredChatMessage): DisplayMessage {
+  return {
+    id: row.id,
+    roomId: row.roomId,
+    text: row.text,
+    senderId: row.senderId,
+    senderName: row.senderName || 'Anonymous',
+    timestamp: row.timestamp,
+    seq: row.seq,
+    status: row.outgoing ? row.syncStatus : undefined,
+    error: row.error,
+  };
 }
 
 export class ChatRoomService {
   private static get gun() { return GunService.getGun(); }
+
+  // ── Gun paths ─────────────────────────────────────────────────────────────
+
+  private static roomNode(roomId: string) {
+    return this.gun.get('chatrooms').get(roomId);
+  }
+
+  private static messagesNode(roomId: string) {
+    return this.roomNode(roomId).get('messages');
+  }
+
+  private static membersNode(roomId: string) {
+    return this.roomNode(roomId).get('members');
+  }
+
+  private static messageSoul(roomId: string, messageId: string): string {
+    return `${GUN_NAMESPACE}/chatrooms/${roomId}/messages/${messageId}`;
+  }
+
+  // ── Keys ──────────────────────────────────────────────────────────────────
+
+  private static async getRoomKey(roomId: string): Promise<CryptoKey | null> {
+    const cached = roomKeys.get(roomId);
+    if (cached) return cached;
+
+    const storedKey = await KeyVaultService.getKey(roomId);
+    if (!storedKey) return null;
+    const aesKey = await EncryptionService.importKey(storedKey.key);
+    roomKeys.set(roomId, aesKey);
+    return aesKey;
+  }
+
+  // ── Per-device sequence ───────────────────────────────────────────────────
+
+  private static async nextSeq(): Promise<number> {
+    if (seqCounter === null) {
+      try {
+        const stored = await StorageService.getMetadata(SEQ_STORAGE_KEY);
+        seqCounter = typeof stored === 'number' && Number.isFinite(stored) ? stored : 0;
+      } catch {
+        seqCounter = 0;
+      }
+    }
+    seqCounter += 1;
+    void StorageService.setMetadata(SEQ_STORAGE_KEY, seqCounter).catch(() => { /* advisory */ });
+    return seqCounter;
+  }
+
+  // ── Create / join / leave ─────────────────────────────────────────────────
 
   /**
    * Create a new encrypted chat room.
@@ -39,9 +150,9 @@ export class ChatRoomService {
     name: string,
     description: string,
     creatorId: string,
-    password?: string
+    password?: string,
   ): Promise<{ room: ChatRoom; inviteLink: string }> {
-    const roomId = `room-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const roomId = `room-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
     let aesKey: CryptoKey;
     let method: StoredEncryptionKey['method'];
@@ -56,24 +167,11 @@ export class ChatRoomService {
     const meta: DecryptedChatRoomMeta = { name, description, creatorId };
     const encryptedMeta = await EncryptionService.encrypt(JSON.stringify(meta), aesKey);
     const encryptionHint = password ? 'Password-protected' : 'Invite-only';
+    const createdAt = Date.now();
 
-    const roomData = {
-      id: roomId,
-      isEncrypted: true,
-      encryptionHint,
-      encryptedMeta,
-      createdAt: Date.now(),
-      memberCount: 1,
-      name: '🔒 Encrypted Room',
-      description: 'Encrypted chat room',
-    };
-    await new Promise<void>((resolve, reject) => {
-      this.gun.get('chatrooms').get(roomId).put(roomData, (ack: any) => {
-        if (ack.err) reject(ack.err);
-        else resolve();
-      });
-    });
-
+    // Store the key first. If the graph write fails we still hold the key, so
+    // the room is recoverable; the reverse — a room in the graph nobody has the
+    // key for — is unrecoverable by design.
     const keyBase64 = await EncryptionService.exportKey(aesKey);
     await KeyVaultService.storeKey({
       id: roomId,
@@ -81,24 +179,46 @@ export class ChatRoomService {
       key: keyBase64,
       method,
       label: name,
-      joinedAt: Date.now(),
+      joinedAt: createdAt,
     });
+    roomKeys.set(roomId, aesKey);
+
+    const ack = await gunPut(this.roomNode(roomId), toGunRecord({
+      id: roomId,
+      isEncrypted: true,
+      encryptionHint,
+      encryptedMeta,
+      createdAt,
+      memberCount: 1,
+      name: '🔒 Encrypted Room',
+      description: 'Encrypted chat room',
+    }));
+    if (!ack.ok) {
+      // The old version could hang here forever: the put callback was the only
+      // thing that ever settled the promise, and Gun does not promise to call it.
+      throw new Error(ack.err === 'timeout'
+        ? 'No peer accepted the new room — check your relay connection and try again'
+        : ack.err || 'Room could not be created');
+    }
+
+    void gunPut(this.membersNode(roomId).get(creatorId), { userId: creatorId, joinedAt: createdAt });
 
     const keyBase64Url = await EncryptionService.exportKeyAsBase64Url(aesKey);
     const inviteLink = InviteLinkService.generateInviteLink(roomId, 'chatroom', keyBase64Url);
 
-    const room: ChatRoom = {
-      id: roomId,
-      name,
-      description,
-      creatorId,
-      isEncrypted: true,
-      encryptionHint,
-      createdAt: roomData.createdAt,
-      memberCount: 1,
+    return {
+      room: {
+        id: roomId,
+        name,
+        description,
+        creatorId,
+        isEncrypted: true,
+        encryptionHint,
+        createdAt,
+        memberCount: 1,
+      },
+      inviteLink,
     };
-
-    return { room, inviteLink };
   }
 
   /**
@@ -107,7 +227,7 @@ export class ChatRoomService {
   static async joinRoom(
     roomId: string,
     keyOrPassword: string,
-    method: 'invite' | 'password'
+    method: 'invite' | 'password',
   ): Promise<ChatRoom> {
     let aesKey: CryptoKey;
     if (method === 'password') {
@@ -116,11 +236,7 @@ export class ChatRoomService {
       aesKey = await EncryptionService.importKeyFromBase64Url(keyOrPassword);
     }
 
-    const roomData = await new Promise<any>((resolve) => {
-      this.gun.get('chatrooms').get(roomId).once((data: any) => resolve(data));
-      setTimeout(() => resolve(null), 3000);
-    });
-
+    const roomData = await gunOnce<any>(this.roomNode(roomId), 6_000);
     if (!roomData?.encryptedMeta) {
       throw new Error('Chat room not found');
     }
@@ -132,18 +248,27 @@ export class ChatRoomService {
       throw new Error('Invalid key or password — could not decrypt room');
     }
 
-    const keyBase64 = await EncryptionService.exportKey(aesKey);
+    const joinedAt = Date.now();
     await KeyVaultService.storeKey({
       id: roomId,
       type: 'chatroom',
-      key: keyBase64,
+      key: await EncryptionService.exportKey(aesKey),
       method,
       label: meta.name,
-      joinedAt: Date.now(),
+      joinedAt,
     });
+    roomKeys.set(roomId, aesKey);
 
-    const currentCount = Number(roomData.memberCount) || 1;
-    this.gun.get('chatrooms').get(roomId).get('memberCount').put(currentCount + 1);
+    // Membership is a node keyed by user, not a counter. Two people joining at
+    // the same moment used to read the same total and write back the same N+1,
+    // silently losing one of the joins.
+    const userId = await this.resolveUserId();
+    if (userId) {
+      await gunPut(this.membersNode(roomId).get(userId), { userId, joinedAt });
+    }
+    const memberCount = await this.getMemberCount(roomId, Number(roomData.memberCount) || 1);
+    // Keep the legacy field roughly right for clients that still read it.
+    void gunPut(this.roomNode(roomId), { memberCount });
 
     return {
       id: roomId,
@@ -152,108 +277,361 @@ export class ChatRoomService {
       creatorId: meta.creatorId,
       isEncrypted: true,
       encryptionHint: roomData.encryptionHint || '',
-      createdAt: roomData.createdAt,
-      memberCount: currentCount + 1,
+      createdAt: Number(roomData.createdAt) || joinedAt,
+      memberCount,
     };
   }
 
+  /** Members counted from the membership set, falling back to the stored hint. */
+  static async getMemberCount(roomId: string, fallback = 1): Promise<number> {
+    const members = await gunReadChildren<any>(this.membersNode(roomId), { minMs: 300, maxMs: 2_500 });
+    const ids = new Set<string>();
+    for (const { key, value } of members) {
+      const id = value && typeof value === 'object' && typeof value.userId === 'string' ? value.userId : key;
+      if (id && id !== '_') ids.add(id);
+    }
+    return ids.size > 0 ? ids.size : fallback;
+  }
+
+  private static async resolveUserId(): Promise<string | null> {
+    try {
+      // Imported lazily: userService pulls in a good part of the app, and room
+      // creation must not depend on it being loaded.
+      const { UserService } = await import('./userService');
+      const user = await UserService.getCurrentUser();
+      return user?.id ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   /**
-   * Send an encrypted message to a chat room.
+   * Leave a chat room: drop the key and the membership marker.
+   *
+   * The local message mirror goes too — without the key those rows can never be
+   * re-derived from the graph, so keeping them would only leak plaintext of a
+   * room the user chose to leave.
    */
-  static async sendMessage(roomId: string, text: string, senderId: string, senderName: string): Promise<DisplayMessage> {
-    const storedKey = await KeyVaultService.getKey(roomId);
-    if (!storedKey) throw new Error('No encryption key for this room');
+  static async leaveRoom(roomId: string): Promise<void> {
+    await KeyVaultService.removeKey(roomId);
+    roomKeys.delete(roomId);
 
-    const aesKey = await EncryptionService.importKey(storedKey.key);
-    const msgId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const userId = await this.resolveUserId();
+    if (userId) {
+      void gunPut(this.membersNode(roomId).get(userId), { userId, joinedAt: 0, left: true });
+    }
+
+    try {
+      const rows = await StorageService.getChatMessagesByRoom(roomId);
+      await Promise.all(rows.map((row) => StorageService.deleteChatMessage(row.id)));
+    } catch (err) {
+      console.warn('[ChatRoomService] Could not clear local room history:', err);
+    }
+  }
+
+  // ── Messages ──────────────────────────────────────────────────────────────
+
+  /**
+   * Queue a message and start delivering it.
+   *
+   * The row is durable before any network work happens, so a failed send costs a
+   * retry rather than the message. `status` on the returned message reflects the
+   * initial state; the outbox updates the stored row as delivery progresses.
+   */
+  static async sendMessage(
+    roomId: string,
+    text: string,
+    senderId: string,
+    senderName: string,
+  ): Promise<DisplayMessage> {
+    const trimmed = text.trim();
+    if (!trimmed) throw new Error('Cannot send an empty message');
+
+    const aesKey = await this.getRoomKey(roomId);
+    if (!aesKey) throw new Error('No encryption key for this room');
+
     const timestamp = Date.now();
-
-    const content: DecryptedChatRoomMessageContent = { text, senderId, senderName };
-    const encryptedContent = await EncryptionService.encrypt(JSON.stringify(content), aesKey);
-    const authTag = await EncryptionService.generateAuthTag(aesKey, msgId, String(timestamp), senderId);
-
-    const msgData = {
-      id: msgId,
+    const row: StoredChatMessage = {
+      id: `msg-${timestamp}-${Math.random().toString(36).slice(2, 11)}`,
       roomId,
+      kind: 'room',
       senderId,
-      encryptedContent,
-      authTag,
+      senderName,
+      text: trimmed,
       timestamp,
+      seq: await this.nextSeq(),
+      outgoing: true,
+      syncStatus: 'pending',
+      syncAttempts: 0,
     };
-    this.gun.get('chatrooms').get(roomId).get('messages').get(msgId).put(msgData);
 
-    return { id: msgId, roomId, text, senderId, senderName, timestamp };
+    await StorageService.saveChatMessage(row);
+
+    // Deliver in the background — the message is already safe, and blocking the
+    // composer on a relay round-trip is what made sending feel unreliable.
+    void this.deliver(row);
+    this.startOutboxLoop();
+
+    return toDisplay(row);
+  }
+
+  /** One delivery attempt. Never throws; the outbox retries. */
+  private static async deliver(row: StoredChatMessage): Promise<StoredChatMessage> {
+    const attempts = row.syncAttempts + 1;
+    const expired = Date.now() - row.timestamp > OUTBOX_TTL_MS;
+
+    const settle = async (patch: Partial<StoredChatMessage>): Promise<StoredChatMessage> => {
+      const existing = await StorageService.getChatMessage(row.id);
+      const next = { ...(existing ?? row), ...patch } as StoredChatMessage;
+      await StorageService.saveChatMessage(next);
+      return next;
+    };
+
+    const fail = (error: string) => settle({
+      syncStatus: attempts >= MAX_SEND_ATTEMPTS || expired ? 'failed' : 'pending',
+      syncAttempts: attempts,
+      error,
+    });
+
+    const aesKey = await this.getRoomKey(row.roomId);
+    if (!aesKey) return fail('The key for this room is no longer available');
+
+    let record: Record<string, string | number | boolean>;
+    try {
+      const content: DecryptedChatRoomMessageContent = {
+        text: row.text,
+        senderId: row.senderId,
+        senderName: row.senderName || 'Anonymous',
+      };
+      record = toGunRecord({
+        id: row.id,
+        roomId: row.roomId,
+        senderId: row.senderId,
+        encryptedContent: await EncryptionService.encrypt(JSON.stringify(content), aesKey),
+        authTag: await EncryptionService.generateAuthTag(
+          aesKey, row.id, String(row.timestamp), row.senderId,
+        ),
+        timestamp: row.timestamp,
+        seq: row.seq,
+      });
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : 'Encryption failed');
+    }
+
+    const ack = await gunPut(this.messagesNode(row.roomId).get(row.id), record);
+    if (!ack.ok) return fail(ack.err || 'Message could not be written to the graph');
+
+    const onRelay = await verifySoulOnRelay(this.messageSoul(row.roomId, row.id), 6_000);
+    return settle({
+      // `false` (relay says no) and `null` (no reachable endpoint) both mean keep
+      // trying, but a peer-acked write is further along than an unsent one.
+      syncStatus: onRelay === true ? 'confirmed' : 'published',
+      syncAttempts: attempts,
+      error: undefined,
+    });
   }
 
   /**
-   * Subscribe to messages in a chat room (live updates).
-   * Automatically decrypts and verifies messages.
-   * Returns an unsubscribe function.
+   * Re-send every room message no relay has confirmed.
+   *
+   * Gun does not retro-sync writes made while every peer was unreachable, so
+   * without this a message written offline never leaves the device.
+   */
+  static async flushOutbox(): Promise<void> {
+    if (flushInFlight) return;
+    flushInFlight = true;
+    try {
+      const all = await StorageService.getAllChatMessages();
+      const now = Date.now();
+      const pending = all.filter((row) =>
+        row.kind === 'room'
+        && row.outgoing
+        && row.syncStatus !== 'confirmed'
+        && row.syncAttempts < MAX_SEND_ATTEMPTS
+        && now - row.timestamp < OUTBOX_TTL_MS);
+
+      for (const row of pending) await this.deliver(row);
+    } catch (err) {
+      console.warn('[ChatRoomService] Outbox flush failed:', err);
+    } finally {
+      flushInFlight = false;
+    }
+  }
+
+  static startOutboxLoop(): void {
+    if (outboxLoopStarted || typeof window === 'undefined') return;
+    outboxLoopStarted = true;
+
+    GunService.onReconnect(() => { void this.flushOutbox(); });
+    window.addEventListener('online', () => { void this.flushOutbox(); });
+
+    const tick = () => {
+      void this.flushOutbox().finally(() => setTimeout(tick, FLUSH_INTERVAL_MS));
+    };
+    setTimeout(tick, 10_000);
+  }
+
+  // ── Reading ───────────────────────────────────────────────────────────────
+
+  /** Decrypt and verify one raw graph record. Returns null if it isn't usable. */
+  private static async decodeMessage(roomId: string, data: any): Promise<StoredChatMessage | null> {
+    if (!data || typeof data !== 'object') return null;
+    const id = typeof data.id === 'string' ? data.id : null;
+    if (!id || typeof data.encryptedContent !== 'string') return null;
+
+    const aesKey = await this.getRoomKey(roomId);
+    if (!aesKey) return null;
+
+    const timestamp = Number(data.timestamp) || Date.now();
+    const senderId = typeof data.senderId === 'string' ? data.senderId : '';
+
+    if (typeof data.authTag === 'string') {
+      const valid = await EncryptionService.verifyAuthTag(
+        aesKey, data.authTag, id, String(data.timestamp), senderId,
+      );
+      if (!valid) return null;
+    }
+
+    let content: DecryptedChatRoomMessageContent;
+    try {
+      content = JSON.parse(await EncryptionService.decrypt(data.encryptedContent, aesKey));
+    } catch {
+      return null;
+    }
+
+    const existing = await StorageService.getChatMessage(id);
+    return {
+      id,
+      roomId,
+      kind: 'room',
+      senderId: content.senderId || senderId,
+      senderName: content.senderName || 'Anonymous',
+      text: content.text ?? '',
+      timestamp,
+      seq: Number(data.seq) || 0,
+      // Preserve local authorship: our own message coming back from the graph
+      // must not lose its outgoing flag, or the outbox stops tracking it.
+      outgoing: existing?.outgoing ?? false,
+      // Visible in the graph means it demonstrably left the author's browser.
+      syncStatus: 'confirmed',
+      syncAttempts: existing?.syncAttempts ?? 0,
+      readAt: existing?.readAt,
+    };
+  }
+
+  /** Messages already on this device. Resolves immediately — no network. */
+  static async getLocalHistory(roomId: string): Promise<DisplayMessage[]> {
+    const rows = await StorageService.getChatMessagesByRoom(roomId);
+    return rows.filter((row) => row.kind === 'room').sort(compareMessages).map(toDisplay);
+  }
+
+  /**
+   * Local history merged with the graph.
+   *
+   * Always settles: `gunReadChildren` stops on quiet or a hard ceiling instead of
+   * waiting on callbacks Gun never promised to fire.
+   */
+  static async loadHistory(roomId: string): Promise<DisplayMessage[]> {
+    const [local, remote] = await Promise.all([
+      StorageService.getChatMessagesByRoom(roomId),
+      gunReadChildren<any>(this.messagesNode(roomId), { minMs: 600, maxMs: 8_000 }),
+    ]);
+
+    const byId = new Map<string, StoredChatMessage>();
+    for (const row of local) {
+      if (row.kind === 'room') byId.set(row.id, row);
+    }
+
+    const fresh: StoredChatMessage[] = [];
+    for (const { value } of remote) {
+      const existing = byId.get(typeof value?.id === 'string' ? value.id : '');
+      if (existing?.text) continue;
+      const decoded = await this.decodeMessage(roomId, value);
+      if (!decoded) continue;
+      byId.set(decoded.id, decoded);
+      fresh.push(decoded);
+    }
+    if (fresh.length) await StorageService.saveChatMessages(fresh);
+
+    return [...byId.values()].sort(compareMessages).map(toDisplay);
+  }
+
+  /**
+   * Live messages in a room. Decrypts, verifies and mirrors before emitting.
+   *
+   * Re-attaches after `GunService.reconnect()` rebuilds the Gun instance —
+   * otherwise the chain is bound to a discarded graph and goes quiet with no
+   * indication anything is wrong.
    */
   static subscribeToMessages(
     roomId: string,
-    callback: (message: DisplayMessage) => void
+    callback: (message: DisplayMessage) => void,
   ): () => void {
     const seen = new Set<string>();
     let active = true;
+    let chain: any = null;
 
-    const listener = this.gun.get('chatrooms').get(roomId).get('messages')
-      .map()
-      .on(async (data: any, key: string) => {
-        if (!active || !data?.id || !data?.encryptedContent || seen.has(key)) return;
-        seen.add(key);
+    const handle = (data: any) => {
+      if (!active || !data?.id || seen.has(data.id)) return;
+      seen.add(data.id);
+      void (async () => {
+        const row = await this.decodeMessage(roomId, data);
+        if (!row || !active) return;
+        await StorageService.saveChatMessage(row);
+        if (!active) return;
+        callback(toDisplay(row));
+      })();
+    };
 
-        try {
-          const storedKey = await KeyVaultService.getKey(roomId);
-          if (!storedKey) return;
+    const attach = () => {
+      if (!active) return;
+      chain = this.messagesNode(roomId).map().on((data: any) => handle(data));
+    };
 
-          const aesKey = await EncryptionService.importKey(storedKey.key);
+    const detach = () => {
+      try { chain?.off?.(); } catch { /* already detached */ }
+      chain = null;
+    };
 
-          if (data.authTag) {
-            const valid = await EncryptionService.verifyAuthTag(
-              aesKey, data.authTag, data.id, String(data.timestamp), data.senderId || ''
-            );
-            if (!valid) return;
-          }
-
-          const content: DecryptedChatRoomMessageContent = JSON.parse(
-            await EncryptionService.decrypt(data.encryptedContent, aesKey)
-          );
-
-          callback({
-            id: data.id,
-            roomId,
-            text: content.text,
-            senderId: content.senderId,
-            senderName: content.senderName,
-            timestamp: data.timestamp,
-          });
-        } catch {
-          // Silently skip messages that can't be decrypted
-        }
-      });
+    attach();
+    const offReconnect = GunService.onReconnect(() => {
+      if (!active) return;
+      detach();
+      attach();
+    });
 
     return () => {
       active = false;
-      if (listener) listener.off();
+      offReconnect();
+      detach();
     };
   }
 
   /**
-   * List all chat rooms the user has keys for.
+   * Rooms this device holds a key for.
+   *
+   * Every room is listed even when its graph node is unreachable: the key vault
+   * is the record of membership, and dropping unreachable rooms meant the whole
+   * list emptied out while offline.
    */
   static async listJoinedRooms(): Promise<ChatRoom[]> {
     const keys = await KeyVaultService.listKeysByType('chatroom');
-    const rooms: ChatRoom[] = [];
 
-    for (const storedKey of keys) {
+    const rooms = await Promise.all(keys.map(async (storedKey): Promise<ChatRoom> => {
+      const fallback: ChatRoom = {
+        id: storedKey.id,
+        name: storedKey.label || 'Encrypted room',
+        description: '',
+        creatorId: '',
+        isEncrypted: true,
+        encryptionHint: '',
+        createdAt: storedKey.joinedAt,
+        memberCount: 1,
+      };
+
       try {
-        const roomData = await new Promise<any>((resolve) => {
-          this.gun.get('chatrooms').get(storedKey.id).once((data: any) => resolve(data));
-          setTimeout(() => resolve(null), 2000);
-        });
-
-        if (!roomData) continue;
+        const roomData = await gunOnce<any>(this.roomNode(storedKey.id), 3_000);
+        if (!roomData) return fallback;
 
         let name = storedKey.label;
         let description = '';
@@ -261,40 +639,35 @@ export class ChatRoomService {
 
         if (roomData.encryptedMeta) {
           try {
-            const aesKey = await EncryptionService.importKey(storedKey.key);
-            const meta: DecryptedChatRoomMeta = JSON.parse(
-              await EncryptionService.decrypt(roomData.encryptedMeta, aesKey)
-            );
-            name = meta.name;
-            description = meta.description;
-            creatorId = meta.creatorId;
+            const aesKey = await this.getRoomKey(storedKey.id);
+            if (aesKey) {
+              const meta: DecryptedChatRoomMeta = JSON.parse(
+                await EncryptionService.decrypt(roomData.encryptedMeta, aesKey),
+              );
+              name = meta.name;
+              description = meta.description;
+              creatorId = meta.creatorId;
+            }
           } catch {
-            // Use stored label as fallback
+            // Keep the vault label — the room is still usable.
           }
         }
 
-        rooms.push({
+        return {
           id: storedKey.id,
-          name,
+          name: name || fallback.name,
           description,
           creatorId,
           isEncrypted: true,
           encryptionHint: roomData.encryptionHint || '',
-          createdAt: roomData.createdAt || storedKey.joinedAt,
+          createdAt: Number(roomData.createdAt) || storedKey.joinedAt,
           memberCount: Number(roomData.memberCount) || 1,
-        });
+        };
       } catch {
-        // Skip rooms that can't be loaded
+        return fallback;
       }
-    }
+    }));
 
     return rooms.sort((a, b) => b.createdAt - a.createdAt);
-  }
-
-  /**
-   * Leave a chat room (delete stored key).
-   */
-  static async leaveRoom(roomId: string): Promise<void> {
-    await KeyVaultService.removeKey(roomId);
   }
 }

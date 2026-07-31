@@ -10,18 +10,19 @@
     </ion-header>
 
     <ion-content class="ion-padding">
+      <DesktopPageShell>
       <ion-card>
         <ion-card-header>
           <ion-card-title>Blockchain Blocks</ion-card-title>
           <ion-card-subtitle>
-            Total: {{ chainStore.blocks.length }} blocks
+            Showing {{ visibleBlocks.length }} of {{ chainStore.blocks.length }} blocks
           </ion-card-subtitle>
         </ion-card-header>
 
         <ion-card-content>
           <div class="blocks-list">
             <div
-              v-for="block in reversedBlocks"
+              v-for="block in visibleBlocks"
               :key="block.index"
               class="block-item"
             >
@@ -103,14 +104,22 @@
               </div>
             </div>
           </div>
+
+          <div v-if="hasMoreBlocks" class="load-more-row">
+            <ion-button fill="outline" size="small" @click="loadMoreBlocks">
+              Load {{ Math.min(LOAD_BATCH_SIZE, chainStore.blocks.length - visibleBlocks.length) }} more blocks
+            </ion-button>
+          </div>
         </ion-card-content>
       </ion-card>
+      </DesktopPageShell>
     </ion-content>
   </ion-page>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watchEffect } from 'vue';
+import { computed, ref, watch } from 'vue';
+import DesktopPageShell from '../components/DesktopPageShell.vue';
 import {
   IonPage,
   IonHeader,
@@ -125,7 +134,8 @@ import {
   IonCardSubtitle,
   IonCardContent,
   IonBadge,
-  IonIcon
+  IonIcon,
+  IonButton,
 } from '@ionic/vue';
 import {
   shieldCheckmarkOutline,
@@ -136,18 +146,41 @@ import { useChainStore } from '../stores/chainStore';
 import { CryptoService } from '../services/cryptoService';
 
 const chainStore = useChainStore();
+const INITIAL_VISIBLE_BLOCKS = 75;
+const LOAD_BATCH_SIZE = 75;
+const visibleCount = ref(INITIAL_VISIBLE_BLOCKS);
 
 const reversedBlocks = computed(() => {
   return [...chainStore.blocks].reverse();
 });
 
+const visibleBlocks = computed(() => reversedBlocks.value.slice(0, visibleCount.value));
+const hasMoreBlocks = computed(() => visibleBlocks.value.length < chainStore.blocks.length);
+
+const loadMoreBlocks = () => {
+  visibleCount.value = Math.min(chainStore.blocks.length, visibleCount.value + LOAD_BATCH_SIZE);
+};
+
+watch(
+  () => chainStore.blocks.length,
+  (len) => {
+    if (visibleCount.value > len) visibleCount.value = len;
+    if (visibleCount.value === 0 && len > 0) {
+      visibleCount.value = Math.min(INITIAL_VISIBLE_BLOCKS, len);
+    }
+  },
+  { immediate: true },
+);
+
 // Verify Schnorr signatures for all blocks with pubkeys
 const verificationStatus = ref<Record<number, boolean>>({});
 
-watchEffect(() => {
-  const status: Record<number, boolean> = {};
-  for (const block of chainStore.blocks) {
-    if (block.pubkey) {
+watch(
+  () => visibleBlocks.value,
+  (blocks) => {
+    const status = { ...verificationStatus.value };
+    for (const block of blocks) {
+      if (!block.pubkey || status[block.index] !== undefined) continue;
       const dataToVerify = JSON.stringify({
         index: block.index,
         voteHash: block.voteHash,
@@ -155,9 +188,10 @@ watchEffect(() => {
       });
       status[block.index] = CryptoService.verify(dataToVerify, block.signature, block.pubkey);
     }
-  }
-  verificationStatus.value = status;
-});
+    verificationStatus.value = status;
+  },
+  { immediate: true },
+);
 
 const fullHash = (hash: string) => {
   return hash || '';
@@ -293,5 +327,11 @@ const actionLabel = (actionType: string) => {
 .sig-invalid {
   color: var(--ion-color-danger);
   font-weight: 600;
+}
+
+.load-more-row {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
 }
 </style>

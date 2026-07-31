@@ -21,7 +21,7 @@ export default defineNuxtConfig({
     mysqlPassword: process.env.MYSQL_PASSWORD || '',
     mysqlDatabase: process.env.MYSQL_DATABASE || '',
     mysqlPort:     process.env.MYSQL_PORT     || '3306',
-    // Public (accessible in browser too)
+    // Public (accessible in browser too) // Will soon change as we implement multi relays, be aware people
     public: {
       appUrl:      process.env.APP_URL      || 'https://endless.sbs',
       siteUrl:     process.env.SITE_URL     || 'https://interpoll.endless.sbs',

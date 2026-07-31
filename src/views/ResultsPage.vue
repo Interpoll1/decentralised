@@ -21,6 +21,12 @@
           <ion-card-title>{{ poll.question }}</ion-card-title>
           <ion-card-subtitle>
             Total Votes: {{ totalVotes }}
+            <span v-if="verifiedTotal > 0 && !policyActive" class="verified-note" :class="{ inflated: resultsInflated }">
+              · {{ verifiedTotal }} verified{{ resultsInflated ? ' (reported total exceeds verified)' : '' }}
+            </span>
+            <span v-if="policyActive" class="verified-note">
+              · {{ verifiedTrackTotal }} verified / {{ openTrackTotal }} open
+            </span>
           </ion-card-subtitle>
         </ion-card-header>
 
@@ -29,12 +35,12 @@
             <div v-for="option in sortedOptions" :key="option.id" class="result-item">
               <div class="result-header">
                 <span class="option-text">{{ option.text }}</span>
-                <span class="option-percent">{{ getPercentage(option.votes) }}%</span>
+                <span class="option-percent">{{ getPercentage(option) }}%</span>
               </div>
               <div class="result-bar">
                 <div
                   class="result-fill"
-                  :style="{ width: `${getPercentage(option.votes)}%` }"
+                  :style="{ width: `${getPercentage(option)}%` }"
                 ></div>
               </div>
               <div class="result-votes">
@@ -82,6 +88,8 @@ import {
   IonSpinner
 } from '@ionic/vue';
 import { usePollStore } from '../stores/pollStore';
+import type { PollOption } from '../types/poll';
+import { useVerifiedPollResults } from '../composables/useVerifiedPollResults';
 const route = useRoute();
 const router = useRouter();
 const pollStore = usePollStore();
@@ -89,21 +97,20 @@ const pollStore = usePollStore();
 const isLoading = ref(true);
 const poll = computed(() => pollStore.currentPoll);
 
-const totalVotes = computed(() => {
-  if (!poll.value || !poll.value.options) return 0;
-  return poll.value.options.reduce((sum, option) => sum + (option.votes || 0), 0);
-});
+// Verified results (CRITICAL-2): total and bars come from the signed-event tally,
+// collapsing to the verified floor if the Gun total reads as inflated.
+const results = useVerifiedPollResults(poll);
+const totalVotes = results.displayTotal;
+const sortedOptions = results.sortedOptions;
+const verifiedTotal = results.verifiedTotal;
+const resultsInflated = computed(() => results.trust.value === 'inflated');
 
-const sortedOptions = computed(() => {
-  if (!poll.value) return [];
-  return [...poll.value.options].sort((a, b) => b.votes - a.votes);
-});
+const getPercentage = (option: PollOption) => Math.round(results.percent(option));
 
-const getPercentage = (count: number) => {
-  const total = totalVotes.value;
-  if (total === 0) return 0;
-  return Math.round((count / total) * 100);
-};
+// Sybil-resistance dual tracks.
+const policyActive = results.policyActive;
+const verifiedTrackTotal = computed(() => results.verified.total.value);
+const openTrackTotal = computed(() => results.open.total.value);
 
 onMounted(async () => {
   const pollId = route.params.pollId as string;
@@ -187,5 +194,13 @@ onMounted(async () => {
 
 .mt-3 {
   margin-top: 12px;
+}
+
+.verified-note {
+  color: var(--ion-color-success);
+  font-size: 12px;
+}
+.verified-note.inflated {
+  color: var(--ion-color-warning);
 }
 </style>

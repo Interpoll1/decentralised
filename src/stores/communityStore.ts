@@ -19,18 +19,55 @@ function getGunRelayBaseUrl(): string {
   }
 }
 
+function getApiBaseUrl(): string {
+  try {
+    const endpoint = new URL(config.relay.api);
+    endpoint.search = '';
+    endpoint.hash = '';
+    return endpoint.toString().replace(/\/$/, '');
+  } catch {
+    return config.relay.api.replace(/\/$/, '');
+  }
+}
+
 const FALLBACK_SOUL_TIMEOUT_MS = 4000;
 const FALLBACK_COMMUNITY_SEARCH_TIMEOUT_MS = 8000;
 const FALLBACK_POST_SEARCH_TIMEOUT_MS = 12000;
-const CLEAN_SLATE_NAMESPACE_VERSION = 3;
+const FALLBACK_POST_WARMUP_BATCH_SIZE = 20;
+const FALLBACK_POST_WARMUP_BATCH_DELAY_MS = 60;
+const FALLBACK_POST_EXISTING_CHECK_TIMEOUT_MS = 250;
+const COMMUNITY_GUN_LIVE_ENABLED = typeof window !== 'undefined'
+  && window.localStorage.getItem('interpoll_community_live') === 'true';
+const FALLBACK_POST_WARMUP_ENABLED = typeof window !== 'undefined'
+  && window.localStorage.getItem('interpoll_posts_warmup') === 'true';
 
-function getNamespaceVersion(namespace: string): number {
-  const parsed = Number.parseInt(namespace.replace(/^v/i, ''), 10);
-  return Number.isFinite(parsed) ? parsed : 0;
+function isSyncDebugEnabled(): boolean {
+  return typeof window !== 'undefined' && window.localStorage.getItem('interpoll_sync_debug') === 'true';
 }
 
-function isCleanSlateNamespace(namespace: string): boolean {
-  return getNamespaceVersion(namespace) >= CLEAN_SLATE_NAMESPACE_VERSION;
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+type GunNodeLike = {
+  get: (key: string) => GunNodeLike;
+  once: (callback: (data: unknown) => void) => void;
+  put: (data: Record<string, unknown>) => void;
+};
+
+function createRateLogger(label: string, snapshot?: () => Record<string, unknown>) {
+  let windowStart = Date.now();
+  let count = 0;
+  return (delta = 1) => {
+    if (!isSyncDebugEnabled()) return;
+    count += delta;
+    const now = Date.now();
+    if (now - windowStart < 1000) return;
+    const payload = snapshot ? snapshot() : {};
+    console.warn(`[SyncRate] ${label}`, { eventsPerSec: count, ...payload });
+    windowStart = now;
+    count = 0;
+  };
 }
 
 async function fetchJsonWithTimeout<T>(url: string, timeoutMs: number): Promise<T | null> {
@@ -60,13 +97,29 @@ function asStringArray(value: unknown): string[] {
   return value.filter((entry): entry is string => typeof entry === 'string');
 }
 
-function toCommunityRecord(value: unknown): Community | null {
+function getTopLevelCommunitySoulId(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const parts = value.split('/').filter(Boolean);
+  if (parts.length !== 3) return null;
+  const [namespace, root, id] = parts;
+  if (namespace !== GUN_NAMESPACE || root !== 'communities' || !id) return null;
+  return id;
+}
+
+function isCanonicalCommunityId(id: string): boolean {
+  return id.startsWith('c-');
+}
+
+function toCommunityRecord(value: unknown, expectedId?: string): Community | null {
   if (!value || typeof value !== 'object') return null;
   const data = value as Record<string, unknown>;
   const id = asString(data.id);
+  if (!id) return null;
+  if (expectedId && id !== expectedId) return null;
+  if (!isCanonicalCommunityId(id)) return null;
+
   const name = asString(data.name, id);
   const displayName = asString(data.displayName, name || id);
-  if (!id) return null;
 
   return {
     id,
@@ -91,7 +144,10 @@ export const useCommunityStore = defineStore('community', () => {
   const joinedCommunities = ref<Set<string>>(new Set());
 
   let subscriptionStarted = false;
+  let postsWarmupPromise: Promise<void> | null = null;
   const seen = new Set<string>();
+  const logCommunityIncomingRate = createRateLogger('community-live');
+  const logFallbackWarmupRate = createRateLogger('fallback-post-warmup');
 
   function persistJoinedCommunities() {
     localStorage.setItem('joined-communities', JSON.stringify(Array.from(joinedCommunities.value)));
@@ -176,19 +232,47 @@ export const useCommunityStore = defineStore('community', () => {
   // When Gun returns nothing (cold relay), fetch directly from MySQL via the
   // gun-relay's /db/search endpoint and hydrate the store immediately.
 
+  async function loadCommunitiesFromApiFallback(): Promise<number> {
+    const apiBaseUrl = getApiBaseUrl();
+    const json = await fetchJsonWithTimeout<{ communities?: Array<Record<string, unknown>> }>(
+      `${apiBaseUrl}/api/communities`,
+      FALLBACK_COMMUNITY_SEARCH_TIMEOUT_MS,
+    );
+    if (!json?.communities?.length) return 0;
+
+    let added = 0;
+    for (const row of json.communities) {
+      const community = toCommunityRecord(row);
+      if (!community) continue;
+      const previousCount = communities.value.length;
+      await upsertCommunity(community);
+      if (communities.value.length > previousCount) added++;
+    }
+
+    if (added > 0) {
+      console.log(`✅ Loaded ${added} communities from API fallback`);
+    }
+    return added;
+  }
+
   async function loadCommunitiesFromDB(): Promise<number> {
-    if (isCleanSlateNamespace(GUN_NAMESPACE)) return 0;
     try {
       const relayBaseUrl = getGunRelayBaseUrl();
-      const json = await fetchJsonWithTimeout<{ results?: Array<{ data?: Record<string, unknown> }> }>(
-        `${relayBaseUrl}/db/search?prefix=${GUN_NAMESPACE}/communities&limit=200`,
+      const prefix = encodeURIComponent(`${GUN_NAMESPACE}/communities`);
+      const json = await fetchJsonWithTimeout<{ results?: Array<{ soul?: unknown; data?: Record<string, unknown> }> }>(
+        `${relayBaseUrl}/db/search?prefix=${prefix}&limit=200`,
         FALLBACK_COMMUNITY_SEARCH_TIMEOUT_MS,
       );
-      if (!json) return 0;
+      if (!json) {
+        console.warn('⚠️  MySQL community fallback unavailable, trying API fallback...');
+        return await loadCommunitiesFromApiFallback();
+      }
 
       let added = 0;
       for (const row of json.results || []) {
-        const community = toCommunityRecord(row.data);
+        const soulId = getTopLevelCommunitySoulId(row.soul);
+        if (!soulId) continue;
+        const community = toCommunityRecord(row.data, soulId);
         if (!community) continue;
 
         const previousCount = communities.value.length;
@@ -199,36 +283,169 @@ export const useCommunityStore = defineStore('community', () => {
       if (added > 0) {
         console.log(`✅ Loaded ${added} communities from MySQL fallback`);
       }
-      return added;
+      const apiAdded = await loadCommunitiesFromApiFallback();
+      return added + apiAdded;
     } catch (err) {
       console.warn('⚠️  MySQL community fallback failed:', err);
-      return 0;
+      return await loadCommunitiesFromApiFallback();
     }
   }
 
   // Same thing for posts — scan all community post index nodes from MySQL
   // so postStore can subscribe to communities even on cold relay
-  async function loadPostsFromDB(): Promise<void> {
-    if (isCleanSlateNamespace(GUN_NAMESPACE)) return;
+  async function loadPostsFromApiFallback(): Promise<number> {
+    const apiBaseUrl = getApiBaseUrl();
+    const json = await fetchJsonWithTimeout<{ posts?: Array<Record<string, unknown>> }>(
+      `${apiBaseUrl}/api/posts?limit=500`,
+      FALLBACK_POST_SEARCH_TIMEOUT_MS,
+    );
+    if (!json?.posts?.length) return 0;
+
+    const gun = (await import('../services/gunService')).GunService.getGun() as unknown as GunNodeLike;
+    let staged = 0;
+    for (const d of json.posts) {
+      const postId = asString(d.id);
+      if (!postId || !asString(d.title)) continue;
+      // Avoid hydrating posts from a different dataVersion (e.g., v2 into v3)
+      const postDataVersion = typeof d.dataVersion === 'string' ? d.dataVersion : null;
+      const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;
+      if (postDataVersion && postDataVersion !== GUN_NAMESPACE) continue;
+      if (!postDataVersion && namespaceVersion >= 3) continue;
+
+      if (!await shouldHydrateFallbackPost(gun, d)) continue;
+      gun.get('posts').get(postId).put(d);
+      staged += 1;
+      logFallbackWarmupRate();
+      if (staged % FALLBACK_POST_WARMUP_BATCH_SIZE === 0) {
+        await sleep(FALLBACK_POST_WARMUP_BATCH_DELAY_MS);
+      }
+    }
+    if (staged > 0) {
+      console.log(`✅ Warmed ${staged} posts from API fallback (chunked)`);
+    }
+    return staged;
+  }
+
+  async function loadPostsFromDB(): Promise<number> {
     try {
       const relayBaseUrl = getGunRelayBaseUrl();
+      const prefix = encodeURIComponent(`${GUN_NAMESPACE}/posts`);
       const json = await fetchJsonWithTimeout<{ results?: Array<{ data?: Record<string, unknown> }> }>(
-        `${relayBaseUrl}/db/search?prefix=${GUN_NAMESPACE}/posts&limit=500`,
+        `${relayBaseUrl}/db/search?prefix=${prefix}&limit=500`,
         FALLBACK_POST_SEARCH_TIMEOUT_MS,
       );
-      if (!json) return;
+      if (!json) {
+        console.warn('⚠️  MySQL posts fallback unavailable, trying API fallback...');
+        return await loadPostsFromApiFallback();
+      }
 
       // Warm up Gun's local cache by putting data back into it so existing
       // postService subscriptions fire correctly
-      const gun = (await import('../services/gunService')).GunService.getGun();
-      for (const row of json.results || []) {
+      const gun = (await import('../services/gunService')).GunService.getGun() as unknown as GunNodeLike;
+      let staged = 0;
+      const candidates = json.results || [];
+      for (const row of candidates) {
         const d = row.data;
-        if (!d?.id || !d?.title) continue; // only full post nodes
-        gun.get('posts').get(d.id).put(d);
+        if (!d) continue;
+        const postId = asString(d.id);
+        if (!postId || !asString(d.title)) continue; // only full post nodes
+
+        // Avoid hydrating posts from a different dataVersion (e.g., v2 into v3)
+        const postDataVersion = typeof d.dataVersion === 'string' ? d.dataVersion : null;
+        const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;
+        if (postDataVersion && postDataVersion !== GUN_NAMESPACE) continue;
+        if (!postDataVersion && namespaceVersion >= 3) continue;
+
+        if (!await shouldHydrateFallbackPost(gun, d)) continue;
+        gun.get('posts').get(postId).put(d);
+        staged += 1;
+        logFallbackWarmupRate();
+        if (staged % FALLBACK_POST_WARMUP_BATCH_SIZE === 0) {
+          // Yield between chunks so Gun/DOM are not flooded at startup.
+          await sleep(FALLBACK_POST_WARMUP_BATCH_DELAY_MS);
+        }
       }
+      if (staged > 0) {
+        console.log(`✅ Warmed ${staged} posts from MySQL fallback (chunked)`);
+      }
+      if (staged === 0) {
+        // DB may return only index/incomplete rows; API snapshot can still restore the feed.
+        return await loadPostsFromApiFallback();
+      }
+      return staged;
     } catch (err) {
       console.warn('⚠️  MySQL posts warmup failed:', err);
+      return await loadPostsFromApiFallback();
     }
+  }
+
+  async function readExistingPostWithTimeout(gun: GunNodeLike, postId: string): Promise<Record<string, unknown> | null> {
+    if (!postId) return null;
+    return await new Promise((resolve) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        resolve(null);
+      }, FALLBACK_POST_EXISTING_CHECK_TIMEOUT_MS);
+
+      gun.get('posts').get(postId).once((data: unknown) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (data && typeof data === 'object') {
+          resolve(data as Record<string, unknown>);
+        } else {
+          resolve(null);
+        }
+      });
+    });
+  }
+
+  function getPostActivityCount(post: Record<string, unknown>): number {
+    return asNumber(post.upvotes) + asNumber(post.downvotes) + asNumber(post.commentCount);
+  }
+
+  async function shouldHydrateFallbackPost(gun: GunNodeLike, fallbackPost: Record<string, unknown>): Promise<boolean> {
+    const fallbackId = asString(fallbackPost.id);
+    if (!fallbackId) return false;
+
+    const existing = await readExistingPostWithTimeout(gun, fallbackId);
+    if (!existing?.id) return true;
+
+    const fallbackCreatedAt = asNumber(fallbackPost.createdAt, 0);
+    const existingCreatedAt = asNumber(existing.createdAt, 0);
+    if (fallbackCreatedAt !== existingCreatedAt) {
+      return fallbackCreatedAt > existingCreatedAt;
+    }
+
+    // Keep richer/more-updated interaction aggregates if root already has them.
+    return getPostActivityCount(fallbackPost) > getPostActivityCount(existing);
+  }
+
+  async function hasWarmPostsLoaded(): Promise<boolean> {
+    const { usePostStore } = await import('./postStore');
+    const postStore = usePostStore();
+    return postStore.postsMap.size > 0;
+  }
+
+  function startPostsWarmup(options?: { force?: boolean }): Promise<void> {
+    const force = options?.force === true;
+    if (!FALLBACK_POST_WARMUP_ENABLED && !force) {
+      if (isSyncDebugEnabled()) {
+        console.log('[SyncDebug] posts warmup disabled (set localStorage.interpoll_posts_warmup=true to enable)');
+      }
+      return Promise.resolve();
+    }
+    if (force && isSyncDebugEnabled()) {
+      console.log('[SyncDebug] forcing posts warmup because feed is empty');
+    }
+    if (!postsWarmupPromise) {
+      postsWarmupPromise = loadPostsFromDB().then(() => undefined).finally(() => {
+        postsWarmupPromise = null;
+      });
+    }
+    return postsWarmupPromise;
   }
 
   // ─── Load ──────────────────────────────────────────────────────────────────
@@ -239,26 +456,25 @@ export const useCommunityStore = defineStore('community', () => {
     isLoading.value = true;
     await syncJoinedPrivateCommunitiesFromKeys();
 
-    // 1. Start Gun live subscription — gets data from localStorage cache
-    //    instantly and from relay as it arrives
-    CommunityService.subscribeToCommunitiesLive((community) => {
-      void upsertCommunity(community);
-    });
+    if (COMMUNITY_GUN_LIVE_ENABLED) {
+      // Always keep the live subscription active so communities discovered
+      // after bootstrap still flow into the list.
+      CommunityService.subscribeToCommunitiesLive((community) => {
+        logCommunityIncomingRate();
+        void upsertCommunity(community);
+      });
 
-    // 2. After 1.5s, if Gun gave us nothing (cold relay), v2 can fall back to MySQL.
-    // v3+ is clean-slate mode; skip API relay fallback so we don't rehydrate legacy data.
-    await new Promise(r => setTimeout(r, 1500));
-
-    if (communities.value.length === 0) {
-      const shouldUseFallback = !isCleanSlateNamespace(GUN_NAMESPACE);
-      if (shouldUseFallback) {
-        console.log('⚠️  Gun returned no communities — falling back to MySQL...');
-        await loadCommunitiesFromDB();
-        // Also warm up posts so the feed isn't empty
-        await loadPostsFromDB();
-      } else {
-        console.log('ℹ️  Gun returned no communities in clean-slate mode; skipping MySQL fallback.');
+      await new Promise(r => setTimeout(r, 1500));
+      await loadCommunitiesFromDB();
+      // Also warm up posts so the feed isn't empty; run in background and chunked
+      // to avoid flooding Gun + DOM with thousands of records at startup.
+      void startPostsWarmup({ force: !(await hasWarmPostsLoaded()) });
+    } else {
+      if (isSyncDebugEnabled()) {
+        console.log('[SyncDebug] community Gun live subscription disabled; using DB snapshot bootstrap');
       }
+      await loadCommunitiesFromDB();
+      void startPostsWarmup({ force: !(await hasWarmPostsLoaded()) });
     }
 
     isLoading.value = false;
@@ -271,6 +487,8 @@ export const useCommunityStore = defineStore('community', () => {
     displayName: string;
     description: string;
     rules: string[];
+    category?: string;
+    nsfw?: boolean;
   }) {
     try {
       const community = await CommunityService.createCommunity({
@@ -301,6 +519,8 @@ export const useCommunityStore = defineStore('community', () => {
     displayName: string;
     description: string;
     rules: string[];
+    category?: string;
+    nsfw?: boolean;
   }, password?: string) {
     try {
       const result = await CommunityService.createPrivateCommunity({
@@ -343,14 +563,16 @@ export const useCommunityStore = defineStore('community', () => {
       // Try Gun first
       currentCommunity.value = await CommunityService.getCommunity(communityId);
 
-      // Fallback: fetch from MySQL relay only for v2 and older namespaces.
-      if (!currentCommunity.value && !isCleanSlateNamespace(GUN_NAMESPACE)) {
+      // Fallback: fetch from DB snapshot relay when Gun is empty/unavailable.
+      if (!currentCommunity.value) {
         const relayBaseUrl = getGunRelayBaseUrl();
-        const json = await fetchJsonWithTimeout<{ data?: unknown }>(
-          `${relayBaseUrl}/db/soul?soul=${GUN_NAMESPACE}/communities/${communityId}`,
+        const soul = encodeURIComponent(`${GUN_NAMESPACE}/communities/${communityId}`);
+        const json = await fetchJsonWithTimeout<{ soul?: unknown; data?: unknown }>(
+          `${relayBaseUrl}/db/soul?soul=${soul}`,
           FALLBACK_SOUL_TIMEOUT_MS,
         );
-        const fallbackCommunity = toCommunityRecord(json?.data);
+        const soulId = getTopLevelCommunitySoulId(json?.soul);
+        const fallbackCommunity = soulId ? toCommunityRecord(json?.data, soulId) : null;
         if (fallbackCommunity) {
           currentCommunity.value = fallbackCommunity;
         }

@@ -6,6 +6,10 @@ export class BroadcastService {
   static initialize() {
     if (typeof BroadcastChannel === 'undefined') return;
 
+    // A second initialize() used to overwrite the handle, leaking the previous
+    // channel and its onmessage closure (and double-delivering every message).
+    if (this.channel) { try { this.channel.close(); } catch { /* already closed */ } }
+
     this.channel = new BroadcastChannel('interpoll-sync');
 
     this.channel.onmessage = (event: MessageEvent) => {
