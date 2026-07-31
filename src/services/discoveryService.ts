@@ -238,6 +238,18 @@ class DiscoveryService {
       .slice(0, this.maxEntries);
   }
 
+  /**
+   * Returns Gun peer URLs from all valid discovered entries.
+   * Used by gunService / relayManager to expand the peer pool automatically.
+   */
+  static getDiscoveredGunPeers(): string[] {
+    return this.getEntries()
+      .map((e) => e.gun)
+      .filter((url) => {
+        try { return new URL(url).protocol === 'https:'; } catch { return false; }
+      });
+  }
+
   private static subscribeToAnnouncements(): void {
     if (this.subscribed) return;
     this.subscribed = true;
@@ -253,6 +265,12 @@ class DiscoveryService {
           const normalized = this.normalizeAndValidate(raw);
           if (!normalized) return;
           this.upsertEntry(this.discoveryKey(normalized), normalized);
+
+          // NEW: auto-add discovered Gun peer to the live Gun instance
+          // so the mesh grows organically as nodes announce themselves.
+          try {
+            GunService.addPeer(normalized.gun);
+          } catch { /* non-fatal */ }
         });
     } catch {
       // Gun unavailable; keep existing cache
