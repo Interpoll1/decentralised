@@ -1,35 +1,62 @@
-import { GunService } from './gunService';
+/**
+ * Comments — local-first, relay-verified.
+ *
+ * The previous implementation treated Gun as the source of truth. It is not:
+ * `GunService.initialize()` runs with `localStorage:false` and `radisk:false`,
+ * so Gun keeps comments in a volatile in-memory graph that the memory watchdog
+ * evicts under pressure, and a `.put()` whose ack came from that same in-memory
+ * graph proves nothing about whether the write ever left the browser. Reads
+ * guessed at completion with fixed `setTimeout`s and returned whatever had
+ * arrived. Between those, a comment could be posted, displayed, and then simply
+ * not exist — the "comments don't persist and are super random" behaviour.
+ *
+ * The model here:
+ *
+ *   1. Every comment is written to IndexedDB first and rendered from there.
+ *      That copy survives reloads, relay outages and graph eviction.
+ *   2. Publishing to Gun is a background job with a durable outbox. It waits for
+ *      a real ack, then asks the *relay* whether it holds the soul
+ *      (`verifySoulOnRelay`) — a local re-read cannot answer that question.
+ *   3. Unconfirmed comments are retried for a week, on a timer and on every Gun
+ *      reconnect, and the attempt count survives reload because it lives in the
+ *      same IndexedDB row.
+ *   4. Reads settle on quiet rather than on a stopwatch, and merge Gun's answer
+ *      into the local mirror instead of replacing it.
+ *
+ * Votes are per-user nodes (`commentVotes/<commentId>/<userId>`) tallied by
+ * counting, not a read-modify-write counter on the comment. Concurrent voters
+ * used to overwrite each other's totals, which is what made scores jump around.
+ * The aggregate is still mirrored onto the comment node, but only as a hint for
+ * readers who have not loaded the vote set.
+ */
+
+import { GunService, GUN_NAMESPACE } from './gunService';
 import { CryptoService } from './cryptoService';
 import { KeyService } from './keyService';
 import { AuditService } from './auditService';
 import { PostService } from './postService';
 import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
+import { StorageService } from './storageService';
+import { gunPut, gunOnce, gunReadChildren, verifySoulOnRelay, toGunRecord } from '../utils/gunAsync';
+import { canonicalJSON } from '../../shared-validation/canonical.js';
+import type { Comment, StoredComment, SyncStatus } from '../types/social';
 
-function getGun() {
-  return GunService.getGun();
-}
+export type { Comment, StoredComment, SyncStatus } from '../types/social';
 
-export interface Comment {
-  id: string;
-  postId: string;
-  communityId: string;
-  authorId: string;
-  authorName: string;
-  authorShowRealName?: boolean;
-  content: string;
-  parentId?: string;
-  createdAt: number;
+const CURRENT_CANON_VERSION = 2;
+
+/** How long a locally-authored comment keeps trying to reach a relay. */
+const OUTBOX_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_PUBLISH_ATTEMPTS = 12;
+const REPUBLISH_INTERVAL_MS = 90_000;
+/** Concurrent Gun node reads while hydrating a thread. */
+const FETCH_CONCURRENCY = 8;
+
+export interface CommentTally {
   upvotes: number;
   downvotes: number;
   score: number;
-  edited?: boolean;
-  editedAt?: number;
-  authorPubkey?: string;
-  contentSignature?: string;
-  isEncrypted?: boolean;
-  encryptedContent?: string;    // AES-GCM encrypted comment data
-  authTag?: string;             // HMAC anti-sabotage tag
 }
 
 export interface CreateCommentData {
@@ -42,7 +69,40 @@ export interface CreateCommentData {
   parentId?: string;
 }
 
-function buildSignablePayload(c: Pick<Comment, 'content' | 'postId' | 'communityId' | 'createdAt'>): string {
+// ── Gun paths ─────────────────────────────────────────────────────────────────
+
+function gun() {
+  return GunService.getGun();
+}
+
+function commentNode(commentId: string) {
+  return gun().get('comments').get(commentId);
+}
+
+/**
+ * Per-post comment index. Entries are written at a *deterministic* key (the
+ * comment id) so republishing is idempotent. The old code used `.set()`, which
+ * mints a fresh random soul each time and left duplicate index entries pointing
+ * at the same comment; reads still normalize those legacy rows.
+ */
+function commentIndexNode(postId: string) {
+  return gun().get('posts').get(postId).get('comments');
+}
+
+function commentVotesNode(commentId: string) {
+  return gun().get('commentVotes').get(commentId);
+}
+
+function commentSoul(commentId: string): string {
+  return `${GUN_NAMESPACE}/comments/${commentId}`;
+}
+
+// ── Signing ───────────────────────────────────────────────────────────────────
+
+type SignablePayload = Pick<Comment, 'content' | 'postId' | 'communityId' | 'createdAt'>;
+
+/** @deprecated Verification only — for comments signed before `canonicalJSON`. */
+function buildSignablePayloadV1(c: SignablePayload): string {
   return JSON.stringify({
     content: c.content,
     postId: c.postId,
@@ -51,518 +111,69 @@ function buildSignablePayload(c: Pick<Comment, 'content' | 'postId' | 'community
   });
 }
 
-/**
- * Create a new comment
- */
-export async function createComment(data: CreateCommentData): Promise<Comment> {
-  const commentId = `comment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  const timestamp = Date.now();
+function buildSignablePayload(c: SignablePayload): string {
+  return canonicalJSON({
+    content: c.content,
+    postId: c.postId,
+    communityId: c.communityId,
+    timestamp: c.createdAt,
+  });
+}
 
-  const comment: Comment = {
-    id: commentId,
-    postId: data.postId,
-    communityId: data.communityId,
-    authorId: data.authorId,
-    authorName: data.authorName,
-    authorShowRealName: data.authorShowRealName || false,
-    content: data.content,
-    parentId: data.parentId || undefined,
-    createdAt: timestamp,
-    upvotes: 0,
-    downvotes: 0,
-    score: 0,
-    edited: false
-  };
-
-  // Sign content for anti-sabotage verification
+async function signComment(comment: Comment): Promise<void> {
   try {
     const keyPair = await KeyService.getKeyPair();
     const contentHash = CryptoService.hash(buildSignablePayload(comment));
-    const signature = CryptoService.sign(contentHash, keyPair.privateKey);
+    comment.contentSignature = CryptoService.sign(contentHash, keyPair.privateKey);
     comment.authorPubkey = keyPair.publicKey;
-    comment.contentSignature = signature;
+    comment.canonVersion = CURRENT_CANON_VERSION;
   } catch (err) {
-    console.warn('Failed to sign comment content:', err);
+    // A comment without a signature is still a valid comment — it just shows as
+    // unsigned in the UI. Never block posting on the key store.
+    console.warn('[CommentService] Failed to sign comment:', err);
   }
-
-  // Encrypt content if community is encrypted
-  if (data.communityId) {
-    const storedKey = await KeyVaultService.getKey(data.communityId);
-    if (storedKey) {
-      try {
-        const aesKey = await EncryptionService.importKey(storedKey.key);
-        const encryptableData = {
-          content: comment.content,
-          authorId: comment.authorId,
-          authorName: comment.authorName,
-        };
-        comment.encryptedContent = await EncryptionService.encrypt(JSON.stringify(encryptableData), aesKey);
-        comment.authTag = await EncryptionService.generateAuthTag(aesKey, comment.id, String(comment.createdAt), comment.authorId);
-        comment.isEncrypted = true;
-      } catch (err) {
-        throw new Error(`Failed to encrypt comment: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    }
-  }
-
-  return new Promise((resolve, reject) => {
-    const commentNode = getGun().get('comments').get(commentId);
-    
-    // Set each field individually (Gun.js prefers this approach)
-    commentNode.get('id').put(commentId);
-    commentNode.get('postId').put(data.postId);
-    commentNode.get('communityId').put(data.communityId);
-    commentNode.get('authorId').put(data.authorId);
-    commentNode.get('authorName').put(comment.isEncrypted ? 'encrypted' : data.authorName);
-    commentNode.get('authorShowRealName').put(data.authorShowRealName || false);
-    commentNode.get('content').put(comment.isEncrypted ? '🔒 Encrypted comment' : data.content);
-    
-    if (data.parentId) {
-      commentNode.get('parentId').put(data.parentId);
-    }
-    
-    commentNode.get('createdAt').put(timestamp);
-    commentNode.get('upvotes').put(0);
-    commentNode.get('downvotes').put(0);
-    commentNode.get('score').put(0);
-    commentNode.get('edited').put(false);
-
-    if (comment.authorPubkey) {
-      commentNode.get('authorPubkey').put(comment.authorPubkey);
-    }
-    if (comment.contentSignature) {
-      commentNode.get('contentSignature').put(comment.contentSignature);
-    }
-
-    if (comment.isEncrypted) {
-      commentNode.get('isEncrypted').put(true);
-      commentNode.get('encryptedContent').put(comment.encryptedContent);
-      commentNode.get('authTag').put(comment.authTag);
-    }
-
-    // Add to post's comments index
-    getGun().get('posts')
-      .get(data.postId)
-      .get('comments')
-      .set({ commentId, createdAt: timestamp });
-    
-    setTimeout(() => {
-      // Audit receipt (fire-and-forget)
-      (async () => {
-        try {
-          const contentHash = CryptoService.hash(
-            JSON.stringify({
-              id: comment.id,
-              postId: comment.postId,
-              communityId: comment.communityId,
-              authorId: comment.authorId,
-              createdAt: comment.createdAt,
-              content: comment.content,
-            })
-          );
-
-          await AuditService.logReceipt('comment', {
-            commentId: comment.id,
-            postId: comment.postId,
-            communityId: comment.communityId,
-            authorId: comment.authorId,
-            createdAt: comment.createdAt,
-            contentHash,
-          });
-        } catch (_error) {
-          // Non-fatal: audit logging failed
-        }
-      })();
-
-      // Bump comment count on the associated post (best-effort)
-      (async () => {
-        try {
-          await PostService.incrementCommentCount(data.postId, data.communityId);
-        } catch (_err) {
-          // Non-fatal: comment count increment failed
-        }
-      })();
-
-      resolve(comment);
-    }, 100);
-  });
 }
 
-/**
- * Get a single comment by ID
- */
-export async function getComment(commentId: string): Promise<Comment | null> {
-  return new Promise((resolve) => {
-    getGun().get('comments')
-      .get(commentId)
-      .once((data) => {
-        if (data && data.id) {
-          resolve(data as Comment);
-        } else {
-          resolve(null);
-        }
-      });
-  });
-}
-
-/**
- * Subscribe to real-time updates for comments in a post.
- * Returns an unsubscribe function to clean up all listeners.
- */
-export function subscribeToCommentsInPost(
-  postId: string,
-  callback: (comment: Comment) => void
-): () => void {
-  const seenCommentIds = new Set<string>();
-  let active = true;
-
-  const listener = getGun().get('posts')
-    .get(postId)
-    .get('comments')
-    .map()
-    .on((data: any) => {
-      if (!active || !data?.commentId || seenCommentIds.has(data.commentId)) return;
-      seenCommentIds.add(data.commentId);
-      // Use .once() — not .on() — to avoid permanent inner subscriptions
-      getGun().get('comments')
-        .get(data.commentId)
-        .once((commentData: any) => {
-          if (!active) return;
-          if (commentData && commentData.id) {
-            const comment: Comment = {
-              id: commentData.id,
-              postId: commentData.postId || postId,
-              communityId: commentData.communityId,
-              authorId: commentData.authorId,
-              authorName: commentData.authorName,
-              content: commentData.content,
-              parentId: commentData.parentId && commentData.parentId !== 'null' && commentData.parentId !== '' ? commentData.parentId : undefined,
-              createdAt: commentData.createdAt,
-              upvotes: commentData.upvotes || 0,
-              downvotes: commentData.downvotes || 0,
-              score: commentData.score || 0,
-              edited: commentData.edited || false,
-              editedAt: commentData.editedAt,
-              authorPubkey: commentData.authorPubkey || undefined,
-              contentSignature: commentData.contentSignature || undefined,
-              isEncrypted: commentData.isEncrypted || false,
-              encryptedContent: commentData.encryptedContent || undefined,
-              authTag: commentData.authTag || undefined,
-            };
-            callback(comment);
-          }
-        });
-    });
-
-  return () => {
-    active = false;
-    if (listener?.off) listener.off();
-  };
-}
-
-/**
- * Get all comments for a post (one-time fetch)
- */
-export async function getAllCommentsInPost(postId: string): Promise<Comment[]> {
-  return new Promise((resolve) => {
-    const comments: Comment[] = [];
-    const seen = new Set<string>();
-
-    getGun().get('posts')
-      .get(postId)
-      .get('comments')
-      .map()
-      .once((data: any) => {
-        if (data && data.commentId && !seen.has(data.commentId)) {
-          seen.add(data.commentId);
-          
-          getGun().get('comments')
-            .get(data.commentId)
-            .once((commentData: any) => {
-              if (commentData && commentData.id) {
-                const comment: Comment = {
-                  id: commentData.id,
-                  postId: commentData.postId || postId,
-                  communityId: commentData.communityId,
-                  authorId: commentData.authorId,
-                  authorName: commentData.authorName,
-                  content: commentData.content,
-                  // CRITICAL: Only set parentId if it actually exists (not null, undefined, or empty string)
-                  parentId: commentData.parentId && commentData.parentId !== 'null' && commentData.parentId !== '' ? commentData.parentId : undefined,
-                  createdAt: commentData.createdAt,
-                  upvotes: commentData.upvotes || 0,
-                  downvotes: commentData.downvotes || 0,
-                  score: commentData.score || 0,
-                  edited: commentData.edited || false,
-                  editedAt: commentData.editedAt,
-                  authorPubkey: commentData.authorPubkey || undefined,
-                  contentSignature: commentData.contentSignature || undefined,
-                  isEncrypted: commentData.isEncrypted || false,
-                  encryptedContent: commentData.encryptedContent || undefined,
-                  authTag: commentData.authTag || undefined,
-                };
-                comments.push(comment);
-              }
-            });
-        }
-      });
-
-    // Wait for all comments to load
-    setTimeout(() => {
-      resolve(comments);
-    }, 1500);
-  });
-}
-
-/**
- * Get replies to a comment
- */
-export async function getReplies(parentCommentId: string): Promise<Comment[]> {
-  return new Promise((resolve) => {
-    const replies: Comment[] = [];
-    const seen = new Set<string>();
-
-    getGun().get('comments')
-      .map()
-      .once((comment: any) => {
-        if (
-          comment && 
-          comment.id && 
-          comment.parentId === parentCommentId &&
-          !seen.has(comment.id)
-        ) {
-          seen.add(comment.id);
-          replies.push(comment as Comment);
-        }
-      });
-
-    setTimeout(() => {
-      resolve(replies.sort((a, b) => b.score - a.score));
-    }, 500);
-  });
-}
-
-/**
- * Vote on a comment
- */
-export async function voteOnComment(
-  commentId: string,
-  voteType: 'up' | 'down',
-  userId: string
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    // Get current comment data
-    getGun().get('comments')
-      .get(commentId)
-      .once((comment: any) => {
-        if (!comment || !comment.id) {
-          reject(new Error('Comment not found'));
-          return;
-        }
-
-        const voteKey = `vote_${userId}_${commentId}`;
-        
-        // Check existing vote
-        getGun().get('votes')
-          .get(voteKey)
-          .once((existingVote: any) => {
-            let upvotes = comment.upvotes || 0;
-            let downvotes = comment.downvotes || 0;
-
-            // Remove old vote if exists
-            if (existingVote && existingVote.type) {
-              if (existingVote.type === 'up') {
-                upvotes = Math.max(0, upvotes - 1);
-              } else if (existingVote.type === 'down') {
-                downvotes = Math.max(0, downvotes - 1);
-              }
-            }
-
-            // Add new vote (or toggle off if same vote)
-            if (!existingVote || existingVote.type !== voteType) {
-              if (voteType === 'up') {
-                upvotes++;
-              } else {
-                downvotes++;
-              }
-
-              // Store the vote
-              getGun().get('votes')
-                .get(voteKey)
-                .put({
-                  userId,
-                  commentId,
-                  type: voteType,
-                  timestamp: Date.now()
-                });
-            } else {
-              // Toggle off - remove vote
-              getGun().get('votes')
-                .get(voteKey)
-                .put(null);
-            }
-
-            const score = upvotes - downvotes;
-
-            // Update comment - use .put() on the parent node with all fields
-            const commentNode = getGun().get('comments').get(commentId);
-            
-            // Update vote counts
-            commentNode.put({
-              upvotes: upvotes,
-              downvotes: downvotes,
-              score: score
-            }, (ack: any) => {
-              if (ack.err) {
-                reject(new Error(ack.err));
-              } else {
-                resolve();
-              }
-            });
-          });
-      });
-  });
-}
-
-/**
- * Edit a comment
- */
-export async function editComment(commentId: string, newContent: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    getGun().get('comments')
-      .get(commentId)
-      .once(async (comment: any) => {
-        if (!comment || !comment.id) {
-          reject(new Error('Comment not found'));
-          return;
-        }
-
-        getGun().get('comments')
-          .get(commentId)
-          .get('content')
-          .put(newContent);
-
-        getGun().get('comments')
-          .get(commentId)
-          .get('edited')
-          .put(true);
-
-        getGun().get('comments')
-          .get(commentId)
-          .get('editedAt')
-          .put(Date.now());
-
-        // Re-sign with updated content
-        try {
-          const keyPair = await KeyService.getKeyPair();
-          const contentHash = CryptoService.hash(buildSignablePayload({
-            content: newContent,
-            postId: comment.postId,
-            communityId: comment.communityId,
-            createdAt: comment.createdAt,
-          }));
-          const signature = CryptoService.sign(contentHash, keyPair.privateKey);
-          const commentNode = getGun().get('comments').get(commentId);
-          commentNode.get('authorPubkey').put(keyPair.publicKey);
-          commentNode.get('contentSignature').put(signature);
-        } catch (_err) {
-          // Non-fatal: signature update failed
-        }
-
-        resolve();
-      });
-  });
-}
-
-/**
- * Delete a comment
- */
-export async function deleteComment(commentId: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    getGun().get('comments')
-      .get(commentId)
-      .once((comment: any) => {
-        if (!comment || !comment.id) {
-          reject(new Error('Comment not found'));
-          return;
-        }
-
-        // Mark as deleted instead of actually deleting
-        getGun().get('comments')
-          .get(commentId)
-          .get('content')
-          .put('[deleted]');
-
-        getGun().get('comments')
-          .get(commentId)
-          .get('deleted')
-          .put(true);
-
-        resolve();
-      });
-  });
-}
-
-/**
- * Get user's vote on a comment
- */
-export async function getUserVote(
-  commentId: string,
-  userId: string
-): Promise<'up' | 'down' | null> {
-  return new Promise((resolve) => {
-    const voteKey = `vote_${userId}_${commentId}`;
-    
-    getGun().get('votes')
-      .get(voteKey)
-      .once((vote: any) => {
-        if (vote && vote.type) {
-          resolve(vote.type as 'up' | 'down');
-        } else {
-          resolve(null);
-        }
-      });
-  });
-}
-
-/**
- * Get comment count for a post
- */
-export async function getCommentCount(postId: string): Promise<number> {
-  return new Promise((resolve) => {
-    let count = 0;
-    const seen = new Set<string>();
-
-    getGun().get('posts')
-      .get(postId)
-      .get('comments')
-      .map()
-      .once((commentRef: any) => {
-        if (commentRef && commentRef.ref && !seen.has(commentRef.ref)) {
-          seen.add(commentRef.ref);
-          count++;
-        }
-      });
-
-    setTimeout(() => {
-      resolve(count);
-    }, 500);
-  });
-}
-
-/** Verify the Schnorr signature on a comment for anti-sabotage */
 export function verifyCommentSignature(comment: Comment): 'verified' | 'unverified' | 'unsigned' {
   if (!comment.authorPubkey || !comment.contentSignature) return 'unsigned';
   try {
-    const contentHash = CryptoService.hash(buildSignablePayload(comment));
-    const valid = CryptoService.verify(contentHash, comment.contentSignature, comment.authorPubkey);
-    return valid ? 'verified' : 'unverified';
+    const contentHash = comment.canonVersion === CURRENT_CANON_VERSION
+      ? CryptoService.hash(buildSignablePayload(comment))
+      : CryptoService.hash(buildSignablePayloadV1(comment));
+    return CryptoService.verify(contentHash, comment.contentSignature, comment.authorPubkey)
+      ? 'verified'
+      : 'unverified';
   } catch {
     return 'unverified';
   }
 }
 
-/** Decrypt an encrypted comment using the stored community key */
+// ── Encryption (private communities) ──────────────────────────────────────────
+
+const ENCRYPTED_PLACEHOLDER = '🔒 Encrypted comment';
+
+/** Encrypt in place when the community has a stored key. No key = public community. */
+async function encryptForCommunity(comment: Comment): Promise<void> {
+  if (!comment.communityId) return;
+  const storedKey = await KeyVaultService.getKey(comment.communityId);
+  if (!storedKey) return;
+
+  const aesKey = await EncryptionService.importKey(storedKey.key);
+  const payload = JSON.stringify({
+    content: comment.content,
+    authorId: comment.authorId,
+    authorName: comment.authorName,
+  });
+  comment.encryptedContent = await EncryptionService.encrypt(payload, aesKey);
+  comment.authTag = await EncryptionService.generateAuthTag(
+    aesKey,
+    comment.id,
+    String(comment.createdAt),
+    comment.authorId,
+  );
+  comment.isEncrypted = true;
+}
+
 export async function decryptComment(comment: Comment): Promise<Comment> {
   if (!comment.isEncrypted || !comment.encryptedContent) return comment;
 
@@ -571,39 +182,721 @@ export async function decryptComment(comment: Comment): Promise<Comment> {
 
   try {
     const aesKey = await EncryptionService.importKey(storedKey.key);
-    
     if (comment.authTag) {
-      const valid = await EncryptionService.verifyAuthTag(aesKey, comment.authTag, comment.id, String(comment.createdAt), comment.authorId);
+      const valid = await EncryptionService.verifyAuthTag(
+        aesKey,
+        comment.authTag,
+        comment.id,
+        String(comment.createdAt),
+        comment.authorId,
+      );
       if (!valid) {
-        console.warn(`Comment ${comment.id} failed authTag verification`);
+        console.warn(`[CommentService] Comment ${comment.id} failed authTag verification`);
         return comment;
       }
     }
-
     const decrypted = JSON.parse(await EncryptionService.decrypt(comment.encryptedContent, aesKey));
     return {
       ...comment,
-      content: decrypted.content || comment.content,
-      authorId: decrypted.authorId || comment.authorId,
-      authorName: decrypted.authorName || comment.authorName,
+      content: decrypted.content ?? comment.content,
+      authorId: decrypted.authorId ?? comment.authorId,
+      authorName: decrypted.authorName ?? comment.authorName,
     };
   } catch {
     return comment;
   }
 }
 
-// Export as CommentService object for compatibility
+/**
+ * The form a comment takes on the wire and in the local mirror. For encrypted
+ * communities the plaintext never leaves memory — not into Gun, not into
+ * IndexedDB — matching the guarantee that losing the community key makes the
+ * content unreadable.
+ */
+function redactForStorage(comment: Comment): Comment {
+  if (!comment.isEncrypted) return comment;
+  return { ...comment, content: ENCRYPTED_PLACEHOLDER, authorName: 'encrypted' };
+}
+
+// ── Record conversion ─────────────────────────────────────────────────────────
+
+function toGunComment(comment: Comment): Record<string, string | number | boolean> {
+  const c = redactForStorage(comment);
+  return toGunRecord({
+    id: c.id,
+    postId: c.postId,
+    communityId: c.communityId,
+    authorId: c.authorId,
+    authorName: c.authorName,
+    authorShowRealName: c.authorShowRealName ?? false,
+    content: c.content,
+    parentId: c.parentId,
+    createdAt: c.createdAt,
+    upvotes: c.upvotes ?? 0,
+    downvotes: c.downvotes ?? 0,
+    score: c.score ?? 0,
+    edited: !!c.edited,
+    editedAt: c.editedAt,
+    deleted: c.deleted ? true : undefined,
+    authorPubkey: c.authorPubkey,
+    contentSignature: c.contentSignature,
+    canonVersion: c.canonVersion,
+    isEncrypted: c.isEncrypted ? true : undefined,
+    encryptedContent: c.encryptedContent,
+    authTag: c.authTag,
+  });
+}
+
+/** Normalize a raw Gun node into a Comment, or null if it isn't one. */
+function fromGunComment(raw: any, fallbackPostId?: string): Comment | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const id = typeof raw.id === 'string' ? raw.id : null;
+  if (!id) return null;
+
+  const postId = typeof raw.postId === 'string' && raw.postId ? raw.postId : fallbackPostId;
+  if (!postId) return null;
+
+  // Gun round-trips absent optional fields as the string 'null'/'undefined' in
+  // some legacy rows; treat those as absent rather than as a parent id, or the
+  // comment threads itself under a phantom parent and disappears from the list.
+  const parentId = typeof raw.parentId === 'string'
+    && raw.parentId !== ''
+    && raw.parentId !== 'null'
+    && raw.parentId !== 'undefined'
+    ? raw.parentId
+    : undefined;
+
+  const upvotes = Number(raw.upvotes) || 0;
+  const downvotes = Number(raw.downvotes) || 0;
+
+  return {
+    id,
+    postId,
+    communityId: typeof raw.communityId === 'string' ? raw.communityId : '',
+    authorId: typeof raw.authorId === 'string' ? raw.authorId : '',
+    authorName: typeof raw.authorName === 'string' ? raw.authorName : 'anon',
+    authorShowRealName: raw.authorShowRealName === true,
+    content: typeof raw.content === 'string' ? raw.content : '',
+    parentId,
+    createdAt: Number(raw.createdAt) || 0,
+    upvotes,
+    downvotes,
+    score: Number.isFinite(Number(raw.score)) ? Number(raw.score) : upvotes - downvotes,
+    edited: raw.edited === true,
+    editedAt: Number(raw.editedAt) || undefined,
+    deleted: raw.deleted === true,
+    authorPubkey: typeof raw.authorPubkey === 'string' ? raw.authorPubkey : undefined,
+    contentSignature: typeof raw.contentSignature === 'string' ? raw.contentSignature : undefined,
+    canonVersion: Number(raw.canonVersion) || undefined,
+    isEncrypted: raw.isEncrypted === true,
+    encryptedContent: typeof raw.encryptedContent === 'string' ? raw.encryptedContent : undefined,
+    authTag: typeof raw.authTag === 'string' ? raw.authTag : undefined,
+  };
+}
+
+// ── Local mirror ──────────────────────────────────────────────────────────────
+
+function toStored(comment: Comment, patch: Partial<StoredComment> = {}): StoredComment {
+  return {
+    ...redactForStorage(comment),
+    syncStatus: patch.syncStatus ?? 'pending',
+    syncAttempts: patch.syncAttempts ?? 0,
+    lastSyncAt: patch.lastSyncAt,
+    authoredLocally: patch.authoredLocally ?? false,
+    updatedAt: patch.updatedAt ?? Date.now(),
+  };
+}
+
+/** Which of two versions of the same comment is newer. */
+function revisionOf(comment: Comment): number {
+  return comment.editedAt || comment.createdAt || 0;
+}
+
+/**
+ * Fold observed comments into the local mirror.
+ *
+ * A remote copy never overwrites a locally-authored row that has not been
+ * confirmed yet: the relay's version of such a comment is at best a partial
+ * echo, and letting it win is how an in-flight comment used to lose its body.
+ */
+async function mergeIntoMirror(incoming: Comment[], authoredLocally = false): Promise<void> {
+  if (incoming.length === 0) return;
+
+  const rows: StoredComment[] = [];
+  for (const comment of incoming) {
+    const existing = await StorageService.getComment(comment.id);
+
+    if (existing) {
+      const localWins = existing.authoredLocally
+        && existing.syncStatus !== 'confirmed'
+        && revisionOf(existing) >= revisionOf(comment);
+      if (localWins) continue;
+      // Never let an emptier record replace a fuller one.
+      if (!comment.content && existing.content) continue;
+
+      rows.push(toStored(comment, {
+        syncStatus: authoredLocally ? existing.syncStatus : 'confirmed',
+        syncAttempts: existing.syncAttempts,
+        lastSyncAt: existing.lastSyncAt,
+        authoredLocally: existing.authoredLocally || authoredLocally,
+      }));
+      continue;
+    }
+
+    rows.push(toStored(comment, {
+      // Observed from the graph means it demonstrably exists outside this browser.
+      syncStatus: authoredLocally ? 'pending' : 'confirmed',
+      authoredLocally,
+    }));
+  }
+
+  await StorageService.saveComments(rows);
+}
+
+async function patchMirror(commentId: string, patch: Partial<StoredComment>): Promise<void> {
+  const existing = await StorageService.getComment(commentId);
+  if (!existing) return;
+  await StorageService.saveComment({ ...existing, ...patch, updatedAt: Date.now() });
+}
+
+// ── Publishing ────────────────────────────────────────────────────────────────
+
+/**
+ * Push one comment into the graph and find out whether it stuck.
+ *
+ * Both writes matter: the canonical node is the content, the index entry is how
+ * anyone finds it. A comment whose index entry was dropped is invisible even
+ * though the node exists — which is exactly how comments "randomly" failed to
+ * show up for other people.
+ */
+async function publishComment(comment: Comment): Promise<SyncStatus> {
+  const record = toGunComment(comment);
+
+  const [nodeAck, indexAck] = await Promise.all([
+    gunPut(commentNode(comment.id), record),
+    gunPut(
+      commentIndexNode(comment.postId).get(comment.id),
+      toGunRecord({
+        commentId: comment.id,
+        createdAt: comment.createdAt,
+        parentId: comment.parentId,
+      }),
+    ),
+  ]);
+
+  if (!nodeAck.ok && !indexAck.ok) return 'pending';
+
+  const confirmed = await verifySoulOnRelay(commentSoul(comment.id), 6_000);
+  if (confirmed === true) return 'confirmed';
+  // `false` (relay says no) and `null` (no reachable /db/soul endpoint) both mean
+  // "keep trying" — but a peer-acked write is further along than an unsent one.
+  return 'published';
+}
+
+let republishLoopStarted = false;
+let republishInFlight = false;
+
+/**
+ * Re-push every locally-authored comment no relay has confirmed.
+ *
+ * Gun does not retro-sync writes made while a peer was unreachable, so without
+ * this a comment written during an outage stays in this browser forever. State
+ * lives in IndexedDB, so a reload mid-outage does not reset progress — the old
+ * in-memory attempt counters plus a 30-minute TTL meant a comment written during
+ * a longer outage was abandoned before the relay ever came back.
+ */
+export async function republishUnconfirmedComments(): Promise<void> {
+  if (republishInFlight || typeof window === 'undefined') return;
+  republishInFlight = true;
+  try {
+    const all = await StorageService.getAllComments();
+    const now = Date.now();
+    const pending = all.filter((c) =>
+      c.authoredLocally
+      && c.syncStatus !== 'confirmed'
+      && c.syncAttempts < MAX_PUBLISH_ATTEMPTS
+      && now - (c.createdAt || 0) < OUTBOX_TTL_MS);
+
+    for (const stored of pending) {
+      const status = await publishComment(stored);
+      const attempts = stored.syncAttempts + 1;
+      await patchMirror(stored.id, {
+        syncStatus: status === 'confirmed'
+          ? 'confirmed'
+          : attempts >= MAX_PUBLISH_ATTEMPTS ? 'failed' : status,
+        syncAttempts: attempts,
+        lastSyncAt: Date.now(),
+      });
+      if (status === 'confirmed') {
+        console.info(`[CommentService] Comment ${stored.id} confirmed on relay after ${attempts} attempt(s)`);
+      }
+    }
+  } catch (err) {
+    console.warn('[CommentService] Republish sweep failed:', err);
+  } finally {
+    republishInFlight = false;
+  }
+}
+
+export function startCommentRepublishLoop(): void {
+  if (republishLoopStarted || typeof window === 'undefined') return;
+  republishLoopStarted = true;
+
+  GunService.onReconnect(() => { void republishUnconfirmedComments(); });
+  window.addEventListener('online', () => { void republishUnconfirmedComments(); });
+
+  const tick = () => {
+    void republishUnconfirmedComments().finally(() => setTimeout(tick, REPUBLISH_INTERVAL_MS));
+  };
+  setTimeout(tick, 8_000);
+}
+
+// ── Create / edit / delete ────────────────────────────────────────────────────
+
+export async function createComment(data: CreateCommentData): Promise<Comment> {
+  if (!data.postId) throw new Error('postId is required');
+  if (!data.content?.trim()) throw new Error('content is required');
+
+  const createdAt = Date.now();
+  const comment: Comment = {
+    id: `comment_${createdAt}_${Math.random().toString(36).slice(2, 11)}`,
+    postId: data.postId,
+    communityId: data.communityId,
+    authorId: data.authorId,
+    authorName: data.authorName,
+    authorShowRealName: data.authorShowRealName ?? false,
+    content: data.content.trim(),
+    parentId: data.parentId || undefined,
+    createdAt,
+    upvotes: 0,
+    downvotes: 0,
+    score: 0,
+    edited: false,
+  };
+
+  await signComment(comment);
+  await encryptForCommunity(comment);
+
+  // Durable first. Everything after this point can fail without losing the comment.
+  await StorageService.saveComment(toStored(comment, { syncStatus: 'pending', authoredLocally: true }));
+
+  // Publish in the background: the comment is already safe, and blocking the UI
+  // on a relay round-trip is what made posting feel broken on a slow network.
+  void (async () => {
+    try {
+      const status = await publishComment(comment);
+      await patchMirror(comment.id, { syncStatus: status, syncAttempts: 1, lastSyncAt: Date.now() });
+    } catch (err) {
+      console.warn('[CommentService] Initial publish failed, queued for retry:', err);
+    }
+    startCommentRepublishLoop();
+  })();
+
+  // Best-effort side effects — never allowed to fail the comment.
+  void (async () => {
+    try {
+      const contentHash = CryptoService.hash(JSON.stringify({
+        id: comment.id,
+        postId: comment.postId,
+        communityId: comment.communityId,
+        authorId: comment.authorId,
+        createdAt: comment.createdAt,
+        content: comment.content,
+      }));
+      await AuditService.logReceipt('comment', {
+        commentId: comment.id,
+        postId: comment.postId,
+        communityId: comment.communityId,
+        authorId: comment.authorId,
+        createdAt: comment.createdAt,
+        contentHash,
+      });
+    } catch { /* audit is advisory */ }
+  })();
+
+  void PostService.incrementCommentCount(data.postId, data.communityId).catch(() => { /* counter is a hint */ });
+
+  return comment;
+}
+
+export async function editComment(commentId: string, newContent: string): Promise<Comment | null> {
+  const existing = await getComment(commentId);
+  if (!existing) return null;
+
+  const edited: Comment = {
+    ...existing,
+    content: newContent,
+    edited: true,
+    editedAt: Date.now(),
+  };
+  await signComment(edited);
+  if (existing.isEncrypted) {
+    edited.isEncrypted = false;
+    edited.encryptedContent = undefined;
+    edited.authTag = undefined;
+    await encryptForCommunity(edited);
+  }
+
+  const stored = await StorageService.getComment(commentId);
+  await StorageService.saveComment(toStored(edited, {
+    syncStatus: 'pending',
+    syncAttempts: 0,
+    authoredLocally: stored?.authoredLocally ?? true,
+  }));
+
+  const status = await publishComment(edited);
+  await patchMirror(commentId, { syncStatus: status, syncAttempts: 1, lastSyncAt: Date.now() });
+  return edited;
+}
+
+export async function deleteComment(commentId: string): Promise<void> {
+  const existing = await getComment(commentId);
+  if (!existing) return;
+
+  // Tombstone rather than remove: a Gun delete does not propagate reliably, and
+  // peers that still hold the node would resurrect the original text.
+  const tombstoned: Comment = {
+    ...existing,
+    content: '[deleted]',
+    deleted: true,
+    edited: true,
+    editedAt: Date.now(),
+    encryptedContent: undefined,
+    authTag: undefined,
+    isEncrypted: false,
+  };
+
+  await StorageService.saveComment(toStored(tombstoned, {
+    syncStatus: 'pending',
+    syncAttempts: 0,
+    authoredLocally: true,
+  }));
+
+  const status = await publishComment(tombstoned);
+  await patchMirror(commentId, { syncStatus: status, syncAttempts: 1, lastSyncAt: Date.now() });
+}
+
+// ── Reads ─────────────────────────────────────────────────────────────────────
+
+/** Comments already on this device. Resolves immediately — no network. */
+export async function getLocalComments(postId: string): Promise<Comment[]> {
+  const rows = await StorageService.getCommentsByPost(postId);
+  return Promise.all(rows.map((row) => decryptComment(row)));
+}
+
+export async function getComment(commentId: string): Promise<Comment | null> {
+  const local = await StorageService.getComment(commentId);
+  if (local) return decryptComment(local);
+
+  const raw = await gunOnce(commentNode(commentId));
+  const comment = fromGunComment(raw);
+  if (!comment) return null;
+  await mergeIntoMirror([comment]);
+  return decryptComment(comment);
+}
+
+/**
+ * Comment ids listed in a post's index.
+ *
+ * Handles both entry shapes: the deterministic `<commentId>` keys written now,
+ * and the random-soul `.set()` entries the old implementation produced.
+ */
+async function readCommentIndex(postId: string): Promise<string[]> {
+  const children = await gunReadChildren<any>(commentIndexNode(postId), { minMs: 600, maxMs: 8_000 });
+  const ids = new Set<string>();
+  for (const { key, value } of children) {
+    const fromValue = value && typeof value === 'object'
+      ? (typeof value.commentId === 'string' ? value.commentId
+        : typeof value.id === 'string' ? value.id : null)
+      : null;
+    const id = fromValue ?? (key.startsWith('comment_') ? key : null);
+    if (id) ids.add(id);
+  }
+  return [...ids];
+}
+
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (;;) {
+      const index = cursor++;
+      if (index >= items.length) return;
+      results[index] = await fn(items[index]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+/** Pull a post's comments from the graph and fold them into the local mirror. */
+export async function fetchCommentsFromGun(postId: string): Promise<Comment[]> {
+  const ids = await readCommentIndex(postId);
+  if (ids.length === 0) return [];
+
+  const fetched = await mapWithConcurrency(ids, FETCH_CONCURRENCY, async (id) => {
+    const raw = await gunOnce(commentNode(id), 6_000);
+    return fromGunComment(raw, postId);
+  });
+
+  const comments = fetched.filter((c): c is Comment => c !== null);
+  await mergeIntoMirror(comments);
+  return Promise.all(comments.map((c) => decryptComment(c)));
+}
+
+/**
+ * Everything known about a post's comments: the local mirror first, then the
+ * graph merged on top. Callers get a single settled list — no fixed timeout, no
+ * partial answer presented as complete.
+ */
+export async function getAllCommentsInPost(postId: string): Promise<Comment[]> {
+  const [local, remote] = await Promise.all([
+    getLocalComments(postId),
+    fetchCommentsFromGun(postId).catch(() => [] as Comment[]),
+  ]);
+
+  const byId = new Map<string, Comment>();
+  for (const comment of local) byId.set(comment.id, comment);
+  for (const comment of remote) {
+    const existing = byId.get(comment.id);
+    if (!existing || revisionOf(comment) > revisionOf(existing)) byId.set(comment.id, comment);
+  }
+  return [...byId.values()].sort((a, b) => a.createdAt - b.createdAt);
+}
+
+/**
+ * Live comment feed for a post.
+ *
+ * Emits every comment as it arrives *and* whenever an existing one changes, so
+ * edits, deletions and vote totals land without a refetch. The previous version
+ * used `.once()` per comment, which meant a comment's own updates never
+ * appeared. Re-attaches after `GunService.reconnect()` rebuilds the instance —
+ * otherwise the subscription silently binds to a discarded Gun and goes quiet.
+ */
+export function subscribeToCommentsInPost(
+  postId: string,
+  callback: (comment: Comment) => void,
+): () => void {
+  let active = true;
+  let indexChain: any = null;
+  const nodeChains = new Map<string, any>();
+
+  const watchComment = (commentId: string) => {
+    if (!active || nodeChains.has(commentId)) return;
+    const chain = commentNode(commentId).on((raw: any) => {
+      if (!active) return;
+      const comment = fromGunComment(raw, postId);
+      if (!comment) return;
+      void (async () => {
+        await mergeIntoMirror([comment]);
+        if (!active) return;
+        callback(await decryptComment(comment));
+      })();
+    });
+    nodeChains.set(commentId, chain);
+  };
+
+  const attach = () => {
+    if (!active) return;
+    indexChain = commentIndexNode(postId).map().on((value: any, key: string) => {
+      if (!active) return;
+      const id = value && typeof value === 'object'
+        ? (typeof value.commentId === 'string' ? value.commentId
+          : typeof value.id === 'string' ? value.id : null)
+        : null;
+      const commentId = id ?? (typeof key === 'string' && key.startsWith('comment_') ? key : null);
+      if (commentId) watchComment(commentId);
+    });
+  };
+
+  const detach = () => {
+    try { indexChain?.off?.(); } catch { /* already detached */ }
+    indexChain = null;
+    for (const chain of nodeChains.values()) {
+      try { chain?.off?.(); } catch { /* already detached */ }
+    }
+    nodeChains.clear();
+  };
+
+  attach();
+
+  const offReconnect = GunService.onReconnect(() => {
+    if (!active) return;
+    detach();
+    attach();
+  });
+
+  return () => {
+    active = false;
+    offReconnect();
+    detach();
+  };
+}
+
+export async function getCommentCount(postId: string): Promise<number> {
+  const [ids, local] = await Promise.all([
+    readCommentIndex(postId),
+    StorageService.getCommentsByPost(postId),
+  ]);
+  const all = new Set(ids);
+  for (const row of local) all.add(row.id);
+  return all.size;
+}
+
+// ── Votes ─────────────────────────────────────────────────────────────────────
+
+type VoteValue = 'up' | 'down' | 'none';
+
+function parseVote(raw: any): VoteValue | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const type = raw.type;
+  return type === 'up' || type === 'down' || type === 'none' ? type : null;
+}
+
+/**
+ * Count the per-user vote nodes.
+ *
+ * Falls back to the counters stored on the comment itself when nobody has voted
+ * under the new scheme yet, so comments predating this change keep their totals.
+ */
+export async function getCommentTally(commentId: string, fallback?: Comment): Promise<CommentTally> {
+  const children = await gunReadChildren<any>(commentVotesNode(commentId), { minMs: 300, maxMs: 4_000 });
+
+  let upvotes = 0;
+  let downvotes = 0;
+  let counted = 0;
+  for (const { value } of children) {
+    const vote = parseVote(value);
+    if (!vote) continue;
+    counted++;
+    if (vote === 'up') upvotes++;
+    else if (vote === 'down') downvotes++;
+  }
+
+  if (counted === 0 && fallback) {
+    const up = fallback.upvotes || 0;
+    const down = fallback.downvotes || 0;
+    return { upvotes: up, downvotes: down, score: up - down };
+  }
+  return { upvotes, downvotes, score: upvotes - downvotes };
+}
+
+export async function getUserVote(commentId: string, userId: string): Promise<'up' | 'down' | null> {
+  const raw = await gunOnce(commentVotesNode(commentId).get(userId), 3_000);
+  const vote = parseVote(raw);
+  return vote === 'up' || vote === 'down' ? vote : null;
+}
+
+/**
+ * Record this user's vote and return the recomputed tally.
+ *
+ * The vote is a node keyed by user id, so two people voting at once cannot
+ * clobber each other — the old code read the totals, added one, and wrote them
+ * back, so simultaneous votes silently cancelled and scores appeared to drift.
+ * Re-voting the same way clears the vote (a toggle), stored as an explicit
+ * `'none'` rather than a Gun delete, because deletes do not propagate reliably.
+ */
+export async function voteOnComment(
+  commentId: string,
+  voteType: 'up' | 'down',
+  userId: string,
+): Promise<CommentTally> {
+  if (!userId) throw new Error('userId is required to vote');
+
+  const current = await getUserVote(commentId, userId);
+  const next: VoteValue = current === voteType ? 'none' : voteType;
+
+  const ack = await gunPut(commentVotesNode(commentId).get(userId), {
+    type: next,
+    userId,
+    commentId,
+    at: Date.now(),
+  });
+  if (!ack.ok) throw new Error(ack.err || 'Vote could not be recorded');
+
+  const local = await StorageService.getComment(commentId);
+  const tally = await getCommentTally(commentId, local ?? undefined);
+
+  // Mirror the aggregate onto the comment as a hint for readers who have not
+  // loaded the vote set. Advisory only — `getCommentTally` always prefers the set.
+  void gunPut(commentNode(commentId), {
+    upvotes: tally.upvotes,
+    downvotes: tally.downvotes,
+    score: tally.score,
+  }).catch(() => { /* hint only */ });
+
+  if (local) {
+    await StorageService.saveComment({ ...local, ...tally, updatedAt: Date.now() });
+  }
+
+  return tally;
+}
+
+/** Live tally updates for one comment. */
+export function subscribeToCommentVotes(
+  commentId: string,
+  callback: (tally: CommentTally) => void,
+): () => void {
+  let active = true;
+  const votes = new Map<string, VoteValue>();
+
+  const emit = () => {
+    let upvotes = 0;
+    let downvotes = 0;
+    for (const vote of votes.values()) {
+      if (vote === 'up') upvotes++;
+      else if (vote === 'down') downvotes++;
+    }
+    callback({ upvotes, downvotes, score: upvotes - downvotes });
+  };
+
+  const chain = commentVotesNode(commentId).map().on((value: any, key: string) => {
+    if (!active || typeof key !== 'string') return;
+    const vote = parseVote(value);
+    if (!vote) return;
+    votes.set(key, vote);
+    emit();
+  });
+
+  return () => {
+    active = false;
+    try { chain?.off?.(); } catch { /* already detached */ }
+  };
+}
+
+// ── Replies ───────────────────────────────────────────────────────────────────
+
+/**
+ * Direct replies to a comment, from the loaded thread.
+ *
+ * The old implementation ran `.map()` over the *entire* `comments` root and
+ * filtered client-side — every reply lookup pulled every comment in the network
+ * into memory. A post's replies are a subset of its own thread.
+ */
+export async function getReplies(parentCommentId: string, postId: string): Promise<Comment[]> {
+  const comments = await getAllCommentsInPost(postId);
+  return comments
+    .filter((c) => c.parentId === parentCommentId)
+    .sort((a, b) => b.score - a.score || a.createdAt - b.createdAt);
+}
+
 export const CommentService = {
   createComment,
-  getComment,
-  subscribeToCommentsInPost,
-  getAllCommentsInPost,
-  getReplies,
-  voteOnComment,
   editComment,
   deleteComment,
-  getUserVote,
+  getComment,
+  getLocalComments,
+  getAllCommentsInPost,
+  fetchCommentsFromGun,
+  subscribeToCommentsInPost,
   getCommentCount,
+  getReplies,
+  voteOnComment,
+  getUserVote,
+  getCommentTally,
+  subscribeToCommentVotes,
   verifyCommentSignature,
-  decryptComment
+  decryptComment,
+  startCommentRepublishLoop,
+  republishUnconfirmedComments,
 };

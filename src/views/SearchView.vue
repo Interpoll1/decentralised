@@ -10,6 +10,7 @@
     </ion-header>
 
     <ion-content>
+      <DesktopPageShell>
       <div class="search-page">
     <!-- Search Header -->
     <div class="search-header">
@@ -127,6 +128,7 @@
       </div>
     </div>
       </div>
+      </DesktopPageShell>
     </ion-content>
   </ion-page>
 </template>
@@ -474,6 +476,7 @@ html.dark .page-btn.active {
 </style>
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRouter } from 'vue-router';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,

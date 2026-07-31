@@ -19,6 +19,9 @@
           <ion-segment-button value="moderation">
             <ion-label>Moderation</ion-label>
           </ion-segment-button>
+          <ion-segment-button value="advanced">
+            <ion-label>Advanced</ion-label>
+          </ion-segment-button>
           <ion-segment-button value="network">
             <ion-label>Network</ion-label>
           </ion-segment-button>
@@ -30,7 +33,7 @@
     </ion-header>
 
     <ion-content>
-      <!-- GENERAL TAB -->
+      <DesktopPageShell>      <!-- GENERAL TAB -->
       <div v-if="activeTab === 'general'">
         <!-- Appearance -->
         <div class="section">
@@ -50,6 +53,38 @@
           <h3 class="section-title">Content Filters</h3>
           <p class="helper-text">
             Content filtering has moved to the <a href="#" class="link-primary" @click.prevent="activeTab = 'moderation'">Moderation</a> tab.
+          </p>
+          <div class="separator"></div>
+        </div>
+
+        <!-- Home Feed Moderation -->
+        <div class="section">
+          <h3 class="section-title">Home Feed Moderation</h3>
+          <p class="section-subtitle">Use a moderation API to hide unwanted posts from the home feed</p>
+          <ion-list>
+            <ion-item>
+              <ion-toggle v-model="modSettings.moderateHomeFeed" @ionChange="saveModerationSettings">
+                Moderate home feed
+              </ion-toggle>
+            </ion-item>
+            <ion-item>
+              <ion-label>API provider</ion-label>
+              <ion-select v-model="modSettings.moderationProvider" @ionChange="onModerationProviderChange">
+                <ion-select-option value="interpoll">InterPoll default API</ion-select-option>
+                <ion-select-option value="custom">Custom API</ion-select-option>
+              </ion-select>
+            </ion-item>
+            <ion-item v-if="modSettings.moderationProvider === 'custom'">
+              <ion-label position="stacked">Custom API base URL</ion-label>
+              <ion-input
+                v-model="modSettings.moderationApiBaseUrl"
+                placeholder="https://example.com/moderation"
+                @ionBlur="saveModerationSettings"
+              ></ion-input>
+            </ion-item>
+          </ion-list>
+          <p class="helper-text">
+            Default API: {{ moderationDefaultApiUrl }}. Custom endpoints must expose the same moderation hash API.
           </p>
           <div class="separator"></div>
         </div>
@@ -90,24 +125,6 @@
             <ion-icon slot="start" :icon="personCircleOutline"></ion-icon>
             Edit Profile
           </ion-button>
-          <div class="separator"></div>
-        </div>
-
-        <!-- Beta Features -->
-        <div class="section">
-          <h3 class="section-title">Beta Features</h3>
-          <p class="section-subtitle">Try experimental features before they're fully released</p>
-          <ion-list>
-            <ion-item>
-              <ion-toggle :checked="betaFeatures.resilience" @ionChange="onToggleResilienceBeta($event)">
-                Resilience Tools
-              </ion-toggle>
-            </ion-item>
-          </ion-list>
-          <p class="helper-text">
-            Anti-censorship toolkit: relay health scanning, relay management, snapshot export/import, Tor support.
-            Enable to access the Resilience page from the side menu.
-          </p>
           <div class="separator"></div>
         </div>
 
@@ -355,6 +372,12 @@
 
       <!-- MODERATION TAB -->
       <div v-if="activeTab === 'moderation'">
+        <div class="section">
+          <h3 class="section-title">Home Feed Moderation</h3>
+          <p class="helper-text">Configure this from the <a href="#" class="link-primary" @click.prevent="activeTab = 'general'">General</a> tab.</p>
+          <div class="separator"></div>
+        </div>
+
         <!-- Karma Filter -->
         <div class="section">
           <h3 class="section-title">Karma Filter</h3>
@@ -505,8 +528,123 @@
         </div>
       </div>
 
+      <!-- ADVANCED TAB -->
+      <div v-if="activeTab === 'advanced'">
+        <div class="section">
+          <h3 class="section-title">Moderation API</h3>
+          <p class="section-subtitle">Authenticate and enable click-to-submit from Home feed</p>
+          <ion-list>
+            <ion-item>
+              <ion-label>Provider</ion-label>
+              <ion-select v-model="modSettings.moderationProvider" @ionChange="saveModerationSettings">
+                <ion-select-option value="interpoll">Interpoll Moderation API</ion-select-option>
+                <ion-select-option value="custom">Custom API</ion-select-option>
+              </ion-select>
+            </ion-item>
+            <ion-item>
+              <ion-label position="stacked">API base URL</ion-label>
+              <ion-input
+                v-model="modSettings.moderationApiBaseUrl"
+                @ionBlur="saveModerationSettings"
+                placeholder="https://interpoll.endless.sbs/moderation"
+              ></ion-input>
+            </ion-item>
+            <ion-item>
+              <ion-label position="stacked">API key</ion-label>
+              <ion-input
+                v-model="moderationApiKeyInput"
+                type="password"
+                placeholder="mod_sk_..."
+              ></ion-input>
+            </ion-item>
+          </ion-list>
+          <div class="button-row">
+            <ion-button size="small" @click="authenticateModerationApi">Authenticate</ion-button>
+            <ion-button size="small" fill="outline" color="medium" @click="clearModerationApiAuth">Clear Auth</ion-button>
+          </div>
+          <p class="helper-text">{{ moderationAuthMessage }}</p>
+          <div class="separator"></div>
+        </div>
+
+        <div class="section">
+          <h3 class="section-title">Manual hash submission</h3>
+          <ion-list>
+            <ion-item>
+              <ion-toggle v-model="modSettings.moderationClickToSubmit" @ionChange="saveModerationSettings">
+                Click post on Home feed to submit post-body hash
+              </ion-toggle>
+            </ion-item>
+          </ion-list>
+          <p class="helper-text">
+            Uses SHA-256 over the post body only (no username/author fields) and sends it to the selected moderation API.
+          </p>
+        </div>
+      </div>
+
       <!-- NETWORK TAB -->
       <div v-if="activeTab === 'network'">
+        <!-- Privacy & Tor / Anonymity Mode -->
+        <div class="section">
+          <div class="status-header">
+            <h3 class="section-title">Privacy &amp; Tor</h3>
+            <ion-badge :color="anonymityMode ? 'success' : 'medium'">
+              <ion-icon :icon="shieldCheckmarkOutline" class="mr-1" />
+              {{ anonymityMode ? 'Anonymity ON' : 'Anonymity OFF' }}
+            </ion-badge>
+          </div>
+          <p class="section-subtitle">Harden the app for anonymous use over Tor.</p>
+
+          <ion-list>
+            <ion-item lines="none">
+              <ion-toggle v-model="anonymityMode" @ionChange="onAnonymityToggle">
+                Anonymity (Tor) Mode
+              </ion-toggle>
+            </ion-item>
+          </ion-list>
+
+          <div class="tor-explainer">
+            <p>
+              <strong>A web app can't route its own traffic through Tor.</strong>
+              To actually be anonymous, open InterPoll in
+              <a href="https://www.torproject.org" target="_blank" rel="noopener noreferrer" class="link-primary">Tor Browser</a>
+              (or route this browser through Tor / Orbot on mobile).
+            </p>
+            <p>
+              This mode makes the app <em>safe</em> under Tor: it disables the WebRTC
+              peer mesh — which leaks your real IP via STUN even inside Tor Browser —
+              and prefers <code>.onion</code> relays. Peer-to-peer / mesh sync pauses
+              while it's on; relay sync keeps working.
+            </p>
+          </div>
+
+          <div v-if="anonymityMode" class="tor-route-status">
+            <div class="tor-status-line" :class="activeRelayIsOnion ? 'ok' : 'warn'">
+              <ion-icon :icon="activeRelayIsOnion ? lockClosedOutline : warningOutline" />
+              <span v-if="activeRelayIsOnion">
+                Active relay is a <code>.onion</code> address — routed via Tor hidden service.
+              </span>
+              <span v-else>
+                Active relay is <strong>clearnet</strong> — safe only inside Tor Browser.
+                Add a <code>.onion</code> relay in Relay Configuration below for hidden-service routing.
+              </span>
+            </div>
+
+            <ion-button size="small" fill="outline" :disabled="torChecking" @click="checkTorStatus" class="mt-2">
+              <ion-icon slot="start" :icon="refreshOutline" />
+              {{ torChecking ? 'Checking…' : 'Check Tor status' }}
+            </ion-button>
+            <div
+              v-if="torStatus.checked"
+              class="tor-check-result"
+              :class="torStatus.isTor === true ? 'ok' : torStatus.isTor === false ? 'warn' : 'unknown'"
+            >
+              {{ torStatus.note }}
+            </div>
+          </div>
+
+          <div class="separator"></div>
+        </div>
+
         <!-- Connection Status -->
         <div class="section">
           <div class="status-header">
@@ -541,11 +679,21 @@
           <div class="metrics-grid">
             <div class="metric-card">
               <div class="metric-value">{{ networkStatus.peerCount }}</div>
-              <div class="metric-label">Active Peers</div>
+              <div class="metric-label">Relay Peers</div>
             </div>
             <div class="metric-card">
-              <div class="metric-value">{{ networkStatus.gunPeerCount }}</div>
-              <div class="metric-label">DB Peers</div>
+              <div class="metric-value">{{ networkStatus.gunConnectedCount }}</div>
+              <div class="metric-label">Sync Peers</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-value">
+                {{ networkStatus.gunConnectedCount }}/{{ networkStatus.gunPeerCount }}
+              </div>
+              <div class="metric-label">DB Relays</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-value">{{ networkStatus.gunAvgLatencyMs != null ? networkStatus.gunAvgLatencyMs + 'ms' : '—' }}</div>
+              <div class="metric-label">DB Latency</div>
             </div>
             <div class="metric-card">
               <div class="metric-value">{{ networkStatus.blockHeight }}</div>
@@ -558,6 +706,96 @@
               <div class="metric-label">Chain Status</div>
             </div>
           </div>
+          <div v-if="networkStatus.registrationRejected" class="reg-gate-hint">
+            <ion-icon :icon="lockClosedOutline"></ion-icon>
+            <span>
+              Connected to the relay, but joining its peer list requires signing in.
+              You're still syncing over {{ networkStatus.gunConnectedCount }} Gun peer{{ networkStatus.gunConnectedCount !== 1 ? 's' : '' }} — sign in to also appear in the relay peer network.
+            </span>
+          </div>
+          <div class="separator"></div>
+        </div>
+
+        <!-- Gun DB Relay Peers -->
+        <div class="section">
+          <div class="status-header">
+            <h3 class="section-title">GunDB Relay Peers</h3>
+            <ion-badge color="primary">{{ networkStatus.gunConnectedCount }}/{{ gunPeersList.length }}</ion-badge>
+          </div>
+          <p class="section-subtitle">Gun connects to all peers simultaneously for maximum resilience. Data syncs across all of them.</p>
+
+          <!-- Current peer list -->
+          <div class="gun-peers-list">
+            <div
+              v-for="peer in gunPeersDetail.length ? gunPeersDetail : gunPeersList.map(u => ({ url: u, connected: false }))"
+              :key="peer.url"
+              class="gun-peer-row"
+            >
+              <div class="gun-peer-info">
+                <span class="gun-peer-dot" :class="{ online: peer.connected }"></span>
+                <div class="gun-peer-text">
+                  <span class="gun-peer-label">{{ labelForGunUrl(peer.url) }}</span>
+                  <span class="gun-peer-url">{{ peer.url }}</span>
+                </div>
+              </div>
+              <div class="gun-peer-meta">
+                <span v-if="peer.latencyMs != null" class="gun-peer-latency">{{ peer.latencyMs }}ms</span>
+                <span class="gun-peer-status" :class="peer.connected ? 'state-ok' : 'state-off'">
+                  {{ peer.connected ? 'Live' : 'Connecting…' }}
+                </span>
+                <ion-button
+                  v-if="gunPeersList.length > 1"
+                  fill="clear"
+                  size="small"
+                  color="danger"
+                  @click="removeGunPeer(peer.url)"
+                >
+                  <ion-icon :icon="trashOutline" slot="icon-only"></ion-icon>
+                </ion-button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Add from presets -->
+          <div class="relay-field mt-3" v-if="availableGunPresets.length">
+            <label class="relay-label">Add from presets</label>
+            <div class="gun-preset-row">
+              <select v-model="selectedGunPreset" class="relay-input relay-select">
+                <option value="">— choose a preset —</option>
+                <option v-for="p in availableGunPresets" :key="p.url" :value="p.url">{{ p.label }}</option>
+              </select>
+              <ion-button size="small" :disabled="!selectedGunPreset" @click="addGunPeerFromPreset">
+                <ion-icon :icon="addOutline" slot="icon-only"></ion-icon>
+              </ion-button>
+            </div>
+          </div>
+
+          <!-- Add custom URL -->
+          <div class="relay-field mt-2">
+            <label class="relay-label">Add custom URL</label>
+            <div class="gun-preset-row">
+              <input
+                v-model="newGunPeerUrl"
+                type="text"
+                class="relay-input"
+                placeholder="https://your-relay.example.com/gun"
+                @keyup.enter="addGunPeerFromInput"
+              />
+              <ion-button size="small" :disabled="!newGunPeerUrl.trim()" @click="addGunPeerFromInput">
+                <ion-icon :icon="addOutline" slot="icon-only"></ion-icon>
+              </ion-button>
+            </div>
+          </div>
+
+          <ion-button
+            fill="outline"
+            color="medium"
+            size="small"
+            class="mt-2"
+            @click="resetGunPeersToDefaults"
+          >
+            Reset to defaults
+          </ion-button>
           <div class="separator"></div>
         </div>
 
@@ -983,8 +1221,28 @@
             class="hidden-input"
             @change="handleImportFile"
           />
+          <div class="separator"></div>
+        </div>
+
+        <!-- Build Info -->
+        <div class="section">
+          <h3 class="section-title">About this build</h3>
+          <ion-list>
+            <ion-item>
+              <ion-label>Build Hash</ion-label>
+              <ion-text slot="end" class="build-hash">{{ buildHash }}</ion-text>
+            </ion-item>
+            <ion-item>
+              <ion-label>Built at</ion-label>
+              <ion-text slot="end" class="build-time">{{ formatBuildTime }}</ion-text>
+            </ion-item>
+          </ion-list>
+          <p class="helper-text">
+            Use these identifiers when reporting issues or checking if you're running the latest version.
+          </p>
         </div>
       </div>
+      </DesktopPageShell>
     </ion-content>
   </ion-page>
 </template>
@@ -1033,6 +1291,51 @@
   margin: 8px 0;
   line-height: 1.5;
 }
+
+/* Privacy & Tor */
+.tor-explainer {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ion-color-medium);
+  margin: 4px 0 8px;
+}
+.tor-explainer p { margin: 6px 0; }
+.tor-explainer code,
+.tor-status-line code {
+  font-size: 12px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(var(--ion-text-color-rgb), 0.08);
+}
+.tor-route-status { margin-top: 8px; }
+.tor-status-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+.tor-status-line ion-icon { flex: 0 0 auto; margin-top: 2px; font-size: 18px; }
+.tor-status-line.ok {
+  background: rgba(var(--ion-color-success-rgb), 0.12);
+  color: var(--ion-color-success-shade);
+}
+.tor-status-line.warn {
+  background: rgba(var(--ion-color-warning-rgb), 0.14);
+  color: var(--ion-color-warning-shade);
+}
+.tor-check-result {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+.tor-check-result.ok { background: rgba(var(--ion-color-success-rgb), 0.12); color: var(--ion-color-success-shade); }
+.tor-check-result.warn { background: rgba(var(--ion-color-danger-rgb), 0.12); color: var(--ion-color-danger-shade); }
+.tor-check-result.unknown { background: rgba(var(--ion-text-color-rgb), 0.06); color: var(--ion-color-medium); }
 
 /* Moderation Tab */
 .range-row {
@@ -1228,6 +1531,26 @@
 }
 
 /* Network Status */
+.reg-gate-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 193, 7, 0.06);
+  border: 1px solid rgba(255, 193, 7, 0.18);
+  font-size: 12px;
+  line-height: 1.45;
+  opacity: 0.85;
+}
+
+.reg-gate-hint ion-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--ion-color-warning);
+}
+
 .status-header {
   display: flex;
   justify-content: space-between;
@@ -1409,6 +1732,109 @@
   gap: 8px;
 }
 
+/* Gun Relay Peers */
+.gun-peers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.gun-peer-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: rgba(var(--ion-text-color-rgb), 0.03);
+  border: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
+  border-radius: 10px;
+  gap: 8px;
+}
+
+.gun-peer-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.gun-peer-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ion-color-medium);
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+
+.gun-peer-dot.online {
+  background: var(--ion-color-success);
+  box-shadow: 0 0 6px rgba(var(--ion-color-success-rgb), 0.5);
+}
+
+.gun-peer-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.gun-peer-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ion-text-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gun-peer-url {
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--ion-color-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gun-peer-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.gun-peer-latency {
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--ion-color-medium);
+  background: rgba(var(--ion-text-color-rgb), 0.06);
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.gun-peer-status {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 8px;
+}
+
+.gun-preset-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.gun-preset-row .relay-input {
+  flex: 1;
+}
+
+.relay-select {
+  appearance: none;
+  cursor: pointer;
+}
+
 /* Servers & Peers */
 .empty-state {
   display: flex;
@@ -1568,11 +1994,19 @@
   margin-top: 6px;
   line-height: 1.4;
 }
+
+.build-hash,
+.build-time {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  color: var(--ion-color-medium);
+  text-align: right;
+}
 </style>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { useRouter } from 'vue-router';
+import DesktopPageShell from '../components/DesktopPageShell.vue';
 import {
   IonPage,
   IonHeader,
@@ -1601,6 +2035,7 @@ import {
   IonChip,
   IonInput,
   IonSpinner,
+  IonText,
   alertController,
   toastController,
   onIonViewWillEnter
@@ -1618,7 +2053,10 @@ import {
   copyOutline,
   eyeOutline,
   closeCircleOutline,
-  checkmarkCircleOutline
+  checkmarkCircleOutline,
+  addOutline,
+  lockClosedOutline,
+  shieldCheckmarkOutline
 } from 'ionicons/icons';
 import { PinningService } from '../services/pinningService';
 import { StorageManager } from '../services/storageManager';
@@ -1630,19 +2068,21 @@ import { StorageService } from '../services/storageService';
 import { KeyService } from '../services/keyService';
 import { RelayManager } from '../services/relayManager';
 import { RelayHealthService } from '../services/relayHealthService';
+import { WebRTCService } from '../services/webrtcService';
+import { MeshService } from '../services/meshService';
 import { BootstrapInviteService, type BootstrapEndpoint } from '../services/bootstrapInviteService';
 import { useChainStore } from '../stores/chainStore';
 import { useCommunityStore } from '../stores/communityStore';
 import config from '../config';
-import { ModerationService, moderationVersion, type ModerationSettings, type WordCategory } from '../services/moderationService';
+import { ModerationService, moderationVersion, MODERATION_API_DEFAULT_BASE_URL, type ModerationSettings, type WordCategory } from '../services/moderationService';
 import { getEnabledVersions, setEnabledVersions, probeForVersions, availableVersions, type DataVersion } from '../utils/dataVersionSettings';
 import { GUN_NAMESPACE } from '../services/gunService';
-import { betaFeatures, setBetaFeature } from '../utils/betaFeatures';
 import { useFeedPreferences } from '../composables/useFeedPreferences';
 import type { FeedMode, FeedRankingWeights } from '../services/feedPreferencesService';
+import { BUILD_HASH, BUILD_TIME } from '../utils/buildHash';
 import UserIdentityBadge from '../components/UserIdentityBadge.vue';
+import { GUN_RELAY_PRESETS, isValidGunUrl, labelForGunUrl, DEFAULT_GUN_PEERS } from '../services/gunRelayPresets';
 
-const router = useRouter();
 const chainStore = useChainStore();
 const communityStore = useCommunityStore();
 const importFileInput = ref<HTMLInputElement | null>(null);
@@ -1663,10 +2103,6 @@ const {
 const newFeedIncludeKeyword = ref('');
 const newFeedExcludeKeyword = ref('');
 
-function onToggleResilienceBeta(ev: CustomEvent) {
-  setBetaFeature('resilience', ev.detail.checked);
-}
-
 const storageStats = ref({ used: 0, quota: 0, pinnedItems: 0 });
 
 const policy = ref({
@@ -1682,6 +2118,22 @@ const policy = ref({
 const isDarkMode = ref(false);
 const userProfile = ref<any>(null);
 const deviceId = ref('');
+const buildHash = BUILD_HASH;
+const formatBuildTime = computed(() => {
+  if (BUILD_TIME === 'unknown' || BUILD_TIME === 'development') return BUILD_TIME;
+  try {
+    const date = new Date(BUILD_TIME);
+    return date.toLocaleString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch {
+    return BUILD_TIME;
+  }
+});
 
 // Data version toggles — dynamic, based on GunDB probe
 const currentNamespace = GUN_NAMESPACE;
@@ -1831,6 +2283,9 @@ const modSettings = ref<ModerationSettings>(ModerationService.getSettings());
 const newBlockedWord = ref('');
 const newAllowedWord = ref('');
 const testText = ref('');
+const moderationApiKeyInput = ref('');
+const moderationAuthMessage = ref('Not authenticated.');
+const moderationDefaultApiUrl = MODERATION_API_DEFAULT_BASE_URL;
 
 const wordCategories = computed(() => {
   const list = ModerationService.getDefaultWordList();
@@ -1861,7 +2316,20 @@ function onKarmaRangeChange(ev: CustomEvent) {
 }
 
 function saveModerationSettings() {
+  if (modSettings.value.moderationProvider === 'interpoll') {
+    modSettings.value.moderationApiBaseUrl = moderationDefaultApiUrl;
+  }
   ModerationService.saveSettings({ ...modSettings.value });
+  moderationAuthMessage.value = modSettings.value.moderationApiKey.trim()
+    ? 'Authenticated key is stored.'
+    : 'Not authenticated.';
+}
+
+function onModerationProviderChange() {
+  if (modSettings.value.moderationProvider === 'interpoll') {
+    modSettings.value.moderationApiBaseUrl = moderationDefaultApiUrl;
+  }
+  saveModerationSettings();
 }
 
 function toggleCategory(catId: WordCategory, ev: CustomEvent) {
@@ -1907,10 +2375,40 @@ async function resetModerationDefaults() {
   const defaults = ModerationService.getDefaultSettings();
   ModerationService.saveSettings(defaults);
   modSettings.value = ModerationService.getSettings();
+  moderationApiKeyInput.value = '';
+  moderationAuthMessage.value = 'Not authenticated.';
   const toast = await toastController.create({
     message: 'Moderation settings reset to defaults',
     duration: 1500,
     color: 'success'
+  });
+  await toast.present();
+}
+
+async function authenticateModerationApi() {
+  const result = await ModerationService.authenticateModerationApiKey(moderationApiKeyInput.value);
+  moderationAuthMessage.value = result.message;
+  if (result.ok) {
+    modSettings.value = ModerationService.getSettings();
+    moderationApiKeyInput.value = '';
+  }
+  const toast = await toastController.create({
+    message: result.message,
+    duration: 2000,
+    color: result.ok ? 'success' : 'warning',
+  });
+  await toast.present();
+}
+
+async function clearModerationApiAuth() {
+  ModerationService.clearModerationApiKey();
+  modSettings.value = ModerationService.getSettings();
+  moderationApiKeyInput.value = '';
+  moderationAuthMessage.value = 'Not authenticated.';
+  const toast = await toastController.create({
+    message: 'Moderation API authentication cleared',
+    duration: 1800,
+    color: 'success',
   });
   await toast.present();
 }
@@ -1926,7 +2424,10 @@ const networkStatus = ref({
   connectedWsUrl: '',
   gunConnected: false,
   peerCount: 0,
+  registrationRejected: false,
   gunPeerCount: 0,
+  gunConnectedCount: 0,
+  gunAvgLatencyMs: undefined as number | undefined,
   blockHeight: 0,
   chainValid: true
 });
@@ -1938,9 +2439,17 @@ const connectionStatusClass = computed(() => {
 });
 
 const connectionStatusLabel = computed(() => {
-  if (networkStatus.value.wsConnected && networkStatus.value.gunConnected) return 'Fully Connected';
+  if (networkStatus.value.wsConnected && networkStatus.value.gunConnected) {
+    const gunPeers = networkStatus.value.gunConnectedCount || networkStatus.value.gunPeerCount;
+    const latency = networkStatus.value.gunAvgLatencyMs;
+    const latencyStr = latency ? ` · ${latency}ms` : '';
+    return `Connected · ${gunPeers} DB peer${gunPeers !== 1 ? 's' : ''}${latencyStr}`;
+  }
   if (networkStatus.value.wsConnected) return 'WS Only';
-  if (networkStatus.value.gunConnected) return 'Gun Only';
+  if (networkStatus.value.gunConnected) {
+    const gunPeers = networkStatus.value.gunConnectedCount || networkStatus.value.gunPeerCount;
+    return `DB Only · ${gunPeers} peer${gunPeers !== 1 ? 's' : ''}`;
+  }
   return 'Disconnected';
 });
 
@@ -1951,6 +2460,78 @@ const bootstrapInviteInput = ref('');
 const generatedBootstrapInvite = ref('');
 const bootstrapImporting = ref(false);
 const bootstrapDiscovering = ref(false);
+
+// Gun multi-relay peers management
+const gunPeersList = ref<string[]>(config.getGunPeers());
+const gunPeersDetail = ref<Array<{ url: string; connected: boolean; latencyMs?: number }>>([]);
+const newGunPeerUrl = ref('');
+const selectedGunPreset = ref('');
+const gunStartupProbeRunning = ref(false);
+
+function refreshGunPeers() {
+  gunPeersList.value = config.getGunPeers();
+  gunPeersDetail.value = GunService.getDetailedPeerStats();
+  gunStartupProbeRunning.value = GunService.presetProbeRunning;
+}
+
+async function addGunPeer(url: string) {
+  const trimmed = url.trim();
+  if (!isValidGunUrl(trimmed)) {
+    const toast = await toastController.create({ message: 'Invalid Gun relay URL', duration: 2000, color: 'warning' });
+    await toast.present();
+    return;
+  }
+  const current = config.getGunPeers();
+  if (current.includes(trimmed)) {
+    const toast = await toastController.create({ message: 'Relay already in list', duration: 1800, color: 'medium' });
+    await toast.present();
+    return;
+  }
+  const updated = [...current, trimmed];
+  config.setGunPeers(updated);
+  GunService.addPeerDynamic(trimmed);
+  refreshGunPeers();
+  const toast = await toastController.create({ message: `Added ${labelForGunUrl(trimmed)}`, duration: 2000, color: 'success' });
+  await toast.present();
+}
+
+async function removeGunPeer(url: string) {
+  const current = config.getGunPeers();
+  if (current.length <= 1) {
+    const toast = await toastController.create({ message: 'Cannot remove last Gun relay', duration: 2000, color: 'warning' });
+    await toast.present();
+    return;
+  }
+  const updated = current.filter(u => u !== url);
+  config.setGunPeers(updated);
+  GunService.reconnect(updated);
+  refreshGunPeers();
+  const toast = await toastController.create({ message: 'Relay removed', duration: 1600, color: 'medium' });
+  await toast.present();
+}
+
+async function addGunPeerFromInput() {
+  await addGunPeer(newGunPeerUrl.value);
+  newGunPeerUrl.value = '';
+}
+
+async function addGunPeerFromPreset() {
+  if (!selectedGunPreset.value) return;
+  await addGunPeer(selectedGunPreset.value);
+  selectedGunPreset.value = '';
+}
+
+async function resetGunPeersToDefaults() {
+  config.resetGunPeers();
+  GunService.reconnect(DEFAULT_GUN_PEERS);
+  refreshGunPeers();
+  const toast = await toastController.create({ message: 'Gun peers reset to defaults', duration: 2000, color: 'success' });
+  await toast.present();
+}
+
+const availableGunPresets = computed(() =>
+  GUN_RELAY_PRESETS.filter(p => !gunPeersList.value.includes(p.url))
+);
 
 // Relay editing
 const editRelay = ref({
@@ -1963,6 +2544,110 @@ const hasCustomRelay = computed(() => {
   const overrides = config.getRelayOverrides();
   return !!(overrides.websocket || overrides.gun || overrides.api);
 });
+
+// ── Anonymity (Tor) Mode ─────────────────────────────────────
+const anonymityMode = ref(config.anonymityMode);
+const torChecking = ref(false);
+const torStatus = ref<{ checked: boolean; isTor: boolean | null; note: string }>({
+  checked: false,
+  isTor: null,
+  note: '',
+});
+
+/** Match `.onion` hosts (end-of-host boundary avoids matching e.g. "onion.example.com"). */
+function isOnionUrl(url: string): boolean {
+  return /\.onion(?::\d+)?(?:\/|$)/i.test(url || '');
+}
+
+const activeRelayIsOnion = computed(() =>
+  isOnionUrl(config.relay.websocket) &&
+  isOnionUrl(config.relay.gun) &&
+  isOnionUrl(config.relay.api),
+);
+
+/** Switch the active relay to a .onion endpoint if one exists. Returns true if switched. */
+async function preferOnionRelay(): Promise<boolean> {
+  try {
+    const onion = RelayManager.getRelayList().find(
+      (r) => r.isTor || isOnionUrl(r.ws) || isOnionUrl(r.gun) || isOnionUrl(r.api),
+    );
+    const active = RelayManager.getActiveRelay();
+    if (onion && onion.id !== active?.id) {
+      await RelayManager.switchToRelay(onion.id);
+      return true;
+    }
+  } catch (e) {
+    console.warn('[Settings] preferOnionRelay failed', e);
+  }
+  return false;
+}
+
+async function onAnonymityToggle() {
+  const on = anonymityMode.value;
+  config.setAnonymityMode(on);
+
+  if (on) {
+    // Kill the IP-leaking peer mesh immediately (tears down live connections).
+    WebRTCService.setEnabled(false);
+    const switched = await preferOnionRelay();
+    const toast = await toastController.create({
+      message: switched
+        ? 'Anonymity Mode on — mesh disabled, switched to a .onion relay.'
+        : 'Anonymity Mode on — peer mesh disabled. Use Tor Browser and add a .onion relay for full anonymity.',
+      duration: 3500,
+      color: 'success',
+    });
+    await toast.present();
+  } else {
+    // Restore the peer mesh (default-on) so P2P sync resumes.
+    WebRTCService.setEnabled(true);
+    MeshService.initialize();
+    torStatus.value = { checked: false, isTor: null, note: '' };
+    const toast = await toastController.create({
+      message: 'Anonymity Mode off — peer mesh re-enabled.',
+      duration: 2500,
+      color: 'medium',
+    });
+    await toast.present();
+  }
+}
+
+/**
+ * Best-effort, on-demand Tor reachability check. Uses the canonical Tor Project
+ * endpoint. Reads the result only if CORS allows; otherwise reports "unknown"
+ * rather than overclaiming. Never runs automatically (no silent egress).
+ */
+async function checkTorStatus() {
+  torChecking.value = true;
+  torStatus.value = { checked: false, isTor: null, note: '' };
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch('https://check.torproject.org/api/ip', {
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+    clearTimeout(timer);
+    const data = await res.json();
+    const isTor = data?.IsTor === true;
+    torStatus.value = {
+      checked: true,
+      isTor,
+      note: isTor
+        ? 'Confirmed: this browser is reaching the network over Tor.'
+        : 'This browser is NOT on Tor. Open InterPoll in Tor Browser to be anonymous.',
+    };
+  } catch {
+    // CORS-blocked or offline — cannot read the result. Do not overclaim.
+    torStatus.value = {
+      checked: true,
+      isTor: null,
+      note: 'Could not verify automatically. Make sure you opened InterPoll in Tor Browser.',
+    };
+  } finally {
+    torChecking.value = false;
+  }
+}
 
 let statusCleanup: (() => void) | null = null;
 let networkPollInterval: ReturnType<typeof setInterval> | null = null;
@@ -1991,6 +2676,15 @@ function shortenUrl(url: string): string {
   } catch {
     return url;
   }
+}
+
+function escapeHtml(value: string): string {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function endpointToKnownServer(
@@ -2175,9 +2869,9 @@ async function importBootstrapInvite() {
     const switchDisabled = probe.overall === 'offline';
     const hasSignatureMetadata = Boolean(artifact.signature?.alg && artifact.signature?.sig);
     const signatureLabel = hasSignatureMetadata ? 'present' : 'none';
-    const sourcePeerLabel = artifact.handoff?.sourcePeerId || artifact.meta?.createdBy || 'unknown';
+    const sourcePeerLabel = escapeHtml(artifact.handoff?.sourcePeerId || artifact.meta?.createdBy || 'unknown');
     const status = artifact.handoff?.status;
-    const connectedServerLabel = artifact.handoff?.connectedServer?.websocket || artifact.endpoint.websocket;
+    const connectedServerLabel = escapeHtml(artifact.handoff?.connectedServer?.websocket || artifact.endpoint.websocket);
     const message = [
       `Probe: ${probe.overall}`,
       `WS: ${probe.ws.reachable ? 'ok' : 'fail'} · Gun: ${probe.gun.reachable ? 'ok' : 'fail'} · API: ${probe.api.reachable ? 'ok' : 'fail'}`,
@@ -2364,7 +3058,10 @@ function refreshNetwork() {
     connectedWsUrl,
     gunConnected: gunStats.isConnected,
     peerCount: WebSocketService.getPeerCount(),
+    registrationRejected: WebSocketService.isRegistrationRejected(),
     gunPeerCount: gunStats.peerCount,
+    gunConnectedCount: gunStats.connectedCount,
+    gunAvgLatencyMs: gunStats.avgLatencyMs,
     blockHeight: chainStore.blocks.length,
     chainValid: chainStore.chainValid
   };
@@ -2372,6 +3069,7 @@ function refreshNetwork() {
   peerList.value = Array.from(peerAddresses.values());
   myPeerId.value = WebSocketService.getPeerId();
   knownServers.value = WebSocketService.getKnownServers();
+  refreshGunPeers();
 }
 
 async function applyRelayConfig() {
@@ -2463,7 +3161,7 @@ async function probeAndSwitchToServer(server: KnownServer) {
   }
 
   const alert = await alertController.create({
-    header: `Switch to ${shortenUrl(server.websocket)}?`,
+    header: `Switch to ${escapeHtml(shortenUrl(server.websocket))}?`,
     message: [
       `Probe: ${probe.overall}`,
       `WS: ${probe.ws.reachable ? 'ok' : 'fail'} · Gun: ${probe.gun.reachable ? 'ok' : 'fail'} · API: ${probe.api.reachable ? 'ok' : 'fail'}`,
@@ -2587,6 +3285,9 @@ onMounted(async () => {
 
   // Load moderation settings (may have migrated legacy minUserKarma)
   modSettings.value = ModerationService.getSettings();
+  moderationAuthMessage.value = modSettings.value.moderationApiKey.trim()
+    ? 'Authenticated key is stored.'
+    : 'Not authenticated.';
 
   // Network polling
   refreshNetwork();
@@ -2739,8 +3440,7 @@ const confirmClearAll = async () => {
           });
           await toast.present();
 
-          await refreshStorageStats();
-          router.push('/home');
+          window.location.href = '/home';
         }
       }
     ]

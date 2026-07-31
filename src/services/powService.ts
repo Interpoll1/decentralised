@@ -1,6 +1,7 @@
 import { CryptoService } from '@/services/cryptoService';
 import { WebSocketService } from '@/services/websocketService';
 import { VoteTrackerService } from '@/services/voteTrackerService';
+import { UserService } from '@/services/userService';
 
 export interface PowChallenge {
   challengeId: string;
@@ -22,7 +23,7 @@ const POW_REQUIRED_TYPES = new Set(['broadcast', 'new-poll', 'new-block']);
 
 const CHALLENGE_TIMEOUT_MS = 10_000;
 const SOLVER_BATCH_SIZE = 5_000;
-const MAX_CLIENT_DIFFICULTY = 28;
+const MAX_CLIENT_DIFFICULTY = 24;
 const MAX_PREFIX_LENGTH = 128;
 const MIN_TTL_MS = 5_000;
 
@@ -104,6 +105,13 @@ export class PowService {
     this.initialize();
 
     const deviceId = await VoteTrackerService.getDeviceId();
+    let identityUsername = '';
+    try {
+      const currentUser = await UserService.getCurrentUser();
+      identityUsername = (currentUser.identityUsername || currentUser.customUsername || currentUser.username || '').trim();
+    } catch (err) {
+      console.warn('[PoW] Proceeding without identity username claim:', err);
+    }
 
     return new Promise<PowChallenge>((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -126,6 +134,7 @@ export class PowService {
         type: 'request-pow',
         deviceId,
         action,
+        identityUsername,
       });
 
       if (!sent) {

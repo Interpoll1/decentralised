@@ -1,0 +1,29 @@
+.ip-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--ip-font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--app-border);
+  background: var(--app-pill-surface);
+  color: var(--app-text-muted);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(var(--glass-item-blur)) saturate(var(--glass-item-saturation));
+  -webkit-backdrop-filter: blur(var(--glass-item-blur)) saturate(var(--glass-item-saturation));
+  transition: color var(--app-transition), border-color var(--app-transition),
+    background var(--app-transition);
+}
+
+.ip-pill--active {
+  color: var(--app-accent);
+  border-color: var(--app-border-accent);
+  background: rgba(var(--app-accent-rgb), 0.1);
+}
+
+.ip-pill__icon {
+  display: inline-flex;
+  font-size: 1.05em;
+}

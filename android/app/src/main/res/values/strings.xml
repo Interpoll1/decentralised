@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">InterPoll</string>
+    <string name="title_activity_main">InterPoll</string>
+    <string name="package_name">com.interpoll.app</string>
+    <string name="custom_url_scheme">com.interpoll.app</string>
+</resources>

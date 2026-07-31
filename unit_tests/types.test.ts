@@ -64,6 +64,7 @@ describe('Type definitions', () => {
         blockIndex: 1,
         voteHash: 'vh',
         chainHeadHash: 'ch',
+        verificationCode: 'word1 word2 word3',
         mnemonic: 'word1 word2 word3',
         timestamp: Date.now(),
         pollId: 'p1',

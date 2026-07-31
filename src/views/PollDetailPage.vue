@@ -16,6 +16,7 @@
     </ion-header>
 
     <ion-content>
+      <DesktopPageShell>
       <!-- Loading -->
       <div v-if="isLoading" class="loading-container">
         <ion-spinner></ion-spinner>
@@ -52,7 +53,11 @@
           </div>
           <h1 class="poll-title">{{ poll.question }}</h1>
           <p class="poll-author">
-            Posted by u/{{ pollAuthorDisplayName }} • {{ formatTime(poll.createdAt) }}
+            Posted by u/{{ pollAuthorDisplayName }}
+            <span v-if="poll.authorShowRealName" class="identity-badge" :class="pollAuthorIdentityClass">
+              {{ pollAuthorIdentityLabel }}
+            </span>
+            • {{ formatTime(poll.createdAt) }}
           </p>
           <p v-if="poll.description" class="poll-description">{{ poll.description }}</p>
           <div class="separator"></div>
@@ -66,6 +71,17 @@
               <div>
                 <strong>{{ actualTotalVotes }}</strong>
                 <span>Total Votes</span>
+                <span
+                  v-if="verifiedTotal > 0"
+                  class="verified-note"
+                  :class="{ inflated: resultsInflated }"
+                  :title="resultsInflated
+                    ? 'Reported total exceeds cryptographically verified votes — showing the verified floor'
+                    : verifiedTotal + ' vote(s) cryptographically verified from signed events'"
+                >
+                  <ion-icon :icon="resultsInflated ? warningOutline : shieldCheckmarkOutline"></ion-icon>
+                  {{ verifiedTotal }} verified
+                </span>
               </div>
             </div>
             <div class="stat-item">
@@ -214,7 +230,8 @@
             <p>Results are hidden until you vote</p>
           </div>
 
-          <div v-else class="poll-results">
+          <!-- Single-track results (no Sybil policy) -->
+          <div v-else-if="!policyActive" class="poll-results">
             <div
               v-for="option in sortedOptions"
               :key="option.id"
@@ -235,13 +252,64 @@
               </div>
             </div>
           </div>
+
+          <!-- Dual-track results (creator set a Sybil-resistance policy) -->
+          <div v-else class="poll-results">
+            <div class="policy-banner">
+              <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
+              <span>
+                The creator requires <strong>{{ tierLabel }}</strong> to count as verified.
+                {{ policyIsGate
+                  ? 'Unverified votes are shown separately and kept out of the verified result.'
+                  : 'Verified and open votes are tallied separately below.' }}
+              </span>
+            </div>
+
+            <div class="result-track">
+              <div class="track-title verified">
+                <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
+                Verified · {{ verifiedTrackTotal }} vote{{ verifiedTrackTotal !== 1 ? 's' : '' }}
+              </div>
+              <div v-for="option in verifiedSorted" :key="`v-${option.id}`" class="result-item">
+                <div class="result-header">
+                  <span class="option-text">{{ option.text }}</span>
+                  <span class="option-percent">{{ verifiedPct(option) }}%</span>
+                </div>
+                <div class="result-bar">
+                  <div class="result-fill" :style="{ width: `${verifiedPct(option)}%` }"></div>
+                </div>
+                <div class="result-votes">{{ verifiedCount(option) }} vote{{ verifiedCount(option) !== 1 ? 's' : '' }}</div>
+              </div>
+              <p v-if="verifiedTrackTotal === 0" class="track-empty">No verified votes yet.</p>
+            </div>
+
+            <div class="result-track open">
+              <div class="track-title">
+                Open · {{ openTrackTotal }} vote{{ openTrackTotal !== 1 ? 's' : '' }}
+                <span class="track-note">(unverified — anyone)</span>
+              </div>
+              <div v-for="option in openSorted" :key="`o-${option.id}`" class="result-item">
+                <div class="result-header">
+                  <span class="option-text">{{ option.text }}</span>
+                  <span class="option-percent">{{ openPct(option) }}%</span>
+                </div>
+                <div class="result-bar">
+                  <div class="result-fill open" :style="{ width: `${openPct(option)}%` }"></div>
+                </div>
+                <div class="result-votes">{{ openCount(option) }} vote{{ openCount(option) !== 1 ? 's' : '' }}</div>
+              </div>
+              <p v-if="openTrackTotal === 0" class="track-empty">No open votes yet.</p>
+            </div>
+          </div>
         </div>
       </div>
+      </DesktopPageShell>
     </ion-content>
   </ion-page>
 </template>
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
+import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage,
@@ -278,24 +346,32 @@ import {
   eyeOffOutline,
   lockClosedOutline,
   shareOutline,
-  copyOutline
+  copyOutline,
+  warningOutline,
+  shieldCheckmarkOutline
 } from 'ionicons/icons';
 import { usePollStore } from '../stores/pollStore';
 import { useChainStore } from '../stores/chainStore';
+import { useUserStore } from '../stores/userStore';
 import { PollService } from '../services/pollService';
 import type { Poll } from '../services/pollService';
+import type { PollOption } from '../types/poll';
+import { useVerifiedPollResults } from '../composables/useVerifiedPollResults';
+import { VoteTierService } from '../services/voteTierService';
 import { UserService } from '../services/userService';
 import { VoteTrackerService } from '../services/voteTrackerService';
 import { AuditService } from '../services/auditService';
 import { GUN_NAMESPACE } from '../services/gunService';
 import type { Vote } from '../types/chain';
 import { generatePseudonym } from '../utils/pseudonym';
+import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 import config from '../config';
 
 const route = useRoute();
 const router = useRouter();
 const pollStore = usePollStore();
 const chainStore = useChainStore();
+const userStore = useUserStore();
 
 const poll = ref<Poll | null>(null);
 const isLoading = ref(true);
@@ -307,6 +383,8 @@ const currentUserId = ref('');
 const inviteCodes = ref<{ code: string; used: boolean }[]>([]);
 const isLoadingCodes = ref(false);
 const loadPollRequestId = ref(0);
+const pollAuthorTrustLevel = ref<'trusted-issuer' | 'unverified'>('unverified');
+let pollAuthorTrustRequestId = 0;
 
 function readVotedPolls(): string[] {
   try {
@@ -335,6 +413,19 @@ const pollAuthorDisplayName = computed(() => {
   return poll.value.authorName || 'anon';
 });
 
+const pollAuthorIdentityLabel = computed(() =>
+  pollAuthorTrustLevel.value === 'trusted-issuer'
+    ? formatTrustedIdentityLabel({
+      username: poll.value?.authorName,
+      issuer: userStore.profiles[poll.value?.authorId || '']?.identityIssuer,
+    })
+    : 'Unverified identity'
+);
+
+const pollAuthorIdentityClass = computed(() =>
+  pollAuthorTrustLevel.value === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'
+);
+
 const canSubmitVote = computed(() => {
   if (poll.value?.allowMultipleChoices) {
     return selectedOptions.value.length > 0;
@@ -342,15 +433,31 @@ const canSubmitVote = computed(() => {
   return selectedOption.value !== '';
 });
 
-const sortedOptions = computed(() => {
-  if (!poll.value) return [];
-  return [...poll.value.options].sort((a, b) => b.votes - a.votes);
-});
+// Verified results (CRITICAL-2): the displayed total and result bars are anchored
+// to the signature-verified tally, not the forgeable Gun counts. See
+// useVerifiedPollResults. `actualTotalVotes` collapses to the verified floor when
+// the reported total reads as inflated.
+const results = useVerifiedPollResults(poll);
+const sortedOptions = results.sortedOptions;
+const actualTotalVotes = results.displayTotal;
+const verifiedTotal = results.verifiedTotal;
+const resultsInflated = computed(() => results.trust.value === 'inflated');
 
-const actualTotalVotes = computed(() => {
-  if (!poll.value || !poll.value.options) return 0;
-  return poll.value.options.reduce((sum, option) => sum + (option.votes || 0), 0);
-});
+// Sybil-resistance dual tracks (flattened for the template).
+const policyActive = results.policyActive;
+const TIER_LABELS: Record<string, string> = {
+  open: 'no verification', pow: 'proof-of-work', relay: 'a verified device/login', issuer: 'a verified identity',
+};
+const tierLabel = computed(() => TIER_LABELS[results.policy.value.requiredTier] || results.policy.value.requiredTier);
+const policyIsGate = computed(() => results.policy.value.mode === 'gate');
+const verifiedSorted = computed(() => results.verified.sortedOptions.value);
+const openSorted = computed(() => results.open.sortedOptions.value);
+const verifiedTrackTotal = computed(() => results.verified.total.value);
+const openTrackTotal = computed(() => results.open.total.value);
+const verifiedCount = (o: PollOption) => results.verified.count(o);
+const openCount = (o: PollOption) => results.open.count(o);
+const verifiedPct = (o: PollOption) => Math.round(results.verified.percent(o));
+const openPct = (o: PollOption) => Math.round(results.open.percent(o));
 
 function formatTime(timestamp: number): string {
   const now = Date.now();
@@ -386,10 +493,23 @@ function getTimeRemaining(): string {
   return 'Ending soon';
 }
 
-function getOptionPercent(option: { votes: number }): number {
-  const total = actualTotalVotes.value;
-  if (total === 0) return 0;
-  return Math.round((option.votes / total) * 100);
+watch(
+  () => [poll.value?.authorId, poll.value?.authorShowRealName] as const,
+  async ([authorId, authorShowRealName]) => {
+    const requestId = ++pollAuthorTrustRequestId;
+    if (!authorId || !authorShowRealName) {
+      pollAuthorTrustLevel.value = 'unverified';
+      return;
+    }
+    const profile = await userStore.getProfile(authorId);
+    if (requestId !== pollAuthorTrustRequestId) return;
+    pollAuthorTrustLevel.value = profile?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified';
+  },
+  { immediate: true }
+);
+
+function getOptionPercent(option: PollOption): number {
+  return Math.round(results.percent(option));
 }
 
 function blurActiveElement() {
@@ -427,7 +547,7 @@ async function submitVote() {
     }
 
     const authorization = await AuditService.authorizeVote(poll.value.id, deviceId, !!poll.value.requireLogin)
-    if (!authorization.allowed || !authorization.reservationToken) {
+    if (!authorization.allowed) {
       if (authorization.requiresAuth) {
         await presentToast('Sign in is required before voting on this poll', 3000)
         AuditService.saveReturnUrl(route.fullPath)
@@ -453,9 +573,13 @@ async function submitVote() {
       new Promise((_, reject) => setTimeout(() => reject(new Error('chain timeout')), 5000))
     ]).catch(() => {})
 
+    const evidence = await VoteTierService.gatherEvidence(poll.value)
+
     const vote: Vote = {
       pollId: poll.value.id,
       choice: choiceText,
+      optionIds,
+      ...evidence,
       timestamp: Date.now(),
       deviceId
     }
@@ -478,18 +602,20 @@ async function submitVote() {
     const gunRelayBase = config.relay.gun.replace(/\/gun$/, '')
 
     void (async () => {
-      try {
-        const confirmedByBackend = await AuditService.confirmVote(
-          pollIdForSync,
-          deviceId,
-          authorization.reservationToken,
-          !!poll.value?.requireLogin,
-        )
-        if (!confirmedByBackend) {
-          console.warn('Vote confirm request failed after chain vote')
+      if (authorization.reservationToken) {
+        try {
+          const confirmedByBackend = await AuditService.confirmVote(
+            pollIdForSync,
+            deviceId,
+            authorization.reservationToken,
+            !!poll.value?.requireLogin,
+          )
+          if (!confirmedByBackend) {
+            console.warn('Vote confirm request failed after chain vote')
+          }
+        } catch (confirmError) {
+          console.warn('Vote confirm request failed after chain vote:', confirmError)
         }
-      } catch (confirmError) {
-        console.warn('Vote confirm request failed after chain vote:', confirmError)
       }
 
       try {
@@ -559,7 +685,7 @@ async function submitVote() {
     })()
 
     await presentToast('Vote recorded. Network sync will continue in the background.')
-    void router.push(`/receipt/${receipt.mnemonic}`)
+    void router.push(`/receipt/${receipt.verificationCode}`)
 
   } catch (error) {
     console.error('Vote error:', error);
@@ -817,6 +943,26 @@ watch(
   margin: 0 0 12px 0;
 }
 
+.identity-badge {
+  display: inline-block;
+  border-radius: 10px;
+  padding: 1px 8px;
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.identity-badge.unverified {
+  background: rgba(var(--ion-color-warning-rgb), 0.16);
+  color: var(--ion-color-warning-shade);
+}
+
+.identity-badge.trusted-issuer {
+  background: rgba(var(--ion-color-success-rgb), 0.14);
+  color: var(--ion-color-success-shade);
+}
+
 .poll-description {
   margin: 0;
   line-height: 1.6;
@@ -1025,5 +1171,55 @@ watch(
   font-size: 14px;
   color: var(--ion-color-medium);
   line-height: 1.5;
+}
+
+.policy-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  border-radius: 8px;
+  background: var(--ion-color-light);
+  border: 1px solid var(--ion-color-step-150, rgba(0,0,0,0.08));
+  font-size: 13px;
+  line-height: 1.4;
+}
+.policy-banner ion-icon {
+  flex-shrink: 0;
+  font-size: 16px;
+  margin-top: 1px;
+  color: var(--ion-color-success);
+}
+.result-track { margin-bottom: 18px; }
+.result-track.open { opacity: 0.85; }
+.track-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--ion-color-medium);
+}
+.track-title.verified { color: var(--ion-color-success); }
+.track-title ion-icon { font-size: 14px; }
+.track-note { font-weight: 400; opacity: 0.75; }
+.track-empty { font-size: 12px; color: var(--ion-color-medium); margin: 2px 0 0; }
+.result-fill.open { background: var(--ion-color-medium); }
+
+.verified-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--ion-color-success);
+}
+.verified-note ion-icon {
+  font-size: 12px;
+}
+.verified-note.inflated {
+  color: var(--ion-color-warning);
 }
 </style>

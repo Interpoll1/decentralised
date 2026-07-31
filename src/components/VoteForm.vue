@@ -39,7 +39,7 @@
         <p class="text-xs">
           <ion-icon :icon="informationCircle" class="align-middle"></ion-icon>
           <strong>One Vote Per Device:</strong> Your device fingerprint will be recorded
-          to prevent duplicate votes. You'll receive a 12-word receipt to verify your vote later.
+          to prevent duplicate votes. You'll receive a 12-word receipt verification code to verify your vote later.
         </p>
       </div>
 
@@ -77,12 +77,14 @@ import { informationCircle, warningOutline } from 'ionicons/icons';
 import { useChainStore } from '../stores/chainStore';
 import { usePollStore } from '../stores/pollStore';
 import { VoteTrackerService } from '../services/voteTrackerService';
-import { Poll, Vote } from '../types/chain';
+import { ChainPollSnapshot, Vote } from '../types/chain';
 import { AuditService } from '../services/auditService';
 import { PollService } from '../services/pollService';
+import type { Poll } from '../types/poll';
+import { VoteTierService } from '../services/voteTierService';
 
 interface Props {
-  poll: Poll;
+  poll: ChainPollSnapshot;
   inviteCode?: string | null;
   requiresInviteCode?: boolean;
 }
@@ -171,7 +173,7 @@ const submitVote = async () => {
 
     // Ask backend (if available) to enforce one-vote-per-device
     const authorization = await AuditService.authorizeVote(props.poll.id, deviceId, !!(props.poll as any).requireLogin);
-    if (!authorization.allowed || !authorization.reservationToken) {
+    if (!authorization.allowed) {
       if (authorization.requiresAuth) {
         const toast = await toastController.create({
           message: 'Sign in is required before voting on this poll',
@@ -193,9 +195,15 @@ const submitVote = async () => {
       return;
     }
 
+    // Gather Sybil-resistance evidence for the poll's required tier (issuer cert
+    // if held; solve vote PoW when required). Never blocks — falls back to Open.
+    const evidence = await VoteTierService.gatherEvidence(props.poll as unknown as Poll);
+
     const vote: Vote = {
       pollId: props.poll.id,
       choice: selectedOption.value,
+      optionIds: [selectedOption.value],
+      ...evidence,
       timestamp: Date.now(),
       deviceId
     };
@@ -214,7 +222,7 @@ const submitVote = async () => {
       console.warn('Failed to persist local vote record after chain vote:', recordError);
     }
 
-    emit('vote-submitted', receipt.mnemonic);
+    emit('vote-submitted', receipt.verificationCode);
     const pollIdForSync = props.poll.id;
     const reservationTokenForSync = authorization.reservationToken;
     const inviteCodeForSync = inviteCode;
@@ -240,18 +248,20 @@ const submitVote = async () => {
         }
       }
 
-      try {
-        const confirmedByBackend = await AuditService.confirmVote(
-          pollIdForSync,
-          deviceId,
-          reservationTokenForSync,
-          !!(props.poll as any).requireLogin,
-        );
-        if (!confirmedByBackend) {
-          console.warn('Vote confirmation request failed after chain vote');
+      if (reservationTokenForSync) {
+        try {
+          const confirmedByBackend = await AuditService.confirmVote(
+            pollIdForSync,
+            deviceId,
+            reservationTokenForSync,
+            !!(props.poll as any).requireLogin,
+          );
+          if (!confirmedByBackend) {
+            console.warn('Vote confirmation request failed after chain vote');
+          }
+        } catch (confirmError) {
+          console.warn('Vote confirmation request failed after chain vote:', confirmError);
         }
-      } catch (confirmError) {
-        console.warn('Vote confirmation request failed after chain vote:', confirmError);
       }
 
       try {

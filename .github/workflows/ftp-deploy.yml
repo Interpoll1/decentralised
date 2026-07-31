@@ -1,0 +1,138 @@
+name: Deploy to FTP
+
+on:
+  push:
+    branches:
+      - prod
+  workflow_dispatch:
+
+# Never let two deploys interleave over FTP — a half-uploaded dist/ means
+# index.html can reference chunks that are not on the server yet.
+concurrency:
+  group: ftp-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      REMOTE_DIR: domains/endless.sbs/public_html
+      CF_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+      CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      # Guard rails: if any of these are missing the deploy would ship a
+      # broken or un-updatable app shell, which is exactly the failure mode
+      # this workflow used to have.
+      - name: Verify build output
+        run: |
+          set -euo pipefail
+          for f in index.html sw.js registerSW.js manifest.webmanifest; do
+            [ -f "dist/$f" ] || { echo "::error::dist/$f is missing"; exit 1; }
+          done
+          ls dist/workbox-*.js >/dev/null 2>&1 || { echo "::error::dist/workbox-*.js is missing"; exit 1; }
+          grep -q 'assets2/index-.*\.js' dist/index.html \
+            || { echo "::error::dist/index.html has no entry script tag"; exit 1; }
+          grep -q 'assets2/.*\.css' dist/index.html \
+            || { echo "::error::dist/index.html has no stylesheet link"; exit 1; }
+          echo "Build output OK:"
+          ls -la dist
+
+      - name: Install lftp
+        run: sudo apt-get update && sudo apt-get install -y lftp
+
+      - name: Deploy dist/ to FTP
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          set -euo pipefail
+          HOST="${FTP_HOST#ftp://}"
+          HOST="${HOST%/}"
+
+          WORKBOX_FILE="$(basename "$(ls dist/workbox-*.js | head -1)")"
+
+          # Back up whatever .htaccess is currently live before we overwrite it,
+          # and print it so it is recoverable from the run log.
+          mkdir -p ftp_backup
+          lftp -u "$FTP_USERNAME","$FTP_PASSWORD" "$HOST" <<LFTP_EOF || true
+          set ssl:verify-certificate no
+          cd $REMOTE_DIR
+          get .htaccess -o ftp_backup/htaccess.bak
+          bye
+          LFTP_EOF
+          if [ -f ftp_backup/htaccess.bak ]; then
+            echo "--- previous remote .htaccess (backup) ---"
+            cat ftp_backup/htaccess.bak
+            echo "--- end backup ---"
+          else
+            echo "No existing remote .htaccess found."
+          fi
+
+          # Upload order matters. Hashed chunks first, then the service worker
+          # and its runtime, then index.html LAST — so there is never a moment
+          # where the shell points at files that have not landed yet.
+          #
+          # No --delete: old hashed chunks stay behind on purpose so that
+          # sessions mid-navigation during a deploy do not 404.
+          lftp -u "$FTP_USERNAME","$FTP_PASSWORD" "$HOST" <<LFTP_EOF
+          set ssl:verify-certificate no
+          set net:max-retries 3
+          set net:timeout 20
+          cd $REMOTE_DIR
+
+          mirror --reverse --verbose --parallel=4 dist/assets2 assets2
+
+          put dist/$WORKBOX_FILE -o $WORKBOX_FILE
+          put dist/manifest.webmanifest -o manifest.webmanifest
+          put dist/og-preview.svg -o og-preview.svg
+          put dist/pwa-icon.svg -o pwa-icon.svg
+          put dist/vite.svg -o vite.svg
+          put dist/.htaccess -o .htaccess
+          put dist/registerSW.js -o registerSW.js
+          put dist/sw.js -o sw.js
+          put dist/index.html -o index.html
+
+          bye
+          LFTP_EOF
+
+      # Cloudflare sits in front of endless.sbs and caches .js by default, so a
+      # fresh sw.js can otherwise sit behind a stale edge copy. Skipped
+      # automatically if the secrets are not configured.
+      - name: Purge Cloudflare cache for the app shell
+        if: ${{ env.CF_ZONE_ID != '' && env.CF_API_TOKEN != '' }}
+        run: |
+          set -euo pipefail
+          curl -sS -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/purge_cache" \
+            -H "Authorization: Bearer ${CF_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data '{"files":[
+              "https://endless.sbs/",
+              "https://endless.sbs/index.html",
+              "https://endless.sbs/sw.js",
+              "https://endless.sbs/registerSW.js",
+              "https://endless.sbs/manifest.webmanifest"
+            ]}'
+
+      - name: Cleanup
+        if: always()
+        run: rm -rf ftp_backup

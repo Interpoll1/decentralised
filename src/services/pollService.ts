@@ -1,9 +1,15 @@
-import { GunService } from './gunService';
+import { GunService, GUN_NAMESPACE } from './gunService';
 import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
 import { StorageService } from './storageService';
 import config from '../config';
 import { AuditService } from './auditService';
+import type { Poll, PollOption, VoteTrustPolicy } from '../types/poll';
+import { BoundedMap } from '../utils/boundedMap';
+
+// Re-exported for backward compatibility — `src/types/poll.ts` is now the
+// single source of truth for these types; import from there in new code.
+export type { Poll, PollOption };
 
 function getApiBase(): string {
   return config.relay.api;
@@ -11,37 +17,6 @@ function getApiBase(): string {
 
 function getGunRelayBase(): string {
   return config.relay.gun.replace(/\/gun$/, '');
-}
-
-export interface PollOption {
-  id: string;
-  text: string;
-  votes: number;
-  voters: string[];
-}
-
-export interface Poll {
-  id: string;
-  communityId: string;
-  authorId: string;
-  authorName: string;
-  authorShowRealName?: boolean;
-  question: string;
-  description?: string;
-  options: PollOption[];
-  createdAt: number;
-  expiresAt: number;
-  allowMultipleChoices: boolean;
-  showResultsBeforeVoting: boolean;
-  requireLogin: boolean;
-  isPrivate: boolean;
-  totalVotes: number;
-  isExpired: boolean;
-  authorPubkey?: string;
-  contentSignature?: string;
-  isEncrypted?: boolean;
-  encryptedContent?: string;
-  authTag?: string;
 }
 
 const pollActiveListeners = new Map<string, any>();
@@ -99,49 +74,159 @@ function logPollDebug(category: PollDebugCategory, message: string, meta?: Recor
   console.log(prefix, message);
 }
 
-async function indexForSearch(type: 'post' | 'poll', id: string, data: any) {
-  try {
-    const startedAt = performance.now();
-    logPollDebug('index', 'Indexing started', { type, id });
-    const { IntegrityService } = await import('@/services/integrityService');
-    const body = await IntegrityService.seal(
-      { type, id, data } as Record<string, unknown>,
-      'index',
-    );
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 2500);
-    const apiUrl = new URL(getApiBase(), typeof window !== 'undefined' ? window.location.origin : undefined);
-    const useCredentials = typeof window !== 'undefined' && apiUrl.origin === window.location.origin;
-    try {
-      await fetch(`${getApiBase()}/api/index`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: useCredentials ? 'include' : 'omit',
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-      logPollDebug('index', 'Indexing completed', {
-        type,
-        id,
-        durationMs: Math.round(performance.now() - startedAt),
-      });
-    } finally {
-      clearTimeout(timer);
-    }
-  } catch (err) {
-    logPollDebug('index', 'Indexing failed', {
-      type,
-      id,
-      error: err instanceof Error ? err.message : String(err),
-    });
-    console.warn('Search indexing failed:', err);
-  }
-}
+// Search indexing is not a client concern. The gun-relay process indexes posts
+// and polls off its own Gun write hook (gun-relay/gun-relay-enhanced.js,
+// maybeIndexNode), so anything that reaches the graph is indexed regardless of
+// whether the author was signed in. The old client-side POST to /api/index could
+// never have worked: that endpoint requires a shared secret a browser cannot hold,
+// so every call returned 401 into a swallowed warning — and it paid for a
+// proof-of-work seal on the publish path to do it.
 
 export class PollService {
   private static get gun() { return GunService.getGun(); }
   private static localPollBackupWriteQueue: Promise<void> = Promise.resolve();
   private static getPollPath(pollId: string) { return this.gun.get('polls').get(pollId); }
+
+  /**
+   * Ask the relay's DB mirror whether a poll actually reached it. Gun put acks
+   * fire once local storage accepts the write and read-backs are served from
+   * the local graph, so neither proves the relay holds the data — only an
+   * independent read like this can. Returns true (relay has it), false
+   * (endpoint reachable but poll absent after retries), or null when the
+   * endpoint is unreachable/has no DB (inconclusive).
+   */
+  static async verifyRelayPersistence(pollId: string, deadlineMs = 8000): Promise<boolean | null> {
+    const soul = encodeURIComponent(`${GUN_NAMESPACE}/polls/${pollId}`);
+    const url = `${getGunRelayBase()}/db/soul?soul=${soul}`;
+    const deadline = Date.now() + deadlineMs;
+    const retryDelayMs = 1500;
+    let endpointReachable = false;
+    for (;;) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3000);
+      try {
+        const res = await fetch(url, { signal: controller.signal });
+        if (res.ok) return true;
+        if (res.status === 404) endpointReachable = true;
+      } catch {
+        // Network error / timeout — endpoint state unknown for this attempt.
+      } finally {
+        clearTimeout(timer);
+      }
+      if (Date.now() + retryDelayMs > deadline) {
+        return endpointReachable ? false : null;
+      }
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+    }
+  }
+
+  private static republishLoopStarted = false;
+  private static republishInFlight = false;
+  // Entries are removed only on success, so failures accumulated for the session.
+  private static republishAttempts = new BoundedMap<string, number>({ maxSize: 500, ttlMs: 60 * 60_000 });
+  private static readonly REPUBLISH_MAX_ATTEMPTS = 5;
+  private static readonly REPUBLISH_INTERVAL_MS = 120_000;
+
+  /** Gun-shaped shell + options map for (re)writing a poll — redacts encrypted polls exactly like createPoll. */
+  private static toGunPollRecord(poll: Poll): { record: Record<string, unknown>; optionsMap: Record<string, any> } {
+    const persistedOptions = poll.isEncrypted
+      ? poll.options.map((option) => ({ ...option, text: '🔒 Encrypted option', voters: [] as string[] }))
+      : poll.options;
+    const optionsMap = this.buildOptionsMap(persistedOptions);
+    return {
+      optionsMap,
+      record: {
+        id: poll.id,
+        communityId: poll.communityId,
+        authorId: poll.authorId,
+        authorName: poll.isEncrypted ? 'encrypted' : poll.authorName,
+        authorShowRealName: poll.authorShowRealName || false,
+        question: poll.isEncrypted ? '🔒 Encrypted Poll' : poll.question,
+        description: poll.isEncrypted ? '' : (poll.description || ''),
+        createdAt: poll.createdAt,
+        expiresAt: poll.expiresAt,
+        allowMultipleChoices: poll.allowMultipleChoices,
+        showResultsBeforeVoting: poll.showResultsBeforeVoting,
+        requireLogin: !!poll.requireLogin,
+        isPrivate: !!poll.isPrivate,
+        totalVotes: poll.totalVotes || 0,
+        isExpired: !!poll.isExpired,
+        options: optionsMap,
+        isEncrypted: poll.isEncrypted ? true : undefined,
+        encryptedContent: poll.encryptedContent,
+        authTag: poll.authTag,
+        authorPubkey: poll.authorPubkey,
+        contentSignature: poll.contentSignature,
+      },
+    };
+  }
+
+  /**
+   * Re-push recent locally-backed-up polls the relay does not confirm holding.
+   * Gun never retro-syncs puts made while the relay connection was dead — and a
+   * rate-limited relay can drop messages on an open socket — so without this a
+   * poll created during an outage stays invisible to everyone else forever.
+   */
+  static async republishUnconfirmedPolls(): Promise<void> {
+    if (this.republishInFlight || typeof window === 'undefined') return;
+    this.republishInFlight = true;
+    try {
+      const [map, tombstones] = await Promise.all([
+        this.readLocalPollMap(),
+        this.readLocalPollTombstones(),
+      ]);
+      const now = Date.now();
+      const candidates = Object.values(map).filter((entry) => {
+        const poll = entry?.poll;
+        if (!poll?.id || tombstones[poll.id]) return false;
+        const ageMs = now - (Number.isFinite(entry.backedUpAt) ? entry.backedUpAt : poll.createdAt || 0);
+        if (ageMs > LOCAL_POLL_BACKUP_TTL_MS) return false;
+        return (this.republishAttempts.get(poll.id) || 0) < this.REPUBLISH_MAX_ATTEMPTS;
+      });
+      for (const entry of candidates) {
+        const poll = entry.poll;
+        const confirmed = await this.verifyRelayPersistence(poll.id, 4000);
+        if (confirmed === true) {
+          this.republishAttempts.delete(poll.id);
+          continue;
+        }
+        if (confirmed === null) continue; // verification endpoint unreachable — retry next tick
+        this.republishAttempts.set(poll.id, (this.republishAttempts.get(poll.id) || 0) + 1);
+        const { record, optionsMap } = this.toGunPollRecord(poll);
+        this.warmPollCache(record, optionsMap);
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const recheck = await this.verifyRelayPersistence(poll.id, 8000);
+        if (recheck === true) {
+          this.republishAttempts.delete(poll.id);
+          console.info(`[PollService] Republished poll ${poll.id} to relay after missed sync`);
+        } else {
+          logPollDebug('writes', 'Republish attempt did not confirm', {
+            pollId: poll.id,
+            attempt: this.republishAttempts.get(poll.id),
+          });
+        }
+      }
+    } catch (error) {
+      logPollDebug('writes', 'Republish sweep failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      this.republishInFlight = false;
+    }
+  }
+
+  /** Start the background republish loop (idempotent). Also re-sweeps on Gun instance rebuilds. */
+  static startRepublishLoop(): void {
+    if (this.republishLoopStarted || typeof window === 'undefined') return;
+    this.republishLoopStarted = true;
+    GunService.onReconnect(() => { void this.republishUnconfirmedPolls(); });
+    const tick = () => {
+      void this.republishUnconfirmedPolls().finally(() => {
+        setTimeout(tick, this.REPUBLISH_INTERVAL_MS);
+      });
+    };
+    setTimeout(tick, 20_000);
+  }
   private static getCommunityPollPath(communityId: string, pollId: string) {
     return this.gun.get('communities').get(communityId).get('polls').get(pollId);
   }
@@ -150,6 +235,63 @@ export class PollService {
     const run = this.localPollBackupWriteQueue.then(task, task);
     this.localPollBackupWriteQueue = run.catch(() => {});
     return run;
+  }
+
+  private static sanitizeForGun<T>(value: T): T {
+    if (Array.isArray(value)) {
+      return value.map((item) => this.sanitizeForGun(item)) as T;
+    }
+    if (value && typeof value === 'object') {
+      const out: Record<string, unknown> = {};
+      Object.entries(value as Record<string, unknown>).forEach(([key, entry]) => {
+        if (entry === undefined) return;
+        const sanitized = this.sanitizeForGun(entry);
+        // Gun cannot persist an empty-object child node: it emits "0 length key!"
+        // and the enclosing put never receives an ACK. Drop empty-object values.
+        if (
+          sanitized !== null &&
+          typeof sanitized === 'object' &&
+          !Array.isArray(sanitized) &&
+          Object.keys(sanitized as Record<string, unknown>).length === 0
+        ) {
+          return;
+        }
+        out[key] = sanitized;
+      });
+      return out as T;
+    }
+    return value;
+  }
+
+  private static async registerPollPolicyBestEffort(pollId: string, requireLogin: boolean): Promise<void> {
+    const initialRegistered = await AuditService.registerPollPolicy(pollId, requireLogin);
+    if (initialRegistered) return;
+
+    console.warn(
+      `[PollService] Poll policy registration failed for ${pollId}; continuing decentralized propagation`,
+    );
+    logPollDebug('create', 'Poll policy registration failed; continuing with Gun writes', {
+      pollId,
+      requireLogin,
+    });
+
+    void (async () => {
+      const retryDelaysMs = [1500, 5000, 15000];
+      for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, retryDelaysMs[attempt]));
+        const registered = await AuditService.registerPollPolicy(pollId, requireLogin);
+        if (registered) {
+          logPollDebug('create', 'Poll policy registration retry succeeded', {
+            pollId,
+            attempt: attempt + 1,
+          });
+          return;
+        }
+      }
+      console.warn(
+        `[PollService] Poll policy remained unavailable after retries for ${pollId}; poll stays decentralized and relay-enforced vote policy may be unavailable`,
+      );
+    })();
   }
 
   private static buildPollRecord(pollData: any, options: PollOption[]): Poll | null {
@@ -165,12 +307,31 @@ export class PollService {
       showResultsBeforeVoting: !!pollData.showResultsBeforeVoting,
       requireLogin: !!pollData.requireLogin, isPrivate: !!pollData.isPrivate,
       totalVotes, isExpired: Date.now() > (pollData.expiresAt || 0),
+      upvotes: pollData.upvotes || 0,
+      downvotes: pollData.downvotes || 0,
+      score: (pollData.upvotes || 0) - (pollData.downvotes || 0),
       isEncrypted: pollData.isEncrypted || false,
       encryptedContent: pollData.encryptedContent || undefined,
       authTag: pollData.authTag || undefined,
       authorPubkey: pollData.authorPubkey || undefined,
       contentSignature: pollData.contentSignature || undefined,
+      voteTrustPolicy: this.parseVoteTrustPolicy(pollData.voteTrustPolicy),
     };
+  }
+
+  /** Parse the JSON-string-encoded Sybil-resistance policy stored on the Gun node. */
+  private static parseVoteTrustPolicy(raw: unknown): VoteTrustPolicy | undefined {
+    if (!raw) return undefined;
+    let obj: any = raw;
+    if (typeof raw === 'string') {
+      try { obj = JSON.parse(raw); } catch { return undefined; }
+    }
+    const tiers = ['open', 'pow', 'relay', 'issuer'];
+    const modes = ['separate', 'gate'];
+    if (obj && tiers.includes(obj.requiredTier) && modes.includes(obj.mode)) {
+      return { requiredTier: obj.requiredTier, mode: obj.mode };
+    }
+    return undefined;
   }
 
   private static isOffline(): boolean {
@@ -367,18 +528,24 @@ export class PollService {
   ): Promise<T | null> {
     return new Promise((resolve) => {
       let settled = false;
-      let subscription: any;
-      const cleanup = () => { if (subscription?.off) subscription.off(); };
-      subscription = node.on((value: T | null) => {
-        if (settled || !predicate(value)) return;
+      // `node.on(cb)` returns the *chain*, and chain.off() detaches every
+      // listener on that soul — including unrelated live feed subscriptions
+      // sharing the same path. Gun binds `this` inside the handler to that one
+      // listener, so `this.off()` detaches only ours.
+      node.on(function (this: any, value: T | null) {
+        // Detach as soon as we're done — either we just resolved, or the
+        // timeout already fired and this is a late event.
+        if (settled) { try { this?.off?.(); } catch { /* already detached */ } return; }
+        if (!predicate(value)) return;
         settled = true;
-        cleanup();
+        try { this?.off?.(); } catch { /* already detached */ }
         resolve(value ?? null);
       });
       setTimeout(() => {
         if (settled) return;
         settled = true;
-        cleanup();
+        // The listener detaches itself on its next fire (see above); we can't
+        // detach it from here without tearing down every listener on the soul.
         resolve(null);
       }, timeoutMs);
     });
@@ -408,30 +575,46 @@ export class PollService {
       return votersData.filter((voterId): voterId is string => typeof voterId === 'string');
     }
     if (typeof votersData !== 'object') return [];
-
+    // New format: Gun-native set — { [voterId]: true }
+    // This allows per-voter leaf writes instead of rewriting the full array.
     return Object.entries(votersData)
-      .filter(([key]) => key !== '_')
+      .filter(([key]) => key !== '_' && key !== '#')
       .map(([key, value]) => {
-        if (typeof value === 'string') return value;
         if (value === true || value === 1) return key;
+        // Legacy compat: numeric-indexed { "0": "voter-id" }
+        if (typeof value === 'string') return value;
         return null;
       })
-      .filter((voterId): voterId is string => typeof voterId === 'string');
+      .filter((voterId): voterId is string => typeof voterId === 'string' && voterId.length > 0);
   }
 
-  private static buildVotersMap(voters: string[]): Record<string, string> {
-    return Object.fromEntries(
-      voters.map((voterId, index) => [index, voterId])
-    );
+  /**
+   * Build a Gun-native voter set: { [voterId]: true }
+   * This means adding a voter is a single leaf write (gun.get(optionId).get('voters').get(voterId).put(true))
+   * rather than serialising and rewriting the entire voters array.
+   */
+  private static buildVotersSet(voters: string[]): Record<string, true> {
+    return Object.fromEntries(voters.map(id => [id, true as const]));
   }
 
   private static buildOptionsMap(options: PollOption[]): Record<string, any> {
-    return Object.fromEntries(options.map((option, index) => [index, {
-      id: option.id,
-      text: option.text,
-      votes: option.votes || 0,
-      voters: this.buildVotersMap(option.voters || []),
-    }]));
+    return Object.fromEntries(options.map((option, index) => {
+      // Gun-native set ({ [voterId]: true }) so future incremental voter writes
+      // hit a single leaf instead of rewriting the whole voters collection.
+      const votersSet = this.buildVotersSet(option.voters || []);
+      const entry: Record<string, any> = {
+        id: option.id,
+        text: option.text,
+        votes: option.votes || 0,
+      };
+      // Gun refuses to ACK/persist a node that contains an empty-object child
+      // (emits "0 length key!" and the put callback never fires). Only include
+      // the voters sub-node when it actually has entries.
+      if (Object.keys(votersSet).length > 0) {
+        entry.voters = votersSet;
+      }
+      return [index, entry];
+    }));
   }
 
   // ── API poll fetch (metadata fallback only; vote totals are ignored) ─────────
@@ -460,22 +643,43 @@ export class PollService {
     allowApiOptionFallback = true,
     allowLocalBackupFallback = true,
   ): Promise<Poll | null> {
-    const pollNode = this.getPollPath(pollId);
-    let pollData = await this.onceNode<any>(pollNode, 300);
-    if (!pollData?.id) {
-      pollData = await this.waitForNode<any>(pollNode, (value) => !!value?.id, 1500);
-    }
+    const pollNode    = this.getPollPath(pollId);
+    const optionsNode = pollNode.get('options');
+
+    // ── Parallel fetch: root data and options start at the same time ──────────
+    // Previously these were sequential (root wait → options wait) adding up to
+    // 300+1500+300+1500 = 3.6s worst-case per poll on a slow relay.
+    // Now both fire simultaneously, cutting the wall-clock cost to max(root, options).
+    const [pollData, optionsData] = await Promise.all([
+      this.onceNode<any>(pollNode, 300)
+        .then(d => d?.id ? d : this.waitForNode<any>(pollNode, (v) => !!v?.id, 1500)),
+      this.onceNode<any>(optionsNode, 300)
+        .then(d => this.parsePollOptions(d).length > 0
+          ? d
+          : this.waitForNode<any>(optionsNode, (v) => this.parsePollOptions(v).length > 0, 1500)),
+    ]);
+
     if (!pollData?.id && allowLocalBackupFallback) {
       return this.getLocalPollBackup(pollId);
     }
     if (!pollData?.id) return null;
 
-    let options = await this.loadPollOptions(pollId, allowApiOptionFallback, pollData);
-    // Some relays return poll shells under community scope before global options hydrate.
-    // Fall back to community-scoped options to avoid dropping polls on reload.
+    let options = this.parsePollOptions(optionsData);
+
+    // Inline shell fallback (embedded in root write as redundancy)
+    if (options.length === 0) options = this.parsePollOptions(pollData?.options);
+
+    // Community-scoped fallback if global options are still missing
     if (options.length === 0 && pollData.communityId) {
       options = await this.loadCommunityPollOptions(pollData.communityId, pollId);
     }
+
+    // API metadata-only fallback as last resort
+    if (options.length === 0 && allowApiOptionFallback) {
+      const apiFallback = await this.loadPollFromAPI(pollId);
+      options = apiFallback.options;
+    }
+
     const builtPoll = this.buildPollRecord(pollData, options);
     if (builtPoll) {
       void this.saveLocalPollBackup(builtPoll);
@@ -546,15 +750,15 @@ export class PollService {
   private static warmPollCache(pollData: any, optionsData?: any) {
     if (!pollData?.id) return;
     const pollNode = this.getPollPath(pollData.id);
-    pollNode.put(pollData);
+    pollNode.put(this.sanitizeForGun(pollData));
     if (optionsData && typeof optionsData === 'object') {
-      pollNode.get('options').put(optionsData);
+      pollNode.get('options').put(this.sanitizeForGun(optionsData));
     }
     if (pollData.communityId) {
       const communityNode = this.getCommunityPollPath(pollData.communityId, pollData.id);
-      communityNode.put(pollData);
+      communityNode.put(this.sanitizeForGun(pollData));
       if (optionsData && typeof optionsData === 'object') {
-        communityNode.get('options').put(optionsData);
+        communityNode.get('options').put(this.sanitizeForGun(optionsData));
       }
     }
   }
@@ -809,6 +1013,7 @@ export class PollService {
     requireLogin: boolean;
     isPrivate: boolean;
     inviteCodeCount?: number;
+    voteTrustPolicy?: VoteTrustPolicy;
   }, preGeneratedId?: string): Promise<Poll> {
     const createStartedAt = performance.now();
     logPollDebug('create', 'createPoll entered', {
@@ -835,13 +1040,18 @@ export class PollService {
       showResultsBeforeVoting: data.showResultsBeforeVoting,
       requireLogin: !!data.requireLogin, isPrivate: !!data.isPrivate,
       totalVotes: 0, isExpired: false,
+      voteTrustPolicy: data.voteTrustPolicy,
     };
 
     try {
       const { KeyService }    = await import('./keyService');
       const { CryptoService } = await import('./cryptoService');
       const keyPair    = await KeyService.getKeyPair();
-      const contentHash = CryptoService.hash(JSON.stringify({ question: poll.question, communityId: poll.communityId, timestamp: poll.createdAt }));
+      // Include the Sybil-resistance policy in the signed content hash so a peer
+      // can't silently weaken it (e.g. downgrade to `open`) — NOTE: poll
+      // signatures are not yet verified on read (see security-debt), so this
+      // signs the policy but full tamper-evidence needs read-side verification.
+      const contentHash = CryptoService.hash(JSON.stringify({ question: poll.question, communityId: poll.communityId, timestamp: poll.createdAt, voteTrustPolicy: poll.voteTrustPolicy || null }));
       const signature  = CryptoService.sign(contentHash, keyPair.privateKey);
       poll.authorPubkey      = keyPair.publicKey;
       poll.contentSignature  = signature;
@@ -892,12 +1102,10 @@ export class PollService {
       authTag: poll.authTag,
       authorPubkey: poll.authorPubkey,
       contentSignature: poll.contentSignature,
+      voteTrustPolicy: poll.voteTrustPolicy ? JSON.stringify(poll.voteTrustPolicy) : undefined,
     };
 
-    const policyRegistered = await AuditService.registerPollPolicy(poll.id, poll.requireLogin);
-    if (!policyRegistered) {
-      throw new Error('Failed to register poll policy with relay');
-    }
+    await this.registerPollPolicyBestEffort(poll.id, poll.requireLogin);
 
     const createWriteOptions = { timeoutMs: 15000 } as const;
     const optionWriteOptions = { timeoutMs: 8000, resolveOnTimeout: true } as const;
@@ -1061,18 +1269,19 @@ export class PollService {
       logPollDebug('create', 'Private invite codes generated', { pollId, inviteCount });
     }
 
-    if (!poll.isEncrypted) {
-      void indexForSearch('poll', poll.id, {
-        question: poll.question,
-        description: poll.description || '',
-        authorName: poll.authorName,
-        communitySlug: poll.communityId,
-        createdAt: poll.createdAt,
-      });
+
+    const relayConfirmed = await this.verifyRelayPersistence(pollId);
+    poll.relayConfirmed = relayConfirmed === null
+      ? GunService.getPeerStats().isConnected
+      : relayConfirmed;
+    if (!poll.relayConfirmed) {
+      this.startRepublishLoop();
+      setTimeout(() => { void this.republishUnconfirmedPolls(); }, 15_000);
     }
 
     logPollDebug('create', 'createPoll completed', {
       pollId,
+      relayConfirmed: poll.relayConfirmed,
       durationMs: Math.round(performance.now() - createStartedAt),
     });
     await this.saveLocalPollBackup(poll);
@@ -1124,17 +1333,56 @@ export class PollService {
     return this.buildPollRecord(apiData, apiOptions);
   }
 
+  /**
+   * Read a poll's options by dereferencing each child node.
+   *
+   * When an options map is read cold from a relay, Gun returns the children as
+   * unresolved `{'#': soul}` references rather than inlined objects, so a plain
+   * `.once()` + `parsePollOptions()` sees no `id` on any child and drops every
+   * option (making the whole poll invisible). `.map().once()` resolves each
+   * child soul to its real `{ id, text, votes }` data.
+   */
+  private static readOptionsViaMap(optionsNode: any, timeoutMs = 1800): Promise<PollOption[]> {
+    return new Promise((resolve) => {
+      const collected = new Map<string, PollOption>();
+      let settled = false;
+      let subscription: any;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        if (subscription?.off) subscription.off();
+        const ordered = Array.from(collected.entries())
+          .sort(([a], [b]) => {
+            const na = Number(a); const nb = Number(b);
+            if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+            return a < b ? -1 : a > b ? 1 : 0;
+          })
+          .map(([, option]) => option);
+        resolve(ordered);
+      };
+      subscription = optionsNode.map().once((child: any, key: string) => {
+        if (settled || !child || key === '_' || !child.id) return;
+        collected.set(String(key), {
+          id: child.id,
+          text: child.text || '',
+          votes: child.votes || 0,
+          voters: this.parseVoters(child.voters),
+        });
+      });
+      setTimeout(finish, timeoutMs);
+    });
+  }
+
   static async loadPollOptions(pollId: string, allowApiFallback = true, parentPollData?: any): Promise<PollOption[]> {
     const optionsNode = this.getPollPath(pollId).get('options');
     const optionsData = await this.onceNode<any>(optionsNode, 300);
     const parsed      = this.parsePollOptions(optionsData);
     if (parsed.length > 0) return parsed;
 
-    const liveOptions = await this.waitForNode<any>(
-      optionsNode, (value) => this.parsePollOptions(value).length > 0, 1500,
-    );
-    const liveParsed = this.parsePollOptions(liveOptions);
-    if (liveParsed.length > 0) return liveParsed;
+    // Cold relay reads return child options as unresolved {'#': soul} refs;
+    // dereference each child explicitly so the poll isn't dropped for "0 options".
+    const mapped = await this.readOptionsViaMap(optionsNode, 1800);
+    if (mapped.length > 0) return mapped;
 
     // Root poll writes now redundantly include an inline options map.
     // Use it only after giving the dedicated options child path time to hydrate.
@@ -1159,10 +1407,8 @@ export class PollService {
     const parsed = this.parsePollOptions(optionsData);
     if (parsed.length > 0) return parsed;
 
-    const liveOptions = await this.waitForNode<any>(
-      optionsNode, (value) => this.parsePollOptions(value).length > 0, 1500,
-    );
-    return this.parsePollOptions(liveOptions);
+    // Same cold-relay ref-resolution problem as loadPollOptions; deref children.
+    return this.readOptionsViaMap(optionsNode, 1800);
   }
 
   static async vote(pollId: string, optionIds: string[], voterId: string, communityId?: string): Promise<void> {
@@ -1171,110 +1417,149 @@ export class PollService {
       ?? (communityId ? await this.loadPollFromCommunityPath(communityId, pollId, false, false) : null);
     if (!poll) throw new Error('Poll not found');
     if (poll.isExpired) throw new Error('Poll has expired');
+
     const selectedOptions = poll.options.filter(opt => optionIds.includes(opt.id));
     if (selectedOptions.length === 0) throw new Error('No valid options selected');
     if (!poll.allowMultipleChoices && selectedOptions.length > 1) throw new Error('Multiple choices not allowed');
-    const confirmedOptionIds = selectedOptions.map((option) => option.id);
-    const applyVoteToOptions = (baseOptions: PollOption[]): PollOption[] => baseOptions.map((option) => {
-      if (!confirmedOptionIds.includes(option.id) || option.voters.includes(voterId)) {
-        return option;
+
+    // Only vote on options the voter hasn't already voted for (idempotent)
+    const newVoteOptions = selectedOptions.filter(opt => !opt.voters.includes(voterId));
+    if (newVoteOptions.length === 0) return; // already voted — no-op
+
+    const confirmedOptionIds = newVoteOptions.map(o => o.id);
+
+    // ── Surgical per-leaf writes ────────────────────────────────────────────
+    // Instead of rewriting the full options map on every vote (O(all voters)),
+    // we write only the changed leaves:
+    //   polls/{id}/options/{optionIndex}/voters/{voterId}  = true
+    //   polls/{id}/options/{optionIndex}/votes             = newCount
+    //   polls/{id}/totalVotes                             = newTotal
+    //
+    // Because each voter gets their own leaf, concurrent votes no longer
+    // clobber each other — Gun's last-write-wins applies per-leaf, not per-option.
+    // The totalVotes counter is still a shared counter (one writer at a time),
+    // but it's only bumped AFTER the voter leaf is confirmed, so a lost update
+    // at most under-counts by the number of concurrent votes — not erases them.
+
+    const voteWriteOptions = { timeoutMs: 12000, resolveOnTimeout: true } as const;
+
+    // Build a lookup: option.id → numeric index in the Gun options map
+    const optionIndexById = new Map<string, string>();
+    {
+      // Re-read the raw options node to get the numeric keys Gun uses
+      const rawOptions = await this.onceNode<any>(this.getPollPath(pollId).get('options'), 500);
+      if (rawOptions && typeof rawOptions === 'object') {
+        Object.keys(rawOptions).forEach(key => {
+          if (key === '_') return;
+          const opt = rawOptions[key];
+          if (opt?.id) optionIndexById.set(opt.id, key);
+        });
+      }
+    }
+
+    // Parallel leaf writes for each selected option
+    const leafWrites: Promise<void>[] = [];
+    // Set when an option can't be addressed by leaf key and we must fall back
+    // to rewriting the whole options map.
+    let needsFullOptionsWrite = false;
+    const updatedOptions = poll.options.map(option => {
+      if (!confirmedOptionIds.includes(option.id)) return option;
+
+      const optKey = optionIndexById.get(option.id);
+      const newVotes = (option.votes || 0) + 1;
+
+      if (optKey !== undefined) {
+        // Write voter presence leaf — race-safe: multiple writers all set their own key
+        const rootOptionNode = this.getPollPath(pollId).get('options').get(optKey);
+        leafWrites.push(
+          this.putPromise(rootOptionNode.get('voters').get(voterId), true as any, {
+            ...voteWriteOptions, label: `vote root voter leaf (opt ${optKey})`,
+          }),
+        );
+        // Update vote count — still a shared counter but much smaller payload
+        leafWrites.push(
+          this.putPromise(rootOptionNode.get('votes'), newVotes as any, {
+            ...voteWriteOptions, label: `vote root count (opt ${optKey})`,
+          }),
+        );
+
+        if (poll.communityId) {
+          const commOptionNode = this.getCommunityPollPath(poll.communityId, pollId).get('options').get(optKey);
+          leafWrites.push(
+            this.putPromise(commOptionNode.get('voters').get(voterId), true as any, {
+              ...voteWriteOptions, label: `vote community voter leaf (opt ${optKey})`,
+            }),
+          );
+          leafWrites.push(
+            this.putPromise(commOptionNode.get('votes'), newVotes as any, {
+              ...voteWriteOptions, label: `vote community count (opt ${optKey})`,
+            }),
+          );
+        }
+      } else {
+        // Fallback: this option has no addressable key in the live Gun options
+        // map, so there is no leaf to write. Flag a full options-map rewrite
+        // (the pre-perf behaviour) so the vote still persists.
+        console.warn(`[PollService] option key not found for ${option.id}, falling back to full options write`);
+        needsFullOptionsWrite = true;
+        return { ...option, votes: newVotes, voters: [...option.voters, voterId] };
       }
 
-      return {
-        ...option,
-        votes: (option.votes || 0) + 1,
-        voters: [...option.voters, voterId],
-      };
+      return { ...option, votes: newVotes, voters: [...option.voters, voterId] };
     });
-    const updatedOptions = applyVoteToOptions(poll.options);
+
     const totalVotes = updatedOptions.reduce((sum, opt) => sum + (opt.votes || 0), 0);
-    const optionsMap = this.buildOptionsMap(updatedOptions);
+
+    // Whole-map rewrite fallback for options with no addressable leaf key.
+    if (needsFullOptionsWrite) {
+      const optionsMap = this.buildOptionsMap(updatedOptions);
+      leafWrites.push(
+        this.putPromise(this.getPollPath(pollId).get('options'), optionsMap, {
+          ...voteWriteOptions, label: 'vote root options fallback write',
+        }),
+      );
+      if (poll.communityId) {
+        leafWrites.push(
+          this.putPromise(this.getCommunityPollPath(poll.communityId, pollId).get('options'), optionsMap, {
+            ...voteWriteOptions, label: 'vote community options fallback write',
+          }),
+        );
+      }
+    }
+
+    // Fire all leaf writes in parallel
+    await Promise.all(leafWrites);
+
+    // Update totalVotes counter on root + community path
     const pollPatch = { totalVotes };
-    const voteWriteOptions = { timeoutMs: 12000, resolveOnTimeout: true } as const;
     await Promise.all([
-      this.putPromise(this.getPollPath(pollId).get('options'), optionsMap, { ...voteWriteOptions, label: 'vote root options write' }),
-      this.putPromise(this.getPollPath(pollId), pollPatch, { ...voteWriteOptions, label: 'vote root patch write' }),
+      this.putPromise(this.getPollPath(pollId), pollPatch, { ...voteWriteOptions, label: 'vote root totalVotes' }),
       poll.communityId
-        ? this.putPromise(this.getCommunityPollPath(poll.communityId, pollId).get('options'), optionsMap, { ...voteWriteOptions, label: 'vote community options write' })
-        : Promise.resolve(),
-      poll.communityId
-        ? this.putPromise(this.getCommunityPollPath(poll.communityId, pollId), pollPatch, { ...voteWriteOptions, label: 'vote community patch write' })
+        ? this.putPromise(this.getCommunityPollPath(poll.communityId, pollId), pollPatch, { ...voteWriteOptions, label: 'vote community totalVotes' })
         : Promise.resolve(),
     ]);
 
-    const isVoteApplied = (optionsData: any) => {
-      const parsed = this.parsePollOptions(optionsData);
-      if (parsed.length === 0) return false;
-      return confirmedOptionIds.every((optionId) => parsed.some((opt) => opt.id === optionId && opt.voters.includes(voterId)));
+    // Confirm voter leaf is readable (lighter check than parsing entire options)
+    const isVoterLeafPresent = async (path: any): Promise<boolean> => {
+      const val = await this.onceNode<any>(path, 1500);
+      return val === true;
     };
-    const voteRetryDeadline = Date.now() + 30000;
-    let rootVoteConfirmed = await this.waitForNode<any>(
-      this.getPollPath(pollId).get('options'),
-      (value) => isVoteApplied(value),
-      10000,
-    );
-    for (let attempt = 1; !isVoteApplied(rootVoteConfirmed) && attempt <= 3 && Date.now() < voteRetryDeadline; attempt += 1) {
-      const latestRootOptions = await this.loadPollOptions(pollId, false);
-      const retryRootOptions = applyVoteToOptions(latestRootOptions.length > 0 ? latestRootOptions : updatedOptions);
-      const retryRootOptionsMap = this.buildOptionsMap(retryRootOptions);
-      const retryRootPatch = { totalVotes: retryRootOptions.reduce((sum, opt) => sum + (opt.votes || 0), 0) };
-      await this.putPromise(this.getPollPath(pollId).get('options'), retryRootOptionsMap, {
-        ...voteWriteOptions,
-        label: `vote root options retry write (attempt ${attempt})`,
-      });
-      await this.putPromise(this.getPollPath(pollId), retryRootPatch, {
-        ...voteWriteOptions,
-        label: `vote root patch retry write (attempt ${attempt})`,
-      });
-      rootVoteConfirmed = await this.waitForNode<any>(
-        this.getPollPath(pollId).get('options'),
-        (value) => isVoteApplied(value),
-        10000,
-      );
-      if (!isVoteApplied(rootVoteConfirmed)) {
-        await new Promise((resolve) => setTimeout(resolve, 250));
+
+    const firstOptKey = confirmedOptionIds.length > 0 ? optionIndexById.get(confirmedOptionIds[0]) : undefined;
+    if (firstOptKey !== undefined) {
+      const voterLeafNode = this.getPollPath(pollId).get('options').get(firstOptKey).get('voters').get(voterId);
+      const voteRetryDeadline = Date.now() + 20000;
+      let confirmed = await isVoterLeafPresent(voterLeafNode);
+      for (let attempt = 1; !confirmed && attempt <= 3 && Date.now() < voteRetryDeadline; attempt += 1) {
+        await this.putPromise(voterLeafNode, true as any, { ...voteWriteOptions, label: `voter leaf retry (attempt ${attempt})` });
+        confirmed = await isVoterLeafPresent(voterLeafNode);
+        if (!confirmed) await new Promise(r => setTimeout(r, 250));
+      }
+      if (!confirmed) {
+        throw new Error('Vote write could not be confirmed — voter leaf not readable');
       }
     }
-    if (!isVoteApplied(rootVoteConfirmed)) {
-      throw new Error('Vote write could not be confirmed on root poll options');
-    }
 
-    if (poll.communityId) {
-      void (async () => {
-        let communityVoteConfirmed = await this.waitForNode<any>(
-          this.getCommunityPollPath(poll.communityId, pollId).get('options'),
-          (value) => isVoteApplied(value),
-          10000,
-        );
-        for (let attempt = 1; !isVoteApplied(communityVoteConfirmed) && attempt <= 3 && Date.now() < voteRetryDeadline; attempt += 1) {
-          const latestCommunityOptions = await this.loadCommunityPollOptions(poll.communityId, pollId);
-          const retryCommunityOptions = applyVoteToOptions(latestCommunityOptions.length > 0 ? latestCommunityOptions : updatedOptions);
-          const retryCommunityOptionsMap = this.buildOptionsMap(retryCommunityOptions);
-          const retryCommunityPatch = { totalVotes: retryCommunityOptions.reduce((sum, opt) => sum + (opt.votes || 0), 0) };
-          await this.putPromise(this.getCommunityPollPath(poll.communityId, pollId).get('options'), retryCommunityOptionsMap, {
-            ...voteWriteOptions,
-            label: `vote community options retry write (attempt ${attempt})`,
-          });
-          await this.putPromise(this.getCommunityPollPath(poll.communityId, pollId), retryCommunityPatch, {
-            ...voteWriteOptions,
-            label: `vote community patch retry write (attempt ${attempt})`,
-          });
-          communityVoteConfirmed = await this.waitForNode<any>(
-            this.getCommunityPollPath(poll.communityId, pollId).get('options'),
-            (value) => isVoteApplied(value),
-            10000,
-          );
-          if (!isVoteApplied(communityVoteConfirmed)) {
-            await new Promise((resolve) => setTimeout(resolve, 250));
-          }
-        }
-        if (!isVoteApplied(communityVoteConfirmed)) {
-          console.warn('[PollService] Vote root confirmation succeeded, but community vote path is still lagging');
-        }
-      })().catch((error) => {
-        console.warn('[PollService] Community vote reconciliation failed:', error);
-      });
-    }
     await this.saveLocalPollBackup({
       ...poll,
       options: updatedOptions,
@@ -1285,6 +1570,54 @@ export class PollService {
 
   static async voteOnPoll(pollId: string, optionIds: string[], voterId: string, communityId?: string): Promise<void> {
     return this.vote(pollId, optionIds, voterId, communityId);
+  }
+
+  /**
+   * Content-level upvote/downvote on the poll itself (independent of option voting).
+   * Mirrors PostService.voteOnPost's toggle semantics.
+   */
+  static async voteOnPollContent(
+    pollId: string,
+    direction: 'up' | 'down',
+    userId: string,
+    communityId?: string,
+  ): Promise<{ upvotes: number; downvotes: number; score: number }> {
+    const poll = await this.loadPollFromGun(pollId, false, false)
+      ?? (communityId ? await this.loadPollFromCommunityPath(communityId, pollId, false, false) : null);
+    if (!poll) throw new Error('Poll not found');
+
+    const gun = this.gun;
+    const voteKey = `vote_${userId}_poll_${pollId}`;
+    const existingVote = await this.onceNode<any>(gun.get('votes').get(voteKey), 2000);
+    let upvotes = poll.upvotes || 0;
+    let downvotes = poll.downvotes || 0;
+
+    if (existingVote?.type === 'up') {
+      upvotes = Math.max(0, upvotes - 1);
+    } else if (existingVote?.type === 'down') {
+      downvotes = Math.max(0, downvotes - 1);
+    }
+
+    const togglingOffSameVote = existingVote?.type === direction;
+    if (togglingOffSameVote) {
+      await this.putPromise(gun.get('votes').get(voteKey), null, { label: 'poll content vote clear' });
+    } else {
+      if (direction === 'up') upvotes += 1; else downvotes += 1;
+      await this.putPromise(gun.get('votes').get(voteKey), {
+        userId,
+        pollId,
+        type: direction,
+        timestamp: Date.now(),
+      }, { label: 'poll content vote write' });
+    }
+
+    const score = upvotes - downvotes;
+    const patch = { upvotes, downvotes, score };
+    await this.putPromise(this.getPollPath(pollId), patch, { label: 'poll content vote patch (root)' });
+    if (poll.communityId) {
+      await this.putPromise(this.getCommunityPollPath(poll.communityId, pollId), patch, { label: 'poll content vote patch (community)' });
+    }
+    return patch;
   }
 
   static async getInviteCodes(pollId: string): Promise<{ code: string; used: boolean }[]> {
@@ -1551,7 +1884,7 @@ export class PollService {
         }
         reject(timeoutError);
       }, timeoutMs);
-      node.put(data, (ack: any) => {
+      node.put(this.sanitizeForGun(data), (ack: any) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);

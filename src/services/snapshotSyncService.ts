@@ -39,6 +39,12 @@ export class SnapshotSyncService {
   // Pending offers keyed by peerId, so receiver can look up the hash
   private static pendingOffers: Map<string, SnapshotOffer> = new Map();
 
+  private static async ensureInitialized(): Promise<void> {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+  }
+
   static async initialize(): Promise<void> {
     if (this.initialized) return;
     const { WebSocketService } = await import('./websocketService');
@@ -75,6 +81,8 @@ export class SnapshotSyncService {
   }
 
   static async offerSnapshot(snapshot: NetworkSnapshot): Promise<void> {
+    await this.ensureInitialized();
+
     const json = JSON.stringify(snapshot);
     const hash = await this.computeHash(json);
     this.serializedData = json;
@@ -95,6 +103,8 @@ export class SnapshotSyncService {
   }
 
   static async acceptOffer(peerId: string): Promise<void> {
+    await this.ensureInitialized();
+
     if (this.transfer) {
       this.emitError('A transfer is already in progress');
       return;
@@ -134,6 +144,8 @@ export class SnapshotSyncService {
   }
 
   static async cancelTransfer(reason?: string): Promise<void> {
+    await this.ensureInitialized();
+
     if (!this.transfer) return;
     const { WebSocketService } = await import('./websocketService');
 
@@ -172,7 +184,8 @@ export class SnapshotSyncService {
     this.onProgressCallbacks.clear();
     this.onCompleteCallbacks.clear();
     this.onErrorCallbacks.clear();
-    this.initialized = false;
+    // Keep transport subscriptions active if already initialized; WebSocketService
+    // does not expose unsubscribe and re-subscribing would duplicate handlers.
   }
 
   // --- Internal handlers ---

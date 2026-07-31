@@ -1,7 +1,6 @@
 import { CryptoService } from '@/services/cryptoService';
 import { KeyService } from '@/services/keyService';
-
-const META_FIELDS = new Set(['_hash', '_sig', '_pub', '_pow', '_ts', '_nonce']);
+import { canonicalJSON } from '../../shared-validation/canonical.js';
 
 const POW_DIFFICULTY: Record<string, number> = {
   'new-poll': 16,
@@ -35,30 +34,6 @@ export interface IntegrityMeta {
   _pow: string;
   _ts: number;
   _nonce: string;
-}
-
-function stableStringify(val: unknown): string | undefined {
-  if (val === undefined) return undefined;
-  if (val === null) return 'null';
-  if (typeof val !== 'object') return JSON.stringify(val);
-  if (Array.isArray(val)) {
-    return '[' + val.map((v) => stableStringify(v) ?? 'null').join(',') + ']';
-  }
-  const keys = Object.keys(val as Record<string, unknown>).sort();
-  const pairs: string[] = [];
-  for (const k of keys) {
-    const sv = stableStringify((val as Record<string, unknown>)[k]);
-    if (sv !== undefined) pairs.push(JSON.stringify(k) + ':' + sv);
-  }
-  return '{' + pairs.join(',') + '}';
-}
-
-function canonicalJSON(obj: Record<string, unknown>): string {
-  const stripped: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(obj)) {
-    if (!META_FIELDS.has(k)) stripped[k] = v;
-  }
-  return stableStringify(stripped) ?? '{}';
 }
 
 function hasLeadingZeroBits(hashHex: string, bits: number): boolean {
@@ -114,31 +89,32 @@ export class IntegrityService {
       };
     }
 
-    // 1. Sign — CryptoService.sign() internally hashes with SHA-256 then signs
-    const canonical = canonicalJSON(payload as Record<string, unknown>);
+    // 1. Freshness FIRST, so _ts/_nonce are covered by the signature and hash.
+    //    canonicalJSON no longer strips them (see shared-validation/canonical.js),
+    //    so a captured message can't have _ts/_nonce mutated without invalidating _sig.
+    const ts = Date.now();
+    const nonce = crypto.randomUUID();
+    const sealed = { ...payload, _ts: ts, _nonce: nonce };
+
+    // 2. Sign — CryptoService.sign() internally hashes with SHA-256 then signs
+    const canonical = canonicalJSON(sealed as Record<string, unknown>);
     const privateKey = await KeyService.getPrivateKeyHex();
     const publicKey = await KeyService.getPublicKeyHex();
     const sig = CryptoService.sign(canonical, privateKey);
 
-    // 2. Hash — SHA-256 of canonical JSON
+    // 3. Hash — SHA-256 of canonical JSON
     const hash = CryptoService.hash(canonical);
 
-    // 3. PoW — find nonce where SHA-256(hash + ':' + nonce) has N leading zero bits
+    // 4. PoW — find nonce where SHA-256(hash + ':' + nonce) has N leading zero bits
     const difficulty = POW_DIFFICULTY[type] || POW_DIFFICULTY.DEFAULT;
     const pow = await solveHashcash(hash, difficulty);
 
-    // 4. Freshness
-    const ts = Date.now();
-    const nonce = crypto.randomUUID();
-
     return {
-      ...payload,
+      ...sealed,
       _sig: sig,
       _pub: publicKey,
       _hash: hash,
       _pow: pow,
-      _ts: ts,
-      _nonce: nonce,
     };
   }
 

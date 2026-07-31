@@ -1,0 +1,297 @@
+openapi: 3.0.3
+info:
+  title: Moderation Hash-Match API
+  version: "1.0.0"
+  description: >
+    A standard for a content-moderation hash-matching service. Clients send a
+    hash (e.g. a file's SHA-256, or a perceptual hash like PDQ) and the
+    service reports whether that hash matches a known record in its
+    database, along with category/severity metadata. New hash records can
+    only be ingested by authenticated clients holding a 'write' or 'admin'
+    scoped API key.
+servers:
+  - url: http://localhost:3000/v1
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: "Alternatively, send as 'Authorization: Bearer <key>'."
+
+  schemas:
+    HashAlgorithm:
+      type: string
+      enum: [md5, sha1, sha256, pdq, phash]
+
+    Severity:
+      type: string
+      enum: [low, medium, high, critical]
+
+    HashRecord:
+      type: object
+      required: [hash, algorithm, categories, severity, source, addedAt, updatedAt]
+      properties:
+        hash:
+          type: string
+          example: "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        algorithm:
+          $ref: "#/components/schemas/HashAlgorithm"
+        categories:
+          type: array
+          items:
+            type: string
+          example: ["csam"]
+        severity:
+          $ref: "#/components/schemas/Severity"
+        source:
+          type: string
+          example: "ncmec-feed"
+        addedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+          additionalProperties: true
+
+    HashRecordInput:
+      type: object
+      required: [hash, algorithm, categories, severity, source]
+      properties:
+        hash:
+          type: string
+        algorithm:
+          $ref: "#/components/schemas/HashAlgorithm"
+        categories:
+          type: array
+          items:
+            type: string
+        severity:
+          $ref: "#/components/schemas/Severity"
+        source:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+
+    LookupResult:
+      type: object
+      required: [match, hash, algorithm]
+      properties:
+        match:
+          type: boolean
+        hash:
+          type: string
+        algorithm:
+          $ref: "#/components/schemas/HashAlgorithm"
+        record:
+          $ref: "#/components/schemas/HashRecord"
+
+    ApiError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+              additionalProperties: true
+
+paths:
+  /health:
+    get:
+      summary: Service health and basic stats
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  hashCount:
+                    type: integer
+                  time:
+                    type: string
+                    format: date-time
+
+  /hashes/{hash}:
+    get:
+      summary: Look up a single hash
+      description: >
+        No authentication is required by default for lookups (see README for
+        how to lock this down). Returns match:false rather than 404 when the
+        hash is not found, since "not found" is itself meaningful moderation
+        signal, not an error.
+      parameters:
+        - name: hash
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: algorithm
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/HashAlgorithm"
+            default: sha256
+      responses:
+        "200":
+          description: Lookup result (match true or false)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LookupResult"
+        "400":
+          description: Hash does not match the expected format for the given algorithm
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+    delete:
+      summary: Delete a hash record
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: hash
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: algorithm
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/HashAlgorithm"
+            default: sha256
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Missing or invalid API key
+        "403":
+          description: API key lacks the 'write' or 'admin' scope
+        "404":
+          description: No matching record
+
+  /hashes:
+    post:
+      summary: Submit one or more new hash records
+      description: >
+        Requires an API key with 'write' or 'admin' scope. Accepts either a
+        single HashRecordInput object or an array of up to 1000. Existing
+        hashes are upserted (categories/severity/metadata updated,
+        addedAt preserved).
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/HashRecordInput"
+                - type: array
+                  items:
+                    $ref: "#/components/schemas/HashRecordInput"
+                  minItems: 1
+                  maxItems: 1000
+      responses:
+        "201":
+          description: Created/updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created:
+                    type: integer
+                  records:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/HashRecord"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Missing or invalid API key
+        "403":
+          description: API key lacks the 'write' or 'admin' scope
+
+  /api-keys:
+    post:
+      summary: Create a new API key
+      description: Requires 'admin' scope. The raw key is returned exactly once.
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label, scopes]
+              properties:
+                label:
+                  type: string
+                scopes:
+                  type: array
+                  items:
+                    type: string
+                    enum: [read, write, admin]
+      responses:
+        "201":
+          description: Created
+        "401":
+          description: Missing or invalid API key
+        "403":
+          description: API key lacks 'admin' scope
+
+    get:
+      summary: List API keys (without raw key material)
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Missing or invalid API key
+        "403":
+          description: API key lacks 'admin' scope
+
+  /api-keys/{id}:
+    delete:
+      summary: Revoke an API key
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Revoked
+        "401":
+          description: Missing or invalid API key
+        "403":
+          description: API key lacks 'admin' scope
+        "404":
+          description: No such key
