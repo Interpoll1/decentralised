@@ -24,21 +24,38 @@ export const useChainStore = defineStore('chain', () => {
   const blocks = ref<ChainBlock[]>([]);
   /** index → block, kept in sync with `blocks` by pushBlock/loadBlocks.
    *  handleNewBlock/handleSyncResponse used to `find()` over the whole array per
-   *  incoming block, which made a sync burst O(n²) on a chain that only grows. */
+   *  incoming block, which made a sync burst O(n²) on a chain that only grows.
+   *  Blocks are stored as markRaw — Vue's deep proxy roughly doubled the per-block
+   *  heap cost for no benefit. */
   const blockByIndex = new Map<number, ChainBlock>();
 
-  /** Append a block to the chain and the index. Blocks are immutable once
-   *  written, so `markRaw` skips Vue's deep proxying — that proxy roughly
-   *  doubled the per-block heap cost for no benefit. */
+  /** O(1) duplicate-vote guard for peer-synced blocks.
+   *  Key format: `${pubkey}:${pollId}` (extracted from block.actionLabel).
+   *  Seeded on loadBlocks() and updated in pushBlock().
+   *  Prevents a malicious peer from injecting a double-vote via WebRTC/WS sync. */
+  const voteByPubkeyAndPoll = new Set<string>();
   function pushBlock(block: ChainBlock) {
     const raw = markRaw(block);
     blocks.value.push(raw);
     blockByIndex.set(raw.index, raw);
+    // Keep the vote-dedup index up to date so handleNewBlock can reject
+    // double-vote blocks received from peers in O(1).
+    if (raw.actionType === 'vote' && raw.pubkey && raw.actionLabel) {
+      const pollId = raw.actionLabel.replace(/^Vote on\s+/i, '').trim();
+      if (pollId) voteByPubkeyAndPoll.add(`${raw.pubkey}:${pollId}`);
+    }
   }
 
   function reindexBlocks() {
     blockByIndex.clear();
-    for (const b of blocks.value) blockByIndex.set(b.index, b);
+    voteByPubkeyAndPoll.clear();
+    for (const b of blocks.value) {
+      blockByIndex.set(b.index, b);
+      if (b.actionType === 'vote' && b.pubkey && b.actionLabel) {
+        const pollId = b.actionLabel.replace(/^Vote on\s+/i, '').trim();
+        if (pollId) voteByPubkeyAndPoll.add(`${b.pubkey}:${pollId}`);
+      }
+    }
   }
   const isInitialized = ref(false);
   const isValidating = ref(false);
@@ -263,6 +280,24 @@ export const useChainStore = defineStore('chain', () => {
     }
 
     if (ChainService.validateBlock(block, previousBlock)) {
+      // ── Point 4: Peer vote-dedup check ───────────────────────────────────────
+      // If this is a vote block, check that we haven't already accepted a vote
+      // from the same signing key on the same poll. This catches double-votes
+      // injected via Gun sync, WebRTC P2P, community relay, or Tor paths —
+      // any transport that bypasses the main relay's voteRegistry.
+      if (block.actionType === 'vote' && block.pubkey && block.actionLabel) {
+        const pollId = block.actionLabel.replace(/^Vote on\s+/i, '').trim();
+        if (pollId) {
+          const dedupKey = `${block.pubkey}:${pollId}`;
+          if (voteByPubkeyAndPoll.has(dedupKey)) {
+            console.warn(
+              `[ChainStore] Rejected peer vote block — duplicate vote detected`,
+              `(pubkey=${block.pubkey.slice(0, 12)}…, poll=${pollId}, block.index=${block.index})`,
+            );
+            return; // drop silently; don't request resync (this is an attack, not a gap)
+          }
+        }
+      }
       await StorageService.saveBlock(block);
       pushBlock(block);
       markSyncProgress();

@@ -259,6 +259,15 @@ export class ChainService {
   }
 
   static async addVote(vote: Vote): Promise<{ block: ChainBlock; receipt: string }> {
+    // ── Point 1: O(1) chain-level duplicate-vote guard ────────────────────────
+    // The vote-index store holds one entry per (pollId, deviceId) pair.
+    // This check works offline and across all transport paths (community relay,
+    // WebRTC P2P, Tor) — not just the main relay's voteRegistry Set.
+    const alreadyVoted = await StorageService.hasVoted(vote.pollId, vote.deviceId);
+    if (alreadyVoted) {
+      throw new Error(`Duplicate vote: device ${vote.deviceId} already voted on poll ${vote.pollId}`);
+    }
+
     const previousBlock = await StorageService.getLatestBlock();
 
     if (!previousBlock) {
@@ -274,6 +283,13 @@ export class ChainService {
 
     await StorageService.saveBlock(newBlock);
     await StorageService.saveVote(vote);
+
+    // Update the vote index atomically after the block is committed.
+    // If this write fails the block is already on chain, so we mark best-effort
+    // (worst case the guard misses one duplicate, which the chain-scan fallback catches).
+    await StorageService.markVoted(vote.pollId, vote.deviceId).catch(() => {
+      console.warn('[ChainService] vote-index mark failed; chain still committed');
+    });
 
     const verificationCode = CryptoService.generateVerificationCode();
 

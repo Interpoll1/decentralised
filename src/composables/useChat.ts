@@ -1,139 +1,308 @@
-// useChat.ts - Vue Composable for P2P Chat
-//
-// Thin reactive wrapper over `ChatService`. The service owns durability,
-// ordering and retries; this only mirrors its callbacks into refs.
+/**
+ * useChat.ts
+ *
+ * All chat-related state, subscriptions and handlers extracted from HomePage.vue.
+ * Loaded lazily — only initialised when the user taps the Chat tab for the first time.
+ */
 
-import { ref, onMounted, onUnmounted, shallowRef, type Ref, type ShallowRef } from 'vue';
-import ChatService, { type ChatMessage, type RecipientInfo } from '../services/chatService';
+import { ref, shallowRef } from 'vue';
+import { useRouter } from 'vue-router';
+import { toastController } from '@ionic/vue';
+import { GunService } from '../services/gunService';
+import { StorageService } from '../services/storageService';
+import { ChatInviteService } from '../services/chatInviteService';
+import config from '../config';
+import ChatService from '../services/chatService';
 
-interface UseChatReturn {
-  chat: ShallowRef<ChatService | null>;
-  connected: Ref<boolean>;
-  messages: Ref<Record<string, ChatMessage[]>>;
-  typing: Ref<Record<string, boolean>>;
-  publicKey: Ref<string>;
-  startChat: (recipient: RecipientInfo) => Promise<void>;
-  sendMessage: (recipientId: string, message: string) => Promise<ChatMessage>;
-  sendTyping: (recipientId: string, isTyping: boolean) => void;
-  markAsRead: (recipientId: string) => void;
-  loadHistory: (recipientId: string) => Promise<void>;
-  getMessages: (recipientId: string) => ChatMessage[];
-  isTyping: (recipientId: string) => boolean;
+export interface ChatEntry {
+  userId: string;
+  name: string;
+  lastMessage: string;
+  lastMessageTime: number;
+  unreadCount: number;
+  publicKey: string;
 }
 
-export function useChat(wsUrl: string, userId: string): UseChatReturn {
-  // `shallowRef`, not `ref`: a deep ref would hand back a reactive Proxy of the
-  // service, and every private field access through that proxy is a different
-  // object identity than `this` — which broke the declared `Ref<ChatService>`
-  // type and made instance state subtly unreliable.
-  const chat = shallowRef<ChatService | null>(null);
-  const connected = ref(false);
-  const messages = ref<Record<string, ChatMessage[]>>({});
-  const typing = ref<Record<string, boolean>>({});
-  const publicKey = ref('');
+export interface UserSearchResult {
+  id: string;
+  name: string;
+  username: string;
+  publicKey: string;
+}
 
-  /** Conversation key for a message: whoever the other party is. */
-  const peerOf = (msg: ChatMessage) => (msg.sent ? msg.to : msg.from);
+export function useChat(currentUserId: string, gunListeners: Array<() => void>) {
+  const router = useRouter();
 
-  const upsert = (msg: ChatMessage) => {
-    const peer = peerOf(msg);
-    if (!peer) return;
-    const list = messages.value[peer] ?? (messages.value[peer] = []);
-    const at = list.findIndex((m) => m.id === msg.id);
-    if (at === -1) list.push(msg);
-    else list[at] = { ...list[at], ...msg };
-  };
+  const chatList           = shallowRef<ChatEntry[]>([]);
+  const userSearchQuery    = ref('');
+  const userSearchResults  = shallowRef<UserSearchResult[]>([]);
+  const searchingUsers     = ref(false);
 
-  const initChat = async () => {
-    const chatService = new ChatService(wsUrl, userId);
+  const totalUnread = ref(0);
 
-    chatService.onMessage = upsert;
+  const unreadDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const subscribedChatRooms  = new Set<string>();
+  let   chatDiscoverySubscribed = false;
+  let   bgChatService: ChatService | null = null;
+  let   bgChatInitialised = false;
+  let   bgChatInitPromise: Promise<void> | null = null;
 
-    chatService.onMessageStatus = ({ id, status, error }) => {
-      for (const list of Object.values(messages.value)) {
-        const at = list.findIndex((m) => m.id === id);
-        if (at !== -1) { list[at] = { ...list[at], status, error }; return; }
-      }
-    };
+  // ─── Room helpers ─────────────────────────────────────────────────────────
 
-    chatService.onTyping = ({ from, isTyping }) => {
-      typing.value[from] = isTyping;
-    };
+  function getRoomId(a: string, b: string) {
+    return [a, b].sort().join(':');
+  }
 
-    chatService.onConnectionChange = (status: boolean) => {
-      connected.value = status;
-    };
+  function refreshRoomSummary(roomId: string, otherUserId: string) {
+    const existing = unreadDebounceTimers.get(roomId);
+    if (existing) clearTimeout(existing);
+    unreadDebounceTimers.set(roomId, setTimeout(() => {
+      void (async () => {
+        const rows = await StorageService.getChatMessagesByRoom(roomId);
+        if (rows.length === 0) return;
+        const unread = rows.filter(row => !row.outgoing && !row.readAt).length;
+        const latest = rows.reduce((n, r) => (r.timestamp > n.timestamp ? r : n));
+        const body   = latest.text.length > 80 ? `${latest.text.slice(0, 79)}…` : latest.text;
+        const entry  = chatList.value.find(c => c.userId === otherUserId);
+        if (!entry) return;
+        entry.unreadCount = unread;
+        if (latest.timestamp >= entry.lastMessageTime) {
+          entry.lastMessageTime = latest.timestamp;
+          entry.lastMessage     = latest.outgoing ? `You: ${body}` : body;
+        }
+        chatList.value = [...chatList.value].sort((a, b) => b.lastMessageTime - a.lastMessageTime);
+        totalUnread.value = chatList.value.reduce((s, c) => s + c.unreadCount, 0);
+      })();
+    }, 500));
+  }
 
-    chatService.onReadReceipt = ({ from, at }) => {
-      const list = messages.value[from];
-      if (!list) return;
-      for (const msg of list) {
-        if (msg.sent && msg.timestamp <= at) msg.read = true;
-      }
-    };
-
-    publicKey.value = await chatService.init();
-    chat.value = chatService;
-  };
-
-  const startChat = async (recipient: RecipientInfo) => {
-    if (!chat.value) return;
-    await chat.value.startChat(recipient);
-    await loadHistory(recipient.userId);
-  };
-
-  const sendMessage = async (recipientId: string, message: string): Promise<ChatMessage> => {
-    if (!chat.value) throw new Error('Chat not initialized');
-    // The service returns the stored message; no optimistic duplicate is added
-    // here, which is what used to leave two bubbles for one send.
-    const sent = await chat.value.sendMessage(recipientId, message);
-    upsert(sent);
-    return sent;
-  };
-
-  const sendTyping = (recipientId: string, isTyping: boolean) => {
-    chat.value?.sendTyping(recipientId, isTyping);
-  };
-
-  const markAsRead = (recipientId: string) => {
-    if (!chat.value) return;
-    chat.value.markAsRead(recipientId);
-    for (const msg of messages.value[recipientId] || []) {
-      if (!msg.sent) msg.read = true;
+  function subscribeToRoom(otherUserId: string, otherName: string, otherPublicKey: string) {
+    const gun    = GunService.getGun();
+    const roomId = getRoomId(currentUserId, otherUserId);
+    if (subscribedChatRooms.has(roomId)) return;
+    if (!chatList.value.find(c => c.userId === otherUserId)) {
+      chatList.value = [...chatList.value, {
+        userId: otherUserId, name: otherName,
+        lastMessage: '', lastMessageTime: 0,
+        unreadCount: 0, publicKey: otherPublicKey,
+      }];
     }
-  };
+    refreshRoomSummary(roomId, otherUserId);
+    const listener = gun.get('chats').get(roomId).map().on((msg: any) => {
+      if (!msg || !msg.senderId || !msg.timestamp) return;
+      refreshRoomSummary(roomId, otherUserId);
+    });
+    subscribedChatRooms.add(roomId);
+    gunListeners.push(() => { listener?.off?.(); subscribedChatRooms.delete(roomId); });
+  }
 
-  const loadHistory = async (recipientId: string) => {
-    if (!chat.value) return;
-    // Local first so the conversation paints immediately, then the graph.
-    messages.value[recipientId] = await chat.value.getLocalHistory(recipientId);
-    messages.value[recipientId] = await chat.value.loadHistory(recipientId);
-  };
+  // ─── Load chat list ────────────────────────────────────────────────────────
 
-  const getMessages = (recipientId: string): ChatMessage[] => messages.value[recipientId] || [];
+  async function loadChatList() {
+    const gun = GunService.getGun();
+    try {
+      const stored = await StorageService.getAllChatMessages();
+      const peers  = new Set<string>();
+      for (const row of stored) {
+        if (row.kind !== 'dm') continue;
+        const other = row.roomId.split(':').find(id => id !== currentUserId);
+        if (other) peers.add(other);
+      }
+      for (const otherUserId of peers) {
+        subscribeToRoom(otherUserId, otherUserId, '');
+        gun.get('users').get(otherUserId).once((userData: any) => {
+          const entry = chatList.value.find(c => c.userId === otherUserId);
+          if (entry && userData) {
+            entry.name      = userData.displayName || userData.username || otherUserId;
+            entry.publicKey = userData.publicKey || '';
+          }
+        });
+      }
+    } catch (err) {
+      console.warn('[useChat] Could not read stored conversations:', err);
+    }
+    gun.get('chats').once((rooms: any) => {
+      if (!rooms) return;
+      Object.keys(rooms)
+        .filter(k => k !== '_' && k.includes(currentUserId))
+        .forEach((roomId) => {
+          const otherUserId = roomId.split(':').find(id => id !== currentUserId);
+          if (!otherUserId) return;
+          gun.get('users').get(otherUserId).once((userData: any) => {
+            subscribeToRoom(
+              otherUserId,
+              userData?.displayName || userData?.username || otherUserId,
+              userData?.publicKey || '',
+            );
+          });
+        });
+    });
+  }
 
-  const isTyping = (recipientId: string): boolean => typing.value[recipientId] || false;
+  function ensureChatRoomDiscoverySubscription() {
+    if (chatDiscoverySubscribed || !currentUserId) return;
+    const gun = GunService.getGun();
+    const discoveryListener = gun.get('users').get(currentUserId).get('rooms').map()
+      .on((roomData: any, roomId: string) => {
+        if (!roomId || roomId === '_' || typeof roomId !== 'string') return;
+        if (!roomId.includes(':') || !roomId.includes(currentUserId)) return;
+        const otherUserId = roomId.split(':').find(id => id !== currentUserId);
+        if (!otherUserId) return;
+        gun.get('users').get(otherUserId).once((userData: any) => {
+          subscribeToRoom(
+            otherUserId,
+            userData?.displayName || userData?.username || otherUserId,
+            userData?.publicKey || '',
+          );
+        });
+      });
+    chatDiscoverySubscribed = true;
+    gunListeners.push(() => { discoveryListener?.off?.(); chatDiscoverySubscribed = false; });
+  }
 
-  onMounted(() => {
-    if (wsUrl && userId) void initChat();
-  });
+  // ─── Background chat ───────────────────────────────────────────────────────
 
-  onUnmounted(() => {
-    chat.value?.disconnect();
-  });
+  async function initBackgroundChat(activeTabRef: { value: string }) {
+    const WS_URL = config.relay.websocket;
+    bgChatService = new ChatService(WS_URL, currentUserId);
+    bgChatService.onConnectionChange = () => {};
+    bgChatService.onMessage = (msg) => {
+      if (msg.sent) return;
+      const preview = msg.message.length > 80 ? `${msg.message.slice(0, 79)}…` : msg.message;
+      const entry   = chatList.value.find(c => c.userId === msg.from);
+      if (entry) {
+        entry.lastMessage     = preview;
+        entry.lastMessageTime = msg.timestamp;
+        if (activeTabRef.value !== 'chat') entry.unreadCount++;
+        chatList.value = [...chatList.value].sort((a, b) => b.lastMessageTime - a.lastMessageTime);
+        totalUnread.value = chatList.value.reduce((s, c) => s + c.unreadCount, 0);
+      } else {
+        chatList.value = [{
+          userId: msg.from, name: msg.from,
+          lastMessage: preview, lastMessageTime: msg.timestamp,
+          unreadCount: activeTabRef.value !== 'chat' ? 1 : 0, publicKey: '',
+        }, ...chatList.value];
+        totalUnread.value++;
+        gun_lookupUser(msg.from);
+      }
+    };
+    bgChatInitialised = true;
+  }
+
+  function gun_lookupUser(userId: string) {
+    const gun = GunService.getGun();
+    gun.get('users').get(userId).once((userData: any) => {
+      const entry = chatList.value.find(c => c.userId === userId);
+      if (entry && userData) {
+        entry.name      = userData.displayName || userData.username || userId;
+        entry.publicKey = userData.publicKey || '';
+      }
+    });
+  }
+
+  function ensureBackgroundChatInitialized(activeTabRef: { value: string }): Promise<void> {
+    if (bgChatInitialised) return Promise.resolve();
+    if (!bgChatInitPromise) {
+      bgChatInitPromise = initBackgroundChat(activeTabRef).finally(() => { bgChatInitPromise = null; });
+    }
+    return bgChatInitPromise;
+  }
+
+  function ensureChatInitialized(activeTabRef: { value: string }): Promise<void> {
+    return ensureBackgroundChatInitialized(activeTabRef).then(() => {
+      ensureChatRoomDiscoverySubscription();
+    });
+  }
+
+  // ─── Invites ───────────────────────────────────────────────────────────────
+
+  async function processPendingChatInvites(userId: string) {
+    const invites = await ChatInviteService.getPendingInvites(userId);
+    if (invites.length === 0) return;
+    for (const invite of invites.slice(0, 5)) {
+      ChatInviteService.markInviteRead(userId, invite.id);
+      const toast = await toastController.create({
+        message: `💬 Chat invite from u/${invite.fromDisplayName}`,
+        duration: 5000,
+        position: 'top',
+        buttons: [{ text: 'Open', handler: () => { void router.push(invite.inviteLink); } }],
+      });
+      await toast.present();
+    }
+  }
+
+  // ─── Navigation ───────────────────────────────────────────────────────────
+
+  function openChat(chat: ChatEntry) {
+    const entry = chatList.value.find(c => c.userId === chat.userId);
+    if (entry) entry.unreadCount = 0;
+    totalUnread.value = chatList.value.reduce((s, c) => s + c.unreadCount, 0);
+    router.push({ name: 'Chat', params: { userId: chat.userId }, query: { name: chat.name, publicKey: chat.publicKey } });
+  }
+
+  function startChatWithUser(user: UserSearchResult) {
+    router.push({ name: 'Chat', params: { userId: user.id }, query: { name: user.name, publicKey: user.publicKey } });
+  }
+
+  function clearUserSearch() {
+    userSearchQuery.value   = '';
+    userSearchResults.value = [];
+  }
+
+  async function handleUserSearch() {
+    const query = userSearchQuery.value.trim();
+    if (query.length < 2) { userSearchResults.value = []; return; }
+    searchingUsers.value = true;
+    try {
+      const gun     = GunService.getGun();
+      const results: UserSearchResult[] = [];
+      const seen    = new Set<string>();
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => resolve(), 1000);
+        gun.get('users').once((users: any) => {
+          if (!users) { resolve(); return; }
+          const userKeys = Object.keys(users).filter(k => k !== '_');
+          let processed  = 0;
+          userKeys.forEach(userId => {
+            gun.get('users').get(userId).once((userData: any) => {
+              processed++;
+              if (userData && userData.id && !seen.has(userData.id)) {
+                const name     = userData.displayName || userData.username || '';
+                const username = userData.username || '';
+                if (name.toLowerCase().includes(query.toLowerCase()) ||
+                    username.toLowerCase().includes(query.toLowerCase())) {
+                  seen.add(userData.id);
+                  results.push({ id: userData.id, name: userData.displayName || userData.username || 'Anonymous', username: userData.username || userData.id, publicKey: userData.publicKey || '' });
+                }
+              }
+              if (processed === userKeys.length) { clearTimeout(timeout); resolve(); }
+            });
+          });
+        });
+      });
+      userSearchResults.value = results.slice(0, 10);
+    } catch (err) {
+      console.error('User search error:', err);
+    } finally {
+      searchingUsers.value = false;
+    }
+  }
+
+  // ─── Cleanup ───────────────────────────────────────────────────────────────
+
+  function teardown() {
+    bgChatService?.disconnect?.();
+    bgChatService = null;
+    bgChatInitialised = false;
+  }
 
   return {
-    chat,
-    connected,
-    messages,
-    typing,
-    publicKey,
-    startChat,
-    sendMessage,
-    sendTyping,
-    markAsRead,
-    loadHistory,
-    getMessages,
-    isTyping,
+    chatList, totalUnread,
+    userSearchQuery, userSearchResults, searchingUsers,
+    loadChatList, ensureChatInitialized,
+    processPendingChatInvites,
+    openChat, startChatWithUser,
+    clearUserSearch, handleUserSearch,
+    teardown,
   };
 }

@@ -1,2007 +1,1390 @@
 <template>
-  <ion-page>
+  <ion-page class="settings-page">
     <ion-header>
       <ion-toolbar>
         <ion-buttons slot="start">
-          <ion-back-button default-href="/home"></ion-back-button>
+          <button class="back-btn" @click="router.back()">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
         </ion-buttons>
         <ion-title>Settings</ion-title>
       </ion-toolbar>
 
-      <ion-toolbar>
-        <ion-segment v-model="activeTab">
-          <ion-segment-button value="general">
-            <ion-label>General</ion-label>
-          </ion-segment-button>
-          <ion-segment-button value="feed">
-            <ion-label>Feed</ion-label>
-          </ion-segment-button>
-          <ion-segment-button value="moderation">
-            <ion-label>Moderation</ion-label>
-          </ion-segment-button>
-          <ion-segment-button value="advanced">
-            <ion-label>Advanced</ion-label>
-          </ion-segment-button>
-          <ion-segment-button value="network">
-            <ion-label>Network</ion-label>
-          </ion-segment-button>
-          <ion-segment-button value="data">
-            <ion-label>Data</ion-label>
-          </ion-segment-button>
-        </ion-segment>
-      </ion-toolbar>
+      <!-- Custom tab bar — replaces ion-segment -->
+      <div class="settings-tab-bar">
+        <button v-for="tab in tabs" :key="tab.id"
+          class="settings-tab" :class="{ active: activeTab === tab.id }"
+          @click="activeTab = tab.id">
+          <ion-icon :icon="tab.icon"></ion-icon>
+          <span>{{ tab.label }}</span>
+        </button>
+      </div>
     </ion-header>
 
     <ion-content>
-      <DesktopPageShell>      <!-- GENERAL TAB -->
-      <div v-if="activeTab === 'general'">
-        <!-- Appearance -->
-        <div class="section">
-          <h3 class="section-title">Appearance</h3>
-          <ion-list>
-            <ion-item>
-              <ion-toggle v-model="isDarkMode" @ionChange="toggleDarkMode">
-                {{ isDarkMode ? 'Dark mode' : 'Light mode' }}
-              </ion-toggle>
-            </ion-item>
-          </ion-list>
-          <div class="separator"></div>
-        </div>
+      <div class="settings-body">
 
-        <!-- Content Filters (moved to Moderation tab) -->
-        <div class="section">
-          <h3 class="section-title">Content Filters</h3>
-          <p class="helper-text">
-            Content filtering has moved to the <a href="#" class="link-primary" @click.prevent="activeTab = 'moderation'">Moderation</a> tab.
-          </p>
-          <div class="separator"></div>
-        </div>
+        <!-- ══════════════════════ GENERAL TAB ══════════════════════ -->
+        <div v-if="activeTab === 'general'">
 
-        <!-- Home Feed Moderation -->
-        <div class="section">
-          <h3 class="section-title">Home Feed Moderation</h3>
-          <p class="section-subtitle">Use a moderation API to hide unwanted posts from the home feed</p>
-          <ion-list>
-            <ion-item>
-              <ion-toggle v-model="modSettings.moderateHomeFeed" @ionChange="saveModerationSettings">
-                Moderate home feed
-              </ion-toggle>
-            </ion-item>
-            <ion-item>
-              <ion-label>API provider</ion-label>
-              <ion-select v-model="modSettings.moderationProvider" @ionChange="onModerationProviderChange">
-                <ion-select-option value="interpoll">InterPoll default API</ion-select-option>
-                <ion-select-option value="custom">Custom API</ion-select-option>
-              </ion-select>
-            </ion-item>
-            <ion-item v-if="modSettings.moderationProvider === 'custom'">
-              <ion-label position="stacked">Custom API base URL</ion-label>
-              <ion-input
-                v-model="modSettings.moderationApiBaseUrl"
-                placeholder="https://example.com/moderation"
-                @ionBlur="saveModerationSettings"
-              ></ion-input>
-            </ion-item>
-          </ion-list>
-          <p class="helper-text">
-            Default API: {{ moderationDefaultApiUrl }}. Custom endpoints must expose the same moderation hash API.
-          </p>
-          <div class="separator"></div>
-        </div>
-
-        <!-- Account -->
-        <div class="section">
-          <h3 class="section-title">Account</h3>
-          <div class="info-grid">
-            <div class="info-row">
-              <span>Device ID</span>
-              <code>{{ fullDeviceId }}</code>
-            </div>
-            <div class="info-row identity-row">
-              <span>Username</span>
-              <div class="identity-right">
-                <UserIdentityBadge
-                  v-if="userProfile"
-                  :username="userProfile.customUsername || userProfile.username"
-                  :pubkey="publicKeyHex"
-                />
-                <ion-button
-                  fill="outline"
-                  size="small"
-                  class="claim-btn"
-                  @click="$router.push('/claim-username')"
-                >
-                  {{ userProfile?.customUsername ? 'Change' : 'Set username' }}
-                </ion-button>
+          <!-- Account card -->
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-violet">
+                <ion-icon :icon="personCircleOutline"></ion-icon>
+              </div>
+              <div>
+                <h3>Account</h3>
+                <p>Your identity on Interpoll</p>
               </div>
             </div>
-            <div class="info-row">
-              <span>Karma</span>
-              <ion-badge color="primary">{{ userProfile?.karma || 0 }}</ion-badge>
-            </div>
-          </div>
-
-          <ion-button expand="block" fill="outline" @click="$router.push('/profile')">
-            <ion-icon slot="start" :icon="personCircleOutline"></ion-icon>
-            Edit Profile
-          </ion-button>
-          <div class="separator"></div>
-        </div>
-
-        <!-- Cryptographic Identity -->
-        <div class="section">
-          <h3 class="section-title">Cryptographic Identity</h3>
-          <p class="section-subtitle">Schnorr / secp256k1 keypair for signing events</p>
-          
-          <div class="info-grid">
-            <div class="info-row">
-              <span>Public Key</span>
-            </div>
-            <div class="key-display">
-              <code class="key-value">{{ publicKeyHex }}</code>
-              <ion-button fill="clear" size="small" @click="copyPublicKey">
-                <ion-icon :icon="copyOutline"></ion-icon>
-              </ion-button>
-            </div>
-
-            <div class="info-row mt-12">
-              <span>Private Key</span>
-            </div>
-            <div v-if="!showPrivateKey" class="key-display">
-              <code class="key-value key-hidden">**** hidden ****</code>
-              <ion-button fill="clear" size="small" color="warning" @click="revealPrivateKey">
-                <ion-icon :icon="eyeOutline"></ion-icon>
-              </ion-button>
-            </div>
-            <div v-else class="key-display">
-              <code class="key-value key-danger">{{ privateKeyHex }}</code>
-              <ion-button fill="clear" size="small" @click="copyPrivateKey">
-                <ion-icon :icon="copyOutline"></ion-icon>
-              </ion-button>
-            </div>
-            <p v-if="showPrivateKey" class="key-warning">
-              Never share your private key. Anyone with it can sign events as you.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <!-- FEED TAB -->
-      <div v-if="activeTab === 'feed'">
-        <div class="section">
-          <h3 class="section-title">Feed Mode</h3>
-          <p class="section-subtitle">Switch between chronological and personalized ranking</p>
-          <ion-segment :value="feedPreferences.mode" @ionChange="onFeedModeChange">
-            <ion-segment-button value="for-you">
-              <ion-label>For You</ion-label>
-            </ion-segment-button>
-            <ion-segment-button value="latest">
-              <ion-label>Latest</ion-label>
-            </ion-segment-button>
-          </ion-segment>
-          <p class="helper-text">
-            For You uses keyword and community preferences plus engagement/freshness scoring. Latest keeps chronological order.
-          </p>
-          <div class="separator"></div>
-        </div>
-
-        <div class="section">
-          <h3 class="section-title">Include Keywords</h3>
-          <p class="section-subtitle">Boost content containing these words or phrases</p>
-          <div class="chip-list" v-if="feedPreferences.includeKeywords.length">
-            <ion-chip
-              v-for="keyword in feedPreferences.includeKeywords"
-              :key="`include-${keyword}`"
-              color="success"
-              outline
-              @click="removeFeedIncludeKeyword(keyword)"
-            >
-              {{ keyword }}
-              <ion-icon :icon="closeCircleOutline"></ion-icon>
-            </ion-chip>
-          </div>
-          <div class="inline-add">
-            <ion-input
-              v-model="newFeedIncludeKeyword"
-              placeholder="Add include keyword…"
-              @keyup.enter="addFeedIncludeKeyword"
-              class="inline-input"
-            ></ion-input>
-            <ion-button
-              size="small"
-              fill="clear"
-              @click="addFeedIncludeKeyword"
-              :disabled="!newFeedIncludeKeyword.trim()"
-            >
-              Add
-            </ion-button>
-          </div>
-          <div class="separator"></div>
-        </div>
-
-        <div class="section">
-          <h3 class="section-title">Exclude Keywords</h3>
-          <p class="section-subtitle">Demote content containing these words (it still appears)</p>
-          <div class="chip-list" v-if="feedPreferences.excludeKeywords.length">
-            <ion-chip
-              v-for="keyword in feedPreferences.excludeKeywords"
-              :key="`exclude-${keyword}`"
-              color="warning"
-              outline
-              @click="removeFeedExcludeKeyword(keyword)"
-            >
-              {{ keyword }}
-              <ion-icon :icon="closeCircleOutline"></ion-icon>
-            </ion-chip>
-          </div>
-          <div class="inline-add">
-            <ion-input
-              v-model="newFeedExcludeKeyword"
-              placeholder="Add exclude keyword…"
-              @keyup.enter="addFeedExcludeKeyword"
-              class="inline-input"
-            ></ion-input>
-            <ion-button
-              size="small"
-              fill="clear"
-              @click="addFeedExcludeKeyword"
-              :disabled="!newFeedExcludeKeyword.trim()"
-            >
-              Add
-            </ion-button>
-          </div>
-          <div class="separator"></div>
-        </div>
-
-        <div class="section">
-          <h3 class="section-title">Content Types</h3>
-          <p class="section-subtitle">Choose what can appear in your personalized feed</p>
-          <ion-list>
-            <ion-item>
-              <ion-toggle :checked="feedPreferences.showPosts" @ionChange="onFeedPostsToggle">
-                Show posts
-              </ion-toggle>
-            </ion-item>
-            <ion-item>
-              <ion-toggle :checked="feedPreferences.showPolls" @ionChange="onFeedPollsToggle">
-                Show polls
-              </ion-toggle>
-            </ion-item>
-          </ion-list>
-          <div class="separator"></div>
-        </div>
-
-        <div class="section">
-          <h3 class="section-title">Community Preferences</h3>
-          <p class="section-subtitle">Favorite communities are boosted; muted communities are hidden from feeds</p>
-
-          <div v-if="communityStore.isLoading" class="helper-text">Loading communities…</div>
-          <ion-list v-else-if="feedCommunities.length > 0">
-            <ion-item v-for="community in feedCommunities" :key="community.id">
-              <ion-label>
-                <h3>{{ community.displayName }}</h3>
-                <p class="community-id">{{ community.id }}</p>
-              </ion-label>
-              <div class="community-pref-actions">
-                <ion-button
-                  size="small"
-                  :fill="isFavoriteCommunity(community.id) ? 'solid' : 'outline'"
-                  color="primary"
-                  @click.stop="toggleFavoriteCommunityPreference(community.id)"
-                >
-                  Favorite
-                </ion-button>
-                <ion-button
-                  size="small"
-                  :fill="isMutedCommunity(community.id) ? 'solid' : 'outline'"
-                  color="medium"
-                  @click.stop="toggleMutedCommunityPreference(community.id)"
-                >
-                  Mute
-                </ion-button>
+            <div class="info-table">
+              <div class="info-row">
+                <span class="info-key">Device ID</span>
+                <code class="info-val mono-sm">{{ fullDeviceId }}</code>
               </div>
-            </ion-item>
-          </ion-list>
-          <p v-else class="helper-text">No communities loaded yet.</p>
-
-          <div class="separator"></div>
-        </div>
-
-        <div class="section">
-          <h3 class="section-title">Ranking Weights</h3>
-          <p class="section-subtitle">Balanced defaults are applied. Increase what matters most to you.</p>
-
-          <div class="range-row">
-            <span class="range-label">Freshness: <strong>{{ formatWeight(feedPreferences.rankingWeights.freshness) }}</strong></span>
-            <ion-range
-              :min="0"
-              :max="1"
-              :step="0.05"
-              :value="feedPreferences.rankingWeights.freshness"
-              @ionChange="(ev) => onFeedWeightChange('freshness', ev)"
-              :pin="true"
-            ></ion-range>
-          </div>
-
-          <div class="range-row">
-            <span class="range-label">Engagement: <strong>{{ formatWeight(feedPreferences.rankingWeights.engagement) }}</strong></span>
-            <ion-range
-              :min="0"
-              :max="1"
-              :step="0.05"
-              :value="feedPreferences.rankingWeights.engagement"
-              @ionChange="(ev) => onFeedWeightChange('engagement', ev)"
-              :pin="true"
-            ></ion-range>
-          </div>
-
-          <div class="range-row">
-            <span class="range-label">Keywords: <strong>{{ formatWeight(feedPreferences.rankingWeights.keywords) }}</strong></span>
-            <ion-range
-              :min="0"
-              :max="1"
-              :step="0.05"
-              :value="feedPreferences.rankingWeights.keywords"
-              @ionChange="(ev) => onFeedWeightChange('keywords', ev)"
-              :pin="true"
-            ></ion-range>
-          </div>
-
-          <div class="range-row">
-            <span class="range-label">Community affinity: <strong>{{ formatWeight(feedPreferences.rankingWeights.community) }}</strong></span>
-            <ion-range
-              :min="0"
-              :max="1"
-              :step="0.05"
-              :value="feedPreferences.rankingWeights.community"
-              @ionChange="(ev) => onFeedWeightChange('community', ev)"
-              :pin="true"
-            ></ion-range>
-          </div>
-
-          <p class="helper-text">Weights are normalized automatically during ranking.</p>
-          <div class="separator"></div>
-        </div>
-
-        <div class="section">
-          <ion-button expand="block" fill="outline" color="medium" @click="resetFeedPreferencesToDefaults">
-            Reset Feed Preferences
-          </ion-button>
-        </div>
-      </div>
-
-      <!-- MODERATION TAB -->
-      <div v-if="activeTab === 'moderation'">
-        <div class="section">
-          <h3 class="section-title">Home Feed Moderation</h3>
-          <p class="helper-text">Configure this from the <a href="#" class="link-primary" @click.prevent="activeTab = 'general'">General</a> tab.</p>
-          <div class="separator"></div>
-        </div>
-
-        <!-- Karma Filter -->
-        <div class="section">
-          <h3 class="section-title">Karma Filter</h3>
-          <p class="section-subtitle">Hide posts from low-reputation users</p>
-          <div class="range-row">
-            <span class="range-label">Min karma: <strong>{{ modSettings.minUserKarma <= -1000 ? 'Off' : modSettings.minUserKarma }}</strong></span>
-            <ion-range
-              :min="-100"
-              :max="100"
-              :step="5"
-              :value="modSettings.minUserKarma <= -1000 ? -100 : modSettings.minUserKarma"
-              @ionChange="onKarmaRangeChange"
-              :pin="true"
-            ></ion-range>
-          </div>
-          <p class="helper-text">
-            Drag to −100 to show everyone. Posts and comments from users with karma below this value are hidden.
-          </p>
-          <div class="separator"></div>
-        </div>
-
-        <!-- Score Filter -->
-        <div class="section">
-          <h3 class="section-title">Score Filter</h3>
-          <p class="section-subtitle">Hide heavily downvoted content</p>
-          <div class="range-row">
-            <span class="range-label">Min score: <strong>{{ modSettings.minContentScore }}</strong></span>
-            <ion-range
-              :min="-50"
-              :max="50"
-              :step="1"
-              v-model="modSettings.minContentScore"
-              @ionKnobMoveEnd="saveModerationSettings"
-              :pin="true"
-            ></ion-range>
-          </div>
-          <p class="helper-text">
-            Posts and comments with net score (upvotes − downvotes) below this value are hidden.
-          </p>
-          <div class="separator"></div>
-        </div>
-
-        <!-- Word Filter -->
-        <div class="section">
-          <h3 class="section-title">Word Filter</h3>
-          <p class="section-subtitle">Filter content containing specific words</p>
-
-          <ion-list>
-            <ion-item>
-              <ion-toggle v-model="modSettings.wordFilterEnabled" @ionChange="saveModerationSettings">
-                Enable word filter
-              </ion-toggle>
-            </ion-item>
-          </ion-list>
-
-          <div v-if="modSettings.wordFilterEnabled" class="mt-3">
-            <!-- Action -->
-            <ion-list>
-              <ion-item>
-                <ion-label>Action for flagged content</ion-label>
-                <ion-select v-model="modSettings.wordFilterAction" @ionChange="saveModerationSettings">
-                  <ion-select-option value="blur">Blur (reveal on click)</ion-select-option>
-                  <ion-select-option value="hide">Hide completely</ion-select-option>
-                  <ion-select-option value="flag">Show with warning icon</ion-select-option>
-                </ion-select>
-              </ion-item>
-            </ion-list>
-
-            <!-- Category Toggles -->
-            <h4 class="subsection-title mt-3">Categories</h4>
-            <ion-list>
-              <ion-item v-for="cat in wordCategories" :key="cat.id">
-                <ion-toggle
-                  :checked="!modSettings.disabledCategories.includes(cat.id)"
-                  @ionChange="toggleCategory(cat.id, $event)"
-                >
-                  {{ cat.label }} <span class="category-count">({{ cat.count }})</span>
-                </ion-toggle>
-              </ion-item>
-            </ion-list>
-
-            <!-- Custom Blocked Words -->
-            <h4 class="subsection-title mt-3">Custom Blocked Words</h4>
-            <div class="chip-list" v-if="modSettings.customBlockedWords.length">
-              <ion-chip v-for="w in modSettings.customBlockedWords" :key="w" @click="removeCustomBlocked(w)" color="danger" outline>
-                {{ w }}
-                <ion-icon :icon="closeCircleOutline"></ion-icon>
-              </ion-chip>
+              <div class="info-row">
+                <span class="info-key">Username</span>
+                <div class="info-val flex-end">
+                  <UserIdentityBadge v-if="userProfile"
+                    :username="userProfile.customUsername || userProfile.username"
+                    :pubkey="publicKeyHex" />
+                  <button class="pill-btn accent" @click="$router.push('/claim-username')">
+                    {{ userProfile?.customUsername ? 'Change' : 'Set username' }}
+                  </button>
+                </div>
+              </div>
+              <div class="info-row">
+                <span class="info-key">Karma</span>
+                <span class="karma-badge">{{ userProfile?.karma || 0 }}</span>
+              </div>
             </div>
-            <div class="inline-add">
-              <ion-input
-                v-model="newBlockedWord"
-                placeholder="Add word…"
-                @keyup.enter="addCustomBlocked"
-                class="inline-input"
-              ></ion-input>
-              <ion-button size="small" fill="clear" @click="addCustomBlocked" :disabled="!newBlockedWord.trim()">Add</ion-button>
-            </div>
+            <button class="block-btn outline mt-12" @click="$router.push('/profile')">
+              <ion-icon :icon="personCircleOutline"></ion-icon>
+              Edit Profile
+            </button>
+          </div>
 
-            <!-- Custom Allowed Words -->
-            <h4 class="subsection-title mt-3">Allowed Words (override defaults)</h4>
-            <div class="chip-list" v-if="modSettings.customAllowedWords.length">
-              <ion-chip v-for="w in modSettings.customAllowedWords" :key="w" @click="removeCustomAllowed(w)" color="success" outline>
-                {{ w }}
-                <ion-icon :icon="closeCircleOutline"></ion-icon>
-              </ion-chip>
+          <!-- Cryptographic identity -->
+          <div class="settings-card danger-zone">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-amber">
+                <ion-icon :icon="keyOutline"></ion-icon>
+              </div>
+              <div>
+                <h3>Cryptographic Identity</h3>
+                <p>Schnorr / secp256k1 keypair for signing events</p>
+              </div>
             </div>
-            <div class="inline-add">
-              <ion-input
-                v-model="newAllowedWord"
-                placeholder="Allow word…"
-                @keyup.enter="addCustomAllowed"
-                class="inline-input"
-              ></ion-input>
-              <ion-button size="small" fill="clear" @click="addCustomAllowed" :disabled="!newAllowedWord.trim()">Add</ion-button>
-            </div>
-
-            <!-- Test Preview -->
-            <h4 class="subsection-title mt-3">Test Filter</h4>
-            <ion-input
-              v-model="testText"
-              placeholder="Type text to test…"
-              class="test-input"
-            ></ion-input>
-            <div v-if="testText.trim()" class="test-result" :class="testResult.flagged ? 'flagged' : 'clean'">
-              <template v-if="testResult.flagged">
+            <div class="key-block">
+              <div class="key-row">
+                <span class="key-label">Public Key</span>
+                <div class="key-value-row">
+                  <code class="key-val">{{ publicKeyHex }}</code>
+                  <button class="icon-btn" @click="copyPublicKey" title="Copy"><ion-icon :icon="copyOutline"></ion-icon></button>
+                </div>
+              </div>
+              <div class="key-row">
+                <span class="key-label">Private Key</span>
+                <div v-if="!showPrivateKey" class="key-value-row">
+                  <code class="key-val muted">•••• hidden ••••</code>
+                  <button class="icon-btn warning" @click="revealPrivateKey" title="Reveal"><ion-icon :icon="eyeOutline"></ion-icon></button>
+                </div>
+                <div v-else class="key-value-row">
+                  <code class="key-val danger">{{ privateKeyHex }}</code>
+                  <button class="icon-btn" @click="copyPrivateKey" title="Copy"><ion-icon :icon="copyOutline"></ion-icon></button>
+                </div>
+              </div>
+              <div v-if="showPrivateKey" class="alert-box warning">
                 <ion-icon :icon="warningOutline"></ion-icon>
-                <span>Flagged ({{ testResult.severity }}) — matches: {{ testResult.matches.map(m => m.word).join(', ') }}</span>
-              </template>
-              <template v-else>
-                <ion-icon :icon="checkmarkCircleOutline"></ion-icon>
-                <span>Clean — no matches</span>
-              </template>
-            </div>
-          </div>
-
-          <div class="separator"></div>
-        </div>
-
-        <!-- Word filter categories -->
-
-        <!-- Reset -->
-        <div class="section">
-          <ion-button expand="block" fill="outline" color="medium" @click="resetModerationDefaults">
-            <ion-icon slot="start" :icon="refreshOutline"></ion-icon>
-            Reset Moderation to Defaults
-          </ion-button>
-        </div>
-      </div>
-
-      <!-- ADVANCED TAB -->
-      <div v-if="activeTab === 'advanced'">
-        <div class="section">
-          <h3 class="section-title">Moderation API</h3>
-          <p class="section-subtitle">Authenticate and enable click-to-submit from Home feed</p>
-          <ion-list>
-            <ion-item>
-              <ion-label>Provider</ion-label>
-              <ion-select v-model="modSettings.moderationProvider" @ionChange="saveModerationSettings">
-                <ion-select-option value="interpoll">Interpoll Moderation API</ion-select-option>
-                <ion-select-option value="custom">Custom API</ion-select-option>
-              </ion-select>
-            </ion-item>
-            <ion-item>
-              <ion-label position="stacked">API base URL</ion-label>
-              <ion-input
-                v-model="modSettings.moderationApiBaseUrl"
-                @ionBlur="saveModerationSettings"
-                placeholder="https://interpoll.endless.sbs/moderation"
-              ></ion-input>
-            </ion-item>
-            <ion-item>
-              <ion-label position="stacked">API key</ion-label>
-              <ion-input
-                v-model="moderationApiKeyInput"
-                type="password"
-                placeholder="mod_sk_..."
-              ></ion-input>
-            </ion-item>
-          </ion-list>
-          <div class="button-row">
-            <ion-button size="small" @click="authenticateModerationApi">Authenticate</ion-button>
-            <ion-button size="small" fill="outline" color="medium" @click="clearModerationApiAuth">Clear Auth</ion-button>
-          </div>
-          <p class="helper-text">{{ moderationAuthMessage }}</p>
-          <div class="separator"></div>
-        </div>
-
-        <div class="section">
-          <h3 class="section-title">Manual hash submission</h3>
-          <ion-list>
-            <ion-item>
-              <ion-toggle v-model="modSettings.moderationClickToSubmit" @ionChange="saveModerationSettings">
-                Click post on Home feed to submit post-body hash
-              </ion-toggle>
-            </ion-item>
-          </ion-list>
-          <p class="helper-text">
-            Uses SHA-256 over the post body only (no username/author fields) and sends it to the selected moderation API.
-          </p>
-        </div>
-      </div>
-
-      <!-- NETWORK TAB -->
-      <div v-if="activeTab === 'network'">
-        <!-- Privacy & Tor / Anonymity Mode -->
-        <div class="section">
-          <div class="status-header">
-            <h3 class="section-title">Privacy &amp; Tor</h3>
-            <ion-badge :color="anonymityMode ? 'success' : 'medium'">
-              <ion-icon :icon="shieldCheckmarkOutline" class="mr-1" />
-              {{ anonymityMode ? 'Anonymity ON' : 'Anonymity OFF' }}
-            </ion-badge>
-          </div>
-          <p class="section-subtitle">Harden the app for anonymous use over Tor.</p>
-
-          <ion-list>
-            <ion-item lines="none">
-              <ion-toggle v-model="anonymityMode" @ionChange="onAnonymityToggle">
-                Anonymity (Tor) Mode
-              </ion-toggle>
-            </ion-item>
-          </ion-list>
-
-          <div class="tor-explainer">
-            <p>
-              <strong>A web app can't route its own traffic through Tor.</strong>
-              To actually be anonymous, open InterPoll in
-              <a href="https://www.torproject.org" target="_blank" rel="noopener noreferrer" class="link-primary">Tor Browser</a>
-              (or route this browser through Tor / Orbot on mobile).
-            </p>
-            <p>
-              This mode makes the app <em>safe</em> under Tor: it disables the WebRTC
-              peer mesh — which leaks your real IP via STUN even inside Tor Browser —
-              and prefers <code>.onion</code> relays. Peer-to-peer / mesh sync pauses
-              while it's on; relay sync keeps working.
-            </p>
-          </div>
-
-          <div v-if="anonymityMode" class="tor-route-status">
-            <div class="tor-status-line" :class="activeRelayIsOnion ? 'ok' : 'warn'">
-              <ion-icon :icon="activeRelayIsOnion ? lockClosedOutline : warningOutline" />
-              <span v-if="activeRelayIsOnion">
-                Active relay is a <code>.onion</code> address — routed via Tor hidden service.
-              </span>
-              <span v-else>
-                Active relay is <strong>clearnet</strong> — safe only inside Tor Browser.
-                Add a <code>.onion</code> relay in Relay Configuration below for hidden-service routing.
-              </span>
-            </div>
-
-            <ion-button size="small" fill="outline" :disabled="torChecking" @click="checkTorStatus" class="mt-2">
-              <ion-icon slot="start" :icon="refreshOutline" />
-              {{ torChecking ? 'Checking…' : 'Check Tor status' }}
-            </ion-button>
-            <div
-              v-if="torStatus.checked"
-              class="tor-check-result"
-              :class="torStatus.isTor === true ? 'ok' : torStatus.isTor === false ? 'warn' : 'unknown'"
-            >
-              {{ torStatus.note }}
-            </div>
-          </div>
-
-          <div class="separator"></div>
-        </div>
-
-        <!-- Connection Status -->
-        <div class="section">
-          <div class="status-header">
-            <h3 class="section-title">Connection Status</h3>
-            <div class="status-indicator" :class="connectionStatusClass">
-              <span class="status-dot"></span>
-              {{ connectionStatusLabel }}
-            </div>
-          </div>
-
-          <div class="service-status-list">
-            <div class="service-status-row">
-              <div class="service-info">
-                <span class="service-dot" :class="{ online: networkStatus.wsConnected }"></span>
-                <span class="service-name">WebSocket Relay</span>
+                Never share your private key. Anyone with it can sign events as you.
               </div>
-              <span class="service-state" :class="networkStatus.wsConnected ? 'state-ok' : 'state-off'">
-                {{ networkStatus.wsConnected ? 'Connected' : 'Disconnected' }}
-              </span>
-            </div>
-            <div class="service-status-row">
-              <div class="service-info">
-                <span class="service-dot" :class="{ online: networkStatus.gunConnected }"></span>
-                <span class="service-name">GunDB Relay</span>
-              </div>
-              <span class="service-state" :class="networkStatus.gunConnected ? 'state-ok' : 'state-off'">
-                {{ networkStatus.gunConnected ? 'Connected' : 'Disconnected' }}
-              </span>
             </div>
           </div>
 
-          <div class="metrics-grid">
-            <div class="metric-card">
-              <div class="metric-value">{{ networkStatus.peerCount }}</div>
-              <div class="metric-label">Relay Peers</div>
-            </div>
-            <div class="metric-card">
-              <div class="metric-value">{{ networkStatus.gunConnectedCount }}</div>
-              <div class="metric-label">Sync Peers</div>
-            </div>
-            <div class="metric-card">
-              <div class="metric-value">
-                {{ networkStatus.gunConnectedCount }}/{{ networkStatus.gunPeerCount }}
+          <!-- Appearance -->
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-blue">
+                <ion-icon :icon="colorPaletteOutline"></ion-icon>
               </div>
-              <div class="metric-label">DB Relays</div>
+              <div><h3>Appearance</h3></div>
             </div>
-            <div class="metric-card">
-              <div class="metric-value">{{ networkStatus.gunAvgLatencyMs != null ? networkStatus.gunAvgLatencyMs + 'ms' : '—' }}</div>
-              <div class="metric-label">DB Latency</div>
-            </div>
-            <div class="metric-card">
-              <div class="metric-value">{{ networkStatus.blockHeight }}</div>
-              <div class="metric-label">Block Height</div>
-            </div>
-            <div class="metric-card">
-              <div class="metric-value" :class="networkStatus.chainValid ? 'text-success' : 'text-danger'">
-                {{ networkStatus.chainValid ? 'Valid' : 'Invalid' }}
+            <div class="toggle-row">
+              <div>
+                <div class="toggle-label">{{ isDarkMode ? 'Dark mode' : 'Light mode' }}</div>
+                <div class="toggle-sub">Switch between light and dark theme</div>
               </div>
-              <div class="metric-label">Chain Status</div>
+              <label class="toggle-switch">
+                <input type="checkbox" v-model="isDarkMode" @change="toggleDarkMode" />
+                <span class="toggle-track"></span>
+              </label>
             </div>
           </div>
-          <div v-if="networkStatus.registrationRejected" class="reg-gate-hint">
-            <ion-icon :icon="lockClosedOutline"></ion-icon>
-            <span>
-              Connected to the relay, but joining its peer list requires signing in.
-              You're still syncing over {{ networkStatus.gunConnectedCount }} Gun peer{{ networkStatus.gunConnectedCount !== 1 ? 's' : '' }} — sign in to also appear in the relay peer network.
-            </span>
+
+          <!-- Home Feed Moderation -->
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-rose">
+                <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
+              </div>
+              <div>
+                <h3>Home Feed Moderation</h3>
+                <p>Use a moderation API to filter your feed</p>
+              </div>
+            </div>
+            <div class="toggle-row">
+              <div><div class="toggle-label">Moderate home feed</div></div>
+              <label class="toggle-switch">
+                <input type="checkbox" v-model="modSettings.moderateHomeFeed" @change="saveModerationSettings" />
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+            <div class="field-group mt-12">
+              <label class="field-label">API Provider</label>
+              <div class="field-wrap">
+                <select class="field-native" v-model="modSettings.moderationProvider" @change="onModerationProviderChange">
+                  <option value="interpoll">InterPoll default API</option>
+                  <option value="custom">Custom API</option>
+                </select>
+              </div>
+            </div>
+            <div v-if="modSettings.moderationProvider === 'custom'" class="field-group mt-8">
+              <label class="field-label">Custom API URL</label>
+              <div class="field-wrap">
+                <input class="field-native" v-model="modSettings.moderationApiBaseUrl"
+                  placeholder="https://example.com/moderation" @blur="saveModerationSettings" />
+              </div>
+            </div>
+            <p class="helper-text mt-8">Default: {{ moderationDefaultApiUrl }}</p>
           </div>
-          <div class="separator"></div>
+
         </div>
 
-        <!-- Gun DB Relay Peers -->
-        <div class="section">
-          <div class="status-header">
-            <h3 class="section-title">GunDB Relay Peers</h3>
-            <ion-badge color="primary">{{ networkStatus.gunConnectedCount }}/{{ gunPeersList.length }}</ion-badge>
-          </div>
-          <p class="section-subtitle">Gun connects to all peers simultaneously for maximum resilience. Data syncs across all of them.</p>
+        <!-- ══════════════════════ FEED TAB ══════════════════════ -->
+        <div v-if="activeTab === 'feed'">
 
-          <!-- Current peer list -->
-          <div class="gun-peers-list">
-            <div
-              v-for="peer in gunPeersDetail.length ? gunPeersDetail : gunPeersList.map(u => ({ url: u, connected: false }))"
-              :key="peer.url"
-              class="gun-peer-row"
-            >
-              <div class="gun-peer-info">
-                <span class="gun-peer-dot" :class="{ online: peer.connected }"></span>
-                <div class="gun-peer-text">
-                  <span class="gun-peer-label">{{ labelForGunUrl(peer.url) }}</span>
-                  <span class="gun-peer-url">{{ peer.url }}</span>
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-violet">
+                <ion-icon :icon="rocketOutline"></ion-icon>
+              </div>
+              <div>
+                <h3>Feed Mode</h3>
+                <p>Chronological or personalised ranking</p>
+              </div>
+            </div>
+            <div class="seg-pills">
+              <button class="seg-pill" :class="{ active: feedPreferences.mode === 'for-you' }"
+                @click="onFeedModeChange({ detail: { value: 'for-you' } })">For You</button>
+              <button class="seg-pill" :class="{ active: feedPreferences.mode === 'latest' }"
+                @click="onFeedModeChange({ detail: { value: 'latest' } })">Latest</button>
+            </div>
+            <p class="helper-text mt-8">For You uses keyword and community preferences plus engagement/freshness scoring. Latest is purely chronological.</p>
+          </div>
+
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-teal">
+                <ion-icon :icon="optionsOutline"></ion-icon>
+              </div>
+              <div><h3>Content Types</h3><p>What appears in your feed</p></div>
+            </div>
+            <div class="toggle-row">
+              <div class="toggle-label">Show posts</div>
+              <label class="toggle-switch">
+                <input type="checkbox" :checked="feedPreferences.showPosts" @change="onFeedPostsToggle" />
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+            <div class="toggle-row mt-8">
+              <div class="toggle-label">Show polls</div>
+              <label class="toggle-switch">
+                <input type="checkbox" :checked="feedPreferences.showPolls" @change="onFeedPollsToggle" />
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-green">
+                <ion-icon :icon="addCircleOutline"></ion-icon>
+              </div>
+              <div><h3>Include Keywords</h3><p>Boost content containing these words</p></div>
+            </div>
+            <div class="chip-list" v-if="feedPreferences.includeKeywords.length">
+              <button class="kw-chip include" v-for="kw in feedPreferences.includeKeywords" :key="kw"
+                @click="removeFeedIncludeKeyword(kw)">{{ kw }} ×</button>
+            </div>
+            <div class="inline-add mt-8">
+              <div class="field-wrap flex1">
+                <input class="field-native" v-model="newFeedIncludeKeyword"
+                  placeholder="Add keyword…" @keyup.enter="addFeedIncludeKeyword" />
+              </div>
+              <button class="pill-btn accent" @click="addFeedIncludeKeyword"
+                :disabled="!newFeedIncludeKeyword.trim()">Add</button>
+            </div>
+          </div>
+
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-amber">
+                <ion-icon :icon="removeCircleOutline"></ion-icon>
+              </div>
+              <div><h3>Exclude Keywords</h3><p>Demote content with these words</p></div>
+            </div>
+            <div class="chip-list" v-if="feedPreferences.excludeKeywords.length">
+              <button class="kw-chip exclude" v-for="kw in feedPreferences.excludeKeywords" :key="kw"
+                @click="removeFeedExcludeKeyword(kw)">{{ kw }} ×</button>
+            </div>
+            <div class="inline-add mt-8">
+              <div class="field-wrap flex1">
+                <input class="field-native" v-model="newFeedExcludeKeyword"
+                  placeholder="Add keyword…" @keyup.enter="addFeedExcludeKeyword" />
+              </div>
+              <button class="pill-btn accent" @click="addFeedExcludeKeyword"
+                :disabled="!newFeedExcludeKeyword.trim()">Add</button>
+            </div>
+          </div>
+
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-blue">
+                <ion-icon :icon="peopleOutline"></ion-icon>
+              </div>
+              <div><h3>Community Preferences</h3><p>Favourite = boost, Muted = hidden</p></div>
+            </div>
+            <div v-if="communityStore.isLoading" class="helper-text">Loading…</div>
+            <div v-else-if="feedCommunities.length > 0" class="community-pref-list">
+              <div v-for="community in feedCommunities" :key="community.id" class="community-pref-row">
+                <div>
+                  <div class="toggle-label">{{ community.displayName }}</div>
+                  <div class="community-id-text">{{ community.id }}</div>
+                </div>
+                <div class="pref-btns">
+                  <button class="pref-btn" :class="{ active: isFavoriteCommunity(community.id) }"
+                    @click="toggleFavoriteCommunityPreference(community.id)">★ Fav</button>
+                  <button class="pref-btn mute" :class="{ active: isMutedCommunity(community.id) }"
+                    @click="toggleMutedCommunityPreference(community.id)">Mute</button>
                 </div>
               </div>
-              <div class="gun-peer-meta">
-                <span v-if="peer.latencyMs != null" class="gun-peer-latency">{{ peer.latencyMs }}ms</span>
-                <span class="gun-peer-status" :class="peer.connected ? 'state-ok' : 'state-off'">
-                  {{ peer.connected ? 'Live' : 'Connecting…' }}
-                </span>
-                <ion-button
-                  v-if="gunPeersList.length > 1"
-                  fill="clear"
-                  size="small"
-                  color="danger"
-                  @click="removeGunPeer(peer.url)"
-                >
-                  <ion-icon :icon="trashOutline" slot="icon-only"></ion-icon>
-                </ion-button>
+            </div>
+            <p v-else class="helper-text">No communities loaded yet.</p>
+          </div>
+
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-violet">
+                <ion-icon :icon="analyticsOutline"></ion-icon>
+              </div>
+              <div><h3>Ranking Weights</h3><p>Tweak what matters in your feed</p></div>
+            </div>
+            <div class="range-row" v-for="(weight, key) in feedPreferences.rankingWeights" :key="key">
+              <div class="range-header">
+                <span>{{ { freshness: 'Freshness', engagement: 'Engagement', keywords: 'Keywords', community: 'Community affinity' }[key] }}</span>
+                <strong class="range-val">{{ formatWeight(weight) }}</strong>
+              </div>
+              <ion-range :min="0" :max="1" :step="0.05" :value="weight"
+                @ionChange="(ev) => onFeedWeightChange(key, ev)" :pin="true"></ion-range>
+            </div>
+            <button class="block-btn outline mt-12" @click="resetFeedPreferencesToDefaults">Reset Feed Preferences</button>
+          </div>
+        </div>
+
+        <!-- ══════════════════════ MODERATION TAB ══════════════════════ -->
+        <div v-if="activeTab === 'moderation'">
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-amber">
+                <ion-icon :icon="personOutline"></ion-icon>
+              </div>
+              <div><h3>Karma Filter</h3><p>Hide posts from low-rep users</p></div>
+            </div>
+            <div class="range-row">
+              <div class="range-header">
+                <span>Min karma</span>
+                <strong class="range-val">{{ modSettings.minUserKarma <= -1000 ? 'Off' : modSettings.minUserKarma }}</strong>
+              </div>
+              <ion-range :min="-100" :max="100" :step="5"
+                :value="modSettings.minUserKarma <= -1000 ? -100 : modSettings.minUserKarma"
+                @ionChange="onKarmaRangeChange" :pin="true"></ion-range>
+            </div>
+            <p class="helper-text">Drag to −100 to disable.</p>
+          </div>
+
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-rose">
+                <ion-icon :icon="arrowDownOutline"></ion-icon>
+              </div>
+              <div><h3>Score Filter</h3><p>Hide heavily downvoted content</p></div>
+            </div>
+            <div class="range-row">
+              <div class="range-header">
+                <span>Min score</span>
+                <strong class="range-val">{{ modSettings.minContentScore }}</strong>
+              </div>
+              <ion-range :min="-50" :max="50" :step="1" v-model="modSettings.minContentScore"
+                @ionKnobMoveEnd="saveModerationSettings" :pin="true"></ion-range>
+            </div>
+            <p class="helper-text">Posts with net score below this are hidden.</p>
+          </div>
+
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-rose">
+                <ion-icon :icon="chatbubbleOutline"></ion-icon>
+              </div>
+              <div><h3>Word Filter</h3><p>Hide or blur content with flagged words</p></div>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Filter Action</label>
+              <div class="seg-pills">
+                <button class="seg-pill" :class="{ active: modSettings.wordFilterAction === 'blur' }"
+                  @click="modSettings.wordFilterAction = 'blur'; saveModerationSettings()">Blur</button>
+                <button class="seg-pill" :class="{ active: modSettings.wordFilterAction === 'hide' }"
+                  @click="modSettings.wordFilterAction = 'hide'; saveModerationSettings()">Hide</button>
+                <button class="seg-pill" :class="{ active: modSettings.wordFilterAction === 'flag' }"
+                  @click="modSettings.wordFilterAction = 'flag'; saveModerationSettings()">Flag</button>
               </div>
             </div>
-          </div>
-
-          <!-- Add from presets -->
-          <div class="relay-field mt-3" v-if="availableGunPresets.length">
-            <label class="relay-label">Add from presets</label>
-            <div class="gun-preset-row">
-              <select v-model="selectedGunPreset" class="relay-input relay-select">
-                <option value="">— choose a preset —</option>
-                <option v-for="p in availableGunPresets" :key="p.url" :value="p.url">{{ p.label }}</option>
-              </select>
-              <ion-button size="small" :disabled="!selectedGunPreset" @click="addGunPeerFromPreset">
-                <ion-icon :icon="addOutline" slot="icon-only"></ion-icon>
-              </ion-button>
-            </div>
-          </div>
-
-          <!-- Add custom URL -->
-          <div class="relay-field mt-2">
-            <label class="relay-label">Add custom URL</label>
-            <div class="gun-preset-row">
-              <input
-                v-model="newGunPeerUrl"
-                type="text"
-                class="relay-input"
-                placeholder="https://your-relay.example.com/gun"
-                @keyup.enter="addGunPeerFromInput"
-              />
-              <ion-button size="small" :disabled="!newGunPeerUrl.trim()" @click="addGunPeerFromInput">
-                <ion-icon :icon="addOutline" slot="icon-only"></ion-icon>
-              </ion-button>
-            </div>
-          </div>
-
-          <ion-button
-            fill="outline"
-            color="medium"
-            size="small"
-            class="mt-2"
-            @click="resetGunPeersToDefaults"
-          >
-            Reset to defaults
-          </ion-button>
-          <div class="separator"></div>
-        </div>
-
-        <!-- Relay Configuration -->
-        <div class="section">
-          <div class="status-header">
-            <h3 class="section-title">Relay Configuration</h3>
-            <ion-badge v-if="hasCustomRelay" color="warning">Custom</ion-badge>
-          </div>
-          <p class="section-subtitle">Change the servers your node connects to</p>
-
-          <div class="relay-form">
-            <div class="relay-field">
-              <label class="relay-label">WebSocket Relay</label>
-              <input
-                v-model="editRelay.websocket"
-                type="text"
-                class="relay-input"
-                placeholder="ws://localhost:8080"
-              />
-            </div>
-            <div class="relay-field">
-              <label class="relay-label">GunDB Relay</label>
-              <input
-                v-model="editRelay.gun"
-                type="text"
-                class="relay-input"
-                placeholder="http://localhost:8765/gun"
-              />
-            </div>
-            <div class="relay-field">
-              <label class="relay-label">API Server</label>
-              <input
-                v-model="editRelay.api"
-                type="text"
-                class="relay-input"
-                placeholder="http://localhost:8080"
-              />
-            </div>
-          </div>
-
-          <ion-button expand="block" @click="applyRelayConfig" class="mt-3">
-            <ion-icon slot="start" :icon="swapHorizontalOutline"></ion-icon>
-            Apply &amp; Reconnect
-          </ion-button>
-
-          <ion-button
-            v-if="hasCustomRelay"
-            expand="block"
-            fill="outline"
-            color="medium"
-            @click="resetRelayConfig"
-            class="mt-2"
-          >
-            Reset to Defaults
-          </ion-button>
-          <div class="separator"></div>
-        </div>
-
-        <!-- Bootstrap Recovery -->
-        <div class="section">
-          <div class="status-header">
-            <h3 class="section-title">Bootstrap Recovery</h3>
-            <ion-badge color="tertiary">Manual + Gun</ion-badge>
-          </div>
-          <p class="section-subtitle">
-            First-contact flow when centralized relay is down: discover from Gun or exchange a bootstrap invite with peer status and relay context.
-          </p>
-
-          <div class="bootstrap-actions">
-            <ion-button size="small" fill="outline" :disabled="bootstrapDiscovering" @click="discoverBootstrapFromGun">
-              <ion-icon slot="start" :icon="refreshOutline"></ion-icon>
-              {{ bootstrapDiscovering ? 'Discovering…' : 'Discover from Gun' }}
-            </ion-button>
-            <ion-button size="small" fill="outline" @click="generateBootstrapInvite">
-              <ion-icon slot="start" :icon="downloadOutline"></ion-icon>
-              Generate Invite
-            </ion-button>
-            <ion-button
-              size="small"
-              fill="outline"
-              :disabled="!generatedBootstrapInvite"
-              @click="copyGeneratedBootstrapInvite"
-            >
-              <ion-icon slot="start" :icon="copyOutline"></ion-icon>
-              Copy Invite
-            </ion-button>
-          </div>
-
-          <div v-if="generatedBootstrapInvite" class="relay-field mt-2">
-            <label class="relay-label">Generated bootstrap invite</label>
-            <textarea
-              class="relay-input relay-textarea"
-              readonly
-              :value="generatedBootstrapInvite"
-            ></textarea>
-          </div>
-
-          <div class="relay-field mt-2">
-            <label class="relay-label">Import bootstrap invite</label>
-            <textarea
-              v-model="bootstrapInviteInput"
-              class="relay-input relay-textarea"
-              placeholder="Paste interpoll-bootstrap://... or JSON payload"
-            ></textarea>
-          </div>
-
-          <ion-button
-            size="small"
-            expand="block"
-            :disabled="!bootstrapInviteInput.trim() || bootstrapImporting"
-            @click="importBootstrapInvite"
-          >
-            <ion-icon slot="start" :icon="cloudUploadOutline"></ion-icon>
-            {{ bootstrapImporting ? 'Validating…' : 'Validate & Seed from Invite' }}
-          </ion-button>
-          <p class="helper-text">
-            Import never switches silently. We validate format, probe endpoints, then ask before adding or switching.
-          </p>
-          <div class="separator"></div>
-        </div>
-
-        <!-- Known Servers -->
-        <div class="section">
-          <div class="status-header">
-            <h3 class="section-title">Known Servers</h3>
-            <ion-badge color="primary">{{ knownServers.length }}</ion-badge>
-          </div>
-          <p class="section-subtitle">Servers learned from peers, Gun discovery, or local bootstrap actions</p>
-
-          <div v-if="knownServers.length === 0" class="empty-state">
-            <ion-icon :icon="serverOutline" size="large"></ion-icon>
-            <p>No servers discovered yet</p>
-            <p class="helper-text">Servers shared by peers will appear here</p>
-          </div>
-
-          <div v-else class="server-list">
-            <div
-              v-for="server in knownServers"
-              :key="server.websocket"
-              class="server-item"
-              :class="{ active: isCurrentlyConnectedServer(server.websocket) }"
-            >
-              <div class="server-header">
-                <div class="server-url-badge">
-                  <span class="server-dot" :class="{ active: isCurrentlyConnectedServer(server.websocket) }"></span>
-                  {{ shortenUrl(server.websocket) }}
-                </div>
-                <div class="server-meta">
-                  <ion-badge :color="server.source === 'peer' ? 'tertiary' : server.source === 'gun' ? 'primary' : 'medium'">
-                    {{ server.source === 'peer' ? 'Peer' : server.source === 'gun' ? 'Gun' : 'Local' }}
-                  </ion-badge>
-                  <ion-badge :color="server.signatureValid ? 'success' : 'warning'">
-                    {{ server.signatureValid ? 'Signed' : 'Unsigned' }}
-                  </ion-badge>
-                  <ion-badge color="light">{{ formatServerTtl(server) }}</ion-badge>
-                </div>
-              </div>
-              <div class="server-details">
-                <div class="server-detail">
-                  <span class="detail-label">WS</span>
-                  <code>{{ server.websocket }}</code>
-                </div>
-                <div class="server-detail">
-                  <span class="detail-label">Gun</span>
-                  <code>{{ server.gun }}</code>
-                </div>
-                <div class="server-detail">
-                  <span class="detail-label">API</span>
-                  <code>{{ server.api }}</code>
-                </div>
-                <div class="server-detail">
-                  <span class="detail-label">Discovered</span>
-                  <code>{{ formatPeerTime(server.firstSeen) }} · by {{ server.addedBy }}</code>
-                </div>
-              </div>
-              <ion-button
-                v-if="!isConfiguredServer(server.websocket)"
-                expand="block"
-                size="small"
-                fill="outline"
-                @click="probeAndSwitchToServer(server)"
-                class="mt-2"
-              >
-                <ion-icon slot="start" :icon="swapHorizontalOutline"></ion-icon>
-                Switch to this server
-              </ion-button>
-              <div v-else-if="isCurrentlyConnectedServer(server.websocket)" class="active-badge">Currently connected</div>
-              <div v-else class="active-badge reconnecting">Configured (reconnecting)</div>
-            </div>
-          </div>
-          <p v-if="knownServers.length > 0" class="helper-text mt-2">
-            Auto-switch only promotes fresh signed peer discoveries. Local/manual entries remain available for explicit switching.
-          </p>
-          <div class="separator"></div>
-        </div>
-
-        <!-- Connected Peers -->
-        <div class="section">
-          <div class="status-header">
-            <h3 class="section-title">Connected Peers</h3>
-            <ion-button fill="clear" size="small" @click="refreshNetwork">
+            <button class="block-btn outline danger mt-12" @click="resetModerationDefaults">
               <ion-icon :icon="refreshOutline"></ion-icon>
-            </ion-button>
+              Reset Moderation to Defaults
+            </button>
           </div>
-          <p class="section-subtitle">Peers sharing relay addresses automatically</p>
+        </div>
 
-          <div v-if="peerList.length === 0" class="empty-state">
-            <ion-icon :icon="globeOutline" size="large"></ion-icon>
-            <p>No peers connected yet</p>
-            <p class="helper-text">Peers will appear here once they join the network. Relay addresses are shared automatically on connect.</p>
-          </div>
-
-          <div v-else class="peer-list">
-            <div v-for="peer in peerList" :key="peer.peerId" class="peer-item">
-              <div class="peer-header">
-                <div class="peer-id-badge">
-                  <span class="peer-dot"></span>
-                  {{ peer.peerId }}
-                </div>
-                <span class="peer-joined">{{ formatPeerTime(peer.joinedAt) }}</span>
+        <!-- ══════════════════════ ADVANCED TAB ══════════════════════ -->
+        <div v-if="activeTab === 'advanced'">
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-violet">
+                <ion-icon :icon="keyOutline"></ion-icon>
               </div>
-              <div class="peer-details">
-                <div class="peer-detail" v-if="peer.relayUrl">
-                  <span class="detail-label">Relay</span>
-                  <code>{{ peer.relayUrl }}</code>
-                </div>
-                <div class="peer-detail" v-if="peer.gunPeers?.length">
-                  <span class="detail-label">DB Peers</span>
-                  <code v-for="gun in peer.gunPeers" :key="gun">{{ gun }}</code>
-                </div>
+              <div><h3>Moderation API</h3><p>Authenticate and enable click-to-submit from Home feed</p></div>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Provider</label>
+              <div class="field-wrap">
+                <select class="field-native" v-model="modSettings.moderationProvider" @change="saveModerationSettings">
+                  <option value="interpoll">Interpoll Moderation API</option>
+                  <option value="custom">Custom API</option>
+                </select>
               </div>
             </div>
+            <div class="field-group mt-8">
+              <label class="field-label">API Base URL</label>
+              <div class="field-wrap">
+                <input class="field-native mono-sm" v-model="modSettings.moderationApiBaseUrl"
+                  @blur="saveModerationSettings" placeholder="https://interpoll.endless.sbs/moderation" />
+              </div>
+            </div>
+            <div class="field-group mt-8">
+              <label class="field-label">API Key</label>
+              <div class="field-wrap">
+                <input class="field-native mono-sm" type="password" v-model="moderationApiKeyInput" placeholder="mod_sk_..." />
+              </div>
+            </div>
+            <div class="button-row mt-12">
+              <button class="pill-btn accent" @click="authenticateModerationApi">Authenticate</button>
+              <button class="pill-btn outline" @click="clearModerationApiAuth">Clear Auth</button>
+            </div>
+            <p class="helper-text mt-8">{{ moderationAuthMessage }}</p>
           </div>
-          <div class="separator"></div>
+
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-teal">
+                <ion-icon :icon="fingerPrintOutline"></ion-icon>
+              </div>
+              <div><h3>Manual Hash Submission</h3><p>SHA-256 of post body sent to moderation API on click</p></div>
+            </div>
+            <div class="toggle-row">
+              <div>
+                <div class="toggle-label">Click post to submit hash</div>
+                <div class="toggle-sub">No author fields included — content hash only</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" v-model="modSettings.moderationClickToSubmit" @change="saveModerationSettings" />
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+          </div>
         </div>
 
-        <!-- Your Peer Identity -->
-        <div class="section">
-          <h3 class="section-title">Your Node</h3>
-          <div class="info-grid">
-            <div class="info-row">
-              <span>Peer ID</span>
-              <code>{{ myPeerId }}</code>
+        <!-- ══════════════════════ NETWORK TAB ══════════════════════ -->
+        <div v-if="activeTab === 'network'">
+
+          <!-- P2P health banner -->
+          <div class="p2p-banner" :class="networkStatus.gunConnected ? 'banner-ok' : 'banner-warn'">
+            <div class="banner-left">
+              <div class="banner-dot" :class="networkStatus.gunConnected ? 'dot-ok' : 'dot-warn'"></div>
+              <div>
+                <div class="banner-title">{{ networkStatus.gunConnected ? 'Decentralised Network Active' : 'Network Degraded' }}</div>
+                <div class="banner-sub">{{ networkStatus.gunConnectedCount }} peer{{ networkStatus.gunConnectedCount !== 1 ? 's' : '' }} connected · {{ networkStatus.gunAvgLatencyMs != null ? networkStatus.gunAvgLatencyMs + 'ms avg' : 'measuring…' }}</div>
+              </div>
             </div>
-            <div class="info-row">
-              <span>Device ID</span>
-              <code>{{ fullDeviceId }}</code>
+            <div class="banner-metrics">
+              <div class="bmetric">
+                <span>{{ networkStatus.peerCount }}</span>
+                <small>Relay peers</small>
+              </div>
+              <div class="bmetric">
+                <span>{{ networkStatus.gunConnectedCount }}/{{ networkStatus.gunPeerCount }}</span>
+                <small>DB relays</small>
+              </div>
+              <div class="bmetric" :class="networkStatus.chainValid ? 'ok' : 'danger'">
+                <span>{{ networkStatus.chainValid ? '✓' : '✗' }}</span>
+                <small>Chain</small>
+              </div>
+            </div>
+          </div>
+
+          <!-- Privacy & Tor -->
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-violet">
+                <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
+              </div>
+              <div>
+                <h3>Privacy &amp; Tor</h3>
+                <p>Makes your browsing harder to trace. Turn this on if you want extra privacy — it stops features that could accidentally reveal your real location.</p>
+              </div>
+              <span class="status-pill" :class="anonymityMode ? 'pill-ok' : 'pill-off'">
+                {{ anonymityMode ? 'Anonymity ON' : 'OFF' }}
+              </span>
+            </div>
+            <div class="toggle-row">
+              <div>
+                <div class="toggle-label">Anonymity (Tor) Mode</div>
+                <div class="toggle-sub">Disables WebRTC, prefers .onion relays</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" v-model="anonymityMode" @change="onAnonymityToggle" />
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+            <div class="alert-box info mt-12">
+              <ion-icon :icon="informationCircleOutline"></ion-icon>
+              <span>A web app can't route its own traffic through Tor. Open InterPoll in <a href="https://www.torproject.org" target="_blank" class="link">Tor Browser</a> or route this browser through Orbot.</span>
+            </div>
+            <div v-if="anonymityMode" class="mt-12">
+              <div class="status-row" :class="activeRelayIsOnion ? 'row-ok' : 'row-warn'">
+                <ion-icon :icon="activeRelayIsOnion ? lockClosedOutline : warningOutline"></ion-icon>
+                <span v-if="activeRelayIsOnion">Active relay is a <code>.onion</code> address — routing via Tor hidden service.</span>
+                <span v-else>Active relay is <strong>clearnet</strong> — add a <code>.onion</code> relay below for hidden-service routing.</span>
+              </div>
+              <button class="pill-btn outline mt-8" :disabled="torChecking" @click="checkTorStatus">
+                <ion-icon :icon="refreshOutline"></ion-icon>
+                {{ torChecking ? 'Checking…' : 'Check Tor status' }}
+              </button>
+              <div v-if="torStatus.checked" class="alert-box mt-8"
+                :class="torStatus.isTor === true ? 'info' : torStatus.isTor === false ? 'warning' : ''">
+                {{ torStatus.note }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Relay Peers -->
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-teal">
+                <ion-icon :icon="serverOutline"></ion-icon>
+              </div>
+              <div>
+                <h3>Relay Peers</h3>
+                <p>These are the servers your app talks to. Think of them like post offices — they pass your messages to everyone else. More peers = more reliable, even if one goes down.</p>
+              </div>
+              <span class="count-badge">{{ networkStatus.gunConnectedCount }}/{{ gunPeersList.length }}</span>
+            </div>
+
+            <div class="peer-health-list">
+              <div v-for="peer in gunPeersDetail.length ? gunPeersDetail : gunPeersList.map(u => ({ url: u, connected: false }))"
+                :key="peer.url" class="peer-health-row">
+                <div class="peer-health-left">
+                  <span class="health-dot" :class="peer.connected ? 'dot-ok' : 'dot-off'"></span>
+                  <div>
+                    <div class="peer-name">{{ labelForGunUrl(peer.url) }}</div>
+                    <div class="peer-url">{{ peer.url }}</div>
+                  </div>
+                </div>
+                <div class="peer-health-right">
+                  <span v-if="peer.latencyMs != null" class="latency-badge">{{ peer.latencyMs }}ms</span>
+                  <span class="status-chip" :class="peer.connected ? 'chip-ok' : 'chip-off'">
+                    {{ peer.connected ? 'Live' : 'Connecting…' }}
+                  </span>
+                  <button v-if="gunPeersList.length > 1" class="icon-btn danger" @click="removeGunPeer(peer.url)" title="Remove">
+                    <ion-icon :icon="trashOutline"></ion-icon>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Add preset -->
+            <div v-if="availableGunPresets.length" class="field-group mt-12">
+              <label class="field-label">Add from presets</label>
+              <div class="inline-add">
+                <div class="field-wrap flex1">
+                  <select class="field-native" v-model="selectedGunPreset">
+                    <option value="">— choose a preset —</option>
+                    <option v-for="p in availableGunPresets" :key="p.url" :value="p.url">{{ p.label }}</option>
+                  </select>
+                </div>
+                <button class="pill-btn accent" :disabled="!selectedGunPreset" @click="addGunPeerFromPreset">Add</button>
+              </div>
+            </div>
+
+            <!-- Add custom -->
+            <div class="field-group mt-8">
+              <label class="field-label">Add custom relay URL</label>
+              <div class="inline-add">
+                <div class="field-wrap flex1">
+                  <input class="field-native mono-sm" v-model="newGunPeerUrl"
+                    placeholder="https://your-relay.example.com/gun"
+                    @keyup.enter="addGunPeerFromInput" />
+                </div>
+                <button class="pill-btn accent" :disabled="!newGunPeerUrl.trim()" @click="addGunPeerFromInput">Add</button>
+              </div>
+            </div>
+            <button class="pill-btn outline mt-8" @click="resetGunPeersToDefaults">Reset to defaults</button>
+          </div>
+
+          <!-- Run a Relay Node -->
+          <div class="settings-card decentralised-feature">
+            <div class="decentral-badge">
+              <ion-icon :icon="globeOutline"></ion-icon>
+              DECENTRALISED
+            </div>
+            <div class="card-heading">
+              <div class="card-heading-icon accent-violet">
+                <ion-icon :icon="cloudUploadOutline"></ion-icon>
+              </div>
+              <div>
+                <h3>Run a Relay Node</h3>
+                <p>Help keep Interpoll alive for everyone. Running a relay is like donating a phone line — other users route through you when they need it. No technical knowledge needed to get started.</p>
+              </div>
+            </div>
+
+            <div class="relay-options">
+              <div class="relay-option">
+                <div class="relay-option-header">
+                  <span class="relay-difficulty easy">Easy</span>
+                  <span class="relay-option-name">Browser Tab</span>
+                </div>
+                <p class="relay-option-desc">One click, zero setup. Gets a public <code>wss://tunnel.interpoll.endless.sbs</code> URL via the bridge server.</p>
+                <button class="pill-btn accent">Enable Browser Relay</button>
+              </div>
+
+              <div class="relay-option">
+                <div class="relay-option-header">
+                  <span class="relay-difficulty medium">Medium</span>
+                  <span class="relay-option-name">Home Server</span>
+                </div>
+                <p class="relay-option-desc">One-line installer for Raspberry Pi or spare Linux PC. Prints local IP relay URL, guides through optional port forwarding.</p>
+                <div class="code-block">curl -sSL https://interpoll.endless.sbs/install.sh | bash</div>
+              </div>
+
+              <div class="relay-option">
+                <div class="relay-option-header">
+                  <span class="relay-difficulty advanced">Technical</span>
+                  <span class="relay-option-name">Cloud VPS</span>
+                </div>
+                <p class="relay-option-desc">One-command VPS installer with domain argument. Handles Docker + Caddy + auto-TLS automatically.</p>
+                <div class="code-block">curl -sSL https://interpoll.endless.sbs/vps.sh | bash -s yourdomain.com</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Relay Configuration -->
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-blue">
+                <ion-icon :icon="constructOutline"></ion-icon>
+              </div>
+              <div><h3>Relay Configuration</h3><p>Change the servers your node connects to</p></div>
+              <span v-if="hasCustomRelay" class="status-pill pill-warn">Custom</span>
+            </div>
+            <div class="field-group">
+              <label class="field-label">WebSocket Relay</label>
+              <div class="field-wrap"><input class="field-native mono-sm" v-model="editRelay.websocket" placeholder="ws://localhost:8080" /></div>
+            </div>
+            <div class="field-group mt-8">
+              <label class="field-label">GunDB Relay</label>
+              <div class="field-wrap"><input class="field-native mono-sm" v-model="editRelay.gun" placeholder="http://localhost:8765/gun" /></div>
+            </div>
+            <div class="field-group mt-8">
+              <label class="field-label">API Server</label>
+              <div class="field-wrap"><input class="field-native mono-sm" v-model="editRelay.api" placeholder="http://localhost:8080" /></div>
+            </div>
+            <button class="block-btn accent mt-12" @click="applyRelayConfig">
+              <ion-icon :icon="swapHorizontalOutline"></ion-icon>
+              Apply &amp; Reconnect
+            </button>
+            <button v-if="hasCustomRelay" class="block-btn outline mt-8" @click="resetRelayConfig">Reset to Defaults</button>
+          </div>
+
+          <!-- Bootstrap Recovery -->
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-amber">
+                <ion-icon :icon="refreshOutline"></ion-icon>
+              </div>
+              <div>
+                <h3>Bootstrap Recovery</h3>
+                <p>If you can't connect at all, use this to find other users and get back online. Like asking a friend to share their server address when yours stops working.</p>
+              </div>
+            </div>
+            <div class="button-row">
+              <button class="pill-btn outline" :disabled="bootstrapDiscovering" @click="discoverBootstrapFromGun">
+                <ion-icon :icon="refreshOutline"></ion-icon>
+                {{ bootstrapDiscovering ? 'Discovering…' : 'Discover from Gun' }}
+              </button>
+              <button class="pill-btn outline" @click="generateBootstrapInvite">
+                <ion-icon :icon="downloadOutline"></ion-icon>
+                Generate Invite
+              </button>
+              <button class="pill-btn outline" :disabled="!generatedBootstrapInvite" @click="copyGeneratedBootstrapInvite">
+                <ion-icon :icon="copyOutline"></ion-icon>
+                Copy Invite
+              </button>
+            </div>
+            <p class="helper-text mt-8">Import never switches silently — endpoints are validated before connecting.</p>
+          </div>
+
+          <!-- Connected Peers & Your Node -->
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-teal">
+                <ion-icon :icon="peopleOutline"></ion-icon>
+              </div>
+              <div><h3>Connected Peers</h3><p>Peers sharing relay addresses automatically</p></div>
+              <button class="icon-btn" @click="refreshNetwork"><ion-icon :icon="refreshOutline"></ion-icon></button>
+            </div>
+            <div v-if="peerList.length === 0" class="empty-peers">
+              <ion-icon :icon="globeOutline"></ion-icon>
+              <p>No peers connected yet</p>
+            </div>
+            <div v-else class="peer-health-list">
+              <div v-for="peer in peerList" :key="peer.peerId" class="peer-health-row">
+                <div class="peer-health-left">
+                  <span class="health-dot dot-ok"></span>
+                  <div>
+                    <div class="peer-name">{{ peer.peerId }}</div>
+                    <div class="peer-url" v-if="peer.relayUrl">{{ peer.relayUrl }}</div>
+                  </div>
+                </div>
+                <span class="peer-joined-time">{{ formatPeerTime(peer.joinedAt) }}</span>
+              </div>
+            </div>
+            <div class="info-table mt-12">
+              <div class="info-row">
+                <span class="info-key">Your Peer ID</span>
+                <code class="info-val mono-sm">{{ myPeerId }}</code>
+              </div>
+              <div class="info-row">
+                <span class="info-key">Device ID</span>
+                <code class="info-val mono-sm">{{ fullDeviceId }}</code>
+              </div>
             </div>
           </div>
         </div>
+
+        <!-- ══════════════════════ DATA TAB ══════════════════════ -->
+        <div v-if="activeTab === 'data'">
+
+          <!-- Storage usage -->
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-blue">
+                <ion-icon :icon="serverOutline"></ion-icon>
+              </div>
+              <div><h3>Storage Usage</h3><p>Local device storage</p></div>
+            </div>
+            <div class="storage-ring-row">
+              <div class="storage-ring">
+                <svg viewBox="0 0 56 56">
+                  <circle cx="28" cy="28" r="24" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="6"/>
+                  <circle cx="28" cy="28" r="24" fill="none"
+                    :stroke="storagePercent > 95 ? '#ef4444' : storagePercent > 80 ? '#f59e0b' : '#6366f1'"
+                    stroke-width="6" stroke-linecap="round"
+                    :stroke-dasharray="`${storagePercent * 1.508} 150.8`"
+                    stroke-dashoffset="37.7" transform="rotate(-90 28 28)"/>
+                </svg>
+                <div class="ring-label">{{ storagePercent.toFixed(0) }}%</div>
+              </div>
+              <div class="storage-stats">
+                <div class="storage-stat-row">
+                  <span>Used</span><strong>{{ storageStats.used.toFixed(1) }} MB</strong>
+                </div>
+                <div class="storage-stat-row">
+                  <span>Available</span><strong>{{ storageStats.quota.toFixed(0) }} MB</strong>
+                </div>
+                <div class="storage-stat-row">
+                  <span>Pinned images</span><strong>{{ storageStats.pinnedItems }}</strong>
+                </div>
+              </div>
+            </div>
+            <button class="pill-btn outline mt-12" @click="refreshStorageStats">
+              <ion-icon :icon="refreshOutline"></ion-icon>
+              Refresh Stats
+            </button>
+          </div>
+
+          <!-- Data Versions -->
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-violet">
+                <ion-icon :icon="layersOutline"></ion-icon>
+              </div>
+              <div><h3>Data Versions</h3><p>Which GunDB data versions to display</p></div>
+            </div>
+            <div v-if="isProbing" class="helper-text">Probing available versions…</div>
+            <template v-else>
+              <div v-for="version in availableVersions" :key="version" class="toggle-row">
+                <div>
+                  <div class="toggle-label">{{ version === currentNamespace ? `${version} (current)` : `${version} (legacy)` }}</div>
+                  <div class="toggle-sub">{{ version === currentNamespace ? 'Default namespace' : 'Legacy posts from before migration' }}</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" :checked="versionToggles[version]" @change="toggleVersion(version)" />
+                  <span class="toggle-track"></span>
+                </label>
+              </div>
+            </template>
+            <p class="helper-text mt-8">Legacy posts were created before the namespace migration. Changes take effect on next page load.</p>
+          </div>
+
+          <!-- Storage Policy -->
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-teal">
+                <ion-icon :icon="cloudOutline"></ion-icon>
+              </div>
+              <div><h3>Storage Policy</h3><p>Control what gets stored locally</p></div>
+            </div>
+            <div class="toggle-row" v-for="(label, key) in { alwaysStoreMyPosts: 'Always store my posts', storeUpvotedPosts: 'Store posts I upvoted', storeMyCommunities: 'Store my communities', cachePopularPosts: 'Cache popular posts (100+ upvotes)', autoDeleteOldContent: 'Auto-delete old cached content' }" :key="key">
+              <div class="toggle-label">{{ label }}</div>
+              <label class="toggle-switch">
+                <input type="checkbox" v-model="policy[key]" @change="savePolicy" />
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+            <div class="field-group mt-12">
+              <label class="field-label">Keep recent posts</label>
+              <div class="field-wrap">
+                <select class="field-native" v-model="policy.keepRecentPostCount" @change="savePolicy">
+                  <option :value="25">Last 25</option>
+                  <option :value="50">Last 50</option>
+                  <option :value="100">Last 100</option>
+                  <option :value="250">Last 250</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-group mt-8">
+              <label class="field-label">Max storage (MB)</label>
+              <div class="field-wrap">
+                <select class="field-native" v-model="policy.maxStorageMB" @change="savePolicy">
+                  <option :value="50">50 MB</option>
+                  <option :value="100">100 MB</option>
+                  <option :value="250">250 MB</option>
+                  <option :value="500">500 MB</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Export / Import / Clear -->
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-green">
+                <ion-icon :icon="downloadOutline"></ion-icon>
+              </div>
+              <div><h3>Backup &amp; Restore</h3><p>Export or import all local data</p></div>
+            </div>
+            <div class="button-row">
+              <button class="pill-btn accent" @click="exportData">
+                <ion-icon :icon="downloadOutline"></ion-icon>
+                Export
+              </button>
+              <button class="pill-btn outline" @click="importData">
+                <ion-icon :icon="cloudUploadOutline"></ion-icon>
+                Import
+              </button>
+            </div>
+            <button class="block-btn outline danger mt-12" @click="pruneOldContent">
+              <ion-icon :icon="trashOutline"></ion-icon>
+              Clean Up Old Content
+            </button>
+            <button class="block-btn outline danger mt-8" @click="confirmClearAll">
+              <ion-icon :icon="warningOutline"></ion-icon>
+              Clear All Data
+            </button>
+            <input ref="importFileInput" type="file" accept=".json" class="hidden" @change="handleImportFile" />
+          </div>
+
+          <!-- Build info -->
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-blue">
+                <ion-icon :icon="informationCircleOutline"></ion-icon>
+              </div>
+              <div><h3>About this Build</h3></div>
+            </div>
+            <div class="info-table">
+              <div class="info-row">
+                <span class="info-key">Build Hash</span>
+                <code class="info-val mono-sm">{{ buildHash }}</code>
+              </div>
+              <div class="info-row">
+                <span class="info-key">Built at</span>
+                <span class="info-val">{{ formatBuildTime }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
-
-      <!-- DATA TAB -->
-      <div v-if="activeTab === 'data'">
-        <!-- Storage Usage -->
-        <div class="section">
-          <h3 class="section-title">Storage Usage</h3>
-          <p class="section-subtitle">Local device storage</p>
-
-          <div class="storage-stats">
-            <div class="stat-row">
-              <span>Used Storage</span>
-              <strong>{{ storageStats.used.toFixed(1) }} MB</strong>
-            </div>
-            <div class="stat-row">
-              <span>Available</span>
-              <strong>{{ storageStats.quota.toFixed(0) }} MB</strong>
-            </div>
-            <div class="stat-row">
-              <span>Pinned Images</span>
-              <strong>{{ storageStats.pinnedItems }}</strong>
-            </div>
-          </div>
-
-          <div class="progress-bar">
-            <div
-              class="progress-fill"
-              :style="{ width: `${storagePercent}%` }"
-              :class="{ warning: storagePercent > 80, danger: storagePercent > 95 }"
-            ></div>
-          </div>
-          <p class="progress-text">{{ storagePercent.toFixed(1) }}% used</p>
-
-          <ion-button
-            expand="block"
-            fill="outline"
-            @click="refreshStorageStats"
-            class="mt-3"
-          >
-            <ion-icon slot="start" :icon="refreshOutline"></ion-icon>
-            Refresh Stats
-          </ion-button>
-          <div class="separator"></div>
-        </div>
-
-        <!-- Data Versions -->
-        <div class="section">
-          <h3 class="section-title">Data Versions</h3>
-          <p class="section-subtitle">Choose which GunDB data versions to display</p>
-
-          <ion-list>
-            <ion-item v-if="isProbing">
-              <ion-spinner name="dots" slot="start"></ion-spinner>
-              <ion-label>Scanning for data versions…</ion-label>
-            </ion-item>
-            <ion-item v-for="ver in availableVersions" :key="ver">
-              <ion-toggle
-                :checked="versionToggles[ver]"
-                @ionChange="onToggleVersion(ver, $event)"
-              >
-                {{ ver }} {{ versionLabel(ver) }}
-              </ion-toggle>
-            </ion-item>
-          </ion-list>
-
-          <p class="helper-text">
-            Legacy posts were created before the namespace migration. Enable older versions to see that content. Changes take effect on next page load.
-          </p>
-          <div class="separator"></div>
-        </div>
-
-        <!-- Storage Policy -->
-        <div class="section">
-          <h3 class="section-title">Storage Policy</h3>
-          <p class="section-subtitle">Control what gets stored locally</p>
-
-          <ion-list>
-            <ion-item>
-              <ion-toggle v-model="policy.myPosts" @ionChange="savePolicy">
-                Always store my posts
-              </ion-toggle>
-            </ion-item>
-
-            <ion-item>
-              <ion-toggle v-model="policy.myUpvotes" @ionChange="savePolicy">
-                Store posts I upvoted
-              </ion-toggle>
-            </ion-item>
-
-            <ion-item>
-              <ion-toggle v-model="policy.myCommunities" @ionChange="savePolicy">
-                Store my communities
-              </ion-toggle>
-            </ion-item>
-
-            <ion-item>
-              <ion-toggle v-model="policy.popularPosts" @ionChange="savePolicy">
-                Cache popular posts (100+ upvotes)
-              </ion-toggle>
-            </ion-item>
-
-            <ion-item>
-              <ion-toggle v-model="policy.autoPruneOldContent" @ionChange="savePolicy">
-                Auto-delete old cached content
-              </ion-toggle>
-            </ion-item>
-
-            <ion-item>
-              <ion-label>Keep recent posts</ion-label>
-              <ion-select v-model="policy.recentPosts" @ionChange="savePolicy">
-                <ion-select-option :value="20">Last 20</ion-select-option>
-                <ion-select-option :value="50">Last 50</ion-select-option>
-                <ion-select-option :value="100">Last 100</ion-select-option>
-                <ion-select-option :value="200">Last 200</ion-select-option>
-              </ion-select>
-            </ion-item>
-
-            <ion-item>
-              <ion-label>Max storage (MB)</ion-label>
-              <ion-select v-model="policy.maxStorageMB" @ionChange="savePolicy">
-                <ion-select-option :value="50">50 MB</ion-select-option>
-                <ion-select-option :value="100">100 MB</ion-select-option>
-                <ion-select-option :value="250">250 MB</ion-select-option>
-                <ion-select-option :value="500">500 MB</ion-select-option>
-                <ion-select-option :value="1000">1 GB</ion-select-option>
-              </ion-select>
-            </ion-item>
-          </ion-list>
-          <div class="separator"></div>
-        </div>
-
-        <!-- Data Management -->
-        <div class="section">
-          <h3 class="section-title">Data Management</h3>
-          <p class="section-subtitle">Export, import, or clear data</p>
-
-          <ion-button expand="block" fill="outline" @click="exportData">
-            <ion-icon slot="start" :icon="downloadOutline"></ion-icon>
-            Export All Data
-          </ion-button>
-
-          <ion-button expand="block" fill="outline" @click="importData" class="mt-2">
-            <ion-icon slot="start" :icon="cloudUploadOutline"></ion-icon>
-            Import Data
-          </ion-button>
-
-          <ion-button
-            expand="block"
-            fill="outline"
-            @click="pruneOldContent"
-            class="mt-2"
-          >
-            <ion-icon slot="start" :icon="trashOutline"></ion-icon>
-            Clean Up Old Content
-          </ion-button>
-
-          <ion-button
-            expand="block"
-            color="danger"
-            fill="outline"
-            @click="confirmClearAll"
-            class="mt-2"
-          >
-            <ion-icon slot="start" :icon="warningOutline"></ion-icon>
-            Clear All Data
-          </ion-button>
-
-          <input
-            ref="importFileInput"
-            type="file"
-            accept=".json"
-            class="hidden-input"
-            @change="handleImportFile"
-          />
-          <div class="separator"></div>
-        </div>
-
-        <!-- Build Info -->
-        <div class="section">
-          <h3 class="section-title">About this build</h3>
-          <ion-list>
-            <ion-item>
-              <ion-label>Build Hash</ion-label>
-              <ion-text slot="end" class="build-hash">{{ buildHash }}</ion-text>
-            </ion-item>
-            <ion-item>
-              <ion-label>Built at</ion-label>
-              <ion-text slot="end" class="build-time">{{ formatBuildTime }}</ion-text>
-            </ion-item>
-          </ion-list>
-          <p class="helper-text">
-            Use these identifiers when reporting issues or checking if you're running the latest version.
-          </p>
-        </div>
-      </div>
-      </DesktopPageShell>
     </ion-content>
   </ion-page>
 </template>
 
 
 <style scoped>
-/* Section Layout */
-.section {
-  padding: 14px;
-  background: transparent;
+/* ── Global resets ──────────────────────────── */
+ion-header::after { display: none !important; }
+ion-toolbar { --border-width: 0 !important; }
+
+/* Settings content area — show the gradient through ion-content */
+ion-content {
+  --background:
+    radial-gradient(ellipse at 15% 0%,   rgba(139, 92, 246, 0.35) 0%, transparent 50%),
+    radial-gradient(ellipse at 88% 8%,   rgba(236, 72, 153, 0.22) 0%, transparent 45%),
+    radial-gradient(ellipse at 50% 100%, rgba(99, 102, 241, 0.24) 0%, transparent 55%),
+    radial-gradient(ellipse at 0%  55%,  rgba(79,  70, 229, 0.15) 0%, transparent 40%),
+    #0d0e1c;
 }
 
-.section-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin: 0 0 4px 0;
-  color: var(--ion-text-color);
+.back-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; background: none; border: none;
+  border-radius: 50%; color: var(--app-text-muted); cursor: pointer;
+  margin-left: 4px; transition: color 160ms ease;
 }
+.back-btn:hover { color: var(--app-text); }
+.back-btn svg { width: 22px; height: 22px; }
 
-.section-subtitle {
-  font-size: 13px;
-  color: var(--ion-color-medium);
-  margin: 0 0 12px 0;
-}
-
-.link-primary {
-  color: var(--ion-color-primary);
-  cursor: pointer;
-}
-
-.separator {
-  height: 1px;
-  background: rgba(var(--ion-text-color-rgb), 0.08);
-  margin: 16px 0;
-}
-
-.mt-2 { margin-top: 8px; }
-.mt-3 { margin-top: 12px; }
-.mt-12 { margin-top: 12px; }
-
-.hidden-input { display: none; }
-
-.helper-text {
-  font-size: 13px;
-  color: var(--ion-color-medium);
-  margin: 8px 0;
-  line-height: 1.5;
-}
-
-/* Privacy & Tor */
-.tor-explainer {
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--ion-color-medium);
-  margin: 4px 0 8px;
-}
-.tor-explainer p { margin: 6px 0; }
-.tor-explainer code,
-.tor-status-line code {
-  font-size: 12px;
-  padding: 1px 4px;
-  border-radius: 4px;
-  background: rgba(var(--ion-text-color-rgb), 0.08);
-}
-.tor-route-status { margin-top: 8px; }
-.tor-status-line {
+/* ── Settings tab bar ───────────────────────── */
+.settings-tab-bar {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  font-size: 13px;
-  line-height: 1.5;
-  padding: 10px 12px;
-  border-radius: 8px;
-}
-.tor-status-line ion-icon { flex: 0 0 auto; margin-top: 2px; font-size: 18px; }
-.tor-status-line.ok {
-  background: rgba(var(--ion-color-success-rgb), 0.12);
-  color: var(--ion-color-success-shade);
-}
-.tor-status-line.warn {
-  background: rgba(var(--ion-color-warning-rgb), 0.14);
-  color: var(--ion-color-warning-shade);
-}
-.tor-check-result {
-  margin-top: 8px;
-  font-size: 13px;
-  line-height: 1.45;
-  padding: 8px 10px;
-  border-radius: 8px;
-}
-.tor-check-result.ok { background: rgba(var(--ion-color-success-rgb), 0.12); color: var(--ion-color-success-shade); }
-.tor-check-result.warn { background: rgba(var(--ion-color-danger-rgb), 0.12); color: var(--ion-color-danger-shade); }
-.tor-check-result.unknown { background: rgba(var(--ion-text-color-rgb), 0.06); color: var(--ion-color-medium); }
-
-/* Moderation Tab */
-.range-row {
-  padding: 8px 0;
-}
-
-.range-label {
-  font-size: 14px;
-  color: var(--ion-text-color);
-  display: block;
-  margin-bottom: 4px;
-}
-
-.subsection-title {
-  font-size: 15px;
-  font-weight: 600;
-  margin: 0 0 8px 0;
-  color: var(--ion-text-color);
-}
-
-.category-count {
-  font-size: 12px;
-  color: var(--ion-color-medium);
-  font-weight: 400;
-}
-
-.chip-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-
-.inline-add {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.community-pref-actions {
-  display: flex;
-  gap: 6px;
-  margin-left: 8px;
-}
-
-.community-id {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--ion-color-medium);
-}
-
-.inline-input {
-  flex: 1;
-  --padding-start: 8px;
-  --padding-end: 8px;
-  border: 1px solid rgba(var(--ion-text-color-rgb), 0.12);
-  border-radius: 8px;
-  font-size: 14px;
-}
-
-.test-input {
-  --padding-start: 8px;
-  --padding-end: 8px;
-  border: 1px solid rgba(var(--ion-text-color-rgb), 0.12);
-  border-radius: 8px;
-  font-size: 14px;
-  margin-bottom: 8px;
-}
-
-.test-result {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  gap: 4px;
   padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 13px;
+  background: rgba(18, 12, 40, 0.55);
+  border-bottom: 1px solid rgba(139, 92, 246, 0.12);
+  justify-content: center;
 }
-
-.test-result.flagged {
-  background: rgba(var(--ion-color-warning-rgb), 0.10);
-  color: var(--ion-color-warning-shade);
+@media (max-width: 700px) {
+  .settings-tab-bar { justify-content: flex-start; }
 }
+.settings-tab-bar::-webkit-scrollbar { display: none; }
 
-.test-result.clean {
-  background: rgba(var(--ion-color-success-rgb), 0.10);
-  color: var(--ion-color-success-shade);
-}
-
-.test-result ion-icon {
-  font-size: 18px;
-  flex-shrink: 0;
-}
-
-/* Storage */
-.storage-stats {
+.settings-tab {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.stat-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.stat-row span {
-  color: var(--ion-color-medium);
-  font-size: 14px;
-}
-
-.stat-row strong {
-  font-size: 16px;
-}
-
-.progress-bar {
-  width: 100%;
-  height: 8px;
-  background: rgba(var(--ion-text-color-rgb), 0.08);
-  border-radius: 8px;
-  overflow: hidden;
-  margin-top: 16px;
-}
-
-.progress-fill {
-  height: 100%;
-  background: var(--ion-color-primary);
-  border-radius: 8px;
-  transition: width 0.5s ease;
-}
-
-.progress-fill.warning {
-  background: var(--ion-color-warning);
-}
-
-.progress-fill.danger {
-  background: var(--ion-color-danger);
-}
-
-.progress-text {
-  text-align: center;
-  font-size: 12px;
-  color: var(--ion-color-medium);
-  margin-top: 4px;
-}
-
-/* Info Grid */
-.info-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.info-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.info-row span {
-  color: var(--ion-color-medium);
-  font-size: 14px;
-}
-
-.info-row code {
-  font-size: 12px;
-  background: rgba(var(--ion-text-color-rgb), 0.05);
-  padding: 4px 8px;
-  border-radius: 8px;
-}
-
-.identity-row {
-  align-items: flex-start;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 4px 0;
-}
-
-.identity-right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-}
-
-.claim-btn {
-  --padding-start: 10px;
-  --padding-end: 10px;
-  height: 28px;
-  font-size: 12px;
-}
-
-/* Network Status */
-.reg-gate-hint {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 12px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: rgba(255, 193, 7, 0.06);
-  border: 1px solid rgba(255, 193, 7, 0.18);
-  font-size: 12px;
-  line-height: 1.45;
-  opacity: 0.85;
-}
-
-.reg-gate-hint ion-icon {
-  flex-shrink: 0;
-  margin-top: 2px;
-  color: var(--ion-color-warning);
-}
-
-.status-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.status-indicator {
-  display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ion-color-danger);
-  padding: 4px 10px;
-  border-radius: 20px;
-  background: rgba(var(--ion-color-danger-rgb), 0.08);
-  border: 1px solid rgba(var(--ion-color-danger-rgb), 0.12);
-}
-
-.status-indicator.connected {
-  color: var(--ion-color-success);
-  background: rgba(var(--ion-color-success-rgb), 0.08);
-  border-color: rgba(var(--ion-color-success-rgb), 0.12);
-}
-
-.status-indicator.partial {
-  color: var(--ion-color-warning);
-  background: rgba(var(--ion-color-warning-rgb), 0.08);
-  border-color: rgba(var(--ion-color-warning-rgb), 0.12);
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-/* Service Status */
-.service-status-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 16px;
-  padding: 12px;
-  background: rgba(var(--ion-text-color-rgb), 0.03);
-  border: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
-  border-radius: 12px;
-}
-
-.service-status-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.service-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.service-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--ion-color-danger);
-  flex-shrink: 0;
-}
-
-.service-dot.online {
-  background: var(--ion-color-success);
-}
-
-.service-name {
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.service-state {
-  font-size: 12px;
+  padding: 8px 14px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--app-text-muted);
+  font-size: 12.5px;
   font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 8px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  border-radius: 10px;
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.settings-tab ion-icon { font-size: 16px; flex-shrink: 0; }
+.settings-tab:hover {
+  color: var(--app-text);
+  background: rgba(255,255,255,0.06);
+}
+.settings-tab.active {
+  color: #e0e7ff;
+  background: rgba(99,102,241,0.18);
+  border-color: rgba(99,102,241,0.35);
 }
 
-.service-state.state-ok {
-  color: var(--ion-color-success);
-  background: rgba(var(--ion-color-success-rgb), 0.08);
-}
-
-.service-state.state-off {
-  color: var(--ion-color-danger);
-  background: rgba(var(--ion-color-danger-rgb), 0.08);
-}
-
-/* Metrics */
-.metrics-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.metric-card {
-  padding: 16px;
-  background: rgba(var(--ion-text-color-rgb), 0.03);
-  border: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
-  border-radius: 12px;
-  text-align: center;
-}
-
-.metric-value {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--ion-color-primary);
-  line-height: 1.2;
-}
-
-.metric-value.text-success {
-  color: var(--ion-color-success);
-}
-
-.metric-value.text-danger {
-  color: var(--ion-color-danger);
-}
-
-.metric-label {
-  font-size: 12px;
-  color: var(--ion-color-medium);
-  margin-top: 4px;
-  text-transform: uppercase;
-}
-
-/* Relay Config */
-.relay-form {
+/* ── Body ───────────────────────────────────── */
+.settings-body {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 20px 16px 60px;
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
-
-.relay-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.relay-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ion-color-medium);
-  text-transform: uppercase;
-}
-
-.relay-input {
-  font-size: 13px;
-  font-family: monospace;
-  background: rgba(var(--ion-text-color-rgb), 0.03);
-  color: var(--ion-text-color);
-  border: 1px solid rgba(var(--ion-text-color-rgb), 0.1);
-  padding: 10px 12px;
-  border-radius: 8px;
-  outline: none;
-  width: 100%;
-}
-
-.relay-input:focus {
-  border-color: var(--ion-color-primary);
-}
-
-.relay-textarea {
-  min-height: 92px;
-  resize: vertical;
-}
-
-.bootstrap-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-/* Gun Relay Peers */
-.gun-peers-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.gun-peer-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 12px;
-  background: rgba(var(--ion-text-color-rgb), 0.03);
-  border: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
-  border-radius: 10px;
-  gap: 8px;
-}
-
-.gun-peer-info {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  flex: 1;
-}
-
-.gun-peer-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--ion-color-medium);
-  flex-shrink: 0;
-  transition: background 0.3s;
-}
-
-.gun-peer-dot.online {
-  background: var(--ion-color-success);
-  box-shadow: 0 0 6px rgba(var(--ion-color-success-rgb), 0.5);
-}
-
-.gun-peer-text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.gun-peer-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ion-text-color);
-  white-space: nowrap;
+/* ── Cards ──────────────────────────────────── */
+.settings-card {
+  border-radius: 18px;
+  background: rgba(15, 12, 32, 0.55);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  padding: 18px 20px;
+  position: relative;
   overflow: hidden;
-  text-overflow: ellipsis;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+.settings-card.danger-zone {
+  border-color: rgba(239,68,68,0.18);
+  background: rgba(30, 10, 20, 0.55);
+}
+.settings-card.decentralised-feature {
+  border-color: rgba(99,102,241,0.30);
+  background: linear-gradient(135deg, rgba(99,102,241,0.10), rgba(139,92,246,0.07));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
-.gun-peer-url {
-  font-size: 11px;
-  font-family: monospace;
-  color: var(--ion-color-medium);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.gun-peer-meta {
+/* Card heading */
+.card-heading {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 16px;
 }
-
-.gun-peer-latency {
-  font-size: 11px;
-  font-family: monospace;
-  color: var(--ion-color-medium);
-  background: rgba(var(--ion-text-color-rgb), 0.06);
-  padding: 2px 6px;
-  border-radius: 6px;
+.card-heading h3 {
+  margin: 0 0 3px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--app-text);
 }
-
-.gun-peer-status {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 7px;
-  border-radius: 8px;
-}
-
-.gun-preset-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.gun-preset-row .relay-input {
-  flex: 1;
-}
-
-.relay-select {
-  appearance: none;
-  cursor: pointer;
-}
-
-/* Servers & Peers */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 32px 16px;
-  text-align: center;
-  gap: 8px;
-}
-
-.empty-state ion-icon {
-  font-size: 48px;
-  color: var(--ion-color-medium);
-}
-
-.empty-state p {
+.card-heading p {
   margin: 0;
-  color: var(--ion-color-medium);
-}
-
-.server-list,
-.peer-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.server-item,
-.peer-item {
-  border: 1px solid rgba(var(--ion-text-color-rgb), 0.1);
-  border-radius: 12px;
-  padding: 12px;
-  background: rgba(var(--ion-text-color-rgb), 0.02);
-}
-
-.server-item.active {
-  border-color: rgba(var(--ion-color-success-rgb), 0.3);
-  background: rgba(var(--ion-color-success-rgb), 0.04);
-}
-
-.server-header,
-.peer-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 8px;
-}
-
-.server-meta {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 6px;
-}
-
-.server-url-badge,
-.peer-id-badge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.server-dot,
-.peer-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--ion-color-medium);
-}
-
-.server-dot.active,
-.peer-dot {
-  background: var(--ion-color-success);
-}
-
-.peer-joined {
-  font-size: 12px;
-  color: var(--ion-color-medium);
-}
-
-.server-details,
-.peer-details {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.server-detail,
-.peer-detail {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.detail-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--ion-color-medium);
-  text-transform: uppercase;
-  min-width: 60px;
-  padding-top: 4px;
-}
-
-.server-detail code,
-.peer-detail code {
-  font-size: 12px;
-  background: rgba(var(--ion-text-color-rgb), 0.05);
-  padding: 2px 6px;
-  border-radius: 6px;
-  word-break: break-all;
-}
-
-.active-badge {
-  margin-top: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ion-color-success);
-  text-align: center;
-  text-transform: uppercase;
-}
-
-.active-badge.reconnecting {
-  color: var(--ion-color-medium);
-}
-
-/* Crypto Keys */
-.key-display {
-  display: flex;
-  align-items: flex-start;
-  gap: 4px;
-}
-
-.key-value {
-  font-size: 11px;
-  background: rgba(var(--ion-text-color-rgb), 0.05);
-  padding: 6px 10px;
-  border-radius: 8px;
-  word-break: break-all;
-  flex: 1;
-}
-
-.key-hidden {
-  color: var(--ion-color-medium);
-  font-style: italic;
-}
-
-.key-danger {
-  border: 1px solid rgba(var(--ion-color-warning-rgb), 0.3);
-  background: rgba(var(--ion-color-warning-rgb), 0.06);
-}
-
-.key-warning {
-  font-size: 12px;
-  color: var(--ion-color-warning);
-  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--app-text-muted);
   line-height: 1.4;
 }
+.card-heading > div:not(.card-heading-icon) { flex: 1; min-width: 0; }
 
-.build-hash,
-.build-time {
-  font-family: 'Courier New', monospace;
-  font-size: 12px;
-  color: var(--ion-color-medium);
-  text-align: right;
+/* Icon bubble */
+.card-heading-icon {
+  width: 40px; height: 40px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; color: #fff; flex-shrink: 0;
 }
+.accent-violet { background: linear-gradient(135deg, #6366f1, #8b5cf6); box-shadow: 0 4px 12px rgba(99,102,241,0.3); }
+.accent-blue   { background: linear-gradient(135deg, #3b82f6, #6366f1); box-shadow: 0 4px 12px rgba(59,130,246,0.3); }
+.accent-teal   { background: linear-gradient(135deg, #14b8a6, #3b82f6); box-shadow: 0 4px 12px rgba(20,184,166,0.3); }
+.accent-amber  { background: linear-gradient(135deg, #f59e0b, #ef4444); box-shadow: 0 4px 12px rgba(245,158,11,0.3); }
+.accent-rose   { background: linear-gradient(135deg, #ec4899, #ef4444); box-shadow: 0 4px 12px rgba(236,72,153,0.3); }
+.accent-green  { background: linear-gradient(135deg, #22c55e, #14b8a6); box-shadow: 0 4px 12px rgba(34,197,94,0.3); }
+
+/* ── Info table ─────────────────────────────── */
+.info-table { display: flex; flex-direction: column; gap: 10px; }
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(139,92,246,0.12);
+  border-radius: 12px;
+}
+.info-key { font-size: 12.5px; color: var(--app-text-muted); font-weight: 600; }
+.info-val { font-size: 12.5px; color: var(--app-text); }
+.info-val.flex-end { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.mono-sm { font-family: monospace; font-size: 11.5px; word-break: break-all; }
+
+/* ── Toggle rows ─────────────────────────────── */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.toggle-row:last-child { border-bottom: none; }
+.toggle-label { font-size: 14px; font-weight: 600; color: var(--app-text); }
+.toggle-sub { font-size: 12px; color: var(--app-text-muted); margin-top: 2px; }
+
+/* Toggle switch */
+.toggle-switch { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-track {
+  position: absolute; inset: 0; border-radius: 999px;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.1);
+  cursor: pointer;
+  transition: background 200ms ease;
+}
+.toggle-switch input:checked + .toggle-track { background: #6366f1; border-color: #6366f1; }
+.toggle-track::after {
+  content: ''; position: absolute; top: 3px; left: 3px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  transition: transform 200ms ease;
+}
+.toggle-switch input:checked + .toggle-track::after { transform: translateX(18px); }
+
+/* ── Field inputs ───────────────────────────── */
+.field-group { display: flex; flex-direction: column; gap: 6px; }
+.field-label {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--app-text-subtle);
+}
+.field-wrap {
+  border-radius: 12px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.09);
+  overflow: hidden;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+.field-wrap:focus-within {
+  border-color: rgba(99,102,241,0.5);
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+}
+.field-native {
+  width: 100%; background: transparent; border: none; outline: none;
+  padding: 11px 14px; font-size: 14px; font-family: inherit;
+  color: var(--ion-text-color); -webkit-appearance: none; appearance: none;
+}
+.field-native::placeholder { color: var(--app-text-subtle); }
+select.field-native {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.4)' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 36px;
+  cursor: pointer;
+}
+select.field-native option { background: #1a1a2e; color: #fff; }
+
+/* ── Buttons ────────────────────────────────── */
+.block-btn {
+  width: 100%; padding: 13px; border-radius: 14px; border: none;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+.block-btn.accent {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff; box-shadow: 0 6px 20px rgba(99,102,241,0.35);
+}
+.block-btn.outline {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--app-text-muted);
+}
+.block-btn.danger { color: #ef4444; border-color: rgba(239,68,68,0.25); }
+.block-btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+.block-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.pill-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: 999px; border: none;
+  font-size: 13px; font-weight: 700; cursor: pointer;
+  transition: opacity 160ms ease, transform 160ms ease;
+  white-space: nowrap;
+}
+.pill-btn.accent {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff; box-shadow: 0 4px 14px rgba(99,102,241,0.35);
+}
+.pill-btn.outline {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--app-text-muted);
+}
+.pill-btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+.pill-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.icon-btn {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: none; background: rgba(255,255,255,0.06);
+  color: var(--app-text-muted); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; transition: background 160ms ease, color 160ms ease;
+}
+.icon-btn:hover { background: rgba(255,255,255,0.1); color: var(--app-text); }
+.icon-btn.warning { color: #fbbf24; }
+.icon-btn.danger { color: #ef4444; background: rgba(239,68,68,0.1); }
+
+.button-row {
+  display: flex; flex-wrap: wrap; gap: 8px;
+}
+
+.inline-add { display: flex; align-items: center; gap: 8px; }
+.flex1 { flex: 1; }
+
+/* ── Seg pills ──────────────────────────────── */
+.seg-pills {
+  display: flex; gap: 4px; padding: 4px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 999px;
+  width: fit-content;
+}
+.seg-pill {
+  padding: 6px 16px; border-radius: 999px; border: none;
+  background: transparent; color: var(--app-text-muted);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: background 160ms, color 160ms;
+}
+.seg-pill:hover { color: var(--app-text); }
+.seg-pill.active {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff; box-shadow: 0 2px 10px rgba(99,102,241,0.35);
+}
+
+/* ── Keyword chips ──────────────────────────── */
+.chip-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.kw-chip {
+  padding: 4px 10px; border-radius: 999px; border: none;
+  font-size: 12.5px; font-weight: 600; cursor: pointer;
+  transition: opacity 160ms;
+}
+.kw-chip.include { background: rgba(52,211,153,0.12); color: #34d399; border: 1px solid rgba(52,211,153,0.25); }
+.kw-chip.exclude { background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.25); }
+.kw-chip:hover { opacity: 0.7; }
+
+/* ── Karma badge ────────────────────────────── */
+.karma-badge {
+  padding: 4px 12px; border-radius: 999px;
+  background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(139,92,246,0.15));
+  border: 1px solid rgba(99,102,241,0.25);
+  color: #818cf8; font-weight: 700; font-size: 13px;
+}
+
+/* ── Key block ──────────────────────────────── */
+.key-block { display: flex; flex-direction: column; gap: 12px; }
+.key-row { display: flex; flex-direction: column; gap: 6px; }
+.key-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--app-text-subtle); }
+.key-value-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px;
+}
+.key-val {
+  flex: 1; font-family: monospace; font-size: 11px;
+  word-break: break-all; color: var(--app-text);
+}
+.key-val.muted { color: var(--app-text-subtle); }
+.key-val.danger { color: #ef4444; }
+
+/* ── Alert boxes ────────────────────────────── */
+.alert-box {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 14px; border-radius: 12px;
+  font-size: 13px; line-height: 1.5;
+}
+.alert-box ion-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+.alert-box.info {
+  background: rgba(99,102,241,0.08);
+  border: 1px solid rgba(99,102,241,0.2);
+  color: #a5b4fc;
+}
+.alert-box.warning {
+  background: rgba(251,191,36,0.08);
+  border: 1px solid rgba(251,191,36,0.2);
+  color: #fbbf24;
+}
+.link { color: #818cf8; text-decoration: none; }
+.link:hover { text-decoration: underline; }
+
+/* ── Status pills / chips ───────────────────── */
+.status-pill {
+  padding: 4px 10px; border-radius: 999px;
+  font-size: 10.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  align-self: flex-start; flex-shrink: 0;
+}
+.pill-ok { background: rgba(52,211,153,0.12); color: #34d399; border: 1px solid rgba(52,211,153,0.25); }
+.pill-off { background: rgba(255,255,255,0.06); color: var(--app-text-muted); border: 1px solid rgba(255,255,255,0.09); }
+.pill-warn { background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.2); }
+
+.count-badge {
+  padding: 4px 10px; border-radius: 999px;
+  background: rgba(99,102,241,0.12);
+  border: 1px solid rgba(99,102,241,0.2);
+  color: #818cf8; font-size: 12px; font-weight: 700;
+  align-self: flex-start; flex-shrink: 0;
+}
+
+.status-chip {
+  padding: 3px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 700;
+}
+.chip-ok { background: rgba(52,211,153,0.12); color: #34d399; }
+.chip-off { background: rgba(255,255,255,0.06); color: var(--app-text-muted); }
+
+.status-row {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.5;
+}
+.row-ok { background: rgba(52,211,153,0.08); color: #34d399; border: 1px solid rgba(52,211,153,0.2); }
+.row-warn { background: rgba(251,191,36,0.08); color: #fbbf24; border: 1px solid rgba(251,191,36,0.2); }
+.status-row ion-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0.07); padding: 1px 5px; border-radius: 4px; }
+
+/* ── Network banner ─────────────────────────── */
+.p2p-banner {
+  border-radius: 18px; padding: 18px 20px;
+  border: 1px solid; display: flex;
+  align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+}
+.banner-ok {
+  background: linear-gradient(135deg, rgba(52,211,153,0.08), rgba(20,184,166,0.06));
+  border-color: rgba(52,211,153,0.2);
+}
+.banner-warn {
+  background: linear-gradient(135deg, rgba(251,191,36,0.08), rgba(239,68,68,0.06));
+  border-color: rgba(251,191,36,0.2);
+}
+.banner-left { display: flex; align-items: center; gap: 14px; }
+.banner-dot {
+  width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
+}
+.dot-ok { background: #34d399; box-shadow: 0 0 8px rgba(52,211,153,0.6); animation: pulse 2s infinite; }
+.dot-warn { background: #fbbf24; box-shadow: 0 0 8px rgba(251,191,36,0.6); }
+.dot-off { background: rgba(255,255,255,0.2); }
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 6px rgba(52,211,153,0.5); }
+  50% { box-shadow: 0 0 14px rgba(52,211,153,0.85); }
+}
+.banner-title { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; color: var(--app-text); }
+.banner-sub { font-size: 12.5px; color: var(--app-text-muted); margin-top: 2px; }
+.banner-metrics { display: flex; gap: 20px; }
+.bmetric { text-align: center; }
+.bmetric span { display: block; font-size: 20px; font-weight: 800; letter-spacing: -0.03em; color: var(--app-text); }
+.bmetric small { font-size: 10.5px; color: var(--app-text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.bmetric.ok span { color: #34d399; }
+.bmetric.danger span { color: #ef4444; }
+
+/* ── Peer health list ───────────────────────── */
+.peer-health-list { display: flex; flex-direction: column; gap: 8px; }
+.peer-health-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+}
+.peer-health-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+.health-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.peer-name { font-size: 13.5px; font-weight: 600; color: var(--app-text); }
+.peer-url { font-size: 11px; font-family: monospace; color: var(--app-text-subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
+.peer-health-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.latency-badge {
+  font-size: 11px; font-family: monospace;
+  background: rgba(255,255,255,0.06); color: var(--app-text-muted);
+  padding: 2px 7px; border-radius: 6px;
+}
+.peer-joined-time { font-size: 11.5px; color: var(--app-text-subtle); }
+
+.empty-peers {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 36px 16px; color: var(--app-text-muted);
+}
+.empty-peers ion-icon { font-size: 36px; opacity: 0.4; }
+.empty-peers p { margin: 0; font-size: 14px; }
+
+/* ── Decentralised feature card ─────────────── */
+.decentral-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 999px;
+  background: linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.2));
+  border: 1px solid rgba(99,102,241,0.3);
+  color: #a5b4fc; font-size: 9.5px; font-weight: 800;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  margin-bottom: 14px;
+}
+.decentral-badge ion-icon { font-size: 13px; }
+
+.relay-options { display: flex; flex-direction: column; gap: 12px; }
+.relay-option {
+  padding: 16px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 14px;
+}
+.relay-option-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.relay-difficulty {
+  padding: 3px 8px; border-radius: 999px;
+  font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
+}
+.relay-difficulty.easy { background: rgba(52,211,153,0.12); color: #34d399; border: 1px solid rgba(52,211,153,0.25); }
+.relay-difficulty.medium { background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.25); }
+.relay-difficulty.advanced { background: rgba(239,68,68,0.12); color: #f87171; border: 1px solid rgba(239,68,68,0.25); }
+.relay-option-name { font-size: 14px; font-weight: 700; color: var(--app-text); }
+.relay-option-desc { font-size: 13px; color: var(--app-text-muted); line-height: 1.55; margin: 0 0 12px; }
+.code-block {
+  font-family: monospace; font-size: 12px;
+  background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
+  padding: 10px 14px; border-radius: 10px; color: #a5b4fc;
+  word-break: break-all;
+}
+
+/* ── Range rows ─────────────────────────────── */
+.range-row { padding: 6px 0; }
+.range-header { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13.5px; color: var(--app-text-muted); }
+.range-val { font-weight: 700; color: var(--app-text); }
+
+/* ── Community prefs ────────────────────────── */
+.community-pref-list { display: flex; flex-direction: column; gap: 8px; }
+.community-pref-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+}
+.community-id-text { font-size: 11.5px; color: var(--app-text-subtle); margin-top: 2px; }
+.pref-btns { display: flex; gap: 6px; }
+.pref-btn {
+  padding: 5px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05); color: var(--app-text-muted);
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: all 160ms ease;
+}
+.pref-btn.active { background: rgba(99,102,241,0.15); color: #818cf8; border-color: rgba(99,102,241,0.3); }
+.pref-btn.mute.active { background: rgba(255,255,255,0.08); color: var(--app-text); border-color: rgba(255,255,255,0.15); }
+
+/* ── Storage ring ───────────────────────────── */
+.storage-ring-row { display: flex; align-items: center; gap: 20px; }
+.storage-ring { position: relative; width: 80px; height: 80px; flex-shrink: 0; }
+.storage-ring svg { width: 80px; height: 80px; }
+.ring-label {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 800; color: var(--app-text); letter-spacing: -0.02em;
+}
+.storage-stats { display: flex; flex-direction: column; gap: 8px; }
+.storage-stat-row { display: flex; justify-content: space-between; gap: 20px; font-size: 13px; }
+.storage-stat-row span { color: var(--app-text-muted); }
+.storage-stat-row strong { color: var(--app-text); font-weight: 700; }
+
+/* ── Helpers ────────────────────────────────── */
+.helper-text { font-size: 12.5px; color: var(--app-text-muted); line-height: 1.5; }
+.mt-8 { margin-top: 8px; }
+.mt-12 { margin-top: 12px; }
+.hidden { display: none; }
+
+@media (max-width: 576px) {
+  .settings-tab { padding: 7px 11px; font-size: 11.5px; gap: 5px; }
+  .settings-tab ion-icon { font-size: 14px; }
+  .banner-metrics { gap: 12px; }
+  .bmetric span { font-size: 16px; }
+}
+
 </style>
 
 <script setup lang="ts">
@@ -2057,7 +1440,22 @@ import {
   addOutline,
   lockClosedOutline,
   shieldCheckmarkOutline
-} from 'ionicons/icons';
+,
+  rocketOutline,
+  keyOutline,
+  colorPaletteOutline,
+  analyticsOutline,
+  layersOutline,
+  cloudOutline,
+  constructOutline,
+  fingerPrintOutline,
+  addCircleOutline,
+  removeCircleOutline,
+  arrowDownOutline,
+  optionsOutline,
+  informationCircleOutline,
+  chatbubbleOutline,
+  personOutline} from 'ionicons/icons';
 import { PinningService } from '../services/pinningService';
 import { StorageManager } from '../services/storageManager';
 import { UserService } from '../services/userService';
@@ -2087,6 +1485,16 @@ const chainStore = useChainStore();
 const communityStore = useCommunityStore();
 const importFileInput = ref<HTMLInputElement | null>(null);
 const activeTab = ref('general');
+
+const tabs = [
+  { id: 'general',    label: 'General',    icon: personCircleOutline },
+  { id: 'network',    label: 'Network',    icon: globeOutline },
+  { id: 'data',       label: 'Data',       icon: serverOutline },
+  { id: 'feed',       label: 'Feed',       icon: rocketOutline },
+  { id: 'moderation', label: 'Moderation', icon: shieldCheckmarkOutline },
+  { id: 'advanced',   label: 'Advanced',   icon: keyOutline },
+];
+
 const {
   preferences: feedPreferences,
   setMode: setFeedMode,
@@ -3445,6 +2853,8 @@ const confirmClearAll = async () => {
       }
     ]
   });
+
+
 
   await alert.present();
 };

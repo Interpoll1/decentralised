@@ -1,6 +1,6 @@
 // src/stores/postStore.ts
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { ref, computed, shallowRef, triggerRef, watchEffect } from 'vue';
 import { Post, PostService } from '../services/postService';
 import type { PostTally } from '../services/postVoteService';
 import { UserService } from '../services/userService';
@@ -12,6 +12,7 @@ import { generatePseudonym } from '../utils/pseudonym';
 import { enabledVersions, type DataVersion } from '../utils/dataVersionSettings';
 import { GUN_NAMESPACE } from '../services/gunService';
 import { BoundedMap } from '../utils/boundedMap';
+// relayFeedService imports removed from store — REST warmup lives in dbWarmup.ts
 
 const PAGE_SIZE      = 10;
 const SEEN_POSTS_KEY = 'seen-post-ids';
@@ -111,7 +112,11 @@ export const usePostStore = defineStore('post', () => {
     });
   }
 
-  const postsMap           = ref<Map<string, Post>>(new Map());
+  // shallowRef instead of ref: Vue only tracks the Map reference, not every
+  // nested Post object. This means tally patches via postsMap.value.set() do
+  // NOT cause a full sortedPosts recompute on their own — we call triggerRef()
+  // selectively from setTally/setCommentCount when sort order might change.
+  const postsMap = shallowRef<Map<string, Post>>(new Map());
   const currentPost        = ref<Post | null>(null);
   const isLoading          = ref(false);
   const currentFeed        = ref<'all' | 'community'>('all');
@@ -146,19 +151,57 @@ export const usePostStore = defineStore('post', () => {
   // state it starts in.
   const tallies = new BoundedMap<string, PostTally>({ maxSize: 1000 });
 
+  /**
+   * Derived comment counts from the relay's comment index (not the mutable
+   * commentCount Gun field which suffers LWW concurrent-write races). Once a
+   * count lands here it permanently outranks any Gun echo of the post node —
+   * same protection pattern as tallies.
+   */
+  const knownCommentCounts = new BoundedMap<string, number>({ maxSize: 1000 });
+
+  /**
+   * Update the stored comment count for a post and patch it into the store map
+   * immediately so feed cards refresh without waiting for a Gun echo.
+   */
+  function setCommentCount(postId: string, count: number): void {
+    knownCommentCounts.set(postId, count);
+    const existing = postsMap.value.get(postId);
+    if (existing) {
+      postsMap.value.set(postId, { ...existing, commentCount: count });
+      // Comment count doesn't affect sort order — no triggerRef needed here.
+      // The card will update because currentPost is a separate ref.
+    }
+    if (currentPost.value?.id === postId) {
+      currentPost.value = { ...currentPost.value, commentCount: count };
+    }
+  }
+
   /** postId → this user's vote, as last confirmed by the graph. */
   const myVotes = ref(loadMyVotes());
 
-  /** Overlay the derived tally, if we have one, onto an incoming copy of a post. */
+  /**
+   * Overlay the derived tally AND the index-derived comment count onto an
+   * incoming post. Both outrank Gun echoes of the mutable fields.
+   */
   function withKnownTally(incoming: Post): Post {
+    let post: Post = incoming;
     const tally = tallies.get(incoming.id);
-    return tally ? { ...incoming, ...tally } : incoming;
+    if (tally) post = { ...post, ...tally };
+    const count = knownCommentCounts.get(incoming.id);
+    if (count !== undefined) post = { ...post, commentCount: count };
+    return post;
   }
 
   function setTally(postId: string, tally: PostTally) {
     tallies.set(postId, tally);
     const existing = postsMap.value.get(postId);
-    if (existing) postsMap.value.set(postId, { ...existing, ...tally });
+    if (existing) {
+      const scoreChanged = existing.score !== tally.score;
+      postsMap.value.set(postId, { ...existing, ...tally });
+      // Only notify sorted computed when score changes — otherwise the upvote
+      // counter update on a single card was triggering a full feed re-sort.
+      if (scoreChanged) triggerRef(postsMap);
+    }
     if (currentPost.value?.id === postId) {
       currentPost.value = { ...currentPost.value, ...tally };
     }
@@ -218,16 +261,31 @@ export const usePostStore = defineStore('post', () => {
   }
 
   function processIncomingPost(communityId: string, post: Post) {
-    // Avoid accepting legacy posts into a v3 client
+    // Avoid accepting legacy posts into a v3 client.
+    // Exception: category-only patches ({category, tags, nsfw} with no title)
+    // are synthetic objects built in postService with dataVersion already injected —
+    // but for safety we also allow them through if the post already exists in store
+    // (it's an update to a post we already accepted, not a new foreign-namespace post).
     const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;
     const postDataVersion = (post as any).dataVersion || null;
-    if (postDataVersion && postDataVersion !== GUN_NAMESPACE) return;
-    if (!postDataVersion && namespaceVersion >= 3) return;
+    const isCategoryPatch = !!(post as any).category && !(post as any).title;
+    const alreadyInStore  = postsMap.value.has(post.id);
+    // Allow through if: correct namespace, OR it's a category patch for a known post
+    if (!isCategoryPatch || !alreadyInStore) {
+      if (postDataVersion && postDataVersion !== GUN_NAMESPACE) return;
+      if (!postDataVersion && namespaceVersion >= 3) return;
+    }
 
-    // Always update existing posts in-place (vote counts, edits)
-    if (postsMap.value.has(post.id)) {
-      postsMap.value.set(post.id, withKnownTally(post));
-      tryDecryptPost(post);
+    // Always update existing posts in-place (vote counts, edits, category patches)
+    if (alreadyInStore) {
+      const existing = postsMap.value.get(post.id)!;
+      // For category patches, merge only the new fields onto the existing post
+      const merged = isCategoryPatch
+        ? { ...existing, category: (post as any).category, tags: (post as any).tags, nsfw: (post as any).nsfw }
+        : withKnownTally(post);
+      postsMap.value.set(post.id, merged);
+      triggerRef(postsMap);
+      tryDecryptPost(merged);
       return;
     }
 
@@ -320,11 +378,28 @@ export const usePostStore = defineStore('post', () => {
     return enabledVersions.value.includes(v as DataVersion);
   }
 
-  const sortedPosts = computed(() =>
-    Array.from(postsMap.value.values())
+  // Maintained sorted array — rebuilt only when postsMap changes (triggerRef).
+  // Tally patches that don't change sort order (upvote count only) do NOT
+  // rebuild this array, eliminating the biggest source of feed jank.
+  const _sortedPostsCache = shallowRef<Post[]>([]);
+
+  function rebuildSortedPosts() {
+    const arr = Array.from(postsMap.value.values())
       .filter(matchesVersion)
-      .sort((a, b) => b.createdAt - a.createdAt)
-  );
+      .sort((a, b) => b.createdAt - a.createdAt);
+    _sortedPostsCache.value = arr;
+  }
+
+  // Mirror: whenever postsMap is triggered (new post added or score changed)
+  // rebuild the sorted array. watchEffect subscribes to postsMap.value because
+  // shallowRef fires only on triggerRef() or .value reassignment — not on
+  // every individual .set() call inside the Map.
+  watchEffect(() => {
+    void postsMap.value; // reactive dependency
+    rebuildSortedPosts();
+  });
+
+  const sortedPosts = computed(() => _sortedPostsCache.value);
 
   const communityPosts = computed(() => {
     if (!currentCommunityId.value) return sortedPosts.value;
@@ -336,7 +411,7 @@ export const usePostStore = defineStore('post', () => {
 
   // ─── Loading ───────────────────────────────────────────────────────────────
 
-  function loadPostsForCommunity(communityId: string): Promise<void> {
+  async function loadPostsForCommunity(communityId: string): Promise<void> {
     if (POST_DEBUG) {
       postDebug('load-community-start', {
         communityId,
@@ -357,11 +432,15 @@ export const usePostStore = defineStore('post', () => {
       subscribedCommunities.delete(communityId);
     }
 
-    return new Promise((resolve) => {
-      communityInitialLoadDone.set(communityId, false);
-      const subscriptionStartTime = Date.now();
-      communityArrivalCounts.set(communityId, 0);
+    communityInitialLoadDone.set(communityId, false);
+    communityArrivalCounts.set(communityId, 0);
 
+    // REST warmup is handled by dbWarmup.ts (called from onMounted before this).
+    // This function's job is solely to open the Gun live-updates subscription.
+    // Gun delivers: (a) any posts dbWarmup missed, (b) real-time new posts.
+    const subscriptionStartTime = Date.now();
+
+    await new Promise<void>((resolve) => {
       const unsub = PostService.subscribeToPostsInCommunity(
         communityId,
         (post) => {
@@ -761,6 +840,7 @@ export const usePostStore = defineStore('post', () => {
     createPost, selectPost,
     toggleVote, clearVote, myVote, myVotes, refreshVoteState, subscribeToVotes,
     voteOnPost, upvotePost, downvotePost, removeUpvote, removeDownvote,
+    setCommentCount,
     refreshPosts,
   };
 });

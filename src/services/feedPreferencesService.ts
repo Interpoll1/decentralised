@@ -17,10 +17,18 @@ export interface FeedPreferences {
   includeKeywords: string[];
   excludeKeywords: string[];
   mutedCommunities: string[];
-  favoriteCommunities: string[];
+  favoriteCommunities: string[]
   showPosts: boolean;
   showPolls: boolean;
   rankingWeights: FeedRankingWeights;
+  /** Categories the user has explicitly followed or auto-followed via engagement */
+  followedCategories: string[];
+  /** Categories the user has hidden from their feed */
+  hiddenCategories: string[];
+  /** Tag → engagement count; used for personalised ranking */
+  engagedTags: Record<string, number>;
+  /** Whether to show NSFW-flagged posts */
+  showNsfw: boolean;
 }
 
 interface PersistedFeedPreferences extends Partial<FeedPreferences> {
@@ -47,6 +55,10 @@ const DEFAULT_PREFERENCES: FeedPreferences = {
   showPosts: true,
   showPolls: true,
   rankingWeights: { ...DEFAULT_RANKING_WEIGHTS },
+  followedCategories: [],
+  hiddenCategories: [],
+  engagedTags: {},
+  showNsfw: false,
 };
 
 export const feedPreferencesVersion = ref(0);
@@ -144,6 +156,20 @@ function sanitizePreferences(raw: Partial<FeedPreferences>): FeedPreferences {
     showPosts,
     showPolls,
     rankingWeights: sanitizeRankingWeights(raw.rankingWeights),
+    followedCategories: Array.isArray(raw.followedCategories)
+      ? raw.followedCategories.filter((c): c is string => typeof c === 'string' && !!c)
+      : [],
+    hiddenCategories: Array.isArray(raw.hiddenCategories)
+      ? raw.hiddenCategories.filter((c): c is string => typeof c === 'string' && !!c)
+      : [],
+    engagedTags: (raw.engagedTags && typeof raw.engagedTags === 'object' && !Array.isArray(raw.engagedTags))
+      ? Object.fromEntries(
+          Object.entries(raw.engagedTags as Record<string, unknown>)
+            .filter(([k, v]) => typeof k === 'string' && typeof v === 'number')
+            .map(([k, v]) => [k, v as number]),
+        )
+      : {},
+    showNsfw: raw.showNsfw === true,
   };
 }
 
@@ -178,8 +204,44 @@ export class FeedPreferencesService {
     return clonePreferences(next);
   }
 
-  static setMode(mode: FeedMode): FeedPreferences {
-    return this.savePreferences({ mode });
+  /**
+   * Record an engagement event (upvote, long-read, share) for a post.
+   * Increments tag scores and auto-follows the post's category after 3 engagements.
+   * Safe to call fire-and-forget; never throws.
+   */
+  static trackEngagement(post: { category?: string; tags?: string[] }): void {
+    try {
+      const prefs = this.getPreferences();
+      let changed = false;
+
+      // ── Category auto-follow ─────────────────────────────────────────────────
+      if (post.category && !prefs.followedCategories.includes(post.category)) {
+        const key = `cat_engage_${post.category}`;
+        const count = parseInt(localStorage.getItem(key) || '0', 10) + 1;
+        localStorage.setItem(key, String(count));
+        if (count >= 3) {
+          prefs.followedCategories.push(post.category);
+          changed = true;
+        }
+      }
+
+      // ── Tag engagement scoring ───────────────────────────────────────────────
+      if (post.tags && post.tags.length > 0) {
+        for (const tag of post.tags) {
+          if (tag && typeof tag === 'string') {
+            prefs.engagedTags[tag] = (prefs.engagedTags[tag] || 0) + 1;
+          }
+        }
+        changed = true;
+      }
+
+      if (changed) this.savePreferences(prefs);
+    } catch {
+      // Non-fatal — engagement tracking should never break a user action
+    }
+  }
+
+  static setMode(mode: FeedMode): FeedPreferences {    return this.savePreferences({ mode });
   }
 
   static setContentTypeVisibility(showPosts: boolean, showPolls: boolean): FeedPreferences {
