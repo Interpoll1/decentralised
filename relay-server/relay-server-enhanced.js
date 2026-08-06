@@ -839,6 +839,21 @@ async function initMySQL() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
+    // Chain-level vote dedup index — survives relay restarts (unlike the JSON voteRegistry).
+    // Keyed on (poll_id, device_id) so a single query confirms uniqueness even when the
+    // in-memory voteRegistry was wiped by a process restart.
+    await queryMySQL(`
+      CREATE TABLE IF NOT EXISTS chain_vote_index (
+        poll_id   VARCHAR(255) NOT NULL,
+        device_id VARCHAR(255) NOT NULL,
+        pubkey    VARCHAR(64),
+        recorded_at BIGINT NOT NULL,
+        PRIMARY KEY (poll_id, device_id),
+        INDEX idx_poll (poll_id),
+        INDEX idx_device (device_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
     console.log('✅ MySQL connected with enhanced tables');
   } catch (err) {
     console.error('❌ MySQL failed:', err.message);
@@ -859,6 +874,40 @@ async function queryMySQL(sql, params) {
     return null;
   } finally {
     if (conn) conn.release();
+  }
+}
+
+/**
+ * Check the durable chain_vote_index for a (pollId, deviceId) pair.
+ * Returns true if this (poll, device) already has a recorded vote.
+ * Survives relay restarts — unlike the JSON voteRegistry which must reload from disk.
+ */
+async function isChainDuplicate(pollId, deviceId) {
+  if (!db || !pollId || !deviceId) return false;
+  try {
+    const rows = await queryMySQL(
+      'SELECT 1 FROM chain_vote_index WHERE poll_id = ? AND device_id = ? LIMIT 1',
+      [String(pollId), String(deviceId)],
+    );
+    return Array.isArray(rows) && rows.length > 0;
+  } catch {
+    return false; // fail open — don't block votes on DB errors
+  }
+}
+
+/**
+ * Record a vote into the durable chain_vote_index.
+ * INSERT IGNORE is idempotent; re-delivery of the same block is a no-op.
+ */
+async function recordChainVote(pollId, deviceId, pubkey) {
+  if (!db || !pollId || !deviceId) return;
+  try {
+    await queryMySQL(
+      'INSERT IGNORE INTO chain_vote_index (poll_id, device_id, pubkey, recorded_at) VALUES (?, ?, ?, ?)',
+      [String(pollId), String(deviceId), pubkey ? String(pubkey).slice(0, 64) : null, Date.now()],
+    );
+  } catch (err) {
+    console.warn('[chain_vote_index] recordChainVote failed:', err.message);
   }
 }
 
@@ -2382,6 +2431,32 @@ wss.on('connection', (ws, req) => {
           if (!peerId) {
             if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'error', code: 'AUTH_REQUIRED', reason: 'register required before relay actions' }));
             break;
+          }
+          // ── Point 5: Chain-level vote dedup cross-check ──────────────────────
+          // For vote blocks, check BOTH the in-memory voteRegistry (fast, reloaded
+          // from disk on startup) AND the durable chain_vote_index MySQL table.
+          // The MySQL table catches replays that arrive after a relay restart before
+          // the JSON voteRegistry has been reloaded, or when the file was wiped.
+          if ((data.type === 'new-block' || effectiveType === 'new-block') && actionType === 'vote') {
+            // effectivePayload handles both direct { type:'new-block', ...block }
+            // and wrapped { type:'broadcast', data: { type:'new-block', ...block } } shapes.
+            const blockPollId   = (effectivePayload.actionLabel || '').replace(/^Vote on\s+/i, '').trim();
+            const blockDeviceId = effectivePayload.deviceId || effectivePayload.pubkey;
+            if (blockPollId && blockDeviceId) {
+              const registryKey = blockPollId + ':' + blockDeviceId;
+              const inRegistry  = voteRegistryOperational && voteRegistry.has(registryKey);
+              const inChainDB   = !inRegistry && await isChainDuplicate(blockPollId, blockDeviceId);
+              if (inRegistry || inChainDB) {
+                const source = inRegistry ? 'voteRegistry' : 'chain_vote_index';
+                console.warn('[relay] Rejected duplicate vote block from peer ' + peerId + ' (source=' + source + ', poll=' + blockPollId + ')');
+                if (ws.readyState === 1) {
+                  ws.send(JSON.stringify({ type: 'error', code: 'DUPLICATE_VOTE', reason: 'Vote already recorded on this relay' }));
+                }
+                break;
+              }
+              // Record into the durable table so future restarts cannot replay old blocks.
+              await recordChainVote(blockPollId, blockDeviceId, effectivePayload.pubkey);
+            }
           }
           broadcastToOthers(peerId, data);
           cacheMessage(data);

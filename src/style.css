@@ -165,9 +165,9 @@
 html.dark,
 body.dark {
   color-scheme: dark;
-  --app-bg-deep: #000000;
-  --app-bg-base: #000000;
-  --app-bg-elevated: #07080a;
+  --app-bg-deep: #0c0d14;
+  --app-bg-base: #0e0f1a;
+  --app-bg-elevated: #13152a;
   --app-surface: rgba(22, 24, 30, 0.66);
   --app-surface-strong: rgba(30, 32, 40, 0.80);
   --app-surface-hover: rgba(38, 41, 50, 0.86);
@@ -206,18 +206,19 @@ body.dark {
   --glass-inner-glow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 
   /* dark aurora */
-  --aurora-base-bg: #0a0b10;
+  --aurora-base-bg: #0c0d14;
   --aurora-blend: normal;
-  --aurora-orb1-opacity: 0.16;
-  --aurora-orb2-opacity: 0.12;
-  --aurora-orb3-opacity: 0.10;
+  --aurora-orb1-opacity: 0.18;
+  --aurora-orb2-opacity: 0.14;
+  --aurora-orb3-opacity: 0.12;
 
-  --ion-background-color-rgb: 0, 0, 0;
+  --ion-background-color: #0e0f1a;
+  --ion-background-color-rgb: 14, 15, 26;
   --ion-card-background-rgb: 22, 24, 30;
   --ion-item-background: rgba(255, 255, 255, 0.04);
   --ion-text-color-rgb: 245, 245, 246;
-  --ion-toolbar-background: rgba(10, 11, 14, 0.55);
-  --ion-tab-bar-background: rgba(10, 11, 14, 0.70);
+  --ion-toolbar-background: rgba(12, 13, 22, 0.80);
+  --ion-tab-bar-background: rgba(10, 11, 20, 0.92);
   --ion-color-step-50: #050505;
   --ion-color-step-100: #0a0a0a;
   --ion-color-step-150: #111111;
@@ -254,6 +255,7 @@ body {
   background: var(--aurora-base-bg);
   color: var(--app-text);
 }
+
 
 body {
   position: relative;
@@ -557,6 +559,24 @@ ion-toolbar {
   -webkit-backdrop-filter: blur(var(--toolbar-blur)) saturate(var(--toolbar-saturation));
 }
 
+/* Kill the blue square on any button rendered inside ion-toolbar slots */
+ion-toolbar ion-buttons button,
+ion-toolbar ion-buttons .button-native,
+ion-toolbar .back-button-native,
+ion-toolbar ion-back-button::part(native),
+ion-toolbar ion-button::part(native) {
+  background: transparent !important;
+  --background: transparent !important;
+  --background-hover: transparent !important;
+  --background-activated: transparent !important;
+  --background-focused: transparent !important;
+  --background-hover-opacity: 0 !important;
+  --background-activated-opacity: 0 !important;
+  --background-focused-opacity: 0 !important;
+  --ripple-color: rgba(255,255,255,0.08) !important;
+  box-shadow: none !important;
+}
+
 ion-card {
   --background: transparent;
   margin: 0;
@@ -612,6 +632,30 @@ ion-searchbar {
   --placeholder-color: var(--app-text-subtle);
 }
 
+/* Kill native browser blue-square outline on ALL inputs/textareas/selects globally */
+input,
+textarea,
+select,
+button {
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  box-shadow: none;
+}
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+/* Any div used as a search wrapper */
+div:focus,
+div:focus-within {
+  outline: none;
+}
+
 ion-select::part(text),
 ion-input::part(native),
 ion-textarea::part(native) {
@@ -654,6 +698,25 @@ ion-button:hover {
 
 ion-button:active {
   transform: scale(0.98);
+}
+
+/* ── ion-back-button — kill blue square hover ── */
+ion-back-button {
+  --background: transparent;
+  --background-hover: transparent;
+  --background-focused: transparent;
+  --background-activated: transparent;
+  --background-hover-opacity: 0;
+  --background-focused-opacity: 0;
+  --background-activated-opacity: 0;
+  --ripple-color: rgba(255, 255, 255, 0.1);
+  --color: var(--app-text-muted);
+  --color-hover: var(--app-text);
+  --icon-font-size: 22px;
+}
+ion-back-button:hover {
+  transform: none;
+  filter: none;
 }
 
 ion-chip,
@@ -745,54 +808,50 @@ ion-modal::part(backdrop) {
 
 /* poll / post rows */
 
+/* poll / post cards — border via CSS variable, no !important needed */
 .poll-card,
 .post-card {
-  border-bottom-color: var(--app-border) !important;
-  transition: background 0.2s ease;
+  border-bottom-color: var(--app-border);
+  /* will-change only on interaction, not by default */
 }
 
 .poll-card:hover,
 .post-card:hover {
-  background: var(--app-item-surface) !important;
-  backdrop-filter: blur(12px) !important;
-  -webkit-backdrop-filter: blur(12px) !important;
+  background: var(--app-item-surface);
   border-radius: 12px;
+  /* skip backdrop-filter on hover — causes GPU layer promotion on every card */
 }
 
-.poll-footer {
-  border-top-color: var(--app-border) !important;
-}
+.poll-footer { border-top-color: var(--app-border); }
 
-/* stat / option / community elements */
-
+/* stat pills — backdrop-filter once via a shared backdrop context */
 .stat-item {
-  background: var(--app-item-surface) !important;
-  border-color: var(--app-border) !important;
-  backdrop-filter: blur(8px) !important;
-  -webkit-backdrop-filter: blur(8px) !important;
+  background: var(--app-item-surface);
+  border-color: var(--app-border);
+  /* backdrop delegated to parent surface; skip per-pill repaint */
 }
 
 .option-bar {
-  background: var(--app-item-surface) !important;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.12) !important;
+  background: var(--app-item-surface);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
 .community-row,
 .community-item {
-  background: var(--app-item-surface) !important;
-  border-radius: 10px !important;
-  border: 1px solid var(--app-border) !important;
-  backdrop-filter: blur(12px) !important;
-  -webkit-backdrop-filter: blur(12px) !important;
+  background: var(--app-item-surface);
+  border-radius: 10px;
+  border: 1px solid var(--app-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .tab-bar,
 .feed-tabs {
-  background: var(--app-pill-surface) !important;
-  backdrop-filter: blur(16px) !important;
-  -webkit-backdrop-filter: blur(16px) !important;
-  border-radius: 999px !important;
-  border: 1px solid var(--app-border) !important;
+  background: var(--app-pill-surface);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 999px;
+  border: 1px solid var(--app-border);
 }
 
 /* misc */

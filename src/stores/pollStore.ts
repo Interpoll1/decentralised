@@ -1,18 +1,46 @@
 // src/stores/pollStore.ts
 import { defineStore } from 'pinia';
-import { ref, computed, onScopeDispose } from 'vue';
+import { ref, computed, onScopeDispose, shallowRef, triggerRef, watchEffect } from 'vue';
 import type { Poll } from '../services/pollService';
 import { PollService } from '../services/pollService';
 import { UserService } from '../services/userService';
 import { EventService } from '../services/eventService';
 import { BroadcastService } from '../services/broadcastService';
 import { WebSocketService } from '../services/websocketService';
+import { GunService } from '../services/gunService';
 import { generatePseudonym } from '../utils/pseudonym';
+// relayFeedService imports removed from store — REST warmup lives in dbWarmup.ts
 
 const PAGE_SIZE      = 10;
 const SEEN_POLLS_KEY = 'seen-poll-ids';
 const INCOMING_POLL_FLUSH_MS = 50;
 const INCOMING_POLL_BATCH_SIZE = 100;
+
+/**
+ * Per-poll content vote state (up/down on the poll card itself, not on options).
+ * Stored in localStorage so it survives reloads, same as postStore myVotes.
+ * Keyed by pollId → 'up' | 'down'.
+ */
+const MY_POLL_CONTENT_VOTES_KEY = 'my-poll-content-votes-v1';
+
+function loadMyPollContentVotes(): Map<string, 'up' | 'down'> {
+  const votes = new Map<string, 'up' | 'down'>();
+  try {
+    const stored = localStorage.getItem(MY_POLL_CONTENT_VOTES_KEY);
+    if (stored) {
+      for (const [id, vote] of Object.entries(JSON.parse(stored) as Record<string, 'up' | 'down'>)) {
+        if (vote === 'up' || vote === 'down') votes.set(id, vote);
+      }
+    }
+  } catch { /* unreadable cache — graph is authority */ }
+  return votes;
+}
+
+function saveMyPollContentVotes(votes: Map<string, 'up' | 'down'>): void {
+  try {
+    localStorage.setItem(MY_POLL_CONTENT_VOTES_KEY, JSON.stringify(Object.fromEntries(votes)));
+  } catch { /* quota — non-fatal */ }
+}
 
 function isSyncDebugEnabled(): boolean {
   return typeof window !== 'undefined' && window.localStorage.getItem('interpoll_sync_debug') === 'true';
@@ -51,7 +79,10 @@ function createRateLogger(label: string, snapshot?: () => Record<string, unknown
 }
 
 export const usePollStore = defineStore('poll', () => {
-  const pollsMap     = ref<Map<string, Poll>>(new Map());
+  // shallowRef: Vue only tracks the Map reference. Tally-only mutations
+  // (vote count changes) use in-place .set() WITHOUT triggerRef so they don't
+  // cause a full feed re-sort. Only new polls and score changes call triggerRef.
+  const pollsMap = shallowRef<Map<string, Poll>>(new Map());
   const currentPoll  = ref<Poll | null>(null);
   const isLoading    = ref(false);
   const visibleCount = ref(PAGE_SIZE);
@@ -68,6 +99,13 @@ export const usePollStore = defineStore('poll', () => {
   // Recently-voted polls: Gun subscription won't overwrite vote counts during this window
   const recentlyVotedPolls = new Map<string, number>();
   const VOTE_PROTECTION_MS = 10_000; // 10s protection window after voting
+
+  /**
+   * Per-poll content vote state — confirmed from graph after each cast.
+   * Replaces the stale localStorage Sets (upvoted-polls / downvoted-polls) that
+   * lived in HomePage.vue and diverged from the actual graph state.
+   */
+  const myPollContentVotes = ref(loadMyPollContentVotes());
   const pendingPollsByCommunity = new Map<string, Map<string, Poll>>();
   let pendingPollsFlushTimer: ReturnType<typeof setTimeout> | null = null;
   const getPendingIncomingPollCount = () => {
@@ -136,6 +174,7 @@ export const usePollStore = defineStore('poll', () => {
         return;
       }
       pollsMap.value.set(normalizedPoll.id, normalizedPoll);
+      triggerRef(pollsMap); // new poll — sort order may change
       tryDecryptPoll(normalizedPoll);
       if (currentPoll.value?.id === normalizedPoll.id) {
         currentPoll.value = normalizedPoll;
@@ -213,9 +252,19 @@ export const usePollStore = defineStore('poll', () => {
 
   const polls = computed(() => Array.from(pollsMap.value.values()));
 
-  const sortedPolls = computed(() =>
-    [...polls.value].sort((a, b) => b.createdAt - a.createdAt)
-  );
+  const _sortedPollsCache = shallowRef<Poll[]>([]);
+
+  function rebuildSortedPolls() {
+    _sortedPollsCache.value = Array.from(pollsMap.value.values())
+      .sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  watchEffect(() => {
+    void pollsMap.value; // subscribe to shallowRef trigger
+    rebuildSortedPolls();
+  });
+
+  const sortedPolls = computed(() => _sortedPollsCache.value);
 
   const activePolls  = computed(() => sortedPolls.value.filter(p => !p.isExpired));
   const visiblePolls = computed(() => sortedPolls.value.slice(0, visibleCount.value));
@@ -225,7 +274,7 @@ export const usePollStore = defineStore('poll', () => {
 
   const pendingLoads = new Map<string, Promise<void>>();
 
-  function loadPollsForCommunity(communityId: string): Promise<void> {
+  async function loadPollsForCommunity(communityId: string): Promise<void> {
     // If a load is already in-flight, return the same promise to avoid orphaning it
     if (pendingLoads.has(communityId)) return pendingLoads.get(communityId)!;
 
@@ -240,27 +289,21 @@ export const usePollStore = defineStore('poll', () => {
       subscribedCommunities.delete(communityId);
     }
 
+    // ── Step 1: Local IndexedDB warmup (instant, zero network) ───────────────
     void PollService.loadLocalPollsForCommunity(communityId)
-      .then((localPolls) => {
-        localPolls.forEach((poll) => {
-          injectPoll(poll);
-        });
-      })
-      .catch(() => { /* best-effort local fallback */ });
+      .then((localPolls) => { localPolls.forEach((poll) => { injectPoll(poll); }); })
+      .catch(() => { /* best-effort */ });
 
+    // REST warmup is handled by dbWarmup.ts before this is called.
+    // This function opens the Gun live-updates subscription only.
     const p = new Promise<void>((resolve) => {
       initialLoadDoneByCommId.set(communityId, false);
-      // Resolve after 15 s even if GunDB never fires the done callback (graceful degradation)
       const timeoutId = setTimeout(resolve, 15_000);
       const unsub = PollService.subscribeToPollsInCommunity(
         communityId,
-
-        // Phase 1: shell poll arrives
         (poll) => {
           queueIncomingPoll(communityId, poll);
         },
-
-        // Initial batch done
         () => {
           flushCommunityIncomingPolls(communityId);
           clearTimeout(timeoutId);
@@ -271,7 +314,6 @@ export const usePollStore = defineStore('poll', () => {
           resolve();
         },
       );
-
       unsubscribers.set(communityId, unsub);
     });
     pendingLoads.set(communityId, p);
@@ -288,18 +330,29 @@ export const usePollStore = defineStore('poll', () => {
     const existing = pollsMap.value.get(poll.id);
     if (!existing) {
       pollsMap.value.set(poll.id, poll);
+      triggerRef(pollsMap);
       tryDecryptPoll(poll);
     } else if (poll.options.length > 0 && existing.options.length === 0) {
-      // Existing has no options yet — take the incoming version
       pollsMap.value.set(poll.id, poll);
+      triggerRef(pollsMap);
       tryDecryptPoll(poll);
     } else if (poll.options.length > 0 && getTotalVotes(poll) >= getTotalVotes(existing)) {
-      // Accept updates with equal or higher vote counts (avoids reverting votes)
-      // During vote-protection, block only non-advancing updates.
       if (!isVoteProtected(poll.id) || getTotalVotes(poll) > getTotalVotes(existing)) {
         pollsMap.value.set(poll.id, poll);
+        triggerRef(pollsMap);
         tryDecryptPoll(poll);
       }
+    } else if (poll.category && poll.category !== existing.category) {
+      // Category arrived on a poll whose vote counts haven't changed —
+      // merge category fields only and trigger so combinedFeed re-evaluates.
+      pollsMap.value.set(poll.id, {
+        ...existing,
+        category:  poll.category,
+        tags:      poll.tags  ?? existing.tags,
+        sentiment: poll.sentiment ?? existing.sentiment,
+        nsfw:      poll.nsfw  ?? existing.nsfw,
+      });
+      triggerRef(pollsMap);
     }
     if (currentPoll.value?.id === poll.id) {
       currentPoll.value = pollsMap.value.get(poll.id) || currentPoll.value;
@@ -443,20 +496,50 @@ export const usePollStore = defineStore('poll', () => {
     }
   }
 
-  async function voteOnPollContent(pollId: string, direction: 'up' | 'down') {
+  /** This user's content vote on a poll card (not an option), or null. */
+  function myPollContentVote(pollId: string): 'up' | 'down' | null {
+    return myPollContentVotes.value.get(pollId) ?? null;
+  }
+
+  /**
+   * Toggle a poll content vote. Clicking the same direction again removes the
+   * vote. Mirrors the postStore.toggleVote pattern exactly: optimistic update →
+   * service call → graph reconciliation → myPollContentVotes updated.
+   *
+   * Replaces the old upvotedPollsCache / downvotedPollsCache localStorage sets
+   * in HomePage.vue which diverged from the graph on any failed write.
+   */
+  async function togglePollContentVote(pollId: string, direction: 'up' | 'down') {
     const user = await UserService.getCurrentUser();
     const original = pollsMap.value.get(pollId);
     const communityId = original?.communityId || currentPoll.value?.communityId;
 
+    const previous = myPollContentVote(pollId);
+    // Toggle: same direction → remove; different → switch
+    const predicted = previous === direction ? null : direction;
+
+    // Optimistic update on counts
     if (original) {
       const upvotes = original.upvotes || 0;
       const downvotes = original.downvotes || 0;
-      const optimistic: Poll = direction === 'up'
-        ? { ...original, upvotes: upvotes + 1, score: (upvotes + 1) - downvotes }
-        : { ...original, downvotes: downvotes + 1, score: upvotes - (downvotes + 1) };
+      const uDelta = (predicted === 'up' ? 1 : 0) - (previous === 'up' ? 1 : 0);
+      const dDelta = (predicted === 'down' ? 1 : 0) - (previous === 'down' ? 1 : 0);
+      const optimistic: Poll = {
+        ...original,
+        upvotes: Math.max(0, upvotes + uDelta),
+        downvotes: Math.max(0, downvotes + dDelta),
+        score: Math.max(0, upvotes + uDelta) - Math.max(0, downvotes + dDelta),
+      };
       pollsMap.value.set(pollId, optimistic);
       if (currentPoll.value?.id === pollId) currentPoll.value = optimistic;
     }
+
+    // Optimistic vote state
+    if (predicted) myPollContentVotes.value.set(pollId, predicted);
+    else myPollContentVotes.value.delete(pollId);
+    myPollContentVotes.value = new Map(myPollContentVotes.value);
+    saveMyPollContentVotes(myPollContentVotes.value);
+
     try {
       const patch = await PollService.voteOnPollContent(pollId, direction, user.id, communityId);
       const current = pollsMap.value.get(pollId);
@@ -468,7 +551,12 @@ export const usePollStore = defineStore('poll', () => {
         void WebSocketService.broadcast('poll-updated', updated);
       }
     } catch (err) {
+      // Roll back optimistic changes
       console.warn('Poll content vote failed — rolling back', err);
+      if (previous) myPollContentVotes.value.set(pollId, previous);
+      else myPollContentVotes.value.delete(pollId);
+      myPollContentVotes.value = new Map(myPollContentVotes.value);
+      saveMyPollContentVotes(myPollContentVotes.value);
       if (original) {
         pollsMap.value.set(pollId, original);
         if (currentPoll.value?.id === pollId) currentPoll.value = original;
@@ -477,8 +565,12 @@ export const usePollStore = defineStore('poll', () => {
     }
   }
 
-  function upvotePoll(pollId: string) { return voteOnPollContent(pollId, 'up'); }
-  function downvotePoll(pollId: string) { return voteOnPollContent(pollId, 'down'); }
+  async function voteOnPollContent(pollId: string, direction: 'up' | 'down') {
+    return togglePollContentVote(pollId, direction);
+  }
+
+  function upvotePoll(pollId: string) { return togglePollContentVote(pollId, 'up'); }
+  function downvotePoll(pollId: string) { return togglePollContentVote(pollId, 'down'); }
 
   // ─── Select ────────────────────────────────────────────────────────────────
 
@@ -525,6 +617,63 @@ export const usePollStore = defineStore('poll', () => {
     await loadPollsForCommunity(communityId);
   }
 
+  // ── Category patch watcher ────────────────────────────────────────────────
+  // Gun's map().on() doesn't fire for property updates on existing nodes,
+  // and loadPollFromGun fails silently when options time out (300ms).
+  // Instead we subscribe directly to the category leaf of each poll node
+  // and patch it onto the in-memory poll without re-fetching options.
+
+  function patchPollCategory(pollId: string, data: { category?: string; tags?: string; sentiment?: string; nsfw?: any }) {
+    const existing = pollsMap.value.get(pollId);
+    if (!existing) return;
+    const tags = data.tags
+      ? data.tags.split(',').map((t: string) => t.trim()).filter(Boolean)
+      : existing.tags;
+    pollsMap.value.set(pollId, {
+      ...existing,
+      ...(data.category  ? { category:  data.category  }              : {}),
+      ...(tags?.length   ? { tags }                                    : {}),
+      ...(data.sentiment ? { sentiment: data.sentiment as Poll['sentiment'] } : {}),
+      ...(data.nsfw      ? { nsfw: true }                              : {}),
+    });
+    // Trigger so combinedFeed re-evaluates — category change affects which
+    // filter tab this poll appears under.
+    triggerRef(pollsMap);
+    if (currentPoll.value?.id === pollId) {
+      currentPoll.value = pollsMap.value.get(pollId)!;
+    }
+  }
+
+  // Subscribe to category updates on all gun poll paths.
+  // Called once after initial load so we only watch polls already in the store.
+  function watchCategoryUpdates() {
+    try {
+      const gun = GunService.getGun();
+
+      // v3/polls/<id> — global feed path
+      gun.get('polls').map().on((data: any, pollId: string) => {
+        if (!data || !pollId || pollId === '_' || !data.category) return;
+        // Only patch — don't trigger a full reload
+        patchPollCategory(pollId, data);
+      });
+
+      // v3/communities/<cid>/polls/<id> — community feed path
+      // Use a flat map on the polls node directly (namespaced proxy handles v3 prefix)
+      // Each poll appears in both gun.get('polls') and community paths;
+      // the global polls subscription above covers all polls already loaded.
+      // For community-specific updates, subscribe to each community's polls node.
+      // This is handled incrementally as communities load rather than a nested map
+      // (gun.map().get().map() is not reliable across Gun versions).
+      const knownCommunityIds = new Set(polls.value.map(p => p.communityId).filter(Boolean));
+      for (const cid of knownCommunityIds) {
+        gun.get('communities').get(cid).get('polls').map().on((data: any, pollId: string) => {
+          if (!data || !pollId || pollId === '_' || !data.category) return;
+          patchPollCategory(pollId, data);
+        });
+      }
+    } catch { /* GunService not ready yet — categories will load on next poll fetch */ }
+  }
+
   onScopeDispose(() => {
     if (pendingPollsFlushTimer) {
       clearTimeout(pendingPollsFlushTimer);
@@ -536,6 +685,9 @@ export const usePollStore = defineStore('poll', () => {
     pendingLoads.clear();
   });
 
+  // Start watching after a short delay so initial load completes first
+  setTimeout(watchCategoryUpdates, 3000);
+
   return {
     polls, pollsMap, currentPoll, isLoading,
     sortedPolls, activePolls,
@@ -545,6 +697,7 @@ export const usePollStore = defineStore('poll', () => {
     flushNewPolls, injectPoll, saveSeenNow,
     createPoll, voteOnPoll, selectPoll,
     voteOnPollContent, upvotePoll, downvotePoll,
+    myPollContentVote, togglePollContentVote,
     refreshCommunityPolls,
   };
 });

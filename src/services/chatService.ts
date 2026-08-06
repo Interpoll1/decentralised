@@ -344,7 +344,7 @@ class ChatService {
    * are not lost — nothing new is ever written there.
    */
   private legacyRoomNode(roomId: string) {
-    return GunService.getRawGun().get('chats').get(roomId);
+    return GunService.getGun().get('chats').get(roomId); // use proxied gun so path resolves to v3/chats
   }
 
   /**

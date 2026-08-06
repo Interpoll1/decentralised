@@ -36,7 +36,7 @@ import { GunService } from './gunService';
 // REPLACE the first entry with your own bridge for production use.
 // Self-hosted bridge (cheapest, most reliable): https://github.com/localtunnel/server
 const BRIDGE_URLS = [
-  'wss://tunnel.interpoll.example.com',  // your own bridge — replace this
+  'wss://tunnel.interpoll.endless.sbs',  // your own bridge — replace this
   'wss://relay-bridge.loca.lt',          // localtunnel fallback
 ];
 

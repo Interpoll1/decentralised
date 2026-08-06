@@ -37,7 +37,7 @@ export class IPFSService {
     thumbnail: string; // Base64 thumbnail (stored in Gun)
     size: number;
   }> {
-    if (!this.isReady) await this.initialize();
+    // initialize() is a no-op — removed redundant await
 
     // Compress full image (max 1 MB) — stored locally only
     const compressed = await imageCompression(file, {
@@ -67,14 +67,20 @@ export class IPFSService {
 
     // Store only thumbnail + metadata pointer in Gun
     const gun = GunService.getGun();
+    // Timeout after 5s — Gun ack may never fire if relay is mid-handshake
     await new Promise<void>((resolve) => {
+      const timer = setTimeout(() => {
+        console.warn('[IPFSService] Gun thumbnail ack timeout — continuing');
+        resolve();
+      }, 5_000);
       gun.get('images').get(cid).put({
         id: cid,
         thumbnail: thumbnailBase64,
         size: compressed.size,
         uploadedAt: Date.now(),
-        hasFull: true,  // signals that a full-res copy exists locally on the uploader
+        hasFull: true,
       }, (ack: any) => {
+        clearTimeout(timer);
         if (ack?.err) console.warn('[IPFSService] Gun thumbnail write error:', ack.err);
         resolve();
       });
@@ -89,8 +95,6 @@ export class IPFSService {
    *   2. Thumbnail from Gun (slower on first load, but universally available)
    */
   static async downloadImage(cid: string): Promise<string | null> {
-    if (!this.isReady) await this.initialize();
-
     // Try local full-res first
     try {
       const local = await StorageService.getMetadata(FULL_IMAGE_STORE_KEY(cid));

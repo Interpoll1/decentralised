@@ -21,6 +21,7 @@ const DEV_INSECURE_DISCOVERY_KEY = 'interpoll_rdv_dev_insecure';
 const ICE_SERVERS_STORAGE_KEY = 'interpoll_ice_servers';
 const IDENTITY_CONFIG_STORAGE_KEY = 'interpoll_identity_config';
 const WIRE_FILTER_STORAGE_KEY = 'interpoll_wire_filter_mode';
+const PEER_PREFS_KEY = 'interpoll_peer_prefs';
 
 /**
  * How the WebRTC mesh wire bridge treats inbound Gun `put`s whose souls fall
@@ -168,6 +169,19 @@ const defaults = {
   gun: 'https://interpoll2.endless.sbs/gun',
   api: 'https://interpoll.endless.sbs',
 };
+
+// ── Built-in peer tiers ───────────────────────────────────────────────────────
+// Tier 1 — Private VPS (always first, most trusted)
+
+export const PRIVATE_PEERS = [
+  'https://interpoll2.endless.sbs/gun',
+  'http://v7so4otlnuleppayd7znkqwzjq6xhvzpetywpyzuth3jrykdqklxlwqd.onion/gun',
+] as const;
+
+// Tier 2 — Well-known public Gun relays (stable, high-uptime, but no SLA)
+export const PUBLIC_PEERS = [
+  'https://relay.peer.ooo/gun',
+] as const;
 
 // Canonical public web origin where the browser build of the app is hosted.
 // Used to construct shareable links from the native app (see config.web).
@@ -325,6 +339,62 @@ const config = {
     ];
   },
 
+  /**
+   * Returns the full deduplicated list of Gun peers to connect to.
+   * Order: private VPS → public tier → user-added community peers → tor gateway.
+   * All tiers are included by default; user can disable tiers via PeerPreferences.
+   */
+  getActivePeerList(): string[] {
+    const peerSets = getPeerPreferences();
+    const list: string[] = [];
+
+    if (peerSets.usePrivate) {
+      list.push(...PRIVATE_PEERS);
+    }
+    if (peerSets.usePublic) {
+      list.push(...PUBLIC_PEERS);
+    }
+
+    // Override: if a custom primary gun is set via RelayManager, include it
+    const customGun = overrides.gun;
+    if (customGun && !list.includes(customGun)) {
+      list.unshift(customGun);
+    }
+
+    // User-added community peers
+    const userPeerList = gunPeers ?? [];
+    for (const p of userPeerList) {
+      if (!list.includes(p)) list.push(p);
+    }
+
+    return list.length > 0 ? list : [defaults.gun];
+  },
+
+  /** Add a user-supplied community Gun peer URL */
+  addGunPeer(peerUrl: string): void {
+    const current = gunPeers ?? [];
+    if (!current.includes(peerUrl)) {
+      const updated = [...current, peerUrl];
+      gunPeers = updated;
+      try { localStorage.setItem(GUN_PEERS_STORAGE_KEY, JSON.stringify(updated)); } catch { /* ignore */ }
+    }
+  },
+
+  /** Remove a user-supplied community Gun peer URL */
+  removeGunPeer(peerUrl: string): void {
+    const updated = (gunPeers ?? []).filter((p) => p !== peerUrl);
+    gunPeers = updated.length > 0 ? updated : null;
+    try {
+      if (updated.length > 0) localStorage.setItem(GUN_PEERS_STORAGE_KEY, JSON.stringify(updated));
+      else localStorage.removeItem(GUN_PEERS_STORAGE_KEY);
+    } catch { /* ignore */ }
+  },
+
+  /** Get current user-added peers only (not builtins) */
+  getUserGunPeers(): string[] {
+    return [...(gunPeers ?? [])];
+  },
+
   /** Persist a new Gun peer list */
   setGunPeers(urls: string[]) {
     gunPeers = urls.filter(u => !!u.trim());
@@ -426,5 +496,35 @@ const config = {
     return [...DEFAULT_ICE_SERVERS];
   },
 };
+
+// ── Peer tier preferences ─────────────────────────────────────────────────────
+// Stored separately so they survive resetRelayOverrides()
+
+export interface PeerPreferences {
+  usePrivate: boolean;  // connect to your VPS Gun relay
+  usePublic: boolean;   // connect to public community Gun relays
+  axeEnabled: boolean;  // enable Gun AXE mesh (peers relay to each other)
+  swRelayEnabled: boolean; // enable ServiceWorker tab-relay
+}
+
+const DEFAULT_PEER_PREFS: PeerPreferences = {
+  usePrivate: true,
+  usePublic: true,
+  axeEnabled: false,  // matches existing app default (axe: false in gunService)
+  swRelayEnabled: true,
+};
+
+export function getPeerPreferences(): PeerPreferences {
+  try {
+    const raw = localStorage.getItem(PEER_PREFS_KEY);
+    if (raw) return { ...DEFAULT_PEER_PREFS, ...JSON.parse(raw) };
+  } catch { /* ignore */ }
+  return { ...DEFAULT_PEER_PREFS };
+}
+
+export function setPeerPreferences(partial: Partial<PeerPreferences>): void {
+  const current = getPeerPreferences();
+  try { localStorage.setItem(PEER_PREFS_KEY, JSON.stringify({ ...current, ...partial })); } catch { /* ignore */ }
+}
 
 export default config;

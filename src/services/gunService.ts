@@ -1,6 +1,6 @@
 import Gun from 'gun';
 import 'gun/sea';
-import config from '../config';
+import config, { getPeerPreferences } from '../config';
 
 export const GUN_NAMESPACE = 'v3';
 
@@ -37,7 +37,36 @@ export interface GunPeerDetail {
   latencyMs?: number;
 }
 
+/** Extended peer health record — updated by the health poll timer */
+export interface PeerHealth {
+  url: string;
+  lastSeenMs: number;
+  latencyMs: number | null;
+  failures: number;
+  connected: boolean;
+}
+
 export type PresetProbeStatus = 'pending' | 'live' | 'dead';
+
+// ── Peer health map (keyed by URL) ────────────────────────────────────────────
+const _peerHealth = new Map<string, PeerHealth>();
+
+export function getPeerHealthReport(): PeerHealth[] {
+  return [..._peerHealth.values()];
+}
+
+// ── ServiceWorker tab-relay registration ──────────────────────────────────────
+// Progressive enhancement — fails silently if SW not supported or disabled.
+async function maybeRegisterServiceWorkerRelay(): Promise<void> {
+  const prefs = getPeerPreferences();
+  if (!prefs.swRelayEnabled) return;
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+  try {
+    await navigator.serviceWorker.register('/gun-relay-sw.js', { scope: '/' });
+  } catch {
+    // Not fatal — app works fine without it
+  }
+}
 
 export class GunService {
   private static gun: any = null;
@@ -87,6 +116,10 @@ export class GunService {
     this.proxiedGun = createNamespacedProxy(this.gun, nsNode);
     this.user = this.gun.user();
     this.isInitialized = true;
+
+    // Progressive: register SW tab relay (non-blocking)
+    void maybeRegisterServiceWorkerRelay();
+
     return this.proxiedGun;
   }
 
@@ -292,6 +325,26 @@ export class GunService {
         this.peerConnectTime.set(url, performance.now());
       }
     } catch { /* ignore */ }
+  }
+
+  /**
+   * Add a new peer at runtime and persist it via config so it reconnects on reload.
+   * Immediately connects — no restart required.
+   */
+  static addPeer(peerUrl: string): void {
+    config.addGunPeer(peerUrl);
+    this.addPeerDynamic(peerUrl);
+    _peerHealth.set(peerUrl, { url: peerUrl, lastSeenMs: 0, latencyMs: null, failures: 0, connected: false });
+  }
+
+  /**
+   * Remove a user-added peer (persists the removal).
+   * Note: Gun doesn't support disconnecting a peer without reinitialising.
+   * The peer will be dropped on the next full reconnect().
+   */
+  static removePeer(peerUrl: string): void {
+    config.removeGunPeer(peerUrl);
+    _peerHealth.delete(peerUrl);
   }
 
 

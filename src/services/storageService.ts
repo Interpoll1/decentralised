@@ -41,6 +41,12 @@ interface VotingChainDB extends DBSchema {
     value: StoredChatMessage;
     indexes: { 'by-room': string };
   };
+  'vote-index': {
+    // Compound key: [pollId, deviceId] — one entry per (poll, device) pair.
+    // This makes duplicate-vote checks O(1) instead of O(n chain blocks).
+    key: [string, string];
+    value: { pollId: string; deviceId: string; timestamp: number };
+  };
 }
 
 // How long to wait for IndexedDB to open before assuming it is blocked and
@@ -67,7 +73,7 @@ export class StorageService {
     const hasIndexedDB = typeof indexedDB !== 'undefined' && indexedDB !== null;
     if (hasIndexedDB) {
       try {
-        const open = openDB('interpoll-db', 3, {
+        const open = openDB('interpoll-db', 4, {
           upgrade(db, oldVersion) {
             if (oldVersion < 1) {
               // Blocks store
@@ -101,6 +107,12 @@ export class StorageService {
 
               const chatStore = db.createObjectStore('chat-messages', { keyPath: 'id' });
               chatStore.createIndex('by-room', 'roomId');
+            }
+            if (oldVersion < 4) {
+              // O(1) duplicate-vote index — compound key [pollId, deviceId].
+              // One entry per (poll, device) pair so hasVoted() is a single IDB
+              // key lookup instead of a full chain scan.
+              db.createObjectStore('vote-index', { keyPath: ['pollId', 'deviceId'] });
             }
           },
         });
@@ -334,11 +346,33 @@ export class StorageService {
     return db.get('metadata', key);
   }
 
-  // Utility
+  // ── Vote-index operations (O(1) duplicate-vote check) ────────────────────────
+
+  /**
+   * Returns true if this device has already submitted a vote for this poll.
+   * O(1) — single IDB key lookup on the compound [pollId, deviceId] index.
+   */
+  static async hasVoted(pollId: string, deviceId: string): Promise<boolean> {
+    const db = await this.getDB();
+    const entry = await db.get('vote-index', [pollId, deviceId]);
+    return entry !== undefined;
+  }
+
+  /**
+   * Record that this device has voted on this poll.
+   * Called after a block is committed to the chain so the index stays consistent.
+   */
+  static async markVoted(pollId: string, deviceId: string): Promise<void> {
+    const db = await this.getDB();
+    await db.put('vote-index', { pollId, deviceId, timestamp: Date.now() });
+  }
+
+  // ── Utility ────────────────────────────────────────────────────────────────
+
   static async clearAll(): Promise {
     const db = await this.getDB();
     const tx = db.transaction(
-      ['blocks', 'votes', 'receipts', 'polls', 'metadata', 'encryption-keys', 'comments', 'chat-messages'],
+      ['blocks', 'votes', 'receipts', 'polls', 'metadata', 'encryption-keys', 'comments', 'chat-messages', 'vote-index'],
       'readwrite',
     );
     await Promise.all([
@@ -350,6 +384,7 @@ export class StorageService {
       tx.objectStore('encryption-keys').clear(),
       tx.objectStore('comments').clear(),
       tx.objectStore('chat-messages').clear(),
+      tx.objectStore('vote-index').clear(),
     ]);
   }
 
@@ -420,6 +455,7 @@ function createInMemoryDB(): IDBPDatabase {
     'encryption-keys': new Map(),
     comments: new Map(),
     'chat-messages': new Map(),
+    'vote-index': new Map(),
   };
   // Stores with an inline keyPath derive their key from the value; `metadata`
   // uses out-of-line (explicit) keys.
@@ -432,6 +468,8 @@ function createInMemoryDB(): IDBPDatabase {
     'encryption-keys': 'id',
     comments: 'id',
     'chat-messages': 'id',
+    // vote-index uses compound key [pollId, deviceId] — handled specially below
+    'vote-index': null,
   };
   const indexes: Record<string, Record<string, string>> = {
     blocks: { 'by-hash': 'currentHash' },
@@ -443,7 +481,10 @@ function createInMemoryDB(): IDBPDatabase {
 
   const resolveKey = (name: string, value: any, explicitKey?: any) => {
     const kp = keyPaths[name];
-    return kp ? value?.[kp] : explicitKey;
+    let key = kp ? value?.[kp] : explicitKey;
+    // Compound keys (arrays) must be serialised for Map equality to work
+    if (Array.isArray(key)) key = key.join('\x00');
+    return key;
   };
   const store = (name: string): Map<any, any> => stores[name] ?? (stores[name] = new Map());
 
@@ -465,8 +506,8 @@ function createInMemoryDB(): IDBPDatabase {
 
   const db: any = {
     async put(name: string, value: any, key?: any) { store(name).set(resolveKey(name, value, key), value); },
-    async get(name: string, key: any) { return store(name).get(key); },
-    async delete(name: string, key: any) { store(name).delete(key); },
+    async get(name: string, key: any) { return store(name).get(Array.isArray(key) ? key.join('\x00') : key); },
+    async delete(name: string, key: any) { store(name).delete(Array.isArray(key) ? key.join('\x00') : key); },
     async getAll(name: string) { return [...store(name).values()]; },
     async getAllFromIndex(name: string, index: string, query: any) {
       const kp = indexes[name]?.[index];

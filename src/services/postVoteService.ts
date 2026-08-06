@@ -212,7 +212,10 @@ export class PostVoteService {
     if (baselineType) record.baselineType = baselineType;
 
     const ack = await gunPut(postVotesNode(postId).get(userId), record);
-    if (!ack.ok) throw new Error(ack.err || 'Vote could not be recorded');
+    // 'timeout' means Gun wrote locally but didn't get a relay ack within 8s.
+    // This is acceptable — Gun will sync when the relay reconnects.
+    // Only throw on explicit Gun error responses (network rejection, auth failure).
+    if (!ack.ok && ack.err !== 'timeout') throw new Error(ack.err || 'Vote could not be recorded');
 
     const children = await gunReadChildren<any>(postVotesNode(postId), { minMs: 300, maxMs: 4_000 });
     const folded = new Map(children.map(({ key, value }) => [key, value]));
@@ -225,11 +228,13 @@ export class PostVoteService {
 
     // Advisory mirror for readers that render a post before its vote set loads.
     // Never authoritative — every read path here prefers the derived tally.
-    void gunPut(postNode(postId), {
-      upvotes: tally.upvotes,
-      downvotes: tally.downvotes,
-      score: tally.score,
-    }).catch(() => { /* hint only */ });
+    // Update vote counters on the post/poll node (hint — non-blocking)
+    const tallyHint = { upvotes: tally.upvotes, downvotes: tally.downvotes, score: tally.score };
+    void gunPut(postNode(postId), tallyHint).catch(() => {});
+    // For poll IDs, also update the polls path so the poll's displayed score stays current
+    if (postId.startsWith('poll-')) {
+      void gunPut(gun().get('polls').get(postId), tallyHint).catch(() => {});
+    }
 
     return { tally, myVote: next === 'none' ? null : next };
   }

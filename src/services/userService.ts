@@ -1,17 +1,21 @@
+// src/services/userService.ts
+
 import { GunService } from './gunService';
 import { VoteTrackerService } from './voteTrackerService';
 import { KeyService } from './keyService';
+import { CryptoService } from './cryptoService';
 import { StorageService } from './storageService';
-import type { TrustLevel } from './trustService';
 import { parseIdentityTrust } from '@/utils/identityTrust';
+import type { TrustLevel } from './trustService';
 
-const PROFILE_META_KEY = 'user-profile';
+const PROFILE_META_KEY = 'user-profile-v2';
 
 export interface UserProfile {
-  id: string;
+  id: string;                          // public key hex (durable identity)
+  deviceId?: string;                   // legacy field, kept for migration compat
   username: string;
   customUsername?: string;
-  trustLevel?: TrustLevel;
+  trustLevel?: TrustLevel;            // kept from v1 for compat
   displayName: string;
   identityUsername?: string;
   identityIssuer?: string;
@@ -24,7 +28,11 @@ export interface UserProfile {
   karma: number;
   postCount: number;
   commentCount: number;
-  publicKey?: string;
+  publicKey: string;                   // Schnorr x-only public key (safe to share)
+  // Integrity fields — present on Gun-written copies
+  _sig?: string;
+  _pub?: string;
+  _hash?: string;
 }
 
 export interface UserStats {
@@ -36,20 +44,61 @@ export interface UserStats {
   joinedCommunities: number;
 }
 
+// ── Signing helpers ───────────────────────────────────────────────────────────
+
+function profilePayload(profile: UserProfile): Record<string, unknown> {
+  // Strip previous integrity fields before re-signing
+  const { _sig, _pub, _hash, ...rest } = profile as any;
+  return rest;
+}
+
+function stableStringify(obj: Record<string, unknown>): string {
+  const keys = Object.keys(obj).sort();
+  const pairs = keys.map(k => `${JSON.stringify(k)}:${JSON.stringify((obj as any)[k])}`);
+  return `{${pairs.join(',')}}`;
+}
+
+async function signProfile(profile: UserProfile): Promise<UserProfile> {
+  const privateKey = await KeyService.getPrivateKeyHex();
+  const publicKey = await KeyService.getPublicKeyHex();
+  const payload = profilePayload(profile);
+  const canonical = stableStringify(payload as Record<string, unknown>);
+  const hash = CryptoService.hash(canonical);
+  const sig = CryptoService.sign(canonical, privateKey);
+  return { ...profile, _sig: sig, _pub: publicKey, _hash: hash };
+}
+
+function verifyProfileSignature(profile: UserProfile): boolean {
+  try {
+    const { _sig, _pub, _hash, ...rest } = profile as any;
+    if (!_sig || !_pub || !_hash) return false;
+    const canonical = stableStringify(rest as Record<string, unknown>);
+    const expectedHash = CryptoService.hash(canonical);
+    if (expectedHash !== _hash) return false;
+    return CryptoService.verify(canonical, _sig, _pub);
+  } catch {
+    return false;
+  }
+}
+
+// ── Service ───────────────────────────────────────────────────────────────────
+
 export class UserService {
   private static currentUser: UserProfile | null = null;
 
   /**
-   * Secondary reverse index: pubkey → deviceId pointer, stored under the
+   * Secondary reverse index: pubkey → publicKey pointer, stored under the
    * dedicated `user-pubkey-index` Gun root. Best-effort only (Gun has no
    * cross-node transactions), so `getUserByPubkey` falls back to a scan.
    * Written lazily whenever a profile is touched — no bulk backfill.
    */
-  private static writePubkeyIndex(pubkey: string | undefined, deviceId: string): void {
-    if (!pubkey || !deviceId) return;
+  private static writePubkeyIndex(pubkey: string | undefined): void {
+    if (!pubkey) return;
     try {
       const gun = GunService.getGun();
-      gun.get('user-pubkey-index').get(pubkey).put({ deviceId, updatedAt: Date.now() });
+      // In v2, identity is keyed by publicKey, so the index entry just
+      // confirms the key exists and timestamps the last touch.
+      gun.get('user-pubkey-index').get(pubkey).put({ publicKey: pubkey, updatedAt: Date.now() });
     } catch {
       // Secondary index is best-effort; a failed write degrades to a scan, not a break.
     }
@@ -58,11 +107,11 @@ export class UserService {
   private static deriveIdentityFields(
     profileLike: Partial<UserProfile>,
   ): Pick<UserProfile, 'identityUsername' | 'identityIssuer' | 'identityTrustLevel'> {
-    const identityUsername = (profileLike.identityUsername || profileLike.customUsername || profileLike.username || '').trim();
-    const trust = parseIdentityTrust(identityUsername);
+    const raw = (profileLike.customUsername || profileLike.username || '').trim();
+    const trust = parseIdentityTrust(raw);
     return {
       identityUsername: trust.identityUsername,
-      identityIssuer: trust.issuer,
+      identityIssuer: trust.issuer || undefined,
       identityTrustLevel: trust.trustLevel,
     };
   }
@@ -70,139 +119,188 @@ export class UserService {
   static async getCurrentUser(forceRefresh = false): Promise<UserProfile> {
     if (this.currentUser && !forceRefresh) return this.currentUser;
 
+    // 1. Try IndexedDB first (source of truth for own profile)
     const stored = await StorageService.getMetadata(PROFILE_META_KEY).catch(() => null);
     if (stored && stored.id) {
       this.currentUser = stored as UserProfile;
       return this.currentUser;
     }
 
-    const deviceId = await VoteTrackerService.getDeviceId();
-    const gun = GunService.getGun();
     const publicKey = await KeyService.getPublicKeyHex();
+    const gun = GunService.getGun();
 
-    const existingProfile = await new Promise<UserProfile | null>((resolve) => {
+    // 2. Try fetching existing profile from Gun by public key (device recovery path)
+    const gunProfile = await new Promise<any>((resolve) => {
       let done = false;
-      gun.get('users').get(deviceId).once((data: any) => {
-        if (!done) {
-          done = true;
-          resolve(data && data.id ? (data as UserProfile) : null);
-        }
+      gun.get('users').get(publicKey).once((data: any) => {
+        if (!done) { done = true; resolve(data && data.id ? data : null); }
       });
-      setTimeout(() => {
-        if (!done) {
-          done = true;
-          resolve(null);
-        }
-      }, 3000);
+      setTimeout(() => { if (!done) { done = true; resolve(null); } }, 3000);
     });
 
-    if (existingProfile) {
-      const derived = this.deriveIdentityFields(existingProfile);
-      const profile: UserProfile = {
-        ...existingProfile,
-        publicKey: existingProfile.publicKey || publicKey,
-        ...derived,
-      };
-      await gun.get('users').get(deviceId).put(profile);
-      this.writePubkeyIndex(profile.publicKey, deviceId);
-      await StorageService.setMetadata(PROFILE_META_KEY, profile);
-      this.currentUser = profile;
-      return profile;
+    if (gunProfile) {
+      // Verify the signature before trusting the fetched profile
+      if (!verifyProfileSignature(gunProfile)) {
+        console.warn('[UserService] Gun profile signature invalid — ignoring and creating fresh');
+      } else {
+        const profile: UserProfile = {
+          ...gunProfile,
+          // Ensure derived fields are up to date
+          ...this.deriveIdentityFields(gunProfile),
+        };
+        await StorageService.setMetadata(PROFILE_META_KEY, profile);
+        this.currentUser = profile;
+        this.writePubkeyIndex(profile.publicKey);
+        return profile;
+      }
     }
 
-    const username = `user_${deviceId.substring(0, 8)}`;
+    // 3. Migration: check legacy deviceId-keyed node
+    const deviceId = await VoteTrackerService.getDeviceId();
+    const legacyProfile = await new Promise<any>((resolve) => {
+      let done = false;
+      gun.get('users').get(deviceId).once((data: any) => {
+        if (!done) { done = true; resolve(data && data.id ? data : null); }
+      });
+      setTimeout(() => { if (!done) { done = true; resolve(null); } }, 2000);
+    });
+
+    if (legacyProfile && legacyProfile.publicKey === publicKey) {
+      // Migrate: re-key under publicKey and sign
+      const migrated: UserProfile = {
+        ...legacyProfile,
+        id: publicKey,
+        publicKey,
+        ...this.deriveIdentityFields(legacyProfile),
+      };
+      const signed = await signProfile(migrated);
+      await gun.get('users').get(publicKey).put(signed);
+      await StorageService.setMetadata(PROFILE_META_KEY, signed);
+      this.currentUser = signed;
+      this.writePubkeyIndex(signed.publicKey);
+      return signed;
+    }
+
+    // 4. First boot — create new profile keyed by public key
     const newProfile: UserProfile = {
-      id: deviceId,
-      username,
-      displayName: `User ${deviceId.substring(0, 8)}`,
+      id: publicKey,
+      deviceId,
+      username: `user_${publicKey.substring(0, 8)}`,
+      displayName: `User ${publicKey.substring(0, 8)}`,
       bio: '',
       createdAt: Date.now(),
       karma: 0,
       postCount: 0,
       commentCount: 0,
       publicKey,
-      ...this.deriveIdentityFields({ username }),
+      ...this.deriveIdentityFields({ username: `user_${publicKey.substring(0, 8)}` }),
     };
 
-    await gun.get('users').get(deviceId).put(newProfile);
-    this.writePubkeyIndex(newProfile.publicKey, deviceId);
-    await StorageService.setMetadata(PROFILE_META_KEY, newProfile);
-    this.currentUser = newProfile;
-
-    return newProfile;
-  }
-
-  static async updateProfile(updates: Partial<UserProfile>): Promise<UserProfile> {
-    const base = this.currentUser || await this.getCurrentUser();
-    const mergedProfile: UserProfile = { ...base, ...updates };
-    const derivedIdentity = this.deriveIdentityFields(mergedProfile);
-    const updatedProfile: UserProfile = {
-      ...mergedProfile,
-      identityUsername: mergedProfile.identityUsername ?? derivedIdentity.identityUsername,
-      identityIssuer: mergedProfile.identityIssuer ?? derivedIdentity.identityIssuer,
-      identityTrustLevel: mergedProfile.identityTrustLevel ?? derivedIdentity.identityTrustLevel,
-    };
-
-    this.currentUser = updatedProfile;
-    await StorageService.setMetadata(PROFILE_META_KEY, updatedProfile);
-
-    const gun = GunService.getGun();
-    await gun.get('users').get(updatedProfile.id).put(updatedProfile);
-    this.writePubkeyIndex(updatedProfile.publicKey, updatedProfile.id);
-
-    return updatedProfile;
-  }
-
-  static async getUser(userId: string): Promise<UserProfile | null> {
-    const gun = GunService.getGun();
-    return new Promise((resolve) => {
-      let done = false;
-      gun.get('users').get(userId).once((data: any) => {
-        if (!done) {
-          done = true;
-          resolve(data && data.id ? (data as UserProfile) : null);
-        }
-      });
-      setTimeout(() => {
-        if (!done) {
-          done = true;
-          resolve(null);
-        }
-      }, 3000);
-    });
+    const signed = await signProfile(newProfile);
+    await gun.get('users').get(publicKey).put(signed);
+    await StorageService.setMetadata(PROFILE_META_KEY, signed);
+    this.currentUser = signed;
+    this.writePubkeyIndex(signed.publicKey);
+    return signed;
   }
 
   /**
-   * Resolve a profile by its Schnorr public key. Uses the `user-pubkey-index`
-   * reverse pointer first, then falls back to a `users` scan if the pointer is
-   * missing or stale (the pointer is a best-effort cache, not authoritative).
+   * Update own profile fields.
+   * Signs the updated profile before writing to Gun so peers can verify ownership.
+   */
+  static async updateProfile(updates: Partial<UserProfile>): Promise<UserProfile> {
+    const base = this.currentUser || await this.getCurrentUser();
+    const merged: UserProfile = {
+      ...base,
+      ...updates,
+      ...this.deriveIdentityFields({ ...base, ...updates }),
+    };
+
+    const signed = await signProfile(merged);
+
+    // 1. Update in-memory cache immediately
+    this.currentUser = signed;
+
+    // 2. Persist to IndexedDB (source of truth)
+    await StorageService.setMetadata(PROFILE_META_KEY, signed);
+
+    // 3. Write to Gun async — keyed by publicKey, signed so peers can verify
+    const gun = GunService.getGun();
+    gun.get('users').get(signed.publicKey).put(signed);
+    this.writePubkeyIndex(signed.publicKey);
+
+    return signed;
+  }
+
+  // ── Other users ─────────────────────────────────────────────────────────────
+
+  /**
+   * Fetch another user's profile and verify their signature.
+   * Returns null if the profile is missing or fails verification.
+   */
+  static async getUser(userId: string): Promise<UserProfile | null> {
+    const gun = GunService.getGun();
+    const profile = await new Promise<any>((resolve) => {
+      let done = false;
+      gun.get('users').get(userId).once((data: any) => {
+        if (!done) { done = true; resolve(data && data.id ? data : null); }
+      });
+      setTimeout(() => { if (!done) { done = true; resolve(null); } }, 3000);
+    });
+
+    if (!profile) return null;
+
+    // Reject profiles that fail signature verification
+    if (!verifyProfileSignature(profile)) {
+      console.warn(`[UserService] Profile for ${userId} failed signature verification`);
+      return null;
+    }
+
+    // Ensure the publicKey in the profile matches the node key we fetched it from
+    if (profile.publicKey && profile.publicKey !== userId && profile._pub !== userId) {
+      console.warn(`[UserService] Profile publicKey mismatch for node ${userId}`);
+      return null;
+    }
+
+    return profile as UserProfile;
+  }
+
+  /**
+   * Resolve a profile by its Schnorr public key.
+   *
+   * In v2, the Gun node is already keyed by publicKey, so this is typically
+   * equivalent to getUser(pubkey). The `user-pubkey-index` pointer is checked
+   * first for forward-compat with any legacy deviceId-keyed nodes that were
+   * migrated and left a pointer behind, then falls back to a direct lookup,
+   * then to a full scan.
    */
   static async getUserByPubkey(pubkey: string): Promise<UserProfile | null> {
     if (!pubkey) return null;
     const gun = GunService.getGun();
 
-    const pointer = await new Promise<{ deviceId?: string } | null>((resolve) => {
+    // Check the reverse index for a legacy deviceId pointer
+    const pointer = await new Promise<{ deviceId?: string; publicKey?: string } | null>((resolve) => {
       let done = false;
       gun.get('user-pubkey-index').get(pubkey).once((data: any) => {
         if (!done) {
           done = true;
-          resolve(data && data.deviceId ? data : null);
+          resolve(data && (data.deviceId || data.publicKey) ? data : null);
         }
       });
-      setTimeout(() => {
-        if (!done) {
-          done = true;
-          resolve(null);
-        }
-      }, 3000);
+      setTimeout(() => { if (!done) { done = true; resolve(null); } }, 3000);
     });
 
-    if (pointer?.deviceId) {
+    // If the pointer carries a legacy deviceId, try that node first
+    if (pointer?.deviceId && pointer.deviceId !== pubkey) {
       const profile = await this.getUser(pointer.deviceId);
       if (profile) return profile;
     }
 
-    // Pointer missing/stale — scan for a profile carrying this pubkey.
+    // Direct lookup — v2 nodes are keyed by publicKey
+    const direct = await this.getUser(pubkey);
+    if (direct) return direct;
+
+    // Last resort: full scan
     return this.findUserByPubkeyScan(pubkey);
   }
 
@@ -212,7 +310,9 @@ export class UserService {
       let found: UserProfile | null = null;
       gun.get('users').map().once((user: any) => {
         if (found || !user || user._ || !user.id) return;
-        if (user.publicKey === pubkey) found = user as UserProfile;
+        if (user.publicKey === pubkey && verifyProfileSignature(user)) {
+          found = user as UserProfile;
+        }
       });
       setTimeout(() => resolve(found), 1000);
     });
@@ -221,6 +321,8 @@ export class UserService {
   static getDisplayUsername(profile: UserProfile): string {
     return profile.customUsername || profile.username;
   }
+
+  // ── Counters ─────────────────────────────────────────────────────────────────
 
   static async incrementPostCount() {
     const user = this.currentUser || await this.getCurrentUser();
@@ -236,26 +338,19 @@ export class UserService {
     const gun = GunService.getGun();
     const user = await this.getUser(authorId);
     if (user) {
-      const updatedKarma = (user.karma || 0) + points;
-      await gun.get('users').get(authorId).get('karma').put(updatedKarma);
-      if (this.currentUser && this.currentUser.id === authorId) {
-        await this.updateProfile({ karma: updatedKarma });
+      // Only the author can update their own karma (signing enforced on relay)
+      if (this.currentUser && this.currentUser.publicKey === authorId) {
+        await this.updateProfile({ karma: (this.currentUser.karma || 0) + points });
+      } else {
+        // For other users, write unsigned karma increment (relay enforces PoW rate limit)
+        gun.get('users').get(authorId).get('karma').put((user.karma || 0) + points);
       }
     }
   }
 
   static async getUserStats(userId: string): Promise<UserStats> {
     const user = await this.getUser(userId);
-    if (!user) {
-      return {
-        totalPosts: 0,
-        totalComments: 0,
-        totalUpvotes: 0,
-        totalDownvotes: 0,
-        karma: 0,
-        joinedCommunities: 0,
-      };
-    }
+    if (!user) return { totalPosts: 0, totalComments: 0, totalUpvotes: 0, totalDownvotes: 0, karma: 0, joinedCommunities: 0 };
     return {
       totalPosts: user.postCount || 0,
       totalComments: user.commentCount || 0,
@@ -272,8 +367,14 @@ export class UserService {
     return new Promise((resolve) => {
       gun.get('users').map().once((user: any) => {
         if (!user || user._ || !user.id) return;
-        if (user.username?.includes(query) || user.customUsername?.includes(query)) {
-          users.push(user as UserProfile);
+        if (
+          user.username?.includes(query) ||
+          user.customUsername?.includes(query)
+        ) {
+          // Only include verified profiles
+          if (verifyProfileSignature(user)) {
+            users.push(user);
+          }
         }
       });
       setTimeout(() => resolve(users), 1000);

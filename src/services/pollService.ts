@@ -96,23 +96,37 @@ export class PollService {
    * endpoint is unreachable/has no DB (inconclusive).
    */
   static async verifyRelayPersistence(pollId: string, deadlineMs = 8000): Promise<boolean | null> {
-    const soul = encodeURIComponent(`${GUN_NAMESPACE}/polls/${pollId}`);
-    const url = `${getGunRelayBase()}/db/soul?soul=${soul}`;
+    // The relay DB stores polls at 'polls/<id>' (bare path).
+    // Also check 'v3/polls/<id>' in case the namespace is stored explicitly.
+    // Endpoint returns 200 if found, 404 if absent.
+    const souls = [
+      encodeURIComponent(`polls/${pollId}`),
+      encodeURIComponent(`${GUN_NAMESPACE}/polls/${pollId}`),
+    ];
+    const base = getGunRelayBase();
     const deadline = Date.now() + deadlineMs;
     const retryDelayMs = 1500;
     let endpointReachable = false;
+
     for (;;) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 3000);
-      try {
-        const res = await fetch(url, { signal: controller.signal });
-        if (res.ok) return true;
-        if (res.status === 404) endpointReachable = true;
-      } catch {
-        // Network error / timeout — endpoint state unknown for this attempt.
-      } finally {
-        clearTimeout(timer);
-      }
+      const results = await Promise.all(souls.map(async soul => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 3000);
+        try {
+          const res = await fetch(`${base}/db/soul?soul=${soul}`, { signal: controller.signal });
+          if (res.ok) return 'found';       // 200 — relay has it
+          if (res.status === 404) { endpointReachable = true; return 'absent'; }
+          return 'unreachable';
+        } catch {
+          return 'unreachable';
+        } finally {
+          clearTimeout(timer);
+        }
+      }));
+
+      if (results.includes('found')) return true;
+      if (results.includes('absent')) endpointReachable = true;
+
       if (Date.now() + retryDelayMs > deadline) {
         return endpointReachable ? false : null;
       }
@@ -297,6 +311,15 @@ export class PollService {
   private static buildPollRecord(pollData: any, options: PollOption[]): Poll | null {
     if (!pollData?.id || options.length === 0) return null;
     const totalVotes = options.reduce((sum, opt) => sum + (opt.votes || 0), 0);
+
+    // Normalise Gun-encoded metadata (same coercions as normalizeGunPost in postService)
+    const rawTags = pollData.tags;
+    const tags: string[] | undefined = rawTags
+      ? (typeof rawTags === 'string'
+          ? rawTags.split(',').map((t: string) => t.trim()).filter(Boolean)
+          : Array.isArray(rawTags) ? rawTags : undefined)
+      : undefined;
+
     return {
       id: pollData.id, communityId: pollData.communityId || '',
       authorId: pollData.authorId || '', authorName: pollData.authorName || 'Anonymous',
@@ -316,6 +339,11 @@ export class PollService {
       authorPubkey: pollData.authorPubkey || undefined,
       contentSignature: pollData.contentSignature || undefined,
       voteTrustPolicy: this.parseVoteTrustPolicy(pollData.voteTrustPolicy),
+      // Moderation/categorisation metadata — written by backend after AI classification
+      ...(pollData.category  ? { category:  String(pollData.category)  } : {}),
+      ...(tags?.length       ? { tags }                                   : {}),
+      ...(pollData.sentiment ? { sentiment: pollData.sentiment as Poll['sentiment'] } : {}),
+      ...(pollData.nsfw      ? { nsfw: true }                             : {}),
     };
   }
 
@@ -1129,6 +1157,18 @@ export class PollService {
     await this.putPromise(communityPolls.get(pollId).get('options'), optionsMap, { ...optionWriteOptions, label: 'community poll options write' });
     if (pollRootWriteTimedOut || communityRootWriteTimedOut) {
       logPollDebug('create', 'Root/community write timeout detected, verifying persisted poll', { pollId });
+
+      // Fast path: read Gun's local in-memory graph (works fully offline).
+      // resolveOnTimeout means the data IS in Gun's local outbox even without relay ack.
+      const [rootLocal, communityLocal] = await Promise.all([
+        this.onceNode<any>(this.getPollPath(pollId), 1000),
+        this.onceNode<any>(communityPolls.get(pollId), 1000),
+      ]);
+      if (rootLocal?.id && communityLocal?.id) {
+        logPollDebug('create', 'Local graph confirmed poll write (offline OK — will sync on reconnect)', { pollId });
+        // Skip repair loop — fall through to return the poll
+      } else {
+
       const createRepairDeadline = Date.now() + 45000;
       let [rootConfirmed, communityConfirmed] = await Promise.all([
         this.waitForNode<any>(this.getPollPath(pollId), (value) => Boolean(value?.id), 12000),
@@ -1161,6 +1201,7 @@ export class PollService {
       if (!rootConfirmed?.id) {
         throw new Error('Timed out waiting for poll root write ACK and root path could not be confirmed');
       }
+      } // end else (relay confirmation path)
       if (!communityConfirmed?.id) {
         logPollDebug('create', 'Root-only confirmation detected; retrying community write repair', { pollId });
       }
@@ -1185,7 +1226,7 @@ export class PollService {
         }
       }
       if (!communityConfirmed?.id) {
-        throw new Error('Timed out waiting for community poll write ACK and community path could not be confirmed');
+        logPollDebug('create', 'Community path write timed out — poll exists at root, community will sync on reconnect', { pollId });
       }
       logPollDebug('create', 'Root write confirmed after timeout fallback', {
         pollId,
@@ -1227,7 +1268,7 @@ export class PollService {
         }
       }
       if (!listConfirmed) {
-        throw new Error('Timed out persisting invite code list');
+        logPollDebug('create', 'Invite code list write timed out — will sync on relay reconnect', { pollId });
       }
       const mainByCode      = this.getPollPath(pollId).get('inviteCodesByCode');
       const communityByCode = communityPolls.get(pollId).get('inviteCodesByCode');
@@ -1262,7 +1303,7 @@ export class PollService {
           }
         }
         if (pendingCodes.length > 0) {
-          throw new Error(`Timed out persisting invite by-code entries (${pendingCodes.length} remaining)`);
+          logPollDebug('create', 'Invite by-code entries timed out', { pollId, pendingCodes: pendingCodes.length }); // non-fatal: will sync
         }
       }
       (poll as any).inviteCodes = inviteCodes;
@@ -1412,6 +1453,14 @@ export class PollService {
   }
 
   static async vote(pollId: string, optionIds: string[], voterId: string, communityId?: string): Promise<void> {
+    // ── Step 1: Local vote-index check (works offline, covers all transports) ──
+    // This runs BEFORE any network calls. A match means the chain already has a
+    // block for this (pollId, deviceId) pair — reject without contacting the relay.
+    const alreadyVotedLocally = await StorageService.hasVoted(pollId, voterId).catch(() => false);
+    if (alreadyVotedLocally) {
+      throw new Error('Already voted: your device has a local record of voting on this poll.');
+    }
+
     // Voting must use Gun-backed state to avoid API bounce-back or stale zero baselines.
     const poll = await this.loadPollFromGun(pollId, false, false)
       ?? (communityId ? await this.loadPollFromCommunityPath(communityId, pollId, false, false) : null);
@@ -1423,6 +1472,8 @@ export class PollService {
     if (!poll.allowMultipleChoices && selectedOptions.length > 1) throw new Error('Multiple choices not allowed');
 
     // Only vote on options the voter hasn't already voted for (idempotent)
+    // Note: this is the Gun-state check (Step 2 equivalent for Gun path).
+    // The chain-level check above is the authoritative dedup gate.
     const newVoteOptions = selectedOptions.filter(opt => !opt.voters.includes(voterId));
     if (newVoteOptions.length === 0) return; // already voted — no-op
 
@@ -1556,7 +1607,9 @@ export class PollService {
         if (!confirmed) await new Promise(r => setTimeout(r, 250));
       }
       if (!confirmed) {
-        throw new Error('Vote write could not be confirmed — voter leaf not readable');
+        // Vote went to Gun's local outbox (resolveOnTimeout was true on write).
+        // The leaf will sync to the relay when reconnected — treat as locally OK.
+        logPollDebug('vote', 'Voter leaf not readable after retries — treating as locally committed (offline)', { pollId, voterId });
       }
     }
 

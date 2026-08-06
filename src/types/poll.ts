@@ -47,6 +47,14 @@ export interface Poll {
   authTag?: string;
   /** Whether the relay independently confirmed it holds this poll (set on creation). */
   relayConfirmed?: boolean;
+  /** Category label assigned by the moderation backend (e.g. 'technology', 'politics') */
+  category?: string;
+  /** Tags stored as comma-string in Gun, parsed to array on read */
+  tags?: string[];
+  /** AI/author sentiment hint */
+  sentiment?: 'positive' | 'negative' | 'neutral';
+  /** Whether the poll is marked adult-only */
+  nsfw?: boolean;
   /**
    * Sybil-resistance policy chosen by the poll creator. Rides inside the signed
    * poll content so it can't be forged. Absent = legacy poll, treated as
