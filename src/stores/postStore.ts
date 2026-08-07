@@ -590,7 +590,17 @@ export const usePostStore = defineStore('post', () => {
 
   // ─── Create ────────────────────────────────────────────────────────────────
 
-  async function createPost(data: { communityId: string; title: string; content: string; imageFile?: File; }) {
+  async function createPost(data: {
+    communityId: string;
+    title: string;
+    content: string;
+    imageFile?: File;
+    videoCID?: string;
+    videoThumbnailCID?: string;
+    videoDuration?: number;
+    videoSize?: number;
+    videoMimeType?: string;
+  }) {
     try {
       let joinedCommunityIds: string[] = [];
       try {
@@ -619,6 +629,12 @@ export const usePostStore = defineStore('post', () => {
         communityId: data.communityId, authorId: currentUser.id,
         authorName, authorShowRealName: showRealName,
         title: data.title, content: data.content,
+        // Video fields — only present when user attached a video
+        ...(data.videoCID          ? { videoCID:          data.videoCID }          : {}),
+        ...(data.videoThumbnailCID ? { videoThumbnailCID: data.videoThumbnailCID } : {}),
+        ...(data.videoDuration     ? { videoDuration:     data.videoDuration }     : {}),
+        ...(data.videoSize         ? { videoSize:         data.videoSize }         : {}),
+        ...(data.videoMimeType     ? { videoMimeType:     data.videoMimeType }     : {}),
       }, data.imageFile, postId);
 
       await UserService.incrementPostCount();

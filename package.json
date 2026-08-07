@@ -40,8 +40,6 @@
     "gun": "^0.2020.1241",
     "idb": "^8.0.0",
     "ionicons": "^7.2.1",
-    "ipfs-core": "^0.18.1",
-    "libp2p-webrtc-star": "^0.25.0",
     "naughty-words": "^1.2.0",
     "os-browserify": "^0.3.0",
     "path-browserify": "^1.0.1",
@@ -51,7 +49,9 @@
     "vue": "^3.4.0",
     "vue-router": "^4.2.5",
     "ws": "^8.19.0",
-    "flexsearch": "^0.7.43"
+    "flexsearch": "^0.7.43",
+    "@ffmpeg/ffmpeg": "^0.12.10",
+    "@ffmpeg/util": "^0.12.1"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
@@ -68,3 +68,10 @@
     "vue-tsc": "^3.2.4"
   }
 }
+
+
+
+
+
+
+

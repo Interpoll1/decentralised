@@ -22,6 +22,7 @@
     </ion-header>
 
     <ion-content>
+      <DesktopPageShell>
       <div class="settings-body">
 
         <!-- ══════════════════════ GENERAL TAB ══════════════════════ -->
@@ -450,7 +451,7 @@
               </div>
               <div>
                 <h3>Privacy &amp; Tor</h3>
-                <p>Makes your browsing harder to trace. Turn this on if you want extra privacy — it stops features that could accidentally reveal your real location.</p>
+                <p>Restrict network features that may leak your IP or device fingerprint. Enable this when routing traffic through Tor or a VPN for enhanced anonymity.</p>
               </div>
               <span class="status-pill" :class="anonymityMode ? 'pill-ok' : 'pill-off'">
                 {{ anonymityMode ? 'Anonymity ON' : 'OFF' }}
@@ -468,7 +469,7 @@
             </div>
             <div class="alert-box info mt-12">
               <ion-icon :icon="informationCircleOutline"></ion-icon>
-              <span>A web app can't route its own traffic through Tor. Open InterPoll in <a href="https://www.torproject.org" target="_blank" class="link">Tor Browser</a> or route this browser through Orbot.</span>
+              <span>Web applications cannot route their own TCP traffic through Tor. To use Interpoll over Tor, open it in <a href="https://www.torproject.org" target="_blank" class="link">Tor Browser</a>, or proxy this browser's traffic through <a href="https://orbot.app" target="_blank" class="link">Orbot</a>.</span>
             </div>
             <div v-if="anonymityMode" class="mt-12">
               <div class="status-row" :class="activeRelayIsOnion ? 'row-ok' : 'row-warn'">
@@ -495,7 +496,7 @@
               </div>
               <div>
                 <h3>Relay Peers</h3>
-                <p>These are the servers your app talks to. Think of them like post offices — they pass your messages to everyone else. More peers = more reliable, even if one goes down.</p>
+                <p>GunDB relay servers that sync data across the network. Connecting to multiple peers ensures continuity if any single server becomes unavailable.</p>
               </div>
               <span class="count-badge">{{ networkStatus.gunConnectedCount }}/{{ gunPeersList.length }}</span>
             </div>
@@ -563,7 +564,7 @@
               </div>
               <div>
                 <h3>Run a Relay Node</h3>
-                <p>Help keep Interpoll alive for everyone. Running a relay is like donating a phone line — other users route through you when they need it. No technical knowledge needed to get started.</p>
+                <p>Contribute to the network by hosting a GunDB relay. Each additional node improves data availability and reduces latency for all users. Choose the setup path that suits your environment.</p>
               </div>
             </div>
 
@@ -573,7 +574,7 @@
                   <span class="relay-difficulty easy">Easy</span>
                   <span class="relay-option-name">Browser Tab</span>
                 </div>
-                <p class="relay-option-desc">One click, zero setup. Gets a public <code>wss://tunnel.interpoll.endless.sbs</code> URL via the bridge server.</p>
+                <p class="relay-option-desc">Runs a relay directly in this browser tab via a WebSocket bridge. Automatically receives a public <code>wss://tunnel.interpoll.endless.sbs</code> URL — no server or port-forwarding required.</p>
                 <button class="pill-btn accent">Enable Browser Relay</button>
               </div>
 
@@ -582,7 +583,7 @@
                   <span class="relay-difficulty medium">Medium</span>
                   <span class="relay-option-name">Home Server</span>
                 </div>
-                <p class="relay-option-desc">One-line installer for Raspberry Pi or spare Linux PC. Prints local IP relay URL, guides through optional port forwarding.</p>
+                <p class="relay-option-desc">Deploys a GunDB relay on a Raspberry Pi or spare Linux machine on your local network. The installer prints the relay URL and optionally guides you through port-forwarding for external access.</p>
                 <div class="code-block">curl -sSL https://interpoll.endless.sbs/install.sh | bash</div>
               </div>
 
@@ -591,7 +592,7 @@
                   <span class="relay-difficulty advanced">Technical</span>
                   <span class="relay-option-name">Cloud VPS</span>
                 </div>
-                <p class="relay-option-desc">One-command VPS installer with domain argument. Handles Docker + Caddy + auto-TLS automatically.</p>
+                <p class="relay-option-desc">Provisions a production-grade relay on any VPS with a domain name. The script handles Docker, Caddy reverse-proxy, and automatic TLS certificate issuance in a single command.</p>
                 <div class="code-block">curl -sSL https://interpoll.endless.sbs/vps.sh | bash -s yourdomain.com</div>
               </div>
             </div>
@@ -633,7 +634,7 @@
               </div>
               <div>
                 <h3>Bootstrap Recovery</h3>
-                <p>If you can't connect at all, use this to find other users and get back online. Like asking a friend to share their server address when yours stops working.</p>
+                <p>Re-establish network connectivity when primary relays are unreachable. Discover active peers via the Gun mesh, or exchange signed invite bundles out-of-band to restore access.</p>
               </div>
             </div>
             <div class="button-row">
@@ -650,7 +651,7 @@
                 Copy Invite
               </button>
             </div>
-            <p class="helper-text mt-8">Import never switches silently — endpoints are validated before connecting.</p>
+            <p class="helper-text mt-8">Imported endpoints are validated before connecting — no silent relay switching occurs.</p>
           </div>
 
           <!-- Connected Peers & Your Node -->
@@ -846,6 +847,7 @@
         </div>
 
       </div>
+      </DesktopPageShell>
     </ion-content>
   </ion-page>
 </template>
@@ -864,6 +866,17 @@ ion-content {
     radial-gradient(ellipse at 50% 100%, rgba(99, 102, 241, 0.24) 0%, transparent 55%),
     radial-gradient(ellipse at 0%  55%,  rgba(79,  70, 229, 0.15) 0%, transparent 40%),
     #0d0e1c;
+}
+
+/* Kill DesktopPageShell's opaque surface-card so our gradient shows through */
+:deep(.surface-card),
+:deep(.main-content),
+:deep(.page-layout) {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  border: none !important;
 }
 
 .back-btn {
@@ -922,9 +935,9 @@ ion-content {
 
 /* ── Body ───────────────────────────────────── */
 .settings-body {
-  max-width: 700px;
+  max-width: 920px;
   margin: 0 auto;
-  padding: 20px 16px 60px;
+  padding: 20px 24px 60px;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -2853,8 +2866,6 @@ const confirmClearAll = async () => {
       }
     ]
   });
-
-
 
   await alert.present();
 };

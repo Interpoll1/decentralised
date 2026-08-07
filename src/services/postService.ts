@@ -63,6 +63,16 @@ export interface Post {
   sentiment?: 'positive' | 'negative' | 'neutral';
   /** Whether the post is marked adult-only */
   nsfw?: boolean;
+  /** IPFS CID of attached video (stored via Filebase, played via VideoPlayer) */
+  videoCID?: string;
+  /** IPFS CID of video thumbnail (JPEG extracted client-side before compression) */
+  videoThumbnailCID?: string;
+  /** Video duration in seconds */
+  videoDuration?: number;
+  /** Compressed video file size in bytes */
+  videoSize?: number;
+  /** Video MIME type, e.g. 'video/mp4' */
+  videoMimeType?: string;
 }
 
 /** @deprecated Legacy per-service canonicalizer, kept for verifying posts signed before the shared canonicalJSON was adopted. Never sign new posts with this. */
@@ -100,6 +110,13 @@ function normalizeGunPost(postData: any): any {
   if (out.nsfw !== undefined) {
     out.nsfw = Boolean(out.nsfw);
   }
+  // Video fields — Gun stores numbers as strings in some edge cases, coerce back
+  if (out.videoDuration !== undefined) out.videoDuration = Number(out.videoDuration) || 0;
+  if (out.videoSize     !== undefined) out.videoSize     = Number(out.videoSize)     || 0;
+  // Clean empty string CIDs (Gun sometimes writes '' instead of omitting the field)
+  if (!out.videoCID)          delete out.videoCID;
+  if (!out.videoThumbnailCID) delete out.videoThumbnailCID;
+  if (!out.videoMimeType)     delete out.videoMimeType;
   return out;
 }
 const MAX_INITIAL_POSTS = 50;
@@ -219,6 +236,9 @@ export class PostService {
   ): Promise<Post> {
     let imageData;
     if (imageFile) {
+      // Dynamic import: ipfs-core is large. Load it only when user attaches an
+      // image so vendor-ipfs.js stays out of the critical bundle entirely.
+      const { IPFSService } = await import('./ipfsService');
       imageData = await IPFSService.uploadImage(imageFile);
     }
 
@@ -238,10 +258,16 @@ export class PostService {
       score: 0,
       commentCount: 0,
       // Optional metadata fields — passed through from the create form
-      ...(post.category  ? { category: post.category }                        : {}),
-      ...(post.tags?.length ? { tags: post.tags }                             : {}),
-      ...(post.sentiment ? { sentiment: post.sentiment }                      : {}),
-      ...(post.nsfw      ? { nsfw: true }                                     : {}),
+      ...(post.category     ? { category: post.category }          : {}),
+      ...(post.tags?.length ? { tags: post.tags }                   : {}),
+      ...(post.sentiment    ? { sentiment: post.sentiment }         : {}),
+      ...(post.nsfw         ? { nsfw: true }                        : {}),
+      // Video fields — only included when a video was uploaded
+      ...(post.videoCID          ? { videoCID:          post.videoCID }          : {}),
+      ...(post.videoThumbnailCID ? { videoThumbnailCID: post.videoThumbnailCID } : {}),
+      ...(post.videoDuration     ? { videoDuration:     post.videoDuration }     : {}),
+      ...(post.videoSize         ? { videoSize:         post.videoSize }         : {}),
+      ...(post.videoMimeType     ? { videoMimeType:     post.videoMimeType }     : {}),
     };
 
     const cleanPost: any = {
@@ -260,12 +286,18 @@ export class PostService {
     };
 
     // Gun can't store arrays — serialise tags as a comma string
-    if (newPost.imageIPFS)        cleanPost.imageIPFS = newPost.imageIPFS;
-    if (newPost.imageThumbnail)   cleanPost.imageThumbnail = newPost.imageThumbnail;
-    if (newPost.category)         cleanPost.category  = newPost.category;
-    if (newPost.tags?.length)     cleanPost.tags      = newPost.tags.join(',');
-    if (newPost.sentiment)        cleanPost.sentiment = newPost.sentiment;
-    if (newPost.nsfw)             cleanPost.nsfw      = 1; // Gun stores booleans unreliably
+    if (newPost.imageIPFS)        cleanPost.imageIPFS        = newPost.imageIPFS;
+    if (newPost.imageThumbnail)   cleanPost.imageThumbnail   = newPost.imageThumbnail;
+    if (newPost.category)         cleanPost.category         = newPost.category;
+    if (newPost.tags?.length)     cleanPost.tags             = newPost.tags.join(',');
+    if (newPost.sentiment)        cleanPost.sentiment        = newPost.sentiment;
+    if (newPost.nsfw)             cleanPost.nsfw             = 1;
+    // Video fields — omit entirely if absent (no null/empty string in Gun)
+    if (newPost.videoCID)          cleanPost.videoCID          = newPost.videoCID;
+    if (newPost.videoThumbnailCID) cleanPost.videoThumbnailCID = newPost.videoThumbnailCID;
+    if (newPost.videoDuration)     cleanPost.videoDuration     = newPost.videoDuration;
+    if (newPost.videoSize)         cleanPost.videoSize         = newPost.videoSize;
+    if (newPost.videoMimeType)     cleanPost.videoMimeType     = newPost.videoMimeType;
 
     try {
       const keyPair = await KeyService.getKeyPair();
@@ -332,29 +364,16 @@ export class PostService {
 
     const gun = GunService.getGun();
 
-    // Gun put ack can hang indefinitely if the relay is still handshaking.
-    // The post is written to Gun's in-memory graph immediately regardless —
-    // the ack only confirms relay persistence. We time out after 6s and
-    // continue; verifyRelayPersistence + republishLoop handle durability.
-    const gunPutWithTimeout = (node: any, data: any, label: string): Promise<void> =>
-      new Promise<void>((resolve) => {
-        const timer = setTimeout(() => {
-          console.warn(`[createPost] Gun ack timeout for ${label} — continuing anyway`);
-          resolve();
-        }, 6_000);
-        node.put(data, (ack: any) => {
-          clearTimeout(timer);
-          if (ack.err) console.warn(`[createPost] Gun ack error for ${label}:`, ack.err);
-          resolve(); // always resolve — durability handled by verifyRelayPersistence
-        });
+    await new Promise<void>((resolve, reject) => {
+      gun.get('posts').get(newPost.id).put(cleanPost, (ack: any) => {
+        if (ack.err) reject(new Error(ack.err)); else resolve();
       });
-
-    await gunPutWithTimeout(gun.get('posts').get(newPost.id), cleanPost, 'posts root');
-    await gunPutWithTimeout(
-      gun.get('communities').get(newPost.communityId).get('posts').get(newPost.id),
-      cleanPost,
-      `communities/${newPost.communityId}`
-    );
+    });
+    await new Promise<void>((resolve, reject) => {
+      gun.get('communities').get(newPost.communityId).get('posts').get(newPost.id).put(cleanPost, (ack: any) => {
+        if (ack.err) reject(new Error(ack.err)); else resolve();
+      });
+    });
 
     postMemoryCache.set(newPost.id, newPost);
     missingPostCache.delete(newPost.id);
@@ -452,27 +471,15 @@ export class PostService {
     subscription = communityPostsNode.map().on((data: any, postId: string) => {
       if (!initialLoadDone) return;
       if (!postId || postId === '_' || inFlightIds.has(postId)) return;
-      // Category/metadata patch — merge directly into the post already in store.
-      // Gun delivers {category, tags, nsfw} without title/content/dataVersion.
-      // We do NOT do a full gun.get('posts').get(id) refetch here because that
-      // path has no namespace prefix and processIncomingPost would drop the result
-      // (dataVersion missing → rejected by version guard on v3 clients).
-      // Instead, fetch from the namespaced path so dataVersion is present.
+      // Category/metadata patch — bypass batch queue and re-fetch immediately
       if (data && typeof data === 'object' && data.category && !data.title) {
         if (!inFlightIds.has(postId)) {
           inFlightIds.add(postId);
-          void onceWithTimeout(gun.get(GUN_NAMESPACE).get('communities').get(communityId).get('posts').get(postId))
-            .then((postData) => {
-              if (postData && postData.id) {
-                // Merge category fields onto the fetched post and deliver.
-                onPost({ ...normalizeGunPost(postData), dataVersion: GUN_NAMESPACE, category: data.category, tags: data.tags, nsfw: data.nsfw });
-              } else {
-                // Fallback: deliver a minimal patch object with dataVersion set
-                // so processIncomingPost's version guard passes.
-                onPost({ id: postId, dataVersion: GUN_NAMESPACE, category: data.category, tags: data.tags, nsfw: data.nsfw } as any);
-              }
-            })
-            .finally(() => inFlightIds.delete(postId));
+          void onceWithTimeout(gun.get('posts').get(postId)).then((postData) => {
+            if (postData && postData.id) {
+              onPost({ ...normalizeGunPost(postData), dataVersion: postData.dataVersion || GUN_NAMESPACE });
+            }
+          }).finally(() => inFlightIds.delete(postId));
         }
         return;
       }
@@ -579,22 +586,23 @@ export class PostService {
       if (!postId || postId === '_' || inFlightIds.has(postId)) return;
 
       // ── Category/metadata patch from backend categorisation ───────────────
-      // Gun delivers {category, tags, nsfw} without title/dataVersion.
-      // processIncomingPost drops patches with no dataVersion on v3 clients,
-      // so we inject dataVersion manually and merge into the existing store entry
-      // rather than doing a full refetch from the un-namespaced 'posts' path.
+      // When gun.get('v3').get('posts').get(id).put({category, tags, nsfw}) fires,
+      // map().on() delivers the partial data as `data`. It won't have `title` or
+      // `content` — only the newly written fields. Merge immediately without a
+      // full re-fetch so the category badge appears within 1-3s of categorisation.
       if (data && typeof data === 'object' && data.category && !data.title) {
+        const normalized = normalizeGunPost(data);
+        // Emit as a minimal post-like object; postStore.processIncomingPost will
+        // merge it with the existing post via postsMap.value.set(id, withKnownTally(post)).
+        // We need to deliver the full existing post merged with the new fields, so
+        // do a quick once() but skip the cooldown for metadata-only patches.
         if (!inFlightIds.has(postId)) {
           inFlightIds.add(postId);
-          void onceWithTimeout(gun.get(GUN_NAMESPACE).get('posts').get(postId))
-            .then((postData) => {
-              if (postData && postData.id) {
-                onPost({ ...normalizeGunPost(postData), dataVersion: GUN_NAMESPACE, category: data.category, tags: data.tags, nsfw: data.nsfw });
-              } else {
-                onPost({ id: postId, dataVersion: GUN_NAMESPACE, category: data.category, tags: data.tags, nsfw: data.nsfw } as any);
-              }
-            })
-            .finally(() => inFlightIds.delete(postId));
+          void onceWithTimeout(gun.get('posts').get(postId)).then((postData) => {
+            if (postData && postData.id) {
+              onPost({ ...normalizeGunPost(postData), dataVersion: postData.dataVersion || GUN_NAMESPACE });
+            }
+          }).finally(() => inFlightIds.delete(postId));
         }
         return;
       }
@@ -899,12 +907,7 @@ export class PostService {
    * null when the endpoint is unreachable/has no DB (inconclusive).
    */
   static async verifyRelayPersistence(postId: string, deadlineMs = 8000): Promise<boolean | null> {
-    // Posts are written to gun.get('posts').get(id) — no namespace prefix.
-    // The namespaced path v3/posts/{id} was never written so the old soul query
-    // always returned 404 for 8 seconds, leaving isSubmitting=true the whole time.
-    // The community path gun.get('communities').get(cid).get('posts').get(id) is
-    // also bare, so we check the bare 'posts' root soul.
-    const soul = encodeURIComponent(`posts/${postId}`);
+    const soul = encodeURIComponent(`${GUN_NAMESPACE}/posts/${postId}`);
     const url = `${getGunRelayBase()}/db/soul?soul=${soul}`;
     const deadline = Date.now() + deadlineMs;
     const retryDelayMs = 1500;
