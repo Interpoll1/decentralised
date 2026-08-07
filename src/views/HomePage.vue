@@ -303,7 +303,7 @@
 
             <div class="sidebar-communities">
               <div
-                v-for="community in sidebarCommunities"
+                v-for="community in sidebarCommunities.slice(0, 5)"
                 :key="community.id"
                 class="sidebar-community-item"
                 @click="$router.push(`/community/${community.id}`)"
@@ -337,7 +337,10 @@
             </div>
             <div class="trending-list">
               <button
-                v-for="row in trendingCategories"
+
+              
+                
+                v-for="row in trendingCategories.slice(0, 6)"
                 :key="row.id"
                 class="trending-row"
                 @click="selectCategory(row.id)"
@@ -538,18 +541,18 @@ import type { Community } from '../services/communityService';
 import { usePostStore } from '../stores/postStore';
 import { usePollStore } from '../stores/pollStore';
 import CommunityCard from '../components/CommunityCard.vue';
- 
+
 // ── Lazy-loaded tab components ────────────────────────────────────────────────
 const CommunitiesTab = defineAsyncComponent(() => import('../components/CommunitiesTab.vue'));
 const CreateTab      = defineAsyncComponent(() => import('../components/CreateTab.vue'));
 const ChatTab        = defineAsyncComponent(() => import('../components/ChatTab.vue'));
- 
+
 // ── Lazy-loaded feed cards (not needed until feed renders) ────────────────────
 // PostCard and PollCard are large components with their own icon sets.
 // Using defineAsyncComponent means their JS is parsed after the shell renders.
 const PostCard = defineAsyncComponent(() => import('../components/PostCard.vue'));
 const PollCard = defineAsyncComponent(() => import('../components/PollCard.vue'));
- 
+
 import { Post } from '../services/postService';
 import { Poll } from '../services/pollService';
 import { GunService } from '../services/gunService';
@@ -557,12 +560,12 @@ import { UserService } from '../services/userService';
 import { warmupFromDB } from '../services/dbWarmup';
 import { ModerationService, moderationVersion } from '../services/moderationService';
 import config from '../config';
- 
+
 // ── Lazy composables — imported statically but only initialised on demand ─────
 import { useChat }       from '../composables/useChat';
 import { useModeration } from '../composables/useModeration';
 import { useTutorial }   from '../composables/useTutorial';
- 
+
 const router = useRouter();
 const route  = useRoute();
 const { isSupported: canScanQr, scan: scanQr } = useQrScan();
@@ -570,13 +573,13 @@ const chainStore     = useChainStore();
 const communityStore = useCommunityStore();
 const postStore      = usePostStore();
 const pollStore      = usePollStore();
- 
+
 const FEED_DEBUG      = localStorage.getItem('interpoll_feed_debug') === 'true';
 const SYNC_DEBUG      = localStorage.getItem('interpoll_sync_debug') === 'true';
 const HOME_GUN_FEED_ENABLED         = localStorage.getItem('interpoll_home_gun_feed') !== 'false';
 const HOME_GUN_FEED_MAX_COMMUNITIES = 8;
 const FEED_INITIAL_RENDER_TARGET    = 50;
- 
+
 function feedDebug(label: string, data?: Record<string, unknown>) {
   if (!FEED_DEBUG) return;
   if (data) console.log(`[FeedDebug] ${label}`, data); else console.log(`[FeedDebug] ${label}`);
@@ -585,7 +588,7 @@ function syncDebug(label: string, data?: Record<string, unknown>) {
   if (!SYNC_DEBUG) return;
   if (data) console.log(`[SyncDebug] ${label}`, data); else console.log(`[SyncDebug] ${label}`);
 }
- 
+
 const HOME_TABS = ['home', 'communities', 'chat', 'create'] as const;
 type HomeTab = typeof HOME_TABS[number];
 function tabFromRoute(): HomeTab {
@@ -593,7 +596,7 @@ function tabFromRoute(): HomeTab {
   const value = Array.isArray(raw) ? raw[0] : raw;
   return HOME_TABS.includes(value as HomeTab) ? (value as HomeTab) : 'home';
 }
- 
+
 const activeTab       = ref<string>(tabFromRoute());
 const communityFilter = ref('all');
 const isLoadingPosts  = ref(false);
@@ -602,7 +605,7 @@ const isHeaderHidden  = ref(false);
 const isTabBarHidden  = ref(false);
 const warmupComplete  = ref(false);
 const showMoreCategories = ref(false);
- 
+
 // URL ↔ tab sync
 watch(activeTab, (tab) => {
   if (route.name !== 'Home' || tab === tabFromRoute()) return;
@@ -613,7 +616,7 @@ watch(() => route.query.tab, () => {
   const tab = tabFromRoute();
   if (activeTab.value !== tab) activeTab.value = tab;
 });
- 
+
 // ── Composables initialised up-front (lightweight) ────────────────────────────
 const tutorial   = useTutorial();
 const moderation = useModeration();
@@ -628,19 +631,19 @@ const {
   skipModerationOnboarding, handleModerationModalDismiss, confirmModerationOnboarding,
   maybeShowOnboarding,
 } = moderation;
- 
+
 // ── Chat — initialised lazily on first tab visit ──────────────────────────────
 const gunListeners: Array<() => void> = [];
 let currentUserId = '';
 let chatComposable: ReturnType<typeof useChat> | null = null;
- 
+
 // Proxy refs that ChatTab binds to — populated once chat composable loads
 const chatList          = ref<any[]>([]);
 const totalUnread       = ref(0);
 const userSearchResults = ref<any[]>([]);
 const searchingUsers    = ref(false);
 const userSearchQuery   = ref('');
- 
+
 function ensureChat() {
   if (!chatComposable && currentUserId) {
     chatComposable = useChat(currentUserId, gunListeners);
@@ -652,7 +655,7 @@ function ensureChat() {
   }
   return chatComposable;
 }
- 
+
 async function ensureChatInitialized() {
   const c = ensureChat();
   if (c) await c.ensureChatInitialized(activeTab);
@@ -669,11 +672,11 @@ async function loadChatList()            { await ensureChat()?.loadChatList(); }
 async function processPendingChatInvites(userId: string) {
   await ensureChat()?.processPendingChatInvites(userId);
 }
- 
+
 // ── Feed mode & categories ────────────────────────────────────────────────────
 const feedMode = ref<'for-you' | 'latest'>('for-you');
 function setFeedMode(mode: 'for-you' | 'latest') { feedMode.value = mode; }
- 
+
 const CATEGORY_IDS = ['technology', 'gaming', 'science', 'politics', 'crypto', 'sports', 'all'] as const;
 function categoryFromRoute(): string {
   const raw   = route.query.category;
@@ -681,7 +684,7 @@ function categoryFromRoute(): string {
   return typeof value === 'string' ? value : 'all';
 }
 const selectedCategory = ref<string>(categoryFromRoute());
- 
+
 watch(selectedCategory, (cat) => {
   if (cat !== 'all') {
     void pollStore.loadAllCommunityPolls?.();
@@ -691,7 +694,7 @@ watch(() => route.query.category, () => {
   const cat = categoryFromRoute();
   if (selectedCategory.value !== cat) selectedCategory.value = cat;
 });
- 
+
 const VISIBLE_CATEGORIES = [
   { id: 'entertainment', label: 'Entertainment', icon: tvOutline },
   { id: 'other',         label: 'Other',         icon: ellipseOutline },
@@ -713,12 +716,12 @@ const VISIBLE_CATEGORIES = [
 const feedCategories = computed(() =>
   showMoreCategories.value ? VISIBLE_CATEGORIES : VISIBLE_CATEGORIES.slice(0, 6)
 );
- 
+
 function selectCategory(id: string) {
   selectedCategory.value = id;
   void router.push({ query: { ...route.query, category: id === 'all' ? undefined : id } });
 }
- 
+
 // ── Feed ──────────────────────────────────────────────────────────────────────
 function itemMatchesCategory(item: { type: string; data: any }): boolean {
   if (selectedCategory.value === 'all') return true;
@@ -730,7 +733,7 @@ function itemMatchesCategory(item: { type: string; data: any }): boolean {
   }
   return false;
 }
- 
+
 function seededRandom(index: number): number {
   let x = Math.sin(index + 1) * 10000;
   return x - Math.floor(x);
@@ -744,7 +747,7 @@ function hashStringToInt(str: string): number {
   }
   return Math.abs(hash);
 }
- 
+
 const combinedFeed = computed(() => {
   moderationVersion.value;
   selectedCategory.value;
@@ -780,37 +783,37 @@ const combinedFeed = computed(() => {
   weighted.sort((a, b) => b.weight - a.weight);
   return weighted.map(w => w.item).slice(0, postStore.visibleCount);
 });
- 
+
 const hasMore = computed(() => postStore.hasMorePosts || pollStore.hasMorePolls);
 const newContentCount = computed(() => postStore.newPostCount + pollStore.newPollCount);
- 
+
 function getPollModerationText(poll: Poll): string {
   return [poll.question, poll.description, ...(poll.options || []).map((o: any) => o.text)].filter(Boolean).join(' ');
 }
 function getPostModerationText(post: Post): string {
   return [post.title, post.content].filter(Boolean).join(' ');
 }
- 
+
 function ensureInitialFeedVisible(reason: string) {
   if (combinedFeed.value.length > 0) return;
   if (FEED_DEBUG) feedDebug('ensure-initial-feed-visible', { reason });
   postStore.resetVisibleCount?.();
   pollStore.resetVisibleCount?.();
 }
- 
+
 // ── Voting ────────────────────────────────────────────────────────────────────
 function hasUpvoted(postId: string): boolean   { voteVersion.value; return postStore.myVote(postId) === 'up'; }
 function hasDownvoted(postId: string): boolean  { voteVersion.value; return postStore.myVote(postId) === 'down'; }
 function hasUpvotedPoll(pollId: string): boolean  { voteVersion.value; return pollStore.myPollContentVote(pollId) === 'up'; }
 function hasDownvotedPoll(pollId: string): boolean { voteVersion.value; return pollStore.myPollContentVote(pollId) === 'down'; }
- 
+
 async function presentVoteToast(message: string, expectedVersion: number) {
   await nextTick();
   if (voteVersion.value !== expectedVersion) return;
   const toast = await toastController.create({ message, duration: 1500, position: 'bottom' });
   await toast.present();
 }
- 
+
 async function handlePostVote(post: Post, direction: 'up' | 'down') {
   voteVersion.value++;
   const version = voteVersion.value;
@@ -826,7 +829,7 @@ async function handlePostVote(post: Post, direction: 'up' | 'down') {
 }
 const handleUpvote   = (post: Post) => handlePostVote(post, 'up');
 const handleDownvote = (post: Post) => handlePostVote(post, 'down');
- 
+
 async function handleUpvotePoll(poll: Poll) {
   const wasActive = pollStore.myPollContentVote(poll.id) === 'up';
   voteVersion.value++;
@@ -853,14 +856,14 @@ async function handleDownvotePoll(poll: Poll) {
     (await toastController.create({ message: 'Failed to downvote poll', duration: 2000 })).present();
   }
 }
- 
+
 // ── Navigation ────────────────────────────────────────────────────────────────
 function getCommunityName(communityId: string): string {
   return communityStore.communities.find((c: any) => c.id === communityId)?.displayName || communityId;
 }
 async function navigateToPost(post: Post) { router.push(`/community/${post.communityId}/post/${post.id}`); }
 function navigateToPoll(poll: Poll)       { router.push(`/community/${poll.communityId}/poll/${poll.id}`); }
- 
+
 async function handleModerationSubmit(post: Post) {
   if (!ModerationService.canSubmitHashesFromHome()) return;
   await ModerationService.submitPostHash(post);
@@ -869,7 +872,7 @@ async function handleModerationSubmitPoll(poll: Poll) {
   if (!ModerationService.canSubmitHashesFromHome()) return;
   await ModerationService.submitPollHash(poll);
 }
- 
+
 // ── Scroll ────────────────────────────────────────────────────────────────────
 let lastScrollTop    = 0;
 const scrollThreshold = 50;
@@ -882,18 +885,18 @@ function handleScroll(event: CustomEvent) {
   }
   lastScrollTop = scrollTop;
 }
- 
+
 function flushNewContent() {
   postStore.flushNewPosts?.();
   pollStore.flushNewPolls?.();
 }
- 
+
 async function onInfiniteScroll(event: any) {
   postStore.loadMorePosts?.();
   pollStore.loadMorePolls?.();
   setTimeout(() => event.target.complete(), 500);
 }
- 
+
 // ── Create actions ────────────────────────────────────────────────────────────
 async function showPostOptions() {
   const actionSheet = await actionSheetController.create({
@@ -923,12 +926,12 @@ async function showPollOptions() {
   });
   await actionSheet.present();
 }
- 
+
 // ── Community subscription ────────────────────────────────────────────────────
 const GUN_SUBSCRIPTION_TIMEOUT_MS      = 8_000;
 const EMPTY_FEED_RECOVERY_TIMEOUT_MS   = 4_000;
 const subscribedCommunityIds           = new Set<string>();
- 
+
 async function subscribeNewCommunities(communities: typeof communityStore.communities) {
   const toSubscribe = communities
     .filter((c: any) => !c.isPrivate)
@@ -947,13 +950,13 @@ async function subscribeNewCommunities(communities: typeof communityStore.commun
     ]);
   }
 }
- 
+
 async function tryRecoverEmptyFeedFromGun() {
   if (combinedFeed.value.length > 0) return;
   await new Promise<void>(resolve => setTimeout(resolve, EMPTY_FEED_RECOVERY_TIMEOUT_MS));
   ensureInitialFeedVisible('empty-feed-gun-recovery');
 }
- 
+
 function communityBadge(community: Community | null | undefined) {
   if (!community) return null;
   if ((community as any).isPrivate) return { label: 'Private', tone: 'private' };
@@ -968,10 +971,10 @@ function communityAvatarTone(community: Community | null | undefined): string {
   const badge = communityBadge(community);
   return badge ? `tone-${badge.tone}` : 'tone-general';
 }
- 
+
 // Right sidebar — always live from the store, no lazy loading
 const sidebarCommunities = computed(() => communityStore.communities);
- 
+
 // Trending categories — real counts fetched from /api/trending-categories.
 // Falls back to empty array so the sidebar simply hides the section if offline.
 const CATEGORY_ICONS: Record<string, any> = {
@@ -986,9 +989,9 @@ const CATEGORY_TONES: Record<string, string> = {
   crypto: 'tone-crypto', politics: 'tone-politics', health: 'tone-health',
   sports: 'tone-sports', entertainment: 'tone-entertainment', other: 'tone-other',
 };
- 
+
 const trendingCategories = ref<Array<{ id: string; label: string; posts: string; icon: any; tone: string }>>([]);
- 
+
 async function loadTrendingCategories() {
   try {
     const res = await fetch(`${config.relay.api}/api/trending-categories`);
@@ -1003,34 +1006,34 @@ async function loadTrendingCategories() {
     }));
   } catch { /* sidebar stays empty on error */ }
 }
- 
+
 // ── Watchers & lifecycle ──────────────────────────────────────────────────────
 watch(() => communityStore.communities.length, (newLen, oldLen) => {
   if (!HOME_GUN_FEED_ENABLED || !warmupComplete.value || newLen <= oldLen) return;
   subscribeNewCommunities(communityStore.communities);
 });
- 
+
 watch(activeTab, (tab) => {
   if (tab === 'home') { ensureInitialFeedVisible('home-tab-selected'); return; }
   if (tab === 'chat') { void ensureChatInitialized(); }
 });
- 
+
 onMounted(async () => {
   maybeShowOnboarding();
   void loadTrendingCategories();
- 
+
   const warmupStartedAt = Date.now();
   await warmupFromDB();
   if (FEED_DEBUG) feedDebug('warmup-finished', { durationMs: Date.now() - warmupStartedAt, combinedFeedLength: combinedFeed.value.length });
   ensureInitialFeedVisible('warmup-finished');
- 
+
   if (HOME_GUN_FEED_ENABLED && communityStore.communities.length > 0) {
     subscribeNewCommunities(communityStore.communities);
   }
   warmupComplete.value = true;
- 
+
   const feedPromise = communityStore.loadCommunities();
- 
+
   // User + chat + chain — parallel, never block feed
   void (async () => {
     try {
@@ -1046,14 +1049,14 @@ onMounted(async () => {
       console.warn('Heavy init error (non-critical):', err);
     }
   })();
- 
+
   await feedPromise;
   if (combinedFeed.value.length === 0) {
     await tryRecoverEmptyFeedFromGun();
     ensureInitialFeedVisible('empty-feed-recovery');
   }
 });
- 
+
 onUnmounted(() => {
   ensureChat()?.teardown();
   gunListeners.forEach(off => off());

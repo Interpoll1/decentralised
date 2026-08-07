@@ -3,75 +3,61 @@
     <ion-header>
       <ion-toolbar>
         <ion-buttons slot="start">
-          <ion-back-button default-href="/home"></ion-back-button>
+          <button class="back-btn" @click="$router.back()">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
         </ion-buttons>
         <ion-title>{{ recipientName }}</ion-title>
         <ion-note slot="end" class="connection-status" :class="{ connected: connected && !chatError, error: chatError }">
           {{ statusLabel }}
         </ion-note>
       </ion-toolbar>
-      <ion-toolbar v-if="isTypingState">
-        <ion-note>typing...</ion-note>
-      </ion-toolbar>
     </ion-header>
+
+    <div v-if="isTypingState" class="typing-bar">
+      <span class="typing-dots"><span></span><span></span><span></span></span>
+      {{ recipientName }} is typing
+    </div>
 
     <ion-content ref="content">
       <div class="chat-container">
-
-        <!-- Messages Area -->
         <div ref="messagesContainer" class="messages-area">
-          <div
-  v-for="msg in currentMessages"
-  :key="msg.id"
-  class="message"
-  :class="{ sent: msg.sent, received: !msg.sent }"
->
-  <div class="message-content">
-    <p>{{ msg.message }}</p>
-  </div>
-  <div class="message-meta">
-    <span class="message-time">{{ formatTime(msg.timestamp) }}</span>
-    <span v-if="msg.sent" class="message-status" :class="{ stalled: msg.status === 'failed' }">
-      {{ deliveryMark(msg) }}
-    </span>
-  </div>
-</div>
+          <div v-for="msg in currentMessages" :key="msg.id"
+            class="message" :class="{ sent: msg.sent, received: !msg.sent }">
+            <div class="message-content"><p>{{ msg.message }}</p></div>
+            <div class="message-meta">
+              <span class="message-time">{{ formatTime(msg.timestamp) }}</span>
+              <span v-if="msg.sent" class="message-status" :class="{ stalled: msg.status === 'failed' }">
+                {{ deliveryMark(msg) }}
+              </span>
+            </div>
+          </div>
         </div>
 
-        <div v-if="chatError" class="chat-error-banner">
-          {{ chatError }}
-        </div>
+        <div v-if="chatError" class="chat-error-banner">{{ chatError }}</div>
         <div v-else-if="recipientKeyMissing" class="chat-warning-banner">
-          {{ recipientName }} hasn’t opened the app yet, so there’s no key to encrypt for them.
-          You can still write — messages are saved here and sent automatically once they appear.
+          {{ recipientName }} hasn't opened the app yet — messages are saved and delivered once they appear.
         </div>
         <div v-else-if="!connected && chatReady" class="chat-warning-banner">
-          No peers reachable. Messages are queued on this device and sent when a connection returns.
+          Offline — messages are queued and sent when connectivity returns.
         </div>
 
-        <!-- Input Area -->
         <div class="input-area">
           <textarea
             v-model="messageInput"
             @keydown.enter.exact.prevent="handleSend"
             @input="handleTyping"
-            :placeholder="chatError ? 'Chat unavailable' : chatReady ? 'Type a message...' : 'Setting up encrypted chat...'"
+            :placeholder="chatError ? 'Chat unavailable' : chatReady ? 'Type a message…' : 'Setting up encrypted chat…'"
             :disabled="!chatReady"
             class="message-input"
             rows="1"
           />
-          <button
-            @click="handleSend"
-            :disabled="!messageInput.trim() || !chatReady"
-            class="send-button"
-          >
-            
+          <button @click="handleSend" :disabled="!messageInput.trim() || !chatReady" class="send-button">
             <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-  <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" />
-</svg>
+              <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" />
+            </svg>
           </button>
         </div>
-
       </div>
     </ion-content>
   </ion-page>
@@ -303,274 +289,138 @@ const formatTime = (timestamp: number): string => {
 </script>
 
 <style scoped>
-ion-content {
-  --background: transparent;
+ion-header::after { display: none !important; }
+ion-toolbar { --border-width: 0 !important; }
+ion-content { --background: transparent; }
+
+.back-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; background: none; border: none;
+  border-radius: 50%; color: var(--app-text-muted); cursor: pointer;
+  margin-left: 4px; transition: color 160ms ease;
+}
+.back-btn:hover { color: var(--app-text); }
+.back-btn svg { width: 22px; height: 22px; }
+
+.connection-status {
+  font-size: 11.5px; margin-right: 12px; padding: 3px 10px;
+  border-radius: 999px; font-weight: 600;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+  color: var(--app-text-muted); transition: all 200ms ease;
+}
+.connection-status.connected {
+  background: rgba(52,211,153,0.12); border-color: rgba(52,211,153,0.3); color: #34d399;
+}
+.connection-status.error {
+  background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.3); color: #ef4444;
 }
 
+.typing-bar {
+  padding: 4px 16px 6px; font-size: 12px; color: var(--app-text-subtle);
+  font-style: italic; display: flex; align-items: center; gap: 6px;
+}
+.typing-dots span {
+  display: inline-block; width: 4px; height: 4px; border-radius: 50%;
+  background: var(--app-text-subtle); animation: tdot 1.2s infinite ease-in-out;
+}
+.typing-dots span:nth-child(2) { animation-delay: .2s; }
+.typing-dots span:nth-child(3) { animation-delay: .4s; }
+@keyframes tdot { 0%,80%,100% { transform: scale(0.6); opacity: .4; } 40% { transform: scale(1); opacity: 1; } }
+
 .chat-container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
+  display: flex; flex-direction: column; height: 100%; overflow: hidden;
 }
 
 .messages-area {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px 12px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(var(--ion-text-color-rgb), 0.10) transparent;
+  flex: 1; overflow-y: auto; padding: 16px 14px 8px;
+  display: flex; flex-direction: column; gap: 2px;
+  scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.08) transparent;
 }
 
 .message {
-  display: flex;
-  flex-direction: column;
-  max-width: 72%;
-  animation: bubbleIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
-  margin-bottom: 6px;
+  display: flex; flex-direction: column; max-width: 75%;
+  animation: bubbleIn 0.22s cubic-bezier(0.34,1.56,0.64,1) both;
+  margin-bottom: 4px;
 }
-
-.message.sent     { align-self: flex-end; align-items: flex-end; }
+.message.sent     { align-self: flex-end;   align-items: flex-end; }
 .message.received { align-self: flex-start; align-items: flex-start; }
-
 @keyframes bubbleIn {
-  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
   to   { opacity: 1; transform: translateY(0)   scale(1); }
 }
 
 .message-content {
-  padding: 7px 12px;
-  border-radius: 999px;
-  max-width: 100%;
-  position: relative;
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  padding: 9px 14px; border-radius: 18px; max-width: 100%;
 }
-
 .message.sent .message-content {
-  background: rgba(var(--ion-color-primary-rgb), 0.82);
-  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.60);
-  border-top-color: rgba(255, 255, 255, 0.35);
-  border-bottom-right-radius: 4px;
-  box-shadow:
-    0 4px 20px rgba(var(--ion-color-primary-rgb), 0.25),
-    inset 0 1px 0 rgba(255, 255, 255, 0.30);
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border-bottom-right-radius: 5px;
+  box-shadow: 0 4px 16px rgba(99,102,241,0.3);
 }
-
-.message.sent .message-content p {
-  color: #ffffff;
-  opacity: 1;
-}
-
+.message.sent .message-content p { color: #fff; }
 .message.received .message-content {
-  background: rgba(var(--ion-card-background-rgb), 0.28);
-  border: 1px solid var(--glass-border);
-  border-top-color: var(--glass-border-top);
-  border-bottom-color: var(--glass-border-bottom);
-  border-bottom-left-radius: 4px;
-  box-shadow: var(--glass-shadow), var(--glass-highlight), var(--glass-inner-glow);
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-bottom-left-radius: 5px;
 }
-
-.message.received .message-content p {
-  color: var(--ion-text-color);
-  opacity: 0.9;
-}
-
-.message-content p {
-  margin: 0;
-  font-size: 15px;
-  line-height: 1.45;
-  word-break: break-word;
-}
+.message.received .message-content p { color: var(--app-text); }
+.message-content p { margin: 0; font-size: 14.5px; line-height: 1.5; word-break: break-word; }
 
 .message-meta {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 3px;
-  padding: 0 4px;
+  display: flex; align-items: center; gap: 4px;
+  margin-top: 3px; padding: 0 4px;
+}
+.message-time { font-size: 11px; color: var(--app-text-subtle); line-height: 1; }
+.message-status { font-size: 11px; color: #818cf8; letter-spacing: -0.5px; line-height: 1; }
+.message-status.stalled { color: #fbbf24; font-weight: 700; }
+
+/* Banners */
+.chat-error-banner, .chat-warning-banner {
+  margin: 0 14px 8px; padding: 10px 14px; border-radius: 12px;
+  font-size: 13px; line-height: 1.5;
+}
+.chat-error-banner {
+  color: #ef4444; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25);
+}
+.chat-warning-banner {
+  color: #fbbf24; background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.25);
 }
 
-.message-time {
-  font-size: 11px;
-  color: var(--ion-color-medium);
-  opacity: 0.75;
-  line-height: 1;
-}
-
-.message-status {
-  font-size: 12px;
-  color: var(--ion-color-primary);
-  letter-spacing: -1px;
-  line-height: 1;
-}
-
+/* Input */
 .input-area {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  padding: 4px 8px;
-  margin: 4px 12px 12px;
+  display: flex; align-items: flex-end; gap: 10px;
+  padding: 8px 10px; margin: 4px 12px 12px;
   border-radius: 24px;
-  background: rgba(var(--ion-card-background-rgb), 0.35);
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  border: 1px solid var(--glass-border);
-  border-top-color: var(--glass-border-top);
-  border-bottom-color: var(--glass-border-bottom);
-  box-shadow: var(--glass-shadow), var(--glass-highlight), var(--glass-inner-glow);
-  transition: var(--liquid-transition);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
 }
-
 .input-area:focus-within {
-  border-color: rgba(var(--ion-color-primary-rgb), 0.45);
-  border-top-color: rgba(var(--ion-color-primary-rgb), 0.65);
-  box-shadow:
-    0 8px 40px rgba(var(--ion-color-primary-rgb), 0.12),
-    0 1.5px 4px rgba(0, 0, 0, 0.04),
-    inset 0 1px 0 rgba(255, 255, 255, 0.85),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
-    inset 0 0 30px rgba(255, 255, 255, 0.12);
+  border-color: rgba(99,102,241,0.5);
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
 }
-
 .message-input {
-  border-top: 1px #ffffff;
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  resize: none;
-  font-size: 15px;
-  line-height: 1;
-  color: var(--ion-text-color);
-margin-bottom: 7px;
-  font-family: inherit;
+  flex: 1; background: transparent; border: none; outline: none; resize: none;
+  font-size: 14.5px; line-height: 1.5; color: var(--ion-text-color);
+  font-family: inherit; padding: 4px 4px 4px 6px; max-height: 120px;
 }
-
-.message-input::placeholder { color: var(--ion-color-medium); }
-.message-input:disabled      { opacity: 0.45; cursor: not-allowed; }
+.message-input::placeholder { color: var(--app-text-subtle); }
+.message-input:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .send-button {
-  flex-shrink: 0;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(var(--ion-color-primary-rgb), 0.90);
-  color: #ffffff;
-  box-shadow:
-    0 4px 16px rgba(var(--ion-color-primary-rgb), 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.30);
-  transition: var(--liquid-spring);
+  flex-shrink: 0; width: 38px; height: 38px; border-radius: 50%; border: none;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg,#6366f1,#8b5cf6); color: #fff;
+  box-shadow: 0 4px 14px rgba(99,102,241,0.4);
+  transition: transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
 }
-
-.send-button:hover:not(:disabled) {
-  background: var(--ion-color-primary);
-  transform: translateY(-1px) scale(1.06);
-  box-shadow:
-    0 8px 28px rgba(var(--ion-color-primary-rgb), 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.30);
-}
-
+.send-button:hover:not(:disabled) { transform: translateY(-1px) scale(1.06); box-shadow: 0 6px 20px rgba(99,102,241,0.5); }
 .send-button:active:not(:disabled) { transform: scale(0.94); }
-
-.send-button:disabled {
-  background: rgba(var(--ion-color-medium-rgb), 0.30);
-  color: var(--ion-color-medium);
-  box-shadow: none;
-  cursor: not-allowed;
-}
-
+.send-button:disabled { background: rgba(255,255,255,0.08); color: var(--app-text-subtle); box-shadow: none; cursor: not-allowed; }
 .w-5 { width: 20px; height: 20px; }
-
-.connection-status {
-  font-size: 12px;
-  margin-right: 12px;
-  padding: 3px 10px;
-  border-radius: 20px;
-  background: rgba(var(--ion-color-medium-rgb), 0.12);
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.20);
-  color: var(--ion-color-medium);
-  transition: var(--liquid-transition);
-}
-
-.connection-status.connected {
-  background: rgba(var(--ion-color-success-rgb), 0.12);
-  border-color: rgba(var(--ion-color-success-rgb), 0.30);
-  color: var(--ion-color-success);
-}
-
-.connection-status.error {
-  background: rgba(var(--ion-color-danger-rgb), 0.12);
-  border-color: rgba(var(--ion-color-danger-rgb), 0.30);
-  color: var(--ion-color-danger);
-}
-
-.chat-error-banner {
-  margin: 0 12px 8px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  font-size: 13px;
-  color: var(--ion-color-danger);
-  background: rgba(var(--ion-color-danger-rgb), 0.12);
-  border: 1px solid rgba(var(--ion-color-danger-rgb), 0.30);
-}
-
-.chat-warning-banner {
-  margin: 0 12px 8px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  font-size: 13px;
-  line-height: 1.4;
-  color: var(--ion-color-warning-shade);
-  background: rgba(var(--ion-color-warning-rgb), 0.12);
-  border: 1px solid rgba(var(--ion-color-warning-rgb), 0.30);
-}
-
-.message-status.stalled {
-  color: var(--ion-color-warning);
-  font-weight: 700;
-}
-
-html.dark .message.received .message-content {
-  background: #0d0d0d;
-  border-color: rgba(255, 255, 255, 0.06);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  box-shadow: none;
-}
-
-html.dark .input-area {
-  background: #0a0a0a;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  border-color: rgba(255, 255, 255, 0.06);
-  box-shadow: none;
-}
-
-html.dark .input-area:focus-within {
-  border-color: rgba(var(--ion-color-primary-rgb), 0.35);
-  box-shadow: 0 0 0 1px rgba(var(--ion-color-primary-rgb), 0.20);
-}
-
-html.dark .send-button {
-  background: rgba(var(--ion-color-primary-rgb), 0.85);
-}
-
-html.dark .send-button:hover:not(:disabled) {
-  background: var(--ion-color-primary);
-  box-shadow: 0 6px 20px rgba(var(--ion-color-primary-rgb), 0.30);
-}
 
 @media (prefers-reduced-motion: reduce) {
   .message { animation: none; }
-  .send-button, .input-area, .connection-status { transition: none; }
+  .send-button, .input-area { transition: none; }
 }
 </style>
