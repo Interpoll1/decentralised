@@ -62,6 +62,19 @@
               />
             </div>
 
+            <!-- Post Video -->
+            <div v-if="post.videoCID" class="post-video">
+              <VideoPlayer
+                :cid="post.videoCID"
+                :thumbnail-url="post.videoThumbnailCID
+                  ? `https://ipfs.filebase.io/ipfs/${post.videoThumbnailCID}`
+                  : null"
+                :duration="post.videoDuration"
+                :file-size="post.videoSize"
+                :mime-type="post.videoMimeType"
+              />
+            </div>
+
             <!-- Vote & Actions Bar -->
             <div class="actions-bar">
               <div class="vote-buttons">
@@ -171,7 +184,20 @@ function autoLink(text: string): string {
   return text.replace(/(https?:\/\/[\w\-\.\/?#&=;%+~:@,]+[\w\/])/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
 }
 
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, defineAsyncComponent, h } from 'vue';
+const VideoPlayer = defineAsyncComponent({
+  loader: () => import('../components/VideoPlayer.vue'),
+  loadingComponent: {
+    template: `
+      <div class="video-loading-placeholder">
+        <div class="video-loading-icon">▶</div>
+        <span>Loading video…</span>
+      </div>
+    `,
+  },
+  delay: 200,
+  timeout: 10_000,
+});
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
@@ -692,6 +718,12 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
+.post-video {
+  margin: 16px 0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
 .post-image img {
   width: 100%;
   height: auto;
@@ -896,5 +928,38 @@ html.dark .section-separator {
 
 .subtitle {
   font-size: 14px;
+}
+/* ── Video loading placeholder ─────────────── */
+.video-loading-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: var(--app-text-muted);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.video-loading-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(99,102,241,0.12);
+  border: 1px solid rgba(99,102,241,0.22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: #818cf8;
+  animation: vl-pulse 1.6s ease-in-out infinite;
+}
+@keyframes vl-pulse {
+  0%, 100% { opacity: 0.6; transform: scale(0.97); }
+  50%       { opacity: 1;   transform: scale(1.03); }
 }
 </style>

@@ -364,16 +364,33 @@ export class PostService {
 
     const gun = GunService.getGun();
 
-    await new Promise<void>((resolve, reject) => {
-      gun.get('posts').get(newPost.id).put(cleanPost, (ack: any) => {
-        if (ack.err) reject(new Error(ack.err)); else resolve();
+    // Gun put ack can hang indefinitely if the relay is still handshaking after
+    // a long video upload. Post is already in Gun's local graph — ack just
+    // confirms relay write. Timeout after 6s and continue; verifyRelayPersistence
+    // + republishLoop handle durability if the relay missed it.
+    const gunPutWithTimeout = (node: any, data: any, label: string): Promise<void> =>
+      new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          console.warn(`[createPost] Gun ack timeout for ${label} — continuing`);
+          resolve();
+        }, 6_000);
+        node.put(data, (ack: any) => {
+          clearTimeout(timer);
+          if (ack?.err) console.warn(`[createPost] Gun ack error for ${label}:`, ack.err);
+          resolve(); // always resolve — never reject on ack error
+        });
       });
-    });
-    await new Promise<void>((resolve, reject) => {
-      gun.get('communities').get(newPost.communityId).get('posts').get(newPost.id).put(cleanPost, (ack: any) => {
-        if (ack.err) reject(new Error(ack.err)); else resolve();
-      });
-    });
+
+    await gunPutWithTimeout(
+      gun.get('posts').get(newPost.id),
+      cleanPost,
+      'posts root',
+    );
+    await gunPutWithTimeout(
+      gun.get('communities').get(newPost.communityId).get('posts').get(newPost.id),
+      cleanPost,
+      `communities/${newPost.communityId}`,
+    );
 
     postMemoryCache.set(newPost.id, newPost);
     missingPostCache.delete(newPost.id);
@@ -383,7 +400,14 @@ export class PostService {
     // actually holds it. If unconfirmed, start the republish loop so the post is
     // re-pushed once the relay is reachable rather than being silently lost.
     await PostService.saveLocalPostBackup(newPost);
-    const relayConfirmed = await PostService.verifyRelayPersistence(newPost.id);
+    // After a video upload the relay has already been active for 60+ seconds —
+    // give it only 3s to confirm rather than 8s. If it misses, republishLoop
+    // will retry. For normal posts keep 5s (reduced from 8s).
+    const hasVideo = !!(newPost as any).videoCID;
+    const relayConfirmed = await PostService.verifyRelayPersistence(
+      newPost.id,
+      hasVideo ? 3_000 : 5_000,
+    );
     newPost.relayConfirmed = relayConfirmed === null
       ? GunService.getPeerStats().isConnected
       : relayConfirmed;
@@ -608,7 +632,18 @@ export class PostService {
       }
 
       const now = Date.now();
-      if (now - (lastHydratedAt.get(postId) ?? 0) < REHYDRATE_COOLDOWN_MS) return;
+      if (now - (lastHydratedAt.get(postId) ?? 0) < REHYDRATE_COOLDOWN_MS) {
+        // Exception: if the incoming Gun patch carries videoCID and our cached
+        // post doesn't have it yet, bypass the cooldown so the video skeleton
+        // appears immediately rather than waiting up to 30s for the next window.
+        const hasCachedVideo = !!(postMemoryCache.get(postId) as any)?.videoCID;
+        const incomingHasVideo = !!(data as any)?.videoCID;
+        if (!hasCachedVideo && incomingHasVideo) {
+          // fall through to refetch
+        } else {
+          return;
+        }
+      }
       lastHydratedAt.set(postId, now);
       // Bounded: the map is a rate limiter, not a cache. Oldest entries expire
       // by cooldown anyway, so dropping them just permits an earlier refetch.
@@ -921,7 +956,7 @@ export class PostService {
    * (relay has it), false (endpoint reachable but post absent after retries), or
    * null when the endpoint is unreachable/has no DB (inconclusive).
    */
-  static async verifyRelayPersistence(postId: string, deadlineMs = 8000): Promise<boolean | null> {
+  static async verifyRelayPersistence(postId: string, deadlineMs = 5_000): Promise<boolean | null> {
     const soul = encodeURIComponent(`${GUN_NAMESPACE}/posts/${postId}`);
     const url = `${getGunRelayBase()}/db/soul?soul=${soul}`;
     const deadline = Date.now() + deadlineMs;

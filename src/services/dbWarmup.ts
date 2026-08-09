@@ -157,6 +157,13 @@ export async function warmupFromDB(): Promise<void> {
           score:         d.score         || 0,
           commentCount:  d.commentCount  || 0,
           dataVersion:   GUN_NAMESPACE,
+          // Video fields — pass through if present so the feed skeleton
+          // renders immediately from the API warmup, before Gun syncs
+          ...(d.videoCID          ? { videoCID:          d.videoCID }          : {}),
+          ...(d.videoThumbnailCID ? { videoThumbnailCID: d.videoThumbnailCID } : {}),
+          ...(d.videoDuration     ? { videoDuration:     Number(d.videoDuration) || 0 } : {}),
+          ...(d.videoSize         ? { videoSize:         Number(d.videoSize) || 0 }     : {}),
+          ...(d.videoMimeType     ? { videoMimeType:     d.videoMimeType }     : {}),
         })
         n++
       }
