@@ -251,6 +251,7 @@ function getTimeRemaining(): string {
   margin: 0 0 2px;
   padding: 18px 20px 16px;
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  cursor: pointer;
 }
 
 /* ── Header ─────────────────────────────────── */

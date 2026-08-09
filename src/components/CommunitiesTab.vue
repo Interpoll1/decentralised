@@ -37,10 +37,9 @@
       </svg>
       <input
         v-model="communitySearchQuery"
-        @input="handleCommunitySearch"
         class="search-input"
         type="search"
-        placeholder="Search communities..."
+        placeholder="Search all communities…"
         autocomplete="off"
       />
     </div>
@@ -51,36 +50,57 @@
       <p>Loading communities…</p>
     </div>
 
+    <!-- Search scope hint — shown while searching -->
+    <div v-else-if="isSearching && searchResults.length > 0" class="search-scope-hint">
+      <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M21 21l-4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      Searching all {{ allPublicCommunities.length }} public communities
+    </div>
+
     <!-- List -->
-    <div v-else-if="filteredCommunities.length > 0" class="communities-list">
+    <div v-if="!communityStore.isLoading && filteredCommunities.length > 0" class="communities-list">
       <CommunityCard
         v-for="community in filteredCommunities"
         :key="community.id"
         :community="community"
         @click="$router.push(`/community/${community.id}`)"
       />
+      <!-- Join nudge shown at the bottom of search results for unjoined hits -->
+      <div v-if="isSearching && searchResults.some(c => !communityStore.isJoined(c.id))" class="join-nudge">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Communities you haven't joined won't appear in your feed or Create tab — click one above to join.
+      </div>
     </div>
 
     <!-- Empty -->
-    <div v-else class="empty-state">
+    <div v-else-if="!communityStore.isLoading && filteredCommunities.length === 0" class="empty-state">
       <div class="empty-icon">
         <ion-icon :icon="earthOutline"></ion-icon>
       </div>
-      <p class="empty-title">
-        {{ communityFilter === 'private' ? 'No private communities joined'
-         : communityFilter === 'joined'  ? 'No communities joined yet'
-         : 'No public communities yet' }}
-      </p>
-      <button
-        class="empty-cta"
-        @click="communityFilter === 'private' ? $emit('update:communityFilter', 'joined')
-              : communityFilter === 'joined'  ? $emit('update:communityFilter', 'all')
-              : $router.push('/create-community')"
-      >
-        {{ communityFilter === 'private' ? 'Show Joined'
-         : communityFilter === 'joined'  ? 'Browse All'
-         : 'Create the first one' }}
-      </button>
+
+      <!-- No search results -->
+      <template v-if="isSearching">
+        <p class="empty-title">No communities match "{{ communitySearchQuery.trim() }}"</p>
+        <p class="empty-sub">Try a different name or <button class="inline-link" @click="$router.push('/create-community')">create one</button>.</p>
+      </template>
+
+      <!-- Joined tab empty -->
+      <template v-else-if="communityFilter === 'joined'">
+        <p class="empty-title">You haven't joined any communities yet</p>
+        <p class="empty-sub">Join communities to see them here and post from the Create tab.</p>
+        <button class="empty-cta" @click="$emit('update:communityFilter', 'all')">Browse all communities</button>
+      </template>
+
+      <!-- Private tab empty -->
+      <template v-else-if="communityFilter === 'private'">
+        <p class="empty-title">No private communities joined</p>
+        <button class="empty-cta" @click="$emit('update:communityFilter', 'joined')">Show Joined</button>
+      </template>
+
+      <!-- All tab empty -->
+      <template v-else>
+        <p class="empty-title">No public communities yet</p>
+        <button class="empty-cta" @click="$router.push('/create-community')">Create the first one</button>
+      </template>
     </div>
 
   </div>
@@ -103,29 +123,36 @@ defineEmits<{
 
 const communityStore = useCommunityStore();
 const communitySearchQuery = ref('');
-const communitySearchResults = ref<Community[]>([]);
 
+// Default view: respects the active filter tab
 const displayedCommunities = computed(() => {
   const all = communityStore.communities;
-  if (props.communityFilter === 'joined')  return all.filter(c => c.isJoined);
-  if (props.communityFilter === 'private') return all.filter(c => c.isPrivate && c.isJoined);
+  if (props.communityFilter === 'joined')  return all.filter(c => communityStore.isJoined(c.id));
+  if (props.communityFilter === 'private') return all.filter(c => c.isPrivate && communityStore.isJoined(c.id));
   return all.filter(c => !c.isPrivate);
 });
 
-const filteredCommunities = computed(() =>
-  communitySearchQuery.value.trim().length > 0
-    ? communitySearchResults.value
-    : displayedCommunities.value,
+// Search always spans ALL public communities regardless of the active filter tab,
+// so users can discover and find communities they haven't joined yet.
+const allPublicCommunities = computed(() =>
+  communityStore.communities.filter(c => !c.isPrivate)
 );
 
-function handleCommunitySearch() {
+const isSearching = computed(() => communitySearchQuery.value.trim().length > 0);
+
+const searchResults = computed(() => {
   const q = communitySearchQuery.value.trim().toLowerCase();
-  if (!q) { communitySearchResults.value = []; return; }
-  communitySearchResults.value = displayedCommunities.value.filter(c =>
+  if (!q) return [];
+  return allPublicCommunities.value.filter(c =>
     c.displayName?.toLowerCase().includes(q) ||
+    c.name?.toLowerCase().includes(q) ||
     c.description?.toLowerCase().includes(q),
   );
-}
+});
+
+const filteredCommunities = computed(() =>
+  isSearching.value ? searchResults.value : displayedCommunities.value
+);
 </script>
 
 <style scoped>
@@ -292,6 +319,61 @@ function handleCommunitySearch() {
   font-weight: 600;
   color: var(--app-text-muted);
   margin: 0;
+}
+.empty-sub {
+  font-size: 13px;
+  color: var(--app-text-subtle);
+  margin: 0;
+  text-align: center;
+  line-height: 1.5;
+}
+.inline-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #818cf8;
+  font-size: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Search scope hint */
+.search-scope-hint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--app-text-subtle);
+  padding: 0 2px;
+}
+.search-scope-hint svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+/* Join nudge at bottom of search results */
+.join-nudge {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(99, 102, 241, 0.07);
+  border: 1px solid rgba(99, 102, 241, 0.18);
+  font-size: 12.5px;
+  color: var(--app-text-muted);
+  line-height: 1.5;
+}
+.join-nudge svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: #818cf8;
+  margin-top: 1px;
 }
 .empty-cta {
   padding: 9px 22px;

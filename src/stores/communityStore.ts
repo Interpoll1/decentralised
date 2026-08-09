@@ -134,6 +134,10 @@ function toCommunityRecord(value: unknown, expectedId?: string): Community | nul
     isEncrypted: Boolean(data.isEncrypted),
     encryptionHint: typeof data.encryptionHint === 'string' ? data.encryptionHint : undefined,
     encryptedMeta: typeof data.encryptedMeta === 'string' ? data.encryptedMeta : undefined,
+    isPrivate: Boolean(data.isPrivate),
+    category: typeof data.category === 'string' ? data.category : undefined,
+    tags: Array.isArray(data.tags) ? (data.tags as string[]).filter(t => typeof t === 'string') : undefined,
+    nsfw: Boolean(data.nsfw),
   };
 }
 

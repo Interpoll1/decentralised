@@ -280,9 +280,27 @@ export const usePostStore = defineStore('post', () => {
     if (alreadyInStore) {
       const existing = postsMap.value.get(post.id)!;
       // For category patches, merge only the new fields onto the existing post
-      const merged = isCategoryPatch
-        ? { ...existing, category: (post as any).category, tags: (post as any).tags, nsfw: (post as any).nsfw }
-        : withKnownTally(post);
+      let merged: Post;
+      if (isCategoryPatch) {
+        merged = { ...existing, category: (post as any).category, tags: (post as any).tags, nsfw: (post as any).nsfw };
+      } else {
+        // Gun delivers post fields asynchronously — videoCID and other media
+        // fields often arrive in a later peer-sync update than title/content.
+        // If the incoming post is missing these fields but the stored post has
+        // them (or vice-versa), preserve whichever side has the data so a
+        // partial Gun delivery never silently clears fields we already have.
+        const updated = withKnownTally(post);
+        merged = {
+          ...updated,
+          videoCID:          updated.videoCID          ?? existing.videoCID,
+          videoThumbnailCID: updated.videoThumbnailCID ?? existing.videoThumbnailCID,
+          videoDuration:     updated.videoDuration     ?? existing.videoDuration,
+          videoSize:         updated.videoSize         ?? existing.videoSize,
+          videoMimeType:     updated.videoMimeType     ?? existing.videoMimeType,
+          imageIPFS:         updated.imageIPFS         ?? existing.imageIPFS,
+          imageThumbnail:    updated.imageThumbnail    ?? existing.imageThumbnail,
+        };
+      }
       postsMap.value.set(post.id, merged);
       triggerRef(postsMap);
       tryDecryptPost(merged);
