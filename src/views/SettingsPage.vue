@@ -10,6 +10,7 @@
         <ion-title>Settings</ion-title>
       </ion-toolbar>
 
+
       <!-- Custom tab bar — replaces ion-segment -->
       <div class="settings-tab-bar">
         <button v-for="tab in tabs" :key="tab.id"
@@ -1402,6 +1403,7 @@ code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { useRouter } from 'vue-router';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
 import {
   IonPage,
@@ -1496,6 +1498,7 @@ import { GUN_RELAY_PRESETS, isValidGunUrl, labelForGunUrl, DEFAULT_GUN_PEERS } f
 
 const chainStore = useChainStore();
 const communityStore = useCommunityStore();
+const router = useRouter();
 const importFileInput = ref<HTMLInputElement | null>(null);
 const activeTab = ref('general');
 
