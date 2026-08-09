@@ -27,6 +27,8 @@
     "@capacitor/core": "^6.2.1",
     "@capacitor/push-notifications": "^6.0.5",
     "@capacitor/share": "^6.0.4",
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2",
     "@ionic/vue": "^8.0.0",
     "@ionic/vue-router": "^8.0.0",
     "@noble/curves": "^2.0.1",
@@ -36,6 +38,7 @@
     "bip39": "^3.1.0",
     "browser-image-compression": "^2.0.2",
     "buffer": "^6.0.3",
+    "flexsearch": "^0.7.43",
     "gu": "^0.6.2",
     "gun": "^0.2020.1241",
     "idb": "^8.0.0",
@@ -48,10 +51,7 @@
     "stream-browserify": "^3.0.0",
     "vue": "^3.4.0",
     "vue-router": "^4.2.5",
-    "ws": "^8.19.0",
-    "flexsearch": "^0.7.43",
-    "@ffmpeg/ffmpeg": "^0.12.10",
-    "@ffmpeg/util": "^0.12.1"
+    "ws": "^8.19.0"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
@@ -68,10 +68,3 @@
     "vue-tsc": "^3.2.4"
   }
 }
-
-
-
-
-
-
-

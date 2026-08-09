@@ -52,6 +52,37 @@
         </div>
       </div>
 
+      <!-- Video attachment -->
+      <div v-if="post.videoCID" class="post-video" @click.stop>
+        <!--
+          Skeleton: visible immediately from post data, zero network cost.
+          Clicking it lazy-mounts VideoPlayer which then takes over.
+        -->
+        <div v-if="!videoPlayerMounted" class="post-video-skeleton" @click="videoPlayerMounted = true">
+          <div class="post-video-skeleton__play">
+            <svg viewBox="0 0 48 48" fill="none">
+              <circle cx="24" cy="24" r="24" fill="rgba(0,0,0,0.55)"/>
+              <polygon points="19,14 37,24 19,34" fill="#fff"/>
+            </svg>
+          </div>
+          <div class="post-video-skeleton__meta">
+            <svg viewBox="0 0 24 24" fill="currentColor" class="post-video-skeleton__cam-icon">
+              <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+            </svg>
+            <span>{{ post.videoDuration ? formatDuration(post.videoDuration) : 'Video' }}</span>
+          </div>
+        </div>
+        <VideoPlayer
+          v-if="videoPlayerMounted"
+          :cid="post.videoCID"
+          :thumbnail-url="post.videoThumbnailCID ? getIPFSUrl(post.videoThumbnailCID) : null"
+          :duration="post.videoDuration"
+          :file-size="post.videoSize"
+          :mime-type="post.videoMimeType"
+          :compact="true"
+        />
+      </div>
+
       <!-- Image lightbox -->
       <teleport to="body">
         <div v-if="lightboxOpen" class="lightbox-overlay" @click="lightboxOpen = false">
@@ -119,6 +150,7 @@
   margin: 0 0 2px;
   padding: 18px 20px 16px;
   border-bottom: 1px solid var(--app-border);
+  cursor: pointer;
 }
 
 /* ── Header ──────────────────────────────────── */
@@ -264,6 +296,85 @@
   pointer-events: none;
 }
 .post-image:hover .image-expand-hint { opacity: 1; transform: scale(1); }
+
+/* ── Video attachment ────────────────────────── */
+.post-video {
+  margin: 0 0 14px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Skeleton — shown instantly, no network required */
+.post-video-skeleton {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  max-height: clamp(220px, 35vw, 360px);
+  background: linear-gradient(135deg, #0f0f22 0%, #1a1a35 100%);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+/* Subtle shimmer sweep */
+.post-video-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgba(255,255,255,0.04) 50%,
+    transparent 80%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-sweep 2s linear infinite;
+}
+@keyframes skeleton-sweep {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+.post-video-skeleton:hover::after { animation-duration: 0.6s; }
+
+.post-video-skeleton__play {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 4px 16px rgba(0,0,0,0.7));
+  transition: transform 0.15s;
+  z-index: 1;
+}
+.post-video-skeleton:hover .post-video-skeleton__play { transform: scale(1.08); }
+.post-video-skeleton:hover .post-video-skeleton__play circle { fill: rgba(99,102,241,0.75); }
+
+/* Duration / label badge bottom-right */
+.post-video-skeleton__meta {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(0,0,0,0.72);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+  z-index: 1;
+}
+.post-video-skeleton__cam-icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
 
 /* ── Lightbox ──────────────────────────────── */
 .lightbox-overlay {
@@ -427,6 +538,39 @@
   .post-image { max-height: 200px; }
   .post-image img { max-height: 200px; }
 }
+/* ── Video loading placeholder ─────────────── */
+.video-loading-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: var(--app-text-muted);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.video-loading-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(99,102,241,0.12);
+  border: 1px solid rgba(99,102,241,0.22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: #818cf8;
+  animation: vl-pulse 1.6s ease-in-out infinite;
+}
+@keyframes vl-pulse {
+  0%, 100% { opacity: 0.6; transform: scale(0.97); }
+  50%       { opacity: 1;   transform: scale(1.03); }
+}
 </style>
 
 <script setup lang="ts">
@@ -438,6 +582,8 @@ function autoLink(text: string): string {
 import { ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { IonIcon, toastController } from '@ionic/vue';
+import VideoPlayer from './VideoPlayer.vue';
+import { formatDuration } from '../services/videoService';
 import {
   chatbubbleOutline,
   trendingUpOutline,
@@ -477,6 +623,7 @@ const props = defineProps<{
 const revealed = ref(false);
 const currentUserId = ref('');
 const lightboxOpen = ref(false);
+const videoPlayerMounted = ref(false);
 
 function openLightbox() { lightboxOpen.value = true; }
 

@@ -45,20 +45,30 @@
     </div>
 
     <!-- Quick communities -->
-    <div v-if="joinedCommunities.length > 0" class="quick-post-section">
+    <div class="quick-post-section">
       <p class="section-label">Post to a community</p>
-      <div class="quick-communities">
-        <button
-          v-for="community in joinedCommunities.slice(0, 10)"
-          :key="community.id"
-          class="community-chip"
-          @click="$router.push(`/community/${community.id}/create-post`)"
-        >
-          <span class="chip-avatar" :class="avatarTone(community.id)">
-            {{ (community.displayName || community.name || 'C').charAt(0).toUpperCase() }}
-          </span>
-          <span class="chip-label">{{ community.displayName || community.name }}</span>
-        </button>
+      <template v-if="joinedCommunities.length > 0">
+        <div class="quick-communities">
+          <button
+            v-for="community in joinedCommunities.slice(0, 10)"
+            :key="community.id"
+            class="community-chip"
+            @click="$router.push(`/community/${community.id}/create-post`)"
+          >
+            <span class="chip-avatar" :class="avatarTone(community.id)">
+              {{ (community.displayName || community.name || 'C').charAt(0).toUpperCase() }}
+            </span>
+            <span class="chip-label">{{ community.displayName || community.name }}</span>
+          </button>
+        </div>
+        <p class="join-hint">
+          Only showing communities you've joined.
+          <span class="join-hint-link" @click="$router.push('/communities')">Browse all to join more →</span>
+        </p>
+      </template>
+      <div v-else class="no-communities">
+        <p>You haven't joined any communities yet.</p>
+        <button class="browse-btn" @click="$router.push('/communities')">Browse Communities</button>
       </div>
     </div>
 
@@ -81,7 +91,7 @@ const router = useRouter();
 const communityStore = useCommunityStore();
 
 const joinedCommunities = computed(() =>
-  communityStore.communities.filter(c => c.isJoined),
+  communityStore.communities.filter(c => communityStore.isJoined(c.id)),
 );
 
 const TONES = ['tone-violet', 'tone-blue', 'tone-teal', 'tone-amber', 'tone-rose'];
@@ -247,4 +257,45 @@ function avatarTone(id: string) {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.join-hint {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: var(--app-text-subtle);
+  padding: 0 2px;
+}
+.join-hint-link {
+  color: #818cf8;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.join-hint-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+.no-communities {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px dashed rgba(255,255,255,0.1);
+}
+.no-communities p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--app-text-muted);
+}
+.browse-btn {
+  font-size: 13px;
+  font-weight: 600;
+  color: #818cf8;
+  background: rgba(99,102,241,0.1);
+  border: 1px solid rgba(99,102,241,0.25);
+  border-radius: 8px;
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: background 150ms;
+}
+.browse-btn:hover { background: rgba(99,102,241,0.18); }
 </style>
