@@ -159,11 +159,14 @@ Gun re-delivers a post/poll whenever any peer echoes it, and an echo can carry a
 pre-vote snapshot that lands *after* our own write — visibly undoing the user's vote
 seconds later.
 
-- `pollStore` — still time-based: `recentlyVotedPolls` + `VOTE_PROTECTION_MS` (10s).
-  Within the window the incoming copy supplies every field *except* `upvotes` /
-  `downvotes` / `score`, which stay local. Any new counter surfaced on a poll needs
-  adding to that carve-out. A late echo past the window still reverts the count on
-  screen — the same defect posts had.
+- `pollStore` — two mechanisms, for two different counters. *Option* vote totals are
+  still time-based: `recentlyVotedPolls` + `VOTE_PROTECTION_MS` (10s), within which the
+  incoming copy supplies every field except the option counts. *Content* votes (the
+  up/down on the poll card) now use the same permanent overlay posts do:
+  `contentTallies` + `withContentTally()`, applied in `injectPoll` and `selectPoll`.
+  This matters because `injectPoll` replaces a poll whenever its *option* total has not
+  gone backwards — a condition that says nothing about content votes — so an echo
+  arriving a second after an upvote used to put the old number straight back on screen.
 - `postStore` — no window. Counts come from `PostVoteService`'s derived tally, held
   in `tallies` and overlaid onto every incoming copy by `withKnownTally()` in
   `processIncomingPost`. A derived tally outranks a post node's advisory counters
@@ -190,3 +193,65 @@ seconds later.
   Do not fold tallies out of `post-updated` instead — that message also carries plain
   Gun echoes from remote peers, whose counter fields are the stale values the tally
   exists to outrank.
+
+## Making a counter patch visible
+
+`postsMap` is a `shallowRef`, and `sortedPosts` reads from `_sortedPostsCache` — an
+array rebuilt only when `postsMap` is `triggerRef`'d. So `postsMap.value.set(id, next)`
+on its own is invisible twice over: Vue does not see the mutation, *and* the rendered
+array still holds the previous object. Every counter update must go through
+**`patchPost(postId, patch)`**, which sets the map, swaps the entry in the sorted array
+in place and notifies. Feed order is by `createdAt` alone, so a counter can never
+reorder anything — patching in place is both correct and cheaper than a rebuild.
+
+`setTally`, `setCommentCount`, `applyOptimisticToggle`, `rollbackVote` and
+`reconcileVote` all route through it. They used to `set()` directly, which is why an
+optimistic vote never moved the number on a feed card and the derived tally that
+followed repainted only when it *disagreed* with the prediction — the number moved on
+screen precisely when it was wrong.
+
+## Comment counts
+
+`commentCount` on a post node is an advisory mirror written read-modify-write, so it
+loses increments whenever two people comment inside one Gun round trip and drifts
+permanently low. Two sources correct it, and both outrank Gun echoes permanently via
+`knownCommentCounts` / `withKnownTally()`:
+
+- `commentStore.publishCommentCount(postId)` — the size of the merged local+graph
+  thread the detail page already holds. Called on load, on every live comment, and
+  after posting. Before the graph has answered it may only *raise* the count: the
+  local mirror alone can be empty for a post with plenty of comments elsewhere, and an
+  adopted count is permanent. The call after `fetchCommentsFromGun` passes
+  `authoritative = true` and may correct downward.
+- `dbWarmup.warmCommentCounts()` — `relayFeedService.fetchCommentCounts()` against the
+  relay's index-derived batch endpoint, applied to the feed after the REST snapshot.
+  Best-effort: a relay without the endpoint leaves the snapshot counts alone, and a
+  reported `0` is never adopted (a relay holding the post but not its comments would
+  otherwise pin a busy post at "0 comments" for the session).
+
+## Comment vote state
+
+`commentStore` mirrors `postStore`'s contract: `vote()` reconciles `myVotes` to the
+`myVote` the service returns rather than keeping its optimistic guess, and
+`refreshTallies()` pulls both the tally and this user's own vote from a single pass
+over the vote set (`CommentService.getCommentVoteState`). `myVotes` is seeded from the
+per-device `upvoted-comments` / `downvoted-comments` sets, so without that reconcile a
+vote cast on another device rendered as un-voted and the next click removed it.
+
+
+## Poll content votes
+
+Up/down on a poll *card* is content voting, distinct from option voting, and it now
+rides `PostVoteService` — the same per-user vote nodes posts use, keyed by poll id.
+`PollService.voteOnPollContent()` used to read `poll.upvotes`, adjust it and write it
+back; two people voting inside one round trip both read N and both wrote N+1, and
+clearing wrote `put(null)`, which Gun does not propagate reliably.
+
+- `togglePollContentVote(pollId, direction)` is the single decision point.
+  `upvotePoll` / `downvotePoll` / `voteOnPollContent` are aliases.
+- It reconciles `myPollContentVotes` (persisted `my-poll-content-votes-v1`) to the
+  `myVote` the service returns, and records the derived counts via `setContentTally`.
+- `refreshPollContentVoteState(pollId)` is the authoritative pull, called from
+  `selectPoll`. Views must **not** keep their own vote sets: `CommunityPage` read the
+  legacy `upvoted-polls` / `downvoted-polls` localStorage keys while the store
+  maintained `myPollContentVotes`, and the two never saw each other's writes.

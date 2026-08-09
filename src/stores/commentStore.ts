@@ -19,6 +19,7 @@ import { CommentService } from '../services/commentService';
 import type { Comment, SyncStatus } from '../types/social';
 import { generatePseudonym } from '../utils/pseudonym';
 import { UserService } from '../services/userService';
+import { usePostStore } from './postStore';
 
 /** Vote memory, so a reload does not forget what you already voted on. */
 const UPVOTED_KEY = 'upvoted-comments';
@@ -117,11 +118,20 @@ export const useCommentStore = defineStore('comment', () => {
   }
 
   /**
-   * Refresh scores from the authoritative per-user vote nodes for the top of the
-   * thread. The counters carried on a comment are only a hint written by whoever
-   * voted last; this reconciles them without a read for every comment ever seen.
+   * Refresh scores *and this user's own vote* from the authoritative per-user
+   * vote nodes, for the top of the thread.
+   *
+   * The counters carried on a comment are only a hint written by whoever voted
+   * last, and `myVotes` is seeded from a per-device localStorage set — so
+   * without this a vote cast on another device renders as un-voted, and the
+   * next click on it silently *removes* the vote instead of adding one. Both
+   * come from a single pass over the vote set, so this costs no more reads than
+   * refreshing the tally alone did.
    */
   async function refreshTallies(postId: string, token: number): Promise<void> {
+    const userId = await UserService.getCurrentUser().then((u) => u.id).catch(() => '');
+    if (token !== generation) return;
+
     const targets = comments.value
       .filter((c) => c.postId === postId)
       .sort((a, b) => b.createdAt - a.createdAt)
@@ -136,9 +146,17 @@ export const useCommentStore = defineStore('comment', () => {
           if (i >= targets.length || token !== generation) return;
           const comment = targets[i];
           try {
-            const tally = await CommentService.getCommentTally(comment.id, comment);
-            if (token !== generation) return;
-            upsert([{ ...comment, ...tally }]);
+            if (userId) {
+              const { tally, myVote } = await CommentService.getCommentVoteState(comment.id, userId, comment);
+              if (token !== generation) return;
+              upsert([{ ...comment, ...tally }]);
+              myVotes.value[comment.id] = myVote;
+              rememberVote(comment.id, myVote);
+            } else {
+              const tally = await CommentService.getCommentTally(comment.id, comment);
+              if (token !== generation) return;
+              upsert([{ ...comment, ...tally }]);
+            }
           } catch {
             // A tally we cannot read leaves the hint in place.
           }
@@ -146,6 +164,31 @@ export const useCommentStore = defineStore('comment', () => {
       },
     );
     await Promise.all(workers);
+  }
+
+  /**
+   * Push the thread's real size onto the post so its feed card stops showing the
+   * mutable `commentCount` field, which is written read-modify-write and loses
+   * increments whenever two people comment inside one Gun round trip.
+   *
+   * Counted from the merged local+graph thread the page is already holding, so
+   * it costs nothing extra and is right the moment a comment lands.
+   */
+  function publishCommentCount(postId: string, authoritative = false): void {
+    if (!postId) return;
+    const count = comments.value.filter((c) => c.postId === postId).length;
+    const postStore = usePostStore();
+    if (!authoritative) {
+      // Mid-load the thread is still filling in — the local mirror alone can be
+      // empty for a post that has plenty of comments elsewhere. A count the
+      // store adopts outranks Gun echoes permanently, so before the graph has
+      // answered only raise it, never lower it.
+      const known = postStore.postsMap.get(postId)?.commentCount
+        ?? (postStore.currentPost?.id === postId ? postStore.currentPost.commentCount : 0)
+        ?? 0;
+      if (count <= known) return;
+    }
+    postStore.setCommentCount(postId, count);
   }
 
   async function loadCommentsForPost(postId: string): Promise<void> {
@@ -165,6 +208,7 @@ export const useCommentStore = defineStore('comment', () => {
       if (token !== generation) return;
       upsert(local);
       seedVotesFromCache(local.map((c) => c.id));
+      publishCommentCount(postId);
       isLoading.value = false;
 
       // 2. Live updates (new comments, edits, deletions, vote hints).
@@ -172,6 +216,7 @@ export const useCommentStore = defineStore('comment', () => {
         if (token !== generation) return;
         upsert([comment]);
         seedVotesFromCache([comment.id]);
+        publishCommentCount(postId);
       });
 
       // 3. The graph's own answer, merged on top.
@@ -179,6 +224,8 @@ export const useCommentStore = defineStore('comment', () => {
       if (token !== generation) return;
       upsert(remote);
       seedVotesFromCache(remote.map((c) => c.id));
+      // The graph has answered — this count may correct the stored one downward.
+      publishCommentCount(postId, true);
 
       void refreshTallies(postId, token);
     } catch (err) {
@@ -225,6 +272,7 @@ export const useCommentStore = defineStore('comment', () => {
     });
 
     upsert([comment]);
+    publishCommentCount(data.postId);
     syncStatus.value[comment.id] = 'pending';
     void trackSync(comment.id);
     return comment;
@@ -269,15 +317,21 @@ export const useCommentStore = defineStore('comment', () => {
 
     try {
       const profile = await UserService.getCurrentUser();
-      const tally = await CommentService.voteOnComment(commentId, choice, profile.id);
+      const { tally, myVote: resolved } = await CommentService.voteOnComment(commentId, choice, profile.id);
       const current = index.get(commentId);
       if (current !== undefined) {
         comments.value[current] = { ...comments.value[current], ...tally };
       }
+      // The graph decides remove-vs-switch, not the optimistic guess above: a
+      // click the UI read as "upvote" is a *clear* when the vote node already
+      // holds this user's upvote. Reconciling here is what keeps the filled
+      // icon and the number from disagreeing.
+      myVotes.value[commentId] = resolved;
+      rememberVote(commentId, resolved);
 
       const author = before?.authorId;
       if (author && author !== profile.id) {
-        const karmaDelta = (next === 'up' ? 1 : next === 'down' ? -1 : 0)
+        const karmaDelta = (resolved === 'up' ? 1 : resolved === 'down' ? -1 : 0)
           - (previous === 'up' ? 1 : previous === 'down' ? -1 : 0);
         if (karmaDelta !== 0) {
           UserService.incrementKarma(author, karmaDelta).catch(() => { /* karma is advisory */ });

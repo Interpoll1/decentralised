@@ -106,6 +106,34 @@ export const usePollStore = defineStore('poll', () => {
    * lived in HomePage.vue and diverged from the actual graph state.
    */
   const myPollContentVotes = ref(loadMyPollContentVotes());
+
+  /**
+   * pollId → content-vote counts derived from the per-user vote set.
+   *
+   * The `upvotes`/`downvotes` a poll node carries are an advisory mirror any
+   * peer can echo a pre-vote snapshot of. `injectPoll` replaces a poll whenever
+   * its *option* vote total has not gone backwards — a condition that says
+   * nothing about content votes — so without this overlay a Gun echo arriving a
+   * second after an upvote put the old number straight back on screen. Once a
+   * tally is derived for a poll it outranks every such echo, permanently.
+   */
+  const contentTallies = new Map<string, { upvotes: number; downvotes: number; score: number }>();
+
+  /** Overlay the derived content tally onto an incoming poll, if we have one. */
+  function withContentTally(poll: Poll): Poll {
+    const tally = contentTallies.get(poll.id);
+    return tally ? { ...poll, ...tally } : poll;
+  }
+
+  function setContentTally(pollId: string, tally: { upvotes: number; downvotes: number; score: number }) {
+    contentTallies.set(pollId, tally);
+    const existing = pollsMap.value.get(pollId);
+    if (existing) {
+      pollsMap.value.set(pollId, { ...existing, ...tally });
+      triggerRef(pollsMap);
+    }
+    if (currentPoll.value?.id === pollId) currentPoll.value = { ...currentPoll.value, ...tally };
+  }
   const pendingPollsByCommunity = new Map<string, Map<string, Poll>>();
   let pendingPollsFlushTimer: ReturnType<typeof setTimeout> | null = null;
   const getPendingIncomingPollCount = () => {
@@ -326,7 +354,8 @@ export const usePollStore = defineStore('poll', () => {
     pendingNewPolls.value = [];
   }
 
-  function injectPoll(poll: Poll) {
+  function injectPoll(incoming: Poll) {
+    const poll = withContentTally(incoming);
     const existing = pollsMap.value.get(poll.id);
     if (!existing) {
       pollsMap.value.set(poll.id, poll);
@@ -541,12 +570,21 @@ export const usePollStore = defineStore('poll', () => {
     saveMyPollContentVotes(myPollContentVotes.value);
 
     try {
-      const patch = await PollService.voteOnPollContent(pollId, direction, user.id, communityId);
-      const current = pollsMap.value.get(pollId);
-      if (current) {
-        const updated = { ...current, ...patch };
-        pollsMap.value.set(pollId, updated);
-        if (currentPoll.value?.id === pollId) currentPoll.value = updated;
+      const { myVote: resolved, ...patch } = await PollService.voteOnPollContent(
+        pollId, direction, user.id, communityId,
+      );
+      // The graph decides, not the prediction: a click the UI read as "upvote"
+      // is a *clear* if this user's vote node already holds an upvote. Keeping
+      // the prediction here is what let the filled/hollow icon disagree with
+      // the count until the next reload.
+      if (resolved) myPollContentVotes.value.set(pollId, resolved);
+      else myPollContentVotes.value.delete(pollId);
+      myPollContentVotes.value = new Map(myPollContentVotes.value);
+      saveMyPollContentVotes(myPollContentVotes.value);
+
+      setContentTally(pollId, patch);
+      const updated = pollsMap.value.get(pollId);
+      if (updated) {
         BroadcastService.broadcast('poll-updated', updated);
         void WebSocketService.broadcast('poll-updated', updated);
       }
@@ -569,6 +607,30 @@ export const usePollStore = defineStore('poll', () => {
     return togglePollContentVote(pollId, direction);
   }
 
+  /**
+   * Pull the authoritative content-vote tally and this user's vote for one poll.
+   *
+   * Worth the round trip on a poll the user has opened: `myPollContentVotes` is
+   * seeded from localStorage, so without this a vote cast on another device
+   * renders as un-voted and the next click silently *removes* it.
+   */
+  async function refreshPollContentVoteState(pollId: string) {
+    try {
+      const user = await UserService.getCurrentUser();
+      const [tally, vote] = await Promise.all([
+        PollService.getPollContentTally(pollId),
+        PollService.getMyPollContentVote(pollId, user.id),
+      ]);
+      setContentTally(pollId, tally);
+      if (vote) myPollContentVotes.value.set(pollId, vote);
+      else myPollContentVotes.value.delete(pollId);
+      myPollContentVotes.value = new Map(myPollContentVotes.value);
+      saveMyPollContentVotes(myPollContentVotes.value);
+    } catch (err) {
+      console.warn('Failed to refresh poll content vote state', err);
+    }
+  }
+
   function upvotePoll(pollId: string) { return togglePollContentVote(pollId, 'up'); }
   function downvotePoll(pollId: string) { return togglePollContentVote(pollId, 'down'); }
 
@@ -577,15 +639,22 @@ export const usePollStore = defineStore('poll', () => {
   async function selectPoll(pollId: string, communityId?: string) {
     isLoading.value = true;
     try {
+      // Reconcile the content-vote state for a poll the user opened directly.
+      // `myPollContentVotes` is seeded from localStorage, so a vote cast on
+      // another device otherwise renders as un-voted here.
+      void refreshPollContentVoteState(pollId);
+
       const existing = pollsMap.value.get(pollId);
       if (existing && existing.options.length > 0) {
         tryDecryptPoll(existing);
         currentPoll.value = existing;
         return;
       }
-      const poll = await PollService.loadPollWithApiFallback(pollId, communityId);
-      if (poll) {
+      const loaded = await PollService.loadPollWithApiFallback(pollId, communityId);
+      if (loaded) {
+        const poll = withContentTally(loaded);
         pollsMap.value.set(poll.id, poll);
+        triggerRef(pollsMap);
         tryDecryptPoll(poll);
         currentPoll.value = poll;
       } else {
@@ -697,7 +766,7 @@ export const usePollStore = defineStore('poll', () => {
     flushNewPolls, injectPoll, saveSeenNow,
     createPoll, voteOnPoll, selectPoll,
     voteOnPollContent, upvotePoll, downvotePoll,
-    myPollContentVote, togglePollContentVote,
+    myPollContentVote, togglePollContentVote, refreshPollContentVoteState,
     refreshCommunityPolls,
   };
 });

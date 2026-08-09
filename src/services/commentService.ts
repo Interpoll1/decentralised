@@ -39,6 +39,7 @@ import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
 import { StorageService } from './storageService';
 import { gunPut, gunOnce, gunReadChildren, verifySoulOnRelay, toGunRecord } from '../utils/gunAsync';
+import { foldVotes } from './postVoteService';
 import { canonicalJSON } from '../../shared-validation/canonical.js';
 import type { Comment, StoredComment, SyncStatus } from '../types/social';
 
@@ -57,6 +58,12 @@ export interface CommentTally {
   upvotes: number;
   downvotes: number;
   score: number;
+}
+
+export interface CommentVoteResult {
+  tally: CommentTally;
+  /** What this user's vote *actually* is now, per the graph — not what the UI guessed. */
+  myVote: 'up' | 'down' | null;
 }
 
 export interface CreateCommentData {
@@ -514,7 +521,16 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
     } catch { /* audit is advisory */ }
   })();
 
-  void PostService.incrementCommentCount(data.postId, data.communityId).catch(() => { /* counter is a hint */ });
+  // Mirror the *derived* count onto the post rather than incrementing the stored
+  // one: the local mirror already holds this comment, so `getCommentCount` sees
+  // it, and a derived write cannot be lost the way read-add-one-write is when
+  // two people comment inside one round trip.
+  void (async () => {
+    try {
+      const count = await getCommentCount(data.postId);
+      await PostService.setCommentCount(data.postId, count, data.communityId);
+    } catch { /* counter is a hint */ }
+  })();
 
   return comment;
 }
@@ -754,31 +770,107 @@ function parseVote(raw: any): VoteValue | null {
 }
 
 /**
- * Count the per-user vote nodes.
+ * This device's record of a vote cast under the pre-migration scheme.
  *
- * Falls back to the counters stored on the comment itself when nobody has voted
- * under the new scheme yet, so comments predating this change keep their totals.
+ * Comment votes had no per-user graph node before this — the totals were
+ * read-modify-written onto the comment and the only record of *who* voted was
+ * the local `upvoted-comments` / `downvoted-comments` sets. Those votes are
+ * inside the frozen baseline, so the one device that can identify them must, or
+ * migrating such a vote counts it twice.
+ */
+function readLegacyCommentVote(commentId: string): 'up' | 'down' | null {
+  if (typeof localStorage === 'undefined') return null;
+  for (const [key, vote] of [['upvoted-comments', 'up'], ['downvoted-comments', 'down']] as const) {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(key) || '[]');
+      if (Array.isArray(parsed) && parsed.includes(commentId)) return vote;
+    } catch { /* unreadable cache — no correction to make */ }
+  }
+  return null;
+}
+
+function parseBaselineType(raw: any): 'up' | 'down' | null {
+  const type = raw && typeof raw === 'object' ? raw.baselineType : null;
+  return type === 'up' || type === 'down' ? type : null;
+}
+
+/**
+ * The comment's frozen legacy vote counters.
+ *
+ * Comments that predate the per-user vote scheme carry totals no vote node
+ * accounts for. The old code fell back to those counters *only while no vote
+ * node existed at all*, so the very first vote cast under the new scheme threw
+ * the entire previous total away — a comment sitting at 12 dropped to 1 the
+ * moment anyone touched it. Freezing the counters once, behind the
+ * `voteBaselineAt` guard, keeps them and adds derived votes on top; because the
+ * baseline is written once and never mutated it reintroduces no
+ * read-modify-write race. Same rule as posts — see `postVoteService`.
+ */
+async function readCommentBaseline(
+  commentId: string,
+  fallback?: Comment,
+): Promise<{ up: number; down: number }> {
+  const node: any = await gunOnce(commentNode(commentId), 3_000);
+  if (node?.voteBaselineAt) {
+    return { up: Number(node.voteBaselineUp) || 0, down: Number(node.voteBaselineDown) || 0 };
+  }
+  const source = node ?? fallback;
+  return { up: Number(source?.upvotes) || 0, down: Number(source?.downvotes) || 0 };
+}
+
+async function ensureCommentBaseline(
+  commentId: string,
+  fallback?: Comment,
+): Promise<{ up: number; down: number }> {
+  const node: any = await gunOnce(commentNode(commentId), 3_000);
+  if (node?.voteBaselineAt) {
+    return { up: Number(node.voteBaselineUp) || 0, down: Number(node.voteBaselineDown) || 0 };
+  }
+  const source = node ?? fallback;
+  const baseline = { up: Number(source?.upvotes) || 0, down: Number(source?.downvotes) || 0 };
+  await gunPut(commentNode(commentId), {
+    voteBaselineUp: baseline.up,
+    voteBaselineDown: baseline.down,
+    voteBaselineAt: Date.now(),
+  });
+  return baseline;
+}
+
+/**
+ * Count the per-user vote nodes on top of the comment's frozen baseline.
+ *
+ * `fallback` supplies the pre-migration counters for a comment whose graph node
+ * has not loaded yet (typically the local mirror's copy).
  */
 export async function getCommentTally(commentId: string, fallback?: Comment): Promise<CommentTally> {
-  const children = await gunReadChildren<any>(commentVotesNode(commentId), { minMs: 300, maxMs: 4_000 });
+  const { tally } = await getCommentVoteState(commentId, '', fallback);
+  return tally;
+}
 
-  let upvotes = 0;
-  let downvotes = 0;
-  let counted = 0;
-  for (const { value } of children) {
-    const vote = parseVote(value);
-    if (!vote) continue;
-    counted++;
-    if (vote === 'up') upvotes++;
-    else if (vote === 'down') downvotes++;
-  }
-
-  if (counted === 0 && fallback) {
-    const up = fallback.upvotes || 0;
-    const down = fallback.downvotes || 0;
-    return { upvotes: up, downvotes: down, score: up - down };
-  }
-  return { upvotes, downvotes, score: upvotes - downvotes };
+/**
+ * The tally *and* this user's own vote, from a single pass over the vote set.
+ *
+ * The store used to seed button state from localStorage alone and never correct
+ * it, so a vote cast on another device rendered as un-voted and the next click
+ * silently removed it. Reading both from one `map()` costs no more than reading
+ * the tally did — pass an empty `userId` when only the tally is wanted.
+ */
+export async function getCommentVoteState(
+  commentId: string,
+  userId: string,
+  fallback?: Comment,
+): Promise<CommentVoteResult> {
+  const [baseline, children] = await Promise.all([
+    readCommentBaseline(commentId, fallback),
+    gunReadChildren<any>(commentVotesNode(commentId), { minMs: 300, maxMs: 4_000 }),
+  ]);
+  const tally = foldVotes(
+    baseline,
+    children.map(({ value }) => ({ vote: parseVote(value), baselineType: parseBaselineType(value) })),
+  );
+  const mine = userId ? children.find(({ key }) => key === userId) : undefined;
+  const vote = mine ? parseVote(mine.value) : null;
+  return { tally, myVote: vote === 'up' || vote === 'down' ? vote : null };
 }
 
 export async function getUserVote(commentId: string, userId: string): Promise<'up' | 'down' | null> {
@@ -800,22 +892,47 @@ export async function voteOnComment(
   commentId: string,
   voteType: 'up' | 'down',
   userId: string,
-): Promise<CommentTally> {
+): Promise<CommentVoteResult> {
   if (!userId) throw new Error('userId is required to vote');
 
-  const current = await getUserVote(commentId, userId);
-  const next: VoteValue = current === voteType ? 'none' : voteType;
+  const local = await StorageService.getComment(commentId);
+  const baseline = await ensureCommentBaseline(commentId, local ?? undefined);
 
-  const ack = await gunPut(commentVotesNode(commentId).get(userId), {
+  const existing = await gunOnce<any>(commentVotesNode(commentId).get(userId), 3_000);
+  const current = parseVote(existing);
+  const currentVote = current === 'up' || current === 'down' ? current : null;
+  const next: VoteValue = currentVote === voteType ? 'none' : voteType;
+
+  // Preserve any baseline correction already recorded for this user. Their
+  // pre-migration vote is inside the frozen baseline, so it must be subtracted
+  // once when their new vote is applied — otherwise migrating a vote counts it
+  // twice.
+  const baselineType = current
+    ? parseBaselineType(existing)
+    : readLegacyCommentVote(commentId);
+
+  const record: Record<string, string | number> = {
     type: next,
     userId,
     commentId,
     at: Date.now(),
-  });
-  if (!ack.ok) throw new Error(ack.err || 'Vote could not be recorded');
+  };
+  if (baselineType) record.baselineType = baselineType;
 
-  const local = await StorageService.getComment(commentId);
-  const tally = await getCommentTally(commentId, local ?? undefined);
+  const ack = await gunPut(commentVotesNode(commentId).get(userId), record);
+  // 'timeout' means Gun accepted the write locally but no relay acked within the
+  // window; it syncs on reconnect. Throwing on that rolled the vote back out of
+  // the UI even though it had landed — only a real error is a failure.
+  if (!ack.ok && ack.err !== 'timeout') throw new Error(ack.err || 'Vote could not be recorded');
+
+  const children = await gunReadChildren<any>(commentVotesNode(commentId), { minMs: 300, maxMs: 4_000 });
+  const folded = new Map<string, any>(children.map(({ key, value }) => [key, value]));
+  // Our own write may not have echoed back yet — count it from what we sent.
+  folded.set(userId, record);
+  const tally = foldVotes(
+    baseline,
+    [...folded.values()].map((value) => ({ vote: parseVote(value), baselineType: parseBaselineType(value) })),
+  );
 
   // Mirror the aggregate onto the comment as a hint for readers who have not
   // loaded the vote set. Advisory only — `getCommentTally` always prefers the set.
@@ -829,7 +946,7 @@ export async function voteOnComment(
     await StorageService.saveComment({ ...local, ...tally, updatedAt: Date.now() });
   }
 
-  return tally;
+  return { tally, myVote: next === 'none' ? null : next };
 }
 
 /** Live tally updates for one comment. */
@@ -838,23 +955,25 @@ export function subscribeToCommentVotes(
   callback: (tally: CommentTally) => void,
 ): () => void {
   let active = true;
-  const votes = new Map<string, VoteValue>();
+  // Read once up front. The baseline is immutable by construction, so a later
+  // echo of the comment node carrying stale counters cannot move the total.
+  let baseline = { up: 0, down: 0 };
+  const votes = new Map<string, { vote: VoteValue | null; baselineType: 'up' | 'down' | null }>();
 
   const emit = () => {
-    let upvotes = 0;
-    let downvotes = 0;
-    for (const vote of votes.values()) {
-      if (vote === 'up') upvotes++;
-      else if (vote === 'down') downvotes++;
-    }
-    callback({ upvotes, downvotes, score: upvotes - downvotes });
+    if (!active) return;
+    callback(foldVotes(baseline, votes.values()));
   };
+
+  void readCommentBaseline(commentId).then((value) => {
+    if (!active) return;
+    baseline = value;
+    emit();
+  });
 
   const chain = commentVotesNode(commentId).map().on((value: any, key: string) => {
     if (!active || typeof key !== 'string') return;
-    const vote = parseVote(value);
-    if (!vote) return;
-    votes.set(key, vote);
+    votes.set(key, { vote: parseVote(value), baselineType: parseBaselineType(value) });
     emit();
   });
 
@@ -894,6 +1013,7 @@ export const CommentService = {
   voteOnComment,
   getUserVote,
   getCommentTally,
+  getCommentVoteState,
   subscribeToCommentVotes,
   verifyCommentSignature,
   decryptComment,

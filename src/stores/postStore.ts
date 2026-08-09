@@ -160,20 +160,42 @@ export const usePostStore = defineStore('post', () => {
   const knownCommentCounts = new BoundedMap<string, number>({ maxSize: 1000 });
 
   /**
+   * Apply a field patch to one post and make the change visible.
+   *
+   * `postsMap` is a `shallowRef`, so `postsMap.value.set(...)` alone is invisible
+   * to Vue *and* leaves the old object still sitting in `_sortedPostsCache` —
+   * the array the feed actually renders. Every counter update here used to do
+   * exactly that: an optimistic vote never moved the number on a feed card, and
+   * the derived tally that followed only repainted when it happened to disagree
+   * with the prediction. The number moved on screen precisely when it was wrong.
+   *
+   * Feed order is by `createdAt` alone, so a counter patch can never reorder
+   * anything: swap the entry in the sorted array in place and notify, rather
+   * than triggering a full rebuild-and-re-sort of the feed.
+   */
+  function patchPost(postId: string, patch: Partial<Post>): void {
+    const existing = postsMap.value.get(postId);
+    if (existing) {
+      const next = { ...existing, ...patch };
+      postsMap.value.set(postId, next);
+      const at = _sortedPostsCache.value.findIndex((p) => p.id === postId);
+      if (at !== -1) {
+        _sortedPostsCache.value[at] = next;
+        triggerRef(_sortedPostsCache);
+      }
+    }
+    if (currentPost.value?.id === postId) {
+      currentPost.value = { ...currentPost.value, ...patch };
+    }
+  }
+
+  /**
    * Update the stored comment count for a post and patch it into the store map
    * immediately so feed cards refresh without waiting for a Gun echo.
    */
   function setCommentCount(postId: string, count: number): void {
     knownCommentCounts.set(postId, count);
-    const existing = postsMap.value.get(postId);
-    if (existing) {
-      postsMap.value.set(postId, { ...existing, commentCount: count });
-      // Comment count doesn't affect sort order — no triggerRef needed here.
-      // The card will update because currentPost is a separate ref.
-    }
-    if (currentPost.value?.id === postId) {
-      currentPost.value = { ...currentPost.value, commentCount: count };
-    }
+    patchPost(postId, { commentCount: count });
   }
 
   /** postId → this user's vote, as last confirmed by the graph. */
@@ -194,17 +216,7 @@ export const usePostStore = defineStore('post', () => {
 
   function setTally(postId: string, tally: PostTally) {
     tallies.set(postId, tally);
-    const existing = postsMap.value.get(postId);
-    if (existing) {
-      const scoreChanged = existing.score !== tally.score;
-      postsMap.value.set(postId, { ...existing, ...tally });
-      // Only notify sorted computed when score changes — otherwise the upvote
-      // counter update on a single card was triggering a full feed re-sort.
-      if (scoreChanged) triggerRef(postsMap);
-    }
-    if (currentPost.value?.id === postId) {
-      currentPost.value = { ...currentPost.value, ...tally };
-    }
+    patchPost(postId, tally);
   }
   const getPendingIncomingPostCount = () => {
     let total = 0;
@@ -306,6 +318,11 @@ export const usePostStore = defineStore('post', () => {
       tryDecryptPost(merged);
       return;
     }
+
+    // Overlay anything already derived for this post. A post that was trimmed
+    // under memory pressure and then re-delivered by Gun otherwise came back
+    // carrying the node's advisory counters, undoing the derived tally on screen.
+    post = withKnownTally(post);
 
     // Already seen in a previous session → add silently, no banner
     if (seenPostIds.has(post.id)) {
@@ -492,7 +509,8 @@ export const usePostStore = defineStore('post', () => {
     pendingNewPosts.value = [];
   }
 
-  function injectPost(post: Post) {
+  function injectPost(incoming: Post) {
+    const post = withKnownTally(incoming);
     // Prevent injecting posts from other namespace versions
     const postDataVersion = (post as any).dataVersion || null;
     const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;
@@ -728,17 +746,14 @@ export const usePostStore = defineStore('post', () => {
       (next === vote ? 1 : 0) - (previous === vote ? 1 : 0);
     const upvotes = Math.max(0, (existing.upvotes || 0) + delta('up'));
     const downvotes = Math.max(0, (existing.downvotes || 0) + delta('down'));
-    const optimistic: Post = { ...existing, upvotes, downvotes, score: upvotes - downvotes };
-    postsMap.value.set(postId, optimistic);
-    if (currentPost.value?.id === postId) currentPost.value = optimistic;
+    patchPost(postId, { upvotes, downvotes, score: upvotes - downvotes });
     return snapshot;
   }
 
   function rollbackVote(postId: string, snapshot: Post | null, previousVote: 'up' | 'down' | null) {
     setMyVote(postId, previousVote);
     if (!snapshot) return;
-    postsMap.value.set(postId, snapshot);
-    if (currentPost.value?.id === postId) currentPost.value = snapshot;
+    patchPost(postId, snapshot);
   }
 
   function reconcileVote(postId: string, updated: Post, resolvedVote: 'up' | 'down' | null) {
@@ -746,9 +761,16 @@ export const usePostStore = defineStore('post', () => {
     setTally(postId, tally);
     BroadcastService.broadcast('post-vote-tally', { postId, tally });
     setMyVote(postId, resolvedVote);
-    const merged = { ...updated };
-    postsMap.value.set(postId, merged);
-    if (currentPost.value?.id === postId) currentPost.value = merged;
+    // `updated` is rebuilt from a Gun read, so a comment count derived from the
+    // index must survive it — otherwise voting on a post reverted its comment
+    // count to whatever stale number the post node happened to carry.
+    const known = knownCommentCounts.get(postId);
+    const merged: Post = {
+      ...updated,
+      ...(known !== undefined ? { commentCount: known } : {}),
+      ...tally,
+    };
+    patchPost(postId, merged);
     broadcastPostUpdate(merged);
   }
 

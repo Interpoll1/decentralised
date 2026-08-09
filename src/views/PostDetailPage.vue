@@ -125,7 +125,7 @@
         <!-- Comments Section -->
         <div class="comments-section">
           <h3 class="section-title">
-            Comments ({{ allComments.length }})
+            Comments ({{ threadCommentCount }})
           </h3>
 
           <!-- Add Comment Form -->
@@ -312,11 +312,24 @@ const postAuthorIdentityClass = computed(() =>
   postAuthorTrustLevel.value === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'
 );
 
+/** Top-level comments — `CommentCard` renders each one's replies itself. */
 const allComments = computed(() =>
   commentStore.comments.filter(c => {
     const matchesPost = c.postId === postId.value || c.postId === post.value?.id;
     return matchesPost && !c.parentId;
   })
+);
+
+/**
+ * Every comment in the thread, replies included.
+ *
+ * The heading used to show `allComments.length`, i.e. top-level only, so a post
+ * whose feed card read "8 comments" opened onto "Comments (3)".
+ */
+const threadCommentCount = computed(() =>
+  commentStore.comments.filter(
+    c => c.postId === postId.value || c.postId === post.value?.id,
+  ).length
 );
 
 const modSettings = computed(() => {

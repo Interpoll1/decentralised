@@ -6,6 +6,7 @@ import config from '../config';
 import { AuditService } from './auditService';
 import type { Poll, PollOption, VoteTrustPolicy } from '../types/poll';
 import { BoundedMap } from '../utils/boundedMap';
+import { PostVoteService } from './postVoteService';
 
 // Re-exported for backward compatibility — `src/types/poll.ts` is now the
 // single source of truth for these types; import from there in new code.
@@ -1627,50 +1628,61 @@ export class PollService {
 
   /**
    * Content-level upvote/downvote on the poll itself (independent of option voting).
-   * Mirrors PostService.voteOnPost's toggle semantics.
+   *
+   * Delegates to `PostVoteService`, the same per-user vote-node scheme posts use.
+   * The previous implementation here was the read-modify-write counter that
+   * scheme exists to replace: it read `poll.upvotes`, adjusted it and wrote it
+   * back, so two people voting inside one round trip both read N and both wrote
+   * N+1 (one vote lost), and a slow or stale read wrote back a total that
+   * *reverted* votes already recorded. Clearing a vote wrote `put(null)`, which
+   * Gun does not propagate reliably, so a toggled-off vote frequently came back.
+   *
+   * Counts are now derived by counting distinct per-user nodes, which cannot
+   * contend, and `myVote` comes back from the graph so the caller reconciles
+   * against what actually happened rather than what it predicted.
    */
   static async voteOnPollContent(
     pollId: string,
     direction: 'up' | 'down',
     userId: string,
     communityId?: string,
-  ): Promise<{ upvotes: number; downvotes: number; score: number }> {
-    const poll = await this.loadPollFromGun(pollId, false, false)
-      ?? (communityId ? await this.loadPollFromCommunityPath(communityId, pollId, false, false) : null);
-    if (!poll) throw new Error('Poll not found');
+  ): Promise<{ upvotes: number; downvotes: number; score: number; myVote: 'up' | 'down' | null }> {
+    if (!userId) throw new Error('userId is required to vote');
+    const { tally, myVote } = await PostVoteService.castVote(pollId, userId, direction);
+    const patch = { upvotes: tally.upvotes, downvotes: tally.downvotes, score: tally.score };
 
-    const gun = this.gun;
-    const voteKey = `vote_${userId}_poll_${pollId}`;
-    const existingVote = await this.onceNode<any>(gun.get('votes').get(voteKey), 2000);
-    let upvotes = poll.upvotes || 0;
-    let downvotes = poll.downvotes || 0;
-
-    if (existingVote?.type === 'up') {
-      upvotes = Math.max(0, upvotes - 1);
-    } else if (existingVote?.type === 'down') {
-      downvotes = Math.max(0, downvotes - 1);
+    // Advisory mirrors so a card rendered before the vote set loads shows
+    // something close. PostVoteService already mirrors onto `polls/<id>`; the
+    // community path is this service's own copy and needs the same hint.
+    const resolvedCommunityId = communityId
+      || (await this.loadPollFromGun(pollId, false, false))?.communityId;
+    if (resolvedCommunityId) {
+      void this.putPromise(
+        this.getCommunityPollPath(resolvedCommunityId, pollId),
+        patch,
+        { label: 'poll content vote patch (community)' },
+      ).catch(() => { /* hint only */ });
     }
 
-    const togglingOffSameVote = existingVote?.type === direction;
-    if (togglingOffSameVote) {
-      await this.putPromise(gun.get('votes').get(voteKey), null, { label: 'poll content vote clear' });
-    } else {
-      if (direction === 'up') upvotes += 1; else downvotes += 1;
-      await this.putPromise(gun.get('votes').get(voteKey), {
-        userId,
-        pollId,
-        type: direction,
-        timestamp: Date.now(),
-      }, { label: 'poll content vote write' });
-    }
+    return { ...patch, myVote };
+  }
 
-    const score = upvotes - downvotes;
-    const patch = { upvotes, downvotes, score };
-    await this.putPromise(this.getPollPath(pollId), patch, { label: 'poll content vote patch (root)' });
-    if (poll.communityId) {
-      await this.putPromise(this.getCommunityPollPath(poll.communityId, pollId), patch, { label: 'poll content vote patch (community)' });
-    }
-    return patch;
+  /** Authoritative content-vote counts for a poll, derived from the vote set. */
+  static async getPollContentTally(pollId: string): Promise<{ upvotes: number; downvotes: number; score: number }> {
+    return PostVoteService.getTally(pollId);
+  }
+
+  /** This user's content vote on a poll as the graph has it. */
+  static async getMyPollContentVote(pollId: string, userId: string): Promise<'up' | 'down' | null> {
+    return PostVoteService.getMyVote(pollId, userId);
+  }
+
+  /** Live content-vote counts for one poll. Returns an unsubscribe. */
+  static subscribeToPollContentVotes(
+    pollId: string,
+    callback: (tally: { upvotes: number; downvotes: number; score: number }) => void,
+  ): () => void {
+    return PostVoteService.subscribeTally(pollId, callback);
   }
 
   static async getInviteCodes(pollId: string): Promise<{ code: string; used: boolean }[]> {

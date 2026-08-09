@@ -8,6 +8,10 @@
  * votes that had already landed. No amount of local caching fixes that — the
  * data model was the bug.
  *
+ * Polls ride the same machinery: a poll card's up/down vote is content voting,
+ * not option voting, so it is keyed by poll id here. Only its baseline differs —
+ * see `baselineNode`.
+ *
  * Here a vote is a node keyed by user id under `postVotes/{postId}/{userId}`.
  * Distinct keys never contend, so concurrent voters cannot clobber each other,
  * and the total is *derived* by counting rather than stored. This mirrors the
@@ -66,6 +70,24 @@ function postNode(postId: string) {
   return gun().get('posts').get(postId);
 }
 
+/** Poll ids are minted as `poll-<ts>-<rand>`; their content lives under `polls`. */
+function isPollId(id: string): boolean {
+  return id.startsWith('poll-');
+}
+
+/**
+ * Where a piece of content's legacy counters live, and therefore where its
+ * baseline is frozen.
+ *
+ * For a poll that is *not* `posts/<id>`: the posts path only ever holds the
+ * category patch, so its `upvotes` is 0 while the real pre-migration total sits
+ * on `polls/<id>`. Freezing the baseline from the wrong node silently reset
+ * every existing poll's score to whatever had been cast since the migration.
+ */
+function baselineNode(id: string) {
+  return isPollId(id) ? gun().get('polls').get(id) : postNode(id);
+}
+
 function postVotesNode(postId: string) {
   return gun().get('postVotes').get(postId);
 }
@@ -112,7 +134,10 @@ export class PostVoteService {
    * never rewritten, so later mirror-writes of `upvotes` cannot disturb it.
    */
   private static async ensureBaseline(postId: string): Promise<{ up: number; down: number }> {
-    const post: any = await gunOnce(postNode(postId), READ_TIMEOUT_MS);
+    const node = baselineNode(postId);
+    const post: any = await gunOnce(node, READ_TIMEOUT_MS);
+    // A node we cannot read yet has no counters to inherit, but the vote itself
+    // must still be recorded — an absent baseline is simply zero.
     if (!post) return { up: 0, down: 0 };
 
     if (post.voteBaselineAt) {
@@ -126,7 +151,7 @@ export class PostVoteService {
       up: Number(post.upvotes) || 0,
       down: Number(post.downvotes) || 0,
     };
-    await gunPut(postNode(postId), {
+    await gunPut(node, {
       voteBaselineUp: baseline.up,
       voteBaselineDown: baseline.down,
       voteBaselineAt: Date.now(),
@@ -135,7 +160,7 @@ export class PostVoteService {
   }
 
   private static async readBaseline(postId: string): Promise<{ up: number; down: number }> {
-    const post: any = await gunOnce(postNode(postId), READ_TIMEOUT_MS);
+    const post: any = await gunOnce(baselineNode(postId), READ_TIMEOUT_MS);
     if (!post) return { up: 0, down: 0 };
     // No baseline frozen yet means nobody has voted under this scheme, so the
     // legacy counters are still the whole truth.
@@ -157,11 +182,22 @@ export class PostVoteService {
     return PostVoteService.readLegacyVote(postId, userId);
   }
 
-  /** The pre-migration vote record, `votes/vote_{userId}_{postId}`. Read-only now. */
+  /**
+   * The pre-migration vote record. Posts used `votes/vote_{userId}_{postId}`;
+   * polls used `votes/vote_{userId}_poll_{pollId}`. Both are read-only now, and
+   * both must be consulted — a poll voter whose old vote is inside the frozen
+   * baseline needs the same per-user correction a post voter gets.
+   */
   private static async readLegacyVote(postId: string, userId: string): Promise<VoteType | null> {
-    const raw: any = await gunOnce(gun().get('votes').get(`vote_${userId}_${postId}`), READ_TIMEOUT_MS);
-    const type = raw?.type;
-    return type === 'up' || type === 'down' ? type : null;
+    const keys = isPollId(postId)
+      ? [`vote_${userId}_poll_${postId}`, `vote_${userId}_${postId}`]
+      : [`vote_${userId}_${postId}`];
+    for (const key of keys) {
+      const raw: any = await gunOnce(gun().get('votes').get(key), READ_TIMEOUT_MS);
+      const type = raw?.type;
+      if (type === 'up' || type === 'down') return type;
+    }
+    return null;
   }
 
   static async getTally(postId: string): Promise<PostTally> {
@@ -232,7 +268,7 @@ export class PostVoteService {
     const tallyHint = { upvotes: tally.upvotes, downvotes: tally.downvotes, score: tally.score };
     void gunPut(postNode(postId), tallyHint).catch(() => {});
     // For poll IDs, also update the polls path so the poll's displayed score stays current
-    if (postId.startsWith('poll-')) {
+    if (isPollId(postId)) {
       void gunPut(gun().get('polls').get(postId), tallyHint).catch(() => {});
     }
 

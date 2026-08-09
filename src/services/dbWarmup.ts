@@ -169,6 +169,12 @@ export async function warmupFromDB(): Promise<void> {
       }
       if (n > 0) { postStore.saveSeenNow(); warmupLog(`API: ${n} posts`) }
       if (!shouldWarmApiFeeds) warmupLog('API posts warmup skipped for clean-slate namespace')
+      // Overwrite the snapshot's `commentCount` with counts derived from the
+      // relay's comment index. The stored field is written read-modify-write and
+      // loses increments whenever two people comment inside one Gun round trip,
+      // so it drifts permanently low. Non-blocking and best-effort: a relay
+      // without the endpoint simply leaves the snapshot counts in place.
+      void warmCommentCounts(postStore, (posts || []).map((d: any) => d?.id).filter(Boolean))
       warmupLog('Warmup posts complete', {
         fetched: n,
         storePosts: postStore.postsMap.size,
@@ -227,6 +233,34 @@ export async function warmupFromDB(): Promise<void> {
 
   } catch (err) {
     console.warn('⚠️ Warmup failed:', err)
+  }
+}
+
+/**
+ * Replace feed-card comment counts with index-derived ones.
+ *
+ * Only ever raises a count: a relay that holds the post but not its comments
+ * answers 0, and the store treats an adopted count as outranking Gun echoes
+ * permanently — so adopting a spurious 0 would pin a busy post at "0 comments"
+ * for the whole session.
+ */
+async function warmCommentCounts(postStore: any, ids: string[]): Promise<void> {
+  if (ids.length === 0) return
+  try {
+    const { fetchCommentCounts } = await import('./relayFeedService')
+    const counts = await fetchCommentCounts(ids)
+    let applied = 0
+    for (const [id, raw] of Object.entries(counts)) {
+      const count = Number(raw)
+      if (!Number.isFinite(count) || count <= 0) continue
+      const known = postStore.postsMap.get(id)?.commentCount || 0
+      if (count <= known) continue
+      postStore.setCommentCount(id, count)
+      applied++
+    }
+    if (applied > 0) warmupLog('Warmup comment counts', { applied, requested: ids.length })
+  } catch (err) {
+    warmupLog('Comment count warmup failed', { err: String(err) })
   }
 }
 

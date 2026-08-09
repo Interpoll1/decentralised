@@ -825,18 +825,48 @@ export class PostService {
     return { post: PostService.applyTally(post, tally), myVote };
   }
 
-  static async incrementCommentCount(postId: string, communityId?: string): Promise<void> {
+  /**
+   * Mirror a post's comment count onto its node.
+   *
+   * Advisory only. The authoritative count is the size of the comment index
+   * (`CommentService.getCommentCount`) — this field exists so a feed card can
+   * render a number before that index loads, and `postStore` treats any
+   * index-derived count as outranking it permanently.
+   *
+   * `count` is passed in rather than derived by read-add-one-write. The old
+   * version read the node's `commentCount`, added one and wrote it back, so two
+   * people commenting inside one Gun round trip both read N and both wrote N+1
+   * and the count stuck one behind — and if the node had not replicated yet it
+   * returned early and never wrote at all, which is why a poll's comment count
+   * (whose `posts/<id>` node only ever holds a category patch) sat at zero
+   * forever.
+   */
+  static async setCommentCount(postId: string, count: number, communityId?: string): Promise<void> {
+    const commentCount = Math.max(0, Math.floor(count));
     const gun = GunService.getGun();
-    // Read the live Gun value directly rather than via getPost(), whose REST/memory
-    // cache snapshot never reflects comment-count changes and would shadow this update.
     const current = await onceWithTimeout(gun.get('posts').get(postId));
-    if (!current) return;
-    const commentCount = (current.commentCount || 0) + 1;
-    await PostService.updatePost(postId, { commentCount, communityId: communityId || current.communityId });
+    await PostService.updatePost(postId, {
+      commentCount,
+      // `updatePost` drops undefined keys, so an unknown community simply means
+      // "root node only" rather than blocking the write.
+      communityId: communityId || current?.communityId || undefined,
+    });
     const cached = postMemoryCache.get(postId);
     if (cached) {
       postMemoryCache.set(postId, { ...cached, commentCount });
     }
+  }
+
+  /**
+   * @deprecated Prefer `setCommentCount` with a derived count. Kept so any
+   * caller still counting by increments writes a value rather than silently
+   * doing nothing.
+   */
+  static async incrementCommentCount(postId: string, communityId?: string): Promise<void> {
+    const gun = GunService.getGun();
+    const current = await onceWithTimeout(gun.get('posts').get(postId));
+    const next = Number(current?.commentCount || 0) + 1;
+    await PostService.setCommentCount(postId, next, communityId || current?.communityId);
   }
 
   /**
