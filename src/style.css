@@ -919,3 +919,8 @@ p {
     scroll-behavior: auto !important;
   }
 }
+/* ── Incoming chat message toast ─────────────────────────────────────────── */
+.chat-incoming-toast { --background: #1e1b3a; --border-radius: 16px; --box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(99,102,241,0.25); --color: #e8e8f0; --min-width: 280px; --max-width: 420px; }
+.chat-incoming-toast::part(message) { font-size: 14px; line-height: 1.4; }
+.chat-incoming-toast::part(button) { font-weight: 700; font-size: 13px; color: #818cf8; }
+.chat-incoming-toast::part(container) { border-left: 3px solid #6366f1; }

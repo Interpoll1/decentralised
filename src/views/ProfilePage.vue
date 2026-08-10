@@ -183,6 +183,33 @@
         </div>
       </div>
 
+      <div class="divider"></div>
+
+      <!-- Chat Link -->
+      <div class="section">
+        <p class="section-title">Chat Link</p>
+        <p class="section-desc">
+          Share this link so others can start a direct message with you — no username search needed.
+        </p>
+        <div class="chat-link-card">
+          <div class="chat-link-url">
+            <svg viewBox="0 0 24 24" fill="none" class="link-icon"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <span class="link-text">{{ chatLinkDisplay }}</span>
+          </div>
+          <div class="chat-link-actions">
+            <button class="link-btn link-btn--copy" @click="copyChatLink">
+              <svg viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              Copy
+            </button>
+            <button v-if="canShare" class="link-btn link-btn--share" @click="shareChatLink">
+              <svg viewBox="0 0 24 24" fill="none"><circle cx="18" cy="5" r="3" stroke="currentColor" stroke-width="1.8"/><circle cx="6" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="19" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51L8.59 10.49" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              Share
+            </button>
+          </div>
+        </div>
+        <p class="section-hint">Anyone with this link can open a chat with you directly.</p>
+      </div>
+
       </DesktopPageShell>
     </ion-content>
   </ion-page>
@@ -338,6 +365,80 @@
   padding: 16px 0;
 }
 
+.section-desc {
+  font-size: 13px;
+  color: var(--ion-color-medium);
+  margin: 0 16px 12px;
+  line-height: 1.5;
+}
+
+.section-hint {
+  font-size: 11.5px;
+  color: var(--ion-color-medium);
+  margin: 8px 16px 0;
+  opacity: 0.8;
+}
+
+.chat-link-card {
+  margin: 0 16px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.chat-link-url {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+
+.link-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: #818cf8;
+  opacity: 0.8;
+}
+
+.link-text {
+  font-size: 13px;
+  font-family: monospace;
+  color: var(--ion-color-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.chat-link-actions {
+  display: flex;
+  gap: 0;
+}
+
+.link-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 11px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  transition: background 150ms;
+}
+.link-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
+.link-btn--copy { color: #818cf8; border-right: 1px solid rgba(255,255,255,0.07); }
+.link-btn--copy:hover { background: rgba(99,102,241,0.1); }
+.link-btn--share { color: #34d399; }
+.link-btn--share:hover { background: rgba(52,211,153,0.1); }
+
 .section-title {
   font-size: 12px;
   font-weight: 600;
@@ -425,8 +526,44 @@ import { VoteTrackerService } from '../services/voteTrackerService';
 import { IPFSService } from '../services/ipfsService';
 import { useCommunityStore } from '../stores/communityStore';
 import { formatTrustedIdentityLabel } from '../utils/identityTrust';
+import config from '../config';
 
 const communityStore = useCommunityStore();
+
+// ── Chat link ────────────────────────────────────────────────────────────────
+const chatLink = computed(() => {
+  const id = userProfile.value?.id;
+  if (!id) return '';
+  const name = encodeURIComponent(
+    userProfile.value?.customUsername ||
+    userProfile.value?.displayName ||
+    userProfile.value?.username ||
+    'User'
+  );
+  const base = ((config as any)?.app?.url || window.location.origin).replace(/\/$/, '');
+  return `${base}/chat/${encodeURIComponent(id)}?name=${name}`;
+});
+const chatLinkDisplay = computed(() => {
+  if (!chatLink.value) return 'Loading…';
+  try { const u = new URL(chatLink.value); return u.host + u.pathname; } catch { return chatLink.value; }
+});
+const canShare = computed(() => !!navigator.share);
+async function copyChatLink() {
+  if (!chatLink.value) return;
+  try {
+    await navigator.clipboard.writeText(chatLink.value);
+    const t = await toastController.create({ message: 'Chat link copied!', duration: 2000, color: 'success' });
+    await t.present();
+  } catch {
+    const t = await toastController.create({ message: 'Copy failed', duration: 3000, color: 'warning' });
+    await t.present();
+  }
+}
+async function shareChatLink() {
+  if (!chatLink.value || !navigator.share) return;
+  const name = userProfile.value?.customUsername || userProfile.value?.displayName || 'me';
+  try { await navigator.share({ title: `Chat with ${name} on Interpoll`, url: chatLink.value }); } catch { /* cancelled */ }
+}
 
 const userProfile = ref<UserProfile | null>(null);
 const displayName = ref('');

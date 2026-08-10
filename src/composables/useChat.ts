@@ -6,7 +6,7 @@
  */
 
 import { ref, shallowRef } from 'vue';
-import { useRouter } from 'vue-router';
+import router from '../router';
 import { toastController } from '@ionic/vue';
 import { GunService } from '../services/gunService';
 import { StorageService } from '../services/storageService';
@@ -31,8 +31,6 @@ export interface UserSearchResult {
 }
 
 export function useChat(currentUserId: string, gunListeners: Array<() => void>) {
-  const router = useRouter();
-
   const chatList           = shallowRef<ChatEntry[]>([]);
   const userSearchQuery    = ref('');
   const userSearchResults  = shallowRef<UserSearchResult[]>([]);
@@ -88,6 +86,19 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
       }];
     }
     refreshRoomSummary(roomId, otherUserId);
+
+    // Wire bgChatService so BOTH delivery paths work:
+    // - WebSocket: relay forwards live frame → handleWsMessage → onMessage
+    // - Gun: p2p sync / offline catch-up → handleRoomRecord → onMessage
+    // Without startChat(), Gun messages land but are never decrypted.
+    if (bgChatService) {
+      void bgChatService.startChat({
+        userId: otherUserId,
+        name: otherName,
+        publicKey: otherPublicKey || undefined,
+      });
+    }
+
     const listener = gun.get('chats').get(roomId).map().on((msg: any) => {
       if (!msg || !msg.senderId || !msg.timestamp) return;
       refreshRoomSummary(roomId, otherUserId);
@@ -162,28 +173,73 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
 
   // ─── Background chat ───────────────────────────────────────────────────────
 
+  async function requestNotificationPermission() {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'default') await Notification.requestPermission();
+  }
+
+  async function showIncomingMessageNotification(
+    fromUserId: string, senderName: string, preview: string, isInThisChat: boolean,
+  ) {
+    if (isInThisChat) return;
+    if ('Notification' in window && Notification.permission === 'granted') {
+      const n = new Notification(`💬 ${senderName}`, {
+        body: preview, icon: '/favicon.ico', tag: `chat-${fromUserId}`, renotify: true,
+      });
+      n.onclick = () => {
+        window.focus();
+        void router.push({ name: 'Chat', params: { userId: fromUserId }, query: { name: senderName } });
+        n.close();
+      };
+    }
+    const toast = await toastController.create({
+      message: `💬 <strong>${senderName}</strong>: ${preview}`,
+      duration: 5000, position: 'top', cssClass: 'chat-incoming-toast',
+      buttons: [
+        { text: 'Reply', handler: () => { void router.push({ name: 'Chat', params: { userId: fromUserId }, query: { name: senderName } }); } },
+        { icon: 'close', role: 'cancel' },
+      ],
+    });
+    await toast.present();
+  }
+
   async function initBackgroundChat(activeTabRef: { value: string }) {
     const WS_URL = config.relay.websocket;
     bgChatService = new ChatService(WS_URL, currentUserId);
     bgChatService.onConnectionChange = () => {};
+
+    // CRITICAL: opens WebSocket, registers with relay, publishes chat public key
+    // to Gun so senders can encrypt to Y. Without this call the service is inert.
+    try { await bgChatService.init(); }
+    catch (err) { console.warn('[useChat] bgChatService.init() failed:', err); }
+
+    await requestNotificationPermission();
+
     bgChatService.onMessage = (msg) => {
       if (msg.sent) return;
-      const preview = msg.message.length > 80 ? `${msg.message.slice(0, 79)}…` : msg.message;
-      const entry   = chatList.value.find(c => c.userId === msg.from);
+      const preview      = msg.message.length > 80 ? `${msg.message.slice(0, 79)}…` : msg.message;
+      const currentRoute = router.currentRoute.value;
+      const isInThisChat = currentRoute.name === 'Chat' && currentRoute.params.userId === msg.from;
+      const entry        = chatList.value.find(c => c.userId === msg.from);
+
       if (entry) {
+        const senderName = entry.name || msg.from;
         entry.lastMessage     = preview;
         entry.lastMessageTime = msg.timestamp;
-        if (activeTabRef.value !== 'chat') entry.unreadCount++;
-        chatList.value = [...chatList.value].sort((a, b) => b.lastMessageTime - a.lastMessageTime);
+        if (!isInThisChat) entry.unreadCount++;
+        chatList.value    = [...chatList.value].sort((a, b) => b.lastMessageTime - a.lastMessageTime);
         totalUnread.value = chatList.value.reduce((s, c) => s + c.unreadCount, 0);
+        void showIncomingMessageNotification(msg.from, senderName, preview, isInThisChat);
       } else {
         chatList.value = [{
           userId: msg.from, name: msg.from,
           lastMessage: preview, lastMessageTime: msg.timestamp,
-          unreadCount: activeTabRef.value !== 'chat' ? 1 : 0, publicKey: '',
+          unreadCount: isInThisChat ? 0 : 1, publicKey: '',
         }, ...chatList.value];
-        totalUnread.value++;
+        if (!isInThisChat) totalUnread.value++;
+        subscribeToRoom(msg.from, msg.from, '');
         gun_lookupUser(msg.from);
+        void showIncomingMessageNotification(msg.from, msg.from, preview, isInThisChat);
       }
     };
     bgChatInitialised = true;
@@ -209,8 +265,9 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
   }
 
   function ensureChatInitialized(activeTabRef: { value: string }): Promise<void> {
-    return ensureBackgroundChatInitialized(activeTabRef).then(() => {
+    return ensureBackgroundChatInitialized(activeTabRef).then(async () => {
       ensureChatRoomDiscoverySubscription();
+      await loadChatList();
     });
   }
 
