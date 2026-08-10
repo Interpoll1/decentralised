@@ -509,22 +509,6 @@
       </div>
     </ion-footer>
 
-  <!-- Community picker modals (Post / Poll) -->
-  <CommunityPickerModal
-    v-model="postPickerOpen"
-    :communities="joinedCommunities"
-    :selected="null"
-    title="Create post in…"
-    @pick="onPostCommunityPicked"
-  />
-  <CommunityPickerModal
-    v-model="pollPickerOpen"
-    :communities="joinedCommunities"
-    :selected="null"
-    title="Create poll in…"
-    @pick="onPollCommunityPicked"
-  />
-
   </ion-page>
 </template>
 
@@ -536,7 +520,7 @@ import {
   IonButtons, IonButton, IonIcon, IonSegment, IonSegmentButton, IonFooter, IonModal,
   IonLabel, IonSpinner, IonChip, IonSearchbar,
   IonInfiniteScroll, IonInfiniteScrollContent,
-  toastController
+  actionSheetController, toastController
 } from '@ionic/vue';
 import {
   cube, personCircleOutline, settingsOutline, addCircleOutline, addOutline,
@@ -557,7 +541,6 @@ import type { Community } from '../services/communityService';
 import { usePostStore } from '../stores/postStore';
 import { usePollStore } from '../stores/pollStore';
 import CommunityCard from '../components/CommunityCard.vue';
-import CommunityPickerModal from '../components/CommunityPickerModal.vue';
 
 // ── Lazy-loaded tab components ────────────────────────────────────────────────
 const CommunitiesTab = defineAsyncComponent(() => import('../components/CommunitiesTab.vue'));
@@ -590,13 +573,6 @@ const chainStore     = useChainStore();
 const communityStore = useCommunityStore();
 const postStore      = usePostStore();
 const pollStore      = usePollStore();
-
-// Community picker modal state
-const postPickerOpen = ref(false);
-const pollPickerOpen = ref(false);
-const joinedCommunities = computed(() =>
-  communityStore.communities.filter(c => communityStore.isJoined(c.id))
-);
 
 const FEED_DEBUG      = localStorage.getItem('interpoll_feed_debug') === 'true';
 const SYNC_DEBUG      = localStorage.getItem('interpoll_sync_debug') === 'true';
@@ -685,8 +661,8 @@ async function ensureChatInitialized() {
   if (c) await c.ensureChatInitialized(activeTab);
 }
 async function ensureBackgroundChatInitialized() {
-  // background DM notifications — init chat composable but don't open discovery
-  ensureChat();
+  const c = ensureChat();
+  if (c) await c.ensureChatInitialized(activeTab);
 }
 function openChat(chat: any)             { ensureChat()?.openChat(chat); }
 function startChatWithUser(user: any)    { ensureChat()?.startChatWithUser(user); }
@@ -721,6 +697,7 @@ watch(() => route.query.category, () => {
 
 const VISIBLE_CATEGORIES = [
   { id: 'entertainment', label: 'Entertainment', icon: tvOutline },
+  { id: 'other',         label: 'Other',         icon: ellipseOutline },
   { id: 'technology',    label: 'Technology',    icon: codeSlashOutline },
   { id: 'humour',        label: 'Humour',        icon: happyOutline },
   { id: 'opinion',       label: 'Opinion',       icon: chatbubblesOutline },
@@ -735,7 +712,6 @@ const VISIBLE_CATEGORIES = [
   { id: 'crypto',        label: 'Crypto',        icon: logoBitcoin },
   { id: 'world-news',    label: 'World News',    icon: earthOutline },
   { id: 'environment',   label: 'Environment',   icon: earthOutline },
-  { id: 'other',         label: 'Other',         icon: ellipseOutline },
 ];
 const feedCategories = computed(() =>
   showMoreCategories.value ? VISIBLE_CATEGORIES : VISIBLE_CATEGORIES.slice(0, 6)
@@ -922,30 +898,33 @@ async function onInfiniteScroll(event: any) {
 }
 
 // ── Create actions ────────────────────────────────────────────────────────────
-function showPostOptions() {
-  if (joinedCommunities.value.length === 0) {
-    toastController.create({ message: 'Join a community first', duration: 2000, color: 'warning' })
-      .then(t => t.present());
-    return;
-  }
-  postPickerOpen.value = true;
+async function showPostOptions() {
+  const actionSheet = await actionSheetController.create({
+    header: 'Create a post in...',
+    buttons: communityStore.communities
+      .filter((c: any) => c.isJoined)
+      .slice(0, 8)
+      .map((c: any) => ({
+        text: c.displayName,
+        handler: () => { router.push(`/community/${c.id}/create-post`); },
+      }))
+      .concat([{ text: 'Cancel', role: 'cancel' }]),
+  });
+  await actionSheet.present();
 }
-
-function showPollOptions() {
-  if (joinedCommunities.value.length === 0) {
-    toastController.create({ message: 'Join a community first', duration: 2000, color: 'warning' })
-      .then(t => t.present());
-    return;
-  }
-  pollPickerOpen.value = true;
-}
-
-function onPostCommunityPicked(c: Community) {
-  router.push(`/community/${c.id}/create-post`);
-}
-
-function onPollCommunityPicked(c: Community) {
-  router.push(`/community/${c.id}/create-poll`);
+async function showPollOptions() {
+  const actionSheet = await actionSheetController.create({
+    header: 'Create a poll in...',
+    buttons: communityStore.communities
+      .filter((c: any) => c.isJoined)
+      .slice(0, 8)
+      .map((c: any) => ({
+        text: c.displayName,
+        handler: () => { router.push(`/community/${c.id}/create-poll`); },
+      }))
+      .concat([{ text: 'Cancel', role: 'cancel' }]),
+  });
+  await actionSheet.present();
 }
 
 // ── Community subscription ────────────────────────────────────────────────────

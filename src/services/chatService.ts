@@ -781,6 +781,32 @@ class ChatService {
     }
   }
 
+  /**
+   * Re-scans every room we are watching for messages that arrived while offline.
+   *
+   * Gun's `.map().on()` fires for existing nodes when the graph syncs from peers,
+   * but that sync can take several seconds after the WebSocket opens. Calling
+   * this with a short delay after `ws.onopen` gives Gun time to settle and then
+   * explicitly walks all known rooms so no offline message is missed.
+   */
+  private replayOfflineMessages(): void {
+    if (this.shuttingDown) return;
+    const gun = GunService.getGun();
+    for (const [roomId] of this.watchedRooms) {
+      // Walk the room node once — handleRoomRecord deduplicates by seenMessageIds
+      gun.get('chats').get(roomId).map().once((raw: any) => {
+        this.handleRoomRecord(roomId, raw);
+      });
+    }
+    // Also check the rooms index in case new rooms were added while offline
+    gun.get('users').get(this.userId).get('rooms').map().once((roomData: any, roomId: string) => {
+      if (!roomId || roomId === '_' || !roomId.includes(':') || !roomId.includes(this.userId)) return;
+      gun.get('chats').get(roomId).map().once((raw: any) => {
+        this.handleRoomRecord(roomId, raw);
+      });
+    });
+  }
+
   // ── WebSocket ───────────────────────────────────────────────────────────────
 
   private connect(): void {
@@ -795,6 +821,11 @@ class ChatService {
     this.ws.onopen = () => {
       this.ws?.send(JSON.stringify({ type: 'register', peerId: this.peerId, userId: this.userId }));
       this.refreshConnectionState();
+      // After reconnecting, replay Gun history for every known room so messages
+      // sent while Y was offline are decrypted and surfaced. Gun's .map().on()
+      // fires for existing nodes when a subscription starts, but only after the
+      // graph has synced from peers — a short delay lets that happen first.
+      setTimeout(() => this.replayOfflineMessages(), 3_000);
     };
 
     this.ws.onmessage = async (event) => {
