@@ -825,13 +825,28 @@ export class PostService {
     return { post: PostService.applyTally(post, tally), myVote };
   }
 
+  /**
+   * Refresh the post's comment-count hint from the comment index rather than
+   * bumping a shared counter.
+   *
+   * The old version read `commentCount` off the post and wrote back `+1` — two
+   * comments landing in the same round trip both read N and both wrote N+1, so
+   * one comment's contribution to the count silently vanished. There is no
+   * local number to increment safely here; `getCommentCount()` derives the true
+   * total by counting the comment index (deduped against the local mirror), the
+   * same "count the leaves, don't add to a scalar" fix already applied to post
+   * and comment votes. This write is still just a hint for readers who have not
+   * loaded the comment list — `commentStore`/`postStore` prefer the derived
+   * count once they have it.
+   */
   static async incrementCommentCount(postId: string, communityId?: string): Promise<void> {
     const gun = GunService.getGun();
-    // Read the live Gun value directly rather than via getPost(), whose REST/memory
-    // cache snapshot never reflects comment-count changes and would shadow this update.
     const current = await onceWithTimeout(gun.get('posts').get(postId));
     if (!current) return;
-    const commentCount = (current.commentCount || 0) + 1;
+
+    const { getCommentCount } = await import('./commentService');
+    const commentCount = await getCommentCount(postId);
+
     await PostService.updatePost(postId, { commentCount, communityId: communityId || current.communityId });
     const cached = postMemoryCache.get(postId);
     if (cached) {

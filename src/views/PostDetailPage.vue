@@ -615,6 +615,22 @@ async function loadPost() {
   }
 }
 
+// Comment count on the post card/header is a derived read (dedup'd ids from
+// the comment index + local mirror), the same "count the leaves" fix already
+// used for votes — never a bumped scalar. commentStore already loads and
+// dedupes the thread for this exact post, so this is a free byproduct of that
+// load rather than an extra round trip. Once set, `withKnownTally` in
+// postStore makes this outrank any stale `commentCount` echoed from Gun.
+watch(
+  () => commentStore.comments.length,
+  () => {
+    if (!post.value) return;
+    if (commentStore.activePostId !== post.value.id) return;
+    const count = commentStore.comments.filter((c) => c.postId === post.value!.id).length;
+    postStore.setCommentCount(post.value.id, count);
+  },
+);
+
 async function refreshPost() {
   await loadPost();
   (await toastController.create({ message: 'Post refreshed', duration: 1500 })).present();

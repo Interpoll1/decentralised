@@ -6,6 +6,7 @@ import { KeyService } from './keyService';
 import { CryptoService } from './cryptoService';
 import { StorageService } from './storageService';
 import { parseIdentityTrust } from '@/utils/identityTrust';
+import { gunPut, gunReadChildren } from '../utils/gunAsync';
 import type { TrustLevel } from './trustService';
 
 const PROFILE_META_KEY = 'user-profile-v2';
@@ -42,6 +43,23 @@ export interface UserStats {
   totalDownvotes: number;
   karma: number;
   joinedCommunities: number;
+}
+
+/**
+ * Sum per-voter karma-event leaves into an author's karma total. Pure — the
+ * whole counting rule lives here, same shape as `PostVoteService.foldVotes`.
+ * Each `(voterId, sourceId)` pair has its own leaf, so two people voting on
+ * the same author at the same moment write to different keys and cannot
+ * clobber each other — summing the leaves (instead of adding to a shared
+ * `karma` scalar) cannot lose a vote's contribution.
+ */
+export function foldKarmaEvents(entries: Iterable<{ value: unknown }>): number {
+  let total = 0;
+  for (const { value } of Array.from(entries)) {
+    const v = value && typeof value === 'object' ? Number((value as any).value) : NaN;
+    if (v === 1 || v === -1) total += v;
+  }
+  return total;
 }
 
 // ── Signing helpers ───────────────────────────────────────────────────────────
@@ -208,28 +226,46 @@ export class UserService {
    * Update own profile fields.
    * Signs the updated profile before writing to Gun so peers can verify ownership.
    */
+  /**
+   * Serializes `updateProfile` calls so two near-simultaneous updates (e.g. two
+   * tabs posting at once) queue instead of both reading the same base and
+   * clobbering each other's field. This is the same read-modify-write race as
+   * the other counters, just within one device instead of across devices —
+   * `postCount`/`commentCount` are the fields it actually matters for, since
+   * every other field here is a full replacement, not an increment.
+   */
+  private static profileWriteQueue: Promise<unknown> = Promise.resolve();
+
   static async updateProfile(updates: Partial<UserProfile>): Promise<UserProfile> {
-    const base = this.currentUser || await this.getCurrentUser();
-    const merged: UserProfile = {
-      ...base,
-      ...updates,
-      ...this.deriveIdentityFields({ ...base, ...updates }),
+    const run = async (): Promise<UserProfile> => {
+      const base = this.currentUser || await this.getCurrentUser();
+      const merged: UserProfile = {
+        ...base,
+        ...updates,
+        ...this.deriveIdentityFields({ ...base, ...updates }),
+      };
+
+      const signed = await signProfile(merged);
+
+      // 1. Update in-memory cache immediately
+      this.currentUser = signed;
+
+      // 2. Persist to IndexedDB (source of truth)
+      await StorageService.setMetadata(PROFILE_META_KEY, signed);
+
+      // 3. Write to Gun async — keyed by publicKey, signed so peers can verify
+      const gun = GunService.getGun();
+      gun.get('users').get(signed.publicKey).put(signed);
+      this.writePubkeyIndex(signed.publicKey);
+
+      return signed;
     };
 
-    const signed = await signProfile(merged);
-
-    // 1. Update in-memory cache immediately
-    this.currentUser = signed;
-
-    // 2. Persist to IndexedDB (source of truth)
-    await StorageService.setMetadata(PROFILE_META_KEY, signed);
-
-    // 3. Write to Gun async — keyed by publicKey, signed so peers can verify
-    const gun = GunService.getGun();
-    gun.get('users').get(signed.publicKey).put(signed);
-    this.writePubkeyIndex(signed.publicKey);
-
-    return signed;
+    const result = this.profileWriteQueue.then(run, run);
+    // Keep the queue alive even if this update fails, but never let one
+    // rejection wedge every update after it.
+    this.profileWriteQueue = result.catch(() => {});
+    return result;
   }
 
   // ── Other users ─────────────────────────────────────────────────────────────
@@ -262,7 +298,13 @@ export class UserService {
       return null;
     }
 
-    return profile as UserProfile;
+    // Karma is derived from per-voter event leaves, not trusted from the
+    // signed scalar on the profile — see setKarmaEvent/getKarma. This overlay
+    // does not touch the signature: it corrects what's displayed, the same way
+    // withKnownTally overlays a post's vote counts without re-signing anything.
+    const karma = await this.getKarma(userId).catch(() => null);
+
+    return { ...(profile as UserProfile), ...(karma !== null ? { karma } : {}) };
   }
 
   /**
@@ -334,18 +376,68 @@ export class UserService {
     await this.updateProfile({ commentCount: (user.commentCount || 0) + 1 });
   }
 
-  static async incrementKarma(authorId: string, points = 1) {
-    const gun = GunService.getGun();
-    const user = await this.getUser(authorId);
-    if (user) {
-      // Only the author can update their own karma (signing enforced on relay)
-      if (this.currentUser && this.currentUser.publicKey === authorId) {
-        await this.updateProfile({ karma: (this.currentUser.karma || 0) + points });
-      } else {
-        // For other users, write unsigned karma increment (relay enforces PoW rate limit)
-        gun.get('users').get(authorId).get('karma').put((user.karma || 0) + points);
-      }
+  private static karmaEventsNode(authorId: string) {
+    return GunService.getGun().get('karmaEvents').get(authorId);
+  }
+
+  /**
+   * Record this voter's karma contribution to one source (a specific post or
+   * comment), or clear it. Each `(voterId, sourceId)` pair gets its own leaf,
+   * so two people voting on the same author around the same moment write to
+   * different keys and cannot clobber each other. A vote flip or clear simply
+   * overwrites this voter's own leaf with the new value — idempotent, and safe
+   * to retry. This mirrors the per-user vote/membership nodes used for post,
+   * comment and poll counts.
+   *
+   * The old version read `user.karma`, added `points`, and wrote the sum back
+   * as a single scalar. Two people voting on the same author within one round
+   * trip both read the same N and both wrote N+1 (or, worse, the "other user"
+   * write path had no ack or retry at all), so votes on someone else's karma
+   * were routinely lost.
+   */
+  static async setKarmaEvent(authorId: string, voterId: string, sourceId: string, value: -1 | 0 | 1): Promise<void> {
+    if (!authorId || !voterId || !sourceId) return;
+    const key = `${voterId}_${sourceId}`;
+    const ack = await gunPut(this.karmaEventsNode(authorId).get(key), { voterId, sourceId, value, at: Date.now() });
+    if (!ack.ok && ack.err !== 'timeout') {
+      console.warn('[UserService] karma event write failed:', ack.err);
     }
+    // Advisory mirror for readers that render a profile before its karma
+    // events load. Never authoritative — getKarma()/getUser() below always
+    // prefer the derived sum. Only the profile owner can sign their own node,
+    // so this stays unsigned and best-effort for everyone else's profile.
+    void this.refreshKarmaHint(authorId).catch(() => {});
+  }
+
+  /** Sum of this author's karma-event leaves — the authoritative karma total. */
+  static async getKarma(authorId: string): Promise<number> {
+    if (!authorId) return 0;
+    const events = await gunReadChildren<any>(this.karmaEventsNode(authorId), { minMs: 300, maxMs: 3_000 });
+    return foldKarmaEvents(events);
+  }
+
+  /** Mirror the derived karma total onto the profile as a hint (unsigned, best-effort). */
+  private static async refreshKarmaHint(authorId: string): Promise<void> {
+    const karma = await this.getKarma(authorId);
+    if (this.currentUser?.publicKey === authorId) {
+      // Own profile: go through updateProfile so the signature stays valid.
+      await this.updateProfile({ karma });
+      return;
+    }
+    void gunPut(GunService.getGun().get('users').get(authorId).get('karma'), karma).catch(() => {});
+  }
+
+  /**
+   * Set this voter's karma contribution toward `authorId` for one source
+   * (a post or comment id), replacing any previous contribution from the same
+   * voter+source pair. `points` is the new net value for that pair (-1, 0, or
+   * 1) — callers already compute the delta between the old and new vote state
+   * themselves (see `karmaFor` in postStore/commentStore); this just needs the
+   * resulting sign.
+   */
+  static async incrementKarma(authorId: string, voterId: string, sourceId: string, points: -1 | 0 | 1): Promise<void> {
+    if (!authorId || authorId === voterId) return; // no self-karma
+    await this.setKarmaEvent(authorId, voterId, sourceId, points);
   }
 
   static async getUserStats(userId: string): Promise<UserStats> {

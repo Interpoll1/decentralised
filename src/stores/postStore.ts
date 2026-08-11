@@ -769,8 +769,9 @@ export const usePostStore = defineStore('post', () => {
       const currentUser = await UserService.getCurrentUser();
       const { post, myVote: resolved } = await PostService.voteOnPost(postId, direction, currentUser.id);
       reconcileVote(postId, post, resolved);
-      const karmaDelta = karmaFor(resolved) - karmaFor(previousVote);
-      if (karmaDelta !== 0) void UserService.incrementKarma(post.authorId, karmaDelta).catch(() => {});
+      // This voter's karma contribution to this post is set outright (not
+      // added to a running total) — see UserService.incrementKarma.
+      void UserService.incrementKarma(post.authorId, currentUser.id, postId, karmaFor(resolved)).catch(() => {});
     } catch (error) {
       rollbackVote(postId, snapshot, previousVote);
       console.error('Error voting:', error); throw error;
@@ -787,8 +788,7 @@ export const usePostStore = defineStore('post', () => {
       const currentUser = await UserService.getCurrentUser();
       const { post, myVote: resolved } = await PostService.removeVote(postId, previousVote, currentUser.id);
       reconcileVote(postId, post, resolved);
-      const karmaDelta = karmaFor(resolved) - karmaFor(previousVote);
-      if (karmaDelta !== 0) void UserService.incrementKarma(post.authorId, karmaDelta).catch(() => {});
+      void UserService.incrementKarma(post.authorId, currentUser.id, postId, karmaFor(resolved)).catch(() => {});
     } catch (error) {
       rollbackVote(postId, snapshot, previousVote);
       console.error('Error clearing vote:', error); throw error;
@@ -796,7 +796,7 @@ export const usePostStore = defineStore('post', () => {
   }
 
   /** Karma contribution of a vote state, so a flip is one net adjustment rather than two. */
-  function karmaFor(vote: 'up' | 'down' | null): number {
+  function karmaFor(vote: 'up' | 'down' | null): -1 | 0 | 1 {
     return vote === 'up' ? 1 : vote === 'down' ? -1 : 0;
   }
 

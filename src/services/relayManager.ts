@@ -645,6 +645,69 @@ export class RelayManager {
     })();
   }
 
+  /**
+   * Last-resort recovery: reconnect to the build-time defaults, bypassing
+   * whatever's in `relays`/`activeRelayId`/overrides entirely.
+   *
+   * The gap this closes: `initialize()` only ever seeds a `'default'` relay
+   * entry once, from whatever `config.relay.*` resolved to *at that moment* —
+   * which already includes any `setRelayOverrides()` override live at the
+   * time. If that snapshot later goes bad (the override it was built from
+   * pointed at a relay that's now dead) and it's the only entry in the list,
+   * `orchestrateConnectionSwitch` has nothing to fail over to: the loop's
+   * `candidate.id === this.config.activeRelayId` skip excludes the very entry
+   * that needs replacing, so it exhausts immediately and warns with no
+   * candidates tried. Overrides were never the problem to route around; they
+   * were themselves the dead endpoint. Only called after every real candidate
+   * has already failed, so it's rare and does not fight `switchToRelay`ing to
+   * a working discovered/public relay when one exists.
+   */
+  private static async recoverToDefaults(reason: string): Promise<boolean> {
+    const defaultsCandidate: RelayEndpoint = {
+      id: 'default',
+      label: 'InterPoll (default)',
+      ws: config.defaults.websocket,
+      gun: config.defaults.gun,
+      api: config.defaults.api,
+      priority: -1,
+      isTor: false,
+      source: 'configured',
+      trusted: true,
+      addedAt: Date.now(),
+      status: 'unknown',
+    };
+
+    const active = this.getActiveRelay();
+    const alreadyOnDefaults = active?.ws === defaultsCandidate.ws
+      && active?.gun === defaultsCandidate.gun
+      && active?.api === defaultsCandidate.api;
+    if (alreadyOnDefaults) return false;
+
+    const probed = await this.probeRelay(defaultsCandidate);
+    if (probed.status === 'offline') return false;
+
+    config.resetRelayOverrides();
+
+    const existing = this.config.relays.find((r) => r.id === 'default');
+    if (existing) {
+      existing.ws = defaultsCandidate.ws;
+      existing.gun = defaultsCandidate.gun;
+      existing.api = defaultsCandidate.api;
+      existing.status = probed.status;
+    } else {
+      this.config.relays.push(defaultsCandidate);
+    }
+
+    try {
+      await this.switchToRelay('default');
+      console.warn(`[RelayManager] Recovered to build-time defaults (${reason})`);
+      return true;
+    } catch (e) {
+      console.warn(`[RelayManager] Recovery to defaults failed (${reason})`, e);
+      return false;
+    }
+  }
+
   private static async orchestrateConnectionSwitch(reason: string): Promise<void> {
     if (this.switching) return;
 
@@ -666,6 +729,8 @@ export class RelayManager {
         console.warn(`[RelayManager] Switch attempt failed (${reason}) for ${candidate.id}`, e);
       }
     }
+
+    if (await this.recoverToDefaults(reason)) return;
 
     console.warn(`[RelayManager] No candidate passed strategy checks for ${reason}`);
   }

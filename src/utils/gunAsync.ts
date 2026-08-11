@@ -25,6 +25,29 @@ export interface GunChild<T> {
   value: T;
 }
 
+/**
+ * Count distinct member/voter ids from a set of per-user leaf entries
+ * (`.../{userId}` nodes, typically `{ userId, ... }`). Pure — the whole
+ * counting rule for any "membership as leaves" collection lives here
+ * (community members, chat room members, and similarly-shaped sets).
+ *
+ * Each member has their own leaf key, so two people joining/voting at the
+ * same moment write to different keys and cannot clobber each other —
+ * counting the leaves (instead of incrementing a shared scalar counter, which
+ * loses updates under Gun's last-write-wins semantics whenever two writers
+ * land in the same round trip) cannot lose an entry.
+ */
+export function foldMemberLeaves(entries: Iterable<{ key: string; value: unknown }>, fallback = 1): number {
+  const ids = new Set<string>();
+  for (const { key, value } of Array.from(entries)) {
+    const id = value && typeof value === 'object' && typeof (value as any).userId === 'string'
+      ? (value as any).userId
+      : key;
+    if (id && id !== '_') ids.add(id);
+  }
+  return ids.size > 0 ? ids.size : fallback;
+}
+
 const DEFAULT_PUT_TIMEOUT_MS = 8_000;
 const DEFAULT_READ_TIMEOUT_MS = 5_000;
 

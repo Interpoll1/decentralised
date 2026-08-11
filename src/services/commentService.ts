@@ -733,14 +733,23 @@ export function subscribeToCommentsInPost(
   };
 }
 
+/**
+ * Dedupe comment ids from the relay index and the local mirror into a single
+ * count. Pure — split out so the "union both sources, count once" rule is
+ * testable without the network/IndexedDB calls that gather the inputs.
+ */
+export function foldCommentIds(indexIds: Iterable<string>, localIds: Iterable<string>): number {
+  const all = new Set<string>(Array.from(indexIds));
+  for (const id of Array.from(localIds)) all.add(id);
+  return all.size;
+}
+
 export async function getCommentCount(postId: string): Promise<number> {
   const [ids, local] = await Promise.all([
     readCommentIndex(postId),
     StorageService.getCommentsByPost(postId),
   ]);
-  const all = new Set(ids);
-  for (const row of local) all.add(row.id);
-  return all.size;
+  return foldCommentIds(ids, local.map((row) => row.id));
 }
 
 // ── Votes ─────────────────────────────────────────────────────────────────────

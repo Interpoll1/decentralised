@@ -30,7 +30,7 @@ import { KeyVaultService } from './keyVaultService';
 import { InviteLinkService } from './inviteLinkService';
 import { StorageService } from './storageService';
 import { BoundedMap } from '../utils/boundedMap';
-import { gunPut, gunOnce, gunReadChildren, verifySoulOnRelay, toGunRecord } from '../utils/gunAsync';
+import { gunPut, gunOnce, gunReadChildren, foldMemberLeaves, verifySoulOnRelay, toGunRecord } from '../utils/gunAsync';
 import { compareMessages } from '../utils/messageOrder';
 import type { StoredChatMessage, SyncStatus } from '../types/social';
 import type {
@@ -285,12 +285,7 @@ export class ChatRoomService {
   /** Members counted from the membership set, falling back to the stored hint. */
   static async getMemberCount(roomId: string, fallback = 1): Promise<number> {
     const members = await gunReadChildren<any>(this.membersNode(roomId), { minMs: 300, maxMs: 2_500 });
-    const ids = new Set<string>();
-    for (const { key, value } of members) {
-      const id = value && typeof value === 'object' && typeof value.userId === 'string' ? value.userId : key;
-      if (id && id !== '_') ids.add(id);
-    }
-    return ids.size > 0 ? ids.size : fallback;
+    return foldMemberLeaves(members, fallback);
   }
 
   private static async resolveUserId(): Promise<string | null> {

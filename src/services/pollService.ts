@@ -6,10 +6,43 @@ import config from '../config';
 import { AuditService } from './auditService';
 import type { Poll, PollOption, VoteTrustPolicy } from '../types/poll';
 import { BoundedMap } from '../utils/boundedMap';
+import { gunReadChildren } from '../utils/gunAsync';
 
 // Re-exported for backward compatibility — `src/types/poll.ts` is now the
 // single source of truth for these types; import from there in new code.
 export type { Poll, PollOption };
+
+export type PollContentVoteValue = 'up' | 'down' | 'none';
+export interface PollContentTally { upvotes: number; downvotes: number; score: number }
+
+/**
+ * Fold a set of per-user poll content votes into a tally. Pure — the whole
+ * counting rule for poll upvote/downvote lives here, same shape as
+ * `PostVoteService.foldVotes`. Distinct per-user keys mean two concurrent
+ * voters can never contend on the same write, so counting rather than
+ * incrementing a shared scalar cannot lose a vote.
+ */
+export function foldPollContentVotes(votes: Map<string, PollContentVoteValue> | Iterable<PollContentVoteValue>): PollContentTally {
+  const values = votes instanceof Map ? Array.from(votes.values()) : Array.from(votes);
+  let upvotes = 0;
+  let downvotes = 0;
+  for (const type of values) {
+    if (type === 'up') upvotes += 1;
+    else if (type === 'down') downvotes += 1;
+  }
+  return { upvotes, downvotes, score: upvotes - downvotes };
+}
+
+/**
+ * `votes` derived from the parsed voter-leaf set when one is present, falling
+ * back to the raw scalar only for options where no voter data came back (e.g.
+ * a truncated/partial read). Pure — used by `PollService.parsePollOptions`
+ * and `PollService.readOptionsViaMap`.
+ */
+export function resolvePollOptionVotes(rawVotes: unknown, voters: string[]): number {
+  if (voters.length > 0) return voters.length;
+  return Number(rawVotes) || 0;
+}
 
 function getApiBase(): string {
   return config.relay.api;
@@ -86,6 +119,7 @@ export class PollService {
   private static get gun() { return GunService.getGun(); }
   private static localPollBackupWriteQueue: Promise<void> = Promise.resolve();
   private static getPollPath(pollId: string) { return this.gun.get('polls').get(pollId); }
+  private static pollContentVotesNode(pollId: string) { return this.gun.get('pollContentVotes').get(pollId); }
 
   /**
    * Ask the relay's DB mirror whether a poll actually reached it. Gun put acks
@@ -586,11 +620,12 @@ export class PollService {
       if (key === '_') return;
       const opt = optionsData[key];
       if (opt && opt.id) {
+        const voters = this.parseVoters(opt.voters);
         options.push({
           id: opt.id,
           text: opt.text || '',
-          votes: opt.votes || 0,
-          voters: this.parseVoters(opt.voters),
+          votes: resolvePollOptionVotes(opt.votes, voters),
+          voters,
         });
       }
     });
@@ -1403,11 +1438,12 @@ export class PollService {
       };
       subscription = optionsNode.map().once((child: any, key: string) => {
         if (settled || !child || key === '_' || !child.id) return;
+        const voters = this.parseVoters(child.voters);
         collected.set(String(key), {
           id: child.id,
           text: child.text || '',
-          votes: child.votes || 0,
-          voters: this.parseVoters(child.voters),
+          votes: resolvePollOptionVotes(child.votes, voters),
+          voters,
         });
       });
       setTimeout(finish, timeoutMs);
@@ -1488,9 +1524,15 @@ export class PollService {
     //
     // Because each voter gets their own leaf, concurrent votes no longer
     // clobber each other — Gun's last-write-wins applies per-leaf, not per-option.
-    // The totalVotes counter is still a shared counter (one writer at a time),
-    // but it's only bumped AFTER the voter leaf is confirmed, so a lost update
-    // at most under-counts by the number of concurrent votes — not erases them.
+    //
+    // `votes` and `totalVotes` are still written as scalars for cheap reads, but
+    // they are no longer computed as `option.votes + 1` (a read-modify-write on
+    // a shared counter — two concurrent voters both reading N and both writing
+    // N+1 silently lost one of the votes). `option.voters` here is already the
+    // *parsed* voter-leaf set for this option (see `parseVoters`), so
+    // `voters.length + 1` — this vote plus everyone already counted from the
+    // leaves — is a derived count, immune to the same race. `totalVotes` below
+    // sums those derived per-option counts, so it inherits the same guarantee.
 
     const voteWriteOptions = { timeoutMs: 12000, resolveOnTimeout: true } as const;
 
@@ -1517,7 +1559,9 @@ export class PollService {
       if (!confirmedOptionIds.includes(option.id)) return option;
 
       const optKey = optionIndexById.get(option.id);
-      const newVotes = (option.votes || 0) + 1;
+      // Derived from the parsed voter-leaf set, not the shared `votes` scalar —
+      // see the note above the leaf-write block.
+      const newVotes = (option.voters?.length || 0) + 1;
 
       if (optKey !== undefined) {
         // Write voter presence leaf — race-safe: multiple writers all set their own key
@@ -1627,7 +1671,14 @@ export class PollService {
 
   /**
    * Content-level upvote/downvote on the poll itself (independent of option voting).
-   * Mirrors PostService.voteOnPost's toggle semantics.
+   *
+   * Same fix as `PostVoteService`: a vote is a node keyed by user id under
+   * `pollContentVotes/{pollId}/{userId}`, and the tally is *derived* by
+   * counting rather than a `upvotes - 1` / `downvotes + 1` read-modify-write on
+   * the poll node. The old version read the poll's `upvotes`/`downvotes`
+   * scalars, adjusted them locally, and wrote the sum back — two people voting
+   * on the same poll within one round trip both read the same N and both wrote
+   * N+1, silently losing one of the votes.
    */
   static async voteOnPollContent(
     pollId: string,
@@ -1639,38 +1690,45 @@ export class PollService {
       ?? (communityId ? await this.loadPollFromCommunityPath(communityId, pollId, false, false) : null);
     if (!poll) throw new Error('Poll not found');
 
-    const gun = this.gun;
-    const voteKey = `vote_${userId}_poll_${pollId}`;
-    const existingVote = await this.onceNode<any>(gun.get('votes').get(voteKey), 2000);
-    let upvotes = poll.upvotes || 0;
-    let downvotes = poll.downvotes || 0;
+    const votesNode = this.pollContentVotesNode(pollId);
+    const existingVote = await this.onceNode<any>(votesNode.get(userId), 2000);
+    const existingType = existingVote?.type === 'up' || existingVote?.type === 'down' ? existingVote.type : null;
+    const next: 'up' | 'down' | 'none' = existingType === direction ? 'none' : direction;
 
-    if (existingVote?.type === 'up') {
-      upvotes = Math.max(0, upvotes - 1);
-    } else if (existingVote?.type === 'down') {
-      downvotes = Math.max(0, downvotes - 1);
-    }
+    await this.putPromise(votesNode.get(userId), {
+      type: next,
+      userId,
+      pollId,
+      at: Date.now(),
+    }, { label: 'poll content vote leaf' });
 
-    const togglingOffSameVote = existingVote?.type === direction;
-    if (togglingOffSameVote) {
-      await this.putPromise(gun.get('votes').get(voteKey), null, { label: 'poll content vote clear' });
-    } else {
-      if (direction === 'up') upvotes += 1; else downvotes += 1;
-      await this.putPromise(gun.get('votes').get(voteKey), {
-        userId,
-        pollId,
-        type: direction,
-        timestamp: Date.now(),
-      }, { label: 'poll content vote write' });
-    }
+    const patch = await this.derivePollContentTally(pollId, userId, next);
 
-    const score = upvotes - downvotes;
-    const patch = { upvotes, downvotes, score };
     await this.putPromise(this.getPollPath(pollId), patch, { label: 'poll content vote patch (root)' });
     if (poll.communityId) {
       await this.putPromise(this.getCommunityPollPath(poll.communityId, pollId), patch, { label: 'poll content vote patch (community)' });
     }
     return patch;
+  }
+
+  /**
+   * Count the per-user poll content vote leaves into a tally. `overrideUserId`
+   * / `overrideVote` let the caller count its own just-written vote before it
+   * has necessarily echoed back from the relay.
+   */
+  private static async derivePollContentTally(
+    pollId: string,
+    overrideUserId?: string,
+    overrideVote?: 'up' | 'down' | 'none',
+  ): Promise<{ upvotes: number; downvotes: number; score: number }> {
+    const children = await gunReadChildren<any>(this.pollContentVotesNode(pollId), { minMs: 300, maxMs: 4_000 });
+    const votes = new Map<string, PollContentVoteValue>();
+    for (const { key, value } of children) {
+      const type = value?.type;
+      if (type === 'up' || type === 'down' || type === 'none') votes.set(key, type);
+    }
+    if (overrideUserId && overrideVote) votes.set(overrideUserId, overrideVote);
+    return foldPollContentVotes(votes);
   }
 
   static async getInviteCodes(pollId: string): Promise<{ code: string; used: boolean }[]> {

@@ -277,11 +277,10 @@ export const useCommentStore = defineStore('comment', () => {
 
       const author = before?.authorId;
       if (author && author !== profile.id) {
-        const karmaDelta = (next === 'up' ? 1 : next === 'down' ? -1 : 0)
-          - (previous === 'up' ? 1 : previous === 'down' ? -1 : 0);
-        if (karmaDelta !== 0) {
-          UserService.incrementKarma(author, karmaDelta).catch(() => { /* karma is advisory */ });
-        }
+        // This voter's karma contribution to this comment is set outright
+        // (not added to a running total) — see UserService.incrementKarma.
+        UserService.incrementKarma(author, profile.id, commentId, next === 'up' ? 1 : next === 'down' ? -1 : 0)
+          .catch(() => { /* karma is advisory */ });
       }
     } catch (err) {
       // Roll back — a vote that never reached the graph must not linger in the UI.

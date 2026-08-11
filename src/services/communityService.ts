@@ -6,6 +6,7 @@ import { KeyService } from './keyService';
 import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
 import { InviteLinkService } from './inviteLinkService';
+import { gunPut, gunReadChildren, foldMemberLeaves } from '../utils/gunAsync';
 import type { DecryptedCommunityMeta, StoredEncryptionKey } from '../types/encryption';
 
 export interface Community {
@@ -32,6 +33,7 @@ export interface Community {
 export class CommunityService {
   private static get gun() { return GunService.getGun(); }
   private static getCommunityNode(id: string) { return this.gun.get('communities').get(id); }
+  private static membersNode(id: string) { return this.getCommunityNode(id).get('members'); }
   // Bounded: one entry per community ever visited, previously never released.
   // Subscriptions and in-flight promises below are deliberately NOT bounded —
   // evicting those would leak the underlying listener rather than free anything.
@@ -105,6 +107,10 @@ export class CommunityService {
       const rulesObj = Object.fromEntries(community.rules.map((rule, i) => [i, rule]));
       await this.put(this.getCommunityNode(id).get('rules'), rulesObj);
     }
+
+    // Seed the creator's own membership node so getMemberCount() is accurate
+    // from creation, not just for later joiners.
+    void gunPut(this.membersNode(id).get(data.creatorId), { userId: data.creatorId, joinedAt: community.createdAt }).catch(() => {});
 
     return community;
   }
@@ -189,6 +195,10 @@ export class CommunityService {
       label: data.displayName,
       joinedAt: Date.now(),
     });
+
+    // Seed the creator's own membership node so getMemberCount() is accurate
+    // from creation, not just for later joiners.
+    void gunPut(this.membersNode(id).get(data.creatorId), { userId: data.creatorId, joinedAt: createdAt }).catch(() => {});
 
     let inviteLink = '';
     if (method === 'invite') {
@@ -286,7 +296,7 @@ export class CommunityService {
       throw new Error('Invalid key or password — could not decrypt community');
     }
 
-    // Only store key and increment count if not already a member
+    // Only store key and record membership if not already a member
     const existingKey = await KeyVaultService.getKey(communityId);
     const keyBase64 = await EncryptionService.exportKey(aesKey);
     await KeyVaultService.storeKey({
@@ -299,10 +309,15 @@ export class CommunityService {
     });
 
     if (!existingKey) {
-      await this.put(
-        this.getCommunityNode(communityId).get('memberCount'),
-        community.memberCount + 1
-      );
+      // Same derived-membership fix as the public join path: a per-user node
+      // rather than a `memberCount + 1` read-modify-write, so simultaneous
+      // joiners cannot clobber each other's increment.
+      const userId = await this.resolveUserId();
+      if (userId) {
+        await gunPut(this.membersNode(communityId).get(userId), { userId, joinedAt: Date.now() });
+      }
+      const memberCount = await this.getMemberCount(communityId, community.memberCount || 1);
+      void gunPut(this.getCommunityNode(communityId).get('memberCount'), memberCount).catch(() => {});
     }
 
     return {
@@ -367,6 +382,16 @@ export class CommunityService {
     return this.mapToCommunity(data, rules);
   }
 
+  /**
+   * Join a public community.
+   *
+   * Membership is a node keyed by user (`communities/{id}/members/{userId}`),
+   * not a counter. Two people joining at the same moment used to both read the
+   * same `memberCount` and both write back the same N+1, silently losing one of
+   * the joins — the same class of bug already fixed for chat rooms and post
+   * votes. The `memberCount` field is still written afterward, but only as a
+   * hint for readers who have not loaded the membership set.
+   */
   static async joinCommunity(communityId: string, localFallback?: { memberCount: number }): Promise<void> {
     let community = await this.getCommunity(communityId);
     if (!community && localFallback) {
@@ -374,10 +399,14 @@ export class CommunityService {
       return;
     }
     if (!community) throw new Error('Community not found');
-    await this.put(
-      this.getCommunityNode(communityId).get('memberCount'),
-      community.memberCount + 1
-    );
+
+    const userId = await this.resolveUserId();
+    if (userId) {
+      await gunPut(this.membersNode(communityId).get(userId), { userId, joinedAt: Date.now() });
+    }
+
+    const memberCount = await this.getMemberCount(communityId, community.memberCount || 1);
+    void gunPut(this.getCommunityNode(communityId).get('memberCount'), memberCount).catch(() => {});
   }
 
   /** @deprecated use subscribeToCommunitiesLive */
@@ -396,6 +425,32 @@ export class CommunityService {
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
+
+  /**
+   * Members counted from the membership set, falling back to the stored hint.
+   *
+   * Same pattern as `ChatRoomService.getMemberCount`: membership is a node per
+   * user (`communities/{id}/members/{userId}`), so concurrent joiners never
+   * contend on a single leaf, and the total is derived by counting rather than
+   * a `memberCount + 1` read-modify-write, which under Gun's last-write-wins
+   * semantics silently lost joins that landed in the same round trip.
+   */
+  static async getMemberCount(communityId: string, fallback = 1): Promise<number> {
+    const members = await gunReadChildren<any>(this.membersNode(communityId), { minMs: 300, maxMs: 2_500 });
+    return foldMemberLeaves(members, fallback);
+  }
+
+  private static async resolveUserId(): Promise<string | null> {
+    try {
+      // Imported lazily: userService pulls in a good part of the app, and a
+      // community read must not depend on it being loaded.
+      const { UserService } = await import('./userService');
+      const user = await UserService.getCurrentUser();
+      return user?.id ?? null;
+    } catch {
+      return null;
+    }
+  }
 
   private static put(node: any, value: any): Promise<void> {
     return new Promise((res, rej) =>
