@@ -110,12 +110,21 @@ export class PostVoteService {
    * Read the post's frozen baseline, freezing it from the legacy counters on
    * first touch. `voteBaselineAt` is the guard: once present the baseline is
    * never rewritten, so later mirror-writes of `upvotes` cannot disturb it.
+   *
+   * Must stamp `voteBaselineAt` on the *first* vote unconditionally — including
+   * when the post does not exist in the graph yet, freezing a `{0, 0}`
+   * baseline. The old code returned an *unwritten* `{0, 0}` early for a
+   * brand-new post without ever setting the guard. `writeVote` then left an
+   * advisory `upvotes: 1` hint sitting on the post node afterward with no
+   * `voteBaselineAt` to mark it as a hint rather than legacy data — so the
+   * very next vote (from anyone) froze that hint as if it were a pre-existing
+   * count, baking in a phantom vote nobody cast. Writing the guard here,
+   * before any hint can land, closes that window.
    */
   private static async ensureBaseline(postId: string): Promise<{ up: number; down: number }> {
     const post: any = await gunOnce(postNode(postId), READ_TIMEOUT_MS);
-    if (!post) return { up: 0, down: 0 };
 
-    if (post.voteBaselineAt) {
+    if (post?.voteBaselineAt) {
       return {
         up: Number(post.voteBaselineUp) || 0,
         down: Number(post.voteBaselineDown) || 0,
@@ -123,8 +132,8 @@ export class PostVoteService {
     }
 
     const baseline = {
-      up: Number(post.upvotes) || 0,
-      down: Number(post.downvotes) || 0,
+      up: Number(post?.upvotes) || 0,
+      down: Number(post?.downvotes) || 0,
     };
     await gunPut(postNode(postId), {
       voteBaselineUp: baseline.up,
