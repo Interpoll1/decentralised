@@ -776,37 +776,31 @@ function hasDownvoted(postId: string): boolean {
   return postStore.myVote(postId) === 'down';
 }
 
+// Poll content-vote state also lives in the store now, reconciled against the
+// graph exactly like posts. The old code here kept its own separate
+// 'upvoted-polls'/'downvoted-polls' localStorage sets (distinct from the
+// store's own persisted vote map) and, when flipping a vote, called
+// pollStore.voteOnPollContent() twice in a row — once to clear the old
+// direction, once to cast the new one. Each call independently reads "my
+// current vote" from the graph and toggles it, so two calls in a row on a
+// toggle API race each other and can leave the vote in the wrong state, or
+// cancel out entirely. A single togglePollContentVote() call decides the
+// whole transition (clear/cast/flip) atomically against one graph read.
 function hasUpvotedPoll(pollId: string): boolean {
   voteVersion.value;
-  const votedPolls = JSON.parse(localStorage.getItem('upvoted-polls') || '[]');
-  return votedPolls.includes(pollId);
+  return pollStore.myPollContentVote(pollId) === 'up';
 }
 
 function hasDownvotedPoll(pollId: string): boolean {
   voteVersion.value;
-  const votedPolls = JSON.parse(localStorage.getItem('downvoted-polls') || '[]');
-  return votedPolls.includes(pollId);
+  return pollStore.myPollContentVote(pollId) === 'down';
 }
 
 async function handleUpvotePoll(poll: Poll) {
+  voteVersion.value++;
   try {
-    if (hasUpvotedPoll(poll.id)) {
-      const votedPolls = JSON.parse(localStorage.getItem('upvoted-polls') || '[]');
-      localStorage.setItem('upvoted-polls', JSON.stringify(votedPolls.filter((id: string) => id !== poll.id)));
-      voteVersion.value++;
-      await pollStore.voteOnPollContent(poll.id, 'up');
-    } else {
-      const downvotedPolls = JSON.parse(localStorage.getItem('downvoted-polls') || '[]');
-      if (downvotedPolls.includes(poll.id)) {
-        localStorage.setItem('downvoted-polls', JSON.stringify(downvotedPolls.filter((id: string) => id !== poll.id)));
-        await pollStore.voteOnPollContent(poll.id, 'down');
-      }
-      const votedPolls = JSON.parse(localStorage.getItem('upvoted-polls') || '[]');
-      votedPolls.push(poll.id);
-      localStorage.setItem('upvoted-polls', JSON.stringify(votedPolls));
-      voteVersion.value++;
-      await pollStore.upvotePoll(poll.id);
-    }
+    await pollStore.togglePollContentVote(poll.id, 'up');
+    voteVersion.value++;
   } catch (error) {
     voteVersion.value++;
     console.error('Error upvoting poll:', error);
@@ -815,24 +809,10 @@ async function handleUpvotePoll(poll: Poll) {
 }
 
 async function handleDownvotePoll(poll: Poll) {
+  voteVersion.value++;
   try {
-    if (hasDownvotedPoll(poll.id)) {
-      const votedPolls = JSON.parse(localStorage.getItem('downvoted-polls') || '[]');
-      localStorage.setItem('downvoted-polls', JSON.stringify(votedPolls.filter((id: string) => id !== poll.id)));
-      voteVersion.value++;
-      await pollStore.voteOnPollContent(poll.id, 'down');
-    } else {
-      const upvotedPolls = JSON.parse(localStorage.getItem('upvoted-polls') || '[]');
-      if (upvotedPolls.includes(poll.id)) {
-        localStorage.setItem('upvoted-polls', JSON.stringify(upvotedPolls.filter((id: string) => id !== poll.id)));
-        await pollStore.voteOnPollContent(poll.id, 'up');
-      }
-      const votedPolls = JSON.parse(localStorage.getItem('downvoted-polls') || '[]');
-      votedPolls.push(poll.id);
-      localStorage.setItem('downvoted-polls', JSON.stringify(votedPolls));
-      voteVersion.value++;
-      await pollStore.downvotePoll(poll.id);
-    }
+    await pollStore.togglePollContentVote(poll.id, 'down');
+    voteVersion.value++;
   } catch (error) {
     voteVersion.value++;
     console.error('Error downvoting poll:', error);
