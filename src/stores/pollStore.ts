@@ -508,9 +508,22 @@ export const usePollStore = defineStore('poll', () => {
    *
    * Replaces the old upvotedPollsCache / downvotedPollsCache localStorage sets
    * in HomePage.vue which diverged from the graph on any failed write.
+   *
+   * The optimistic write happens synchronously, before awaiting anything —
+   * `getCurrentUser()` used to be awaited first, which added a real (if
+   * usually small) delay before the heart/downvote button moved at all. It
+   * only needs the user id once the network call actually fires.
+   *
+   * Every `pollsMap.value.set()` below is paired with `triggerRef(pollsMap)`.
+   * `pollsMap` is a `shallowRef`, so Vue only reacts to `.value` reassignment
+   * or an explicit trigger — never to `.set()` mutating the Map in place.
+   * Skipping the trigger for "tally-only" writes (as a re-sort optimization)
+   * also skipped the re-render: the optimistic count/icon change landed in
+   * the Map but nothing displayed it, so the button visibly did nothing until
+   * the network round trip finished and some later, unrelated trigger caught
+   * it up in one jump — the delayed, then "suddenly resets" behaviour.
    */
   async function togglePollContentVote(pollId: string, direction: 'up' | 'down') {
-    const user = await UserService.getCurrentUser();
     const original = pollsMap.value.get(pollId);
     const communityId = original?.communityId || currentPoll.value?.communityId;
 
@@ -531,6 +544,7 @@ export const usePollStore = defineStore('poll', () => {
         score: Math.max(0, upvotes + uDelta) - Math.max(0, downvotes + dDelta),
       };
       pollsMap.value.set(pollId, optimistic);
+      triggerRef(pollsMap);
       if (currentPoll.value?.id === pollId) currentPoll.value = optimistic;
     }
 
@@ -541,15 +555,26 @@ export const usePollStore = defineStore('poll', () => {
     saveMyPollContentVotes(myPollContentVotes.value);
 
     try {
-      const patch = await PollService.voteOnPollContent(pollId, direction, user.id, communityId);
+      const user = await UserService.getCurrentUser();
+      const { myVote: resolved, ...tally } = await PollService.voteOnPollContent(pollId, direction, user.id, communityId);
       const current = pollsMap.value.get(pollId);
       if (current) {
-        const updated = { ...current, ...patch };
+        const updated = { ...current, ...tally };
         pollsMap.value.set(pollId, updated);
+        triggerRef(pollsMap);
         if (currentPoll.value?.id === pollId) currentPoll.value = updated;
         BroadcastService.broadcast('poll-updated', updated);
         void WebSocketService.broadcast('poll-updated', updated);
       }
+
+      // Reconcile against what the graph actually recorded, not what the UI
+      // predicted — mirrors postStore.toggleVote. A stale localStorage guess or
+      // a vote already cast from another device would otherwise leave the
+      // button permanently disagreeing with the real vote.
+      if (resolved) myPollContentVotes.value.set(pollId, resolved);
+      else myPollContentVotes.value.delete(pollId);
+      myPollContentVotes.value = new Map(myPollContentVotes.value);
+      saveMyPollContentVotes(myPollContentVotes.value);
     } catch (err) {
       // Roll back optimistic changes
       console.warn('Poll content vote failed — rolling back', err);
@@ -559,6 +584,7 @@ export const usePollStore = defineStore('poll', () => {
       saveMyPollContentVotes(myPollContentVotes.value);
       if (original) {
         pollsMap.value.set(pollId, original);
+        triggerRef(pollsMap);
         if (currentPoll.value?.id === pollId) currentPoll.value = original;
       }
       throw err;
@@ -571,6 +597,35 @@ export const usePollStore = defineStore('poll', () => {
 
   function upvotePoll(pollId: string) { return togglePollContentVote(pollId, 'up'); }
   function downvotePoll(pollId: string) { return togglePollContentVote(pollId, 'down'); }
+
+  /**
+   * Pull the authoritative content-vote tally and this user's real vote state
+   * for one poll, straight from the per-user vote set. Mirrors
+   * postStore.refreshVoteState — worth the round trip on a poll the user is
+   * looking at directly.
+   */
+  async function refreshPollContentVoteState(pollId: string) {
+    try {
+      const user = await UserService.getCurrentUser();
+      const [tally, vote] = await Promise.all([
+        PollService.getPollContentTally(pollId),
+        PollService.getMyPollContentVote(pollId, user.id),
+      ]);
+      const current = pollsMap.value.get(pollId);
+      if (current) {
+        const updated = { ...current, ...tally };
+        pollsMap.value.set(pollId, updated);
+        triggerRef(pollsMap);
+        if (currentPoll.value?.id === pollId) currentPoll.value = updated;
+      }
+      if (vote) myPollContentVotes.value.set(pollId, vote);
+      else myPollContentVotes.value.delete(pollId);
+      myPollContentVotes.value = new Map(myPollContentVotes.value);
+      saveMyPollContentVotes(myPollContentVotes.value);
+    } catch (error) {
+      console.error('Error refreshing poll content vote state:', error);
+    }
+  }
 
   // ─── Select ────────────────────────────────────────────────────────────────
 
@@ -697,7 +752,7 @@ export const usePollStore = defineStore('poll', () => {
     flushNewPolls, injectPoll, saveSeenNow,
     createPoll, voteOnPoll, selectPoll,
     voteOnPollContent, upvotePoll, downvotePoll,
-    myPollContentVote, togglePollContentVote,
+    myPollContentVote, togglePollContentVote, refreshPollContentVoteState,
     refreshCommunityPolls,
   };
 });
