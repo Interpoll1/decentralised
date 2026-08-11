@@ -541,15 +541,24 @@ export const usePollStore = defineStore('poll', () => {
     saveMyPollContentVotes(myPollContentVotes.value);
 
     try {
-      const patch = await PollService.voteOnPollContent(pollId, direction, user.id, communityId);
+      const { myVote: resolved, ...tally } = await PollService.voteOnPollContent(pollId, direction, user.id, communityId);
       const current = pollsMap.value.get(pollId);
       if (current) {
-        const updated = { ...current, ...patch };
+        const updated = { ...current, ...tally };
         pollsMap.value.set(pollId, updated);
         if (currentPoll.value?.id === pollId) currentPoll.value = updated;
         BroadcastService.broadcast('poll-updated', updated);
         void WebSocketService.broadcast('poll-updated', updated);
       }
+
+      // Reconcile against what the graph actually recorded, not what the UI
+      // predicted — mirrors postStore.toggleVote. A stale localStorage guess or
+      // a vote already cast from another device would otherwise leave the
+      // button permanently disagreeing with the real vote.
+      if (resolved) myPollContentVotes.value.set(pollId, resolved);
+      else myPollContentVotes.value.delete(pollId);
+      myPollContentVotes.value = new Map(myPollContentVotes.value);
+      saveMyPollContentVotes(myPollContentVotes.value);
     } catch (err) {
       // Roll back optimistic changes
       console.warn('Poll content vote failed — rolling back', err);
@@ -571,6 +580,34 @@ export const usePollStore = defineStore('poll', () => {
 
   function upvotePoll(pollId: string) { return togglePollContentVote(pollId, 'up'); }
   function downvotePoll(pollId: string) { return togglePollContentVote(pollId, 'down'); }
+
+  /**
+   * Pull the authoritative content-vote tally and this user's real vote state
+   * for one poll, straight from the per-user vote set. Mirrors
+   * postStore.refreshVoteState — worth the round trip on a poll the user is
+   * looking at directly.
+   */
+  async function refreshPollContentVoteState(pollId: string) {
+    try {
+      const user = await UserService.getCurrentUser();
+      const [tally, vote] = await Promise.all([
+        PollService.getPollContentTally(pollId),
+        PollService.getMyPollContentVote(pollId, user.id),
+      ]);
+      const current = pollsMap.value.get(pollId);
+      if (current) {
+        const updated = { ...current, ...tally };
+        pollsMap.value.set(pollId, updated);
+        if (currentPoll.value?.id === pollId) currentPoll.value = updated;
+      }
+      if (vote) myPollContentVotes.value.set(pollId, vote);
+      else myPollContentVotes.value.delete(pollId);
+      myPollContentVotes.value = new Map(myPollContentVotes.value);
+      saveMyPollContentVotes(myPollContentVotes.value);
+    } catch (error) {
+      console.error('Error refreshing poll content vote state:', error);
+    }
+  }
 
   // ─── Select ────────────────────────────────────────────────────────────────
 
@@ -697,7 +734,7 @@ export const usePollStore = defineStore('poll', () => {
     flushNewPolls, injectPoll, saveSeenNow,
     createPoll, voteOnPoll, selectPoll,
     voteOnPollContent, upvotePoll, downvotePoll,
-    myPollContentVote, togglePollContentVote,
+    myPollContentVote, togglePollContentVote, refreshPollContentVoteState,
     refreshCommunityPolls,
   };
 });
