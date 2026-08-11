@@ -46,11 +46,11 @@
     "naughty-words": "^1.2.0",
     "os-browserify": "^0.3.0",
     "path-browserify": "^1.0.1",
-    "pinia": "^2.1.7",
+    "pinia": "^4.0.2",
     "simple-peer": "^9.11.1",
     "stream-browserify": "^3.0.0",
     "vue": "^3.5.41",
-    "vue-router": "^4.2.5",
+    "vue-router": "^4.6.4",
     "ws": "^8.19.0"
   },
   "devDependencies": {
