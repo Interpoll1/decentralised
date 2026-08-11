@@ -6,6 +6,7 @@ import config from '../config';
 import { AuditService } from './auditService';
 import type { Poll, PollOption, VoteTrustPolicy } from '../types/poll';
 import { BoundedMap } from '../utils/boundedMap';
+import { PollContentVoteService } from './pollContentVoteService';
 
 // Re-exported for backward compatibility — `src/types/poll.ts` is now the
 // single source of truth for these types; import from there in new code.
@@ -1627,50 +1628,45 @@ export class PollService {
 
   /**
    * Content-level upvote/downvote on the poll itself (independent of option voting).
-   * Mirrors PostService.voteOnPost's toggle semantics.
+   *
+   * Delegates to `PollContentVoteService`, which stores each user's vote as its
+   * own node and derives the total by counting rather than a stored counter.
+   * The previous implementation here read `upvotes`/`downvotes`, added or
+   * subtracted 1 in JS, and wrote the sum back — under Gun's last-write-wins
+   * semantics two people voting within one round trip both read N and both
+   * wrote N+1, so a vote silently vanished. This is the same bug
+   * `postVoteService.ts` fixed for posts; polls just never got the fix.
+   *
+   * Returns `myVote` alongside the tally because the caller cannot predict the
+   * outcome: a click the UI believes is "upvote" is a *clear* if the graph
+   * already holds an upvote from this user.
    */
   static async voteOnPollContent(
     pollId: string,
     direction: 'up' | 'down',
     userId: string,
     communityId?: string,
-  ): Promise<{ upvotes: number; downvotes: number; score: number }> {
-    const poll = await this.loadPollFromGun(pollId, false, false)
-      ?? (communityId ? await this.loadPollFromCommunityPath(communityId, pollId, false, false) : null);
-    if (!poll) throw new Error('Poll not found');
+  ): Promise<{ upvotes: number; downvotes: number; score: number; myVote: 'up' | 'down' | null }> {
+    const { tally, myVote } = await PollContentVoteService.castVote(pollId, userId, direction, communityId);
+    return { ...tally, myVote };
+  }
 
-    const gun = this.gun;
-    const voteKey = `vote_${userId}_poll_${pollId}`;
-    const existingVote = await this.onceNode<any>(gun.get('votes').get(voteKey), 2000);
-    let upvotes = poll.upvotes || 0;
-    let downvotes = poll.downvotes || 0;
+  /** This user's content vote on a poll, as the graph has it — the authority for button state. */
+  static async getMyPollContentVote(pollId: string, userId: string): Promise<'up' | 'down' | null> {
+    return PollContentVoteService.getMyVote(pollId, userId);
+  }
 
-    if (existingVote?.type === 'up') {
-      upvotes = Math.max(0, upvotes - 1);
-    } else if (existingVote?.type === 'down') {
-      downvotes = Math.max(0, downvotes - 1);
-    }
+  /** Authoritative content-vote counts for a poll, derived from the vote set rather than the stored counters. */
+  static async getPollContentTally(pollId: string): Promise<{ upvotes: number; downvotes: number; score: number }> {
+    return PollContentVoteService.getTally(pollId);
+  }
 
-    const togglingOffSameVote = existingVote?.type === direction;
-    if (togglingOffSameVote) {
-      await this.putPromise(gun.get('votes').get(voteKey), null, { label: 'poll content vote clear' });
-    } else {
-      if (direction === 'up') upvotes += 1; else downvotes += 1;
-      await this.putPromise(gun.get('votes').get(voteKey), {
-        userId,
-        pollId,
-        type: direction,
-        timestamp: Date.now(),
-      }, { label: 'poll content vote write' });
-    }
-
-    const score = upvotes - downvotes;
-    const patch = { upvotes, downvotes, score };
-    await this.putPromise(this.getPollPath(pollId), patch, { label: 'poll content vote patch (root)' });
-    if (poll.communityId) {
-      await this.putPromise(this.getCommunityPollPath(poll.communityId, pollId), patch, { label: 'poll content vote patch (community)' });
-    }
-    return patch;
+  /** Live authoritative content-vote counts for one poll. */
+  static subscribeToPollContentVotes(
+    pollId: string,
+    callback: (tally: { upvotes: number; downvotes: number; score: number }) => void,
+  ): () => void {
+    return PollContentVoteService.subscribeTally(pollId, callback);
   }
 
   static async getInviteCodes(pollId: string): Promise<{ code: string; used: boolean }[]> {
