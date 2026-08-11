@@ -715,6 +715,15 @@ export const usePostStore = defineStore('post', () => {
    * Purely cosmetic and always superseded by the derived tally that comes back.
    * It predicts from `myVotes`, the same state the button's filled/hollow
    * rendering uses, so the number and the icon can never disagree mid-flight.
+   *
+   * Must call `triggerRef(postsMap)`: `postsMap` is a `shallowRef`, so Vue only
+   * reacts to `.value` reassignment or an explicit trigger — never to `.set()`
+   * mutating the Map in place. Without this, the optimistic write here landed
+   * in the Map correctly but nothing re-rendered from it: the heart/downvote
+   * button and count sat frozen until the network round trip finished and
+   * `reconcileVote` happened to trigger a re-render for an unrelated reason,
+   * at which point the UI jumped straight from the pre-click state to the
+   * final state — the "delay, then sudden reset" behaviour.
    */
   function applyOptimisticToggle(postId: string, next: 'up' | 'down' | null): Post | null {
     // A post open on the detail page may not be in postsMap — fall back to
@@ -730,6 +739,7 @@ export const usePostStore = defineStore('post', () => {
     const downvotes = Math.max(0, (existing.downvotes || 0) + delta('down'));
     const optimistic: Post = { ...existing, upvotes, downvotes, score: upvotes - downvotes };
     postsMap.value.set(postId, optimistic);
+    triggerRef(postsMap);
     if (currentPost.value?.id === postId) currentPost.value = optimistic;
     return snapshot;
   }
@@ -738,6 +748,7 @@ export const usePostStore = defineStore('post', () => {
     setMyVote(postId, previousVote);
     if (!snapshot) return;
     postsMap.value.set(postId, snapshot);
+    triggerRef(postsMap);
     if (currentPost.value?.id === postId) currentPost.value = snapshot;
   }
 
@@ -748,6 +759,7 @@ export const usePostStore = defineStore('post', () => {
     setMyVote(postId, resolvedVote);
     const merged = { ...updated };
     postsMap.value.set(postId, merged);
+    triggerRef(postsMap);
     if (currentPost.value?.id === postId) currentPost.value = merged;
     broadcastPostUpdate(merged);
   }
