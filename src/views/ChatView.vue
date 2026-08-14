@@ -22,7 +22,13 @@
         </div>
 
         <ion-buttons slot="end">
-          <button class="header-action-btn danger" @click="confirmDeleteAll" title="Delete all messages">
+          <button class="header-action-btn" @click="openSafetySheet" :class="{ verified: safetyNumberVerified }" title="Safety number" aria-label="View safety number">
+            <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
+          </button>
+          <button class="header-action-btn" @click="safetyMenuOpen = true" title="More options" aria-label="More options">
+            <ion-icon :icon="ellipsisVertical"></ion-icon>
+          </button>
+          <button class="header-action-btn danger" @click="confirmDeleteAll" title="Delete all messages" aria-label="Delete all messages">
             <svg viewBox="0 0 24 24" fill="none">
               <polyline points="3 6 5 6 21 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
               <path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -40,7 +46,20 @@
       {{ recipientName }} is typing…
     </div>
 
-    <ion-content ref="content">
+    <!-- Key change banner -->
+    <div v-if="keyChangeBanner" class="key-change-banner" role="alert">
+      <div class="banner-title">Encryption key changed</div>
+      <div class="banner-body">
+        <p>{{ recipientName }}'s encryption key is different from the one this device pinned. This happens when they reinstall or switch devices — but it is also what an interception attempt looks like. Verify the safety number with them through another channel before continuing.</p>
+        <p v-if="keyChangeBanner.wasVerified" class="banner-warning">You had previously verified this contact.</p>
+      </div>
+      <div class="banner-actions">
+        <button class="banner-btn primary" @click="openSafetySheet">Verify safety number</button>
+        <button class="banner-btn accept" @click="acceptKeyChange">Accept new key</button>
+      </div>
+    </div>
+
+    <ion-content ref="content" :class="{ 'composer-disabled': !!keyChangeBanner }">
       <div class="chat-container">
         <div ref="messagesContainer" class="messages-area">
 
@@ -76,6 +95,10 @@
 
               <div class="message-meta">
                 <span class="message-time">{{ formatTime(msg.timestamp) }}</span>
+                <span v-if="msg.verified === false" class="message-unverified" title="Sent before this app signed messages — its sender cannot be confirmed">
+                  <ion-icon :icon="helpCircleOutline"></ion-icon>
+                  unverified
+                </span>
                 <span v-if="msg.sent" class="message-status" :class="{ stalled: msg.status === 'failed' }">
                   {{ deliveryMark(msg) }}
                 </span>
@@ -104,29 +127,29 @@
           <!-- Hidden file input -->
           <input ref="fileInput" type="file" accept="image/*,video/*" style="display:none" @change="onFileSelected" />
 
-          <div class="input-pill" :class="{ focused: inputFocused }">
+          <div class="input-pill" :class="{ focused: inputFocused, disabled: !!keyChangeBanner }">
             <textarea
               v-model="messageInput"
               @keydown.enter.exact.prevent="handleSend"
               @input="handleTyping"
               @focus="inputFocused = true"
               @blur="inputFocused = false"
-              :placeholder="chatError ? 'Chat unavailable' : chatReady ? 'Message…' : 'Setting up…'"
-              :disabled="!chatReady"
+              :placeholder="keyChangeBanner ? 'Resolve key change to send' : chatError ? 'Chat unavailable' : chatReady ? 'Message…' : 'Setting up…'"
+              :disabled="!chatReady || !!keyChangeBanner"
               class="message-input"
               rows="1"
             />
           </div>
 
           <!-- Attach button — right of input -->
-          <button class="attach-btn" @click="fileInput?.click()" :disabled="!chatReady" title="Send image or video">
+          <button class="attach-btn" @click="fileInput?.click()" :disabled="!chatReady || !!keyChangeBanner" title="Send image or video">
             <svg viewBox="0 0 24 24" fill="none">
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66L9.41 17.41a2 2 0 01-2.83-2.83l8.49-8.48" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </button>
 
           <!-- Send — always last -->
-          <button @click="handleSend" :disabled="!messageInput.trim() || !chatReady" class="send-button">
+          <button @click="handleSend" :disabled="!messageInput.trim() || !chatReady || !!keyChangeBanner" class="send-button">
             <svg fill="currentColor" viewBox="0 0 24 24">
               <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" />
             </svg>
@@ -134,24 +157,60 @@
         </div>
       </div>
     </ion-content>
+
+    <!-- Safety number sheet -->
+    <IonModal v-model:is-open="safetySheetOpen" :initialBreakpoint="0.7" :breakpoints="[0.5, 0.7, 0.95]">
+      <ion-content class="safety-sheet">
+        <div class="safety-header">
+          <h2>Safety number</h2>
+          <button class="close-btn" @click="safetySheetOpen = false" aria-label="Close">×</button>
+        </div>
+        <div class="safety-body">
+          <p class="safety-desc">Compare these numbers with {{ recipientName }} over a call or in person. If they match, your conversation is not being intercepted.</p>
+          <div v-if="safetyNumber && !safetyNumber.includes('No key')" class="safety-number-grid">
+            <div v-for="(group, i) in safetyNumber.split(' ')" :key="i" class="safety-group">{{ group }}</div>
+          </div>
+          <div v-else class="safety-empty">
+            {{ safetyNumber }}
+          </div>
+          <button v-if="safetyNumber && !safetyNumber.includes('No key')" class="safety-verify-btn" @click="markSafetyVerified">
+            Mark as verified
+          </button>
+        </div>
+      </ion-content>
+    </IonModal>
+
+    <!-- Safety menu -->
+    <IonActionSheet v-model:is-open="safetyMenuOpen" :buttons="[
+      { text: 'Verify Safety Number', handler: () => handleSafetyAction('verify') },
+      { text: chatSafetyStore.isMuted(recipientId) ? 'Unmute' : 'Mute', handler: () => handleSafetyAction('mute') },
+      { text: 'Report', handler: () => handleSafetyAction('report') },
+      { text: 'Block', role: 'destructive', handler: () => handleSafetyAction('block') },
+      { text: 'Cancel', role: 'cancel' },
+    ]" />
   </ion-page>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onUnmounted, nextTick, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage, IonHeader, IonToolbar, IonContent,
-  IonButtons, onIonViewWillEnter, alertController, toastController,
+  IonButtons, onIonViewWillEnter, alertController, toastController, IonModal, IonActionSheet,
 } from '@ionic/vue';
+import { helpCircleOutline, shieldCheckmarkOutline, ellipsisVertical } from 'ionicons/icons';
 import ChatService, { type ChatMessage } from '../services/chatService';
 import { UserService } from '../services/userService';
 import { GunService } from '../services/gunService';
 import { StorageService } from '../services/storageService';
+import { ChatKeyPinService } from '../services/chatKeyPinService';
+import { useChatSafetyStore } from '../stores/chatSafetyStore';
 import config from '@/config';
 
 const route = useRoute();
+const router = useRouter();
 const props = defineProps<{ userId: string }>();
+const chatSafetyStore = useChatSafetyStore();
 
 const recipientId   = computed(() => props.userId || (route.params.userId as string) || '');
 const recipientName = computed(() => (route.query.name as string) || 'User');
@@ -169,7 +228,11 @@ const typingState         = ref(false);
 const content             = ref<any>(null);
 const typingTimer         = ref<number | null>(null);
 const fileInput           = ref<HTMLInputElement | null>(null);
-const messagesContainer   = ref<HTMLDivElement | null>(null);
+const keyChangeBanner     = ref<{ wasVerified: boolean } | null>(null);
+const safetySheetOpen     = ref(false);
+const safetyNumber        = ref('');
+const safetyNumberVerified = ref(false);
+const safetyMenuOpen      = ref(false);
 
 interface P2PTransfer { name: string; progress: number }
 const p2pTransfer = ref<P2PTransfer | null>(null);
@@ -297,9 +360,9 @@ function setupDataChannel(dc: RTCDataChannel) {
         recvReceived = 0;
         p2pTransfer.value = { name: msg.name, progress: 0 };
       } else if (msg.type === 'done' && recvMeta) {
-        const blob     = new Blob(recvChunks, { type: recvMeta.type });
+        const blob     = new Blob(recvChunks, { type: (recvMeta as any).fileType });
         const url      = URL.createObjectURL(blob);
-        const mtype    = recvMeta.type.startsWith('video') ? 'video' : 'image';
+        const mtype    = ((recvMeta as any).fileType || '').startsWith('video') ? 'video' : 'image';
         const fakeMsg: ChatMessage & { mediaUrl: string; mediaType: 'image' | 'video' } = {
           id: `p2p-${Date.now()}`, from: recipientId.value, to: myUserId,
           message: `[${mtype === 'video' ? 'Video' : 'Image'}]`,
@@ -333,7 +396,7 @@ async function sendFileP2P(file: File) {
     const dc = await createPeer(true);
 
     // Send meta
-    dc.send(JSON.stringify({ type: 'meta', name: file.name, size: file.size, type: file.type }));
+    dc.send(JSON.stringify({ type: 'meta', name: file.name, size: file.size, fileType: file.type }));
 
     // Stream chunks
     const buffer = await file.arrayBuffer();
@@ -463,13 +526,19 @@ function bindChatCallbacks(service: ChatService) {
   service.onRecipientKeyChange = ({ userId, available }) => {
     if (userId === recipientId.value) recipientKeyMissing.value = !available;
   };
+  service.onKeyChange = ({ userId, wasVerified }) => {
+    if (userId === recipientId.value) {
+      keyChangeBanner.value = { wasVerified };
+    }
+  };
   service.onDelivered = () => {};
 }
 
 function resetChatState() {
   messages.value = []; connected.value = false; chatReady.value = false;
   chatError.value = ''; recipientKeyMissing.value = false;
-  messageInput.value = ''; typingState.value = false;
+  messageInput.value = ''; typingState.value = false; keyChangeBanner.value = null;
+  safetySheetOpen.value = false; safetyNumber.value = ''; safetyNumberVerified.value = false;
 }
 
 function disconnectChat() { chatService?.disconnect(); chatService = null; }
@@ -496,6 +565,14 @@ async function initializeChat() {
     if (gen !== initGeneration) { service.disconnect(); return; }
     chatReady.value = true;
     recipientKeyMissing.value = !service.hasRecipientKey(targetUserId);
+
+    // Check for pending key changes on reload
+    const pendingKey = service.pendingKeyChange(targetUserId);
+    if (pendingKey) {
+      const pin = await ChatKeyPinService.getPin(targetUserId);
+      keyChangeBanner.value = { wasVerified: !!pin?.verifiedAt };
+    }
+
     scrollToBottom();
 
     // Start listening for incoming P2P file transfers
@@ -522,6 +599,171 @@ onIonViewWillEnter(() => {
   chatService?.markAsRead(recipientId.value);
 });
 onUnmounted(() => { initGeneration++; disconnectChat(); closePeer(); });
+
+// ── Safety & key management ────────────────────────────────────────────────────
+
+async function openSafetySheet() {
+  if (!chatService) return;
+  try {
+    const myKey = await chatService.exportPublicKey();
+    const safety = await ChatKeyPinService.safetyNumberFor(myKey, recipientId.value);
+    safetyNumber.value = safety || 'No key pinned yet — send a message first.';
+    safetyNumberVerified.value = await ChatKeyPinService.isVerified(recipientId.value);
+    safetySheetOpen.value = true;
+  } catch (err) {
+    console.error('Error opening safety sheet:', err);
+  }
+}
+
+async function markSafetyVerified() {
+  try {
+    await ChatKeyPinService.markVerified(recipientId.value);
+    safetyNumberVerified.value = true;
+    const toast = await toastController.create({
+      message: 'Safety number verified ✓',
+      duration: 2000,
+      position: 'top',
+      color: 'success',
+    });
+    await toast.present();
+  } catch (err) {
+    console.error('Error marking verified:', err);
+  }
+}
+
+async function acceptKeyChange() {
+  if (!chatService) return;
+  try {
+    await chatService.acceptKeyChange(recipientId.value);
+    keyChangeBanner.value = null;
+    const toast = await toastController.create({
+      message: 'New key accepted — queued messages will send',
+      duration: 2000,
+      position: 'top',
+      color: 'success',
+    });
+    await toast.present();
+  } catch (err) {
+    console.error('Error accepting key change:', err);
+  }
+}
+
+async function handleSafetyAction(action: string) {
+  safetyMenuOpen.value = false;
+  if (action === 'verify') {
+    await openSafetySheet();
+  } else if (action === 'block') {
+    const alert = await alertController.create({
+      header: 'Block this contact?',
+      message: `Block ${recipientName.value}? Their messages will stop arriving and they will not be told.`,
+      buttons: [
+        { text: 'Cancel', role: 'cancel' },
+        {
+          text: 'Block',
+          role: 'destructive',
+          handler: async () => {
+            await chatSafetyStore.block(recipientId.value);
+            router.back();
+          },
+        },
+      ],
+    });
+    await alert.present();
+  } else if (action === 'mute') {
+    const isMuted = chatSafetyStore.isMuted(recipientId.value);
+    if (isMuted) {
+      await chatSafetyStore.unmute(recipientId.value);
+    } else {
+      await chatSafetyStore.mute(recipientId.value);
+    }
+    const msg = isMuted ? 'Unmuted' : 'Muted';
+    const toast = await toastController.create({ message: msg, duration: 1500, position: 'top' });
+    await toast.present();
+  } else if (action === 'report') {
+    openReportDialog();
+  }
+}
+
+async function openReportDialog() {
+  const alert = await alertController.create({
+    header: 'Report this contact',
+    inputs: [
+      {
+        name: 'reason',
+        type: 'radio',
+        label: 'Spam',
+        value: 'spam',
+        checked: true,
+      },
+      { name: 'reason', type: 'radio', label: 'Harassment', value: 'harassment' },
+      { name: 'reason', type: 'radio', label: 'Threats', value: 'threats' },
+      { name: 'reason', type: 'radio', label: 'CSAM', value: 'csam' },
+      { name: 'reason', type: 'radio', label: 'Scam', value: 'scam' },
+      { name: 'reason', type: 'radio', label: 'Other', value: 'other' },
+      {
+        name: 'plaintext',
+        type: 'checkbox',
+        label: 'Include message text in report (otherwise only content hash)',
+        value: 'include',
+        checked: false,
+      },
+    ],
+    buttons: [
+      { text: 'Cancel', role: 'cancel' },
+      {
+        text: 'Report',
+        handler: async (data: any) => {
+          const reason = data?.reason || 'spam';
+          const includePlaintext = data?.plaintext?.includes('include');
+          await submitReport(reason, includePlaintext, false);
+        },
+      },
+      {
+        text: 'Report and Block',
+        handler: async (data: any) => {
+          const reason = data?.reason || 'spam';
+          const includePlaintext = data?.plaintext?.includes('include');
+          await submitReport(reason, includePlaintext, true);
+        },
+      },
+    ],
+  });
+  await alert.present();
+}
+
+async function submitReport(reason: string, includePlaintext: boolean, andBlock: boolean) {
+  if (!messages.value.length) return;
+  const lastMsg = messages.value[messages.value.length - 1];
+  if (!lastMsg || lastMsg.sent) return;
+
+  try {
+    const input = {
+      messageId: lastMsg.id,
+      senderId: recipientId.value,
+      text: lastMsg.message,
+      reason: reason as 'spam' | 'harassment' | 'threats' | 'csam' | 'scam' | 'other',
+      includePlaintext,
+    };
+
+    const result = andBlock
+      ? await chatSafetyStore.blockAndReport(input)
+      : await chatSafetyStore.report(input);
+
+    const toast = await toastController.create({
+      message: result.ok ? 'Report submitted' : `Report failed: ${result.message}`,
+      duration: 2000,
+      position: 'top',
+      color: result.ok ? 'success' : 'warning',
+    });
+    await toast.present();
+
+    if (andBlock) {
+      router.back();
+    }
+  } catch (err) {
+    console.error('Error submitting report:', err);
+  }
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const scrollToBottom = () => { if (content.value) content.value.$el.scrollToBottom(300); };
@@ -819,6 +1061,62 @@ ion-content { --background: transparent; }
   border-radius: 50%; animation: spin .7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Key change banner ────────────────────────────────────────────── */
+.key-change-banner {
+  background: rgba(251,191,36,0.1); border-top: 1px solid rgba(251,191,36,0.2);
+  border-bottom: 1px solid rgba(251,191,36,0.2); padding: 12px 14px;
+  font-size: 13px; line-height: 1.5; color: var(--app-text-muted);
+}
+.banner-title { font-weight: 700; color: #fbbf24; margin-bottom: 6px; }
+.banner-body { margin-bottom: 10px; }
+.banner-body p { margin: 4px 0; }
+.banner-warning { color: #f87171; font-weight: 600; }
+.banner-actions { display: flex; gap: 8px; }
+.banner-btn { padding: 8px 12px; border-radius: 6px; border: none; font-size: 12px;
+  font-weight: 600; cursor: pointer; transition: opacity 160ms;
+}
+.banner-btn.primary { background: #fbbf24; color: #000; }
+.banner-btn.accept { background: rgba(52,211,153,0.2); color: #34d399; border: 1px solid rgba(52,211,153,0.3); }
+.banner-btn:hover { opacity: 0.8; }
+
+/* ── Safety sheet ─────────────────────────────────────────────────── */
+.safety-sheet { display: flex; flex-direction: column; }
+.safety-header { display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 18px; border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.safety-header h2 { margin: 0; font-size: 18px; font-weight: 700; color: var(--app-text); }
+.close-btn { background: none; border: none; font-size: 24px; color: var(--app-text-muted);
+  cursor: pointer; padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+}
+.safety-body { flex: 1; overflow-y: auto; padding: 20px 18px; }
+.safety-desc { margin: 0 0 20px; font-size: 13px; color: var(--app-text-muted); line-height: 1.6; }
+.safety-number-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+.safety-group { background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.2);
+  padding: 12px 8px; border-radius: 8px; font-family: 'Monaco', 'Menlo', monospace; font-size: 14px;
+  font-weight: 600; color: #818cf8; text-align: center; user-select: all;
+}
+.safety-empty { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
+  padding: 16px 12px; border-radius: 8px; font-size: 13px; color: var(--app-text-muted); text-align: center;
+}
+.safety-verify-btn { width: 100%; padding: 12px; background: linear-gradient(135deg,#6366f1,#8b5cf6);
+  color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 700;
+  cursor: pointer; transition: opacity 160ms;
+}
+.safety-verify-btn:hover { opacity: 0.88; }
+
+/* ── Input disabled state ────────────────────────────────────────── */
+.input-pill.disabled { opacity: 0.5; cursor: not-allowed; }
+.composer-disabled .input-row { opacity: 0.6; pointer-events: none; }
+
+/* ── Message unverified badge ───────────────────────────────────── */
+.message-unverified { display: inline-flex; align-items: center; gap: 3px; font-size: 9px;
+  color: var(--app-text-subtle); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.message-unverified ion-icon { font-size: 11px; }
+
+/* ── Header verified state ──────────────────────────────────────── */
+.header-action-btn.verified { color: #34d399; }
 
 @media (prefers-reduced-motion: reduce) { .message, .send-button, .input-pill { animation: none; transition: none; } }
 </style>

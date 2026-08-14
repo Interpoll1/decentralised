@@ -57,9 +57,18 @@
               <span v-if="msg.senderId !== currentUserId && !isSameSender(i)" class="sender-name">
                 {{ msg.senderName }}
               </span>
-              <div class="message-content"><p>{{ msg.text }}</p></div>
+              <div class="message-bubble">
+                <div class="message-content"><p>{{ msg.text }}</p></div>
+                <button v-if="msg.senderId !== currentUserId" class="message-menu-btn" @click="openMessageMenu(msg.id)" :aria-label="`Menu for message from ${msg.senderName}`" title="Message options">
+                  <ion-icon :icon="ellipsisVertical"></ion-icon>
+                </button>
+              </div>
               <div class="message-meta">
                 <span class="message-time">{{ formatTime(msg.timestamp) }}</span>
+                <span v-if="msg.verified === false" class="message-unverified" title="Sent before this app signed messages — its sender cannot be confirmed">
+                  <ion-icon :icon="helpCircleOutline"></ion-icon>
+                  unverified
+                </span>
                 <span v-if="msg.status && msg.status !== 'confirmed'" class="message-status"
                   :class="{ stalled: msg.status === 'failed' }"
                   :title="msg.error || 'Saved on this device, still syncing'">
@@ -91,6 +100,9 @@
         </button>
       </div>
     </ion-footer>
+
+    <!-- Message context menu -->
+    <IonActionSheet v-model:is-open="contextMenuOpen" :buttons="getContextMenuButtons()" />
   </ion-page>
 </template>
 
@@ -99,11 +111,11 @@ import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonFooter, IonButtons, IonBackButton, IonButton, IonIcon,
-  IonSpinner, toastController,
+  IonFooter, IonButtons, IonIcon, toastController, alertController, IonActionSheet,
 } from '@ionic/vue';
-import { shareSocialOutline, lockClosedOutline, alertCircleOutline, chatbubblesOutline } from 'ionicons/icons';
+import { shareSocialOutline, lockClosedOutline, alertCircleOutline, chatbubblesOutline, ellipsisVertical, helpCircleOutline } from 'ionicons/icons';
 import { useChatRoomStore } from '@/stores/chatRoomStore';
+import { useChatSafetyStore } from '@/stores/chatSafetyStore';
 import { ChatRoomService } from '@/services/chatRoomService';
 import { KeyVaultService } from '@/services/keyVaultService';
 import { UserService } from '@/services/userService';
@@ -115,6 +127,7 @@ const props = defineProps<{ roomId: string }>();
 const route = useRoute();
 const router = useRouter();
 const chatRoomStore = useChatRoomStore();
+const chatSafetyStore = useChatSafetyStore();
 
 const messagesContainer = ref<HTMLDivElement | null>(null);
 const messageInput = ref('');
@@ -124,6 +137,8 @@ const currentUserId = ref('');
 const currentUserName = ref('');
 const isSending = ref(false);
 const isInitialLoad = ref(true);
+const contextMenuOpen = ref(false);
+const selectedMessageId = ref<string | null>(null);
 
 const roomTitle = ref('Loading...');
 
@@ -274,6 +289,145 @@ function goToJoin() {
   router.push(`/join/chatroom/${encodeURIComponent(roomId.value)}`);
 }
 
+function getContextMenuButtons() {
+  const msg = selectedMessageId.value ? chatRoomStore.sortedMessages.find(m => m.id === selectedMessageId.value) : null;
+  if (!msg) return [{ text: 'Cancel', role: 'cancel' }];
+
+  const isMuted = chatSafetyStore.isMuted(msg.senderId);
+  return [
+    { text: 'Report', handler: () => handleContextMenuAction('report') },
+    { text: isMuted ? 'Unmute' : 'Mute', handler: () => handleContextMenuAction('mute') },
+    { text: 'Block', role: 'destructive', handler: () => handleContextMenuAction('block') },
+    { text: 'Cancel', role: 'cancel' },
+  ];
+}
+
+async function openMessageMenu(messageId: string) {
+  selectedMessageId.value = messageId;
+  const msg = chatRoomStore.sortedMessages.find(m => m.id === messageId);
+  if (!msg) return;
+
+  contextMenuOpen.value = true;
+}
+
+async function handleContextMenuAction(action: string) {
+  contextMenuOpen.value = false;
+  if (!selectedMessageId.value) return;
+
+  const msg = chatRoomStore.sortedMessages.find(m => m.id === selectedMessageId.value);
+  if (!msg) return;
+
+  if (action === 'report') {
+    await submitRoomReport(selectedMessageId.value, msg.senderId, msg.text);
+  } else if (action === 'mute') {
+    const isMuted = chatSafetyStore.isMuted(msg.senderId);
+    if (isMuted) {
+      await chatSafetyStore.unmute(msg.senderId);
+    } else {
+      await chatSafetyStore.mute(msg.senderId);
+    }
+    const text = isMuted ? 'Unmuted' : 'Muted';
+    const t = await toastController.create({ message: text, duration: 1500, position: 'top' });
+    await t.present();
+  } else if (action === 'block') {
+    const alert = await alertController.create({
+      header: 'Block this sender?',
+      message: `Block ${msg.senderName}? Their messages will stop arriving and they will not be told.`,
+      buttons: [
+        { text: 'Cancel', role: 'cancel' },
+        {
+          text: 'Block',
+          role: 'destructive',
+          handler: async () => {
+            await chatSafetyStore.block(msg.senderId);
+            const t = await toastController.create({ message: 'Blocked', duration: 1500, position: 'top' });
+            await t.present();
+          },
+        },
+      ],
+    });
+    await alert.present();
+  }
+  selectedMessageId.value = null;
+}
+
+async function submitRoomReport(messageId: string, senderId: string, text: string) {
+  const alert = await alertController.create({
+    header: 'Report this message',
+    inputs: [
+      {
+        name: 'reason',
+        type: 'radio',
+        label: 'Spam',
+        value: 'spam',
+        checked: true,
+      },
+      { name: 'reason', type: 'radio', label: 'Harassment', value: 'harassment' },
+      { name: 'reason', type: 'radio', label: 'Threats', value: 'threats' },
+      { name: 'reason', type: 'radio', label: 'CSAM', value: 'csam' },
+      { name: 'reason', type: 'radio', label: 'Scam', value: 'scam' },
+      { name: 'reason', type: 'radio', label: 'Other', value: 'other' },
+      {
+        name: 'plaintext',
+        type: 'checkbox',
+        label: 'Include message text in report (otherwise only content hash)',
+        value: 'include',
+        checked: false,
+      },
+    ],
+    buttons: [
+      { text: 'Cancel', role: 'cancel' },
+      {
+        text: 'Report',
+        handler: async (data: any) => {
+          const reason = data?.reason || 'spam';
+          const includePlaintext = data?.plaintext?.includes('include');
+          await submitReport(messageId, senderId, text, reason, includePlaintext, false);
+        },
+      },
+      {
+        text: 'Report and Block',
+        handler: async (data: any) => {
+          const reason = data?.reason || 'spam';
+          const includePlaintext = data?.plaintext?.includes('include');
+          await submitReport(messageId, senderId, text, reason, includePlaintext, true);
+        },
+      },
+    ],
+  });
+  await alert.present();
+}
+
+async function submitReport(messageId: string, senderId: string, text: string, reason: string, includePlaintext: boolean, andBlock: boolean) {
+  try {
+    const input = {
+      messageId,
+      senderId,
+      text,
+      reason: reason as 'spam' | 'harassment' | 'threats' | 'csam' | 'scam' | 'other',
+      includePlaintext,
+    };
+
+    const result = andBlock
+      ? await chatSafetyStore.blockAndReport(input)
+      : await chatSafetyStore.report(input);
+
+    const toast = await toastController.create({
+      message: result.ok ? 'Report submitted' : `Report failed: ${result.message}`,
+      duration: 2000,
+      position: 'top',
+      color: result.ok ? 'success' : 'warning',
+    });
+    await toast.present();
+
+    if (andBlock) {
+      router.back();
+    }
+  } catch (err) {
+    console.error('Error submitting report:', err);
+  }
+}
+
 watch(roomId, () => {
   chatRoomStore.leaveCurrentRoom();
   isInitialLoad.value = true;
@@ -375,6 +529,19 @@ ion-content { --background: transparent; }
 .send-button:active:not(:disabled) { transform: scale(0.94); }
 .send-button:disabled { background: rgba(255,255,255,.08); color: var(--app-text-subtle); box-shadow: none; cursor: not-allowed; }
 .w-5 { width: 20px; height: 20px; }
+
+.message-bubble { display: flex; align-items: flex-end; gap: 4px; width: 100%; }
+.message-content { flex: 1; }
+.message-menu-btn { background: none; border: none; color: var(--app-text-muted); cursor: pointer;
+  padding: 4px; display: flex; align-items: center; justify-content: center; opacity: 0;
+  transition: opacity 160ms; font-size: 14px; width: 24px; height: 24px; flex-shrink: 0;
+}
+.message.received:hover .message-menu-btn { opacity: 1; }
+
+.message-unverified { display: inline-flex; align-items: center; gap: 3px; font-size: 9px;
+  color: var(--app-text-subtle); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.message-unverified ion-icon { font-size: 11px; }
 
 @media (prefers-reduced-motion: reduce) { .message { animation: none; } .send-button, .input-area { transition: none; } }
 </style>
