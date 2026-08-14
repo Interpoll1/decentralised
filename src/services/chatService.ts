@@ -30,12 +30,14 @@ import { StorageService } from './storageService';
 import { BoundedMap, BoundedSet } from '../utils/boundedMap';
 import { gunPut, gunOnce, gunReadChildren, verifySoulOnRelay, toGunRecord } from '../utils/gunAsync';
 import {
-  seal, open, fromBase64,
+  seal, open, sealSmall, openSmall, fromBase64,
   generateIdentityKeyPair, exportPublicKey, importPublicKey,
   type SealedEnvelope,
 } from '../utils/hybridCrypto';
 import { compareMessages } from '../utils/messageOrder';
+import { checkContent } from '../utils/contentGuard';
 import { KeyService } from './keyService';
+import { CryptoService } from './cryptoService';
 import { ChatKeyPinService } from './chatKeyPinService';
 import { ChatSafetyService } from './chatSafetyService';
 import { CHAT_POW_BASE, CHAT_POW_COLD } from './integrityService';
@@ -94,6 +96,18 @@ const CONNECTION_POLL_MS = 3_000;
 const PRUNE_EVERY_N_FLUSHES = 60;
 
 /**
+ * Message length and send-rate ceilings.
+ *
+ * There were none. The relay's 256 KB frame cap was the only limit, which made
+ * filling a peer's IndexedDB — the durable store the whole design rests on — as
+ * cheap as a loop. These are deliberately far above anything a person types:
+ * they exist to bound automation, not to shape conversation.
+ */
+const MAX_MESSAGE_CHARS = 8_000;
+const SEND_BURST = 20;
+const SEND_WINDOW_MS = 10_000;
+
+/**
  * One flush at a time per user, however many `ChatService` instances exist.
  * `HomePage` keeps a background instance alive while `ChatView` creates its own,
  * and both would otherwise re-send the same outbox rows concurrently.
@@ -139,6 +153,8 @@ class ChatService {
   private flushCount = 0;
   private shuttingDown = false;
   private seq = 0;
+  /** Timestamps of recent sends, for the local rate ceiling. */
+  private recentSends: number[] = [];
 
   private roomUnsubscribers = new Map<string, () => void>();
   private typingUnsubscribers = new Map<string, () => void>();
@@ -429,8 +445,23 @@ class ChatService {
 
   // ── Gun paths ───────────────────────────────────────────────────────────────
 
-  /** Sorted so both participants derive the same room from either direction. */
+  /**
+   * Sorted so both participants derive the same room from either direction, then
+   * hashed so the room name does not spell out who is in it.
+   *
+   * The plaintext form was `sorted(a,b).join(':')` — and since a user id is a
+   * public key, the `chats` root was a published edge list of the entire social
+   * graph. Anyone with a relay could enumerate who talks to whom, and how often,
+   * without decrypting a single message. Hashing does not hide that *a*
+   * conversation exists, but recovering the participants now requires guessing
+   * both ids rather than reading them off the key.
+   */
   private getRoomId(userA: string, userB: string): string {
+    return CryptoService.hash(`${[userA, userB].sort().join(':')}|interpoll-dm-v1`).slice(0, 32);
+  }
+
+  /** The pre-hash room name, still read so existing conversations survive. */
+  private legacyRoomId(userA: string, userB: string): string {
     return [userA, userB].sort().join(':');
   }
 
@@ -439,12 +470,13 @@ class ChatService {
   }
 
   /**
-   * `chats` used to be written outside the `v3/` namespace. Reads keep going
-   * through the un-namespaced root as well so conversations from before the move
-   * are not lost — nothing new is ever written there.
+   * Rooms written before ids were hashed.
+   *
+   * Read-only: nothing new is ever written under the plaintext name, so a
+   * conversation migrates to the hashed room the first time either side sends.
    */
-  private legacyRoomNode(roomId: string) {
-    return GunService.getGun().get('chats').get(roomId); // use proxied gun so path resolves to v3/chats
+  private legacyRoomNode(recipientId: string) {
+    return GunService.getGun().get('chats').get(this.legacyRoomId(this.userId, recipientId));
   }
 
   /**
@@ -457,15 +489,43 @@ class ChatService {
    * index is a plain best-effort write: chat still works if it fails, and
    * discovery falls back to the legacy root scan for pre-index rooms.
    */
-  private indexRoomForParticipants(roomId: string, ...userIds: string[]): void {
+  private async indexRoomForParticipants(roomId: string, recipientId: string): Promise<void> {
     try {
       const gun = GunService.getGun();
-      for (const userId of userIds) {
-        if (!userId) continue;
-        gun.get('users').get(userId).get('rooms').get(roomId)
-          .put({ roomId, updatedAt: Date.now() });
+      const recipientKey = await this.getRecipientKey(recipientId);
+
+      // Each side's entry names the *other* party, encrypted to the reader who
+      // is entitled to it: mine to my own key, theirs to theirs. Writing the
+      // peer id in the clear here would hand back the whole social graph that
+      // hashing the room id just took away — the index sits under a public
+      // `users/{id}/rooms` node.
+      const entries: Array<[string, CryptoKey | null, string]> = [
+        [this.userId, this.keyPair?.publicKey ?? null, recipientId],
+        [recipientId, recipientKey, this.userId],
+      ];
+
+      for (const [owner, readerKey, peer] of entries) {
+        if (!owner || !readerKey) continue;
+        gun.get('users').get(owner).get('rooms').get(roomId)
+          .put({ roomId, peer: await sealSmall(peer, readerKey), updatedAt: Date.now() });
       }
     } catch { /* index is an optimisation, never a correctness requirement */ }
+  }
+
+  /**
+   * Read the peer id out of one of our own room-index entries.
+   *
+   * Only this device holds the key, which is the point: the index is public and
+   * says nothing to anyone else about who we talk to.
+   */
+  async resolveIndexedPeer(entry: unknown): Promise<string | null> {
+    const sealed = (entry as { peer?: unknown } | null)?.peer;
+    if (typeof sealed !== 'string' || !this.keyPair) return null;
+    try {
+      return await openSmall(sealed, this.keyPair.privateKey);
+    } catch {
+      return null;
+    }
   }
 
   private messageSoul(roomId: string, messageId: string): string {
@@ -573,13 +633,15 @@ class ChatService {
     })();
   }
 
-  private subscribeToRoomMessages(roomId: string): void {
+  private subscribeToRoomMessages(roomId: string, recipientId: string): void {
     if (this.roomUnsubscribers.has(roomId)) return;
 
     const chains: any[] = [];
     chains.push(this.roomNode(roomId).map().on((raw: any) => this.handleRoomRecord(roomId, raw)));
     try {
-      chains.push(this.legacyRoomNode(roomId).map().on((raw: any) => this.handleRoomRecord(roomId, raw)));
+      // Rows written under the old plaintext room name are folded into the same
+      // local room, so a conversation does not appear to restart when it moves.
+      chains.push(this.legacyRoomNode(recipientId).map().on((raw: any) => this.handleRoomRecord(roomId, raw)));
     } catch {
       // No raw Gun instance (tests, SSR) — the namespaced subscription is enough.
     }
@@ -641,6 +703,33 @@ class ChatService {
   }
 
   /**
+   * One page of older messages, newest-first-bounded.
+   *
+   * Opening a conversation used to decrypt and render every message in it. That
+   * is fine at fifty and not at fifty thousand, and the cost lands on the main
+   * thread at exactly the moment the user is waiting to see the room. Paging is
+   * local-only: the durable mirror already holds everything, so scrolling back
+   * never waits on the network.
+   *
+   * `before` is a timestamp; omit it for the most recent page. Returns messages
+   * in ascending order, the same as `loadHistory`, so callers can prepend.
+   */
+  async loadOlderMessages(
+    recipientId: string,
+    options: { before?: number; limit?: number } = {},
+  ): Promise<{ messages: ChatMessage[]; hasMore: boolean }> {
+    const { before, limit = 50 } = options;
+    const roomId = this.getRoomId(this.userId, recipientId);
+    const rows = (await StorageService.getChatMessagesByRoom(roomId)).sort(compareMessages);
+
+    const older = before === undefined ? rows : rows.filter((row) => row.timestamp < before);
+    const page = older.slice(-limit);
+
+    for (const row of page) this.seenMessageIds.add(row.id);
+    return { messages: page.map(toChatMessage), hasMore: older.length > page.length };
+  }
+
+  /**
    * Local history merged with whatever the graph holds.
    *
    * Always settles: `gunReadChildren` stops on quiet or a hard ceiling rather
@@ -649,14 +738,15 @@ class ChatService {
   async loadHistory(recipientId: string): Promise<ChatMessage[]> {
     const roomId = this.getRoomId(this.userId, recipientId);
 
-    const [current, remote, legacy] = await Promise.all([
+    const [current, migrated, remote, legacy] = await Promise.all([
       StorageService.getChatMessagesByRoom(roomId),
+      this.migrateLocalRoom(recipientId, roomId),
       gunReadChildren<any>(this.roomNode(roomId), { minMs: 600, maxMs: 8_000 }),
-      this.readLegacyRoom(roomId),
+      this.readLegacyRoom(recipientId),
     ]);
 
     const byId = new Map<string, StoredChatMessage>();
-    for (const row of current) byId.set(row.id, row);
+    for (const row of [...current, ...migrated]) byId.set(row.id, row);
 
     for (const { value } of [...remote, ...legacy]) {
       if (!value || typeof value !== 'object') continue;
@@ -669,9 +759,32 @@ class ChatService {
     return rows.map(toChatMessage);
   }
 
-  private async readLegacyRoom(roomId: string): Promise<{ key: string; value: any }[]> {
+  /**
+   * Move locally stored rows off the old plaintext room key onto the hashed one.
+   *
+   * Local rows are indexed by `roomId`, so hashing it would otherwise orphan
+   * every conversation already on the device — the messages would still be in
+   * IndexedDB, and nothing would ever look them up again. Idempotent: once moved
+   * there is nothing left under the old key to find.
+   */
+  private async migrateLocalRoom(recipientId: string, roomId: string): Promise<StoredChatMessage[]> {
     try {
-      return await gunReadChildren<any>(this.legacyRoomNode(roomId), { minMs: 400, maxMs: 5_000 });
+      const legacyId = this.legacyRoomId(this.userId, recipientId);
+      const stale = await StorageService.getChatMessagesByRoom(legacyId);
+      if (stale.length === 0) return [];
+
+      const moved = stale.map((row) => ({ ...row, roomId }));
+      await StorageService.saveChatMessages(moved);
+      return moved;
+    } catch {
+      // Migration is best-effort; the conversation still works from the graph.
+      return [];
+    }
+  }
+
+  private async readLegacyRoom(recipientId: string): Promise<{ key: string; value: any }[]> {
+    try {
+      return await gunReadChildren<any>(this.legacyRoomNode(recipientId), { minMs: 400, maxMs: 5_000 });
     } catch {
       return [];
     }
@@ -687,10 +800,20 @@ class ChatService {
    * `ChatMessage` carries the current delivery state; further changes arrive via
    * `onMessageStatus`.
    */
-  async sendMessage(recipientId: string, message: string): Promise<ChatMessage> {
+  async sendMessage(recipientId: string, message: string, replyTo?: string): Promise<ChatMessage> {
     const text = message.trim();
     if (!text) throw new Error('Cannot send an empty message');
     if (!this.keyPair) throw new Error('Chat is not initialized yet');
+    if (text.length > MAX_MESSAGE_CHARS) {
+      throw new Error(`Messages are limited to ${MAX_MESSAGE_CHARS.toLocaleString()} characters`);
+    }
+    if (ChatSafetyService.isBlocked(recipientId)) {
+      throw new Error('You have blocked this person. Unblock them to send a message.');
+    }
+    this.assertSendRate();
+
+    const guard = checkContent(text, 'chat');
+    if (!guard.ok) throw new Error(guard.reason || 'That message looks like spam');
 
     const timestamp = Date.now();
     const row: StoredChatMessage = {
@@ -705,6 +828,8 @@ class ChatService {
       outgoing: true,
       syncStatus: 'pending',
       syncAttempts: 0,
+      verified: true,
+      replyTo,
     };
 
     await this.storeRow(row);
@@ -717,6 +842,23 @@ class ChatService {
     });
 
     return toChatMessage(row);
+  }
+
+  /**
+   * A local ceiling on send rate.
+   *
+   * This protects the person at this keyboard from a runaway loop in our own
+   * code, and nothing more — it is not a defence against a modified client,
+   * which simply would not run it. The cost that applies to *other people's*
+   * clients is the proof of work in the envelope.
+   */
+  private assertSendRate(): void {
+    const cutoff = Date.now() - SEND_WINDOW_MS;
+    this.recentSends = this.recentSends.filter((at) => at > cutoff);
+    if (this.recentSends.length >= SEND_BURST) {
+      throw new Error('Sending too quickly — wait a moment and try again');
+    }
+    this.recentSends.push(Date.now());
   }
 
   /**
@@ -764,6 +906,7 @@ class ChatService {
           timestamp: row.timestamp,
           seq: row.seq,
           cipherHash,
+          replyTo: row.replyTo,
         },
         privateKey,
         publicKey,
@@ -786,13 +929,14 @@ class ChatService {
       timestamp: row.timestamp,
       seq: row.seq,
       cipherHash,
+      replyTo: row.replyTo,
       ...envelope,
     });
 
     const ack = await gunPut(this.roomNode(row.roomId).get(row.id), record);
     if (!ack.ok) return fail(ack.err || 'Message could not be written to the graph');
 
-    this.indexRoomForParticipants(row.roomId, this.userId, recipientId);
+    void this.indexRoomForParticipants(row.roomId, recipientId);
 
     // Best-effort real-time nudge. The relay gates `register` behind an
     // authenticated session, so this silently does nothing for anonymous users —
@@ -932,7 +1076,7 @@ class ChatService {
       this.readReceiptUnsubscribers.get(roomId)?.();
     }
     for (const [roomId, recipientId] of rooms) {
-      this.subscribeToRoomMessages(roomId);
+      this.subscribeToRoomMessages(roomId, recipientId);
       this.subscribeToTyping(roomId, recipientId);
       this.subscribeToReadReceipts(roomId, recipientId);
     }
@@ -1051,7 +1195,7 @@ class ChatService {
     const roomId = this.getRoomId(this.userId, recipient.userId);
     this.watchedRooms.set(roomId, recipient.userId);
 
-    this.subscribeToRoomMessages(roomId);
+    this.subscribeToRoomMessages(roomId, recipient.userId);
     this.subscribeToTyping(roomId, recipient.userId);
     this.subscribeToReadReceipts(roomId, recipient.userId);
 

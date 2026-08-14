@@ -185,9 +185,17 @@ export function verifyEnvelope(
   return { status: 'valid' };
 }
 
-/** Field names signed on a direct message. */
+/**
+ * Field names signed on a direct message.
+ *
+ * `replyTo` is in here because an unsigned one is a way to put words in
+ * someone's mouth: re-point a reply at a different message and the quoted
+ * context changes while the bubble still verifies. Optional fields cost nothing
+ * when absent — `compact` drops them on the way in, and `verifyEnvelope` only
+ * reads the names actually present on the record.
+ */
 export const DM_SIGNED_FIELDS = [
-  'id', 'senderId', 'recipientId', 'timestamp', 'seq', 'cipherHash',
+  'id', 'senderId', 'recipientId', 'timestamp', 'seq', 'cipherHash', 'replyTo',
 ] as const;
 
 /** Field names signed on a group-room message. */

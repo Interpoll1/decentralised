@@ -116,8 +116,10 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
       const peers  = new Set<string>();
       for (const row of stored) {
         if (row.kind !== 'dm') continue;
-        const other = row.roomId.split(':').find(id => id !== currentUserId);
-        if (other) peers.add(other);
+        // Read the peer off the row rather than the room id: ids are hashed now,
+        // and every DM row already names both ends.
+        const other = row.senderId === currentUserId ? row.recipientId : row.senderId;
+        if (other && other !== currentUserId) peers.add(other);
       }
       for (const otherUserId of peers) {
         subscribeToRoom(otherUserId, otherUserId, '');
@@ -132,22 +134,12 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
     } catch (err) {
       console.warn('[useChat] Could not read stored conversations:', err);
     }
-    gun.get('chats').once((rooms: any) => {
-      if (!rooms) return;
-      Object.keys(rooms)
-        .filter(k => k !== '_' && k.includes(currentUserId))
-        .forEach((roomId) => {
-          const otherUserId = roomId.split(':').find(id => id !== currentUserId);
-          if (!otherUserId) return;
-          gun.get('users').get(otherUserId).once((userData: any) => {
-            subscribeToRoom(
-              otherUserId,
-              userData?.displayName || userData?.username || otherUserId,
-              userData?.publicKey || '',
-            );
-          });
-        });
-    });
+    // There used to be a `gun.get('chats').once()` sweep here that pulled every
+    // room of every user into memory and kept the ones whose id contained our
+    // own. It only worked because room ids named their participants — the exact
+    // property that published the social graph — and it materialised the app's
+    // entire dataset to find a handful of conversations. Local rows above and the
+    // encrypted per-user index below cover discovery without either cost.
   }
 
   function ensureChatRoomDiscoverySubscription() {
@@ -156,16 +148,23 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
     const discoveryListener = gun.get('users').get(currentUserId).get('rooms').map()
       .on((roomData: any, roomId: string) => {
         if (!roomId || roomId === '_' || typeof roomId !== 'string') return;
-        if (!roomId.includes(':') || !roomId.includes(currentUserId)) return;
-        const otherUserId = roomId.split(':').find(id => id !== currentUserId);
-        if (!otherUserId) return;
-        gun.get('users').get(otherUserId).once((userData: any) => {
-          subscribeToRoom(
-            otherUserId,
-            userData?.displayName || userData?.username || otherUserId,
-            userData?.publicKey || '',
-          );
-        });
+
+        // Room ids are hashed now, so the participants can no longer be read off
+        // the key — which was the point, that key is public. Each entry names the
+        // other party encrypted to us, and only this device can open it.
+        void (async () => {
+          const otherUserId = roomId.includes(':')
+            ? roomId.split(':').find(id => id !== currentUserId)          // pre-hash entry
+            : await bgChatService?.resolveIndexedPeer(roomData);
+          if (!otherUserId) return;
+          gun.get('users').get(otherUserId).once((userData: any) => {
+            subscribeToRoom(
+              otherUserId,
+              userData?.displayName || userData?.username || otherUserId,
+              userData?.publicKey || '',
+            );
+          });
+        })();
       });
     chatDiscoverySubscribed = true;
     gunListeners.push(() => { discoveryListener?.off?.(); chatDiscoverySubscribed = false; });

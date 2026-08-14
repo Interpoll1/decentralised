@@ -71,6 +71,27 @@ export async function importPublicKey(base64Key: string): Promise<CryptoKey> {
   );
 }
 
+/**
+ * RSA-OAEP directly, for values that comfortably fit the 190-byte ceiling.
+ *
+ * The room index needs to name a conversation partner to exactly one reader,
+ * and a user id is 64 hex characters. Going through `seal` there would mean
+ * carrying an AES key and two wraps to protect 64 bytes, and `seal` addresses
+ * two readers when only one is wanted.
+ */
+export async function sealSmall(text: string, publicKey: CryptoKey): Promise<string> {
+  const bytes = new TextEncoder().encode(text);
+  if (bytes.byteLength > 190) {
+    throw new Error('sealSmall is for short values; use seal() instead');
+  }
+  return toBase64(new Uint8Array(await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, publicKey, bytes)));
+}
+
+export async function openSmall(value: string, privateKey: CryptoKey): Promise<string> {
+  const plain = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, privateKey, fromBase64(value));
+  return new TextDecoder().decode(plain);
+}
+
 export async function seal(
   text: string,
   recipientPublicKey: CryptoKey,
