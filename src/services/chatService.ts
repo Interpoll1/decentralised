@@ -35,6 +35,11 @@ import {
   type SealedEnvelope,
 } from '../utils/hybridCrypto';
 import { compareMessages } from '../utils/messageOrder';
+import { KeyService } from './keyService';
+import { ChatKeyPinService } from './chatKeyPinService';
+import { ChatSafetyService } from './chatSafetyService';
+import { CHAT_POW_BASE, CHAT_POW_COLD } from './integrityService';
+import { sealEnvelope, verifyEnvelope, cipherDigest, DM_SIGNED_FIELDS } from '../utils/chatEnvelope';
 import type { StoredChatMessage, SyncStatus } from '../types/social';
 
 export interface ChatMessage {
@@ -59,8 +64,19 @@ export interface RecipientInfo {
   avatar?: string;
 }
 
-/** Wire format version. 1 = whole message RSA-encrypted; 2 = AES-GCM + wrapped key. */
-const WIRE_VERSION = 2;
+/**
+ * Wire format version.
+ *
+ *   1 — whole message RSA-encrypted (190-byte ceiling).
+ *   2 — AES-GCM body with the key RSA-wrapped per side. Unbounded length.
+ *   3 — v2 plus a signed envelope binding the message to its sender.
+ *
+ * v1 and v2 records still decrypt and render; they carry `verified: false` and
+ * the UI marks them, because a record written before signing existed cannot be
+ * verified after the fact and dropping them would silently delete history.
+ * Nothing writes below v3.
+ */
+const WIRE_VERSION = 3;
 
 /** How long an unsent message keeps trying before it is marked failed. */
 const OUTBOX_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -103,6 +119,8 @@ class ChatService {
   private recipientKeys = new BoundedMap<string, CryptoKey>({ maxSize: 200 });
   /** Recipients we looked up and found no published chat key for. */
   private missingKeys = new Set<string>();
+  /** Peers whose key changed and whose replacement the user has not answered on. */
+  private pendingKeyChanges = new Map<string, string>();
   private ready = false;
   private connected = false;
   private reconnectTimer: number | null = null;
@@ -132,6 +150,18 @@ class ChatService {
   public onConnectionChange:   ((connected: boolean) => void) | null = null;
   /** Fires when we learn whether a recipient has published a chat key. */
   public onRecipientKeyChange: ((data: { userId: string; available: boolean }) => void) | null = null;
+  /**
+   * Fires when a peer's published key no longer matches the pinned one.
+   *
+   * Sends to that peer are blocked until `acceptKeyChange` is called, so the
+   * view is expected to put this in front of the user rather than log it.
+   */
+  public onKeyChange: ((data: {
+    userId: string;
+    pinnedKeyB64: string;
+    incomingKeyB64: string;
+    wasVerified: boolean;
+  }) => void) | null = null;
 
   constructor(wsUrl: string, userId: string) {
     this.wsUrl = wsUrl;
@@ -294,6 +324,27 @@ class ChatService {
       return null;
     }
 
+    // Trust on first use. `users/{id}/chatPublicKey` is a world-writable Gun
+    // node, so a fresh read is only ever a *claim* about whose key this is —
+    // without a pin, overwriting that node silently redirects every future
+    // message to the attacker, and nothing in the UI would look different.
+    const check = await ChatKeyPinService.check(recipientId, keyB64);
+    if (check.status === 'changed') {
+      this.pendingKeyChanges.set(recipientId, keyB64);
+      this.onKeyChange?.({
+        userId: recipientId,
+        pinnedKeyB64: check.pin.keyB64,
+        incomingKeyB64: keyB64,
+        wasVerified: !!check.pin.verifiedAt,
+      });
+      // Refuse to encrypt to an unrecognised key. The message stays in the
+      // outbox and goes out unchanged once the user accepts the new key.
+      return null;
+    }
+    if (check.status === 'new') {
+      await ChatKeyPinService.pin(recipientId, keyB64);
+    }
+
     try {
       const key = await this.importPublicKey(keyB64);
       this.recipientKeys.set(recipientId, key);
@@ -304,6 +355,45 @@ class ChatService {
     } catch (error) {
       console.warn(`[ChatService] Recipient ${recipientId} has an unusable chat key:`, error);
       return null;
+    }
+  }
+
+  /**
+   * Accept a peer's new encryption key after the user confirmed it out of band.
+   *
+   * Only reachable from the key-change interstitial — accepting clears the
+   * manual-verification flag, so the contact shows as unverified until its
+   * safety number is compared again.
+   */
+  async acceptKeyChange(recipientId: string): Promise<boolean> {
+    const incoming = this.pendingKeyChanges.get(recipientId);
+    if (!incoming) return false;
+    await ChatKeyPinService.acceptChange(recipientId, incoming);
+    this.pendingKeyChanges.delete(recipientId);
+    this.recipientKeys.delete(recipientId);
+    // Queued messages were held, not dropped — they go out under the new key.
+    void this.flushOutbox();
+    return true;
+  }
+
+  /** The key change the user has been asked about but not yet answered. */
+  pendingKeyChange(recipientId: string): string | undefined {
+    return this.pendingKeyChanges.get(recipientId);
+  }
+
+  /**
+   * Whether this is an ongoing conversation rather than cold outreach.
+   *
+   * Anything already exchanged with this peer counts. The check is deliberately
+   * cheap and local — it only picks a proof-of-work tier, and being wrong costs
+   * the sender a fraction of a second, never a delivery.
+   */
+  private async isEstablishedPeer(recipientId: string): Promise<boolean> {
+    try {
+      const rows = await StorageService.getChatMessagesByRoom(this.getRoomId(this.userId, recipientId));
+      return rows.some((row) => !row.outgoing) || rows.length > 1;
+    } catch {
+      return true;
     }
   }
 
@@ -398,6 +488,33 @@ class ChatService {
     if (!id || !senderId) return null;
     if (senderId !== this.userId && recipientId !== this.userId) return null;
 
+    // Before decryption, so a blocked sender gets no CPU from us and — more to
+    // the point — no read receipt and no typing signal to confirm they landed.
+    if (senderId !== this.userId && ChatSafetyService.isBlocked(senderId)) return null;
+
+    // Who wrote this. A user id *is* an x-only secp256k1 public key here (every
+    // profile is keyed by `KeyService.getPublicKeyHex()`), so the claimed sender
+    // and the key that must have signed are the same string — a forged
+    // `senderId` cannot survive this without that user's private key.
+    const verdict = verifyEnvelope(raw as Record<string, unknown>, DM_SIGNED_FIELDS, senderId);
+    if (verdict.status === 'invalid') {
+      console.warn(`[ChatService] Dropped message ${id} from ${senderId}: ${verdict.reason}`);
+      return null;
+    }
+    // `unsigned` is a pre-v3 record. It still renders, marked, rather than
+    // vanishing — see the wire-version note at the top of this file.
+    const verified = verdict.status === 'valid';
+
+    // The ciphertext has to be the one that was signed, not merely *a* valid
+    // ciphertext: without this the signature covers a hash nobody checked.
+    if (verified) {
+      const expected = cipherDigest(raw?.ciphertext, raw?.keyForRecipient, raw?.keyForSender);
+      if (raw?.cipherHash !== expected) {
+        console.warn(`[ChatService] Dropped message ${id}: ciphertext does not match its signature`);
+        return null;
+      }
+    }
+
     const existing = await StorageService.getChatMessage(id);
     if (existing && existing.text) return null;
 
@@ -425,6 +542,8 @@ class ChatService {
       syncStatus: 'confirmed',
       syncAttempts: existing?.syncAttempts ?? 0,
       readAt: Number(raw?.readAt) || existing?.readAt,
+      verified,
+      replyTo: typeof raw?.replyTo === 'string' ? raw.replyTo : undefined,
     };
     await this.storeRow(row);
     return row;
@@ -620,6 +739,32 @@ class ChatService {
       return fail(error instanceof Error ? error.message : 'Encryption failed');
     }
 
+    // Sign the envelope, not the plaintext: anyone must be able to establish who
+    // wrote a message without being able to read it. `cipherHash` is what ties
+    // the signature to this exact ciphertext and key wrapping.
+    const cipherHash = cipherDigest(sealed.ciphertext, sealed.keyForRecipient, sealed.keyForSender);
+    let envelope: Awaited<ReturnType<typeof sealEnvelope>>;
+    try {
+      const { privateKey, publicKey } = await KeyService.getKeyPair();
+      envelope = await sealEnvelope(
+        {
+          id: row.id,
+          senderId: row.senderId,
+          recipientId,
+          timestamp: row.timestamp,
+          seq: row.seq,
+          cipherHash,
+        },
+        privateKey,
+        publicKey,
+        // Cold outreach pays more. `attempts === 1` alone would re-charge every
+        // retry, so the tier follows the conversation, not the attempt.
+        (await this.isEstablishedPeer(recipientId)) ? CHAT_POW_BASE : CHAT_POW_COLD,
+      );
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : 'Could not sign the message');
+    }
+
     const record = toGunRecord({
       id: row.id,
       v: WIRE_VERSION,
@@ -630,6 +775,8 @@ class ChatService {
       keyForSender: sealed.keyForSender,
       timestamp: row.timestamp,
       seq: row.seq,
+      cipherHash,
+      ...envelope,
     });
 
     const ack = await gunPut(this.roomNode(row.roomId).get(row.id), record);

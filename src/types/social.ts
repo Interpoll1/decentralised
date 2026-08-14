@@ -93,4 +93,33 @@ export interface StoredChatMessage {
   readAt?: number;
   /** Set when the message could not be encrypted/sent, so the UI can offer a retry. */
   error?: string;
+  /**
+   * Whether a signature proved this message came from `senderId`.
+   *
+   * `false` on anything written before wire v3 — those records carry no
+   * envelope and cannot be verified retroactively, so they render with an
+   * "unverified sender" marker rather than being dropped. Absent is treated as
+   * `false` by every consumer.
+   */
+  verified?: boolean;
+  /** Id of the message this one replies to, if any. */
+  replyTo?: string;
+  /** Set on a tombstone row: the id of the message it retracts. */
+  retracts?: string;
+  /** True once a tombstone for this message has been applied. */
+  deleted?: boolean;
+  /** Emoji reactions, keyed by emoji → the userIds that reacted. */
+  reactions?: Record<string, string[]>;
+  /** Encrypted attachment descriptor, when the message carries media. */
+  attachment?: ChatAttachment;
+}
+
+export interface ChatAttachment {
+  /** Content id of the *ciphertext* on IPFS — the relay never holds plaintext media. */
+  cid: string;
+  /** base64 AES key for the blob, carried inside the sealed envelope. */
+  key: string;
+  name: string;
+  mimeType: string;
+  size: number;
 }

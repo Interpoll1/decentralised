@@ -17,6 +17,24 @@ const POW_DIFFICULTY: Record<string, number> = {
   DEFAULT: 12,
 };
 
+/**
+ * Proof-of-work for durable chat envelopes.
+ *
+ * 10 bits is ~1024 hashes — free, and it was the only cost of writing a message
+ * into someone's conversation. The cost now depends on who you are to the
+ * recipient: an unsolicited first message to a stranger pays `CHAT_POW_COLD`
+ * (~65k hashes, a fraction of a second on any device, but enough that blasting
+ * every known public key stops being cheap), while an established conversation
+ * stays at `CHAT_POW_BASE` so normal chat is instant.
+ *
+ * Verifiers only ever enforce `CHAT_POW_BASE`. The sender cannot know how the
+ * recipient classifies them, so requiring the higher tier on receipt would
+ * reject legitimate messages; the cold tier is a cost imposed on the sender, not
+ * a check made by the receiver.
+ */
+export const CHAT_POW_BASE = 10;
+export const CHAT_POW_COLD = 16;
+
 const POW_EXEMPT = new Set([
   'ping', 'pong', 'register', 'join-room',
   'chat-typing', 'chat-read', 'chat-delivered', 'chat-read-receipt',
@@ -36,7 +54,7 @@ export interface IntegrityMeta {
   _nonce: string;
 }
 
-function hasLeadingZeroBits(hashHex: string, bits: number): boolean {
+export function hasLeadingZeroBits(hashHex: string, bits: number): boolean {
   const fullBytes = Math.floor(bits / 8);
   const remainderBits = bits % 8;
   for (let i = 0; i < fullBytes; i++) {
@@ -50,7 +68,7 @@ function hasLeadingZeroBits(hashHex: string, bits: number): boolean {
   return true;
 }
 
-async function solveHashcash(contentHash: string, difficulty: number): Promise<string> {
+export async function solveHashcash(contentHash: string, difficulty: number): Promise<string> {
   let nonce = 0;
   for (;;) {
     for (let i = 0; i < SOLVER_BATCH_SIZE; i++) {
