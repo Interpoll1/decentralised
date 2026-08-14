@@ -22,6 +22,9 @@
         </div>
 
         <ion-buttons slot="end">
+          <button class="header-action-btn" @click="searchOpen = !searchOpen" title="Search messages" aria-label="Search messages">
+            <ion-icon :icon="searchOutline"></ion-icon>
+          </button>
           <button class="header-action-btn" @click="openSafetySheet" :class="{ verified: safetyNumberVerified }" title="Safety number" aria-label="View safety number">
             <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
           </button>
@@ -44,6 +47,36 @@
     <div v-if="isTypingState" class="typing-bar">
       <span class="typing-dots"><span></span><span></span><span></span></span>
       {{ recipientName }} is typing…
+    </div>
+
+    <!-- Search bar -->
+    <div v-if="searchOpen" class="search-bar">
+      <div class="search-input-wrapper">
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="Search messages…"
+          class="search-input"
+          @keydown.escape="closeSearch"
+          @keydown.enter.prevent="goToNextMatch"
+          autofocus
+        />
+        <button class="search-close-btn" @click="closeSearch" title="Close search" aria-label="Close search">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <div v-if="searchQuery && searchMatches.length > 0" class="search-nav">
+        <span aria-live="polite" aria-atomic="true" class="match-counter">{{ currentMatchIndex + 1 }} of {{ searchMatches.length }}</span>
+        <button @click="goToPrevMatch" :disabled="searchMatches.length === 0" title="Previous match" aria-label="Previous match">
+          <svg viewBox="0 0 24 24" fill="none"><polyline points="15 18 9 12 15 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button @click="goToNextMatch" :disabled="searchMatches.length === 0" title="Next match" aria-label="Next match">
+          <svg viewBox="0 0 24 24" fill="none"><polyline points="9 18 15 12 9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <div v-else-if="searchQuery && searchMatches.length === 0" class="search-no-results">
+        No matches
+      </div>
     </div>
 
     <!-- Key change banner -->
@@ -90,7 +123,10 @@
 
               <!-- Text bubble -->
               <div v-else class="message-content">
-                <p>{{ msg.message }}</p>
+                <p v-if="searchQuery && isMatchedMessage(msg.id)">
+                  <span v-for="(segment, i) in highlightSegments(msg.message)" :key="`${msg.id}-${i}`" :class="{ 'search-highlight': segment.match }">{{ segment.text }}</span>
+                </p>
+                <p v-else>{{ msg.message }}</p>
               </div>
 
               <div class="message-meta">
@@ -198,7 +234,7 @@ import {
   IonPage, IonHeader, IonToolbar, IonContent,
   IonButtons, onIonViewWillEnter, alertController, toastController, IonModal, IonActionSheet,
 } from '@ionic/vue';
-import { helpCircleOutline, shieldCheckmarkOutline, ellipsisVertical } from 'ionicons/icons';
+import { helpCircleOutline, shieldCheckmarkOutline, ellipsisVertical, searchOutline } from 'ionicons/icons';
 import ChatService, { type ChatMessage } from '../services/chatService';
 import { UserService } from '../services/userService';
 import { GunService } from '../services/gunService';
@@ -233,6 +269,10 @@ const safetySheetOpen     = ref(false);
 const safetyNumber        = ref('');
 const safetyNumberVerified = ref(false);
 const safetyMenuOpen      = ref(false);
+const searchOpen          = ref(false);
+const searchQuery         = ref('');
+const currentMatchIndex   = ref(0);
+const draftSaveTimer      = ref<number | null>(null);
 
 interface P2PTransfer { name: string; progress: number }
 const p2pTransfer = ref<P2PTransfer | null>(null);
@@ -593,12 +633,27 @@ async function initializeChat() {
   scrollToBottom();
 }
 
-watch(recipientId, async (n, o) => { if (n && n !== o) await initializeChat(); });
+watch(recipientId, async (n, o) => {
+  if (n && n !== o) {
+    loadDraft();
+    await initializeChat();
+  }
+});
 onIonViewWillEnter(() => {
-  if (!chatReady.value && recipientId.value) { void initializeChat(); return; }
+  if (!chatReady.value && recipientId.value) {
+    loadDraft();
+    void initializeChat();
+    return;
+  }
+  loadDraft();
   chatService?.markAsRead(recipientId.value);
 });
-onUnmounted(() => { initGeneration++; disconnectChat(); closePeer(); });
+onUnmounted(() => {
+  if (draftSaveTimer.value) clearTimeout(draftSaveTimer.value);
+  initGeneration++;
+  disconnectChat();
+  closePeer();
+});
 
 // ── Safety & key management ────────────────────────────────────────────────────
 
@@ -765,6 +820,119 @@ async function submitReport(reason: string, includePlaintext: boolean, andBlock:
   }
 }
 
+// ── Search functionality ───────────────────────────────────────────────────────
+const searchMatches = computed(() => {
+  if (!searchQuery.value) return [];
+  const q = searchQuery.value.toLowerCase();
+  return currentMessages.value
+    .filter(msg => msg.message && msg.message.toLowerCase().includes(q))
+    .map(msg => msg.id);
+});
+
+function isMatchedMessage(msgId: string): boolean {
+  return searchMatches.value.includes(msgId);
+}
+
+function escapeRegexChars(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function highlightSegments(text: string): Array<{ text: string; match: boolean }> {
+  if (!searchQuery.value) return [{ text, match: false }];
+
+  const q = searchQuery.value.toLowerCase();
+  const segments: Array<{ text: string; match: boolean }> = [];
+  let lastIndex = 0;
+  const regex = new RegExp(`(${escapeRegexChars(q)})`, 'gi');
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ text: text.slice(lastIndex, match.index), match: false });
+    }
+    segments.push({ text: match[0], match: true });
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    segments.push({ text: text.slice(lastIndex), match: false });
+  }
+
+  return segments.length ? segments : [{ text, match: false }];
+}
+
+function closeSearch() {
+  searchOpen.value = false;
+  searchQuery.value = '';
+  currentMatchIndex.value = 0;
+}
+
+function goToNextMatch() {
+  if (searchMatches.value.length === 0) return;
+  currentMatchIndex.value = (currentMatchIndex.value + 1) % searchMatches.value.length;
+  scrollToMatchedMessage();
+}
+
+function goToPrevMatch() {
+  if (searchMatches.value.length === 0) return;
+  currentMatchIndex.value = (currentMatchIndex.value - 1 + searchMatches.value.length) % searchMatches.value.length;
+  scrollToMatchedMessage();
+}
+
+function scrollToMatchedMessage() {
+  const matchId = searchMatches.value[currentMatchIndex.value];
+  if (!matchId) return;
+  nextTick(() => {
+    const msgsArea = document.querySelector('.messages-area');
+    if (!msgsArea) return;
+    const allMsgs = msgsArea.querySelectorAll('.message');
+    const matchedMsg = Array.from(allMsgs).find(el => {
+      const p = el.querySelector('.message-content p');
+      return p?.textContent?.includes(searchQuery.value);
+    });
+    if (matchedMsg) {
+      matchedMsg.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      matchedMsg.classList.add('search-active');
+      setTimeout(() => matchedMsg.classList.remove('search-active'), 1500);
+    }
+  });
+}
+
+// ── Draft persistence ──────────────────────────────────────────────────────────
+function saveDraft(text: string) {
+  const key = `chat-draft:${recipientId.value}`;
+  try {
+    if (text.trim()) {
+      localStorage.setItem(key, text);
+    } else {
+      localStorage.removeItem(key);
+    }
+  } catch (e) {
+    // Silently fail in private-mode Safari
+    console.debug('Draft save failed (private mode?):', e);
+  }
+}
+
+function loadDraft() {
+  const key = `chat-draft:${recipientId.value}`;
+  try {
+    const draft = localStorage.getItem(key);
+    if (draft) messageInput.value = draft;
+  } catch (e) {
+    // Silently fail
+    console.debug('Draft load failed (private mode?):', e);
+  }
+}
+
+function clearDraft() {
+  const key = `chat-draft:${recipientId.value}`;
+  try {
+    localStorage.removeItem(key);
+  } catch (e) {
+    // Silently fail
+  }
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const scrollToBottom = () => { if (content.value) content.value.$el.scrollToBottom(300); };
 watch(currentMessages, () => nextTick(() => scrollToBottom()), { deep: true });
@@ -773,12 +941,14 @@ const handleSend = async () => {
   if (!messageInput.value.trim() || !chatReady.value || !chatService) return;
   const text = messageInput.value.trim();
   messageInput.value = '';
+  clearDraft();
   try {
     upsertMessage(await chatService.sendMessage(recipientId.value, text));
     chatService.sendTyping(recipientId.value, false);
     nextTick(() => scrollToBottom());
   } catch (err) {
     messageInput.value = text;
+    saveDraft(text);
     chatError.value = err instanceof Error ? err.message : 'Message could not be sent';
   }
 };
@@ -789,6 +959,14 @@ const handleTyping = () => {
   if (typingTimer.value) clearTimeout(typingTimer.value);
   typingTimer.value = window.setTimeout(() => chatService?.sendTyping(recipientId.value, false), 2000);
 };
+
+// Watch messageInput and debounce draft saving
+watch(messageInput, (newVal) => {
+  if (draftSaveTimer.value) clearTimeout(draftSaveTimer.value);
+  draftSaveTimer.value = window.setTimeout(() => {
+    saveDraft(newVal);
+  }, 300);
+});
 
 // Date separators
 function showDateSep(i: number): boolean {
@@ -1104,6 +1282,54 @@ ion-content { --background: transparent; }
   cursor: pointer; transition: opacity 160ms;
 }
 .safety-verify-btn:hover { opacity: 0.88; }
+
+/* ── Search bar ──────────────────────────────────────────────────── */
+.search-bar {
+  padding: 10px 12px; background: rgba(251,191,36,0.08); border-bottom: 1px solid rgba(251,191,36,0.15);
+}
+.search-input-wrapper { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.search-input {
+  flex: 1; background: rgba(255,255,255,0.08); border: 1px solid rgba(251,191,36,0.25);
+  border-radius: 8px; padding: 8px 12px; font-size: 13px; color: var(--app-text);
+  font-family: inherit; outline: none; transition: border-color 150ms;
+}
+.search-input:focus { border-color: rgba(251,191,36,0.5); background: rgba(255,255,255,0.12); }
+.search-input::placeholder { color: var(--app-text-subtle); }
+.search-close-btn {
+  flex-shrink: 0; width: 32px; height: 32px; border-radius: 6px;
+  background: rgba(255,255,255,0.08); border: none; color: var(--app-text-muted);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: background 150ms, color 150ms;
+}
+.search-close-btn:hover { background: rgba(255,255,255,0.12); color: var(--app-text); }
+.search-close-btn svg { width: 16px; height: 16px; }
+
+.search-nav {
+  display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--app-text-muted);
+}
+.match-counter { min-width: 40px; text-align: center; }
+.search-nav button {
+  width: 28px; height: 28px; border-radius: 4px; background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(251,191,36,0.2); color: var(--app-text-muted);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: background 150ms, color 150ms;
+}
+.search-nav button:hover:not(:disabled) { background: rgba(251,191,36,0.15); color: var(--app-text); }
+.search-nav button:disabled { opacity: 0.4; cursor: not-allowed; }
+.search-nav button svg { width: 14px; height: 14px; }
+
+.search-no-results {
+  font-size: 12px; color: var(--app-text-subtle); text-align: center; padding: 6px 0;
+}
+
+.search-highlight {
+  background: rgba(251,191,36,0.4); color: var(--app-text); padding: 1px 2px; border-radius: 2px; font-weight: 600;
+}
+
+.message.search-active .message-content {
+  animation: pulse-search 1.5s ease-out;
+}
+@keyframes pulse-search { 0% { box-shadow: 0 0 12px rgba(251,191,36,0.6); } 100% { box-shadow: none; } }
 
 /* ── Input disabled state ────────────────────────────────────────── */
 .input-pill.disabled { opacity: 0.5; cursor: not-allowed; }

@@ -207,8 +207,8 @@ This section documents threats that are mitigated by this protocol and threats t
 ### 12.2 What this protocol does NOT defend against
 
 - **Forward secrecy:** A compromised long-lived RSA identity key can decrypt all retained chat history. Rotations are TOFU-based; old keys are not destroyed. Keys are held in IndexedDB metadata indefinitely (they are the device's identity).
-- **Group room membership revocation:** Encrypted group keys are never rotated. A member who leaves a room retains the room key and can decrypt all future messages unless the room is evacuated and re-keyed. This is a deliberate tradeoff — rotating keys would require all members to rekeying and re-encrypting the full history with GunDB consensus.
-- **Typing indicators and read receipts:** These are sent unsigned and unencrypted as best-effort signals (`chat-typing`, `chat-read-receipt`). They can be spoofed and are ineligible for signatures because they are high-volume and transient. Do not rely on them for security.
+- **Group room membership revocation:** Room keys are never rotated. A member who leaves retains the key and can decrypt every future message, so `leaveRoom` is a local action, not a revocation. Rotating on departure would mean distributing a new key to each remaining member — past history need not be re-encrypted, since the departing member already has it — and that is not implemented.
+- **Typing indicators and read receipts:** These are sent unsigned and unencrypted (`chat-typing`, `chat-read-receipt`), so they can be spoofed by anyone able to write to the graph, and they leak timing to any observer. Nothing prevents signing them; it is simply not done yet. Do not rely on them for security.
 - **Traffic analysis:** A relay observing which rooms a peer writes to and message volume/timing learns metadata. Room ID hashing makes participant recovery harder but does not hide that a conversation exists.
 - **Metadata from IP/session:** Relay and network operators see IP addresses, session times, and connection patterns. Encryption protects only message content and wrapped keys.
 
