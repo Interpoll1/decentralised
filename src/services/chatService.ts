@@ -114,6 +114,16 @@ const SEND_WINDOW_MS = 10_000;
  */
 const flushInFlight = new Set<string>();
 
+/**
+ * Retracted messages are dropped from every read path rather than rendered as
+ * an empty bubble. The row itself is kept: its id is what a late-arriving copy
+ * of the same message is recognised by, so deleting the row outright would let
+ * the message reappear on the next sync.
+ */
+function isVisible(row: StoredChatMessage): boolean {
+  return !row.deleted;
+}
+
 function toChatMessage(row: StoredChatMessage): ChatMessage {
   return {
     id: row.id,
@@ -167,6 +177,12 @@ class ChatService {
   // Duplicate-delivery guard. Bounded: the TTL is far longer than any plausible
   // redelivery window, so bounding it cannot reintroduce duplicates in practice.
   private seenMessageIds = new BoundedSet<string>({ maxSize: 5000, ttlMs: 60 * 60_000 });
+  /**
+   * Messages retracted by their author, including ones whose tombstone arrived
+   * before the message itself. Longer-lived than `seenMessageIds`: a retraction
+   * forgotten too early lets the message come back on the next sync.
+   */
+  private retractedIds = new BoundedSet<string>({ maxSize: 5000, ttlMs: 7 * 24 * 60 * 60_000 });
 
   public onMessage:            ((msg: ChatMessage) => void) | null = null;
   public onMessageStatus:      ((data: { id: string; status: SyncStatus; error?: string }) => void) | null = null;
@@ -174,6 +190,8 @@ class ChatService {
   public onDelivered:          ((data: { messageId: string; recipientId: string }) => void) | null = null;
   public onReadReceipt:        ((data: { from: string; at: number }) => void) | null = null;
   public onConnectionChange:   ((connected: boolean) => void) | null = null;
+  /** Fires when a peer retracts a message we hold. */
+  public onMessageRetracted: ((data: { messageId: string }) => void) | null = null;
   /** Fires when we learn whether a recipient has published a chat key. */
   public onRecipientKeyChange: ((data: { userId: string; available: boolean }) => void) | null = null;
   /**
@@ -532,6 +550,88 @@ class ChatService {
     return `${GUN_NAMESPACE}/chats/${roomId}/${messageId}`;
   }
 
+  // ── Retraction ──────────────────────────────────────────────────────────────
+
+  /**
+   * Retract a message you sent.
+   *
+   * Be clear about what this is: a *request*, published as a signed tombstone
+   * that honest clients honour. On a replicated graph there is no delete — the
+   * ciphertext may already sit on relays and in other people's storage, and
+   * nothing here can reach it. The local copy is removed unconditionally; the
+   * remote one depends on the other side running code that respects the marker.
+   * The UI must not imply more than that.
+   *
+   * The tombstone is signed for the obvious reason: an unsigned one would let
+   * anybody delete anybody's messages, which is a worse hole than the one
+   * deletion is for.
+   */
+  async retractMessage(recipientId: string, messageId: string): Promise<void> {
+    const target = await StorageService.getChatMessage(messageId);
+    if (!target) throw new Error('That message is no longer on this device');
+    if (target.senderId !== this.userId) throw new Error('You can only delete your own messages');
+
+    await this.patchRow(messageId, { deleted: true, text: '' });
+
+    const roomId = this.getRoomId(this.userId, recipientId);
+    const timestamp = Date.now();
+    const fields = {
+      id: `tomb-${timestamp}-${Math.random().toString(36).slice(2, 11)}`,
+      senderId: this.userId,
+      recipientId,
+      timestamp,
+      seq: this.nextSeq(),
+      retracts: messageId,
+    };
+
+    try {
+      const { privateKey, publicKey } = await KeyService.getKeyPair();
+      const envelope = await sealEnvelope(fields, privateKey, publicKey);
+      await gunPut(this.roomNode(roomId).get(fields.id), toGunRecord({ ...fields, v: WIRE_VERSION, ...envelope }));
+    } catch (error) {
+      // The local copy is already gone, which is the part we control. Surface
+      // the failure so the UI can say the retraction did not reach anyone.
+      throw new Error(
+        error instanceof Error
+          ? `Deleted here, but the retraction could not be published: ${error.message}`
+          : 'Deleted here, but the retraction could not be published',
+      );
+    }
+  }
+
+  /**
+   * Apply an incoming tombstone.
+   *
+   * Only the author of a message may retract it, so the tombstone's signer must
+   * match the target's sender — otherwise a signed tombstone from anyone would
+   * erase anyone's messages, and every peer would faithfully honour it.
+   */
+  private async applyRetraction(raw: any, senderId: string): Promise<void> {
+    const targetId = typeof raw?.retracts === 'string' ? raw.retracts : null;
+    if (!targetId) return;
+
+    if (verifyEnvelope(raw as Record<string, unknown>, DM_SIGNED_FIELDS, senderId).status !== 'valid') {
+      console.warn(`[ChatService] Ignored unsigned or invalid retraction of ${targetId}`);
+      return;
+    }
+
+    const target = await StorageService.getChatMessage(targetId);
+    if (!target) {
+      // The message has not arrived yet. Remember the retraction so it is
+      // applied when it does, rather than being silently lost.
+      this.retractedIds.add(targetId);
+      return;
+    }
+    if (target.senderId !== senderId) {
+      console.warn(`[ChatService] Ignored retraction of ${targetId}: not the author's`);
+      return;
+    }
+
+    this.retractedIds.add(targetId);
+    await this.patchRow(targetId, { deleted: true, text: '' });
+    this.onMessageRetracted?.({ messageId: targetId });
+  }
+
   // ── Local mirror ────────────────────────────────────────────────────────────
 
   private async storeRow(row: StoredChatMessage): Promise<void> {
@@ -557,6 +657,13 @@ class ChatService {
     const recipientId = typeof raw?.recipientId === 'string' ? raw.recipientId : undefined;
     if (!id || !senderId) return null;
     if (senderId !== this.userId && recipientId !== this.userId) return null;
+
+    // Tombstones carry no ciphertext — they retract an existing message rather
+    // than adding one, so they never produce a row of their own.
+    if (typeof raw?.retracts === 'string') {
+      await this.applyRetraction(raw, senderId);
+      return null;
+    }
 
     // Before decryption, so a blocked sender gets no CPU from us and — more to
     // the point — no read receipt and no typing signal to confirm they landed.
@@ -586,7 +693,22 @@ class ChatService {
     }
 
     const existing = await StorageService.getChatMessage(id);
+    if (existing?.deleted) return null;
     if (existing && existing.text) return null;
+
+    // A tombstone can arrive before the message it retracts — Gun makes no
+    // ordering promise, and the outbox can deliver the two in either order.
+    // Without this the message would merge normally and the retraction, already
+    // processed and discarded, would never be applied again.
+    if (this.retractedIds.has(id)) {
+      await this.storeRow({
+        id, roomId, kind: 'dm', senderId, recipientId, text: '',
+        timestamp: Number(raw?.timestamp) || Date.now(), seq: Number(raw?.seq) || 0,
+        outgoing: senderId === this.userId, syncStatus: 'confirmed', syncAttempts: 0,
+        deleted: true,
+      });
+      return null;
+    }
 
     let text: string;
     try {
@@ -697,7 +819,7 @@ class ChatService {
   /** Everything this device already holds. Resolves immediately — no network. */
   async getLocalHistory(recipientId: string): Promise<ChatMessage[]> {
     const roomId = this.getRoomId(this.userId, recipientId);
-    const rows = await StorageService.getChatMessagesByRoom(roomId);
+    const rows = (await StorageService.getChatMessagesByRoom(roomId)).filter(isVisible);
     for (const row of rows) this.seenMessageIds.add(row.id);
     return rows.sort(compareMessages).map(toChatMessage);
   }
@@ -720,7 +842,7 @@ class ChatService {
   ): Promise<{ messages: ChatMessage[]; hasMore: boolean }> {
     const { before, limit = 50 } = options;
     const roomId = this.getRoomId(this.userId, recipientId);
-    const rows = (await StorageService.getChatMessagesByRoom(roomId)).sort(compareMessages);
+    const rows = (await StorageService.getChatMessagesByRoom(roomId)).filter(isVisible).sort(compareMessages);
 
     const older = before === undefined ? rows : rows.filter((row) => row.timestamp < before);
     const page = older.slice(-limit);
@@ -754,7 +876,7 @@ class ChatService {
       if (merged) byId.set(merged.id, merged);
     }
 
-    const rows = [...byId.values()].sort(compareMessages);
+    const rows = [...byId.values()].filter(isVisible).sort(compareMessages);
     for (const row of rows) this.seenMessageIds.add(row.id);
     return rows.map(toChatMessage);
   }

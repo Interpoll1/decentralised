@@ -219,3 +219,50 @@ describe('chat envelope', () => {
     });
   });
 });
+
+/**
+ * Retraction. A tombstone is a signed request that honest clients honour, so
+ * the signature is what stops it becoming a way to delete other people's
+ * messages — a worse hole than the one deletion exists for.
+ */
+describe('retraction tombstones', () => {
+  function tombstone(senderId: string, retracts: string) {
+    return {
+      id: 'tomb-1700000000000-xyz789',
+      senderId,
+      recipientId: 'bob-public-key',
+      timestamp: 1_700_000_000_000,
+      seq: 9,
+      retracts,
+    };
+  }
+
+  it('verifies a tombstone signed by its author', async () => {
+    const alice = identity();
+    const fields = tombstone(alice.publicKey, 'msg-to-remove');
+    const envelope = await sealEnvelope(fields, alice.privateKey, alice.publicKey, CHAT_POW_BASE);
+
+    expect(verifyEnvelope({ ...fields, ...envelope }, DM_SIGNED_FIELDS, alice.publicKey).status)
+      .toBe('valid');
+  });
+
+  it('rejects a tombstone claiming to be from someone else', async () => {
+    const mallory = identity();
+    const alice = identity();
+    const fields = tombstone(alice.publicKey, 'msg-to-remove');
+    const envelope = await sealEnvelope(fields, mallory.privateKey, mallory.publicKey, CHAT_POW_BASE);
+
+    expect(verifyEnvelope({ ...fields, ...envelope }, DM_SIGNED_FIELDS, alice.publicKey).status)
+      .toBe('invalid');
+  });
+
+  it('binds the target, so a valid tombstone cannot be re-aimed', async () => {
+    const alice = identity();
+    const fields = tombstone(alice.publicKey, 'msg-alice-sent');
+    const envelope = await sealEnvelope(fields, alice.privateKey, alice.publicKey, CHAT_POW_BASE);
+
+    // Repointing at someone else's message is the attack this stops.
+    const reaimed = { ...fields, ...envelope, retracts: 'msg-bob-sent' };
+    expect(verifyEnvelope(reaimed, DM_SIGNED_FIELDS, alice.publicKey).status).toBe('invalid');
+  });
+});

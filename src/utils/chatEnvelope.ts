@@ -195,7 +195,7 @@ export function verifyEnvelope(
  * reads the names actually present on the record.
  */
 export const DM_SIGNED_FIELDS = [
-  'id', 'senderId', 'recipientId', 'timestamp', 'seq', 'cipherHash', 'replyTo',
+  'id', 'senderId', 'recipientId', 'timestamp', 'seq', 'cipherHash', 'replyTo', 'retracts',
 ] as const;
 
 /** Field names signed on a group-room message. */
