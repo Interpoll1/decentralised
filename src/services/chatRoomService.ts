@@ -32,6 +32,9 @@ import { StorageService } from './storageService';
 import { BoundedMap } from '../utils/boundedMap';
 import { gunPut, gunOnce, gunReadChildren, verifySoulOnRelay, toGunRecord } from '../utils/gunAsync';
 import { compareMessages } from '../utils/messageOrder';
+import { KeyService } from './keyService';
+import { ChatSafetyService } from './chatSafetyService';
+import { sealEnvelope, verifyEnvelope, cipherDigest, ROOM_SIGNED_FIELDS } from '../utils/chatEnvelope';
 import type { StoredChatMessage, SyncStatus } from '../types/social';
 import type {
   DecryptedChatRoomMeta,
@@ -62,6 +65,11 @@ export interface DisplayMessage {
   /** Delivery state — set for messages this device sent. */
   status?: SyncStatus;
   error?: string;
+  /**
+   * Whether a per-sender signature proved authorship. False on messages written
+   * before wire v3, which the room key alone could never attribute.
+   */
+  verified?: boolean;
 }
 
 const OUTBOX_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -87,6 +95,8 @@ function toDisplay(row: StoredChatMessage): DisplayMessage {
     seq: row.seq,
     status: row.outgoing ? row.syncStatus : undefined,
     error: row.error,
+    // Our own sends are signed on the way out; nothing to re-check locally.
+    verified: row.outgoing ? true : !!row.verified,
   };
 }
 
@@ -403,16 +413,39 @@ export class ChatRoomService {
         senderId: row.senderId,
         senderName: row.senderName || 'Anonymous',
       };
+      const encryptedContent = await EncryptionService.encrypt(JSON.stringify(content), aesKey);
+      const cipherHash = cipherDigest(encryptedContent);
+
+      // The auth tag is keyed with the *room* key, which every member holds — so
+      // it proves the writer is in the room and nothing more. Any member could
+      // mint one for any other member's id. The per-sender signature is what
+      // actually establishes authorship; the tag stays for older clients.
+      const { privateKey, publicKey } = await KeyService.getKeyPair();
+      const envelope = await sealEnvelope(
+        {
+          id: row.id,
+          roomId: row.roomId,
+          senderId: row.senderId,
+          timestamp: row.timestamp,
+          seq: row.seq,
+          cipherHash,
+        },
+        privateKey,
+        publicKey,
+      );
+
       record = toGunRecord({
         id: row.id,
         roomId: row.roomId,
         senderId: row.senderId,
-        encryptedContent: await EncryptionService.encrypt(JSON.stringify(content), aesKey),
+        encryptedContent,
         authTag: await EncryptionService.generateAuthTag(
           aesKey, row.id, String(row.timestamp), row.senderId,
         ),
         timestamp: row.timestamp,
         seq: row.seq,
+        cipherHash,
+        ...envelope,
       });
     } catch (error) {
       return fail(error instanceof Error ? error.message : 'Encryption failed');
@@ -492,10 +525,35 @@ export class ChatRoomService {
       if (!valid) return null;
     }
 
+    // Membership is not authorship. The auth tag above only proves the writer
+    // holds the room key, so before signing existed any member could publish a
+    // message under any other member's id.
+    const verdict = verifyEnvelope(data as Record<string, unknown>, ROOM_SIGNED_FIELDS, senderId);
+    if (verdict.status === 'invalid') {
+      console.warn(`[ChatRoomService] Dropped message ${id} from ${senderId}: ${verdict.reason}`);
+      return null;
+    }
+    const verified = verdict.status === 'valid';
+
+    if (verified && data.cipherHash !== cipherDigest(data.encryptedContent)) {
+      console.warn(`[ChatRoomService] Dropped message ${id}: ciphertext does not match its signature`);
+      return null;
+    }
+
+    if (senderId && ChatSafetyService.isBlocked(senderId)) return null;
+
     let content: DecryptedChatRoomMessageContent;
     try {
       content = JSON.parse(await EncryptionService.decrypt(data.encryptedContent, aesKey));
     } catch {
+      return null;
+    }
+
+    // The signature covers the *outer* sender id, so a signed message whose
+    // encrypted body claims someone else is a forgery attempt by a member —
+    // exactly what the signature is here to stop.
+    if (verified && content.senderId && content.senderId !== senderId) {
+      console.warn(`[ChatRoomService] Dropped message ${id}: encrypted sender disagrees with signed sender`);
       return null;
     }
 
@@ -506,6 +564,7 @@ export class ChatRoomService {
       kind: 'room',
       senderId: content.senderId || senderId,
       senderName: content.senderName || 'Anonymous',
+      verified,
       text: content.text ?? '',
       timestamp,
       seq: Number(data.seq) || 0,

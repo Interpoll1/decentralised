@@ -55,6 +55,13 @@ export interface ChatMessage {
   status?: SyncStatus;
   /** Why an outgoing message has not gone out yet, if anything. */
   error?: string;
+  /**
+   * Whether a signature proved this came from `from`. False on pre-v3 messages,
+   * which the UI marks rather than hides — see the wire-version note below.
+   */
+  verified?: boolean;
+  /** Id of the message this one replies to. */
+  replyTo?: string;
 }
 
 export interface RecipientInfo {
@@ -104,6 +111,9 @@ function toChatMessage(row: StoredChatMessage): ChatMessage {
     sent: row.outgoing,
     status: row.outgoing ? row.syncStatus : undefined,
     error: row.error,
+    // Our own sends are signed on the way out; nothing to re-check locally.
+    verified: row.outgoing ? true : !!row.verified,
+    replyTo: row.replyTo,
   };
 }
 
