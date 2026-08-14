@@ -132,10 +132,12 @@ Each service is a static class unless noted otherwise. Import and call directly:
 | `storageService.ts` | IndexedDB wrapper for blocks, votes, receipts |
 | `encryptionService.ts` | AES-256-GCM encryption for private communities |
 | `keyVaultService.ts` | Local key storage, export/import |
-| `integritySevice.ts` | Hash/signature/PoW/replay-attack validation |
-| `integrityService.ts` | Signature verification and message validation |
+| `integrityService.ts` | Signature verification, PoW, replay-attack validation |
 | `inviteLinkService.ts` | Private community invitation link generation and verification |
-| `chatService.ts` | Instance-based chat message service |
+| `chatService.ts` | Instance-based DM service with hybrid encryption, TOFU key pinning, and durable verification |
+| `chatRoomService.ts` | Encrypted group chat rooms with per-message signatures |
+| `chatKeyPinService.ts` | Trust-on-first-use key pinning and safety number derivation |
+| `chatSafetyService.ts` | Local-first DM blocking/muting and moderation reporting |
 | `searchService.ts` | Instance-based search across polls and posts |
 
 **Exception**: `ChatService` and `SearchService` are instance-based, not static.
@@ -151,6 +153,7 @@ Each service is a static class unless noted otherwise. Import and call directly:
 | `communityStore` | Community list, metadata, encryption keys |
 | `userStore` | Current user profile, authentication state |
 | `postStore` | Published posts and comments |
+| `chatSafetyStore` | DM safety controls — blocking, muting, reporting |
 | `uiStore` | UI state — modals, notifications, settings |
 
 Stores call services; components and views consume stores. Do not call services directly from components.

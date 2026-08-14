@@ -1003,7 +1003,12 @@ class ChatService {
 
     const recipientKey = await this.getRecipientKey(recipientId);
     if (!recipientKey) {
-      return fail('Waiting for the recipient to publish a chat key');
+      // Both cases hold the message in the outbox, but they are not the same
+      // situation and must not read as if they were: one is waiting on the
+      // peer, the other is waiting on a decision only this user can make.
+      return fail(this.pendingKeyChanges.has(recipientId)
+        ? 'Held: this contact’s encryption key changed and has not been accepted'
+        : 'Waiting for the recipient to publish a chat key');
     }
 
     let sealed: Awaited<ReturnType<ChatService['seal']>>;
@@ -1222,8 +1227,12 @@ class ChatService {
       });
     }
     // Also check the rooms index in case new rooms were added while offline
-    gun.get('users').get(this.userId).get('rooms').map().once((roomData: any, roomId: string) => {
-      if (!roomId || roomId === '_' || !roomId.includes(':') || !roomId.includes(this.userId)) return;
+    gun.get('users').get(this.userId).get('rooms').map().once((_roomData: any, roomId: string) => {
+      if (!roomId || roomId === '_' || typeof roomId !== 'string') return;
+      // Hashed ids have no ':' to check us against, and do not need one — this
+      // index is our own, so every entry in it is a room we are in. The legacy
+      // check stays for pre-hash entries, which did name their participants.
+      if (roomId.includes(':') && !roomId.includes(this.userId)) return;
       gun.get('chats').get(roomId).map().once((raw: any) => {
         this.handleRoomRecord(roomId, raw);
       });

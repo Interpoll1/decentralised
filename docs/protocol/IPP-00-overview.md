@@ -75,6 +75,7 @@ converge when connectivity returns.
 | [[IPP-07-multi-relay-quorum]] | Multi-relay vote quorum | **Proposed** |
 | [[IPP-08-anti-abuse]] | PoW, rate limiting, replay, dedup | Draft |
 | [[IPP-09-encrypted-communities]] | AES-256-GCM private spaces | Draft |
+| [[IPP-10-chat]] | Direct messages and encrypted group chat | Draft |
 
 ## 4. Versioning
 

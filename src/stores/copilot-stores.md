@@ -137,6 +137,19 @@ Key refs: `rooms`, `currentRoom`, `messages`, `loading`, `loadingHistory`, `erro
 Key computed: `sortedMessages` — timestamp → per-sender `seq` → id, matching
 `utils/messageOrder.ts`, so the room reads identically on every device.
 
+## `chatSafetyStore.ts` — `useChatSafetyStore`
+
+Local-first DM safety controls backed by `ChatSafetyService`.
+
+- **Blocking and muting:** `block(userId)` / `unblock()` / `mute(userId)` / `unmute()` manage lists persisted in IndexedDB. Blocked senders are filtered before decryption (denying them read-receipts and typing signals). Muted contacts' messages arrive but raise no notification.
+- **State sync:** `syncState()` updates refs from the service (called on `init()` and after mutation). State is deduplicated — blocking/muting the same user twice is idempotent.
+- **Reporting:** `report(input)` / `blockAndReport(input)` submit to the relay's moderation endpoint with configurable plaintext inclusion (default: hash only). Reports carry the signed envelope (if v3) for relay-side verification without plaintext.
+- **DM policy:** `dmPolicy` (`'everyone' | 'verified-only'`) controls whether to accept DMs from any contact or verified-only peers. Persisted in localStorage and synced in/out on init/mutation via `ChatSafetyService`.
+- **Error degradation:** All operations fail gracefully on storage errors, falling back to in-memory state — blocking stays effective even if persistence fails.
+
+Key refs: `blocked`, `muted`, `dmPolicy`
+Key computed: `isBlocked(userId)`, `isMuted(userId)`, `blockedCount`
+
 ## `syncStore.ts`
 
 Currently empty/placeholder.
