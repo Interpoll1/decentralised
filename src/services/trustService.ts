@@ -24,7 +24,7 @@
 import { GunService } from './gunService';
 import { KeyService } from './keyService';
 import { CryptoService } from './cryptoService';
-import { BoundedMap, BoundedSet } from '../utils/boundedMap';
+import { BoundedMap } from '../utils/boundedMap';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

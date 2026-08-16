@@ -42,7 +42,7 @@
 
     <ion-content ref="content">
       <div class="chat-container">
-        <div ref="messagesContainer" class="messages-area">
+        <div class="messages-area">
 
           <!-- Empty state -->
           <div v-if="currentMessages.length === 0 && chatReady" class="empty-chat">
@@ -169,7 +169,6 @@ const typingState         = ref(false);
 const content             = ref<any>(null);
 const typingTimer         = ref<number | null>(null);
 const fileInput           = ref<HTMLInputElement | null>(null);
-const messagesContainer   = ref<HTMLDivElement | null>(null);
 
 interface P2PTransfer { name: string; progress: number }
 const p2pTransfer = ref<P2PTransfer | null>(null);
@@ -208,7 +207,7 @@ async function createPeer(initiator: boolean): Promise<RTCDataChannel> {
   };
 
   // Listen for remote ICE via Gun
-  gunSignal().map().on((raw: any, key: string) => {
+  gunSignal().map().on((raw: any, _key: string) => {
     if (!raw || typeof raw !== 'string') return;
     try {
       const data = JSON.parse(raw);

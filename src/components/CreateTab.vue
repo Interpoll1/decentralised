@@ -79,7 +79,6 @@
 import { computed } from 'vue';
 import { IonIcon } from '@ionic/vue';
 import { peopleOutline, documentTextOutline, statsChartOutline } from 'ionicons/icons';
-import { useRouter } from 'vue-router';
 import { useCommunityStore } from '../stores/communityStore';
 
 defineEmits<{
@@ -87,7 +86,6 @@ defineEmits<{
   (e: 'showPollOptions'): void;
 }>();
 
-const router = useRouter();
 const communityStore = useCommunityStore();
 
 const joinedCommunities = computed(() =>

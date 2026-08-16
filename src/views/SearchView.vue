@@ -454,10 +454,7 @@ import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRouter } from 'vue-router';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonButtons, IonBackButton, IonSearchbar, IonSegment,
-  IonSegmentButton, IonLabel, IonSpinner, IonIcon,
-  IonCard, IonCardHeader, IonCardTitle, IonCardContent,
-  IonBadge, IonButton
+  IonButtons
 } from '@ionic/vue';
 import { useSearch } from '../composables/useSearch';
 

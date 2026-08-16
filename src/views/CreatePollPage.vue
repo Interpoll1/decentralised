@@ -350,13 +350,12 @@ import {
   IonTitle,
   IonContent,
   IonButtons,
-  IonButton,
   IonIcon,
   alertController,
   toastController
 } from '@ionic/vue';
 import CommunityPickerModal from '../components/CommunityPickerModal.vue';
-import { chevronDownOutline, addCircleOutline, closeCircleOutline, timeOutline, listOutline, settingsOutline, shieldCheckmarkOutline, lockClosedOutline, informationCircleOutline } from 'ionicons/icons';
+import { chevronDownOutline, closeCircleOutline, timeOutline, listOutline, settingsOutline, shieldCheckmarkOutline, lockClosedOutline, informationCircleOutline } from 'ionicons/icons';
 import { useCommunityStore } from '../stores/communityStore';
 import { usePollStore } from '../stores/pollStore';
 import { Community } from '../services/communityService';

@@ -112,7 +112,6 @@ import { IonIcon } from '@ionic/vue';
 import { earthOutline } from 'ionicons/icons';
 import { useCommunityStore } from '../stores/communityStore';
 import CommunityCard from './CommunityCard.vue';
-import type { Community } from '../services/communityService';
 
 const props = defineProps<{
   communityFilter: 'all' | 'joined' | 'private';

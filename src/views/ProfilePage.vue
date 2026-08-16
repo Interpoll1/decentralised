@@ -451,7 +451,7 @@ import { useRouter } from 'vue-router';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonButtons, IonIcon, IonSpinner,
+  IonButtons, IonIcon,
   toastController
 } from '@ionic/vue';
 import {

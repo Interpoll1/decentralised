@@ -165,14 +165,6 @@ export const useCommunityStore = defineStore('community', () => {
     persistJoinedCommunities();
   }
 
-  function unmarkJoined(communityId: string) {
-    if (!joinedCommunities.value.has(communityId)) return;
-    const next = new Set(joinedCommunities.value);
-    next.delete(communityId);
-    joinedCommunities.value = next;
-    persistJoinedCommunities();
-  }
-
   async function syncJoinedPrivateCommunitiesFromKeys() {
     try {
       const keys = await KeyVaultService.listKeysByType('community');

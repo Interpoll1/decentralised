@@ -102,7 +102,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
 import { IonIcon, IonButton } from '@ionic/vue';
 import {
   cloudUploadOutline, videocamOutline, alertCircleOutline, checkmarkCircleOutline,
@@ -111,7 +111,6 @@ import {
 import {
   uploadVideo, validateVideoFile, getVideoDuration, extractVideoThumbnail,
   formatFileSize, formatDuration,
-  VIDEO_MAX_SIZE_BYTES, VIDEO_MAX_DURATION_S,
   type VideoMeta, type VideoUploadProgress,
 } from '../services/videoService';
 
@@ -124,8 +123,6 @@ const emit = defineEmits<{
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const MAX_SIZE_MB      = Math.round(VIDEO_MAX_SIZE_BYTES / 1024 / 1024);
-const MAX_DURATION_MIN = Math.round(VIDEO_MAX_DURATION_S / 60);
 
 // ── State ─────────────────────────────────────────────────────────────────────
 

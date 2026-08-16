@@ -516,9 +516,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick, defineAsyncComponent } from 'vue';
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonBadge,
-  IonButtons, IonButton, IonIcon, IonSegment, IonSegmentButton, IonFooter, IonModal,
-  IonLabel, IonSpinner, IonChip, IonSearchbar,
+  IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
+  IonButtons, IonButton, IonIcon, IonFooter, IonModal,
+  IonSpinner,
   IonInfiniteScroll, IonInfiniteScrollContent,
   actionSheetController, toastController
 } from '@ionic/vue';
@@ -526,7 +526,7 @@ import type { ActionSheetButton } from '@ionic/vue';
 import {
   cube, personCircleOutline, settingsOutline, addCircleOutline, addOutline,
   earthOutline, peopleOutline, home, homeOutline, documentTextOutline,
-  chevronForwardOutline, chevronDownOutline, people, addCircle, statsChartOutline,
+  chevronForwardOutline, chevronDownOutline, people, addCircle,
   searchOutline, chatbubble, chatbubbleOutline,
   shieldOutline, shieldCheckmarkOutline, sparklesOutline, eyeOffOutline, linkOutline,
   codeSlashOutline, gameControllerOutline, flaskOutline, businessOutline,
@@ -541,7 +541,6 @@ import { useCommunityStore } from '../stores/communityStore';
 import type { Community } from '../services/communityService';
 import { usePostStore } from '../stores/postStore';
 import { usePollStore } from '../stores/pollStore';
-import CommunityCard from '../components/CommunityCard.vue';
 
 // ── Lazy-loaded tab components ────────────────────────────────────────────────
 const CommunitiesTab = defineAsyncComponent(() => import('../components/CommunitiesTab.vue'));
@@ -556,7 +555,6 @@ const PollCard = defineAsyncComponent(() => import('../components/PollCard.vue')
 
 import { Post } from '../services/postService';
 import { Poll } from '../services/pollService';
-import { GunService } from '../services/gunService';
 import { UserService } from '../services/userService';
 import { warmupFromDB } from '../services/dbWarmup';
 import { ModerationService, moderationVersion } from '../services/moderationService';
@@ -576,18 +574,12 @@ const postStore      = usePostStore();
 const pollStore      = usePollStore();
 
 const FEED_DEBUG      = localStorage.getItem('interpoll_feed_debug') === 'true';
-const SYNC_DEBUG      = localStorage.getItem('interpoll_sync_debug') === 'true';
 const HOME_GUN_FEED_ENABLED         = localStorage.getItem('interpoll_home_gun_feed') !== 'false';
 const HOME_GUN_FEED_MAX_COMMUNITIES = 8;
-const FEED_INITIAL_RENDER_TARGET    = 50;
 
 function feedDebug(label: string, data?: Record<string, unknown>) {
   if (!FEED_DEBUG) return;
   if (data) console.log(`[FeedDebug] ${label}`, data); else console.log(`[FeedDebug] ${label}`);
-}
-function syncDebug(label: string, data?: Record<string, unknown>) {
-  if (!SYNC_DEBUG) return;
-  if (data) console.log(`[SyncDebug] ${label}`, data); else console.log(`[SyncDebug] ${label}`);
 }
 
 const HOME_TABS = ['home', 'communities', 'chat', 'create'] as const;
@@ -627,8 +619,7 @@ const {
 } = tutorial;
 const {
   moderationOnboardingOpen, moderationChoice, moderationCustomApiUrl,
-  moderationCustomApiInput, moderationCustomApiError, moderationSaving,
-  openModerationOnboarding, closeModerationOnboarding,
+  moderationCustomApiError, moderationSaving,
   skipModerationOnboarding, handleModerationModalDismiss, confirmModerationOnboarding,
   maybeShowOnboarding,
 } = moderation;
@@ -669,7 +660,6 @@ function openChat(chat: any)             { ensureChat()?.openChat(chat); }
 function startChatWithUser(user: any)    { ensureChat()?.startChatWithUser(user); }
 function clearUserSearch()               { ensureChat()?.clearUserSearch(); userSearchQuery.value = ''; }
 async function handleUserSearch()        { await ensureChat()?.handleUserSearch(); }
-async function loadChatList()            { await ensureChat()?.loadChatList(); }
 async function processPendingChatInvites(userId: string) {
   await ensureChat()?.processPendingChatInvites(userId);
 }
@@ -678,7 +668,6 @@ async function processPendingChatInvites(userId: string) {
 const feedMode = ref<'for-you' | 'latest'>('for-you');
 function setFeedMode(mode: 'for-you' | 'latest') { feedMode.value = mode; }
 
-const CATEGORY_IDS = ['technology', 'gaming', 'science', 'politics', 'crypto', 'sports', 'all'] as const;
 function categoryFromRoute(): string {
   const raw   = route.query.category;
   const value = Array.isArray(raw) ? raw[0] : raw;

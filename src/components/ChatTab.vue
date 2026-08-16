@@ -176,7 +176,7 @@ async function openFromLink() {
   }
 }
 
-function onLinkPaste(e: ClipboardEvent) {
+function onLinkPaste(_e: ClipboardEvent) {
   // Auto-open on paste after a tick so v-model is updated
   setTimeout(() => { if (inviteLinkInput.value.trim()) openFromLink(); }, 50);
 }

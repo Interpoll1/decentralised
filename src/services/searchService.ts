@@ -115,7 +115,6 @@ class LRUCache {
 
 export class SearchService {
   private static index: any | null = null;
-  private static indexReady = false;
   private static initPromise: Promise<void> | null = null;
 
   /** Master doc store — source of truth for persistence. Parallel to Flexsearch. */
@@ -151,7 +150,6 @@ export class SearchService {
     } catch (e) {
       console.warn('[Search] Could not load index from IDB:', e);
     }
-    this.indexReady = true;
   }
 
   // ── Indexing ───────────────────────────────────────────────────────────────

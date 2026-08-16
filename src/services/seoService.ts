@@ -143,7 +143,7 @@ export class SEOService {
 
   private static async loadPollOptions(
     pollId: string,
-    communityId: string
+    _communityId: string
   ): Promise<any[] | null> {
     return new Promise((resolve) => {
       let resolved = false;

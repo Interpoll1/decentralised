@@ -269,9 +269,7 @@ import {
   IonTitle,
   IonContent,
   IonButtons,
-  IonButton,
   IonIcon,
-  IonSpinner,
   toastController
 } from '@ionic/vue';
 import { imageOutline, closeCircle, informationCircle, videocamOutline, chevronDownOutline, chevronUpOutline, timeOutline } from 'ionicons/icons';

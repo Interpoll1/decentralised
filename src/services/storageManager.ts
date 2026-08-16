@@ -3,8 +3,6 @@ import { StorageService } from './storageService';
 export class StorageManager {
   // Storage limits
   private static readonly MAX_POLLS = 100; // Keep last 100 polls
-  private static readonly MAX_BLOCKS = 1000; // Keep last 1000 blocks
-  private static readonly MAX_RECEIPTS = 500; // Keep last 500 receipts
   private static readonly POLL_RETENTION_DAYS = 30; // Delete polls older than 30 days
 
   // Clear all local storage data
@@ -87,8 +85,6 @@ export class StorageManager {
     // Note: We DON'T prune blocks as they're needed for chain integrity
     // But we could archive them to a separate compressed storage
     
-    const info = await this.getStorageInfo();
-
     return { pollsDeleted, blocksDeleted, receiptsDeleted };
   }
   

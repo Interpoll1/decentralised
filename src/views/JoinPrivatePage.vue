@@ -93,7 +93,6 @@ import {
   alertCircleOutline,
   lockClosedOutline,
 } from 'ionicons/icons';
-import { InviteLinkService } from '@/services/inviteLinkService';
 import { ChatRoomService } from '@/services/chatRoomService';
 import { CommunityService } from '@/services/communityService';
 import { KeyVaultService } from '@/services/keyVaultService';

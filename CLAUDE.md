@@ -66,7 +66,8 @@ Read `docs/protocol/IPP-00-overview.md` (index of the numbered IPP specification
 | Command | Purpose |
 |---------|---------|
 | `npm run dev` | Start Vite dev server at `http://localhost:5173` |
-| `npm run build` | Production build to `dist/` (does **not** type-check) |
+| `npm run build` | Type-check + production build to `dist/` |
+| `npm run build:only` | Production build, skipping the type-check gate |
 | `npm run type-check` | Full TypeScript + template type check via `vue-tsc` |
 | `npm run preview` | Serve the built `dist/` folder locally |
 | `npm test` | Run Vitest test suite (see below) |
@@ -80,9 +81,11 @@ npm test -- -t "requiresPow"
 
 **Type checking:**
 - `npm run type-check` runs `vue-tsc` over `tsconfig.json`, including `.vue` templates.
-- `npm run build` (Vite) does **not** type-check — run `type-check` separately before shipping.
-- Remaining known noise: `noUnusedLocals`/`noUnusedParameters` still report unused
-  imports and bindings across the views. These are cleanup items, not defects.
+- `npm run build` runs the type check first and fails the build on any error.
+  Use `npm run build:only` to skip the gate during local iteration.
+- The tree is currently **type-clean** — keep it that way; a new error fails the build.
+- Note `tsconfig.app.json` is an unused scaffold leftover: it lacks the `@/*` path
+  mapping and extends an uninstalled package. Always check against `tsconfig.json`.
 
 ---
 

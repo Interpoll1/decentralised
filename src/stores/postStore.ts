@@ -122,7 +122,6 @@ export const usePostStore = defineStore('post', () => {
   const currentFeed        = ref<'all' | 'community'>('all');
   const currentCommunityId = ref<string | null>(null);
   const visibleCount       = ref(PAGE_SIZE);
-  const initialLoadDone    = ref(false);
 
   // No more banner — kept for backward compat
   const pendingNewPosts = ref<Post[]>([]);

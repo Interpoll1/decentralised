@@ -154,7 +154,7 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
     if (chatDiscoverySubscribed || !currentUserId) return;
     const gun = GunService.getGun();
     const discoveryListener = gun.get('users').get(currentUserId).get('rooms').map()
-      .on((roomData: any, roomId: string) => {
+      .on((_roomData: any, roomId: string) => {
         if (!roomId || roomId === '_' || typeof roomId !== 'string') return;
         if (!roomId.includes(':') || !roomId.includes(currentUserId)) return;
         const otherUserId = roomId.split(':').find(id => id !== currentUserId);
@@ -205,7 +205,7 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
     await toast.present();
   }
 
-  async function initBackgroundChat(activeTabRef: { value: string }) {
+  async function initBackgroundChat(_activeTabRef: { value: string }) {
     const WS_URL = config.relay.websocket;
     bgChatService = new ChatService(WS_URL, currentUserId);
     bgChatService.onConnectionChange = () => {};

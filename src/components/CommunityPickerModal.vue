@@ -34,7 +34,7 @@
             </div>
 
             <!-- List -->
-            <div class="cpm-list" ref="listEl">
+            <div class="cpm-list">
               <!-- Empty state -->
               <div v-if="filtered.length === 0" class="cpm-empty">
                 <svg viewBox="0 0 24 24" fill="none" class="cpm-empty-icon">
@@ -97,7 +97,6 @@ const emit = defineEmits<{
 
 const query = ref('');
 const searchInput = ref<HTMLInputElement | null>(null);
-const listEl = ref<HTMLElement | null>(null);
 
 const filtered = computed(() => {
   const q = query.value.trim().toLowerCase();

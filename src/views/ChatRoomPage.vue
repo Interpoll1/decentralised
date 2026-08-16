@@ -99,10 +99,10 @@ import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonFooter, IonButtons, IonBackButton, IonButton, IonIcon,
-  IonSpinner, toastController,
+  IonFooter, IonButtons, IonIcon,
+  toastController,
 } from '@ionic/vue';
-import { shareSocialOutline, lockClosedOutline, alertCircleOutline, chatbubblesOutline } from 'ionicons/icons';
+import { lockClosedOutline, alertCircleOutline, chatbubblesOutline } from 'ionicons/icons';
 import { useChatRoomStore } from '@/stores/chatRoomStore';
 import { ChatRoomService } from '@/services/chatRoomService';
 import { KeyVaultService } from '@/services/keyVaultService';

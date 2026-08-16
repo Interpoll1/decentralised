@@ -799,7 +799,7 @@ class ChatService {
       });
     }
     // Also check the rooms index in case new rooms were added while offline
-    gun.get('users').get(this.userId).get('rooms').map().once((roomData: any, roomId: string) => {
+    gun.get('users').get(this.userId).get('rooms').map().once((_roomData: any, roomId: string) => {
       if (!roomId || roomId === '_' || !roomId.includes(':') || !roomId.includes(this.userId)) return;
       gun.get('chats').get(roomId).map().once((raw: any) => {
         this.handleRoomRecord(roomId, raw);

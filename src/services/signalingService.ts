@@ -28,7 +28,7 @@
 import { CryptoService } from '@/services/cryptoService';
 import { GunService } from '@/services/gunService';
 import { KeyService } from '@/services/keyService';
-import { BoundedMap, BoundedSet } from '../utils/boundedMap';
+import { BoundedSet } from '../utils/boundedMap';
 
 /** How a peer can be reached on a signaling channel. */
 export interface SignalTarget {

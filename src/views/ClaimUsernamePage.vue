@@ -201,7 +201,6 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import {
   IonPage, IonHeader, IonToolbar, IonButtons, IonBackButton,
   IonTitle, IonContent, IonItem, IonLabel, IonInput,
@@ -218,7 +217,6 @@ import UserIdentityBadge from '@/components/UserIdentityBadge.vue';
 
 type Step = 'input' | 'pow' | 'done';
 
-const router = useRouter();
 const userStore = useUserStore();
 
 const step = ref<Step>('input');

@@ -94,7 +94,7 @@
         <div>
           <div class="section-heading">Community Rules</div>
           <div class="rules-list-edit">
-            <div v-for="(rule, index) in rules" :key="index" class="rule-row">
+            <div v-for="(_, index) in rules" :key="index" class="rule-row">
               <span class="rule-number">{{ index + 1 }}</span>
               <input
                 v-model="rules[index]"
@@ -481,25 +481,11 @@ import {
   IonTitle,
   IonContent,
   IonButtons,
-  IonBackButton,
-  IonCard,
-  IonCardHeader,
-  IonCardTitle,
-  IonCardSubtitle,
-  IonCardContent,
-  IonItem,
-  IonInput,
-  IonTextarea,
-  IonSelect,
-  IonSelectOption,
-  IonToggle,
-  IonLabel,
-  IonButton,
   IonIcon,
   IonSpinner,
   toastController
 } from '@ionic/vue';
-import { add, closeCircle, informationCircle } from 'ionicons/icons';
+import { informationCircle } from 'ionicons/icons';
 import { useCommunityStore } from '../stores/communityStore';
 import PrivateCommunityToggle from '../components/PrivateCommunityToggle.vue';
 import type { PrivateCommunityConfig } from '../components/PrivateCommunityToggle.vue';

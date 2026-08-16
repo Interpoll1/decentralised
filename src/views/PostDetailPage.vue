@@ -184,7 +184,7 @@ function autoLink(text: string): string {
   return text.replace(/(https?:\/\/[\w\-\.\/?#&=;%+~:@,]+[\w\/])/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
 }
 
-import { ref, computed, onMounted, onUnmounted, watch, defineAsyncComponent, h } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, defineAsyncComponent } from 'vue';
 const VideoPlayer = defineAsyncComponent({
   loader: () => import('../components/VideoPlayer.vue'),
   loadingComponent: {
@@ -198,7 +198,7 @@ const VideoPlayer = defineAsyncComponent({
   delay: 200,
   timeout: 10_000,
 });
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonBackButton, IonButton, IonIcon,
@@ -225,7 +225,6 @@ import { IPFSService } from '../services/ipfsService';
 import { checkContent } from '../utils/contentGuard';
 
 const route = useRoute();
-const router = useRouter();
 const postStore = usePostStore();
 const commentStore = useCommentStore();
 const communityStore = useCommunityStore();
@@ -241,16 +240,14 @@ const voteVersion = ref(0);
 const fullImageSrc = ref<string | null>(null);
 const postAuthorTrustLevel = ref<'trusted-issuer' | 'unverified'>('unverified');
 let postAuthorTrustRequestId = 0;
-let fullImageLoadPromise: Promise<string | null> | null = null;
 
 // Load full-res image from GunDB to replace thumbnail
 watch(
   () => post.value?.imageIPFS,
   (cid) => {
     fullImageSrc.value = null;
-    fullImageLoadPromise = null;
     if (!cid) return;
-    fullImageLoadPromise = loadFullImageSrc(cid);
+    void loadFullImageSrc(cid);
   },
   { immediate: true }
 );
@@ -476,7 +473,6 @@ async function loadFullImageSrc(cid: string): Promise<string | null> {
     return null;
   } finally {
     if (post.value?.imageIPFS === cid) {
-      fullImageLoadPromise = null;
     }
   }
 }

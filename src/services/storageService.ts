@@ -10,7 +10,8 @@ interface VotingChainDB extends DBSchema {
     indexes: { 'by-hash': string };
   };
   votes: {
-    key: string;
+    // keyPath is 'timestamp' (see the upgrade handler), so the key is numeric.
+    key: number;
     value: Vote;
     indexes: { 'by-poll': string };
   };
@@ -56,24 +57,24 @@ interface VotingChainDB extends DBSchema {
 const IDB_OPEN_TIMEOUT_MS = 4_000;
 
 export class StorageService {
-  private static dbPromise: Promise<IDBPDatabase>;
+  private static dbPromise: Promise<IDBPDatabase<VotingChainDB>>;
 
   /** True when the active store is the volatile in-memory fallback (no persistence). */
   static usingMemoryFallback = false;
 
-  static async getDB(): Promise<IDBPDatabase> {
+  static async getDB(): Promise<IDBPDatabase<VotingChainDB>> {
     if (!this.dbPromise) {
       this.dbPromise = this.openDatabase();
     }
     return this.dbPromise;
   }
 
-  private static async openDatabase(): Promise<IDBPDatabase> {
+  private static async openDatabase(): Promise<IDBPDatabase<VotingChainDB>> {
     // Feature-detect: some restricted/mobile contexts expose no IndexedDB at all.
     const hasIndexedDB = typeof indexedDB !== 'undefined' && indexedDB !== null;
     if (hasIndexedDB) {
       try {
-        const open = openDB('interpoll-db', 4, {
+        const open = openDB<VotingChainDB>('interpoll-db', 4, {
           upgrade(db, oldVersion) {
             if (oldVersion < 1) {
               // Blocks store
@@ -400,19 +401,19 @@ export class StorageService {
     let removed = 0;
     for (const key of allKeys) {
       try {
-        const val = await store.get(key as IDBValidKey);
+        const val = await store.get(key);
         // Heuristic: legacy posts may be stored under keys like 'post:<id>' or in arrays
         if (!val) continue;
         if (typeof key === 'string' && key.startsWith('post-')) {
           // val should have dataVersion; remove if not matching
           const dv = val && typeof val.dataVersion === 'string' ? val.dataVersion : null;
           if (dv && dv !== currentNamespace) {
-            await store.delete(key as IDBValidKey);
+            await store.delete(key);
             removed++;
           }
           if (!dv && Number.parseInt(currentNamespace.replace(/^v/i, ''), 10) >= 3) {
             // no version and running v3+ -> delete conservatively
-            await store.delete(key as IDBValidKey);
+            await store.delete(key);
             removed++;
           }
         }
@@ -427,7 +428,7 @@ export class StorageService {
           });
           if (filtered.length !== postsArr.length) {
             (val as any).posts = filtered;
-            await store.put(val, key as IDBValidKey);
+            await store.put(val, key);
             removed += (postsArr.length - filtered.length);
           }
         }
@@ -445,7 +446,7 @@ export class StorageService {
  * hangs (e.g. iOS Safari Private mode). Keeps the app functional for the
  * session — data simply does not persist across reloads.
  */
-function createInMemoryDB(): IDBPDatabase {
+function createInMemoryDB(): IDBPDatabase<VotingChainDB> {
   const stores: Record<string, Map<any, any>> = {
     blocks: new Map(),
     votes: new Map(),
@@ -518,5 +519,5 @@ function createInMemoryDB(): IDBPDatabase {
       return { objectStore, done: Promise.resolve() };
     },
   };
-  return db as IDBPDatabase;
+  return db as unknown as IDBPDatabase<VotingChainDB>;
 }
