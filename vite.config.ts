@@ -44,6 +44,14 @@ const isNativeBuild = process.env.CAP_BUILD === '1';
 
 export default defineConfig({
   base: '/',
+
+  // Strip development-only logging from production bundles. `pure` calls are
+  // only eliminated by the minifier, which runs on `vite build` and not in dev,
+  // so logs stay available while developing. console.warn and console.error are
+  // deliberately kept — they carry real diagnostics for users and support.
+  esbuild: {
+    pure: ['console.log', 'console.debug'],
+  },
   plugins: [
     vue(),
     spaRouteFallbackPlugin(),

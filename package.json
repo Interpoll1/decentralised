@@ -9,6 +9,7 @@
     "dev:gun": "node gun-relay-server/gun-relay.js",
     "dev:peer": "node peer.js",
     "build": "vite build",
+    "type-check": "vue-tsc --noEmit -p tsconfig.json",
     "build:mobile": "CAP_BUILD=1 vite build",
     "cap:sync": "npm run build:mobile && cap sync",
     "cap:android": "npm run cap:sync && cap open android",

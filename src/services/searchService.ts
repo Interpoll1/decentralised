@@ -101,7 +101,10 @@ class LRUCache {
   }
 
   set(key: string, data: SearchResponse): void {
-    if (this.map.size >= MAX_CACHE) this.map.delete(this.map.keys().next().value);
+    if (this.map.size >= MAX_CACHE) {
+      const oldest = this.map.keys().next().value;
+      if (oldest !== undefined) this.map.delete(oldest);
+    }
     this.map.set(key, { data, ts: Date.now() });
   }
 

@@ -42,7 +42,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter, type RouteLocationRaw } from 'vue-router'
-import { useUserStore } from '@/stores/userStore'
+import { AuditService } from '@/services/auditService'
 
 interface PaletteCommand {
   id: string
@@ -54,9 +54,11 @@ interface PaletteCommand {
 }
 
 const router = useRouter()
-const userStore = useUserStore()
 
 const isOpen = ref(false)
+// Re-read the cached OAuth session each time the palette opens; localStorage is
+// not reactive, so `isOpen` is the dependency that refreshes this.
+const isAuthenticated = computed(() => isOpen.value && !!AuditService.getCachedCloudUser())
 const query = ref('')
 const selectedIndex = ref(0)
 const searchInputRef = ref<HTMLInputElement | null>(null)
@@ -162,7 +164,7 @@ const commands = computed<PaletteCommand[]>(() => [
 ])
 
 const visibleCommands = computed(() => {
-  const authenticated = userStore.isAuthenticated
+  const authenticated = isAuthenticated.value
 
   return commands.value.filter((command) => {
     if (command.requiresAuth) {

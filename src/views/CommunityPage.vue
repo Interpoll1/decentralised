@@ -191,10 +191,10 @@
       </div>
 
        <!-- Rules Section -->
-      <div v-if="hasAccess && displayCommunity?.rules?.length > 0" class="rules-section">
+      <div v-if="hasAccess && displayCommunity?.rules?.length" class="rules-section">
         <h3>Community Rules</h3>
         <ol class="rules-list">
-          <li v-for="(rule, index) in displayCommunity.rules" :key="index">{{ rule }}</li>
+          <li v-for="(rule, index) in displayCommunity?.rules" :key="index">{{ rule }}</li>
         </ol>
       </div>
      

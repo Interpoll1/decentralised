@@ -66,9 +66,9 @@ Read `docs/protocol/IPP-00-overview.md` (index of the numbered IPP specification
 | Command | Purpose |
 |---------|---------|
 | `npm run dev` | Start Vite dev server at `http://localhost:5173` |
-| `npm run build` | Type-check + production build to `dist/` |
+| `npm run build` | Production build to `dist/` (does **not** type-check) |
+| `npm run type-check` | Full TypeScript + template type check via `vue-tsc` |
 | `npm run preview` | Serve the built `dist/` folder locally |
-| `npm run lint` | ESLint with auto-fix on `.vue`, `.ts`, etc. |
 | `npm test` | Run Vitest test suite (see below) |
 | `npm run test:watch` | Vitest in watch mode |
 
@@ -79,8 +79,10 @@ npm test -- -t "requiresPow"
 ```
 
 **Type checking:**
-- `npm run build` includes full TypeScript checking.
-- No separate type-check command; linting catches most issues.
+- `npm run type-check` runs `vue-tsc` over `tsconfig.json`, including `.vue` templates.
+- `npm run build` (Vite) does **not** type-check — run `type-check` separately before shipping.
+- Remaining known noise: `noUnusedLocals`/`noUnusedParameters` still report unused
+  imports and bindings across the views. These are cleanup items, not defects.
 
 ---
 
@@ -281,9 +283,9 @@ Environment variables:
 - **Strict mode:** ON (`strict: true`)
 - **Unused variables/parameters:** Error (`noUnusedLocals`, `noUnusedParameters`)
 - **No fallthroughs in switch:** Error
-- **Linter:** ESLint with Vue plugin
-  - Run with auto-fix: `npm run lint`
-  - Scope: `.vue`, `.js`, `.jsx`, `.ts`, `.tsx`, and `.mts` files
+- **Linter:** none currently configured. ESLint is neither a dependency nor
+  configured in this repo, so there is no working `lint` script — use
+  `npm run type-check` as the static-analysis gate.
 
 ---
 

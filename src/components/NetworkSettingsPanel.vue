@@ -308,7 +308,7 @@ const announcing    = ref(false);
 const announceResult = ref<{ ok: boolean; msg: string } | null>(null);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const BUILTIN_URLS = new Set([...PRIVATE_PEERS, ...PUBLIC_PEERS]);
+const BUILTIN_URLS = new Set<string>([...PRIVATE_PEERS, ...PUBLIC_PEERS]);
 const isUserPeer = (url: string) => !BUILTIN_URLS.has(url);
 
 function trimUrl(url: string): string {

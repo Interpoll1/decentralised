@@ -502,19 +502,19 @@ export class TrustService {
     }
 
     const gun = GunService.getGun();
-    let found: TrustLevel = 'none';
+    let isVerified = false;
 
     await new Promise<void>((resolve) => {
       gun.get(GUN_USERNAMES_ROOT).map().once((record: any) => {
         if (record && record.pubkey === pubkey && record.level === 'verified' && record.certificate) {
-          found = 'verified';
+          isVerified = true;
         }
       });
       setTimeout(resolve, 2000);
     });
 
-    this.certCache.set(pubkey, found === 'verified' ? ({} as TrustCertificate) : null);
-    return found;
+    this.certCache.set(pubkey, isVerified ? ({} as TrustCertificate) : null);
+    return isVerified ? 'verified' : 'none';
   }
 
   /**

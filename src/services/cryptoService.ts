@@ -96,7 +96,7 @@ export class CryptoService {
   }
 
   // Generate browser fingerprint (anonymous)
-  static async generateFingerprint(): Promise {
+  static async generateFingerprint(): Promise<string> {
     const data = [
       navigator.userAgent,
       navigator.language,
@@ -105,7 +105,7 @@ export class CryptoService {
       screen.width + 'x' + screen.height,
       navigator.hardwareConcurrency || 'unknown'
     ].join('|');
-    
+
     return this.hash(data);
   }
 

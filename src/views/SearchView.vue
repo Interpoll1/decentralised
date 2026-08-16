@@ -84,10 +84,10 @@
         >
 
           
-          <h3 class="result-title">{{ result.title || result.question }}</h3>
-          
+          <h3 class="result-title">{{ result.title }}</h3>
+
           <p class="result-content">
-            {{ truncate(result.content || result.description || '', 150) }}
+            {{ truncate(result.content || '', 150) }}
           </p>
           
           <div class="result-meta">

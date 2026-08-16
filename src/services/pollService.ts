@@ -39,7 +39,7 @@ type LocalPollBackupEntry = {
 type LocalPollBackupMap = Record<string, LocalPollBackupEntry>;
 
 const POLL_DEBUG_KEY = 'interpoll_poll_debug';
-type PollDebugCategory = 'create' | 'writes' | 'index' | 'ui' | 'all';
+type PollDebugCategory = 'create' | 'writes' | 'index' | 'ui' | 'vote' | 'all';
 
 function getPollDebugCategories(): Set<string> {
   try {
@@ -897,7 +897,7 @@ export class PollService {
     });
     pollActiveListeners.set(listenerKey, { subscription, timer: hydrationTimer, hardTimeout });
 
-    communityPollsNode.once((allPolls) => {
+    communityPollsNode.once((allPolls: any) => {
       if (disposed || snapshotHandled) return;
       snapshotHandled = true;
       clearTimeout(hydrationTimer);
@@ -1009,7 +1009,7 @@ export class PollService {
     });
     pollActiveListeners.set(listenerKey, { subscription, timer: hydrationTimer, hardTimeout });
 
-    pollsNode.once((allPolls) => {
+    pollsNode.once((allPolls: any) => {
       if (disposed || snapshotHandled) return;
       snapshotHandled = true;
       clearTimeout(hydrationTimer);
@@ -1201,7 +1201,6 @@ export class PollService {
       if (!rootConfirmed?.id) {
         throw new Error('Timed out waiting for poll root write ACK and root path could not be confirmed');
       }
-      } // end else (relay confirmation path)
       if (!communityConfirmed?.id) {
         logPollDebug('create', 'Root-only confirmation detected; retrying community write repair', { pollId });
       }
@@ -1233,6 +1232,7 @@ export class PollService {
         rootConfirmed: Boolean(rootConfirmed?.id),
         communityConfirmed: Boolean(communityConfirmed?.id),
       });
+      } // end else (relay confirmation path)
     }
 
     if (poll.isPrivate) {

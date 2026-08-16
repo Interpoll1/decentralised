@@ -84,7 +84,11 @@ import type { Poll } from '../types/poll';
 import { VoteTierService } from '../services/voteTierService';
 
 interface Props {
-  poll: ChainPollSnapshot;
+  // Accepts either a chain snapshot or a full Gun poll — the component already
+  // normalises both title/question and string/object option shapes. Callers must
+  // pass the full Poll when vote authorisation or trust-tier evidence is needed,
+  // since those read fields the snapshot does not carry.
+  poll: ChainPollSnapshot | Poll;
   inviteCode?: string | null;
   requiresInviteCode?: boolean;
 }

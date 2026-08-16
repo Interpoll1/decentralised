@@ -135,17 +135,17 @@ export class StorageService {
   }
 
   // Block operations
-  static async saveBlock(block: ChainBlock): Promise {
+  static async saveBlock(block: ChainBlock): Promise<void> {
     const db = await this.getDB();
     await db.put('blocks', block);
   }
 
-  static async getBlock(index: number): Promise {
+  static async getBlock(index: number): Promise<ChainBlock | undefined> {
     const db = await this.getDB();
     return db.get('blocks', index);
   }
 
-  static async getLatestBlock(): Promise {
+  static async getLatestBlock(): Promise<ChainBlock | undefined> {
     const db = await this.getDB();
     const tx = db.transaction('blocks', 'readonly');
     const store = tx.objectStore('blocks');
@@ -153,24 +153,24 @@ export class StorageService {
     return cursor?.value;
   }
 
-  static async getAllBlocks(): Promise {
+  static async getAllBlocks(): Promise<ChainBlock[]> {
     const db = await this.getDB();
     return db.getAll('blocks');
   }
 
   // Vote operations
-  static async saveVote(vote: Vote): Promise {
+  static async saveVote(vote: Vote): Promise<void> {
     const db = await this.getDB();
     await db.put('votes', vote);
   }
 
-  static async getVotesByPoll(pollId: string): Promise {
+  static async getVotesByPoll(pollId: string): Promise<Vote[]> {
     const db = await this.getDB();
     return db.getAllFromIndex('votes', 'by-poll', pollId);
   }
 
   // Receipt operations
-  static async saveReceipt(receipt: Receipt): Promise {
+  static async saveReceipt(receipt: Receipt): Promise<void> {
     const db = await this.getDB();
     const normalizedReceipt: Receipt = {
       ...receipt,
@@ -180,7 +180,7 @@ export class StorageService {
     await db.put('receipts', normalizedReceipt);
   }
 
-  static async getReceipt(verificationCode: string): Promise {
+  static async getReceipt(verificationCode: string): Promise<Receipt | undefined> {
     const db = await this.getDB();
     const receipt = await db.get('receipts', verificationCode);
     if (!receipt) return undefined;
@@ -191,7 +191,7 @@ export class StorageService {
     };
   }
 
-  static async getAllReceipts(): Promise {
+  static async getAllReceipts(): Promise<Receipt[]> {
     const db = await this.getDB();
     const receipts = await db.getAll('receipts');
     return receipts.map((receipt: Receipt) => ({
@@ -202,17 +202,17 @@ export class StorageService {
   }
 
   // Poll operations
-  static async savePoll(poll: ChainPollSnapshot): Promise {
+  static async savePoll(poll: ChainPollSnapshot): Promise<void> {
     const db = await this.getDB();
     await db.put('polls', poll);
   }
 
-  static async getPoll(id: string): Promise {
+  static async getPoll(id: string): Promise<ChainPollSnapshot | undefined> {
     const db = await this.getDB();
     return db.get('polls', id);
   }
 
-  static async getAllPolls(): Promise {
+  static async getAllPolls(): Promise<ChainPollSnapshot[]> {
     const db = await this.getDB();
     return db.getAll('polls');
   }
@@ -336,12 +336,12 @@ export class StorageService {
   }
 
   // Metadata operations
-  static async setMetadata(key: string, value: any): Promise {
+  static async setMetadata(key: string, value: any): Promise<void> {
     const db = await this.getDB();
     await db.put('metadata', value, key);
   }
 
-  static async getMetadata(key: string): Promise {
+  static async getMetadata(key: string): Promise<any> {
     const db = await this.getDB();
     return db.get('metadata', key);
   }
@@ -369,7 +369,7 @@ export class StorageService {
 
   // ── Utility ────────────────────────────────────────────────────────────────
 
-  static async clearAll(): Promise {
+  static async clearAll(): Promise<void> {
     const db = await this.getDB();
     const tx = db.transaction(
       ['blocks', 'votes', 'receipts', 'polls', 'metadata', 'encryption-keys', 'comments', 'chat-messages', 'vote-index'],

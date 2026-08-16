@@ -282,7 +282,7 @@ async function createPeer(initiator: boolean): Promise<RTCDataChannel> {
 }
 
 // Incoming file receive state
-let recvMeta: { name: string; size: number; type: string } | null = null;
+let recvMeta: { name: string; size: number; mime: string } | null = null;
 let recvChunks: ArrayBuffer[] = [];
 let recvReceived = 0;
 
@@ -297,9 +297,9 @@ function setupDataChannel(dc: RTCDataChannel) {
         recvReceived = 0;
         p2pTransfer.value = { name: msg.name, progress: 0 };
       } else if (msg.type === 'done' && recvMeta) {
-        const blob     = new Blob(recvChunks, { type: recvMeta.type });
+        const blob     = new Blob(recvChunks, { type: recvMeta.mime });
         const url      = URL.createObjectURL(blob);
-        const mtype    = recvMeta.type.startsWith('video') ? 'video' : 'image';
+        const mtype    = String(recvMeta.mime || '').startsWith('video') ? 'video' : 'image';
         const fakeMsg: ChatMessage & { mediaUrl: string; mediaType: 'image' | 'video' } = {
           id: `p2p-${Date.now()}`, from: recipientId.value, to: myUserId,
           message: `[${mtype === 'video' ? 'Video' : 'Image'}]`,
@@ -333,7 +333,7 @@ async function sendFileP2P(file: File) {
     const dc = await createPeer(true);
 
     // Send meta
-    dc.send(JSON.stringify({ type: 'meta', name: file.name, size: file.size, type: file.type }));
+    dc.send(JSON.stringify({ type: 'meta', name: file.name, size: file.size, mime: file.type }));
 
     // Stream chunks
     const buffer = await file.arrayBuffer();

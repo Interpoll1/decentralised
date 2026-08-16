@@ -39,7 +39,10 @@ describe('ModerationService', () => {
   describe('getDefaultWordList', () => {
     it('returns a non-empty list of word entries', () => {
       const list = ModerationService.getDefaultWordList();
-      expect(list.length).toBeGreaterThan(100);
+      // The filter is a context-aware pattern list, not a bare word list, so it
+      // is deliberately small — see the design notes at the top of
+      // src/services/moderationService.ts.
+      expect(list.length).toBeGreaterThan(20);
       expect(list[0]).toHaveProperty('word');
       expect(list[0]).toHaveProperty('category');
       expect(list[0]).toHaveProperty('severity');
@@ -77,15 +80,22 @@ describe('ModerationService', () => {
 
     it('flags content when word filter is enabled', () => {
       ModerationService.saveSettings({ wordFilterEnabled: true });
-      const result = ModerationService.checkContent('what the fuck is this shit');
+      const result = ModerationService.checkContent('i will kill you');
       expect(result.flagged).toBe(true);
       expect(result.matches.length).toBeGreaterThan(0);
     });
 
+    it('does not flag bare profanity', () => {
+      // Profanity is a user preference, not a platform-safety concern — the
+      // filter deliberately ignores it to avoid false positives.
+      ModerationService.saveSettings({ wordFilterEnabled: true });
+      expect(ModerationService.checkContent('what the fuck is this shit').flagged).toBe(false);
+    });
+
     it('returns correct severity levels', () => {
       ModerationService.saveSettings({ wordFilterEnabled: true });
-      // "nigger" is a slur with high severity
-      const result = ModerationService.checkContent('test nigger test');
+      // Direct personal threats are the high-severity tier.
+      const result = ModerationService.checkContent('i will kill you');
       expect(result.severity).toBe('high');
     });
 

@@ -1,6 +1,5 @@
 import { GunService } from './gunService';
 import type { Post } from './postService';
-import type { Poll } from './pollService';
 
 export class SEOService {
   private static gun = GunService.getGun();

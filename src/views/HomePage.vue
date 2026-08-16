@@ -87,7 +87,7 @@
             :class="{ active: selectedCategory === cat.id }"
             @click="selectCategory(cat.id)"
           >
-            <ion-icon :icon="cat.icon" :class="cat.tone"></ion-icon>
+            <ion-icon :icon="cat.icon"></ion-icon>
             <span>{{ cat.label }}</span>
           </button>
           <button class="side-nav-item side-nav-util side-nav-category" style="opacity:0.6" @click="showMoreCategories = !showMoreCategories">
@@ -522,6 +522,7 @@ import {
   IonInfiniteScroll, IonInfiniteScrollContent,
   actionSheetController, toastController
 } from '@ionic/vue';
+import type { ActionSheetButton } from '@ionic/vue';
 import {
   cube, personCircleOutline, settingsOutline, addCircleOutline, addOutline,
   earthOutline, peopleOutline, home, homeOutline, documentTextOutline,
@@ -598,7 +599,7 @@ function tabFromRoute(): HomeTab {
 }
 
 const activeTab       = ref<string>(tabFromRoute());
-const communityFilter = ref('all');
+const communityFilter = ref<'all' | 'joined' | 'private'>('all');
 const isLoadingPosts  = ref(false);
 const voteVersion     = ref(0);
 const isHeaderHidden  = ref(false);
@@ -685,11 +686,6 @@ function categoryFromRoute(): string {
 }
 const selectedCategory = ref<string>(categoryFromRoute());
 
-watch(selectedCategory, (cat) => {
-  if (cat !== 'all') {
-    void pollStore.loadAllCommunityPolls?.();
-  }
-});
 watch(() => route.query.category, () => {
   const cat = categoryFromRoute();
   if (selectedCategory.value !== cat) selectedCategory.value = cat;
@@ -866,11 +862,11 @@ function navigateToPoll(poll: Poll)       { router.push(`/community/${poll.commu
 
 async function handleModerationSubmit(post: Post) {
   if (!ModerationService.canSubmitHashesFromHome()) return;
-  await ModerationService.submitPostHash(post);
+  await ModerationService.submitPostBodyHash([post.title, post.content].filter(Boolean).join('\n\n'));
 }
 async function handleModerationSubmitPoll(poll: Poll) {
   if (!ModerationService.canSubmitHashesFromHome()) return;
-  await ModerationService.submitPollHash(poll);
+  await ModerationService.submitPostBodyHash([poll.question, poll.description].filter(Boolean).join('\n\n'));
 }
 
 // ── Scroll ────────────────────────────────────────────────────────────────────
@@ -899,30 +895,32 @@ async function onInfiniteScroll(event: any) {
 
 // ── Create actions ────────────────────────────────────────────────────────────
 async function showPostOptions() {
+  const communityButtons = communityStore.communities
+    .filter((c: any) => c.isJoined)
+    .slice(0, 8)
+    .map((c: any) => ({
+      text: c.displayName,
+      handler: () => { router.push(`/community/${c.id}/create-post`); },
+    }));
+  const buttons: ActionSheetButton[] = [...communityButtons, { text: 'Cancel', role: 'cancel' }];
   const actionSheet = await actionSheetController.create({
     header: 'Create a post in...',
-    buttons: communityStore.communities
-      .filter((c: any) => c.isJoined)
-      .slice(0, 8)
-      .map((c: any) => ({
-        text: c.displayName,
-        handler: () => { router.push(`/community/${c.id}/create-post`); },
-      }))
-      .concat([{ text: 'Cancel', role: 'cancel' }]),
+    buttons,
   });
   await actionSheet.present();
 }
 async function showPollOptions() {
+  const communityButtons = communityStore.communities
+    .filter((c: any) => c.isJoined)
+    .slice(0, 8)
+    .map((c: any) => ({
+      text: c.displayName,
+      handler: () => { router.push(`/community/${c.id}/create-poll`); },
+    }));
+  const buttons: ActionSheetButton[] = [...communityButtons, { text: 'Cancel', role: 'cancel' }];
   const actionSheet = await actionSheetController.create({
     header: 'Create a poll in...',
-    buttons: communityStore.communities
-      .filter((c: any) => c.isJoined)
-      .slice(0, 8)
-      .map((c: any) => ({
-        text: c.displayName,
-        handler: () => { router.push(`/community/${c.id}/create-poll`); },
-      }))
-      .concat([{ text: 'Cancel', role: 'cancel' }]),
+    buttons,
   });
   await actionSheet.present();
 }

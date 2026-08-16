@@ -862,7 +862,10 @@ export const usePostStore = defineStore('post', () => {
           if (POST_DEBUG) postDebug('purged-legacy-posts', { removed });
         }
       }
-    } catch (err) { /* ignore */ }
+    } catch (err) {
+      // Non-fatal: a failed purge just leaves legacy posts in place.
+      console.warn('[PostStore] Legacy post purge failed:', err);
+    }
   })();
 
   return {

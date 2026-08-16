@@ -299,7 +299,7 @@ const paths = [
   { id: 'browser', icon: '🌐', label: 'Browser tab',   difficulty: 'Easy' },
   { id: 'home',    icon: '🏠', label: 'Home server',   difficulty: 'Medium' },
   { id: 'vps',     icon: '☁️',  label: 'Cloud server',  difficulty: 'Technical' },
-];
+] as const;
 const selectedPath = ref<'browser' | 'home' | 'vps'>('browser');
 
 // ── Browser relay ──────────────────────────────────────────────────────────────

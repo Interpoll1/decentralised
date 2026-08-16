@@ -178,9 +178,9 @@
             </div>
             <div class="seg-pills">
               <button class="seg-pill" :class="{ active: feedPreferences.mode === 'for-you' }"
-                @click="onFeedModeChange({ detail: { value: 'for-you' } })">For You</button>
+                @click="setFeedMode('for-you')">For You</button>
               <button class="seg-pill" :class="{ active: feedPreferences.mode === 'latest' }"
-                @click="onFeedModeChange({ detail: { value: 'latest' } })">Latest</button>
+                @click="setFeedMode('latest')">Latest</button>
             </div>
             <p class="helper-text mt-8">For You uses keyword and community preferences plus engagement/freshness scoring. Latest is purely chronological.</p>
           </div>
@@ -396,24 +396,6 @@
             <p class="helper-text mt-8">{{ moderationAuthMessage }}</p>
           </div>
 
-          <div class="settings-card">
-            <div class="card-heading">
-              <div class="card-heading-icon accent-teal">
-                <ion-icon :icon="fingerPrintOutline"></ion-icon>
-              </div>
-              <div><h3>Manual Hash Submission</h3><p>SHA-256 of post body sent to moderation API on click</p></div>
-            </div>
-            <div class="toggle-row">
-              <div>
-                <div class="toggle-label">Click post to submit hash</div>
-                <div class="toggle-sub">No author fields included — content hash only</div>
-              </div>
-              <label class="toggle-switch">
-                <input type="checkbox" v-model="modSettings.moderationClickToSubmit" @change="saveModerationSettings" />
-                <span class="toggle-track"></span>
-              </label>
-            </div>
-          </div>
         </div>
 
         <!-- ══════════════════════ NETWORK TAB ══════════════════════ -->
@@ -503,7 +485,7 @@
             </div>
 
             <div class="peer-health-list">
-              <div v-for="peer in gunPeersDetail.length ? gunPeersDetail : gunPeersList.map(u => ({ url: u, connected: false }))"
+              <div v-for="peer in gunPeersDetail.length ? gunPeersDetail : gunPeersList.map(u => ({ url: u, connected: false, latencyMs: undefined }))"
                 :key="peer.url" class="peer-health-row">
                 <div class="peer-health-left">
                   <span class="health-dot" :class="peer.connected ? 'dot-ok' : 'dot-off'"></span>
@@ -750,7 +732,7 @@
                   <div class="toggle-sub">{{ version === currentNamespace ? 'Default namespace' : 'Legacy posts from before migration' }}</div>
                 </div>
                 <label class="toggle-switch">
-                  <input type="checkbox" :checked="versionToggles[version]" @change="toggleVersion(version)" />
+                  <input type="checkbox" :checked="versionToggles[version]" @change="toggleVersion(version, $event)" />
                   <span class="toggle-track"></span>
                 </label>
               </div>
@@ -766,17 +748,17 @@
               </div>
               <div><h3>Storage Policy</h3><p>Control what gets stored locally</p></div>
             </div>
-            <div class="toggle-row" v-for="(label, key) in { alwaysStoreMyPosts: 'Always store my posts', storeUpvotedPosts: 'Store posts I upvoted', storeMyCommunities: 'Store my communities', cachePopularPosts: 'Cache popular posts (100+ upvotes)', autoDeleteOldContent: 'Auto-delete old cached content' }" :key="key">
+            <div class="toggle-row" v-for="(label, key) in { myPosts: 'Always store my posts', myUpvotes: 'Store posts I upvoted', myCommunities: 'Store my communities', popularPosts: 'Cache popular posts (100+ upvotes)', autoPruneOldContent: 'Auto-delete old cached content' }" :key="key">
               <div class="toggle-label">{{ label }}</div>
               <label class="toggle-switch">
-                <input type="checkbox" v-model="policy[key]" @change="savePolicy" />
+                <input type="checkbox" v-model="policy[key as keyof typeof policy]" @change="savePolicy" />
                 <span class="toggle-track"></span>
               </label>
             </div>
             <div class="field-group mt-12">
               <label class="field-label">Keep recent posts</label>
               <div class="field-wrap">
-                <select class="field-native" v-model="policy.keepRecentPostCount" @change="savePolicy">
+                <select class="field-native" v-model.number="policy.recentPosts" @change="savePolicy">
                   <option :value="25">Last 25</option>
                   <option :value="50">Last 50</option>
                   <option :value="100">Last 100</option>
@@ -1470,7 +1452,8 @@ import {
   optionsOutline,
   informationCircleOutline,
   chatbubbleOutline,
-  personOutline} from 'ionicons/icons';
+  personOutline,
+  peopleOutline} from 'ionicons/icons';
 import { PinningService } from '../services/pinningService';
 import { StorageManager } from '../services/storageManager';
 import { UserService } from '../services/userService';
@@ -1583,10 +1566,11 @@ function initVersionToggles() {
   versionToggles.value = toggles;
 }
 
-function onToggleVersion(ver: string, ev: CustomEvent) {
+function toggleVersion(ver: string, ev: Event) {
+  const checked = (ev.target as HTMLInputElement).checked;
   versionToggles.value = {
     ...versionToggles.value,
-    [ver]: ev.detail.checked,
+    [ver]: checked,
   };
   syncDataVersions();
 }
@@ -1613,13 +1597,6 @@ async function syncDataVersions() {
   await toast.present();
 }
 
-function onFeedModeChange(ev: CustomEvent) {
-  const mode = ev.detail.value;
-  if (mode === 'latest' || mode === 'for-you') {
-    setFeedMode(mode as FeedMode);
-  }
-}
-
 function addFeedIncludeKeyword() {
   const keyword = newFeedIncludeKeyword.value.trim();
   if (!keyword) return;
@@ -1642,13 +1619,13 @@ function removeFeedExcludeKeyword(keyword: string) {
   removeExcludeKeyword(keyword);
 }
 
-function onFeedPostsToggle(ev: CustomEvent) {
-  const checked = Boolean(ev.detail.checked);
+function onFeedPostsToggle(ev: Event) {
+  const checked = (ev.target as HTMLInputElement).checked;
   setContentTypeVisibility(checked, feedPreferences.value.showPolls);
 }
 
-function onFeedPollsToggle(ev: CustomEvent) {
-  const checked = Boolean(ev.detail.checked);
+function onFeedPollsToggle(ev: Event) {
+  const checked = (ev.target as HTMLInputElement).checked;
   setContentTypeVisibility(feedPreferences.value.showPosts, checked);
 }
 

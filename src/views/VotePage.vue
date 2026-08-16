@@ -80,6 +80,8 @@ const inviteCode = ref<string>('');
 const displayPoll = computed(() => {
   const pollId = route.params.pollId as string | undefined;
   if (!pollId) return null;
+  // Pass the full poll through: VoteForm reads requireLogin and trust-tier
+  // fields that a ChainPollSnapshot projection would drop.
   return pollStore.currentPoll?.id === pollId ? pollStore.currentPoll : null;
 });
 

@@ -35,6 +35,7 @@ interface UseSearchReturn {
   indexSource: Ref<'local' | 'remote' | null>;
   isIndexReady: Ref<boolean>;
   searchDebounced: (query: string, options?: SearchOptions, delayMs?: number) => void;
+  browseCategory: (category: string, options?: Omit<SearchOptions, 'category'>) => Promise<void>;
 }
 
 export function useSearch(_apiUrl: string = ''): UseSearchReturn {

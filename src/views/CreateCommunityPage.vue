@@ -515,7 +515,7 @@ const nsfw = ref(false);
 const rules = ref(['Be respectful', 'No spam']);
 const isCreating = ref(false);
 const nameError = ref('');
-const privacyConfig = ref<PrivateCommunityConfig>({ isPrivate: false, method: 'invite' });
+const privacyConfig = ref<PrivateCommunityConfig>({ isPrivate: false, method: 'invite', valid: true });
 
 const categoryOptions = [
   { value: 'technology', label: 'Technology' },

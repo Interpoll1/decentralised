@@ -184,8 +184,10 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
     if (isInThisChat) return;
     if ('Notification' in window && Notification.permission === 'granted') {
       const n = new Notification(`💬 ${senderName}`, {
+        // `renotify` is a real Notification API option but is missing from the
+        // TS DOM lib, so the option bag is widened to include it.
         body: preview, icon: '/favicon.ico', tag: `chat-${fromUserId}`, renotify: true,
-      });
+      } as NotificationOptions & { renotify: boolean });
       n.onclick = () => {
         window.focus();
         void router.push({ name: 'Chat', params: { userId: fromUserId }, query: { name: senderName } });

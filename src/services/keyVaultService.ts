@@ -48,7 +48,12 @@ export class KeyVaultService {
 
   /** Import keys from a JSON string (from backup). Merges with existing keys. */
   static async importKeys(json: string): Promise<number> {
-    const keys: StoredEncryptionKey[] = JSON.parse(json);
+    let keys: StoredEncryptionKey[];
+    try {
+      keys = JSON.parse(json);
+    } catch {
+      throw new Error('Invalid key backup format: file is not valid JSON');
+    }
     if (!Array.isArray(keys)) throw new Error('Invalid key backup format');
     const db = await StorageService.getDB();
     let imported = 0;

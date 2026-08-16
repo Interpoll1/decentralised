@@ -170,8 +170,9 @@
           <ion-list v-if="poll.allowMultipleChoices && poll.options && poll.options.length > 0">
             <ion-item v-for="(option, index) in poll.options" :key="`option-${index}-${option.id}`">
               <ion-checkbox
-                v-model="selectedOptions"
+                :checked="selectedOptions.includes(option.id)"
                 :value="option.id"
+                @ionChange="onOptionToggle(option.id, $event)"
                 slot="start"
               ></ion-checkbox>
               <ion-label>
@@ -378,6 +379,18 @@ const isLoading = ref(true);
 const isSubmitting = ref(false);
 const selectedOption = ref<string>('');
 const selectedOptions = ref<string[]>([]);
+
+// ion-checkbox reports a boolean `checked`, so multi-select is tracked manually
+// rather than with a v-model bound to the array.
+function onOptionToggle(optionId: string, ev: Event) {
+  const checked = Boolean((ev as CustomEvent<{ checked: boolean }>).detail?.checked);
+  const current = selectedOptions.value;
+  if (checked) {
+    if (!current.includes(optionId)) selectedOptions.value = [...current, optionId];
+  } else {
+    selectedOptions.value = current.filter((id) => id !== optionId);
+  }
+}
 const hasVoted = ref(false);
 const currentUserId = ref('');
 const inviteCodes = ref<{ code: string; used: boolean }[]>([]);

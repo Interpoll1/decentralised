@@ -92,8 +92,8 @@ const deleteAlertButtons = computed(() => [
   },
 ]);
 
-async function showToast(message: string) {
-  const toast = await toastController.create({ message, duration: 3000 });
+async function showToast(message: string, color?: 'success' | 'warning' | 'danger') {
+  const toast = await toastController.create({ message, duration: 3000, color });
   await toast.present();
 }
 
