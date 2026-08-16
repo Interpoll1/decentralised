@@ -740,9 +740,13 @@ export class TrustService {
       throw new Error('Invalid issuer endpoint URL');
     }
     if (url.protocol !== 'https:') {
-      const isLocalHttp = url.protocol === 'http:' && (url.hostname === 'localhost' || url.hostname === '127.0.0.1');
-      if (!isLocalHttp) {
-        throw new Error('Issuer endpoint must use HTTPS (HTTP allowed only for localhost)');
+      // The plaintext-loopback carve-out exists so a trust issuer can be run
+      // locally during development. It must never apply to a production build:
+      // an issuer reached over plaintext HTTP can be tampered with in transit,
+      // and its certificates gate the "verified" badge.
+      const isLocalHttp = url.protocol === 'http:' && this.isLoopbackHost(url.hostname);
+      if (!isLocalHttp || !import.meta.env.DEV) {
+        throw new Error('Issuer endpoint must use HTTPS');
       }
     }
     url.pathname = url.pathname.replace(/\/+$/, '');
@@ -761,8 +765,17 @@ export class TrustService {
     return new URL(endpoint).hostname.trim().toLowerCase();
   }
 
+  private static isLoopbackHost(host: string): boolean {
+    const h = host.trim().toLowerCase();
+    return h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h === '::1';
+  }
+
   private static isDomainBoundToHost(domain: string, endpointHost: string): boolean {
-    if (endpointHost === 'localhost' || endpointHost === '127.0.0.1') return true;
+    // A loopback issuer is exempt from domain binding so a locally-run issuer
+    // can claim its real domain while developing. In production this exemption
+    // would let any loopback endpoint assert an arbitrary trusted domain, so it
+    // is restricted to dev builds.
+    if (import.meta.env.DEV && this.isLoopbackHost(endpointHost)) return true;
     return endpointHost === domain || endpointHost.endsWith(`.${domain}`);
   }
 
