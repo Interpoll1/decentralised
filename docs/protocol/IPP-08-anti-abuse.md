@@ -98,6 +98,63 @@ operator; protection from a compromised frontend bundle; guaranteed
 duplicate-vote prevention when the backend is offline and multiple devices are
 used. See the app-origin trust boundary discussion in the overview/threat text.
 
+## 8. Bought-engagement controls (likes, comments, sponsored opinions)
+
+Batch-purchased engagement — bulk identities, bulk reactions, paid comments — is
+a distinct threat from message flooding, and §1's scope statement applies to it
+in full: the controls below make purchased engagement **non-transferable and
+visible**, not impossible.
+
+### 8.1 Engagement tiers
+
+The vote tier ladder ([[IPP-05-vote-flow]], `voteTierService`) generalises to any
+signed engagement over any target. An implementation SHOULD resolve a tier for
+post votes and comments using the same ladder — `issuer` > `relay` > `pow` >
+`anonymous` — and SHOULD display the tier split (verified vs open distinct
+actors) rather than a single merged count.
+
+Self-contained PoW pre-images are per action kind and MUST bind the actor
+pubkey, the target id and the timestamp, so work solved for one target or one
+kind does not transfer to another. Poll votes keep the `votepow:` pre-image of
+[[IPP-05-vote-flow]]; other kinds use `engagepow:{kind}:{pubkey}:{targetId}:{createdAt}:`.
+
+Reference difficulties: `vote` 18, `comment` 14, `post-vote` / `comment-vote` /
+`follow` 12 leading zero bits.
+
+An engagement carrying tier evidence MUST also carry a signature over its own
+canonical fields, and verifiers MUST check that signature **before** resolving a
+tier. Without it, evidence can be copied off another actor's action.
+
+### 8.2 Statistical signals (advisory only)
+
+Implementations MAY compute the following from locally held actions. Results
+MUST be advisory: they MAY change a display weight or annotate a count, and MUST
+NOT delete content, block an actor, or be presented as a verdict.
+
+| Signal | Reads | Action |
+|---|---|---|
+| Co-engagement overlap | Jaccard of actor target-sets across unrelated targets | Down-weight a cohort of size *n* by 1/√*n* |
+| Delivery shape | Inter-arrival CV/entropy, late start, round totals | Flag the target's arrival pattern |
+| Cohort birth | Actors whose first observed action is minutes old | Flag the cohort |
+| Template reuse | SimHash Hamming distance across distinct authors | Flag the comment cluster |
+
+Cohorts, not individuals, SHOULD be the unit of down-weighting, and the
+down-weighting SHOULD be sub-linear so a false cohort call costs influence
+rather than erasing participation.
+
+### 8.3 Limits specific to this layer
+
+An actor who ages keys, spreads actions over months and engages organically
+between orders defeats every signal in §8.2. A human paid to hold an opinion is
+indistinguishable from a human holding it; only disclosure and trust weighting
+touch that case. Statistical signals see only actions that reached the local
+client, so two honest peers MAY disagree about a cohort, and implementations
+MUST NOT present a cohort call as network consensus.
+
+> **Current Implementation Note.** §8.1 lives in `engagementTierService.ts` +
+> `utils/engagementPow.ts` (with `postVoteService` producing and verifying
+> post-vote evidence); §8.2 lives in `collusionService.ts`.
+
 ---
 
 ## Conformance checklist
@@ -107,3 +164,5 @@ used. See the app-origin trust boundary discussion in the overview/threat text.
 - [ ] Sealed messages are rejected on stale/future `_ts` or replayed `_nonce`.
 - [ ] Relay `identityKey` precedence is pubkey → deviceId → oauth; relay fails closed on missing poll policy.
 - [ ] Verified-username claims (if supported) verify certificate signature and username↔pubkey binding over HTTPS issuers before persisting.
+- [ ] Engagement PoW binds actor, target and kind; evidence-bearing actions are signature-checked before a tier is resolved.
+- [ ] Statistical collusion signals only weight or annotate — they never delete, block, or assert a verdict.

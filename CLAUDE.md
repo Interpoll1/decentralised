@@ -132,6 +132,8 @@ Each service is a static class unless noted otherwise. Import and call directly:
 | `storageService.ts` | IndexedDB wrapper for blocks, votes, receipts |
 | `encryptionService.ts` | AES-256-GCM encryption for private communities |
 | `keyVaultService.ts` | Local key storage, export/import |
+| `engagementTierService.ts` | Trust tier (issuer/relay/pow/anonymous) for likes, comments and votes |
+| `collusionService.ts` | Advisory detection of batch-purchased engagement (cohorts, bursts, templates) |
 | `integritySevice.ts` | Hash/signature/PoW/replay-attack validation |
 | `integrityService.ts` | Signature verification and message validation |
 | `inviteLinkService.ts` | Private community invitation link generation and verification |

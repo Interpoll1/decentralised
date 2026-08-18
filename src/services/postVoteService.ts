@@ -33,6 +33,16 @@
 
 import { GunService } from './gunService';
 import { gunPut, gunOnce, gunReadChildren } from '../utils/gunAsync';
+import { CryptoService } from './cryptoService';
+import { KeyService } from './keyService';
+import { TrustService } from './trustService';
+import {
+  EngagementTierService,
+  type EngagementRecord,
+  type RequiredTier,
+  type TierSplit,
+} from './engagementTierService';
+import { computeEngagementPow } from '../utils/engagementPow';
 
 export type VoteType = 'up' | 'down';
 /** `'none'` is a cleared vote — an explicit tombstone, not a Gun delete. */
@@ -103,6 +113,107 @@ export function foldVotes(
     else if (vote === 'down') down += 1;
   }
   return toTally(up, down);
+}
+
+/**
+ * ── Sybil-resistance evidence (M2 of the bought-engagement design note) ──────
+ *
+ * A vote node on its own says nothing about who cast it: the key is a `userId`
+ * the writer chose, and any peer can write any node. So a vote optionally
+ * carries a *signature* over its own fields plus whatever tier evidence the
+ * voter holds — a self-contained PoW, a relay attestation, an issuer
+ * certificate. Readers verify the signature first (evidence copied off someone
+ * else's vote fails there) and only then resolve a tier.
+ *
+ * It is deliberately optional and best-effort: a voter with no key, or a PoW
+ * that won't solve, still votes — their vote just lands in the Open track.
+ */
+
+/** Canonical bytes a vote signature commits to. Order is part of the format. */
+export function postVotePayload(
+  postId: string,
+  userId: string,
+  vote: VoteValue,
+  at: number,
+  pubkey: string,
+): string {
+  return `postvote:${postId}:${userId}:${vote}:${at}:${pubkey}`;
+}
+
+/** A vote node's evidence fields, as stored alongside the vote itself. */
+interface VoteEvidenceFields {
+  pubkey?: string;
+  sig?: string;
+  pow?: number;
+  trustCert?: string;
+}
+
+/**
+ * Verify a stored vote node's signature and lift it into an EngagementRecord.
+ * Returns null for unsigned or badly-signed votes — they still count in the
+ * tally, they just carry no tier.
+ */
+export function verifiedVoteRecord(key: string, value: any): EngagementRecord | null {
+  if (!value || typeof value !== 'object') return null;
+  const { pubkey, sig, pow, trustCert } = value as VoteEvidenceFields;
+  if (typeof pubkey !== 'string' || typeof sig !== 'string') return null;
+
+  const vote = parseVote(value);
+  const postId = typeof value.postId === 'string' ? value.postId : '';
+  const at = Number(value.at);
+  if (!vote || !postId || !Number.isFinite(at)) return null;
+
+  const payload = postVotePayload(postId, String(value.userId ?? key), vote, at, pubkey);
+  try {
+    if (!CryptoService.verify(payload, sig, pubkey)) return null;
+  } catch {
+    return null;
+  }
+
+  return {
+    kind: 'post-vote',
+    pubkey,
+    targetId: postId,
+    // PoW is bound to whole seconds, matching the rest of the event format.
+    createdAt: Math.floor(at / 1000),
+    evidence: {
+      pow: typeof pow === 'number' ? pow : undefined,
+      trustCert: typeof trustCert === 'string' ? trustCert : undefined,
+    },
+  };
+}
+
+/**
+ * Best-effort evidence for a vote this device is about to write. Never throws
+ * and never blocks the vote: any failure returns the fields gathered so far.
+ */
+async function gatherVoteEvidence(
+  postId: string,
+  userId: string,
+  vote: VoteValue,
+  at: number,
+): Promise<VoteEvidenceFields> {
+  const fields: VoteEvidenceFields = {};
+  try {
+    const { privateKey, publicKey } = await KeyService.getKeyPair();
+    if (!privateKey || !publicKey) return fields;
+    fields.pubkey = publicKey;
+
+    try {
+      const cert = await TrustService.getMyCertificate();
+      if (cert) fields.trustCert = JSON.stringify(cert);
+    } catch { /* no certificate held */ }
+
+    // 12 bits ≈ 4k hashes: unnoticeable once, prohibitive across an order.
+    if (!fields.trustCert) {
+      try {
+        fields.pow = await computeEngagementPow('post-vote', publicKey, postId, Math.floor(at / 1000));
+      } catch { /* leave the vote at the anonymous tier */ }
+    }
+
+    fields.sig = CryptoService.sign(postVotePayload(postId, userId, vote, at, publicKey), privateKey);
+  } catch { /* no key on this device — vote anonymously */ }
+  return fields;
 }
 
 export class PostVoteService {
@@ -176,6 +287,29 @@ export class PostVoteService {
   }
 
   /**
+   * Distinct voters on each side of `required`, so a surface can render
+   * "18 verified · 4,282 open" instead of one number a farm can deliver
+   * against. Cleared votes are excluded — a withdrawn vote endorses nothing.
+   */
+  static async getTierSplit(postId: string, required: RequiredTier = 'pow'): Promise<TierSplit> {
+    const children = await gunReadChildren<any>(postVotesNode(postId), { minMs: 300, maxMs: 4_000 });
+    const records: EngagementRecord[] = [];
+    for (const { key, value } of children) {
+      if (parseVote(value) === 'none') continue;
+      const record = verifiedVoteRecord(key, value);
+      if (record) records.push(record);
+    }
+    const split = await EngagementTierService.splitByTier(records, required);
+    // Votes with no verifiable signature are real votes with no tier evidence.
+    const unsigned = children.filter(
+      ({ key, value }) => parseVote(value) && parseVote(value) !== 'none' && !verifiedVoteRecord(key, value),
+    ).length;
+    split.open += unsigned;
+    split.byTier.anonymous += unsigned;
+    return split;
+  }
+
+  /**
    * Set this user's vote to `direction`, or clear it if that is already their
    * vote (the toggle). Returns the recomputed tally *and* the resulting vote, so
    * callers reconcile against what happened rather than what they predicted.
@@ -203,13 +337,21 @@ export class PostVoteService {
       ? parseBaselineType(existing)
       : await PostVoteService.readLegacyVote(postId, userId);
 
+    const at = Date.now();
     const record: Record<string, string | number> = {
       type: next,
       userId,
       postId,
-      at: Date.now(),
+      at,
     };
     if (baselineType) record.baselineType = baselineType;
+
+    // Tier evidence is additive: if it can't be produced the vote still stands.
+    const evidence = await gatherVoteEvidence(postId, userId, next, at);
+    if (evidence.pubkey) record.pubkey = evidence.pubkey;
+    if (evidence.sig) record.sig = evidence.sig;
+    if (evidence.pow !== undefined) record.pow = evidence.pow;
+    if (evidence.trustCert) record.trustCert = evidence.trustCert;
 
     const ack = await gunPut(postVotesNode(postId).get(userId), record);
     // 'timeout' means Gun wrote locally but didn't get a relay ack within 8s.
