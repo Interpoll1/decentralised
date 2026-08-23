@@ -821,6 +821,36 @@ ion-content { --background: transparent; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 @media (prefers-reduced-motion: reduce) { .message, .send-button, .input-pill { animation: none; transition: none; } }
+
+html.dark .message.received .message-content {
+  background: #0d0d0d;
+  border-color: var(--app-border);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+
+html.dark .input-area {
+  background: #0a0a0a;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: var(--app-border);
+  box-shadow: none;
+}
+
+html.dark .input-area:focus-within {
+  border-color: rgba(var(--ion-color-primary-rgb), 0.35);
+  box-shadow: 0 0 0 1px rgba(var(--ion-color-primary-rgb), 0.20);
+}
+
+html.dark .send-button {
+  background: rgba(var(--ion-color-primary-rgb), 0.85);
+}
+
+html.dark .send-button:hover:not(:disabled) {
+  background: var(--ion-color-primary);
+  box-shadow: 0 6px 20px rgba(var(--ion-color-primary-rgb), 0.30);
+}
 </style>
 
 

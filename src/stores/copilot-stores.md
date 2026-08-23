@@ -159,17 +159,34 @@ Gun re-delivers a post/poll whenever any peer echoes it, and an echo can carry a
 pre-vote snapshot that lands *after* our own write — visibly undoing the user's vote
 seconds later.
 
-- `pollStore` — still time-based: `recentlyVotedPolls` + `VOTE_PROTECTION_MS` (10s).
-  Within the window the incoming copy supplies every field *except* `upvotes` /
-  `downvotes` / `score`, which stay local. Any new counter surfaced on a poll needs
-  adding to that carve-out. A late echo past the window still reverts the count on
-  screen — the same defect posts had.
+- `pollStore` — **content** votes (`upvotes`/`downvotes`/`score`) now work like posts:
+  derived counts from `PollVoteService`, held in `contentTallies` and overlaid onto
+  every incoming copy by `withKnownTally()`. No expiry, so a late echo cannot revert
+  them. `recentlyVotedPolls` + `VOTE_PROTECTION_MS` (10s) remain, but now guard only
+  **option** votes (`totalVotes`), a separate model that was not ported — a late echo
+  past that window still reverts an option count on screen.
 - `postStore` — no window. Counts come from `PostVoteService`'s derived tally, held
   in `tallies` and overlaid onto every incoming copy by `withKnownTally()` in
   `processIncomingPost`. A derived tally outranks a post node's advisory counters
   permanently, so there is no expiry for a late echo to sneak past. The old
   `locallyVotedAt` / `LOCAL_VOTE_GRACE_MS` (15s) / `preserveFreshLocalVote()` are
-  gone.
+  gone. `withKnownTally()` is applied on *every* path that puts a post copy into
+  `postsMap` — the new-post branches of `processIncomingPost` and `selectPost` too,
+  not just the already-present branch — or an echo arriving on one of those paths
+  reverts the count.
+
+## Poll content vote state
+
+Mirrors the post contract above: `pollStore.voteOnPollContent(pollId, direction)` is
+the single toggle, `myContentVote(pollId)` / `myContentVotes` (persisted
+`my-poll-content-votes-v1`, migrating the old `upvoted-polls`/`downvoted-polls` sets)
+hold the state, and `refreshContentVoteState` / `subscribeToContentVotes` /
+`syncFeedVoteSubscriptions` / `stopFeedVoteSubscriptions` match their post
+counterparts. `upvotePoll`/`downvotePoll` are aliases onto the toggle.
+
+`HomePage` and `CommunityPage` used to read two `localStorage` sets to decide
+vote-vs-unvote while the service decided the same thing from the graph — and issued
+*two* writes to the same node when switching sides. Both now call the toggle once.
 
 ## Post vote state
 
@@ -181,6 +198,15 @@ seconds later.
 - `clearVote(postId)`, `myVote(postId)`, `myVotes` (persisted `my-post-votes-v1`),
   `refreshVoteState(postId)` (authoritative pull — worth it on a detail page),
   `subscribeToVotes(postId)` (live tally; returns an unsubscribe).
+- `syncFeedVoteSubscriptions(postIds)` / `stopFeedVoteSubscriptions()` — keep live
+  tallies for exactly the posts a feed is rendering. Without them a feed shows
+  `post.upvotes`, the advisory mirror, which peers re-echo from pre-vote snapshots;
+  only the detail page derived a real tally. `HomePage` and `CommunityPage` call the
+  sync from a `watch` on their rendered list and the stop from `onUnmounted`.
+- `reconcileVote()` takes the service's `tallyAuthoritative` flag: when false the
+  baseline could not be read, so only the vote state is adopted and the optimistic
+  counts stay. Adopting a baseline-less tally drops the number and restores it a
+  moment later.
 - `upvotePost` / `downvotePost` / `removeUpvote` / `removeDownvote` are thin aliases
   kept for older callers; all route through `toggleVote`/`clearVote`.
 - Optimistic counts are predicted from `myVotes` — the same state the button's

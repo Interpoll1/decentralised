@@ -16,7 +16,12 @@
           <span class="community-name">{{ communityName }}</span>
           <span class="separator">·</span>
           <span class="author-wrap">
-            <span class="author">u/{{ authorDisplayName }}</span>
+            <button
+              class="author author-link"
+              type="button"
+              :title="`View u/${authorDisplayName}'s profile`"
+              @click.stop="openAuthorProfile"
+            >u/{{ authorDisplayName }}</button>
             <button
               v-if="canInviteAuthor"
               class="invite-chat-btn"
@@ -100,6 +105,15 @@
 
       <div class="post-footer" @click.stop>
         <div class="post-stats">
+          <button
+            class="author-avatar author-avatar--link"
+            type="button"
+            :title="`View u/${authorDisplayName}'s profile`"
+            @click.stop="openAuthorProfile"
+          >
+            {{ authorInitial }}
+          </button>
+
           <button class="stat-icon-btn heart" @click="handleUpvote" :class="{ active: hasUpvoted }" title="Like">
             <ion-icon :icon="hasUpvoted ? heart : heartOutline"></ion-icon>
             <span>{{ formatNumber(post.upvotes) }}</span>
@@ -188,6 +202,10 @@
   letter-spacing: -0.01em;
 }
 
+.separator {
+  color: var(--app-text-subtle);
+}
+
 .separator { color: rgba(255,255,255,0.2); font-size: 11px; margin: 0 1px; }
 
 .author {
@@ -226,38 +244,42 @@
   font-size: 9.5px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  border: 1px solid rgba(255,255,255,0.08);
+  letter-spacing: 0.08em;
+  border: 1px solid var(--app-border);
 }
+
+/* absence of proof stays quiet; proof itself carries the signal colour.
+   the old amber pill made "unverified" the loudest thing in the card. */
 .identity-badge.unverified {
-  background: rgba(var(--ion-color-warning-rgb),0.12);
-  color: var(--ion-color-warning);
+  background: var(--app-item-surface);
+  color: var(--app-text-subtle);
+  font-weight: 500;
 }
 .identity-badge.trusted-issuer {
-  background: rgba(var(--ion-color-success-rgb),0.14);
-  color: var(--ion-color-success);
+  background: var(--app-signal-soft);
+  border-color: rgba(var(--app-signal-rgb), 0.28);
+  color: var(--app-signal);
 }
 
 .timestamp { color: var(--app-text-subtle); font-size: 12px; }
 
 /* ── Title — editorial gradient style ────────── */
 .post-title {
-  margin: 0 0 8px;
-  font-size: 18px;
-  font-weight: 800;
-  line-height: 1.25;
-  letter-spacing: -0.03em;
-  background: linear-gradient(135deg, var(--app-text) 60%, rgba(167,139,250,0.85));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-fill-color: transparent;
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-variation-settings: "opsz" 24;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: var(--tracking-display);
+  color: var(--app-text);
+  text-wrap: balance;
 }
 
 .post-content {
-  margin: 0 0 12px;
-  font-size: 13.5px;
-  line-height: 1.65;
+  margin: 0 0 14px;
+  font-size: var(--text-sm);
+  line-height: 1.7;
   color: var(--app-text-muted);
 }
 
@@ -302,6 +324,9 @@
   margin: 0 0 14px;
   border-radius: 12px;
   overflow: hidden;
+  background: var(--app-item-surface);
+  border: 1px solid var(--app-border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 /* Skeleton — shown instantly, no network required */
@@ -441,6 +466,24 @@
 }
 
 /* Flat icon buttons */
+.author-avatar {
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, var(--app-accent), var(--ion-color-secondary));
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+}
+
 .stat-icon-btn {
   display: inline-flex;
   align-items: center;
@@ -457,17 +500,17 @@
 }
 .stat-icon-btn ion-icon { font-size: 18px; }
 .stat-icon-btn:hover { color: var(--app-text); }
-.stat-icon-btn:active { transform: scale(0.94); }
-
-.stat-icon-btn.heart,
-.stat-icon-btn.heart ion-icon { color: #a78bfa; }
+.stat-icon-btn:active { transform: scale(0.96); }
+/* the action row used three unrelated hues, which read as decoration.
+   everything rests muted; colour arrives only on hover, as feedback. */
+.stat-icon-btn.heart:hover,
+.stat-icon-btn.heart:hover ion-icon { color: var(--ion-color-secondary); }
 .stat-icon-btn.heart.active,
-.stat-icon-btn.heart.active ion-icon { color: #c4b5fd; }
-
-.stat-icon-btn.comments,
-.stat-icon-btn.comments ion-icon { color: #fbbf24; }
+.stat-icon-btn.heart.active ion-icon { color: var(--ion-color-secondary); }
 .stat-icon-btn.comments:hover,
-.stat-icon-btn.comments:hover ion-icon { color: #fcd34d; }
+.stat-icon-btn.comments:hover ion-icon { color: var(--app-accent-bright); }
+.stat-icon-btn.share:hover,
+.stat-icon-btn.share:hover ion-icon { color: var(--app-success); }
 
 /* YouTube-style thumb-down */
 .thumb-down-icon {
@@ -478,8 +521,7 @@
   flex-shrink: 0;
 }
 .stat-icon-btn.downvote:hover .thumb-down-icon { color: var(--app-text); }
-.stat-icon-btn.downvote.active { color: #ef4444; }
-.stat-icon-btn.downvote.active .thumb-down-icon { color: #ef4444; }
+.stat-icon-btn.downvote.active .thumb-down-icon { color: var(--app-danger); }
 
 /* Reddit-style share icon */
 .share-icon {
@@ -488,8 +530,6 @@
   color: currentColor;
   flex-shrink: 0;
 }
-.stat-icon-btn.share { color: #34d399; }
-.stat-icon-btn.share:hover { color: #6ee7b7; }
 
 /* Moderation */
 .stat-icon-btn.moderation-btn { color: var(--ion-color-warning); }
@@ -500,9 +540,10 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 700;
-  color: #818cf8;
+  font-variant-numeric: tabular-nums;
+  color: var(--app-accent-bright);
 }
 .stat-score ion-icon { font-size: 15px; }
 
@@ -653,7 +694,15 @@ const authorDisplayName = computed(() => {
   return props.post.authorName || 'anon';
 });
 
-const authorInitial = computed(() => (authorDisplayName.value || 'a').charAt(0).toUpperCase());
+function openAuthorProfile() {
+  if (!props.post.authorId) return;
+  router.push(`/user/${props.post.authorId}`);
+}
+
+const authorInitial = computed(() => {
+  const name = authorDisplayName.value || 'a';
+  return name.charAt(0).toUpperCase();
+});
 
 const authorIdentityLabel = computed(() =>
   currentAuthorProfile.value?.identityTrustLevel === 'trusted-issuer'

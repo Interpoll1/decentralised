@@ -1,4 +1,5 @@
-import { openDB, DBSchema, IDBPDatabase } from 'idb';
+import { DBSchema, IDBPDatabase } from 'idb';
+import platformDB from '@platform/db';
 import { ChainBlock, Receipt, Vote, ChainPollSnapshot } from '../types/chain';
 import type { StoredEncryptionKey } from '../types/encryption';
 import type { StoredComment, StoredChatMessage } from '../types/social';
@@ -49,89 +50,28 @@ interface VotingChainDB extends DBSchema {
   };
 }
 
-// How long to wait for IndexedDB to open before assuming it is blocked and
-// falling back to the in-memory store. On some mobile browsers (notably iOS
-// Safari in Private mode) `openDB` never resolves or rejects — it just hangs,
-// which surfaces to the user as the whole app "freezing" on load.
-const IDB_OPEN_TIMEOUT_MS = 4_000;
-
 export class StorageService {
   private static dbPromise: Promise<IDBPDatabase>;
 
-  /** True when the active store is the volatile in-memory fallback (no persistence). */
-  static usingMemoryFallback = false;
+  /**
+   * True when the active store is a volatile fallback (no persistence).
+   *
+   * Now derived from the platform backend rather than tracked here: on web it
+   * flips when IndexedDB is missing/blocked/hung, and on desktop it stays false
+   * because SQLite has no equivalent failure mode.
+   */
+  static get usingMemoryFallback(): boolean {
+    return platformDB.ephemeral;
+  }
 
   static async getDB(): Promise<IDBPDatabase> {
     if (!this.dbPromise) {
-      this.dbPromise = this.openDatabase();
+      // Which durable store this resolves to is the platform's business:
+      // IndexedDB in the browser, SQLite in the desktop shell. Everything below
+      // this line talks to the same `idb`-shaped handle either way.
+      this.dbPromise = platformDB.open();
     }
     return this.dbPromise;
-  }
-
-  private static async openDatabase(): Promise<IDBPDatabase> {
-    // Feature-detect: some restricted/mobile contexts expose no IndexedDB at all.
-    const hasIndexedDB = typeof indexedDB !== 'undefined' && indexedDB !== null;
-    if (hasIndexedDB) {
-      try {
-        const open = openDB('interpoll-db', 4, {
-          upgrade(db, oldVersion) {
-            if (oldVersion < 1) {
-              // Blocks store
-              const blockStore = db.createObjectStore('blocks', { keyPath: 'index' });
-              blockStore.createIndex('by-hash', 'currentHash');
-
-              // Votes store
-              const voteStore = db.createObjectStore('votes', { keyPath: 'timestamp' });
-              voteStore.createIndex('by-poll', 'pollId');
-
-              // Receipts store
-              const receiptStore = db.createObjectStore('receipts', { keyPath: 'mnemonic' });
-              receiptStore.createIndex('by-block', 'blockIndex');
-
-              // Polls store
-              db.createObjectStore('polls', { keyPath: 'id' });
-
-              // Metadata store
-              db.createObjectStore('metadata');
-            }
-            if (oldVersion < 2) {
-              db.createObjectStore('encryption-keys', { keyPath: 'id' });
-            }
-            if (oldVersion < 3) {
-              // Durable mirrors for the social layer. Gun runs with
-              // `localStorage:false, radisk:false`, so without these a comment
-              // or message exists only in a volatile in-memory graph that the
-              // memory watchdog is free to evict.
-              const commentStore = db.createObjectStore('comments', { keyPath: 'id' });
-              commentStore.createIndex('by-post', 'postId');
-
-              const chatStore = db.createObjectStore('chat-messages', { keyPath: 'id' });
-              chatStore.createIndex('by-room', 'roomId');
-            }
-            if (oldVersion < 4) {
-              // O(1) duplicate-vote index — compound key [pollId, deviceId].
-              // One entry per (poll, device) pair so hasVoted() is a single IDB
-              // key lookup instead of a full chain scan.
-              db.createObjectStore('vote-index', { keyPath: ['pollId', 'deviceId'] });
-            }
-          },
-        });
-        // Race the open against a timeout so a hung request can't freeze the app.
-        const db = await Promise.race([
-          open,
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('IndexedDB open timed out')), IDB_OPEN_TIMEOUT_MS),
-          ),
-        ]);
-        return db;
-      } catch (err) {
-        console.warn('[Storage] IndexedDB unavailable — using in-memory fallback (data will not persist):', err);
-      }
-    } else {
-      console.warn('[Storage] IndexedDB not present — using in-memory fallback (data will not persist)');
-    }
-    this.usingMemoryFallback = true;
-    return createInMemoryDB();
   }
 
   // Block operations
@@ -437,86 +377,4 @@ export class StorageService {
     }
     return removed;
   }
-}
-
-/**
- * Minimal in-memory stand-in for the subset of the `idb` API that
- * `StorageService` uses. Activated only when IndexedDB is missing, throws, or
- * hangs (e.g. iOS Safari Private mode). Keeps the app functional for the
- * session — data simply does not persist across reloads.
- */
-function createInMemoryDB(): IDBPDatabase {
-  const stores: Record<string, Map<any, any>> = {
-    blocks: new Map(),
-    votes: new Map(),
-    receipts: new Map(),
-    polls: new Map(),
-    metadata: new Map(),
-    'encryption-keys': new Map(),
-    comments: new Map(),
-    'chat-messages': new Map(),
-    'vote-index': new Map(),
-  };
-  // Stores with an inline keyPath derive their key from the value; `metadata`
-  // uses out-of-line (explicit) keys.
-  const keyPaths: Record<string, string | null> = {
-    blocks: 'index',
-    votes: 'timestamp',
-    receipts: 'mnemonic',
-    polls: 'id',
-    metadata: null,
-    'encryption-keys': 'id',
-    comments: 'id',
-    'chat-messages': 'id',
-    // vote-index uses compound key [pollId, deviceId] — handled specially below
-    'vote-index': null,
-  };
-  const indexes: Record<string, Record<string, string>> = {
-    blocks: { 'by-hash': 'currentHash' },
-    votes: { 'by-poll': 'pollId' },
-    receipts: { 'by-block': 'blockIndex' },
-    comments: { 'by-post': 'postId' },
-    'chat-messages': { 'by-room': 'roomId' },
-  };
-
-  const resolveKey = (name: string, value: any, explicitKey?: any) => {
-    const kp = keyPaths[name];
-    let key = kp ? value?.[kp] : explicitKey;
-    // Compound keys (arrays) must be serialised for Map equality to work
-    if (Array.isArray(key)) key = key.join('\x00');
-    return key;
-  };
-  const store = (name: string): Map<any, any> => stores[name] ?? (stores[name] = new Map());
-
-  const objectStore = (name: string) => ({
-    async put(value: any, key?: any) { store(name).set(resolveKey(name, value, key), value); },
-    async get(key: any) { return store(name).get(key); },
-    async delete(key: any) { store(name).delete(key); },
-    async clear() { store(name).clear(); },
-    async getAllKeys() { return [...store(name).keys()]; },
-    async getAll() { return [...store(name).values()]; },
-    async openCursor(_query?: any, direction?: 'next' | 'prev') {
-      const entries = [...store(name).entries()].sort((a, b) =>
-        a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0,
-      );
-      if (direction === 'prev') entries.reverse();
-      return entries.length ? { value: entries[0][1], key: entries[0][0] } : null;
-    },
-  });
-
-  const db: any = {
-    async put(name: string, value: any, key?: any) { store(name).set(resolveKey(name, value, key), value); },
-    async get(name: string, key: any) { return store(name).get(Array.isArray(key) ? key.join('\x00') : key); },
-    async delete(name: string, key: any) { store(name).delete(Array.isArray(key) ? key.join('\x00') : key); },
-    async getAll(name: string) { return [...store(name).values()]; },
-    async getAllFromIndex(name: string, index: string, query: any) {
-      const kp = indexes[name]?.[index];
-      const all = [...store(name).values()];
-      return kp ? all.filter((v) => v?.[kp] === query) : all;
-    },
-    transaction(_names: string | string[], _mode?: string) {
-      return { objectStore, done: Promise.resolve() };
-    },
-  };
-  return db as IDBPDatabase;
 }

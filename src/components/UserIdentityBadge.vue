@@ -145,13 +145,16 @@ const unverifiedTitle = computed(() => {
   opacity: 0.6;
 }
 
+/* verified identity is proof, so it carries the system's signal colour.
+   tokens rather than hard-coded hex — these adapt to the .dark class,
+   which the old prefers-color-scheme block below never did. */
 .identity-badge.verified {
-  background: rgba(16,185,129,0.12);
-  border: 1px solid rgba(16,185,129,0.35);
-  color: #059669;
+  background: var(--app-signal-soft);
+  border: 1px solid rgba(var(--app-signal-rgb), 0.32);
+  color: var(--app-signal);
 }
 
-.verified-icon { color: #10b981; font-size: 13px; flex-shrink: 0; }
+.verified-icon { color: var(--app-signal); font-size: 13px; flex-shrink: 0; }
 
 .badge-issuer {
   font-size: 0.68rem;
@@ -159,26 +162,15 @@ const unverifiedTitle = computed(() => {
   margin-left: 1px;
 }
 
+/* unverified is the absence of proof, not a warning. it stays quiet
+   so the verified state is the thing the eye catches. */
 .identity-badge.unverified {
-  background: rgba(245,158,11,0.10);
-  border: 1px solid rgba(245,158,11,0.30);
-  color: #92400e;
+  background: var(--app-item-surface);
+  border: 1px solid var(--app-border);
+  color: var(--app-text-muted);
 }
 
-@media (prefers-color-scheme: dark) {
-  .identity-badge.verified {
-    background: rgba(16,185,129,0.15);
-    border-color: rgba(16,185,129,0.4);
-    color: #34d399;
-  }
-  .identity-badge.unverified {
-    background: rgba(245,158,11,0.15);
-    border-color: rgba(245,158,11,0.35);
-    color: #fbbf24;
-  }
-}
-
-.unverified-icon { color: #f59e0b; font-size: 13px; flex-shrink: 0; }
+.unverified-icon { color: var(--app-text-subtle); font-size: 13px; flex-shrink: 0; }
 
 .badge-label {
   font-size: 0.65rem;

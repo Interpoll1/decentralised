@@ -1,0 +1,54 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "InterPoll",
+  "version": "0.1.0",
+  "identifier": "sbs.endless.interpoll",
+  "build": {
+    "beforeDevCommand": "npm run dev -- --port 1420 --strictPort",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build:desktop:web",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "InterPoll",
+        "width": 1200,
+        "height": 820,
+        "minWidth": 380,
+        "minHeight": 560,
+        "resizable": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data: blob: https:",
+        "font-src": "'self' data:",
+        "connect-src": "'self' ipc: http://ipc.localhost https: wss: ws://127.0.0.1:* ws://localhost:*"
+      }
+    },
+    "trayIcon": {
+      "id": "main",
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["appimage", "deb", "rpm", "nsis", "dmg"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "SocialNetworking",
+    "shortDescription": "Decentralised polling with an embedded relay",
+    "longDescription": "InterPoll desktop runs a full network participant: it seeds content from the tray, keeps unlimited local history with offline search, finds peers directly on the LAN, and protects your signing key outside the browser."
+  }
+}

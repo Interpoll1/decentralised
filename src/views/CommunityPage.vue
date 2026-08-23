@@ -778,67 +778,42 @@ function hasDownvoted(postId: string): boolean {
 
 function hasUpvotedPoll(pollId: string): boolean {
   voteVersion.value;
-  const votedPolls = JSON.parse(localStorage.getItem('upvoted-polls') || '[]');
-  return votedPolls.includes(pollId);
+  return pollStore.myContentVote(pollId) === 'up';
 }
 
 function hasDownvotedPoll(pollId: string): boolean {
   voteVersion.value;
-  const votedPolls = JSON.parse(localStorage.getItem('downvoted-polls') || '[]');
-  return votedPolls.includes(pollId);
+  return pollStore.myContentVote(pollId) === 'down';
 }
 
-async function handleUpvotePoll(poll: Poll) {
+/**
+ * One toggle, one write.
+ *
+ * This used to decide vote-vs-unvote from two localStorage sets the view read
+ * directly, while the service decided the same question from the graph; when
+ * they disagreed the click inverted. Switching sides also issued two writes to
+ * the same node, the second racing the first. `voteOnPollContent` now toggles.
+ */
+async function handlePollVote(poll: Poll, direction: 'up' | 'down') {
+  const wasActive = pollStore.myContentVote(poll.id) === direction;
+  voteVersion.value++;
+  const version = voteVersion.value;
   try {
-    if (hasUpvotedPoll(poll.id)) {
-      const votedPolls = JSON.parse(localStorage.getItem('upvoted-polls') || '[]');
-      localStorage.setItem('upvoted-polls', JSON.stringify(votedPolls.filter((id: string) => id !== poll.id)));
-      voteVersion.value++;
-      await pollStore.voteOnPollContent(poll.id, 'up');
-    } else {
-      const downvotedPolls = JSON.parse(localStorage.getItem('downvoted-polls') || '[]');
-      if (downvotedPolls.includes(poll.id)) {
-        localStorage.setItem('downvoted-polls', JSON.stringify(downvotedPolls.filter((id: string) => id !== poll.id)));
-        await pollStore.voteOnPollContent(poll.id, 'down');
-      }
-      const votedPolls = JSON.parse(localStorage.getItem('upvoted-polls') || '[]');
-      votedPolls.push(poll.id);
-      localStorage.setItem('upvoted-polls', JSON.stringify(votedPolls));
-      voteVersion.value++;
-      await pollStore.upvotePoll(poll.id);
-    }
+    await pollStore.voteOnPollContent(poll.id, direction);
+    const labels = { up: 'Upvote', down: 'Downvote' };
+    await presentVoteToast(wasActive ? `${labels[direction]} removed` : `${labels[direction]}d`, version);
   } catch (error) {
     voteVersion.value++;
-    console.error('Error upvoting poll:', error);
-    (await toastController.create({ message: 'Failed to upvote poll', duration: 2000 })).present();
+    console.error('Error voting on poll:', error);
+    (await toastController.create({
+      message: direction === 'up' ? 'Failed to upvote poll' : 'Failed to downvote poll',
+      duration: 2000,
+    })).present();
   }
 }
 
-async function handleDownvotePoll(poll: Poll) {
-  try {
-    if (hasDownvotedPoll(poll.id)) {
-      const votedPolls = JSON.parse(localStorage.getItem('downvoted-polls') || '[]');
-      localStorage.setItem('downvoted-polls', JSON.stringify(votedPolls.filter((id: string) => id !== poll.id)));
-      voteVersion.value++;
-      await pollStore.voteOnPollContent(poll.id, 'down');
-    } else {
-      const upvotedPolls = JSON.parse(localStorage.getItem('upvoted-polls') || '[]');
-      if (upvotedPolls.includes(poll.id)) {
-        localStorage.setItem('upvoted-polls', JSON.stringify(upvotedPolls.filter((id: string) => id !== poll.id)));
-        await pollStore.voteOnPollContent(poll.id, 'up');
-      }
-      const votedPolls = JSON.parse(localStorage.getItem('downvoted-polls') || '[]');
-      votedPolls.push(poll.id);
-      localStorage.setItem('downvoted-polls', JSON.stringify(votedPolls));
-      voteVersion.value++;
-      await pollStore.downvotePoll(poll.id);
-    }
-  } catch (error) {
-    voteVersion.value++;
-    console.error('Error downvoting poll:', error);
-    (await toastController.create({ message: 'Failed to downvote poll', duration: 2000 })).present();
-  }
-}
+const handleUpvotePoll = (poll: Poll) => handlePollVote(poll, 'up');
+const handleDownvotePoll = (poll: Poll) => handlePollVote(poll, 'down');
 
 async function presentVoteToast(message: string, expectedVersion: number) {
   const toast = await toastController.create({ message, duration: 1500 });
@@ -1229,7 +1204,22 @@ watch(totalLoadedContentCount, (nextCount, previousCount) => {
   keepBackgroundSyncVisible();
 });
 
+// Live vote tallies for the posts on screen — the counters on a post node are
+// an advisory mirror that peers re-echo from stale snapshots.
+watch(
+  () => displayedContent.value.filter(item => item.type === 'post').map(item => item.data.id as string),
+  (postIds) => postStore.syncFeedVoteSubscriptions(postIds),
+  { immediate: true },
+);
+watch(
+  () => displayedContent.value.filter(item => item.type === 'poll').map(item => item.data.id as string),
+  (pollIds) => pollStore.syncFeedVoteSubscriptions(pollIds),
+  { immediate: true },
+);
+
 onUnmounted(() => {
+  postStore.stopFeedVoteSubscriptions();
+  pollStore.stopFeedVoteSubscriptions();
   clearBackgroundSyncIdleTimer();
   if (retryTimer) clearTimeout(retryTimer);
 });

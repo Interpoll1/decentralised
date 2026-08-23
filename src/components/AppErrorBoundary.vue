@@ -116,8 +116,8 @@ async function copyDetails() {
 
 .app-error__card {
   width: min(100%, 460px);
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--app-item-surface);
+  border: 1px solid var(--app-border);
   border-radius: 16px;
   padding: 28px 24px;
   text-align: center;
@@ -152,7 +152,7 @@ async function copyDetails() {
 .app-error__btn {
   appearance: none;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--app-item-surface);
   color: inherit;
   font-size: 14px;
   font-weight: 500;

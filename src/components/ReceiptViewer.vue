@@ -160,19 +160,22 @@ const shareReceipt = async () => {
   padding: 8px 10px;
   border-radius: 12px;
   word-break: break-all;
-  font-family: monospace;
+  font-family: var(--font-mono);
   box-shadow: var(--glass-highlight);
 }
 
+/* the verification code is the thing a user reads back to confirm a vote.
+   it is proof, so it takes the signal colour, not the warning amber it
+   was borrowing. */
 .verification-code-box {
   padding: 16px;
-  background: rgba(var(--ion-color-warning-rgb), 0.05);
-  border: 1px solid rgba(var(--ion-color-warning-rgb), 0.12);
-  border-top-color: rgba(var(--ion-color-warning-rgb), 0.20);
+  background: var(--app-signal-soft);
+  border: 1px solid rgba(var(--app-signal-rgb), 0.18);
+  border-top-color: rgba(var(--app-signal-rgb), 0.30);
   border-radius: 16px;
   backdrop-filter: blur(14px) saturate(1.5);
   -webkit-backdrop-filter: blur(14px) saturate(1.5);
-  color: var(--ion-color-warning);
+  color: var(--app-signal);
   box-shadow: var(--glass-inner-glow);
 }
 
@@ -184,7 +187,10 @@ const shareReceipt = async () => {
   border-top-color: var(--glass-border-top);
   padding: 6px 8px;
   border-radius: 12px;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0.04em;
   text-align: center;
   color: var(--ion-text-color);
   box-shadow: var(--glass-highlight);

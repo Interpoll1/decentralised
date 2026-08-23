@@ -337,11 +337,11 @@ onMounted(loadKeys);
 
 /* Dark mode refinements */
 html.dark .key-item {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.08);
+  background: var(--app-item-surface);
+  border-color: var(--app-border);
 }
 
 html.dark .key-count {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--app-item-surface);
 }
 </style>

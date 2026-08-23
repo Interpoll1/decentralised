@@ -13,9 +13,12 @@ export default {
         foreground: 'var(--app-text)',
         muted: 'var(--app-text-muted)',
         accent: 'var(--app-accent)',
+        signal: 'var(--app-signal)',
       },
       fontFamily: {
-        sans: ['Inter', 'Geist Sans', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['Bricolage Grotesque', 'Inter', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       borderRadius: {
         lg: 'var(--app-radius-md)',

@@ -447,7 +447,7 @@ onUnmounted(() => {
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 .uptime { margin-left: auto; font-size: 0.78rem; color: var(--ion-color-medium, #888); }
 .url-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; background: #f1f5f9; border-radius: 6px; padding: 0.4rem 0.6rem; }
-.relay-url { flex: 1; font-size: 0.78rem; word-break: break-all; font-family: monospace; }
+.relay-url { flex: 1; font-size: 0.78rem; word-break: break-all; font-family: var(--font-mono); }
 .btn-copy { background: none; border: none; cursor: pointer; font-size: 1rem; }
 .stats-row { display: flex; gap: 1rem; margin: 0.75rem 0; }
 .stat { text-align: center; }
@@ -468,9 +468,9 @@ onUnmounted(() => {
 
 /* Code blocks */
 .code-block { display: flex; align-items: center; gap: 0.4rem; background: #1e293b; border-radius: 6px; padding: 0.5rem 0.75rem; margin: 0.35rem 0; }
-.code-block code { flex: 1; color: #e2e8f0; font-size: 0.78rem; font-family: monospace; word-break: break-all; }
+.code-block code { flex: 1; color: #e2e8f0; font-size: 0.78rem; font-family: var(--font-mono); word-break: break-all; }
 .btn-copy-small { background: none; border: none; cursor: pointer; color: #94a3b8; font-size: 0.9rem; }
-.inline-code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 0.78rem; font-family: monospace; }
+.inline-code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 0.78rem; font-family: var(--font-mono); }
 
 /* Add inline */
 .add-inline { display: flex; gap: 0.4rem; margin: 0.35rem 0; }

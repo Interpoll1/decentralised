@@ -163,7 +163,7 @@ async function copy(text: string) {
   min-height: 64px;
   margin: 4px 0;
   padding: 8px;
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   word-break: break-all;
   resize: vertical;

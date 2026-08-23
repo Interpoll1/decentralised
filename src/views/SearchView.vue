@@ -440,6 +440,44 @@ ion-content { --background: transparent; }
   border-color: transparent;
   cursor: default;
   opacity: 0.4;
+  color: var(--ion-color-medium);
+}
+
+/* ── Dark mode ── */
+html.dark .search-box,
+html.dark .result-item {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: #0d0d0d;
+  border-color: var(--app-border);
+  box-shadow: none;
+}
+
+html.dark .search-box:focus-within {
+  border-color: rgba(var(--ion-color-primary-rgb), 0.35);
+  box-shadow: 0 0 0 1px rgba(var(--ion-color-primary-rgb), 0.20);
+}
+
+html.dark .filter-select,
+html.dark .filter-input,
+html.dark .pagination-btn,
+html.dark .page-btn {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: #0d0d0d;
+  border-color: var(--app-border);
+}
+
+html.dark .result-item:hover {
+  background: #141414;
+  border-color: var(--app-border);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.40);
+  transform: translateY(-2px);
+}
+
+html.dark .page-btn.active {
+  background: rgba(var(--ion-color-primary-rgb), 0.85);
+  border-color: transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {

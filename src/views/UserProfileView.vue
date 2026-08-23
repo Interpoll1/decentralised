@@ -5,7 +5,7 @@
         <ion-buttons slot="start">
           <ion-back-button default-href="/home"></ion-back-button>
         </ion-buttons>
-        <ion-title>{{ userProfile?.displayName || 'User Profile' }}</ion-title>
+        <ion-title>{{ displayName }}</ion-title>
       </ion-toolbar>
     </ion-header>
 
@@ -16,8 +16,8 @@
         <div class="avatar-placeholder">
           <ion-icon :icon="personCircleOutline"></ion-icon>
         </div>
-        <h1>{{ userProfile?.displayName || userProfile?.username }}</h1>
-        <p class="username">u/{{ userProfile?.username }}</p>
+        <h1>{{ displayName }}</h1>
+        <p v-if="userProfile?.username" class="username">u/{{ userProfile.username }}</p>
 
         <!-- Chat Button - Only show if not viewing own profile -->
         <ion-button
@@ -32,15 +32,15 @@
 
         <div class="stats-row">
           <div class="stat">
-            <strong>{{ userProfile?.karma || 0 }}</strong>
+            <strong class="tabular">{{ userProfile?.karma ?? 0 }}</strong>
             <span>Karma</span>
           </div>
           <div class="stat">
-            <strong>{{ userProfile?.postCount || 0 }}</strong>
+            <strong class="tabular">{{ userProfile?.postCount ?? 0 }}</strong>
             <span>Posts</span>
           </div>
           <div class="stat">
-            <strong>{{ userProfile?.commentCount || 0 }}</strong>
+            <strong class="tabular">{{ userProfile?.commentCount ?? 0 }}</strong>
             <span>Comments</span>
           </div>
         </div>
@@ -54,7 +54,7 @@
 
       <!-- User's Posts -->
       <div class="section">
-        <p class="section-title">Recent Posts</p>
+        <p class="section-title">Posts</p>
         <div v-if="loadingPosts" class="loading">
           <ion-spinner></ion-spinner>
         </div>
@@ -66,32 +66,29 @@
             v-for="post in userPosts"
             :key="post.id"
             :post="post"
-            @click="$router.push(`/post/${post.id}`)"
+            @click="$router.push(`/community/${post.communityId}/post/${post.id}`)"
           />
         </div>
       </div>
 
       <div class="divider"></div>
 
-      <!-- User's Comments -->
+      <!-- Polls replace what was a comments section: GunDB has no by-author
+           comment index, so that list could only ever render empty. -->
       <div class="section">
-        <p class="section-title">Recent Comments</p>
-        <div v-if="loadingComments" class="loading">
+        <p class="section-title">Polls</p>
+        <div v-if="loadingPosts" class="loading">
           <ion-spinner></ion-spinner>
         </div>
-        <div v-else-if="userComments.length === 0" class="empty-state">
-          <p>No comments yet</p>
+        <div v-else-if="userPolls.length === 0" class="empty-state">
+          <p>No polls yet</p>
         </div>
-        <div v-else class="comments-list">
-          <!-- postId/communityId are required: CommentCard derives the author's
-               per-post pseudonym from postId, so omitting it rendered every
-               comment under the wrong pseudonym on this page. -->
-          <CommentCard
-            v-for="comment in userComments"
-            :key="comment.id"
-            :comment="comment"
-            :post-id="comment.postId"
-            :community-id="comment.communityId"
+        <div v-else class="posts-list">
+          <PollCard
+            v-for="poll in userPolls"
+            :key="poll.id"
+            :poll="poll"
+            @click="$router.push(`/community/${poll.communityId}/poll/${poll.id}`)"
           />
         </div>
       </div>
@@ -111,63 +108,96 @@ import {
 } from '@ionic/vue';
 import { personCircleOutline, chatbubbleOutline } from 'ionicons/icons';
 import PostCard from '../components/PostCard.vue';
-import CommentCard from '../components/CommentCard.vue';
+import PollCard from '../components/PollCard.vue';
 import { useChat } from '../composables/useChat';
+import { useUserStore } from '../stores/userStore';
+import { useCommunityStore } from '../stores/communityStore';
+import { usePostStore } from '../stores/postStore';
+import { usePollStore } from '../stores/pollStore';
+import { UserService, type UserProfile } from '../services/userService';
 import config from '@/config';
 
 const router = useRouter();
 const route = useRoute();
 
 const userId = route.params.userId as string;
-const currentUserId = ref('current-user-id'); // Get from auth store
 
+const userStore = useUserStore();
+const communityStore = useCommunityStore();
+const postStore = usePostStore();
+const pollStore = usePollStore();
+
+const currentUserId = ref<string>('');
 const WS_URL = config.relay.websocket;
 
-// Chat composable
-const { publicKey: chatPublicKey } = useChat(WS_URL, currentUserId.value);
+const userProfile = ref<UserProfile | null>(null);
+const loadingProfile = ref(true);
+const loadingPosts = ref(true);
 
-// User profile data
-const userProfile = ref<any>(null);
-const userPosts = ref<any[]>([]);
-const userComments = ref<any[]>([]);
-const loadingPosts = ref(false);
-const loadingComments = ref(false);
+// Chat composable. The peer key is only known once the profile resolves, so
+// the composable is created with an empty id until then rather than a literal.
+const { publicKey: chatPublicKey } = useChat(WS_URL, userId);
 
-const isOwnProfile = computed(() => userId === currentUserId.value);
+/** Falls back to the id rather than inventing a name when the profile has
+ *  not replicated to this peer yet. */
+const displayName = computed(() =>
+  userProfile.value?.displayName || userProfile.value?.username || (loadingProfile.value ? 'Loading…' : `u/${userId.slice(0, 12)}`)
+);
+
+const isOwnProfile = computed(() => !!currentUserId.value && userId === currentUserId.value);
+
+/** Posts this user authored, newest first, drawn from the loaded feed. */
+const userPosts = computed(() =>
+  postStore.sortedPosts.filter((post: any) => post.authorId === userId)
+);
+
+/** Polls this user authored. Private polls are omitted — they are not this
+ *  viewer's to see from a profile page. */
+const userPolls = computed(() =>
+  pollStore.sortedPolls.filter((poll: any) => poll.authorId === userId && !poll.isPrivate)
+);
 
 onMounted(async () => {
-  await loadUserProfile();
-  await loadUserPosts();
-  await loadUserComments();
+  void UserService.getCurrentUser()
+    .then(me => { currentUserId.value = me.id; })
+    .catch(() => { /* anonymous viewer — isOwnProfile stays false */ });
+
+  await Promise.all([loadUserProfile(), loadAuthoredContent()]);
 });
 
 const loadUserProfile = async () => {
-  // TODO: Fetch user profile from your backend/Gun
-  // For now, mock data
-  userProfile.value = {
-    id: userId,
-    username: 'user123',
-    displayName: 'John Doe',
-    bio: 'Love decentralized tech and community building!',
-    karma: 1250,
-    postCount: 42,
-    commentCount: 156,
-    publicKey: 'mock-public-key', // This should come from backend
-  };
+  loadingProfile.value = true;
+  try {
+    userProfile.value = await userStore.getProfile(userId);
+  } finally {
+    loadingProfile.value = false;
+  }
 };
 
-const loadUserPosts = async () => {
+/**
+ * There is no by-author index in GunDB, and no global post feed — posts and
+ * polls are only reachable per community. So subscribe across every known
+ * community and filter locally, the same way the home feed is assembled.
+ * Capped with a timeout because a slow or absent relay leaves Gun
+ * subscriptions hanging indefinitely.
+ */
+const CONTENT_LOAD_TIMEOUT_MS = 6000;
+
+const loadAuthoredContent = async () => {
   loadingPosts.value = true;
-  // TODO: Fetch user's posts
-  userPosts.value = [];
-  loadingPosts.value = false;
-};
-
-const loadUserComments = async () => {
-  loadingComments.value = true;
-  // TODO: Fetch user's comments
-  userComments.value = [];
-  loadingComments.value = false;
+  try {
+    await communityStore.loadCommunities();
+    const subscriptions = communityStore.communities.flatMap((c: any) => [
+      postStore.loadPostsForCommunity(c.id),
+      pollStore.loadPollsForCommunity(c.id),
+    ]);
+    await Promise.race([
+      Promise.allSettled(subscriptions),
+      new Promise(resolve => setTimeout(resolve, CONTENT_LOAD_TIMEOUT_MS)),
+    ]);
+  } finally {
+    loadingPosts.value = false;
+  }
 };
 
 const startChat = async () => {

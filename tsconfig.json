@@ -23,7 +23,11 @@
     /* Path mapping */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      /* Typecheck against the web adapters. Both platform directories implement
+         the same interfaces from src/platform/types.ts, so checking one checks
+         the contract; the desktop build is verified by `build:desktop`. */
+      "@platform/*": ["./src/platform/web/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"],

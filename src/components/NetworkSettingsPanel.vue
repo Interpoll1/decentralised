@@ -498,7 +498,7 @@ onUnmounted(() => {
 
 /* Discovery */
 .disc-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0; border-bottom: 1px solid var(--ion-border-color, #eee); }
-.disc-node { font-family: monospace; font-size: 0.78rem; flex: 0 0 auto; }
+.disc-node { font-family: var(--font-mono); font-size: 0.78rem; flex: 0 0 auto; }
 .disc-caps { flex: 1; font-size: 0.76rem; color: var(--ion-color-medium, #888); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sub-heading { font-size: 0.88rem; font-weight: 600; margin: 0.75rem 0 0.4rem; }
 .result-box { border-radius: 6px; padding: 0.45rem 0.7rem; font-size: 0.82rem; margin-top: 0.5rem; }

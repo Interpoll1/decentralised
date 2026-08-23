@@ -23,137 +23,32 @@ it. Finish the whole task, and stop short of actions that are clearly beyond wha
 
 ## Quick Start
 
-```bash
-# Start all three services in tmux panes (recommended)
-chmod +x run.sh
-./run.sh
-
-# Or manually run each:
-npm run dev              # Vite frontend at http://localhost:5173
-node relay-server.js     # WebSocket relay at ws://localhost:8080
-cd gun-relay-server && node gun-relay.js  # GunDB relay at http://localhost:8765/gun
-```
-
-Frontend listens at `http://localhost:5173`. See `README.md` for environment variable configuration.
+`./run.sh` starts all three services (frontend, WebSocket relay, GunDB relay) in tmux panes.
+See `README.md` for environment variable configuration.
 
 ---
 
 ## Core Architecture
 
-InterPoll has three runtime layers:
+Three runtime layers, each with a different trust property:
 
-1. **Local blockchain (IndexedDB)** — `ChainService` + `chainStore`
-   - Tamper-evident vote and action history
-   - Each block links to the previous one via cryptographic hash
-   - Signed by your device key; impossible to forge from a relay
-
-2. **Distributed content graph (GunDB)** — `GunService`, `PollService`, `PostService`, `CommentService`, etc.
-   - Polls, posts, comments, communities, user profiles, images, chat rooms
-   - Replicated across every connected peer and relay server
-   - Survives as long as any honest participant holds a copy
-
-3. **Peer sync layer** — `WebSocketService`, `BroadcastService`
-   - WebSocket relay discovers peers and broadcasts new blocks in real time
-   - BroadcastChannel syncs chain state across browser tabs
-   - Relay can delay/censor but **cannot forge** a signed action from your device
+1. **Local blockchain (IndexedDB)** — `ChainService` + `chainStore`. Signed by your device key; **impossible to forge from a relay**.
+2. **Distributed content graph (GunDB)** — replicated across every peer and relay; survives as long as any honest participant holds a copy.
+3. **Peer sync layer** — `WebSocketService` (peers/blocks) + `BroadcastService` (cross-tab). The relay can delay or censor but **cannot forge** a signed action from your device.
 
 Read `docs/protocol/IPP-00-overview.md` (index of the numbered IPP specification series) for the full technical specification. The old single-file `docs/protocol-whitepaper.md` is now a superseded redirect stub.
 
 ---
 
-## Build, Test, Lint
+## Services & Stores
 
-| Command | Purpose |
-|---------|---------|
-| `npm run dev` | Start Vite dev server at `http://localhost:5173` |
-| `npm run build` | Type-check + production build to `dist/` |
-| `npm run preview` | Serve the built `dist/` folder locally |
-| `npm run lint` | ESLint with auto-fix on `.vue`, `.ts`, etc. |
-| `npm test` | Run Vitest test suite (see below) |
-| `npm run test:watch` | Vitest in watch mode |
-
-**Run a single test:**
-```bash
-npm test -- unit_tests/pow-challenge.test.js
-npm test -- -t "requiresPow"
-```
-
-**Type checking:**
-- `npm run build` includes full TypeScript checking.
-- No separate type-check command; linting catches most issues.
-
----
-
-## Project Layout
-
-```
-src/
-  components/          UI components (VoteForm, PollCard, PostCard, etc.)
-  views/               Page-level components (HomePage, PollDetailPage, etc.)
-  services/            Core business logic — blockchain, GunDB, crypto, storage
-  stores/              Pinia state stores (chainStore, pollStore, communityStore, etc.)
-  router/              Vue Router configuration
-  composables/         Reusable Vue 3 composition functions
-  types/               TypeScript interfaces and types
-  utils/               Helper functions and utilities
-  config.ts            Runtime-mutable relay URLs and app configuration
-  main.ts              Vue app initialization
-  App.vue              Root component
-  style.css            Global Tailwind + custom CSS
-
-relay-server.js                       Dev WebSocket relay + OAuth + vote authorization
-relay-server/relay-server-enhanced.js Production relay with persisted vote registry (gitignored)
-gun-relay-server/                     GunDB relay standalone server
-unit_tests/                           Test files (*.test.ts)
-docs/protocol/IPP-00..09-*.md         Numbered IPP protocol specification series
-docs/protocol/schemas/*.v1.json       Machine-readable domain-object schemas
-docs/protocol-whitepaper.md           Superseded redirect stub → docs/protocol/
-.github/copilot-instructions.md       Detailed subsystem guidance
-```
-
----
-
-## Key Services
-
-Each service is a static class unless noted otherwise. Import and call directly: `ServiceName.method()`.
-
-| Service | Purpose |
-|---------|---------|
-| `chainService.ts` | Block creation, hashing, signing, chain validation |
-| `gunService.ts` | GunDB read/write/subscribe wrapper |
-| `websocketService.ts` | WebSocket connection, peer discovery, relay failover |
-| `broadcastService.ts` | Cross-tab sync via BroadcastChannel API |
-| `pollService.ts` | Poll CRUD, invite code generation and validation |
-| `postService.ts` | Post publishing and retrieval |
-| `commentService.ts` | Threaded comments on polls and posts |
-| `voteTrackerService.ts` | Device fingerprinting, duplicate-vote prevention |
-| `auditService.ts` | OAuth login/logout, backend vote authorization |
-| `cryptoService.ts` | SHA-256 hashing, verification code generation |
-| `storageService.ts` | IndexedDB wrapper for blocks, votes, receipts |
-| `encryptionService.ts` | AES-256-GCM encryption for private communities |
-| `keyVaultService.ts` | Local key storage, export/import |
-| `integritySevice.ts` | Hash/signature/PoW/replay-attack validation |
-| `integrityService.ts` | Signature verification and message validation |
-| `inviteLinkService.ts` | Private community invitation link generation and verification |
-| `chatService.ts` | Instance-based chat message service |
-| `searchService.ts` | Instance-based search across polls and posts |
-
+Services in `src/services/` are **static classes** — import and call directly: `ServiceName.method()`.
 **Exception**: `ChatService` and `SearchService` are instance-based, not static.
 
----
+Note `src/services/integritySevice.ts` (typo'd filename, hash/signature/PoW/replay validation) and
+`src/services/integrityService.ts` (signature verification) are two distinct files — check which one you mean.
 
-## Key Stores (Pinia)
-
-| Store | Purpose |
-|-------|---------|
-| `chainStore` | Local chain state, verification codes, receipts |
-| `pollStore` | Poll data, results, user's own polls |
-| `communityStore` | Community list, metadata, encryption keys |
-| `userStore` | Current user profile, authentication state |
-| `postStore` | Published posts and comments |
-| `uiStore` | UI state — modals, notifications, settings |
-
-Stores call services; components and views consume stores. Do not call services directly from components.
+Stores call services; components and views consume stores. **Do not call services directly from components.**
 
 ---
 
@@ -241,49 +136,16 @@ Each major subsystem has a `copilot-*.md` file with detailed contracts, patterns
 - Invite links generated and verified via `InviteLinkService`
 - Private community state: `CommunityStore`
 
-### Frontend Environment Variables
-Set at build time with `VITE_` prefix:
-- `VITE_WS_RELAY_URL` — WebSocket relay (default: `ws://localhost:8080`)
-- `VITE_GUN_RELAY_URL` — GunDB relay (default: `http://localhost:8765/gun`)
-- `VITE_API_BASE_URL` — Backend API (default: `http://localhost:8080`)
-Example: `VITE_WS_RELAY_URL=wss://relay.example.com npm run build`
-
 ---
 
 ## Relay Server
 
-**Development:** `node relay-server.js` starts a lightweight WebSocket relay + OAuth + vote authorization.
+**Development:** `node relay-server.js` — WebSocket relay + OAuth + vote authorization.
+Endpoints and env vars are defined in that file; frontend `VITE_*` build vars are in `src/config.ts`.
 
-**Production:** See `relay-server/relay-server-enhanced.js` (gitignored; not in git diffs). This version adds:
-- Persisted vote registry
-- PM2 process management
-- Enhanced logging and monitoring
-
-**Key endpoints:**
-- `GET /health` — health check
-- `POST /api/vote-authorize` — issue reservation token for a vote
-- `POST /api/vote-confirm` — commit vote to registry using token
-- `/oauth/google/callback`, `/oauth/microsoft/callback` — OAuth callbacks
-- `/gun` — GunDB relay proxy
-
-Environment variables:
-- `FRONTEND_ORIGIN` — CORS origin (default: `http://localhost:5173`)
-- `SERVER_ORIGIN` — Public relay origin for OAuth callbacks (required HTTPS in production)
-- `JWT_SECRET`, `VOTE_RESERVATION_SECRET` — HMAC secrets
-- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — Google OAuth
-- `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_TENANT` — Microsoft OAuth
-
----
-
-## TypeScript & Linting
-
-- **Target:** ES2020
-- **Strict mode:** ON (`strict: true`)
-- **Unused variables/parameters:** Error (`noUnusedLocals`, `noUnusedParameters`)
-- **No fallthroughs in switch:** Error
-- **Linter:** ESLint with Vue plugin
-  - Run with auto-fix: `npm run lint`
-  - Scope: `.vue`, `.js`, `.jsx`, `.ts`, `.tsx`, and `.mts` files
+**Production:** `relay-server/relay-server-enhanced.js` is **gitignored** — it will not appear in
+`ls` or git diffs, but it is the code actually running in production (via PM2), with a persisted
+vote registry. Changes to the dev relay do not reach production automatically.
 
 ---
 
@@ -307,10 +169,36 @@ Environment variables:
 
 ---
 
+## Desktop App (Tauri) — in progress
+
+`src-tauri/` is a Cargo workspace building a native desktop shell that reuses the
+existing Vue UI. The goal is the things a browser structurally cannot do: seed
+from the tray with the window closed, keep unlimited history with offline search,
+reach peers directly over the LAN, seal the signing key outside JS, and route
+over Tor (via `arti`) while publishing the embedded relay as an onion service.
+
+Platform differences live behind the `@platform` seam — see the "platform-adapter
+seam" section of `src/services/copilot-services.md` before touching
+`src/config.ts`, `src/main.ts` or `src/services/storageService.ts`.
+
+- `npm run dev:desktop` / `npm run build:desktop` (needs a Rust toolchain)
+- **Linux build deps:** `libwebkit2gtk-4.1-dev libgtk-3-dev
+  libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev build-essential`
+- Phase 0 (shell, seam, tray, settings) is done. Storage, the Rust Gun wire
+  implementation, the embedded relay hub, key sealing, native P2P and Tor are
+  phased in behind the seam; the frontend does not change when they land.
+- `src-tauri/crates/ip-crypto/` — canonical JSON, verified byte-for-byte against
+  `shared-validation/canonical.js`. **Never** "simplify" it to `serde_json` or an
+  RFC 8785 crate; both format numbers differently from `JSON.stringify` and would
+  silently break signatures on the live network.
+
+---
+
 ## Monorepo Note
 
 This repo contains:
 - **Main frontend** (Vite + Vue 3 + Pinia) — this directory
+- **Desktop shell** — `src-tauri/` (Tauri v2 + Rust, gitignored build output)
 - **Relay server** — `relay-server.js` and `relay-server/` (production version)
 - **GunDB relay** — `gun-relay-server/`
 - **Shared validation** — `shared-validation/` (used by both frontend and relay)

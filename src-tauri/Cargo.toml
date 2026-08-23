@@ -1,0 +1,63 @@
+# The Tauri CLI requires the app crate's manifest to sit beside tauri.conf.json,
+# so this file is both the app package AND the Cargo workspace root. The protocol
+# crates live under crates/ and are pulled in as workspace members.
+
+[package]
+name = "interpoll-desktop"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77"
+license = "MIT"
+description = "InterPoll desktop — decentralised polling with an embedded relay."
+
+[lib]
+# Tauri v2 mobile targets require the app to be a library with a `run` entry
+# point; the binary below is a thin wrapper. Harmless on desktop, and it keeps
+# the door open without a restructure later.
+name = "interpoll_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+
+ip-crypto = { path = "crates/ip-crypto" }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+parking_lot = "0.12"
+
+[workspace]
+members = ["crates/ip-crypto"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77"
+license = "MIT"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+thiserror = "2"
+tracing = "0.1"
+
+# Profile for shipped builds. The binary is downloaded by end users, so size is
+# a feature: LTO plus a single codegen unit, panic=abort to drop the unwinding
+# tables, and stripped symbols.
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

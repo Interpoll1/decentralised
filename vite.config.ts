@@ -40,7 +40,15 @@ function spaRouteFallbackPlugin() {
   };
 }
 
-const isNativeBuild = process.env.CAP_BUILD === '1';
+// Tauri desktop build (`build:desktop` / `dev:desktop` npm scripts).
+const isTauri = process.env.TAURI_BUILD === '1';
+
+// When building for a native shell we disable the service worker: Workbox
+// precache/navigateFallback fights local asset serving and causes stale-asset /
+// blank-screen issues inside the WebView. Tauri serves assets over its own
+// `tauri://` protocol and hits the exact same problem as Capacitor, so both
+// native targets opt out.
+const isNativeBuild = process.env.CAP_BUILD === '1' || isTauri;
 
 export default defineConfig({
   base: '/',
@@ -88,6 +96,12 @@ export default defineConfig({
 
   resolve: {
     alias: {
+      // The platform-adapter seam. Resolved at BUILD time, not runtime, so the
+      // web bundle never ships `@tauri-apps/api` and the desktop bundle never
+      // ships the browser code paths it has natively replaced. A runtime
+      // `if (isTauri)` would ship both to everyone and defeat the point.
+      // See src/platform/types.ts.
+      '@platform': path.resolve(__dirname, isTauri ? './src/platform/tauri' : './src/platform/web'),
       '@': path.resolve(__dirname, './src'),
       buffer: 'buffer',
       os:     'os-browserify/browser',
@@ -103,6 +117,7 @@ export default defineConfig({
     global:             'globalThis',
     'import.meta.env.VITE_BUILD_HASH': JSON.stringify(getBuildHash()),
     'import.meta.env.VITE_BUILD_TIME': JSON.stringify(new Date().toISOString()),
+    __PLATFORM__: JSON.stringify(isTauri ? 'tauri' : 'web'),
   },
 
   optimizeDeps: {
@@ -125,7 +140,12 @@ export default defineConfig({
     sourcemap: false,
     assetsDir: 'assets2',
     chunkSizeWarningLimit: 600,
-    target: 'es2020',
+    // 2. Target modern browsers — smaller output, no legacy polyfills.
+    //    Desktop ships its own webview, so we know the floor: WebView2 and
+    //    WKWebView are current, and Linux WebKitGTK is the laggard — chrome110
+    //    is the safe common denominator there.
+    target: isTauri ? 'chrome110' : 'es2020',
+    // 3. Minification options
     minify: 'esbuild',
     cssMinify: true,
     // Per-chunk CSS — each lazy component only loads its own stylesheet
@@ -200,6 +220,16 @@ export default defineConfig({
   },
 
   server: {
-    fs: { strict: false },
-  },
+    fs: {
+      strict: false
+    },
+    // Tauri's dev window loads a fixed URL from tauri.conf.json, so the port
+    // must not drift to 5174 when 5173 is taken — fail loudly instead of
+    // silently launching a window pointed at nothing.
+    ...(isTauri ? {
+      port: 1420,
+      strictPort: true,
+      hmr: { protocol: 'ws', host: 'localhost', port: 1421 },
+    } : {}),
+  }
 });

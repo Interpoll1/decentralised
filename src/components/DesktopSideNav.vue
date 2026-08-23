@@ -169,23 +169,26 @@ function goCategory(id: string) {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #a5b4fc;
+    color: var(--app-accent);
     background: linear-gradient(145deg, rgba(94, 106, 210, 0.28), rgba(139, 92, 246, 0.18));
     border: 1px solid rgba(124, 140, 255, 0.35);
     box-shadow: 0 8px 20px rgba(94, 106, 210, 0.2);
   }
   .side-nav-brand-name {
-    font-size: 17px;
+    font-family: var(--font-display);
+    font-size: 1.0625rem;
+    font-variation-settings: "opsz" 18;
     font-weight: 700;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.04em;
     color: var(--app-text);
   }
 
   .side-nav-section-label {
     margin: 10px 14px 6px;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.14em;
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
+    font-weight: 500;
+    letter-spacing: var(--tracking-label);
     text-transform: uppercase;
     color: var(--app-text-subtle);
   }
@@ -210,7 +213,7 @@ function goCategory(id: string) {
   .side-nav-item ion-icon { font-size: 20px; flex-shrink: 0; }
 
   .side-nav-item:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--app-item-surface);
     color: var(--app-text);
   }
 
@@ -237,12 +240,12 @@ function goCategory(id: string) {
     font-weight: 600;
   }
 
-  .tone-technology { color: #a78bfa; }
-  .tone-gaming     { color: #4ade80; }
-  .tone-science    { color: #38bdf8; }
-  .tone-politics   { color: #fb7185; }
-  .tone-crypto     { color: #fbbf24; }
-  .tone-sports     { color: #2dd4bf; }
+  .tone-technology { color: var(--tone-technology); }
+  .tone-gaming     { color: var(--tone-gaming); }
+  .tone-science    { color: var(--tone-science); }
+  .tone-politics   { color: var(--tone-politics); }
+  .tone-crypto     { color: var(--tone-crypto); }
+  .tone-sports     { color: var(--tone-sports); }
 }
 
 @media (min-width: 1024px) {

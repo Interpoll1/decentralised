@@ -423,7 +423,7 @@ onUnmounted(() => {
 .command-hint {
   color: var(--ion-color-medium, #999);
   font-size: 0.85rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .empty-state {

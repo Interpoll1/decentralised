@@ -120,8 +120,19 @@ function normalizeGunPost(postData: any): any {
   return out;
 }
 const MAX_INITIAL_POSTS = 50;
-const MAX_COMMUNITY_INITIAL_POSTS = 120;
+// The home feed renders PAGE_SIZE (10) posts and pages on scroll, so hydrating
+// 120 per community — across up to 8 communities concurrently — issued ~1000
+// individual Gun gets at startup to display ten items. That burst is what
+// triggers Gun's "syncing 1K+ records a second" warning and seeds the graph with
+// ~1000 nodes the eviction pass then has to fight. 30 still covers three pages
+// per community before load-more needs the network.
+const MAX_COMMUNITY_INITIAL_POSTS = 30;
 const MISSING_POST_CACHE_TTL_MS = 30_000;
+
+// Live `map().on` flush ceiling. See flushPending() — without a per-tick cap the
+// debounce window just accumulates a whole re-sync burst and releases it at once.
+const MAX_LIVE_FLUSH_BATCH = 25;
+const LIVE_FLUSH_INTERVAL_MS = 100;
 
 // Both of these were plain Maps that only ever grew — one entry per post the
 // session had ever rendered or failed to find. On a long feed scroll that is the
@@ -477,8 +488,13 @@ export class PostService {
     let flushTimer: ReturnType<typeof setTimeout> | null = null;
     const flushPending = () => {
       flushTimer = null;
-      const ids = [...pendingIds];
-      pendingIds.clear();
+      // Batching alone didn't bound anything: a relay re-sync drops a whole
+      // community index into `pendingIds` inside one debounce window, so a single
+      // flush still fanned out hundreds of concurrent gets. Dispatch a fixed slice
+      // and leave the remainder queued for the next tick.
+      const ids = [...pendingIds].slice(0, MAX_LIVE_FLUSH_BATCH);
+      ids.forEach(id => pendingIds.delete(id));
+      if (pendingIds.size > 0) flushTimer = setTimeout(flushPending, LIVE_FLUSH_INTERVAL_MS);
       for (const postId of ids) {
         if (inFlightIds.has(postId)) continue;
         inFlightIds.add(postId);
@@ -508,7 +524,7 @@ export class PostService {
         return;
       }
       pendingIds.add(postId);
-      if (!flushTimer) flushTimer = setTimeout(flushPending, 100);
+      if (!flushTimer) flushTimer = setTimeout(flushPending, LIVE_FLUSH_INTERVAL_MS);
     });
 
     // v1 posts intentionally excluded from community feed — only using GUN v3 namespace
@@ -583,8 +599,13 @@ export class PostService {
     let flushTimer: ReturnType<typeof setTimeout> | null = null;
     const flushPending = () => {
       flushTimer = null;
-      const ids = [...pendingIds];
-      pendingIds.clear();
+      // Batching alone didn't bound anything: a relay re-sync drops a whole
+      // community index into `pendingIds` inside one debounce window, so a single
+      // flush still fanned out hundreds of concurrent gets. Dispatch a fixed slice
+      // and leave the remainder queued for the next tick.
+      const ids = [...pendingIds].slice(0, MAX_LIVE_FLUSH_BATCH);
+      ids.forEach(id => pendingIds.delete(id));
+      if (pendingIds.size > 0) flushTimer = setTimeout(flushPending, LIVE_FLUSH_INTERVAL_MS);
       for (const postId of ids) {
         if (inFlightIds.has(postId)) continue;
         inFlightIds.add(postId);
@@ -653,7 +674,7 @@ export class PostService {
         }
       }
       pendingIds.add(postId);
-      if (!flushTimer) flushTimer = setTimeout(flushPending, 100);
+      if (!flushTimer) flushTimer = setTimeout(flushPending, LIVE_FLUSH_INTERVAL_MS);
     });
 
     // v1 posts intentionally excluded from global feed — only using GUN v3 namespace
@@ -818,11 +839,11 @@ export class PostService {
     postId: string,
     direction: 'up' | 'down',
     userId: string,
-  ): Promise<{ post: Post; myVote: 'up' | 'down' | null }> {
+  ): Promise<{ post: Post; myVote: 'up' | 'down' | null; tallyAuthoritative: boolean }> {
     const post = await PostService.getPostForCounterUpdate(postId);
     if (!post) throw new Error('Post not found');
-    const { tally, myVote } = await PostVoteService.castVote(postId, userId, direction);
-    return { post: PostService.applyTally(post, tally), myVote };
+    const { tally, myVote, tallyAuthoritative } = await PostVoteService.castVote(postId, userId, direction);
+    return { post: PostService.applyTally(post, tally), myVote, tallyAuthoritative };
   }
 
   static async incrementCommentCount(postId: string, communityId?: string): Promise<void> {
@@ -851,11 +872,11 @@ export class PostService {
     postId: string,
     _direction: 'up' | 'down',
     userId: string,
-  ): Promise<{ post: Post; myVote: 'up' | 'down' | null }> {
+  ): Promise<{ post: Post; myVote: 'up' | 'down' | null; tallyAuthoritative: boolean }> {
     const post = await PostService.getPostForCounterUpdate(postId);
     if (!post) throw new Error('Post not found');
-    const { tally, myVote } = await PostVoteService.clearVote(postId, userId);
-    return { post: PostService.applyTally(post, tally), myVote };
+    const { tally, myVote, tallyAuthoritative } = await PostVoteService.clearVote(postId, userId);
+    return { post: PostService.applyTally(post, tally), myVote, tallyAuthoritative };
   }
 
   /** This user's vote as the graph has it — the authority for button state. */

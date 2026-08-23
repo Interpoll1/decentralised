@@ -9,6 +9,8 @@
  *   const ws = new WebSocket(config.relay.websocket);
  */
 
+import platformConfig from '@platform/config';
+
 const STORAGE_KEY = 'interpoll_relay_config';
 const ENCRYPTION_STORAGE_KEY = 'interpoll_encryption_config';
 // v3 — removed dead Heroku relays; existing installs get clean defaults
@@ -200,6 +202,29 @@ let overrides = loadOverrides();
 let encryptionConfig = loadEncryptionConfig();
 let gunPeers: string[] | null = loadGunPeers();
 
+/**
+ * Write a setting through to BOTH stores.
+ *
+ * localStorage stays the synchronous read path — this module is imported by ~29
+ * files and evaluates at module load, so its getters cannot become async. On
+ * desktop the platform backend additionally persists to a Rust-owned settings
+ * file, which is authoritative and re-hydrates the mirror on next launch. On web
+ * `save()` is a no-op and localStorage is simply the source of truth.
+ *
+ * Fire-and-forget by design: a failed mirror write must not turn a synchronous
+ * setter into a throwing one.
+ */
+function persist(key: string, value: string | null): void {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+    // Storage unavailable (private mode, disabled cookies) — the in-memory
+    // module state above is still updated, so the setting holds for this session.
+  }
+  platformConfig.save(key, value);
+}
+
 function ws(): string {
   return overrides.websocket || defaults.websocket;
 }
@@ -257,7 +282,7 @@ const config = {
   /** Set which key is authoritative for actor identity ('deviceId' | 'pubkey'). */
   setIdentityPrimaryKey(key: IdentityPrimaryKey) {
     identityConfig = { ...identityConfig, primaryKey: key };
-    try { localStorage.setItem(IDENTITY_CONFIG_STORAGE_KEY, JSON.stringify(identityConfig)); } catch { /* ignore */ }
+    try { persist(IDENTITY_CONFIG_STORAGE_KEY, JSON.stringify(identityConfig)); } catch { /* ignore */ }
   },
 
   /** Mesh wire-bridge filtering mode for inbound out-of-namespace Gun puts. */
@@ -283,8 +308,8 @@ const config = {
   setAnonymityMode(on: boolean) {
     anonymityMode = !!on;
     try {
-      if (anonymityMode) localStorage.setItem(ANONYMITY_MODE_KEY, 'true');
-      else localStorage.removeItem(ANONYMITY_MODE_KEY);
+      if (anonymityMode) persist(ANONYMITY_MODE_KEY, 'true');
+      else persist(ANONYMITY_MODE_KEY, null);
     } catch { /* storage unavailable */ }
   },
 
@@ -292,15 +317,15 @@ const config = {
   setRelayAttestationPubkey(pubkeyHex: string) {
     relayAttestationPubkey = pubkeyHex || '';
     try {
-      if (relayAttestationPubkey) localStorage.setItem(RELAY_ATT_PUBKEY_STORAGE_KEY, relayAttestationPubkey);
-      else localStorage.removeItem(RELAY_ATT_PUBKEY_STORAGE_KEY);
+      if (relayAttestationPubkey) persist(RELAY_ATT_PUBKEY_STORAGE_KEY, relayAttestationPubkey);
+      else persist(RELAY_ATT_PUBKEY_STORAGE_KEY, null);
     } catch { /* ignore */ }
   },
 
   /** Set the mesh wire-bridge filter mode ('off' | 'log' | 'enforce'). */
   setWireFilterMode(mode: WireFilterMode) {
     wireFilterMode = mode;
-    try { localStorage.setItem(WIRE_FILTER_STORAGE_KEY, mode); } catch { /* ignore */ }
+    try { persist(WIRE_FILTER_STORAGE_KEY, mode); } catch { /* ignore */ }
   },
 
   /** Default (build-time) relay URLs */
@@ -313,13 +338,13 @@ const config = {
     for (const key of Object.keys(overrides) as (keyof RelayOverrides)[]) {
       if (!overrides[key]) delete overrides[key];
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(overrides));
+    persist(STORAGE_KEY, JSON.stringify(overrides));
   },
 
   /** Clear all runtime overrides and revert to build-time defaults */
   resetRelayOverrides() {
     overrides = {};
-    localStorage.removeItem(STORAGE_KEY);
+    persist(STORAGE_KEY, null);
   },
 
   /** Get current overrides (if any) */
@@ -332,11 +357,17 @@ const config = {
    * Falls back to DEFAULT_GUN_PEERS (imported lazily to avoid circular deps at module load).
    */
   getGunPeers(): string[] {
-    if (gunPeers && gunPeers.length > 0) return [...gunPeers];
-    return [
-      defaults.gun,
-      'https://relay.peer.ooo/gun',
-    ];
+    const configured = gunPeers && gunPeers.length > 0
+      ? [...gunPeers]
+      : [defaults.gun, 'https://relay.peer.ooo/gun'];
+
+    // The desktop shell runs its own relay; try it before any remote one so the
+    // app keeps working with the internet unplugged, and so a user's own machine
+    // — not endless.sbs — is the first hop. Empty on web. Prepended rather than
+    // substituted: the local hub is a *preferred* peer, not the only one, and it
+    // must never be removable by a user editing their peer list.
+    const preferred = platformConfig.preferredGunPeers();
+    return preferred.length ? [...preferred, ...configured.filter(p => !preferred.includes(p))] : configured;
   },
 
   /**
@@ -400,16 +431,16 @@ const config = {
     gunPeers = urls.filter(u => !!u.trim());
     if (gunPeers.length === 0) {
       gunPeers = null;
-      localStorage.removeItem(GUN_PEERS_STORAGE_KEY);
+      persist(GUN_PEERS_STORAGE_KEY, null);
     } else {
-      localStorage.setItem(GUN_PEERS_STORAGE_KEY, JSON.stringify(gunPeers));
+      persist(GUN_PEERS_STORAGE_KEY, JSON.stringify(gunPeers));
     }
   },
 
   /** Reset Gun peers to built-in defaults */
   resetGunPeers() {
     gunPeers = null;
-    localStorage.removeItem(GUN_PEERS_STORAGE_KEY);
+    persist(GUN_PEERS_STORAGE_KEY, null);
   },
 
   /** Check if server-wide encryption is active */
@@ -423,13 +454,13 @@ const config = {
     for (const key of Object.keys(encryptionConfig) as (keyof EncryptionConfig)[]) {
       if (encryptionConfig[key] === undefined || encryptionConfig[key] === '') delete encryptionConfig[key];
     }
-    localStorage.setItem(ENCRYPTION_STORAGE_KEY, JSON.stringify(encryptionConfig));
+    persist(ENCRYPTION_STORAGE_KEY, JSON.stringify(encryptionConfig));
   },
 
   /** Clear encryption settings */
   resetEncryptionConfig() {
     encryptionConfig = {};
-    localStorage.removeItem(ENCRYPTION_STORAGE_KEY);
+    persist(ENCRYPTION_STORAGE_KEY, null);
   },
 
   /** Get current encryption config */
@@ -478,17 +509,17 @@ const config = {
   setIceServers(servers: RTCIceServer[] | null | undefined) {
     if (!servers || servers.length === 0) {
       iceServers = null;
-      try { localStorage.removeItem(ICE_SERVERS_STORAGE_KEY); } catch { /* ignore */ }
+      try { persist(ICE_SERVERS_STORAGE_KEY, null); } catch { /* ignore */ }
       return;
     }
     iceServers = servers;
-    try { localStorage.setItem(ICE_SERVERS_STORAGE_KEY, JSON.stringify(servers)); } catch { /* ignore */ }
+    try { persist(ICE_SERVERS_STORAGE_KEY, JSON.stringify(servers)); } catch { /* ignore */ }
   },
 
   /** Reset ICE servers to the built-in diverse STUN default. */
   resetIceServers() {
     iceServers = null;
-    try { localStorage.removeItem(ICE_SERVERS_STORAGE_KEY); } catch { /* ignore */ }
+    try { persist(ICE_SERVERS_STORAGE_KEY, null); } catch { /* ignore */ }
   },
 
   /** The built-in default ICE servers (for UI reset/display). */

@@ -309,7 +309,7 @@ export const usePostStore = defineStore('post', () => {
 
     // Already seen in a previous session → add silently, no banner
     if (seenPostIds.has(post.id)) {
-      postsMap.value.set(post.id, post);
+      postsMap.value.set(post.id, withKnownTally(post));
       tryDecryptPost(post);
       const next = (communityArrivalCounts.get(communityId) || 0) + 1;
       communityArrivalCounts.set(communityId, next);
@@ -322,7 +322,7 @@ export const usePostStore = defineStore('post', () => {
 
     if (communityInitialLoadDone.get(communityId) && isGenuinelyNew) {
       // Auto-prepend immediately — no banner, no click required
-      postsMap.value.set(post.id, post);
+      postsMap.value.set(post.id, withKnownTally(post));
       tryDecryptPost(post);
       seenPostIds.add(post.id);
       saveSeenIds(seenPostIds);
@@ -330,7 +330,7 @@ export const usePostStore = defineStore('post', () => {
       communityArrivalCounts.set(communityId, next);
     } else {
       // Initial load or stale Gun re-delivery → add silently
-      postsMap.value.set(post.id, post);
+      postsMap.value.set(post.id, withKnownTally(post));
       tryDecryptPost(post);
       seenPostIds.add(post.id);
       const next = (communityArrivalCounts.get(communityId) || 0) + 1;
@@ -686,9 +686,9 @@ export const usePostStore = defineStore('post', () => {
       const local = postsMap.value.get(postId);
       if (local) { currentPost.value = local; return; }
       const fetched = await PostService.getPost(postId);
-      currentPost.value = fetched;
+      currentPost.value = fetched ? withKnownTally(fetched) : fetched;
       if (fetched) {
-        postsMap.value.set(fetched.id, fetched);
+        postsMap.value.set(fetched.id, withKnownTally(fetched));
         tryDecryptPost(fetched);
       }
     } catch (error) { console.error('Error selecting post:', error); }
@@ -741,11 +741,25 @@ export const usePostStore = defineStore('post', () => {
     if (currentPost.value?.id === postId) currentPost.value = snapshot;
   }
 
-  function reconcileVote(postId: string, updated: Post, resolvedVote: 'up' | 'down' | null) {
+  /**
+   * Adopt the graph's answer for a vote.
+   *
+   * `authoritative` is false when the service could not read the post's frozen
+   * baseline: the vote landed, but its counts omit any legacy total. Adopting
+   * them would drop the number and then restore it on the next good read, so
+   * the optimistic counts are kept instead and only the vote state is taken.
+   */
+  function reconcileVote(
+    postId: string,
+    updated: Post,
+    resolvedVote: 'up' | 'down' | null,
+    authoritative = true,
+  ) {
+    setMyVote(postId, resolvedVote);
+    if (!authoritative) return;
     const tally: PostTally = { upvotes: updated.upvotes, downvotes: updated.downvotes, score: updated.score };
     setTally(postId, tally);
     BroadcastService.broadcast('post-vote-tally', { postId, tally });
-    setMyVote(postId, resolvedVote);
     const merged = { ...updated };
     postsMap.value.set(postId, merged);
     if (currentPost.value?.id === postId) currentPost.value = merged;
@@ -767,8 +781,9 @@ export const usePostStore = defineStore('post', () => {
     setMyVote(postId, predicted);
     try {
       const currentUser = await UserService.getCurrentUser();
-      const { post, myVote: resolved } = await PostService.voteOnPost(postId, direction, currentUser.id);
-      reconcileVote(postId, post, resolved);
+      const { post, myVote: resolved, tallyAuthoritative } =
+        await PostService.voteOnPost(postId, direction, currentUser.id);
+      reconcileVote(postId, post, resolved, tallyAuthoritative);
       const karmaDelta = karmaFor(resolved) - karmaFor(previousVote);
       if (karmaDelta !== 0) void UserService.incrementKarma(post.authorId, karmaDelta).catch(() => {});
     } catch (error) {
@@ -785,8 +800,9 @@ export const usePostStore = defineStore('post', () => {
     setMyVote(postId, null);
     try {
       const currentUser = await UserService.getCurrentUser();
-      const { post, myVote: resolved } = await PostService.removeVote(postId, previousVote, currentUser.id);
-      reconcileVote(postId, post, resolved);
+      const { post, myVote: resolved, tallyAuthoritative } =
+        await PostService.removeVote(postId, previousVote, currentUser.id);
+      reconcileVote(postId, post, resolved, tallyAuthoritative);
       const karmaDelta = karmaFor(resolved) - karmaFor(previousVote);
       if (karmaDelta !== 0) void UserService.incrementKarma(post.authorId, karmaDelta).catch(() => {});
     } catch (error) {
@@ -823,6 +839,36 @@ export const usePostStore = defineStore('post', () => {
   /** Live authoritative counts while a post is on screen. Returns an unsubscribe. */
   function subscribeToVotes(postId: string): () => void {
     return PostService.subscribeToVotes(postId, (tally) => setTally(postId, tally));
+  }
+
+  /** postId → live tally subscription, for the posts currently rendered in a feed. */
+  const feedVoteSubs = new Map<string, () => void>();
+
+  /**
+   * Keep live tallies for exactly the posts a feed is showing.
+   *
+   * Without this a feed renders `post.upvotes` — the advisory mirror on the post
+   * node, which any peer re-echoes from a pre-vote snapshot, so counts drift and
+   * flip as echoes arrive. Only the detail page derived a real tally. Scoped to
+   * the visible window so the subscription count tracks what is on screen.
+   */
+  function syncFeedVoteSubscriptions(postIds: string[]) {
+    const wanted = new Set(postIds);
+    for (const [postId, unsubscribe] of feedVoteSubs) {
+      if (wanted.has(postId)) continue;
+      unsubscribe();
+      feedVoteSubs.delete(postId);
+    }
+    for (const postId of wanted) {
+      if (feedVoteSubs.has(postId)) continue;
+      feedVoteSubs.set(postId, subscribeToVotes(postId));
+    }
+  }
+
+  /** Drop every feed subscription — call when the feed unmounts. */
+  function stopFeedVoteSubscriptions() {
+    for (const unsubscribe of feedVoteSubs.values()) unsubscribe();
+    feedVoteSubs.clear();
   }
 
   // Legacy call shapes, kept so any caller not yet migrated still toggles
@@ -873,6 +919,7 @@ export const usePostStore = defineStore('post', () => {
     flushNewPosts, injectPost, saveSeenNow, purgeLegacyPosts, trimPostsToVisible,
     createPost, selectPost,
     toggleVote, clearVote, myVote, myVotes, refreshVoteState, subscribeToVotes,
+    syncFeedVoteSubscriptions, stopFeedVoteSubscriptions,
     voteOnPost, upvotePost, downvotePost, removeUpvote, removeDownvote,
     setCommentCount,
     refreshPosts,

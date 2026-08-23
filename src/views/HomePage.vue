@@ -244,6 +244,20 @@
               </ion-infinite-scroll>
             </div>
 
+            <!-- an active category filter that matches nothing is a different
+                 situation from an empty instance, and needs a different way out. -->
+            <div v-else-if="selectedCategory !== 'all'" class="empty-state empty-state--home">
+              <ion-icon :icon="documentTextOutline" size="large"></ion-icon>
+              <p>Nothing in {{ selectedCategoryLabel }} yet</p>
+              <p class="subtitle">A post or poll lands here when its community is set to {{ selectedCategoryLabel }}.</p>
+              <div class="empty-state__actions">
+                <ion-button @click="selectCategory('all')">
+                  <ion-icon slot="start" :icon="documentTextOutline"></ion-icon>
+                  Show all categories
+                </ion-button>
+              </div>
+            </div>
+
             <div v-else class="empty-state empty-state--home">
               <ion-icon :icon="documentTextOutline" size="large"></ion-icon>
               <p>No content yet</p>
@@ -331,9 +345,9 @@
             </div>
           </div>
 
-          <div class="sidebar-section surface-card">
+          <div v-if="trendingCategories.length > 0" class="sidebar-section surface-card">
             <div class="sidebar-header">
-              <span>Trending Categories</span>
+              <span>Categories</span>
             </div>
             <div class="trending-list">
               <button
@@ -343,13 +357,15 @@
                 v-for="row in trendingCategories.slice(0, 6)"
                 :key="row.id"
                 class="trending-row"
+                :class="{ active: selectedCategory === row.id }"
+                :aria-label="`${row.label}, ${row.posts} ${row.posts === 1 ? 'item' : 'items'}`"
                 @click="selectCategory(row.id)"
               >
                 <span class="trending-left">
                   <ion-icon :icon="row.icon" :class="row.tone"></ion-icon>
                   <span>{{ row.label }}</span>
                 </span>
-                <span class="trending-meta">{{ row.posts }} posts</span>
+                <span class="trending-meta tabular">{{ row.posts }}</span>
                 <ion-icon :icon="chevronForwardOutline" class="trending-chevron"></ion-icon>
               </button>
             </div>
@@ -717,22 +733,73 @@ const feedCategories = computed(() =>
   showMoreCategories.value ? VISIBLE_CATEGORIES : VISIBLE_CATEGORIES.slice(0, 6)
 );
 
+/**
+ * Counts every loaded post and poll by its community's category. These used to
+ * be hard-coded ("1.2k", "964", …), which meant the sidebar advertised traffic
+ * the instance did not have and never moved. Categories with nothing in them
+ * are dropped rather than shown as zero — an empty row is a dead end.
+ */
+const categoryCounts = computed<Record<string, number>>(() => {
+  const counts: Record<string, number> = {}
+  for (const item of allFeedItems.value) {
+    const cat = categoryOf(item)
+    if (cat) counts[cat] = (counts[cat] || 0) + 1
+  }
+  return counts
+})
+
+const trendingCategories = computed(() =>
+  feedCategories.value
+    .map(cat => ({ ...cat, posts: categoryCounts.value[cat.id] || 0 }))
+    .filter(cat => cat.posts > 0)
+    .sort((a, b) => b.posts - a.posts)
+)
+
+const selectedCategoryLabel = computed(() =>
+  feedCategories.value.find(c => c.id === selectedCategory.value)?.label ?? selectedCategory.value
+)
+
 function selectCategory(id: string) {
   selectedCategory.value = id;
   void router.push({ query: { ...route.query, category: id === 'all' ? undefined : id } });
 }
 
 // ── Feed ──────────────────────────────────────────────────────────────────────
-function itemMatchesCategory(item: { type: string; data: any }): boolean {
-  if (selectedCategory.value === 'all') return true;
-  const cat = selectedCategory.value.toLowerCase();
-  if (item.data.category && String(item.data.category).toLowerCase() === cat) return true;
-  if (item.data.tags) {
-    const tags = Array.isArray(item.data.tags) ? item.data.tags : String(item.data.tags).split(',');
-    if (tags.some((t: any) => String(t).toLowerCase().trim() === cat)) return true;
-  }
-  return false;
+/**
+ * A post/poll's category is its community's category — posts and polls carry
+ * no category of their own. Matching is exact against the community's
+ * `category` field (set from a fixed list in CreateCommunityPage) or one of
+ * its tags. The previous version joined the community name, display name and
+ * tags into one string and substring-matched, so "Crypto" also caught a
+ * community called "Cryptography Reading Group" and "Science" caught
+ * "Data Science Memes" regardless of their actual category.
+ */
+function categoryOf(item: { data: any }): string | null {
+  const community = communityStore.communities.find((c: any) => c.id === item.data.communityId)
+  if (!community) return null
+  const explicit = String(community.category || '').trim().toLowerCase()
+  if (explicit) return explicit
+  const tag = (community.tags || [])
+    .map((t: any) => String(t).trim().toLowerCase())
+    .find((t: string) => (CATEGORY_IDS as readonly string[]).includes(t))
+  return tag || null
 }
+
+function itemMatchesCategory(item: { type: string; data: any }): boolean {
+  if (selectedCategory.value === 'all') return true
+  return categoryOf(item) === selectedCategory.value.toLowerCase()
+}
+
+function isValidModerationApiUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url.trim());
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+const sessionSeed = Math.floor(Math.random() * 10000)
 
 function seededRandom(index: number): number {
   let x = Math.sin(index + 1) * 10000;
@@ -748,10 +815,13 @@ function hashStringToInt(str: string): number {
   return Math.abs(hash);
 }
 
-const combinedFeed = computed(() => {
+/** Every visible post and poll, before any category filter is applied.
+ *  Split out from combinedFeed so the sidebar can count categories across the
+ *  whole feed rather than across whatever the current filter left behind. */
+const allFeedItems = computed(() => {
   moderationVersion.value;
-  selectedCategory.value;
-  const items: Array<{ type: 'post' | 'poll'; data: any; createdAt: number }> = [];
+  const items: Array<{ type: 'post' | 'poll'; data: any; createdAt: number }> = []
+
   postStore.sortedPosts
     .filter(post => !ModerationService.isPostBodyBlocked(getPostModerationText(post)))
     .forEach(post => items.push({ type: 'post', data: post, createdAt: post.createdAt }));
@@ -760,8 +830,15 @@ const combinedFeed = computed(() => {
     if (!ModerationService.isPostBodyBlocked(getPollModerationText(poll))) {
       items.push({ type: 'poll', data: poll, createdAt: poll.createdAt });
     }
-  });
-  const filtered = items.filter(itemMatchesCategory);
+  })
+
+  return items
+})
+
+const combinedFeed = computed(() => {
+  selectedCategory.value;
+  const filtered = allFeedItems.value.filter(itemMatchesCategory)
+
   if (feedMode.value === 'latest') {
     filtered.sort((a, b) => b.createdAt - a.createdAt);
     return filtered.slice(0, postStore.visibleCount);
@@ -804,74 +881,6 @@ function ensureInitialFeedVisible(reason: string) {
 // ── Voting ────────────────────────────────────────────────────────────────────
 function hasUpvoted(postId: string): boolean   { voteVersion.value; return postStore.myVote(postId) === 'up'; }
 function hasDownvoted(postId: string): boolean  { voteVersion.value; return postStore.myVote(postId) === 'down'; }
-function hasUpvotedPoll(pollId: string): boolean  { voteVersion.value; return pollStore.myPollContentVote(pollId) === 'up'; }
-function hasDownvotedPoll(pollId: string): boolean { voteVersion.value; return pollStore.myPollContentVote(pollId) === 'down'; }
-
-async function presentVoteToast(message: string, expectedVersion: number) {
-  await nextTick();
-  if (voteVersion.value !== expectedVersion) return;
-  const toast = await toastController.create({ message, duration: 1500, position: 'bottom' });
-  await toast.present();
-}
-
-async function handlePostVote(post: Post, direction: 'up' | 'down') {
-  voteVersion.value++;
-  const version = voteVersion.value;
-  try {
-    await postStore.toggleVote(post.id, direction);
-    voteVersion.value++;
-    const current = postStore.myVote(post.id);
-    await presentVoteToast(current === direction ? (direction === 'up' ? 'Upvoted' : 'Downvoted') : 'Vote removed', version);
-  } catch {
-    voteVersion.value++;
-    (await toastController.create({ message: 'Failed to vote', duration: 2000 })).present();
-  }
-}
-const handleUpvote   = (post: Post) => handlePostVote(post, 'up');
-const handleDownvote = (post: Post) => handlePostVote(post, 'down');
-
-async function handleUpvotePoll(poll: Poll) {
-  const wasActive = pollStore.myPollContentVote(poll.id) === 'up';
-  voteVersion.value++;
-  const version = voteVersion.value;
-  try {
-    await pollStore.togglePollContentVote(poll.id, 'up');
-    voteVersion.value++;
-    await presentVoteToast(wasActive ? 'Upvote removed' : 'Upvoted', version);
-  } catch {
-    voteVersion.value++;
-    (await toastController.create({ message: 'Failed to upvote poll', duration: 2000 })).present();
-  }
-}
-async function handleDownvotePoll(poll: Poll) {
-  const wasActive = pollStore.myPollContentVote(poll.id) === 'down';
-  voteVersion.value++;
-  const version = voteVersion.value;
-  try {
-    await pollStore.togglePollContentVote(poll.id, 'down');
-    voteVersion.value++;
-    await presentVoteToast(wasActive ? 'Downvote removed' : 'Downvoted', version);
-  } catch {
-    voteVersion.value++;
-    (await toastController.create({ message: 'Failed to downvote poll', duration: 2000 })).present();
-  }
-}
-
-// ── Navigation ────────────────────────────────────────────────────────────────
-function getCommunityName(communityId: string): string {
-  return communityStore.communities.find((c: any) => c.id === communityId)?.displayName || communityId;
-}
-async function navigateToPost(post: Post) { router.push(`/community/${post.communityId}/post/${post.id}`); }
-function navigateToPoll(poll: Poll)       { router.push(`/community/${poll.communityId}/poll/${poll.id}`); }
-
-async function handleModerationSubmit(post: Post) {
-  if (!ModerationService.canSubmitHashesFromHome()) return;
-  await ModerationService.submitPostHash(post);
-}
-async function handleModerationSubmitPoll(poll: Poll) {
-  if (!ModerationService.canSubmitHashesFromHome()) return;
-  await ModerationService.submitPollHash(poll);
-}
 
 // ── Scroll ────────────────────────────────────────────────────────────────────
 let lastScrollTop    = 0;
@@ -927,27 +936,190 @@ async function showPollOptions() {
   await actionSheet.present();
 }
 
-// ── Community subscription ────────────────────────────────────────────────────
-const GUN_SUBSCRIPTION_TIMEOUT_MS      = 8_000;
-const EMPTY_FEED_RECOVERY_TIMEOUT_MS   = 4_000;
-const subscribedCommunityIds           = new Set<string>();
+async function presentVoteToast(message: string, expectedVersion: number) {
+  const toast = await toastController.create({ message, duration: 1500 });
+  // Skip if a newer vote action has since superseded this one, to avoid a stale toast.
+  if (voteVersion.value === expectedVersion) {
+    toast.present();
+  }
+}
+
+/**
+ * One toggle, one write. Switching sides is no longer a remove-then-add pair of
+ * writes to the same node — `toggleVote` replaces this user's vote in place, so
+ * the second write can no longer race ahead of the first.
+ */
+async function handlePostVote(post: Post, direction: 'up' | 'down') {
+  const wasActive = postStore.myVote(post.id) === direction;
+  voteVersion.value++;
+  const version = voteVersion.value;
+  try {
+    await postStore.toggleVote(post.id, direction);
+    const labels = { up: 'Upvote', down: 'Downvote' };
+    await presentVoteToast(wasActive ? `${labels[direction]} removed` : `${labels[direction]}d`, version);
+  } catch {
+    (await toastController.create({
+      message: direction === 'up' ? 'Failed to upvote' : 'Failed to downvote',
+      duration: 2000,
+    })).present();
+  }
+}
+
+const handleUpvote = (post: Post) => handlePostVote(post, 'up');
+const handleDownvote = (post: Post) => handlePostVote(post, 'down');
+
+function hasUpvotedPoll(pollId: string): boolean {
+  voteVersion.value;
+  return pollStore.myContentVote(pollId) === 'up';
+}
+function hasDownvotedPoll(pollId: string): boolean {
+  voteVersion.value;
+  return pollStore.myContentVote(pollId) === 'down';
+}
+
+/**
+ * One toggle, one write — the same shape as `handlePostVote`.
+ *
+ * This used to decide vote-vs-unvote from two localStorage sets the view kept
+ * itself, while the service decided the same question from the graph; when they
+ * disagreed the click inverted. Switching sides also issued two writes to the
+ * same node, the second racing the first. `voteOnPollContent` now toggles.
+ */
+async function handlePollVote(poll: Poll, direction: 'up' | 'down') {
+  const wasActive = pollStore.myContentVote(poll.id) === direction;
+  voteVersion.value++;
+  const version = voteVersion.value;
+  try {
+    await pollStore.voteOnPollContent(poll.id, direction);
+    const labels = { up: 'Upvote', down: 'Downvote' };
+    await presentVoteToast(wasActive ? `${labels[direction]} removed` : `${labels[direction]}d`, version);
+  } catch {
+    voteVersion.value++;
+    (await toastController.create({
+      message: direction === 'up' ? 'Failed to upvote poll' : 'Failed to downvote poll',
+      duration: 2000,
+    })).present();
+  }
+}
+
+const handleUpvotePoll = (poll: Poll) => handlePollVote(poll, 'up');
+const handleDownvotePoll = (poll: Poll) => handlePollVote(poll, 'down');
+
+function getCommunityName(communityId: string): string {
+  return communityStore.communities.find(c => c.id === communityId)?.displayName || communityId;
+}
+async function navigateToPost(post: Post) {
+  router.push(`/community/${post.communityId}/post/${post.id}`);
+}
+
+async function handleModerationSubmit(post: Post) {
+  const moderationText = getPostModerationText(post);
+  if (!moderationText) {
+    (await toastController.create({ message: 'Post has no text to filter', duration: 1800, color: 'medium' })).present();
+    return;
+  }
+
+  try {
+    await ModerationService.submitPostBodyHash(moderationText);
+    (await toastController.create({ message: 'Post hash sent to moderation API', duration: 1800, color: 'success' })).present();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to submit post hash';
+    (await toastController.create({ message, duration: 2200, color: 'warning' })).present();
+  }
+}
+
+async function handleModerationSubmitPoll(poll: Poll) {
+  const moderationText = getPollModerationText(poll);
+  if (!moderationText) {
+    (await toastController.create({ message: 'Poll has no text to filter', duration: 1800, color: 'medium' })).present();
+    return;
+  }
+
+  try {
+    await ModerationService.submitPostBodyHash(moderationText);
+    (await toastController.create({ message: 'Poll text sent to moderation API', duration: 1800, color: 'success' })).present();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to submit poll text';
+    (await toastController.create({ message, duration: 2200, color: 'warning' })).present();
+  }
+}
+function navigateToPoll(poll: Poll) { router.push(`/community/${poll.communityId}/poll/${poll.id}`); }
+
+// ── Community subscriptions ───────────────────────────────────────────────────
+
+const subscribedFromHome = new Set<string>();
+
+const GUN_SUBSCRIPTION_TIMEOUT_MS = 8_000;
+const EMPTY_FEED_RECOVERY_TIMEOUT_MS = 4_000;
 
 async function subscribeNewCommunities(communities: typeof communityStore.communities) {
-  const toSubscribe = communities
-    .filter((c: any) => !c.isPrivate)
-    .slice(0, HOME_GUN_FEED_MAX_COMMUNITIES)
-    .filter((c: any) => !subscribedCommunityIds.has(c.id));
-  if (toSubscribe.length === 0) return;
-  for (const community of toSubscribe) {
-    subscribedCommunityIds.add(community.id);
-    const timeoutPromise = new Promise<void>(resolve => setTimeout(resolve, GUN_SUBSCRIPTION_TIMEOUT_MS));
-    await Promise.race([
-      Promise.all([
-        postStore.loadPostsForCommunity(community.id),
-        pollStore.loadPollsForCommunity(community.id),
-      ]),
-      timeoutPromise,
-    ]);
+  const budget = HOME_GUN_FEED_MAX_COMMUNITIES - subscribedFromHome.size;
+  if (budget <= 0) return;
+  // Joined communities first — those are the ones the user expects in their feed.
+  const candidates = communities.filter(c => !subscribedFromHome.has(c.id));
+  const newOnes = [
+    ...candidates.filter(c => communityStore.isJoined(c.id)),
+    ...candidates.filter(c => !communityStore.isJoined(c.id)),
+  ].slice(0, budget);
+  if (newOnes.length === 0) return;
+  if (FEED_DEBUG) {
+    feedDebug('subscribe-new-communities-start', {
+      newCount: newOnes.length,
+      communityIds: newOnes.map(c => c.id),
+      alreadySubscribed: subscribedFromHome.size,
+    });
+  }
+  newOnes.forEach(c => subscribedFromHome.add(c.id));
+  const isFirstBatch = subscribedFromHome.size === newOnes.length;
+
+  // Only show loading spinner if we have NO warmup data yet
+  const didSetLoading = isFirstBatch && combinedFeed.value.length === 0;
+  if (didSetLoading) isLoadingPosts.value = true;
+
+  // Gun subscriptions may hang if relay is down — cap wait.
+  //
+  // Hydrate a couple of communities at a time rather than firing all
+  // HOME_GUN_FEED_MAX_COMMUNITIES at once: each community's initial load issues
+  // its own batched run of individual Gun gets, and eight of those overlapping is
+  // what produced Gun's "syncing 1K+ records a second" warning at startup. The
+  // feed only renders ten items, so the first pair finishing is enough to paint.
+  const HYDRATION_CONCURRENCY = 2;
+  const hydrateAll = async () => {
+    for (let i = 0; i < newOnes.length; i += HYDRATION_CONCURRENCY) {
+      const slice = newOnes.slice(i, i + HYDRATION_CONCURRENCY);
+      await Promise.all(slice.flatMap(c => [
+        postStore.loadPostsForCommunity(c.id),
+        pollStore.loadPollsForCommunity(c.id),
+      ]));
+    }
+  };
+  let timerId: ReturnType<typeof setTimeout>;
+  let timedOut = false;
+  const timeout = new Promise<void>(r => {
+    timerId = setTimeout(() => {
+      timedOut = true;
+      r();
+    }, GUN_SUBSCRIPTION_TIMEOUT_MS);
+  });
+
+  try {
+    await Promise.race([hydrateAll(), timeout]);
+  } catch (error) {
+    console.error('[HomePage] Error subscribing to communities:', error);
+  } finally {
+    clearTimeout(timerId!);
+    if (didSetLoading) isLoadingPosts.value = false;
+    if (FEED_DEBUG) {
+      feedDebug('subscribe-new-communities-complete', {
+        timedOut,
+        subscribedFromHome: subscribedFromHome.size,
+        sortedPosts: postStore.sortedPosts.length,
+        publicPolls: pollStore.sortedPolls.filter(p => !p.isPrivate).length,
+        visibleCount: postStore.visibleCount,
+        combinedFeedLength: combinedFeed.value.length,
+      });
+    }
+    ensureInitialFeedVisible(timedOut ? 'subscription-timeout' : 'subscription-complete');
   }
 }
 
@@ -975,38 +1147,6 @@ function communityAvatarTone(community: Community | null | undefined): string {
 // Right sidebar — always live from the store, no lazy loading
 const sidebarCommunities = computed(() => communityStore.communities);
 
-// Trending categories — real counts fetched from /api/trending-categories.
-// Falls back to empty array so the sidebar simply hides the section if offline.
-const CATEGORY_ICONS: Record<string, any> = {
-  technology: codeSlashOutline, gaming: gameControllerOutline, science: flaskOutline,
-  crypto: logoBitcoin, politics: businessOutline, health: heartOutline,
-  sports: trophyOutline, entertainment: tvOutline, education: schoolOutline,
-  finance: cashOutline, humour: happyOutline, opinion: chatbubblesOutline,
-  local: locationOutline, 'world-news': earthOutline, environment: earthOutline, other: ellipseOutline,
-};
-const CATEGORY_TONES: Record<string, string> = {
-  technology: 'tone-technology', gaming: 'tone-gaming', science: 'tone-science',
-  crypto: 'tone-crypto', politics: 'tone-politics', health: 'tone-health',
-  sports: 'tone-sports', entertainment: 'tone-entertainment', other: 'tone-other',
-};
-
-const trendingCategories = ref<Array<{ id: string; label: string; posts: string; icon: any; tone: string }>>([]);
-
-async function loadTrendingCategories() {
-  try {
-    const res = await fetch(`${config.relay.api}/api/trending-categories`);
-    if (!res.ok) return;
-    const json = await res.json();
-    trendingCategories.value = (json.categories || []).slice(0, 8).map((c: any) => ({
-      id:    c.id,
-      label: c.label,
-      posts: c.posts,
-      icon:  CATEGORY_ICONS[c.id] || ellipseOutline,
-      tone:  CATEGORY_TONES[c.id] || 'tone-other',
-    }));
-  } catch { /* sidebar stays empty on error */ }
-}
-
 // ── Watchers & lifecycle ──────────────────────────────────────────────────────
 watch(() => communityStore.communities.length, (newLen, oldLen) => {
   if (!HOME_GUN_FEED_ENABLED || !warmupComplete.value || newLen <= oldLen) return;
@@ -1020,7 +1160,6 @@ watch(activeTab, (tab) => {
 
 onMounted(async () => {
   maybeShowOnboarding();
-  void loadTrendingCategories();
 
   const warmupStartedAt = Date.now();
   await warmupFromDB();
@@ -1057,10 +1196,27 @@ onMounted(async () => {
   }
 });
 
+// Derive live vote tallies for the posts actually on screen. The counters
+// carried on a post node are an advisory mirror that peers re-echo from stale
+// snapshots, so a feed rendering them alone shows counts that drift.
+watch(
+  () => combinedFeed.value.filter(item => item.type === 'post').map(item => item.data.id as string),
+  (postIds) => postStore.syncFeedVoteSubscriptions(postIds),
+  { immediate: true },
+);
+watch(
+  () => combinedFeed.value.filter(item => item.type === 'poll').map(item => item.data.id as string),
+  (pollIds) => pollStore.syncFeedVoteSubscriptions(pollIds),
+  { immediate: true },
+);
+
 onUnmounted(() => {
   ensureChat()?.teardown();
+  postStore.stopFeedVoteSubscriptions();
+  pollStore.stopFeedVoteSubscriptions();
   gunListeners.forEach(off => off());
 });
 </script>
+
 
 <style scoped src="../styles/HomePage.css"></style>

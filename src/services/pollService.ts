@@ -1,4 +1,6 @@
 import { GunService, GUN_NAMESPACE } from './gunService';
+import { PollVoteService } from './pollVoteService';
+import type { VoteTally } from './derivedVoteTally';
 import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
 import { StorageService } from './storageService';
@@ -20,6 +22,8 @@ function getGunRelayBase(): string {
 }
 
 const pollActiveListeners = new Map<string, any>();
+/** Startup hydration ceiling per community — see subscribeToPollsInCommunity. */
+const MAX_COMMUNITY_INITIAL_POLLS = 30;
 const PENDING_INVITE_FINALIZATIONS_KEY = 'interpoll_pending_invite_finalizations';
 const LOCAL_POLLS_META_KEY = 'interpoll-local-polls-v1';
 const LOCAL_POLLS_TOMBSTONES_META_KEY = 'interpoll-local-polls-tombstones-v1';
@@ -902,7 +906,12 @@ export class PollService {
       snapshotHandled = true;
       clearTimeout(hydrationTimer);
       const keys = allPolls ? Object.keys(allPolls).filter(k => k !== '_') : [];
-      keys.forEach(pollId => pendingHydrationIds.add(pollId));
+      // Hydrating every poll a community has ever held meant one Gun get per poll,
+      // times every community the home feed subscribes to, all at startup — a large
+      // share of Gun's "syncing 1K+ records a second" warning, for a feed that
+      // renders ten items. The live `map().on` handler still picks up anything new,
+      // and detail pages load on demand.
+      keys.slice(0, MAX_COMMUNITY_INITIAL_POLLS).forEach(pollId => pendingHydrationIds.add(pollId));
       flushHydrationIds().finally(() => { finalizeHydration(); });
     });
 
@@ -1627,50 +1636,47 @@ export class PollService {
 
   /**
    * Content-level upvote/downvote on the poll itself (independent of option voting).
-   * Mirrors PostService.voteOnPost's toggle semantics.
+   *
+   * Delegates to `PollVoteService`, whose counts are *derived* from per-user
+   * vote nodes under `pollVotes/<pollId>/<userId>`. The version this replaced
+   * read `poll.upvotes`, adjusted it and wrote the number back — a
+   * read-modify-write over a last-write-wins graph, so two voters inside one
+   * round trip lost a vote and a stale read reverted counts that had landed.
+   * It also cleared a vote with `put(null)`, which Gun does not propagate
+   * reliably, so toggling off often did not stick.
+   *
+   * Returns `myVote` because the caller cannot predict the outcome: a click the
+   * UI believes is "upvote" is a *clear* if the graph already holds an upvote
+   * from this user. `tallyAuthoritative` is false when the poll's frozen
+   * baseline could not be read — the vote landed, but the counts omit any
+   * legacy total, so the caller should keep the ones it has.
    */
   static async voteOnPollContent(
     pollId: string,
     direction: 'up' | 'down',
     userId: string,
-    communityId?: string,
-  ): Promise<{ upvotes: number; downvotes: number; score: number }> {
-    const poll = await this.loadPollFromGun(pollId, false, false)
-      ?? (communityId ? await this.loadPollFromCommunityPath(communityId, pollId, false, false) : null);
-    if (!poll) throw new Error('Poll not found');
+    _communityId?: string,
+  ): Promise<{
+    upvotes: number; downvotes: number; score: number;
+    myVote: 'up' | 'down' | null; tallyAuthoritative: boolean;
+  }> {
+    const { tally, myVote, tallyAuthoritative } = await PollVoteService.castVote(pollId, userId, direction);
+    return { ...tally, myVote, tallyAuthoritative };
+  }
 
-    const gun = this.gun;
-    const voteKey = `vote_${userId}_poll_${pollId}`;
-    const existingVote = await this.onceNode<any>(gun.get('votes').get(voteKey), 2000);
-    let upvotes = poll.upvotes || 0;
-    let downvotes = poll.downvotes || 0;
+  /** This user's content vote as the graph has it — the authority for button state. */
+  static getMyContentVote(pollId: string, userId: string): Promise<'up' | 'down' | null> {
+    return PollVoteService.getMyVote(pollId, userId);
+  }
 
-    if (existingVote?.type === 'up') {
-      upvotes = Math.max(0, upvotes - 1);
-    } else if (existingVote?.type === 'down') {
-      downvotes = Math.max(0, downvotes - 1);
-    }
+  /** Authoritative content-vote counts, derived from the vote set. */
+  static getContentTally(pollId: string): Promise<VoteTally> {
+    return PollVoteService.getTally(pollId);
+  }
 
-    const togglingOffSameVote = existingVote?.type === direction;
-    if (togglingOffSameVote) {
-      await this.putPromise(gun.get('votes').get(voteKey), null, { label: 'poll content vote clear' });
-    } else {
-      if (direction === 'up') upvotes += 1; else downvotes += 1;
-      await this.putPromise(gun.get('votes').get(voteKey), {
-        userId,
-        pollId,
-        type: direction,
-        timestamp: Date.now(),
-      }, { label: 'poll content vote write' });
-    }
-
-    const score = upvotes - downvotes;
-    const patch = { upvotes, downvotes, score };
-    await this.putPromise(this.getPollPath(pollId), patch, { label: 'poll content vote patch (root)' });
-    if (poll.communityId) {
-      await this.putPromise(this.getCommunityPollPath(poll.communityId, pollId), patch, { label: 'poll content vote patch (community)' });
-    }
-    return patch;
+  /** Live authoritative content-vote counts for one poll. */
+  static subscribeToContentVotes(pollId: string, callback: (tally: VoteTally) => void): () => void {
+    return PollVoteService.subscribeTally(pollId, callback);
   }
 
   static async getInviteCodes(pollId: string): Promise<{ code: string; used: boolean }[]> {

@@ -91,7 +91,8 @@
                 <template v-else-if="block.pubkey">
                   <ion-icon
                     :icon="verificationStatus[block.index] ? shieldCheckmarkOutline : alertCircleOutline"
-                    :color="verificationStatus[block.index] ? 'success' : 'danger'"
+                    :class="verificationStatus[block.index] ? 'sig-verified' : ''"
+                    :color="verificationStatus[block.index] ? undefined : 'danger'"
                   ></ion-icon>
                   <span class="validity-label" :class="verificationStatus[block.index] ? 'sig-verified' : 'sig-invalid'">
                     {{ verificationStatus[block.index] ? 'Schnorr Verified' : 'Signature Invalid' }}
@@ -283,7 +284,11 @@ const actionLabel = (actionType: string) => {
 }
 
 .hash-label {
-  color: var(--ion-color-medium);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--app-text-subtle);
 }
 
 .hash-value {
@@ -294,6 +299,8 @@ const actionLabel = (actionType: string) => {
   border: 1px solid var(--glass-border);
   border-top-color: var(--glass-border-top);
   color: var(--ion-text-color);
+  font-family: var(--font-mono);
+  font-feature-settings: "zero" 1;
   padding: 4px 8px;
   border-radius: 12px;
   margin-top: 2px;
@@ -315,13 +322,15 @@ const actionLabel = (actionType: string) => {
 }
 
 .validity-label {
-  font-size: 12px;
-  color: var(--ion-color-medium);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--app-text-muted);
 }
 
+/* a verified signature is the strongest proof this page shows. */
 .sig-verified {
-  color: var(--ion-color-success);
-  font-weight: 600;
+  color: var(--app-signal);
+  font-weight: 500;
 }
 
 .sig-invalid {

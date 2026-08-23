@@ -3,6 +3,8 @@ import { defineStore } from 'pinia';
 import { ref, computed, onScopeDispose, shallowRef, triggerRef, watchEffect } from 'vue';
 import type { Poll } from '../services/pollService';
 import { PollService } from '../services/pollService';
+import type { VoteTally } from '../services/derivedVoteTally';
+import { BoundedMap } from '../utils/boundedMap';
 import { UserService } from '../services/userService';
 import { EventService } from '../services/eventService';
 import { BroadcastService } from '../services/broadcastService';
@@ -13,6 +15,7 @@ import { generatePseudonym } from '../utils/pseudonym';
 
 const PAGE_SIZE      = 10;
 const SEEN_POLLS_KEY = 'seen-poll-ids';
+const MY_POLL_VOTES_KEY = 'my-poll-content-votes-v1';
 const INCOMING_POLL_FLUSH_MS = 50;
 const INCOMING_POLL_BATCH_SIZE = 100;
 
@@ -61,6 +64,36 @@ function saveSeenIds(ids: Set<string>) {
     const arr = Array.from(ids).slice(-500);
     localStorage.setItem(SEEN_POLLS_KEY, JSON.stringify(arr));
   } catch {}
+}
+
+/** This user's poll *content* votes, seeded from localStorage and corrected by the graph. */
+function loadMyPollVotes(): Map<string, 'up' | 'down'> {
+  const votes = new Map<string, 'up' | 'down'>();
+  try {
+    const stored = localStorage.getItem(MY_POLL_VOTES_KEY);
+    if (stored) {
+      for (const [id, vote] of Object.entries(JSON.parse(stored) as Record<string, 'up' | 'down'>)) {
+        if (vote === 'up' || vote === 'down') votes.set(id, vote);
+      }
+      return votes;
+    }
+    // Migrate the two legacy sets each view maintained independently. They were
+    // treated as the authority on whether a click meant vote or unvote while the
+    // service decided the same question from the graph; when the two disagreed
+    // the click inverted, and a side-switch issued two writes to one node.
+    for (const [key, vote] of [['upvoted-polls', 'up'], ['downvoted-polls', 'down']] as const) {
+      const legacy = localStorage.getItem(key);
+      if (!legacy) continue;
+      for (const id of JSON.parse(legacy) as string[]) votes.set(id, vote);
+    }
+  } catch { /* unreadable cache — the graph is the authority anyway */ }
+  return votes;
+}
+
+function saveMyPollVotes(votes: Map<string, 'up' | 'down'>) {
+  try {
+    localStorage.setItem(MY_POLL_VOTES_KEY, JSON.stringify(Object.fromEntries(votes)));
+  } catch { /* quota — non-fatal, this is only a paint hint */ }
 }
 
 function createRateLogger(label: string, snapshot?: () => Record<string, unknown>) {
@@ -132,6 +165,37 @@ export const usePollStore = defineStore('poll', () => {
   BroadcastService.subscribe('poll-updated', handlePollSyncUpdate);
   WebSocketService.subscribe('poll-updated', handlePollSyncUpdate);
 
+  /**
+   * pollId → content-vote counts derived from the per-user vote set.
+   *
+   * The `upvotes`/`downvotes`/`score` carried on a poll node are an advisory
+   * mirror any peer can echo from a pre-vote snapshot. A derived tally outranks
+   * every such echo permanently — which is why content votes no longer rely on
+   * `VOTE_PROTECTION_MS`, whose expiry a late echo could simply wait out.
+   *
+   * `recentlyVotedPolls` still guards *option* votes (`totalVotes`), which are a
+   * different model and were not ported.
+   */
+  const contentTallies = new BoundedMap<string, VoteTally>({ maxSize: 1000 });
+
+  /** pollId → this user's content vote, as last confirmed by the graph. */
+  const myContentVotes = ref(loadMyPollVotes());
+
+  /** Overlay the derived content tally, if we have one, onto an incoming copy. */
+  function withKnownTally(incoming: Poll): Poll {
+    const tally = contentTallies.get(incoming.id);
+    return tally ? { ...incoming, ...tally } : incoming;
+  }
+
+  function setContentTally(pollId: string, tally: VoteTally) {
+    contentTallies.set(pollId, tally);
+    const existing = pollsMap.value.get(pollId);
+    if (existing) pollsMap.value.set(pollId, { ...existing, ...tally });
+    if (currentPoll.value?.id === pollId) {
+      currentPoll.value = { ...currentPoll.value, ...tally };
+    }
+  }
+
   function isVoteProtected(pollId: string): boolean {
     const ts = recentlyVotedPolls.get(pollId);
     if (!ts) return false;
@@ -173,8 +237,7 @@ export const usePollStore = defineStore('poll', () => {
       if (existing.options.length > 0 && normalizedPoll.options.length === 0) {
         return;
       }
-      pollsMap.value.set(normalizedPoll.id, normalizedPoll);
-      triggerRef(pollsMap); // new poll — sort order may change
+      pollsMap.value.set(normalizedPoll.id, withKnownTally(normalizedPoll));
       tryDecryptPoll(normalizedPoll);
       if (currentPoll.value?.id === normalizedPoll.id) {
         currentPoll.value = normalizedPoll;
@@ -183,14 +246,14 @@ export const usePollStore = defineStore('poll', () => {
     }
 
     if (seenPollIds.has(poll.id)) {
-      pollsMap.value.set(poll.id, poll);
+      pollsMap.value.set(poll.id, withKnownTally(poll));
       tryDecryptPoll(poll);
       return;
     }
 
     const isGenuinelyNew = poll.createdAt > APP_START_TIME;
 
-    pollsMap.value.set(poll.id, poll);
+    pollsMap.value.set(poll.id, withKnownTally(poll));
     tryDecryptPoll(poll);
     seenPollIds.add(poll.id);
     // Flush persisted seen-IDs immediately for live arrivals
@@ -496,67 +559,67 @@ export const usePollStore = defineStore('poll', () => {
     }
   }
 
-  /** This user's content vote on a poll card (not an option), or null. */
-  function myPollContentVote(pollId: string): 'up' | 'down' | null {
-    return myPollContentVotes.value.get(pollId) ?? null;
+  /** This user's content vote on a poll, or null. */
+  function myContentVote(pollId: string): 'up' | 'down' | null {
+    return myContentVotes.value.get(pollId) ?? null;
+  }
+
+  function setMyContentVote(pollId: string, vote: 'up' | 'down' | null) {
+    if (vote) myContentVotes.value.set(pollId, vote);
+    else myContentVotes.value.delete(pollId);
+    // Reassign so template reads re-evaluate; Map mutation is not reactive.
+    myContentVotes.value = new Map(myContentVotes.value);
+    saveMyPollVotes(myContentVotes.value);
   }
 
   /**
-   * Toggle a poll content vote. Clicking the same direction again removes the
-   * vote. Mirrors the postStore.toggleVote pattern exactly: optimistic update →
-   * service call → graph reconciliation → myPollContentVotes updated.
+   * Toggle this user's content vote on a poll: clicking the direction you
+   * already hold clears it.
    *
-   * Replaces the old upvotedPollsCache / downvotedPollsCache localStorage sets
-   * in HomePage.vue which diverged from the graph on any failed write.
+   * The previous version only ever *incremented* — it added +1 optimistically
+   * whichever way the graph was about to go, so un-voting rendered the count
+   * moving the wrong way before the reconcile yanked it back. The decision is
+   * made once, here, and the graph's answer is what everything reconciles to.
    */
-  async function togglePollContentVote(pollId: string, direction: 'up' | 'down') {
+  async function voteOnPollContent(pollId: string, direction: 'up' | 'down') {
     const user = await UserService.getCurrentUser();
-    const original = pollsMap.value.get(pollId);
-    const communityId = original?.communityId || currentPoll.value?.communityId;
+    const original = pollsMap.value.get(pollId)
+      ?? (currentPoll.value?.id === pollId ? currentPoll.value : null);
+    const previousVote = myContentVote(pollId);
+    const predicted = previousVote === direction ? null : direction;
 
-    const previous = myPollContentVote(pollId);
-    // Toggle: same direction → remove; different → switch
-    const predicted = previous === direction ? null : direction;
-
-    // Optimistic update on counts
+    // Optimistic paint, predicted from the same state the button's filled/hollow
+    // rendering uses, so the number and the icon cannot disagree mid-flight.
     if (original) {
-      const upvotes = original.upvotes || 0;
-      const downvotes = original.downvotes || 0;
-      const uDelta = (predicted === 'up' ? 1 : 0) - (previous === 'up' ? 1 : 0);
-      const dDelta = (predicted === 'down' ? 1 : 0) - (previous === 'down' ? 1 : 0);
-      const optimistic: Poll = {
-        ...original,
-        upvotes: Math.max(0, upvotes + uDelta),
-        downvotes: Math.max(0, downvotes + dDelta),
-        score: Math.max(0, upvotes + uDelta) - Math.max(0, downvotes + dDelta),
-      };
+      const delta = (vote: 'up' | 'down') =>
+        (predicted === vote ? 1 : 0) - (previousVote === vote ? 1 : 0);
+      const upvotes = Math.max(0, (original.upvotes || 0) + delta('up'));
+      const downvotes = Math.max(0, (original.downvotes || 0) + delta('down'));
+      const optimistic: Poll = { ...original, upvotes, downvotes, score: upvotes - downvotes };
       pollsMap.value.set(pollId, optimistic);
       if (currentPoll.value?.id === pollId) currentPoll.value = optimistic;
     }
-
-    // Optimistic vote state
-    if (predicted) myPollContentVotes.value.set(pollId, predicted);
-    else myPollContentVotes.value.delete(pollId);
-    myPollContentVotes.value = new Map(myPollContentVotes.value);
-    saveMyPollContentVotes(myPollContentVotes.value);
+    setMyContentVote(pollId, predicted);
 
     try {
-      const patch = await PollService.voteOnPollContent(pollId, direction, user.id, communityId);
-      const current = pollsMap.value.get(pollId);
-      if (current) {
-        const updated = { ...current, ...patch };
-        pollsMap.value.set(pollId, updated);
-        if (currentPoll.value?.id === pollId) currentPoll.value = updated;
-        BroadcastService.broadcast('poll-updated', updated);
-        void WebSocketService.broadcast('poll-updated', updated);
+      const { myVote, tallyAuthoritative, ...tally } =
+        await PollService.voteOnPollContent(pollId, direction, user.id);
+      setMyContentVote(pollId, myVote);
+      // A non-authoritative tally omits the legacy baseline the service could
+      // not read; adopting it would drop the count and restore it a moment
+      // later, so the optimistic numbers stay instead.
+      if (tallyAuthoritative) {
+        setContentTally(pollId, tally);
+        const updated = pollsMap.value.get(pollId);
+        if (updated) {
+          BroadcastService.broadcast('poll-updated', updated);
+          void WebSocketService.broadcast('poll-updated', updated);
+        }
       }
     } catch (err) {
       // Roll back optimistic changes
       console.warn('Poll content vote failed — rolling back', err);
-      if (previous) myPollContentVotes.value.set(pollId, previous);
-      else myPollContentVotes.value.delete(pollId);
-      myPollContentVotes.value = new Map(myPollContentVotes.value);
-      saveMyPollContentVotes(myPollContentVotes.value);
+      setMyContentVote(pollId, previousVote);
       if (original) {
         pollsMap.value.set(pollId, original);
         if (currentPoll.value?.id === pollId) currentPoll.value = original;
@@ -565,12 +628,55 @@ export const usePollStore = defineStore('poll', () => {
     }
   }
 
-  async function voteOnPollContent(pollId: string, direction: 'up' | 'down') {
-    return togglePollContentVote(pollId, direction);
+  /** Pull the authoritative content tally and vote state for one poll. */
+  async function refreshContentVoteState(pollId: string) {
+    try {
+      const user = await UserService.getCurrentUser();
+      const [tally, vote] = await Promise.all([
+        PollService.getContentTally(pollId),
+        PollService.getMyContentVote(pollId, user.id),
+      ]);
+      setContentTally(pollId, tally);
+      setMyContentVote(pollId, vote);
+    } catch (error) {
+      console.error('Error refreshing poll vote state:', error);
+    }
   }
 
-  function upvotePoll(pollId: string) { return togglePollContentVote(pollId, 'up'); }
-  function downvotePoll(pollId: string) { return togglePollContentVote(pollId, 'down'); }
+  /** Live authoritative content counts while a poll is on screen. */
+  function subscribeToContentVotes(pollId: string): () => void {
+    return PollService.subscribeToContentVotes(pollId, (tally) => setContentTally(pollId, tally));
+  }
+
+  /** pollId → live tally subscription, for the polls currently rendered in a feed. */
+  const feedVoteSubs = new Map<string, () => void>();
+
+  /**
+   * Keep live content tallies for exactly the polls a feed is showing — without
+   * it a feed renders the advisory mirror, which peers re-echo from stale
+   * snapshots, so counts drift and flip as echoes arrive.
+   */
+  function syncFeedVoteSubscriptions(pollIds: string[]) {
+    const wanted = new Set(pollIds);
+    for (const [pollId, unsubscribe] of feedVoteSubs) {
+      if (wanted.has(pollId)) continue;
+      unsubscribe();
+      feedVoteSubs.delete(pollId);
+    }
+    for (const pollId of wanted) {
+      if (feedVoteSubs.has(pollId)) continue;
+      feedVoteSubs.set(pollId, subscribeToContentVotes(pollId));
+    }
+  }
+
+  /** Drop every feed subscription — call when the feed unmounts. */
+  function stopFeedVoteSubscriptions() {
+    for (const unsubscribe of feedVoteSubs.values()) unsubscribe();
+    feedVoteSubs.clear();
+  }
+
+  function upvotePoll(pollId: string) { return voteOnPollContent(pollId, 'up'); }
+  function downvotePoll(pollId: string) { return voteOnPollContent(pollId, 'down'); }
 
   // ─── Select ────────────────────────────────────────────────────────────────
 
@@ -680,6 +786,7 @@ export const usePollStore = defineStore('poll', () => {
       pendingPollsFlushTimer = null;
     }
     pendingPollsByCommunity.clear();
+    stopFeedVoteSubscriptions();
     for (const unsub of unsubscribers.values()) unsub();
     initialLoadDoneByCommId.clear();
     pendingLoads.clear();
@@ -697,7 +804,8 @@ export const usePollStore = defineStore('poll', () => {
     flushNewPolls, injectPoll, saveSeenNow,
     createPoll, voteOnPoll, selectPoll,
     voteOnPollContent, upvotePoll, downvotePoll,
-    myPollContentVote, togglePollContentVote,
+    myContentVote, myContentVotes, refreshContentVoteState, subscribeToContentVotes,
+    syncFeedVoteSubscriptions, stopFeedVoteSubscriptions,
     refreshCommunityPolls,
   };
 });

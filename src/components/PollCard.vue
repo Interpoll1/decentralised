@@ -12,10 +12,12 @@
           <span>Poll</span>
         </div>
         <div class="poll-meta">
-          <div class="author-avatar-sm" :title="'u/' + authorDisplayName">
-            {{ authorInitial }}
-          </div>
-          <span class="author">u/{{ authorDisplayName }}</span>
+          <button
+            class="author author-link"
+            type="button"
+            :title="`View u/${authorDisplayName}'s profile`"
+            @click.stop="openAuthorProfile"
+          >u/{{ authorDisplayName }}</button>
           <span class="identity-badge" :class="authorIdentityClass">
             {{ authorIdentityLabel }}
           </span>
@@ -150,6 +152,7 @@ import type { PollOption } from '../types/poll';
 import { useVerifiedPollResults } from '../composables/useVerifiedPollResults';
 import { shareLink } from '../composables/useShare';
 import type { FilterAction } from '../services/moderationService';
+import { useRouter } from 'vue-router';
 import { generatePseudonym } from '../utils/pseudonym';
 import { useUserStore } from '../stores/userStore';
 import type { UserProfile } from '../services/userService';
@@ -172,7 +175,13 @@ const displayTotal = results.displayTotal;
 const verifiedInflated = computed(() => results.trust.value === 'inflated');
 
 const revealed = ref(false);
+const router = useRouter();
 const userStore = useUserStore();
+
+function openAuthorProfile() {
+  if (!props.poll.authorId) return;
+  router.push(`/user/${props.poll.authorId}`);
+}
 const authorProfile = ref<UserProfile | null>(null);
 let authorProfileRequestId = 0;
 
@@ -288,20 +297,8 @@ function getTimeRemaining(): string {
   min-width: 0;
 }
 
-/* ── Author avatar ─────────────────────────── */
-.author-avatar-sm {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  box-shadow: 0 0 0 2px rgba(99,102,241,0.2);
+.separator {
+  color: var(--app-text-subtle);
 }
 
 .separator { color: rgba(255,255,255,0.2); font-size: 11px; margin: 0 1px; }
@@ -320,16 +317,21 @@ function getTimeRemaining(): string {
   font-size: 9.5px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  border: 1px solid rgba(255,255,255,0.08);
+  letter-spacing: 0.08em;
+  border: 1px solid var(--app-border);
 }
+
+/* absence of proof stays quiet; proof itself carries the signal colour.
+   the old amber pill made "unverified" the loudest thing in the card. */
 .identity-badge.unverified {
-  background: rgba(var(--ion-color-warning-rgb), 0.12);
-  color: var(--ion-color-warning);
+  background: var(--app-item-surface);
+  color: var(--app-text-subtle);
+  font-weight: 500;
 }
 .identity-badge.trusted-issuer {
-  background: rgba(var(--ion-color-success-rgb), 0.14);
-  color: var(--ion-color-success);
+  background: var(--app-signal-soft);
+  border-color: rgba(var(--app-signal-rgb), 0.28);
+  color: var(--app-signal);
 }
 .expired-badge {
   background: rgba(var(--ion-color-medium-rgb), 0.1);
@@ -340,24 +342,21 @@ function getTimeRemaining(): string {
 
 /* ── Question ─── cool editorial style ───────── */
 .poll-question {
-  margin: 0 0 8px;
-  font-size: 18px;
-  font-weight: 800;
-  line-height: 1.25;
-  letter-spacing: -0.03em;
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-variation-settings: "opsz" 24;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: var(--tracking-display);
   color: var(--app-text);
-  /* subtle gradient shimmer on the text */
-  background: linear-gradient(135deg, var(--app-text) 60%, rgba(167,139,250,0.85));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-fill-color: transparent;
+  text-wrap: balance;
 }
 
 .poll-description {
-  margin: 0 0 12px;
-  font-size: 13.5px;
-  line-height: 1.6;
+  margin: 0 0 16px;
+  font-size: var(--text-sm);
+  line-height: 1.7;
   color: var(--app-text-muted);
 }
 
@@ -399,8 +398,8 @@ function getTimeRemaining(): string {
 }
 
 .option-bar {
-  height: 5px;
-  background: rgba(255,255,255,0.05);
+  height: 6px;
+  background: var(--app-item-surface);
   border-radius: 999px;
   overflow: hidden;
 }
@@ -417,9 +416,9 @@ function getTimeRemaining(): string {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(15,23,42,0.08);
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--app-border);
   flex-wrap: wrap;
 }
 
@@ -428,6 +427,13 @@ function getTimeRemaining(): string {
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
+  padding: 7px 11px;
+  background: var(--app-item-surface);
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-muted);
 }
 
 .poll-actions {
@@ -441,16 +447,16 @@ function getTimeRemaining(): string {
 .stat-icon-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 11px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.07);
+  gap: 6px;
+  padding: 7px 11px;
+  background: var(--app-item-surface);
+  border: 1px solid var(--app-border);
   border-radius: 999px;
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--app-text-muted);
   cursor: pointer;
-  transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
+  transition: color var(--app-transition), border-color var(--app-transition), background var(--app-transition);
 }
 .stat-icon-btn ion-icon { font-size: 15px; color: var(--app-text-subtle); }
 
@@ -468,8 +474,7 @@ function getTimeRemaining(): string {
   transform: rotate(-20deg) scaleX(-1);
   flex-shrink: 0;
 }
-.stat-icon-btn.downvote.active { color: #ef4444; border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.1); }
-.stat-icon-btn.downvote.active .thumb-down-icon { color: #ef4444; }
+.stat-icon-btn.downvote.active .thumb-down-icon { color: var(--app-danger); }
 
 /* Share button */
 .action-btn {
@@ -494,23 +499,57 @@ function getTimeRemaining(): string {
 .stat-item {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 11px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.07);
+  gap: 6px;
+  padding: 7px 11px;
+  background: var(--app-item-surface);
+  border: 1px solid var(--app-border);
   border-radius: 999px;
-  font-size: 12px;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
   color: var(--app-text-muted);
+  cursor: pointer;
+  transition: color var(--app-transition), border-color var(--app-transition), background var(--app-transition);
 }
 .stat-item ion-icon { font-size: 13px; color: var(--app-text-subtle); }
 
-.verified-tally { color: #34d399; border-color: rgba(52,211,153,0.25); background: rgba(52,211,153,0.08); }
-.verified-tally ion-icon { color: #34d399; }
-.verified-tally.inflated { color: #fbbf24; border-color: rgba(251,191,36,0.3); background: rgba(251,191,36,0.1); }
-.verified-tally.inflated ion-icon { color: #fbbf24; }
-
 .moderation-action { --color: var(--ion-color-warning); }
 .moderation-action::part(native) { border: 1px solid rgba(var(--ion-color-warning-rgb),0.2); border-radius: 999px; }
+
+.stat-icon-btn.active {
+  color: var(--app-accent);
+  border-color: rgba(var(--app-accent-rgb), 0.32);
+  background: rgba(var(--app-accent-rgb), 0.10);
+}
+.stat-icon-btn.active ion-icon {
+  color: var(--app-accent);
+}
+
+.stat-icon-btn.downvote.active {
+  color: var(--app-danger);
+  border-color: rgba(var(--app-danger-rgb), 0.32);
+  background: rgba(var(--app-danger-rgb), 0.10);
+}
+.stat-icon-btn.downvote.active ion-icon {
+  color: var(--app-danger);
+}
+
+/* a verified tally is proof, so it takes the signal colour. */
+.verified-tally {
+  color: var(--app-signal);
+  border-color: rgba(var(--app-signal-rgb), 0.28);
+  background: var(--app-signal-soft);
+}
+.verified-tally ion-icon {
+  color: var(--app-signal);
+}
+.verified-tally.inflated {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.3);
+  background: rgba(251, 191, 36, 0.1);
+}
+.verified-tally.inflated ion-icon {
+  color: #fbbf24;
+}
 
 /* ── Flagged overlay ─────────────────────────── */
 .flagged-overlay {
@@ -534,8 +573,18 @@ function getTimeRemaining(): string {
 .flag-badge ion-icon { font-size: 13px; }
 
 @media (max-width: 576px) {
-  .poll-card { padding: 14px 14px 12px; }
-  .poll-question { font-size: 16px; }
-  .poll-description { font-size: 13px; }
+  .poll-card {
+    margin: 0 0 14px;
+    padding: 16px 0 14px;
+  }
+
+  .poll-question {
+    font-size: 1.0625rem;
+    font-variation-settings: "opsz" 18;
+  }
+
+  .poll-description {
+    font-size: var(--text-xs);
+  }
 }
 </style>

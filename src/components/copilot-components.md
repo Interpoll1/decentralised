@@ -31,7 +31,32 @@ Reusable UI components built with Vue 3 Composition API + Ionic + Tailwind.
 ## Conventions
 
 - Components do **not** import services directly — they go through stores or composables.
+- Author names in `PostCard`, `PollCard` and `CommentCard` are `<button class="author-link">` elements that route to `/user/:authorId`, with `@click.stop` so they don't also fire the card's own navigation. They are buttons rather than spans so they stay keyboard-reachable inside the clickable card; `.author-link` in `src/style.css` strips the button chrome. **Privacy note:** the link is keyed on `authorId`, so it makes the same author identifiable across posts even when their per-post pseudonym differs. Gate it on `authorShowRealName` if per-post unlinkability matters more than navigability.
 - Author pseudonyms (shown in cards) are generated with `generatePseudonym(postId, authorId)` from `src/utils/pseudonym.ts`, not stored in GunDB. If a post/comment has `authorShowRealName: true`, the stored `authorName` is shown instead of a pseudonym.
 - Ionic components (`<ion-card>`, `<ion-button>`, etc.) are used for layout and mobile-friendly interactions. Tailwind is used for spacing, color, and typography.
 - Shared visual primitives for the current redesign live in `src/style.css` (`.ambient-page`, `.ambient-page__content`, `.surface-card`, `.surface-pill`, `.section-heading`, etc.). Prefer composing those shared shell/surface classes before adding new one-off gradients or blur treatments inside component-scoped CSS.
 - Global keyboard shortcuts must not trigger while the user is typing in inputs/textareas/selects or editable content.
+
+## Design system (`src/style.css`)
+
+Three token families drive the visual layer. Compose them instead of hard-coding hex,
+`monospace`, or `rgba(255,255,255,…)` values — white-alpha surfaces are a dark-theme
+assumption and go invisible on the light canvas.
+
+**Type** — `--font-display` (Bricolage Grotesque: headings, `ion-title`, wordmark),
+`--font-body` (Inter: everything else), `--font-mono` (JetBrains Mono). Mono is a
+*signal*, not a style: it marks values the reader can independently verify — hashes,
+verification codes, block heights, tallies. Never set prose in it. Sizes come from
+`--text-2xs … --text-2xl`; helpers: `.data-text`, `.data-text--hash`, `.tabular`.
+
+**Colour** — `--app-accent` (indigo) is the primary. `--app-signal` (copper) is the one
+warm colour and is reserved for proof: verified signatures, sealed receipts, confirmed
+chain state, verified tallies. If the user cannot verify it, it does not get to be warm.
+Absence of proof ("unverified") stays muted rather than amber, so the verified state is
+what the eye catches. Feed categories use the closed `--tone-*` palette, which is tuned
+per theme.
+
+**Depth** — `--app-shadow-sm/md/lg` are a 1px ring plus a contact shadow, not a glow.
+Card edges come from the ring; the blur only lifts. Dark-mode overrides key on the
+`.dark` class, never `prefers-color-scheme` — the app has a manual theme toggle, so a
+`prefers-color-scheme` block silently does nothing when the user switches themes.

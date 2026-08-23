@@ -42,3 +42,13 @@ ds-bundle/
 .design-sync/.cache/
 .design-sync/learnings/
 .design-sync/node_modules
+
+# Rust / Tauri desktop build artifacts
+src-tauri/target/
+src-tauri/gen/
+
+# Local handoff notes for the desktop work (not for commit)
+HANDOFF.md
+
+# Capacitor Android build output
+android/

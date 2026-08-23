@@ -1,6 +1,34 @@
 :root {
   color-scheme: light;
-  font-family: "Inter", "Geist Sans", system-ui, sans-serif;
+
+  /* type system
+     display — headings, wordmark, hero. used with restraint.
+     body    — every other run of prose and UI label.
+     mono    — hashes, verification codes, block heights, tallies.
+               mono is a signal here, not a style: it marks a value the
+               reader can independently verify. never use it for prose. */
+  --font-display: "Bricolage Grotesque", "Inter", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --text-2xs: 0.6875rem;  /* 11px — eyebrows, uppercase labels */
+  --text-xs: 0.75rem;     /* 12px — meta, timestamps */
+  --text-sm: 0.8125rem;   /* 13px — secondary UI */
+  --text-base: 0.9375rem; /* 15px — body default */
+  --text-md: 1.0625rem;   /* 17px — card titles */
+  --text-lg: 1.375rem;    /* 22px — section headings */
+  --text-xl: 1.875rem;    /* 30px — page titles */
+  --text-2xl: 2.5rem;     /* 40px — hero */
+
+  --tracking-tight: -0.022em;
+  --tracking-display: -0.035em;
+  --tracking-label: 0.14em;
+
+  font-family: var(--font-body);
+  font-feature-settings: "cv05" 1, "ss03" 1, "calt" 1;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 
   --app-bg-deep: #dde4f5;
   --app-bg-base: #eef2ff;
@@ -17,6 +45,22 @@
   --app-accent: #5e6ad2;
   --app-accent-bright: #6872d9;
   --app-accent-rgb: 94, 106, 210;
+  /* signal — the one warm colour in the system. reserved for proof:
+     verified signatures, sealed receipts, confirmed chain state.
+     if it is not something the user can verify, it does not get to be warm. */
+  --app-signal: #b8621f;
+  --app-signal-rgb: 184, 98, 31;
+  --app-signal-soft: rgba(184, 98, 31, 0.10);
+  /* category tones. a small closed palette that distinguishes feed
+     categories at a glance. tuned per theme — the dark-mode values were
+     previously hard-coded into components and washed out on light. */
+  --tone-technology: #7c3aed;
+  --tone-gaming: #15803d;
+  --tone-science: #0369a1;
+  --tone-politics: #be123c;
+  --tone-crypto: #a16207;
+  --tone-sports: #0f766e;
+
   --app-success: #34d399;
   --app-success-rgb: 52, 211, 153;
   --app-warning: #fbbf24;
@@ -26,9 +70,11 @@
   --app-radius-lg: 16px;
   --app-radius-md: 12px;
   --app-radius-sm: 10px;
-  --app-shadow-sm: 0 0 0 1px rgba(15, 23, 42, 0.04), 0 12px 36px rgba(15, 23, 42, 0.07);
-  --app-shadow-md: 0 0 0 1px rgba(15, 23, 42, 0.05), 0 18px 42px rgba(15, 23, 42, 0.10), 0 0 72px rgba(94, 106, 210, 0.07);
-  --app-shadow-lg: 0 0 0 1px rgba(15, 23, 42, 0.07), 0 24px 60px rgba(15, 23, 42, 0.13), 0 0 90px rgba(94, 106, 210, 0.10);
+  /* depth is a contact shadow plus a tight ambient one — not a haze.
+     the 1px ring does the edge definition; the blur only lifts the card. */
+  --app-shadow-sm: 0 0 0 1px rgba(15, 23, 42, 0.05), 0 1px 2px rgba(15, 23, 42, 0.05), 0 6px 16px -6px rgba(15, 23, 42, 0.10);
+  --app-shadow-md: 0 0 0 1px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.06), 0 12px 28px -10px rgba(15, 23, 42, 0.16);
+  --app-shadow-lg: 0 0 0 1px rgba(15, 23, 42, 0.07), 0 2px 4px rgba(15, 23, 42, 0.06), 0 24px 48px -16px rgba(15, 23, 42, 0.22);
   --app-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.80);
   --app-focus-ring: 0 0 0 2px rgba(94, 106, 210, 0.55);
   --app-transition: 240ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -47,12 +93,12 @@
   --app-search-surface: rgba(255, 255, 255, 0.48);
   --app-heading-start: #111827;
   --app-heading-end: rgba(17, 24, 39, 0.62);
-  --glass-blur: 18px;
-  --glass-saturation: 1.15;
-  --glass-item-blur: 14px;
-  --glass-item-saturation: 1.08;
-  --toolbar-blur: 16px;
-  --toolbar-saturation: 1.1;
+  --glass-blur: 14px;
+  --glass-saturation: 1.25;
+  --glass-item-blur: 10px;
+  --glass-item-saturation: 1.12;
+  --toolbar-blur: 20px;
+  --toolbar-saturation: 1.2;
   --glass-border: var(--app-border);
   --glass-border-top: rgba(255, 255, 255, 0.85);
   --glass-border-bottom: rgba(15, 23, 42, 0.05);
@@ -65,9 +111,9 @@
   /* light aurora */
   --aurora-base-bg: #f2f3f9;
   --aurora-blend: normal;
-  --aurora-orb1-opacity: 0.14;
-  --aurora-orb2-opacity: 0.11;
-  --aurora-orb3-opacity: 0.09;
+  --aurora-orb1-opacity: 0.10;
+  --aurora-orb2-opacity: 0.07;
+  --aurora-orb3-opacity: 0.05;
 
   --ion-background-color: var(--app-bg-base);
   --ion-background-color-rgb: 238, 242, 255;
@@ -174,8 +220,18 @@ body.dark {
   --app-border: rgba(255, 255, 255, 0.08);
   --app-border-strong: rgba(255, 255, 255, 0.16);
   --app-text: #f5f5f6;
-  --app-text-muted: #70757f;
-  --app-text-subtle: rgba(255, 255, 255, 0.44);
+  /* muted was #70757f — under 4.5:1 on the near-black canvas. */
+  --app-text-muted: #9096a1;
+  --app-text-subtle: rgba(255, 255, 255, 0.50);
+  --app-signal: #e8a35c;
+  --app-signal-rgb: 232, 163, 92;
+  --app-signal-soft: rgba(232, 163, 92, 0.12);
+  --tone-technology: #a78bfa;
+  --tone-gaming: #4ade80;
+  --tone-science: #38bdf8;
+  --tone-politics: #fb7185;
+  --tone-crypto: #fbbf24;
+  --tone-sports: #2dd4bf;
   --app-grid-color: rgba(255, 255, 255, 0.025);
   --app-noise-opacity: 0.02;
   --app-ambient-spot-1: rgba(94, 106, 210, 0.22);
@@ -191,16 +247,16 @@ body.dark {
   --app-search-surface: rgba(255, 255, 255, 0.05);
   --app-heading-start: #ffffff;
   --app-heading-end: rgba(255, 255, 255, 0.58);
-  --app-shadow-sm: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 12px 36px rgba(0, 0, 0, 0.5);
-  --app-shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 18px 42px rgba(0, 0, 0, 0.55), 0 0 72px rgba(94, 106, 210, 0.08);
-  --app-shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 90px rgba(94, 106, 210, 0.12);
+  --app-shadow-sm: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 1px 2px rgba(0, 0, 0, 0.6), 0 6px 16px -6px rgba(0, 0, 0, 0.7);
+  --app-shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 1px 2px rgba(0, 0, 0, 0.6), 0 12px 28px -10px rgba(0, 0, 0, 0.8);
+  --app-shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.09), 0 2px 4px rgba(0, 0, 0, 0.6), 0 24px 48px -16px rgba(0, 0, 0, 0.9);
   --app-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.07);
-  --glass-blur: 18px;
-  --glass-saturation: 1.1;
-  --glass-item-blur: 14px;
-  --glass-item-saturation: 1.05;
-  --toolbar-blur: 16px;
-  --toolbar-saturation: 1.05;
+  --glass-blur: 14px;
+  --glass-saturation: 1.18;
+  --glass-item-blur: 10px;
+  --glass-item-saturation: 1.10;
+  --toolbar-blur: 20px;
+  --toolbar-saturation: 1.15;
   --glass-border-top: rgba(255, 255, 255, 0.10);
   --glass-border-bottom: rgba(0, 0, 0, 0.3);
   --glass-inner-glow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
@@ -261,7 +317,10 @@ body {
   position: relative;
   margin: 0;
   overflow-x: hidden;
-  font-family: "Inter", "Geist Sans", system-ui, sans-serif;
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.55;
+  letter-spacing: var(--tracking-tight);
 }
 
 /* aurora bg layer, see AuroraBackground.vue */
@@ -482,29 +541,32 @@ ion-app {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
+/* eyebrow / label. mono, because these label data regions. */
 .surface-label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
   color: var(--app-text-subtle);
 }
 
 .section-heading {
-  font-size: clamp(2rem, 5vw, 3.5rem);
+  font-family: var(--font-display);
+  font-size: clamp(1.875rem, 4.5vw, 3.25rem);
+  font-variation-settings: "opsz" 48;
   font-weight: 600;
-  line-height: 1;
-  letter-spacing: -0.03em;
-  background: linear-gradient(to bottom, var(--app-heading-start), var(--app-heading-end));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  line-height: 1.02;
+  letter-spacing: var(--tracking-display);
+  color: var(--app-text);
 }
 
 .section-subtitle {
-  font-size: clamp(1rem, 2vw, 1.15rem);
-  line-height: 1.7;
+  font-size: clamp(1rem, 2vw, 1.125rem);
+  line-height: 1.65;
+  letter-spacing: var(--tracking-tight);
   color: var(--app-text-muted);
+  max-width: 62ch;
 }
 
 /* page / layout */
@@ -662,7 +724,17 @@ ion-textarea::part(native) {
   color: var(--app-text);
 }
 
+/* page titles across every view take the display face, so the header
+   reads as part of the same type system as the content below it. */
+ion-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-variation-settings: "opsz" 24;
+  letter-spacing: var(--tracking-display);
+}
+
 ion-button {
+  font-family: var(--font-body);
   font-weight: 600;
   letter-spacing: -0.01em;
   transition:
@@ -864,13 +936,115 @@ a {
   color: inherit;
 }
 
+/* headings take the display face. bricolage is optically sized, so the
+   opsz axis is set per level rather than left at its default. */
 h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
   color: var(--app-text);
   margin-top: 0;
+  letter-spacing: var(--tracking-display);
+  line-height: 1.12;
+  text-wrap: balance;
+}
+
+h1 { font-size: var(--text-xl); font-weight: 600; font-variation-settings: "opsz" 40; }
+h2 { font-size: var(--text-lg); font-weight: 600; font-variation-settings: "opsz" 28; }
+h3 { font-size: var(--text-md); font-weight: 600; font-variation-settings: "opsz" 20; }
+h4, h5, h6 {
+  font-size: var(--text-base);
+  font-weight: 600;
+  font-variation-settings: "opsz" 16;
+  letter-spacing: var(--tracking-tight);
 }
 
 p {
   color: var(--app-text-muted);
+  text-wrap: pretty;
+}
+
+/* data type — hashes, verification codes, block heights, tallies.
+   .data-text for a run of verifiable text, .tabular for aligned numbers. */
+code,
+kbd,
+samp,
+pre,
+.data-text,
+.mono {
+  font-family: var(--font-mono);
+  font-feature-settings: "zero" 1, "ss02" 1;
+  letter-spacing: 0;
+}
+
+.data-text,
+.mono {
+  font-size: 0.92em;
+}
+
+/* long hashes: break anywhere, but keep the groups readable */
+.data-text--hash {
+  word-break: break-all;
+  line-height: 1.45;
+  color: var(--app-text-muted);
+}
+
+.tabular,
+.stat-value,
+.vote-count,
+.option-percent {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "zero" 1;
+}
+
+/* author links. rendered as <button> so they stay keyboard-reachable inside
+   the clickable cards, but they must not inherit any button chrome. */
+.author-link {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  border-radius: 4px;
+  transition: color var(--app-transition);
+}
+
+.author-link:hover {
+  color: var(--app-accent-bright);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.author-avatar--link {
+  cursor: pointer;
+  transition: transform var(--app-transition);
+}
+
+.author-avatar--link:hover {
+  transform: scale(1.06);
+}
+
+/* proof states — the only place the warm signal colour appears */
+.is-verified,
+.signal-text {
+  color: var(--app-signal);
+}
+
+.signal-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--app-signal);
+  background: var(--app-signal-soft);
+  border: 1px solid rgba(var(--app-signal-rgb), 0.28);
 }
 
 :focus-visible {

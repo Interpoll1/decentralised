@@ -11,7 +11,12 @@
       <div class="comment-header">
         <span class="commenter-dot"></span>
         <span class="author-wrap">
-          <span class="author-name">u/{{ displayName }}</span>
+          <button
+            class="author-name author-link"
+            type="button"
+            :title="`View u/${displayName}'s profile`"
+            @click.stop="openAuthorProfile"
+          >u/{{ displayName }}</button>
           <button
             v-if="canInviteAuthor"
             class="invite-chat-btn"
@@ -171,13 +176,15 @@
 }
 
 .identity-badge.unverified {
-  background: rgba(var(--ion-color-warning-rgb), 0.16);
-  color: var(--ion-color-warning-shade);
+  background: var(--app-item-surface);
+  color: var(--app-text-subtle);
+  font-weight: 500;
 }
 
 .identity-badge.trusted-issuer {
-  background: rgba(var(--ion-color-success-rgb), 0.14);
-  color: var(--ion-color-success-shade);
+  background: var(--app-signal-soft);
+  border: 1px solid rgba(var(--app-signal-rgb), 0.28);
+  color: var(--app-signal);
 }
 
 .edited-label {
@@ -342,6 +349,7 @@ import {
 } from 'ionicons/icons';
 import { useCommentStore } from '../stores/commentStore';
 import { Comment } from '../services/commentService';
+import { useRouter } from 'vue-router';
 import { generatePseudonym } from '../utils/pseudonym';
 import type { FilterAction } from '../services/moderationService';
 import { ModerationService } from '../services/moderationService';
@@ -362,8 +370,14 @@ const props = defineProps<{
 
 defineEmits(['upvote', 'downvote']);
 
+const router = useRouter();
 const commentStore = useCommentStore();
 const userStore = useUserStore();
+
+function openAuthorProfile() {
+  if (!props.comment?.authorId) return;
+  router.push(`/user/${props.comment.authorId}`);
+}
 const showReplyForm = ref(false);
 const replyText = ref('');
 const revealed = ref(false);

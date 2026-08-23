@@ -1,0 +1,17 @@
+[package]
+name = "ip-crypto"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Canonical JSON, hashing and BIP-340 Schnorr signing, byte-compatible with the JS implementation."
+
+[dependencies]
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[[bin]]
+# Test oracle: reads JSON values on stdin, writes canonical forms on stdout.
+# Driven by unit_tests/canonicalDifferential.test.ts.
+name = "canonical-oracle"
+path = "src/bin/canonical_oracle.rs"

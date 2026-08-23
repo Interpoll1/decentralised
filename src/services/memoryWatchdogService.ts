@@ -3,6 +3,8 @@ import { GunService } from '@/services/gunService';
 const WARN_THRESHOLD = 0.60;
 const CRITICAL_THRESHOLD = 0.75;
 const EMERGENCY_THRESHOLD = 0.85;
+/** Past this, skip the emergency streak and cooldown entirely — see check(). */
+const HARD_CEILING_THRESHOLD = 0.92;
 
 // Mobile browsers cap tab memory far lower than desktop and (on iOS Safari)
 // expose no `performance.memory`, so we rely on the node-count heuristic there
@@ -19,6 +21,17 @@ const PERIODIC_GC_INTERVAL_MS = IS_MOBILE ? 60_000 : 120_000;
 const HEURISTIC_WARN_NODES = IS_MOBILE ? 600 : 1200;
 const HEURISTIC_CRITICAL_NODES = IS_MOBILE ? 900 : 1600;
 const HEURISTIC_EMERGENCY_NODES = IS_MOBILE ? 1300 : 2500;
+
+/**
+ * `jsHeapSizeLimit` reports the V8 pointer cage (4 GB on 64-bit desktop), but V8
+ * actually OOMs when the *old generation* fills — ~2.98 GB — and that capacity is
+ * not exposed to JS. Dividing by the cage therefore caps the observable ratio at
+ * roughly 0.72, which put `aggressive` (0.75) and `emergency` (0.85) permanently
+ * out of reach: a crash dump taken at death showed old_space 2974MB/2977MB while
+ * this watchdog was still reporting ~0.72 and doing only `light` cleanup.
+ * Clamping the denominator to the real ceiling makes every level reachable again.
+ */
+const MAX_EFFECTIVE_HEAP_BYTES = 2_900 * 1024 * 1024;
 
 interface MemoryInfo {
   usedJSHeapSize: number;
@@ -78,10 +91,13 @@ export class MemoryWatchdogService {
     if (!this.isMemoryAPIAvailable()) return null;
     const mem = (performance as any).memory as MemoryInfo;
     if (!mem.jsHeapSizeLimit || mem.jsHeapSizeLimit <= 0) return null;
+    // Never divide by the reported cage when it exceeds the old-generation
+    // ceiling V8 will actually die at (see MAX_EFFECTIVE_HEAP_BYTES).
+    const limit = Math.min(mem.jsHeapSizeLimit, MAX_EFFECTIVE_HEAP_BYTES);
     return {
-      ratio: mem.usedJSHeapSize / mem.jsHeapSizeLimit,
+      ratio: mem.usedJSHeapSize / limit,
       usedMB: Math.round(mem.usedJSHeapSize / 1024 / 1024),
-      limitMB: Math.round(mem.jsHeapSizeLimit / 1024 / 1024),
+      limitMB: Math.round(limit / 1024 / 1024),
     };
   }
 
@@ -135,6 +151,19 @@ export class MemoryWatchdogService {
     }
 
     this.emergencyStreak = level === 'emergency' ? this.emergencyStreak + 1 : 0;
+
+    // Above the hard ceiling there is no time left to debounce: the streak needs
+    // 3 checks (90s foregrounded, several minutes once Chrome throttles a hidden
+    // tab's timers) and a relay resync storm covers the last few percent of the
+    // heap well inside that. Reset immediately and ignore the cooldown — thrashing
+    // beats a dead renderer.
+    if (usage && usage.ratio >= HARD_CEILING_THRESHOLD) {
+      console.error(`[MemoryWatchdog] Heap at ${(usage.ratio * 100).toFixed(1)}% of effective limit — immediate Gun reset`);
+      this.forceGunReset();
+      this.lastResetTime = Date.now();
+      this.emergencyStreak = 0;
+      return;
+    }
 
     if (this.emergencyStreak >= this.EMERGENCY_STREAK_FOR_RESET) {
       const now = Date.now();

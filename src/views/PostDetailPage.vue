@@ -850,13 +850,15 @@ html.dark .section-separator {
 }
 
 .identity-badge.unverified {
-  background: rgba(var(--ion-color-warning-rgb), 0.16);
-  color: var(--ion-color-warning-shade);
+  background: var(--app-item-surface);
+  color: var(--app-text-subtle);
+  font-weight: 500;
 }
 
 .identity-badge.trusted-issuer {
-  background: rgba(var(--ion-color-success-rgb), 0.14);
-  color: var(--ion-color-success-shade);
+  background: var(--app-signal-soft);
+  border: 1px solid rgba(var(--app-signal-rgb), 0.28);
+  color: var(--app-signal);
 }
 
 .commenter-count {

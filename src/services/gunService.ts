@@ -12,7 +12,7 @@ export const GUN_NAMESPACE = 'v3';
 // so the WebRTC wire bridge drops them in `enforce` mode — comment votes and
 // direct messages could never replicate P2P. They are namespaced now; the chat
 // service still reads the legacy un-namespaced paths so no history is lost.
-const NAMESPACED_ROOTS = new Set(['posts', 'communities', 'polls', 'postVotes', 'users', 'comments', 'commentVotes', 'events', 'chatrooms', 'chats', 'chat-presence', 'chat-read', 'server-config', 'user-pubkey-index']);
+const NAMESPACED_ROOTS = new Set(['posts', 'communities', 'polls', 'postVotes', 'pollVotes', 'users', 'comments', 'commentVotes', 'events', 'chatrooms', 'chats', 'chat-presence', 'chat-read', 'server-config', 'user-pubkey-index']);
 
 function createNamespacedProxy(gun: any, nsNode: any): any {
   return new Proxy(gun, {
@@ -737,11 +737,30 @@ export class GunService {
       // together (the chain is where the retained memory actually lives).
       const root: any = this.gun._;
       const next: Record<string, any> = root.next || {};
-      const hasLiveListeners = (soul: string): boolean => {
+      // Souls with a listener attached directly to their own chain.
+      const directlySubscribed = new Set<string>();
+      for (const soul of Object.keys(next)) {
         const chain = next[soul];
         // `onto` deletes the tag when its last listener detaches, so the presence
         // of an `in` tag means at least one handler is still attached.
-        return !!(chain && chain.tag && chain.tag.in);
+        if (chain && chain.tag && chain.tag.in) directlySubscribed.add(soul);
+      }
+
+      const hasLiveListeners = (soul: string): boolean => {
+        if (directlySubscribed.has(soul)) return true;
+        // `.map().on()` attaches its handler to the *parent* chain, never to the
+        // child souls it streams (see the global feed subscriptions in
+        // pollService/postService/commentService). Those children therefore look
+        // unsubscribed here, and evicting one breaks the parent's map listener —
+        // producing the "chain not yet supported" artifact, a re-request, and the
+        // relay re-sending the whole feed. Treat a soul as live if any ancestor
+        // path is subscribed.
+        let slash = soul.lastIndexOf('/');
+        while (slash > 0) {
+          if (directlySubscribed.has(soul.slice(0, slash))) return true;
+          slash = soul.lastIndexOf('/', slash - 1);
+        }
+        return false;
       };
       const evict = (key: string) => {
         delete graph[key];
@@ -785,7 +804,12 @@ export class GunService {
       } else {
         const MAX_NODES = 2000;
         if (totalBefore > MAX_NODES) {
-          const toEvict = keys.slice(0, totalBefore - MAX_NODES);
+          // Scan the *newest* souls, not the oldest. Insertion order puts the
+          // long-lived roots and broadly-subscribed feed nodes first, and those
+          // are exactly what hasLiveListeners() skips — so slicing from the front
+          // walked a list of pinned nodes and evicted essentially nothing while
+          // the recent sync churn (the actual growth) was never even a candidate.
+          const toEvict = keys.slice(MAX_NODES);
           for (const key of toEvict) {
             if (keepPrefixes.some(p => key.startsWith(p))) continue;
             if (hasLiveListeners(key)) continue;
