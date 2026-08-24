@@ -148,6 +148,7 @@ import {
   heartOutline,
 } from 'ionicons/icons';
 import { Poll } from '../services/pollService';
+import { APP_NAME } from '../branding';
 import type { PollOption } from '../types/poll';
 import { useVerifiedPollResults } from '../composables/useVerifiedPollResults';
 import { shareLink } from '../composables/useShare';
@@ -237,7 +238,7 @@ function handleShare() {
   const url = props.poll.communityId
     ? `/community/${props.poll.communityId}/poll/${props.poll.id}`
     : `/vote/${props.poll.id}`;
-  void shareLink(url, props.poll.question || 'InterPoll poll', 'Vote on this poll on InterPoll');
+  void shareLink(url, props.poll.question || `${APP_NAME} poll`, `Vote on this poll on ${APP_NAME}`);
 }
 
 function getOptionPercent(option: { votes: number }): number {

@@ -2,7 +2,7 @@
   <ion-page>
     <ion-header :class="{ 'header-hidden': isHeaderHidden }">
       <ion-toolbar>
-        <ion-title class="logo-title">InterPoll</ion-title>
+        <ion-title class="logo-title">{{ APP_NAME }}</ion-title>
         <!-- These buttons are hidden on desktop (768px+) and moved to side-nav -->
         <ion-buttons slot="end" class="header-util-buttons">
           <ion-button v-if="canScanQr" @click="scanQr()" aria-label="Scan QR code">
@@ -36,7 +36,7 @@
                 <path d="M12 8V16M8.5 10.5L12 12.5L15.5 10.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </span>
-            <span class="side-nav-brand-name">Interpoll</span>
+            <span class="side-nav-brand-name">{{ APP_NAME }}</span>
           </div>
 
           <!-- Primary nav tabs -->
@@ -374,7 +374,7 @@
           <div class="sidebar-section sidebar-about surface-card">
             <div class="sidebar-about-row">
               <div>
-                <p class="sidebar-about-title">Interpoll</p>
+                <p class="sidebar-about-title">{{ APP_NAME }}</p>
                 <p class="sidebar-about-text">A peer-to-peer community platform built on GunDB. Posts and votes sync across all peers.</p>
               </div>
               <div class="sidebar-about-graph" aria-hidden="true">
@@ -473,7 +473,7 @@
               v-model="moderationCustomApiUrl"
               type="url"
               inputmode="url"
-              placeholder="https://interpoll.endless.sbs/moderation"
+              placeholder="https://example.com/moderation"
               @input="moderationCustomApiError = ''"
             >
             <p class="moderation-onboarding-card__hint">
@@ -531,6 +531,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick, defineAsyncComponent } from 'vue';
+import { APP_NAME } from '../branding';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonBadge,
   IonButtons, IonButton, IonIcon, IonSegment, IonSegmentButton, IonFooter, IonModal,

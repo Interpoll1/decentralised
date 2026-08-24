@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Polls</title>
+    <link rel="stylesheet" href="./style.css" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='4' fill='%234f7cff'/><rect x='4' y='8' width='2' height='4' fill='white'/><rect x='7' y='5' width='2' height='7' fill='white'/><rect x='10' y='3' width='2' height='9' fill='white'/></svg>" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#/">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span data-instance-name>Polls</span>
+      </a>
+      <div class="status">
+        <span class="dot" data-conn-dot></span>
+        <span data-conn-label>connecting…</span>
+      </div>
+    </header>
+
+    <main id="view" aria-live="polite"></main>
+
+    <footer class="footer">
+      <span data-ttl-note></span>
+      <a href="/health" target="_blank" rel="noreferrer">instance status</a>
+    </footer>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

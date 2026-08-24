@@ -81,14 +81,22 @@ export const TRUST_POW_DIFFICULTY = 22;
 const GUN_ISSUERS_ROOT = 'trust-issuers';
 const GUN_USERNAMES_ROOT = 'usernames'; // username → { userId, pubkey, certificate? }
 const CUSTOM_ISSUERS_STORAGE_KEY = 'interpoll_custom_trust_issuers';
-const BUILTIN_ISSUERS: Omit<TrustIssuer, 'addedAt'>[] = [
-  {
-    domain: 'endless.sbs',
-    contact: 'admin@endless.sbs',
-    endpoint: 'https://interpoll.endless.sbs/trust',
-    publicKey: '',
-  },
-];
+// VITE_TRUST_ISSUER_DOMAIN / _ENDPOINT let a self-hosted build name its own
+// issuer; VITE_TRUST_ISSUER_DOMAIN='' ships with no built-in issuer at all,
+// which is the honest default for an instance that runs no trust service.
+const envIssuerDomain = import.meta.env.VITE_TRUST_ISSUER_DOMAIN;
+const BUILTIN_ISSUERS: Omit<TrustIssuer, 'addedAt'>[] =
+  envIssuerDomain === ''
+    ? []
+    : [
+        {
+          domain: envIssuerDomain || 'endless.sbs',
+          contact: import.meta.env.VITE_TRUST_ISSUER_CONTACT || 'admin@endless.sbs',
+          endpoint:
+            import.meta.env.VITE_TRUST_ISSUER_ENDPOINT || 'https://interpoll.endless.sbs/trust',
+          publicKey: '',
+        },
+      ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -100,6 +108,11 @@ function certPayload(cert: Omit<TrustCertificate, 'signature'>): string {
 // ─── TrustService ─────────────────────────────────────────────────────────────
 
 export class TrustService {
+  /** The issuer this build ships with, or `null` when it ships with none. */
+  static getBuiltinIssuer(): Omit<TrustIssuer, 'addedAt'> | null {
+    return BUILTIN_ISSUERS[0] ?? null;
+  }
+
   private static issuersCache: TrustIssuer[] | null = null;
   // pubkey → cert. Bounded + TTL: previously one entry per user ever encountered,
   // held for the whole session, and certificates can be revoked upstream anyway.

@@ -466,6 +466,7 @@ import { IPFSService } from '../services/ipfsService';
 import { useCommunityStore } from '../stores/communityStore';
 import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 import config from '../config';
+import { APP_NAME } from '../branding';
 
 const communityStore = useCommunityStore();
 const router = useRouter();
@@ -502,7 +503,7 @@ async function copyChatLink() {
 async function shareChatLink() {
   if (!chatLink.value || !navigator.share) return;
   const name = userProfile.value?.customUsername || userProfile.value?.displayName || 'me';
-  try { await navigator.share({ title: `Chat with ${name} on Interpoll`, url: chatLink.value }); } catch { /* cancelled */ }
+  try { await navigator.share({ title: `Chat with ${name} on ${APP_NAME}`, url: chatLink.value }); } catch { /* cancelled */ }
 }
 
 const userProfile = ref<UserProfile | null>(null);

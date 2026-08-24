@@ -37,7 +37,7 @@
               </div>
               <div>
                 <h3>Account</h3>
-                <p>Your identity on Interpoll</p>
+                <p>Your identity on {{ APP_NAME }}</p>
               </div>
             </div>
             <div class="info-table">
@@ -51,7 +51,7 @@
                   <UserIdentityBadge v-if="userProfile"
                     :username="userProfile.customUsername || userProfile.username"
                     :pubkey="publicKeyHex" />
-                  <button class="pill-btn accent" @click="$router.push('/claim-username')">
+                  <button v-if="!IS_SELFHOST" class="pill-btn accent" @click="$router.push('/claim-username')">
                     {{ userProfile?.customUsername ? 'Change' : 'Set username' }}
                   </button>
                 </div>
@@ -124,8 +124,8 @@
             </div>
           </div>
 
-          <!-- Home Feed Moderation -->
-          <div class="settings-card">
+          <!-- Home Feed Moderation — needs a moderation API this instance does not run -->
+          <div v-if="!IS_SELFHOST" class="settings-card">
             <div class="card-heading">
               <div class="card-heading-icon accent-rose">
                 <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
@@ -146,7 +146,7 @@
               <label class="field-label">API Provider</label>
               <div class="field-wrap">
                 <select class="field-native" v-model="modSettings.moderationProvider" @change="onModerationProviderChange">
-                  <option value="interpoll">InterPoll default API</option>
+                  <option value="interpoll">{{ APP_NAME }} default API</option>
                   <option value="custom">Custom API</option>
                 </select>
               </div>
@@ -371,7 +371,7 @@
               <label class="field-label">Provider</label>
               <div class="field-wrap">
                 <select class="field-native" v-model="modSettings.moderationProvider" @change="saveModerationSettings">
-                  <option value="interpoll">Interpoll Moderation API</option>
+                  <option value="interpoll">{{ APP_NAME }} Moderation API</option>
                   <option value="custom">Custom API</option>
                 </select>
               </div>
@@ -380,7 +380,7 @@
               <label class="field-label">API Base URL</label>
               <div class="field-wrap">
                 <input class="field-native mono-sm" v-model="modSettings.moderationApiBaseUrl"
-                  @blur="saveModerationSettings" placeholder="https://interpoll.endless.sbs/moderation" />
+                  @blur="saveModerationSettings" placeholder="https://example.com/moderation" />
               </div>
             </div>
             <div class="field-group mt-8">
@@ -470,7 +470,7 @@
             </div>
             <div class="alert-box info mt-12">
               <ion-icon :icon="informationCircleOutline"></ion-icon>
-              <span>Web applications cannot route their own TCP traffic through Tor. To use Interpoll over Tor, open it in <a href="https://www.torproject.org" target="_blank" class="link">Tor Browser</a>, or proxy this browser's traffic through <a href="https://orbot.app" target="_blank" class="link">Orbot</a>.</span>
+              <span>Web applications cannot route their own TCP traffic through Tor. To use {{ APP_NAME }} over Tor, open it in <a href="https://www.torproject.org" target="_blank" class="link">Tor Browser</a>, or proxy this browser's traffic through <a href="https://orbot.app" target="_blank" class="link">Orbot</a>.</span>
             </div>
             <div v-if="anonymityMode" class="mt-12">
               <div class="status-row" :class="activeRelayIsOnion ? 'row-ok' : 'row-warn'">
@@ -553,8 +553,9 @@
             <button class="pill-btn outline mt-8" @click="resetGunPeersToDefaults">Reset to defaults</button>
           </div>
 
-          <!-- Run a Relay Node -->
-          <div class="settings-card decentralised-feature">
+          <!-- Run a Relay Node — the installers it points at are the hosted
+               project's, which is not what a self-hosted operator wants. -->
+          <div v-if="!IS_SELFHOST" class="settings-card decentralised-feature">
             <div class="decentral-badge">
               <ion-icon :icon="globeOutline"></ion-icon>
               DECENTRALISED
@@ -575,7 +576,7 @@
                   <span class="relay-difficulty easy">Easy</span>
                   <span class="relay-option-name">Browser Tab</span>
                 </div>
-                <p class="relay-option-desc">Runs a relay directly in this browser tab via a WebSocket bridge. Automatically receives a public <code>wss://tunnel.interpoll.endless.sbs</code> URL — no server or port-forwarding required.</p>
+                <p class="relay-option-desc">Runs a relay directly in this browser tab via a WebSocket bridge. Automatically receives a public <code>{{ tunnelHost }}</code> URL — no server or port-forwarding required.</p>
                 <button class="pill-btn accent">Enable Browser Relay</button>
               </div>
 
@@ -585,7 +586,7 @@
                   <span class="relay-option-name">Home Server</span>
                 </div>
                 <p class="relay-option-desc">Deploys a GunDB relay on a Raspberry Pi or spare Linux machine on your local network. The installer prints the relay URL and optionally guides you through port-forwarding for external access.</p>
-                <div class="code-block">curl -sSL https://interpoll.endless.sbs/install.sh | bash</div>
+                <div class="code-block">curl -sSL {{ relayInstallBase }}/install.sh | bash</div>
               </div>
 
               <div class="relay-option">
@@ -594,7 +595,7 @@
                   <span class="relay-option-name">Cloud VPS</span>
                 </div>
                 <p class="relay-option-desc">Provisions a production-grade relay on any VPS with a domain name. The script handles Docker, Caddy reverse-proxy, and automatic TLS certificate issuance in a single command.</p>
-                <div class="code-block">curl -sSL https://interpoll.endless.sbs/vps.sh | bash -s yourdomain.com</div>
+                <div class="code-block">curl -sSL {{ relayInstallBase }}/vps.sh | bash -s yourdomain.com</div>
               </div>
             </div>
           </div>
@@ -1404,6 +1405,12 @@ code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { APP_NAME, IS_SELFHOST } from '../branding';
+
+// Where the relay installers live. Env-driven so a fork or a self-hosted build
+// is never telling its users to curl a script from someone else's domain.
+const relayInstallBase = import.meta.env.VITE_RELAY_INSTALL_BASE ?? 'https://interpoll.endless.sbs';
+const tunnelHost = (import.meta.env.VITE_TUNNEL_URLS ?? 'wss://tunnel.interpoll.endless.sbs').split(',')[0];
 import DesktopPageShell from '../components/DesktopPageShell.vue';
 import {
   IonPage,
@@ -2059,14 +2066,14 @@ async function checkTorStatus() {
       isTor,
       note: isTor
         ? 'Confirmed: this browser is reaching the network over Tor.'
-        : 'This browser is NOT on Tor. Open InterPoll in Tor Browser to be anonymous.',
+        : `This browser is NOT on Tor. Open ${APP_NAME} in Tor Browser to be anonymous.`,
     };
   } catch {
     // CORS-blocked or offline — cannot read the result. Do not overclaim.
     torStatus.value = {
       checked: true,
       isTor: null,
-      note: 'Could not verify automatically. Make sure you opened InterPoll in Tor Browser.',
+      note: `Could not verify automatically. Make sure you opened ${APP_NAME} in Tor Browser.`,
     };
   } finally {
     torChecking.value = false;
@@ -2210,7 +2217,7 @@ async function generateBootstrapInvite() {
 
   generatedBootstrapInvite.value = BootstrapInviteService.createInvite(endpoint, {
     createdBy: myPeerId.value || 'local-node',
-    note: 'InterPoll relay bootstrap',
+    note: `${APP_NAME} relay bootstrap`,
     handoff: {
       sourcePeerId: myPeerId.value || WebSocketService.getPeerId(),
       connectedServer,

@@ -1,0 +1,5 @@
+# Runtime state of a local instance — never part of the repo.
+data/
+radata/
+dist-full/
+.env.full.local

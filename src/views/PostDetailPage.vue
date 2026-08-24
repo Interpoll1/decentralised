@@ -223,6 +223,7 @@ import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 
 import { IPFSService } from '../services/ipfsService';
 import { checkContent } from '../utils/contentGuard';
+import { APP_NAME } from '../branding';
 
 const route = useRoute();
 const router = useRouter();
@@ -260,7 +261,7 @@ const postId = computed(() => route.params.postId as string);
 // Meta tags via watch — avoids @unhead/vue context issues
 watch(post, (p) => {
   if (!p) return;
-  document.title = `${p.title} - Interpoll`;
+  document.title = `${p.title} - ${APP_NAME}`;
 
   const setMeta = (attr: string, val: string, content: string) => {
     let el = document.querySelector(`meta[${attr}="${val}"]`);

@@ -62,7 +62,7 @@
               <ion-label position="stacked">Issuer endpoint</ion-label>
               <ion-input
                 v-model="customIssuerEndpoint"
-                placeholder="https://interpoll.endless.sbs/trust"
+                placeholder="https://example.com/trust"
                 autocomplete="off"
               />
             </ion-item>
@@ -192,7 +192,7 @@
     <ion-alert
       :is-open="showTrustInfo"
       header="What is a trust issuer?"
-      message="A trust issuer is an authority (like admin@endless.sbs) that endorses your username with a cryptographic certificate. Verification requires solving a ~15-second Proof-of-Work challenge — this deters spam while keeping registration open. Verified users get higher rate limits and a green shield badge."
+      message="A trust issuer is an authority that endorses your username with a cryptographic certificate. Verification requires solving a ~15-second Proof-of-Work challenge — this deters spam while keeping registration open. Verified users get higher rate limits and a green shield badge."
       :buttons="[{ text: 'Got it', role: 'cancel' }]"
       @didDismiss="showTrustInfo = false"
     />
@@ -233,7 +233,11 @@ const powError = ref('');
 const claimedVerified = ref(false);
 const claimedCertificate = ref<TrustCertificate | null>(null);
 const showCustomIssuerMenu = ref(false);
-const customIssuerEndpoint = ref('https://interpoll.endless.sbs/trust');
+// The issuer this build ships with, if any — never a hardcoded one. On a
+// self-hosted build TrustService has no built-in issuer, so this is blank and
+// the operator types their own.
+const DEFAULT_ISSUER = TrustService.getBuiltinIssuer();
+const customIssuerEndpoint = ref(DEFAULT_ISSUER?.endpoint ?? '');
 const customIssuerContact = ref('');
 const addingCustomIssuer = ref(false);
 const customIssuerError = ref('');
@@ -249,9 +253,9 @@ const previewTrust = computed<VerifiedUsername>(() => ({
 onMounted(async () => {
   try {
     issuers.value = await TrustService.getIssuers();
-    const defaultIssuer = issuers.value.find((issuer) =>
-      issuer.endpoint === 'https://interpoll.endless.sbs/trust' || issuer.domain === 'endless.sbs'
-    );
+    const defaultIssuer = DEFAULT_ISSUER
+      ? issuers.value.find((issuer) => issuer.domain === DEFAULT_ISSUER.domain)
+      : undefined;
     if (defaultIssuer) selectedIssuer.value = defaultIssuer;
   } catch (e) {
     issuers.value = [];

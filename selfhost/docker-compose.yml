@@ -1,0 +1,31 @@
+# docker compose -f selfhost/docker-compose.yml up --build
+#
+# Everything below has a working default. The two settings worth a thought are
+# RELAY_TTL_HOURS (how long content lives) and, if you want the full app rather
+# than the simple poll client, EDITION + PUBLIC_URL.
+
+services:
+  instance:
+    build:
+      context: ..
+      dockerfile: selfhost/Dockerfile
+      args:
+        # "lite" = the simple poll client, no build needed.
+        # "full" = the complete app; set PUBLIC_URL to the address visitors type.
+        EDITION: ${EDITION:-lite}
+        PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      EDITION: ${EDITION:-lite}
+      # Name shown in the client. Empty string = no name at all.
+      INSTANCE_NAME: ${INSTANCE_NAME:-Polls}
+      ACCENT_COLOR: ${ACCENT_COLOR:-#4f7cff}
+      # Short-lived hosting: content older than this is expired. 0 = keep forever.
+      RELAY_TTL_HOURS: ${RELAY_TTL_HOURS:-24}
+      # 1 = keep everything in memory; a restart is a clean slate and the
+      # volume below is never written to.
+      EPHEMERAL: ${EPHEMERAL:-0}
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

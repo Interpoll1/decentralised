@@ -3,7 +3,7 @@
     <div class="consent-copy">
       <p id="consent-title" class="consent-title">Decentralized network notice</p>
       <p class="consent-body">
-        InterPoll stores data locally and syncs peer-to-peer, so content may be unmoderated and subject to your local laws.
+        {{ APP_NAME }} stores data locally and syncs peer-to-peer, so content may be unmoderated and subject to your local laws.
       </p>
     </div>
     <button ref="acceptBtn" class="consent-accept" @click="accept">Got it</button>
@@ -12,6 +12,7 @@
 
 <script setup lang="ts">
 import { ref, nextTick, watch } from 'vue';
+import { APP_NAME } from '../branding';
 
 const STORAGE_KEY = 'interpoll_consent_accepted';
 

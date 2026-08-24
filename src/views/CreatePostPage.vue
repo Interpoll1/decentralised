@@ -117,7 +117,7 @@
               </button>
             </div>
             <div v-if="showVideoSection" class="video-body">
-              <VideoUploader @uploaded="onVideoUploaded" @cleared="onVideoCleared" />
+              <VideoUploader v-if="!IS_SELFHOST" @uploaded="onVideoUploaded" @cleared="onVideoCleared" />
               <div v-if="videoCID" class="video-attached">
                 <ion-icon :icon="videocamOutline"></ion-icon>
                 <span>Video attached · {{ (videoSize / 1024 / 1024).toFixed(1) }} MB · {{ Math.round(videoDuration) }}s</span>
@@ -276,6 +276,9 @@ import {
 } from '@ionic/vue';
 import { imageOutline, closeCircle, informationCircle, videocamOutline, chevronDownOutline, chevronUpOutline, timeOutline } from 'ionicons/icons';
 import { defineAsyncComponent } from 'vue';
+import { IS_SELFHOST } from '../branding';
+// Video hosting needs object storage this relay does not have; the panel is
+// hidden rather than left to fail on upload.
 const VideoUploader = defineAsyncComponent(() => import('../components/VideoUploader.vue'));
 import CommunityPickerModal from '../components/CommunityPickerModal.vue';
 import type { VideoMeta } from '../services/videoService';

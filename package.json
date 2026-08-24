@@ -20,7 +20,11 @@
     "start": "node relay-server.js",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore",
     "test": "vitest run --config unit_tests/vitest.config.ts",
-    "test:watch": "vitest --config unit_tests/vitest.config.ts"
+    "test:watch": "vitest --config unit_tests/vitest.config.ts",
+    "selfhost": "node selfhost/relay/server.js",
+    "selfhost:lite": "node selfhost/relay/server.js",
+    "selfhost:build:full": "node selfhost/build-full.js",
+    "selfhost:full": "npm run selfhost:build:full && EDITION=full node selfhost/relay/server.js"
   },
   "dependencies": {
     "@capacitor-mlkit/barcode-scanning": "^6.2.0",

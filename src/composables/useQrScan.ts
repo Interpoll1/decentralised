@@ -1,6 +1,7 @@
 import { toastController } from '@ionic/vue';
 import { Capacitor } from '@capacitor/core';
 import { useRouter } from 'vue-router';
+import { APP_NAME } from '../branding';
 import { InviteLinkService } from '@/services/inviteLinkService';
 import config from '@/config';
 
@@ -84,7 +85,7 @@ export function useQrScan() {
       }
 
       if (!routeScanned(value)) {
-        await toast('This QR code isn’t an InterPoll invite', 'warning');
+        await toast(`This QR code isn’t an ${APP_NAME} invite`, 'warning');
       }
     } catch (err) {
       const msg = (err as Error)?.message ?? '';

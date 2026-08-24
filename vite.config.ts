@@ -40,6 +40,28 @@ function spaRouteFallbackPlugin() {
   };
 }
 
+// ── Branding ────────────────────────────────────────────────────────────────
+// index.html carries __APP_NAME__ / __APP_TAGLINE__ / __WEB_ORIGIN__ placeholders so a
+// self-hosted build can name itself. With no env set these resolve to the
+// production strings, so the shipped HTML is unchanged.
+const APP_NAME = process.env.VITE_APP_NAME || 'InterPoll';
+const APP_TAGLINE = process.env.VITE_APP_TAGLINE || 'decentralized polls, no company in control';
+const APP_DESCRIPTION =
+  process.env.VITE_APP_DESCRIPTION || 'Decentralized, censorship-resistant polling & discussion';
+const APP_WEB_ORIGIN = process.env.VITE_WEB_ORIGIN || 'https://endless.sbs';
+
+function brandingPlugin() {
+  return {
+    name: 'branding',
+    transformIndexHtml(html: string) {
+      return html
+        .replace(/__APP_NAME__/g, APP_NAME)
+        .replace(/__APP_TAGLINE__/g, APP_TAGLINE)
+        .replace(/__WEB_ORIGIN__/g, APP_WEB_ORIGIN);
+    },
+  };
+}
+
 // Tauri desktop build (`build:desktop` / `dev:desktop` npm scripts).
 const isTauri = process.env.TAURI_BUILD === '1';
 
@@ -54,15 +76,16 @@ export default defineConfig({
   base: '/',
   plugins: [
     vue(),
+    brandingPlugin(),
     spaRouteFallbackPlugin(),
     ...(isNativeBuild ? [] : [
       VitePWA({
         registerType: 'autoUpdate',
         injectRegister: 'auto',
         manifest: {
-          name: 'InterPoll',
-          short_name: 'InterPoll',
-          description: 'Decentralized, censorship-resistant polling & discussion',
+          name: APP_NAME,
+          short_name: APP_NAME,
+          description: APP_DESCRIPTION,
           theme_color: '#141420',
           background_color: '#141420',
           display: 'standalone',

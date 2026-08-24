@@ -166,28 +166,45 @@ function loadGunPeers(): string[] | null {
 //};
 
 // Defaults point to VPS
+// A self-hosted build must be able to point the app at its own relay, and it
+// has to happen *here*: `config.auth.api` deliberately ignores the runtime
+// Settings override, so the vote-authorize/confirm origin can only be set at
+// build time. With none of these env vars set the values are byte-for-byte the
+// production ones, so a plain `npm run build` is unchanged.
 const defaults = {
-  websocket: 'wss://interpoll.endless.sbs',
-  gun: 'https://interpoll2.endless.sbs/gun',
-  api: 'https://interpoll.endless.sbs',
+  websocket: import.meta.env.VITE_RELAY_WS || 'wss://interpoll.endless.sbs',
+  gun: import.meta.env.VITE_RELAY_GUN || 'https://interpoll2.endless.sbs/gun',
+  api: import.meta.env.VITE_RELAY_API || 'https://interpoll.endless.sbs',
 };
 
 // ── Built-in peer tiers ───────────────────────────────────────────────────────
 // Tier 1 — Private VPS (always first, most trusted)
 
-export const PRIVATE_PEERS = [
-  'https://interpoll2.endless.sbs/gun',
-  'http://v7so4otlnuleppayd7znkqwzjq6xhvzpetywpyzuth3jrykdqklxlwqd.onion/gun',
-] as const;
+// `VITE_GUN_PEERS` (comma-separated) replaces both tiers wholesale. A
+// self-hosted instance should not be shipping traffic to the author's VPS or to
+// a public relay its operator never chose, so this is a replacement rather than
+// an addition; an empty string means "this instance only".
+const envPeers = (import.meta.env.VITE_GUN_PEERS ?? '')
+  .split(',')
+  .map((peer: string) => peer.trim())
+  .filter(Boolean);
+const hasEnvPeers = typeof import.meta.env.VITE_GUN_PEERS === 'string';
+
+export const PRIVATE_PEERS: readonly string[] = hasEnvPeers
+  ? envPeers
+  : [
+      'https://interpoll2.endless.sbs/gun',
+      'http://v7so4otlnuleppayd7znkqwzjq6xhvzpetywpyzuth3jrykdqklxlwqd.onion/gun',
+    ];
 
 // Tier 2 — Well-known public Gun relays (stable, high-uptime, but no SLA)
-export const PUBLIC_PEERS = [
-  'https://relay.peer.ooo/gun',
-] as const;
+export const PUBLIC_PEERS: readonly string[] = hasEnvPeers
+  ? []
+  : ['https://relay.peer.ooo/gun'];
 
 // Canonical public web origin where the browser build of the app is hosted.
 // Used to construct shareable links from the native app (see config.web).
-const WEB_ORIGIN = 'https://endless.sbs';
+const WEB_ORIGIN = import.meta.env.VITE_WEB_ORIGIN || 'https://endless.sbs';
 function loadEncryptionConfig(): EncryptionConfig {
   try {
     const raw = localStorage.getItem(ENCRYPTION_STORAGE_KEY);

@@ -16,6 +16,22 @@ We built InterPoll because we noticed that other platforms censor a lot — and 
 
 ---
 
+## Run your own instance
+
+There is a one-command, self-contained version of this on the `selfhost`
+branch: your own relay and client on one port, no database, no accounts, with
+content that expires on its own — built for short-lived things like an event
+poll or a meeting vote.
+
+```bash
+npm run selfhost      # http://localhost:8080
+```
+
+See **[selfhost/README.md](selfhost/README.md)** for the launcher, Docker, and
+the full-app option.
+
+---
+
 ## Why it matters
 
 Traditional online communities share a fundamental weakness: **one server, one point of control**. The company that runs the server can delete a poll, hide a post, remove comments, alter results, or simply go offline. This is as true of small community forums as it is of massive social platforms.

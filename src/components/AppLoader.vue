@@ -2,7 +2,7 @@
   <div class="ip-loader">
     <canvas ref="canvasRef" class="ip-canvas" />
     <div class="ip-content">
-      <div class="ip-logo">Interpoll</div>
+      <div class="ip-logo">{{ APP_NAME }}</div>
       <div class="ip-tag">peer-to-peer · decentralized</div>
       <div class="ip-bar-wrap"><div class="ip-bar" /></div>
       <div class="ip-status-wrap">
@@ -17,6 +17,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import { APP_NAME } from '../branding';
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 

@@ -130,7 +130,8 @@ const STORAGE_KEY = 'moderation_settings';
 const API_KEY_STORAGE_KEY = 'moderation_api_key';
 
 /** Default URL for the InterPoll-hosted moderation API */
-export const MODERATION_API_DEFAULT_BASE_URL = 'https://interpoll.endless.sbs';
+export const MODERATION_API_DEFAULT_BASE_URL =
+  import.meta.env.VITE_MODERATION_API || import.meta.env.VITE_RELAY_API || 'https://interpoll.endless.sbs';
 
 const DEFAULT_SETTINGS: ModerationSettings = {
   minUserKarma: -1000,

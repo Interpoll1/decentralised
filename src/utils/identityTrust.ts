@@ -1,7 +1,14 @@
-const TRUST_ISSUER_DOMAINS = new Set([
-  'endles.sbs',
-  'endless.sbs',
-]);
+// Kept in step with trustService's BUILTIN_ISSUERS: a self-hosted build that
+// names its own issuer domain must recognise that domain as trusted, and one
+// that names none trusts nobody by default.
+const envIssuerDomain = import.meta.env.VITE_TRUST_ISSUER_DOMAIN;
+const TRUST_ISSUER_DOMAINS = new Set<string>(
+  envIssuerDomain === ''
+    ? []
+    : envIssuerDomain
+      ? [envIssuerDomain]
+      : ['endles.sbs', 'endless.sbs'],
+);
 
 export type IdentityTrustLevel = 'trusted-issuer' | 'unverified';
 

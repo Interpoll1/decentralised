@@ -1,6 +1,7 @@
 import config from '@/config';
 import type { KnownServer } from './websocketService';
 import { PeerReputationService } from './peerReputationService';
+import { APP_NAME } from '../branding';
 
 export interface RelayEndpoint {
   id: string;
@@ -82,7 +83,7 @@ export class RelayManager {
     if (this.config.relays.length === 0) {
       const defaultRelay: RelayEndpoint = {
         id: 'default',
-        label: 'InterPoll (Render)',
+        label: `${APP_NAME} relay`,
         ws: config.relay.websocket,
         gun: config.relay.gun,
         api: config.relay.api,

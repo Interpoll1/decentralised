@@ -23,7 +23,7 @@
             </div>
             <div>
               <h2 class="hero-title">Network Resilience</h2>
-              <p class="hero-sub">Monitor relay health, rotate servers instantly, and back up your local state. Interpoll keeps running even when individual nodes go offline.</p>
+              <p class="hero-sub">Monitor relay health, rotate servers instantly, and back up your local state. {{ APP_NAME }} keeps running even when individual nodes go offline.</p>
             </div>
           </div>
           <div class="quick-actions">
@@ -484,6 +484,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { APP_NAME } from '../branding';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
@@ -607,7 +608,7 @@ const guides = [
     id: 'tor', icon: lockClosedOutline, title: 'Using Tor Browser',
     steps: [
       'Download and install <a href="https://www.torproject.org" target="_blank" rel="noopener noreferrer">Tor Browser</a>.',
-      'Open InterPoll in Tor Browser — this routes your traffic through Tor (a web app cannot do it on its own).',
+      `Open ${APP_NAME} in Tor Browser — this routes your traffic through Tor (a web app cannot do it on its own).`,
       'Go to <strong>Settings → Network</strong> and enable <strong>Anonymity (Tor) Mode</strong> to disable WebRTC, which would otherwise leak your real IP via STUN.',
       'Optionally add a <code>.onion</code> relay address — Anonymity Mode will prefer it automatically.',
       'Use <strong>Check Tor status</strong> in that section to verify your connection is routing through Tor.',
@@ -993,7 +994,7 @@ function buildRelayReport(): string {
   const blockedCount = censorship.value?.blocked.length ?? 0;
   const torCount = censorship.value?.torRequired.length ?? 0;
   return [
-    'InterPoll Relay Report',
+    `${APP_NAME} Relay Report`,
     `Scanned: ${lastScanAt.value || 'unknown time'}`,
     ...lines,
     `Censorship signals: blocked=${blockedCount}, torRequired=${torCount}`,

@@ -1,5 +1,6 @@
 import config from '../config';
 import { IntegrityService } from '@/services/integrityService';
+import { IS_SELFHOST } from '../branding';
 
 export type ReceiptKind = 'vote' | 'comment';
 
@@ -237,6 +238,13 @@ export class AuditService {
   }
 
   static startOAuthLogin(provider: 'google' | 'microsoft' = 'google'): void {
+    // A self-hosted relay serves no OAuth provider (it answers /auth/* with an
+    // explicit 501). Redirecting the user there would strand them on an error
+    // page, so the sign-in flow is simply absent on those builds.
+    if (IS_SELFHOST) {
+      console.info('[audit] sign-in is not available on this self-hosted instance');
+      return;
+    }
     const startUrl = `${this.getTrustedApiBase()}/auth/${provider}/start`;
 
     // In the native shell a full-page redirect can't come back: the OAuth

@@ -622,6 +622,7 @@ function autoLink(text: string): string {
 
 import { ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { APP_NAME } from '../branding';
 import { IonIcon, toastController } from '@ionic/vue';
 import VideoPlayer from './VideoPlayer.vue';
 import { formatDuration } from '../services/videoService';
@@ -738,7 +739,7 @@ function handleCommentsClick(e: Event) {
 function handleModerationAction(e: Event) { e.stopPropagation(); emit('moderation-submit'); }
 function handleShare(e: Event) {
   e.stopPropagation();
-  void shareLink(`/post/${props.post.id}`, props.post.title || 'InterPoll post', 'Check out this post on InterPoll');
+  void shareLink(`/post/${props.post.id}`, props.post.title || `${APP_NAME} post`, `Check out this post on ${APP_NAME}`);
 }
 
 async function handleInviteToChat() {

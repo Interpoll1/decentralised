@@ -7,7 +7,7 @@
           <path d="M12 8V16M8.5 10.5L12 12.5L15.5 10.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </span>
-      <span class="side-nav-brand-name">Interpoll</span>
+      <span class="side-nav-brand-name">{{ APP_NAME }}</span>
     </div>
 
     <!-- Primary nav tabs -->
@@ -90,6 +90,7 @@
 <script setup lang="ts">
 import { IonIcon } from '@ionic/vue';
 import { useRouter } from 'vue-router';
+import { APP_NAME } from '../branding';
 import {
   home, homeOutline, people, peopleOutline, chatbubble, chatbubbleOutline,
   addCircle, addCircleOutline, searchOutline, personCircleOutline, settingsOutline,

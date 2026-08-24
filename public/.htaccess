@@ -1,4 +1,4 @@
-# InterPoll — Apache/LiteSpeed config for the static SPA at endless.sbs
+# Apache/LiteSpeed config for the static SPA build.
 #
 # Lives in public/ so Vite copies it to dist/ and the deploy workflow ships it.
 # If the server runs nginx, this file is simply ignored — apply the same rules

@@ -35,10 +35,13 @@ import { GunService } from './gunService';
 // We try them in order; first one that responds wins.
 // REPLACE the first entry with your own bridge for production use.
 // Self-hosted bridge (cheapest, most reliable): https://github.com/localtunnel/server
-const BRIDGE_URLS = [
-  'wss://tunnel.interpoll.endless.sbs',  // your own bridge — replace this
-  'wss://relay-bridge.loca.lt',          // localtunnel fallback
-];
+// VITE_TUNNEL_URLS (comma-separated) replaces these for a self-hosted build.
+const BRIDGE_URLS = (import.meta.env.VITE_TUNNEL_URLS
+  ? import.meta.env.VITE_TUNNEL_URLS.split(',').map((url: string) => url.trim()).filter(Boolean)
+  : [
+      'wss://tunnel.interpoll.endless.sbs',  // your own bridge — replace this
+      'wss://relay-bridge.loca.lt',          // localtunnel fallback
+    ]) as string[];
 
 const RELAY_PORT = 8765;
 const STORAGE_KEY = 'browser_relay_state';
