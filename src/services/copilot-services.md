@@ -163,7 +163,20 @@ throws rather than return an incomplete total; `writeVote()` still records the v
 refuses to freeze, since a frozen 0 would erase a legacy total permanently.
 `subscribeTally()` emits nothing until the baseline is known — vote nodes start
 streaming immediately, and folding them onto an assumed zero showed a derived-only
-count that then jumped. Comment tallies take a simpler route: they fall
+count that then jumped.
+
+**An unacked put is not a failed vote.** `gunPut`'s ack proves only that some peer
+replied inside the timeout; with a busy graph it routinely does not, even though the
+record is already in the local graph and queued for every peer. `writeVote()` used to
+`throw` on any non-ok ack, so `postStore.toggleVote()` rolled the vote back and logged
+`Error voting: Error: timeout` for votes that had in fact been cast. It now throws only
+on a peer-reported error — a real rejection — and treats a bare `'timeout'` as
+*unconfirmed*: `VoteResult.confirmed` is false, the advisory mirror write is skipped
+(it would publish a number the relay has not agreed to), and `tallyAuthoritative` is
+forced false so the caller keeps its optimistic counts and adopts only the vote state.
+The two pre-write reads (`ensureBaseline` and this user's existing vote node) also run
+concurrently now; serialised, a single click waited out both timeouts before the write
+was even attempted. Comment tallies take a simpler route: they fall
 back to the stored counters only while *nobody* has voted under the new scheme, so
 an old comment's total drops to the new count on the first vote.
 

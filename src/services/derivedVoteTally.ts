@@ -60,6 +60,12 @@ export interface VoteResult {
    * show a number that drops and then comes back.
    */
   tallyAuthoritative: boolean;
+  /**
+   * False when no peer acked the write within the timeout. The record is in the
+   * local graph and queued for the peers regardless, so the vote is *not* an
+   * error — it is simply unconfirmed, and `tally` is advisory.
+   */
+  confirmed: boolean;
 }
 
 export interface Baseline {
@@ -200,11 +206,15 @@ export function createDerivedVoteTally(config: DerivedVoteTallyConfig): DerivedV
   }
 
   async function writeVote(contentId: string, userId: string, next: VoteValue): Promise<VoteResult> {
-    const baseline = await ensureBaseline(contentId);
+    // Independent reads — serialising them made a single click wait out two
+    // timeouts back to back before the write was even attempted.
+    const [baseline, existing] = await Promise.all([
+      ensureBaseline(contentId),
+      gunOnce(votesNode(contentId).get(userId), READ_TIMEOUT_MS),
+    ]);
 
     // Preserve any baseline correction already recorded for this user; only
     // discover it from the legacy key the first time we write their node.
-    const existing = await gunOnce(votesNode(contentId).get(userId), READ_TIMEOUT_MS);
     const baselineType = parseVote(existing)
       ? parseBaselineType(existing)
       : await readLegacyVote(contentId, userId);
@@ -217,8 +227,17 @@ export function createDerivedVoteTally(config: DerivedVoteTallyConfig): DerivedV
     };
     if (baselineType) record.baselineType = baselineType;
 
+    // A peer that answers with an error has *rejected* the write — that is a real
+    // failure and the caller must roll back. A timeout is not: `gunPut`'s ack
+    // proves only that some peer replied in time, and with a busy graph it
+    // routinely does not, even though the record is already in the local graph
+    // and queued for every peer. Throwing there discarded votes that had in fact
+    // been cast. Treat it as unconfirmed instead: report the vote, and mark the
+    // tally non-authoritative so callers keep their optimistic counts rather
+    // than rendering a number the relay has not agreed to yet.
     const ack = await gunPut(votesNode(contentId).get(userId), record);
-    if (!ack.ok) throw new Error(ack.err || 'Vote could not be recorded');
+    if (!ack.ok && ack.err !== 'timeout') throw new Error(ack.err || 'Vote could not be recorded');
+    const confirmed = ack.ok;
 
     const children = await gunReadChildren<any>(votesNode(contentId), { minMs: 300, maxMs: 4_000 });
     const folded = new Map(children.map(({ key, value }) => [key, value]));
@@ -229,9 +248,10 @@ export function createDerivedVoteTally(config: DerivedVoteTallyConfig): DerivedV
       [...folded.values()].map((value) => ({ vote: parseVote(value), baselineType: parseBaselineType(value) })),
     );
 
-    // Advisory mirror, skipped when the baseline is unknown: it would be a low
-    // number that every other client then renders until its own tally lands.
-    if (baseline && mirrorNodes) {
+    // Advisory mirror, skipped when the baseline is unknown or the write is
+    // unconfirmed: it would be a low number that every other client then
+    // renders until its own tally lands.
+    if (baseline && confirmed && mirrorNodes) {
       void (async () => {
         for (const node of await mirrorNodes(contentId)) {
           void gunPut(node, {
@@ -243,7 +263,12 @@ export function createDerivedVoteTally(config: DerivedVoteTallyConfig): DerivedV
       })().catch(() => { /* hint only */ });
     }
 
-    return { tally, myVote: next === 'none' ? null : next, tallyAuthoritative: Boolean(baseline) };
+    return {
+      tally,
+      myVote: next === 'none' ? null : next,
+      tallyAuthoritative: Boolean(baseline) && confirmed,
+      confirmed,
+    };
   }
 
   return {
