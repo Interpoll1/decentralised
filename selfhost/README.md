@@ -61,7 +61,8 @@ setting any of them.
 | `RELAY_TTL_HOURS` | `24` | How long content lives. `0` = keep forever |
 | `EPHEMERAL` | `0` | `1` = memory only; nothing is written to disk, a restart is a clean slate |
 | `DATA_DIR` | `selfhost/data` | Where the graph and its index live |
-| `REQUIRE_POW` | `1` | Verify the client's proof-of-work seal on votes. `0` for slow phones on a LAN |
+| `REQUIRE_POW` | `1` | Require the vote's proof-of-work. `0` for slow phones on a LAN — the signature is still verified either way |
+| `ALLOWED_ORIGINS` | _(empty)_ | Extra origins allowed to call the API from a browser. Same-origin, localhost and your LAN already work |
 | `REQUIRE_AUTH` | `0` | Leave it off — there are no accounts here to authenticate against |
 
 For the full client, build-time settings live in `selfhost/.env.full` (copy it
@@ -89,6 +90,19 @@ any peer that still holds a copy. That is the honest limit of a replicated
 graph: if you federated with other relays (`VITE_GUN_PEERS`), bytes already
 copied to their disks are theirs, not yours. A default instance federates with
 nobody, so expiry is complete.
+
+## Who can write to it
+
+There are no accounts, so **reaching the port is the permission**. Anyone who
+can open the address can create polls and vote. That is the point at an event
+and a problem on an untrusted network, so:
+
+- Bind it to yourself with `HOST=127.0.0.1` when you do not want the LAN in.
+- Web pages you visit cannot reach it: the relay refuses cross-origin writes
+  and only answers browsers from itself, localhost and private-network
+  addresses (add more with `ALLOWED_ORIGINS`).
+- Votes carry a signature the relay checks, so a tally cannot be forged by
+  replaying someone else's vote even though nobody signed in.
 
 ## Not included, on purpose
 

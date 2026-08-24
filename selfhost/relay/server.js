@@ -73,8 +73,38 @@ graph.attach(gun);
  * only workable policy here, and the relay holds no cookies or credentials that
  * a hostile origin could ride on.
  */
-function setCors(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+/**
+ * Is this Origin allowed to talk to the API cross-origin?
+ *
+ * Reflecting whatever Origin asks would hand any page on the open web read and
+ * write access to the instance on the operator's laptop the moment they visit
+ * it — there are no accounts here, so reaching the port *is* the authorisation.
+ * Same-origin, loopback and private-network origins (the LAN this is meant to
+ * serve) are allowed; anything else has to be named in ALLOWED_ORIGINS.
+ */
+function originAllowed(req) {
+  const origin = req.headers.origin;
+  if (!origin) return true;  // not a browser cross-origin request
+  if (config.allowedOrigins.includes(origin)) return true;
+
+  let host;
+  try { host = new URL(origin).hostname; } catch { return false; }
+
+  if (host === req.headers.host?.split(':')[0]) return true;  // same host
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return true;
+  // RFC1918 / link-local: the wifi this instance exists to serve.
+  return /^10\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+    /^169\.254\./.test(host);
+}
+
+function setCors(req, res, allowed) {
+  if (allowed && req.headers.origin) {
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
+  } else if (!req.headers.origin) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
   res.setHeader('Vary', 'Origin');
@@ -128,7 +158,8 @@ function serveStatic(req, res, pathname) {
 
 const server = http.createServer(async (req, res) => {
   setSecurityHeaders(res);
-  setCors(req, res);
+  const allowed = originAllowed(req);
+  setCors(req, res, allowed);
   // The CSP from setSecurityHeaders is written for an API host; the client we
   // serve needs its own inline styles and blob workers.
   //
@@ -158,6 +189,12 @@ const server = http.createServer(async (req, res) => {
   // The rate limiter guards the API, not the static client. A single load of
   // the full Vue app pulls ~110 files at once, which trips any sane per-IP API
   // budget and hands the browser a 429 in place of a stylesheet.
+  if (!allowed && req.method !== 'GET' && req.method !== 'HEAD') {
+    res.writeHead(403, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'origin_not_allowed' }));
+    return;
+  }
+
   const isApiPath = url.pathname.startsWith('/api/') ||
     url.pathname.startsWith('/db/') ||
     url.pathname.startsWith('/auth/');

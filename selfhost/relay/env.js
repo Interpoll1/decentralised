@@ -78,6 +78,17 @@ const config = {
    */
   requirePow: bool('REQUIRE_POW', true),
 
+  /**
+   * Origins allowed to make cross-origin API calls. Empty (the default) means
+   * only same-origin and local development origins — a page on the open web
+   * must not be able to read or write the instance running on someone's
+   * laptop just because they happened to visit it.
+   */
+  allowedOrigins: (process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean),
+
   /** Per-IP request budget (see rate-limiter.js). */
   httpRateLimit: num('HTTP_RATE_LIMIT', 120),
   wsRateLimit: num('WS_RATE_LIMIT', 240),

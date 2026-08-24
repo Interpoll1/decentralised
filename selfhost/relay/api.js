@@ -86,9 +86,39 @@ function readBody(req, maxBytes = config.maxBodyBytes) {
  * when the payload is acceptable, or a reason string when it is not.
  */
 function checkSeal(payload, messageType) {
-  if (!config.requirePow) return null;
   const result = verifyRelayRequestIntegrity(payload, messageType);
-  return result.valid ? null : result.reason;
+  if (result.valid) return null;
+  // REQUIRE_POW=0 forgives the *work factor* and nothing else. Skipping the
+  // whole check would also skip the signature, so anyone could post a vote in
+  // someone else's name — the opposite of what a "make it cheaper on slow
+  // phones" switch should mean.
+  if (!config.requirePow && result.reason === 'proof-of-work verification failed') return null;
+  return result.reason;
+}
+
+/**
+ * Roots `/db/write` will accept. The route exists for one job — the client
+ * pushing poll tallies it just wrote (see PollDetailPage.vue) — and it carries
+ * no signature, so an open version of it lets anyone who can reach the port
+ * rewrite any node in the graph, instance config included.
+ */
+const WRITABLE_ROOTS = [
+  `${NS}/polls/`,
+  `${NS}/communities/`,
+  `${NS}/posts/`,
+  `${NS}/comments/`,
+  `${NS}/pollVotes/`,
+  `${NS}/postVotes/`,
+  `${NS}/commentVotes/`,
+  `${NS}/events/`,
+  `${NS}/chatrooms/`,
+  `${NS}/chats/`,
+  `${NS}/chat-presence/`,
+  `${NS}/chat-read/`,
+];
+
+function isWritableSoul(soul) {
+  return WRITABLE_ROOTS.some(root => soul.startsWith(root));
 }
 
 function issueReservation(pollId, deviceId) {
@@ -452,6 +482,9 @@ export async function handleApi(req, res, url, ctx) {
     const soul = sanitizeSoul(body.soul || '');
     if (!soul || !body.data || typeof body.data !== 'object') {
       return json(res, 400, { ok: false, reason: 'soul and data are required' }), true;
+    }
+    if (!isWritableSoul(soul)) {
+      return json(res, 403, { ok: false, reason: 'soul is not writable over /db/write' }), true;
     }
     graph.writeSoul(soul, body.data);
     json(res, 200, { ok: true });
