@@ -74,29 +74,42 @@ graph.attach(gun);
  * a hostile origin could ride on.
  */
 /**
+ * Vite's dev server, the one origin that legitimately needs cross-origin access
+ * out of the box (`selfhost/run.sh` serves the app on 5173 and the API here).
+ */
+const DEV_ORIGINS = new Set([
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+]);
+
+/**
  * Is this Origin allowed to talk to the API cross-origin?
  *
- * Reflecting whatever Origin asks would hand any page on the open web read and
- * write access to the instance on the operator's laptop the moment they visit
- * it — there are no accounts here, so reaching the port *is* the authorisation.
- * Same-origin, loopback and private-network origins (the LAN this is meant to
- * serve) are allowed; anything else has to be named in ALLOWED_ORIGINS.
+ * There are no accounts here, so reaching the instance *is* the authorisation:
+ * an ACAO header handed to the wrong page gives it everything. The bar is
+ * therefore an exact origin match, not a hostname one — `http://box:9999` is a
+ * different application from `http://box:8080` even though the host is shared,
+ * and a page served from anywhere on the LAN is not this instance.
+ *
+ * Being strict costs nothing: the clients this relay serves are same-origin by
+ * construction, so the only callers that need listing are a separate front-end
+ * (ALLOWED_ORIGINS) and the dev server above.
  */
 function originAllowed(req) {
   const origin = req.headers.origin;
   if (!origin) return true;  // not a browser cross-origin request
   if (config.allowedOrigins.includes(origin)) return true;
+  if (DEV_ORIGINS.has(origin)) return true;
 
-  let host;
-  try { host = new URL(origin).hostname; } catch { return false; }
-
-  if (host === req.headers.host?.split(':')[0]) return true;  // same host
-  if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return true;
-  // RFC1918 / link-local: the wifi this instance exists to serve.
-  return /^10\./.test(host) ||
-    /^192\.168\./.test(host) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
-    /^169\.254\./.test(host);
+  // Same origin: compare host *and* port, which is what the Host header is.
+  let originHost;
+  try {
+    const parsed = new URL(origin);
+    originHost = parsed.host;  // host:port, port included only when non-default
+  } catch {
+    return false;
+  }
+  return Boolean(req.headers.host) && originHost === req.headers.host;
 }
 
 function setCors(req, res, allowed) {
