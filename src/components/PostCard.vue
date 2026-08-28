@@ -1,613 +1,179 @@
-<!-- PostCard.vue -->
 <template>
-  <article class="post-card" v-if="post">
-    <div v-if="flagged && filterAction === 'blur' && !revealed" class="flagged-overlay" @click.stop="revealed = true">
+  <article class="post-card" :class="{ 'post-card--flagged': flagged && filterAction === 'blur' && !revealed }">
+
+    <!-- Flagged overlay -->
+    <div v-if="flagged && filterAction === 'blur' && !revealed" class="post-flagged-overlay" @click.stop="revealed = true">
       <ion-icon :icon="warningOutline"></ion-icon>
-      <span>Content hidden by word filter — tap to reveal</span>
+      <span>Post hidden by word filter — tap to reveal</span>
     </div>
 
-    <div class="post-body" @click="handleCardClick" :class="{ 'content-blurred': flagged && filterAction === 'blur' && !revealed }">
+    <div class="post-inner" @click="$emit('click')" :class="{ 'content-blurred': flagged && filterAction === 'blur' && !revealed }">
+
+      <!-- ── Header ───────────────────────────────── -->
       <div class="post-header">
-        <div class="post-meta">
-          <!-- Avatar beside username -->
-          <div class="author-avatar" :title="'u/' + authorDisplayName">
-            {{ authorInitial }}
+        <div class="post-header-meta">
+          <div class="post-avatar" :title="'u/' + authorDisplayName">{{ authorInitial }}</div>
+          <div class="post-meta-text">
+            <div class="post-meta-row">
+              <span class="post-author">u/{{ authorDisplayName }}</span>
+              <span class="post-identity-badge" :class="authorIdentityClass">{{ authorIdentityLabel }}</span>
+              <span class="post-sep">·</span>
+              <span class="post-time">{{ formatTime(post.createdAt) }}</span>
+            </div>
+            <div class="post-meta-row post-meta-row--sub">
+              <span v-if="communityName" class="post-community">
+                <ion-icon :icon="peopleOutline" style="font-size:11px"></ion-icon>
+                {{ communityName }}
+              </span>
+              <!-- Relay attribution -->
+              <span v-if="relayLabel" class="post-relay-attr">
+                <svg viewBox="0 0 24 24" fill="none" width="9" height="9">
+                  <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/>
+                  <path d="M12 2a10 10 0 100 20A10 10 0 0012 2z" stroke="currentColor" stroke-width="1.8"/>
+                  <path d="M2 12h20M12 2c-3 3-4.5 6.5-4.5 10S9 19 12 22c3-3 4.5-6.5 4.5-10S15 5 12 2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                </svg>
+                {{ relayLabel }}
+              </span>
+              <!-- Time-lock indicator -->
+              <span v-if="isTimeLocked" class="post-timelock-badge">
+                <svg viewBox="0 0 24 24" fill="none" width="10" height="10">
+                  <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="1.8"/>
+                  <path d="M7 11V7a5 5 0 0110 0v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+                locked
+              </span>
+            </div>
           </div>
-          <span class="community-name">{{ communityName }}</span>
-          <span class="separator">·</span>
-          <span class="author-wrap">
-            <span class="author">u/{{ authorDisplayName }}</span>
-            <button
-              v-if="canInviteAuthor"
-              class="invite-chat-btn"
-              type="button"
-              @click.stop="handleInviteToChat"
-            >
-              Invite to chat
-            </button>
-          </span>
-          <span class="identity-badge" :class="authorIdentityClass">
-            {{ authorIdentityLabel }}
-          </span>
-          <span class="separator">·</span>
-          <span class="timestamp">{{ formatTime(post.createdAt) }}</span>
-          <span v-if="flagged && filterAction === 'flag'" class="flag-badge" title="Flagged by word filter">
-            <ion-icon :icon="warningOutline"></ion-icon>
-          </span>
         </div>
+        <span v-if="flagged && filterAction === 'flag'" class="post-flag-dot">
+          <ion-icon :icon="warningOutline"></ion-icon>
+        </span>
       </div>
 
+      <!-- ── Content ──────────────────────────────── -->
       <h3 class="post-title">{{ post.title }}</h3>
 
-      <p v-if="post.content" class="post-content" v-html="autoLink(truncatedContent)"></p>
+      <div v-if="post.content" class="post-excerpt">
+        {{ truncated ? truncateText(post.content, 200) : post.content }}
+        <button v-if="post.content.length > 200" class="post-read-more" @click.stop="truncated = !truncated">
+          {{ truncated ? 'Read more' : 'Show less' }}
+        </button>
+      </div>
 
-      <div v-if="post.imageThumbnail || post.imageIPFS" class="post-image" @click.stop="openLightbox">
+      <!-- Media preview -->
+      <div v-if="post.mediaUrl" class="post-media">
         <img
-          :src="post.imageThumbnail || getIPFSUrl(post.imageIPFS)"
+          v-if="isImageUrl(post.mediaUrl)"
+          :src="post.mediaUrl"
           :alt="post.title"
+          class="post-media-img"
           loading="lazy"
+          @click.stop
         />
-        <div class="image-expand-hint">
-          <ion-icon :icon="expandOutline"></ion-icon>
-        </div>
+        <VideoPlayer v-else :src="post.mediaUrl" class="post-media-video" />
       </div>
 
-      <!-- Video attachment -->
-      <div v-if="post.videoCID" class="post-video" @click.stop>
-        <!--
-          Skeleton: visible immediately from post data, zero network cost.
-          Clicking it lazy-mounts VideoPlayer which then takes over.
-        -->
-        <div v-if="!videoPlayerMounted" class="post-video-skeleton" @click="videoPlayerMounted = true">
-          <div class="post-video-skeleton__play">
-            <svg viewBox="0 0 48 48" fill="none">
-              <circle cx="24" cy="24" r="24" fill="rgba(0,0,0,0.55)"/>
-              <polygon points="19,14 37,24 19,34" fill="#fff"/>
-            </svg>
-          </div>
-          <div class="post-video-skeleton__meta">
-            <svg viewBox="0 0 24 24" fill="currentColor" class="post-video-skeleton__cam-icon">
-              <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
-            </svg>
-            <span>{{ post.videoDuration ? formatDuration(post.videoDuration) : 'Video' }}</span>
-          </div>
-        </div>
-        <VideoPlayer
-          v-if="videoPlayerMounted"
-          :cid="post.videoCID"
-          :thumbnail-url="post.videoThumbnailCID ? getIPFSUrl(post.videoThumbnailCID) : null"
-          :duration="post.videoDuration"
-          :file-size="post.videoSize"
-          :mime-type="post.videoMimeType"
-          :compact="true"
-        />
+      <!-- ── Nostr event ID strip ─────────────────── -->
+      <div v-if="nostrEventId" class="post-nostr-strip" @click.stop>
+        <svg class="post-nostr-icon" viewBox="0 0 24 24" fill="none" width="12" height="12">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <code class="post-nostr-id">{{ shortenNostrId(nostrEventId) }}</code>
+        <button class="post-nostr-open" @click.stop="openNostr" title="Open in Nostr client">↗</button>
+        <button class="post-nostr-copy" @click.stop="copyNostrId" :title="nostrCopied ? 'Copied!' : 'Copy event ID'">
+          <svg v-if="!nostrCopied" viewBox="0 0 24 24" fill="none" width="11" height="11">
+            <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="1.8"/>
+          </svg>
+          <svg v-else viewBox="0 0 24 24" fill="none" width="11" height="11">
+            <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
       </div>
 
-      <!-- Image lightbox -->
-      <teleport to="body">
-        <div v-if="lightboxOpen" class="lightbox-overlay" @click="lightboxOpen = false">
-          <button class="lightbox-close" @click.stop="lightboxOpen = false" title="Close">
-            <ion-icon :icon="closeOutline"></ion-icon>
-          </button>
-          <img
-            class="lightbox-img"
-            :src="post.imageThumbnail || getIPFSUrl(post.imageIPFS)"
-            :alt="post.title"
-            @click.stop
-          />
-        </div>
-      </teleport>
-
+      <!-- ── Footer ───────────────────────────────── -->
       <div class="post-footer" @click.stop>
-        <div class="post-stats">
-          <button class="stat-icon-btn heart" @click="handleUpvote" :class="{ active: hasUpvoted }" title="Like">
-            <ion-icon :icon="hasUpvoted ? heart : heartOutline"></ion-icon>
-            <span>{{ formatNumber(post.upvotes) }}</span>
+
+        <div class="post-actions">
+          <!-- Like (heart) -->
+          <button
+            class="post-action-btn post-action-btn--heart"
+            :class="{ active: hasUpvoted }"
+            @click.stop="$emit('upvote')"
+            :aria-label="hasUpvoted ? 'Unlike' : 'Like'"
+          >
+            <ion-icon :icon="hasUpvoted ? heart : heartOutline" style="font-size:15px"></ion-icon>
+            <span>{{ post.upvotes || 0 }}</span>
           </button>
 
-          <!-- YouTube-style rotated thumbs down -->
-          <button class="stat-icon-btn downvote" @click="handleDownvote" :class="{ active: hasDownvoted }" title="Downvote">
-            <svg class="thumb-down-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Downvote -->
+          <button
+            class="post-action-btn post-action-btn--down"
+            :class="{ active: hasDownvoted }"
+            @click.stop="$emit('downvote')"
+            :aria-label="hasDownvoted ? 'Remove downvote' : 'Downvote'"
+          >
+            <svg class="thumb-down-icon" viewBox="0 0 24 24" fill="none" width="14" height="14">
               <path d="M15 3H6C5.17 3 4.46 3.5 4.16 4.22l-3.02 7.05C1.05 11.5 1 11.74 1 12v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.59-6.59c.36-.36.58-.86.58-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z" fill="currentColor"/>
             </svg>
-            <span>{{ formatNumber(post.downvotes) }}</span>
+            <span>{{ post.downvotes || 0 }}</span>
           </button>
 
-          <!-- Comments — navigates to post + scrolls to comments -->
-          <button class="stat-icon-btn comments" @click="handleCommentsClick" title="Comments">
-            <ion-icon :icon="chatbubbleOutline"></ion-icon>
-            <span>{{ formatNumber(post.commentCount) }}</span>
+          <!-- Comments -->
+          <button class="post-action-btn" @click.stop="$emit('comments')">
+            <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
+              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            </svg>
+            <span>{{ commentCount }}</span>
           </button>
 
-          <div class="stat-score">
-            <ion-icon :icon="trendingUpOutline"></ion-icon>
-            <span>{{ post.score }}</span>
-          </div>
-
-          <button
-            v-if="showModerationAction"
-            class="stat-icon-btn moderation-btn"
-            @click="handleModerationAction"
-            :title="moderationActionTitle"
-          >
-            <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
-          </button>
-
-          <!-- Curved-arrow share icon -->
-          <button class="stat-icon-btn share" @click="handleShare" title="Share this post">
-            <svg class="share-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Share -->
+          <button class="post-action-btn" @click.stop="handleShare" aria-label="Share post">
+            <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
               <path d="M21 12l-7-7v4C7 10 4 15 3 21c2.5-3.5 6-5.1 11-5.1V20l7-8z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
             </svg>
+            <span>Share</span>
           </button>
+
+          <!-- Nostr open (compact, in footer too) -->
+          <button v-if="nostrEventId" class="post-action-btn post-action-btn--nostr" @click.stop="openNostr" title="Open in Nostr">
+            <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+
+          <!-- Moderation -->
+          <ion-button
+            v-if="showModerationAction"
+            fill="clear" size="small" class="post-mod-btn"
+            :title="moderationActionTitle"
+            @click.stop="$emit('moderation-submit')"
+          >
+            <ion-icon slot="start" :icon="shieldCheckmarkOutline"></ion-icon>
+            Filter
+          </ion-button>
         </div>
+
       </div>
+
     </div>
   </article>
 </template>
 
-<style scoped>
-.post-card {
-  margin: 0 0 2px;
-  padding: 18px 20px 16px;
-  border-bottom: 1px solid var(--app-border);
-  cursor: pointer;
-}
-
-/* ── Header ──────────────────────────────────── */
-.post-header { margin-bottom: 10px; }
-
-.post-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--app-text-muted);
-  flex-wrap: wrap;
-}
-
-/* Avatar in header row */
-.author-avatar {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  box-shadow: 0 0 0 2px rgba(99,102,241,0.2);
-}
-
-.community-name {
-  color: var(--app-accent-bright);
-  font-weight: 700;
-  font-size: 12.5px;
-  letter-spacing: -0.01em;
-}
-
-.separator { color: rgba(255,255,255,0.2); font-size: 11px; margin: 0 1px; }
-
-.author {
-  color: var(--app-text);
-  font-weight: 600;
-  font-size: 13px;
-  letter-spacing: -0.01em;
-}
-
-.author-wrap {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.invite-chat-btn {
-  border: 1px solid rgba(var(--app-accent-rgb),0.24);
-  background: rgba(var(--app-accent-rgb),0.1);
-  color: var(--app-accent-bright);
-  border-radius: 999px;
-  padding: 2px 8px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-  opacity: 0;
-  transform: translateY(1px);
-  transition: opacity 160ms ease, transform 160ms ease;
-}
-.post-meta:hover .invite-chat-btn,
-.invite-chat-btn:focus-visible { opacity: 1; transform: translateY(0); }
-
-.identity-badge {
-  border-radius: 999px;
-  padding: 2px 8px;
-  font-size: 9.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  border: 1px solid rgba(255,255,255,0.08);
-}
-.identity-badge.unverified {
-  background: rgba(var(--ion-color-warning-rgb),0.12);
-  color: var(--ion-color-warning);
-}
-.identity-badge.trusted-issuer {
-  background: rgba(var(--ion-color-success-rgb),0.14);
-  color: var(--ion-color-success);
-}
-
-.timestamp { color: var(--app-text-subtle); font-size: 12px; }
-
-/* ── Title — editorial gradient style ────────── */
-.post-title {
-  margin: 0 0 8px;
-  font-size: 18px;
-  font-weight: 800;
-  line-height: 1.25;
-  letter-spacing: -0.03em;
-  background: linear-gradient(135deg, var(--app-text) 60%, rgba(167,139,250,0.85));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-fill-color: transparent;
-}
-
-.post-content {
-  margin: 0 0 12px;
-  font-size: 13.5px;
-  line-height: 1.65;
-  color: var(--app-text-muted);
-}
-
-/* Capped image height */
-.post-image {
-  margin: 0 0 14px;
-  border-radius: 12px;
-  overflow: hidden;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
-  max-height: 260px;
-  position: relative;
-  cursor: zoom-in;
-}
-.post-image img { width: 100%; height: 100%; display: block; object-fit: cover; max-height: 260px; transition: transform 300ms ease; }
-.post-image:hover img { transform: scale(1.015); }
-
-.image-expand-hint {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: rgba(0,0,0,0.55);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: 14px;
-  opacity: 0;
-  transform: scale(0.85);
-  transition: opacity 200ms ease, transform 200ms ease;
-  pointer-events: none;
-}
-.post-image:hover .image-expand-hint { opacity: 1; transform: scale(1); }
-
-/* ── Video attachment ────────────────────────── */
-.post-video {
-  margin: 0 0 14px;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-/* Skeleton — shown instantly, no network required */
-.post-video-skeleton {
-  position: relative;
-  aspect-ratio: 16 / 9;
-  max-height: clamp(220px, 35vw, 360px);
-  background: linear-gradient(135deg, #0f0f22 0%, #1a1a35 100%);
-  border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  overflow: hidden;
-}
-
-/* Subtle shimmer sweep */
-.post-video-skeleton::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    100deg,
-    transparent 20%,
-    rgba(255,255,255,0.04) 50%,
-    transparent 80%
-  );
-  background-size: 200% 100%;
-  animation: skeleton-sweep 2s linear infinite;
-}
-@keyframes skeleton-sweep {
-  from { background-position: 200% 0; }
-  to   { background-position: -200% 0; }
-}
-
-.post-video-skeleton:hover::after { animation-duration: 0.6s; }
-
-.post-video-skeleton__play {
-  width: 64px;
-  height: 64px;
-  flex-shrink: 0;
-  filter: drop-shadow(0 4px 16px rgba(0,0,0,0.7));
-  transition: transform 0.15s;
-  z-index: 1;
-}
-.post-video-skeleton:hover .post-video-skeleton__play { transform: scale(1.08); }
-.post-video-skeleton:hover .post-video-skeleton__play circle { fill: rgba(99,102,241,0.75); }
-
-/* Duration / label badge bottom-right */
-.post-video-skeleton__meta {
-  position: absolute;
-  bottom: 10px;
-  right: 10px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  background: rgba(0,0,0,0.72);
-  color: #fff;
-  font-size: 0.72rem;
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 5px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.03em;
-  z-index: 1;
-}
-.post-video-skeleton__cam-icon {
-  width: 13px;
-  height: 13px;
-  flex-shrink: 0;
-  opacity: 0.8;
-}
-
-/* ── Lightbox ──────────────────────────────── */
-.lightbox-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  background: rgba(0,0,0,0.92);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: zoom-out;
-  animation: lb-in 180ms ease;
-}
-@keyframes lb-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-.lightbox-img {
-  max-width: min(92vw, 1200px);
-  max-height: 90vh;
-  border-radius: 10px;
-  object-fit: contain;
-  box-shadow: 0 32px 80px rgba(0,0,0,0.6);
-  cursor: default;
-  animation: lb-img-in 220ms cubic-bezier(0.16,1,0.3,1);
-}
-@keyframes lb-img-in {
-  from { transform: scale(0.94); opacity: 0; }
-  to   { transform: scale(1);    opacity: 1; }
-}
-.lightbox-close {
-  position: fixed;
-  top: 18px;
-  right: 20px;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.1);
-  border: 1px solid rgba(255,255,255,0.15);
-  color: #fff;
-  font-size: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 160ms ease;
-  z-index: 10000;
-}
-.lightbox-close:hover { background: rgba(255,255,255,0.2); }
-
-/* ── Footer ──────────────────────────────────── */
-.post-footer {
-  margin-top: 4px;
-  padding-top: 10px;
-}
-
-.post-stats {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
-/* Flat icon buttons */
-.stat-icon-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 2px;
-  background: none;
-  border: none;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--app-text-muted);
-  cursor: pointer;
-  transition: color 160ms ease, transform 160ms ease;
-  -webkit-tap-highlight-color: transparent;
-}
-.stat-icon-btn ion-icon { font-size: 18px; }
-.stat-icon-btn:hover { color: var(--app-text); }
-.stat-icon-btn:active { transform: scale(0.94); }
-
-.stat-icon-btn.heart,
-.stat-icon-btn.heart ion-icon { color: #a78bfa; }
-.stat-icon-btn.heart.active,
-.stat-icon-btn.heart.active ion-icon { color: #c4b5fd; }
-
-.stat-icon-btn.comments,
-.stat-icon-btn.comments ion-icon { color: #fbbf24; }
-.stat-icon-btn.comments:hover,
-.stat-icon-btn.comments:hover ion-icon { color: #fcd34d; }
-
-/* YouTube-style thumb-down */
-.thumb-down-icon {
-  width: 18px;
-  height: 18px;
-  color: var(--app-text-muted);
-  transform: rotate(-20deg) scaleX(-1);
-  flex-shrink: 0;
-}
-.stat-icon-btn.downvote:hover .thumb-down-icon { color: var(--app-text); }
-.stat-icon-btn.downvote.active { color: #ef4444; }
-.stat-icon-btn.downvote.active .thumb-down-icon { color: #ef4444; }
-
-/* Reddit-style share icon */
-.share-icon {
-  width: 17px;
-  height: 17px;
-  color: currentColor;
-  flex-shrink: 0;
-}
-.stat-icon-btn.share { color: #34d399; }
-.stat-icon-btn.share:hover { color: #6ee7b7; }
-
-/* Moderation */
-.stat-icon-btn.moderation-btn { color: var(--ion-color-warning); }
-
-/* Score */
-.stat-score {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 13px;
-  font-weight: 700;
-  color: #818cf8;
-}
-.stat-score ion-icon { font-size: 15px; }
-
-/* ── Flagged overlay ─────────────────────────── */
-.flagged-overlay {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: rgba(var(--ion-color-warning-rgb),0.10);
-  border: 1px solid rgba(var(--ion-color-warning-rgb),0.25);
-  border-radius: 10px;
-  color: var(--ion-color-warning-shade);
-  font-size: 12.5px;
-  cursor: pointer;
-  margin-bottom: 10px;
-}
-.flagged-overlay ion-icon { font-size: 16px; flex-shrink: 0; }
-
-.content-blurred { filter: blur(6px); user-select: none; pointer-events: none; }
-
-.flag-badge { display: inline-flex; align-items: center; color: var(--ion-color-warning); margin-left: 2px; }
-.flag-badge ion-icon { font-size: 13px; }
-
-:focus-visible { box-shadow: var(--app-focus-ring); outline: none; }
-
-@media (max-width: 576px) {
-  .invite-chat-btn { opacity: 1; transform: translateY(0); pointer-events: auto; }
-  .post-card { padding: 14px 14px 12px; }
-  .post-title { font-size: 16px; }
-  .post-content { font-size: 13px; }
-  .post-stats { gap: 10px; }
-  .post-image { max-height: 200px; }
-  .post-image img { max-height: 200px; }
-}
-/* ── Video loading placeholder ─────────────── */
-.video-loading-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  border-radius: 12px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
-  color: var(--app-text-muted);
-  font-size: 13.5px;
-  font-weight: 500;
-}
-.video-loading-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: rgba(99,102,241,0.12);
-  border: 1px solid rgba(99,102,241,0.22);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  color: #818cf8;
-  animation: vl-pulse 1.6s ease-in-out infinite;
-}
-@keyframes vl-pulse {
-  0%, 100% { opacity: 0.6; transform: scale(0.97); }
-  50%       { opacity: 1;   transform: scale(1.03); }
-}
-</style>
-
 <script setup lang="ts">
-function autoLink(text: string): string {
-  if (!text) return '';
-  return text.replace(/(https?:\/\/[\w\-\.\/?#&=;%+~:@,]+[\w\/])/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
-}
-
-import { ref, computed, watch, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
-import { IonIcon, toastController } from '@ionic/vue';
-import VideoPlayer from './VideoPlayer.vue';
-import { formatDuration } from '../services/videoService';
-import {
-  chatbubbleOutline,
-  trendingUpOutline,
-  warningOutline,
-  shieldCheckmarkOutline,
-  heart,
-  heartOutline,
-  expandOutline,
-  closeOutline,
-} from 'ionicons/icons';
-import { Post } from '../services/postService';
+import { ref, computed, watch } from 'vue';
+import { IonIcon, IonButton } from '@ionic/vue';
+import { peopleOutline, warningOutline, shieldCheckmarkOutline, heart, heartOutline } from 'ionicons/icons';
+import { defineAsyncComponent } from 'vue';
+import type { Post } from '../services/postService';
 import type { FilterAction } from '../services/moderationService';
 import { generatePseudonym } from '../utils/pseudonym';
+import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 import { useUserStore } from '../stores/userStore';
 import type { UserProfile } from '../services/userService';
-import { UserService } from '../services/userService';
-import { ChatInviteService } from '../services/chatInviteService';
-import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 import { shareLink } from '../composables/useShare';
 
-const router = useRouter();
-const userStore = useUserStore();
-const authorProfile = ref<UserProfile | null>(null);
-let authorProfileRequestId = 0;
+const VideoPlayer = defineAsyncComponent(() => import('./VideoPlayer.vue'));
 
 const props = defineProps<{
   post: Post;
@@ -618,114 +184,271 @@ const props = defineProps<{
   filterAction?: FilterAction;
   showModerationAction?: boolean;
   moderationActionTitle?: string;
+  relayLabel?: string;
+  userTags?: string[];
 }>();
 
-const revealed = ref(false);
-const currentUserId = ref('');
-const lightboxOpen = ref(false);
-const videoPlayerMounted = ref(false);
+defineEmits(['click', 'upvote', 'downvote', 'comments', 'moderation-submit', 'tag-click']);
 
-function openLightbox() { lightboxOpen.value = true; }
+// ── State ──────────────────────────────────────────────────────────────────
+const revealed     = ref(false);
+const truncated    = ref(true);
+const nostrCopied  = ref(false);
 
-const emit = defineEmits(['upvote', 'downvote', 'moderation-submit']);
+const userStore     = useUserStore();
+const authorProfile = ref<UserProfile | null>(null);
+let profileRequestId = 0;
 
 watch(
   () => props.post.authorId,
-  async (authorId) => {
-    const requestId = ++authorProfileRequestId;
-    if (!authorId) { authorProfile.value = null; return; }
-    const profile = await userStore.getProfile(authorId);
-    if (requestId !== authorProfileRequestId) return;
-    authorProfile.value = profile;
+  async (id) => {
+    const reqId = ++profileRequestId;
+    if (!id) { authorProfile.value = null; return; }
+    const p = await userStore.getProfile(id);
+    if (reqId !== profileRequestId) return;
+    authorProfile.value = p;
   },
-  { immediate: true }
+  { immediate: true },
 );
 
-const currentAuthorProfile = computed(() =>
-  !props.post.authorId ? authorProfile.value : (userStore.profiles[props.post.authorId] || authorProfile.value)
-);
-
+// ── Computed ───────────────────────────────────────────────────────────────
 const authorDisplayName = computed(() => {
   if (props.post.authorShowRealName) return props.post.authorName || 'anon';
-  if (currentAuthorProfile.value?.customUsername) return currentAuthorProfile.value.customUsername;
-  if (currentAuthorProfile.value?.showRealName && currentAuthorProfile.value?.displayName) return currentAuthorProfile.value.displayName;
   if (props.post.authorId && props.post.id) return generatePseudonym(props.post.id, props.post.authorId);
   return props.post.authorName || 'anon';
 });
-
 const authorInitial = computed(() => (authorDisplayName.value || 'a').charAt(0).toUpperCase());
 
 const authorIdentityLabel = computed(() =>
-  currentAuthorProfile.value?.identityTrustLevel === 'trusted-issuer'
+  authorProfile.value?.identityTrustLevel === 'trusted-issuer'
     ? formatTrustedIdentityLabel({
-        username: currentAuthorProfile.value?.identityUsername || currentAuthorProfile.value?.customUsername || currentAuthorProfile.value?.username || props.post.authorName,
-        issuer: currentAuthorProfile.value?.identityIssuer,
+        username: authorProfile.value?.identityUsername || props.post.authorName,
+        issuer:   authorProfile.value?.identityIssuer,
       })
-    : 'Unverified identity'
+    : 'Unverified'
 );
-
 const authorIdentityClass = computed(() =>
-  currentAuthorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'
+  authorProfile.value?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'
 );
 
-const canInviteAuthor = computed(() =>
-  !!props.post.authorId && !!currentUserId.value && props.post.authorId !== currentUserId.value
-);
+const commentCount  = computed(() => (props.post as any).commentCount ?? 0);
 
-const truncatedContent = computed(() => {
-  const c = props.post.content || '';
-  return c.length <= 200 ? c : c.substring(0, 200) + '…';
+const displayTags = computed<string[]>(() => {
+  const raw = (props.post as any).tags ?? [];
+  const arr = Array.isArray(raw)
+    ? raw
+    : String(raw).split(',').map((t: string) => t.trim());
+  return arr.filter((t: string) => Boolean(t)).slice(0, 5);
 });
+const isTimeLocked  = computed(() => !!(props.post as any).resultsLockedUntil && (props.post as any).resultsLockedUntil > Date.now());
+const nostrEventId  = computed(() => (props.post as any).nostrEventId || (props.post as any).eventId || '');
 
-function handleCardClick() {
-  router.push(`/post/${props.post.id}`);
-}
-function handleUpvote(e: Event) { e.stopPropagation(); emit('upvote'); }
-function handleDownvote(e: Event) { e.stopPropagation(); emit('downvote'); }
-function handleCommentsClick(e: Event) {
-  e.stopPropagation();
-  router.push(`/post/${props.post.id}#comments`);
-}
-function handleModerationAction(e: Event) { e.stopPropagation(); emit('moderation-submit'); }
-function handleShare(e: Event) {
-  e.stopPropagation();
-  void shareLink(`/post/${props.post.id}`, props.post.title || 'InterPoll post', 'Check out this post on InterPoll');
-}
-
-async function handleInviteToChat() {
-  if (!canInviteAuthor.value) return;
-  try {
-    await ChatInviteService.sendInvite(props.post.authorId);
-    const t = await toastController.create({ message: `Chat invite sent to u/${authorDisplayName.value}`, duration: 2200, color: 'success' });
-    await t.present();
-  } catch {
-    const t = await toastController.create({ message: 'Failed to send chat invite', duration: 2200, color: 'danger' });
-    await t.present();
-  }
-}
-
-onMounted(async () => {
-  try { currentUserId.value = (await UserService.getCurrentUser()).id; } catch { currentUserId.value = ''; }
-});
-
+// ── Methods ────────────────────────────────────────────────────────────────
 function formatTime(ts: number): string {
   const diff = Date.now() - ts;
   const m = Math.floor(diff / 60000), h = Math.floor(diff / 3600000), d = Math.floor(diff / 86400000);
   if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
-  if (h < 24) return `${h}h ago`;
-  if (d < 7) return `${d}d ago`;
+  if (m < 60) return `${m}m`;
+  if (h < 24) return `${h}h`;
+  if (d < 7)  return `${d}d`;
   return new Date(ts).toLocaleDateString();
 }
 
-function formatNumber(n: number | undefined | null): string {
-  const v = n ?? 0;
-  if (v >= 1_000_000) return (v / 1_000_000).toFixed(1) + 'M';
-  if (v >= 1_000) return (v / 1_000).toFixed(1) + 'K';
-  return v.toString();
+function truncateText(text: string, max: number): string {
+  if (text.length <= max) return text;
+  return text.slice(0, max).trimEnd() + '…';
 }
 
-function getIPFSUrl(cid?: string): string {
-  return cid ? `https://ipfs.io/ipfs/${cid}` : '';
+function isImageUrl(url: string): boolean {
+  return /\.(jpg|jpeg|png|gif|webp|avif|svg)(\?|$)/i.test(url);
+}
+
+function shortenNostrId(id: string): string {
+  if (id.length > 20) return id.slice(0, 12) + '…' + id.slice(-6);
+  return id;
+}
+
+function openNostr() {
+  if (!nostrEventId.value) return;
+  window.open(`https://njump.me/${nostrEventId.value}`, '_blank', 'noopener');
+}
+
+async function copyNostrId() {
+  if (!nostrEventId.value) return;
+  await navigator.clipboard.writeText(nostrEventId.value).catch(() => {});
+  nostrCopied.value = true;
+  setTimeout(() => { nostrCopied.value = false; }, 2000);
+}
+
+function handleShare() {
+  const url = props.post.communityId
+    ? `/community/${props.post.communityId}/post/${props.post.id}`
+    : `/post/${props.post.id}`;
+  void shareLink(url, props.post.title || 'Interpoll post', 'Read this post on Interpoll');
 }
 </script>
+
+<style scoped>
+/* ── Card shell ─────────────────────────────────── */
+.post-card {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.post-card:hover { background: rgba(255,255,255,0.012); }
+.post-card--flagged { opacity: 0.7; }
+
+.post-inner { display: flex; flex-direction: column; gap: 10px; }
+.content-blurred { filter: blur(6px); user-select: none; pointer-events: none; }
+
+/* ── Flagged overlay ────────────────────────────── */
+.post-flagged-overlay {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px; margin-bottom: 6px;
+  background: rgba(var(--ion-color-warning-rgb), 0.08);
+  border: 1px solid rgba(var(--ion-color-warning-rgb), 0.2);
+  border-radius: 10px; color: var(--ion-color-warning);
+  font-size: 12.5px; cursor: pointer;
+}
+
+/* ── Header ─────────────────────────────────────── */
+.post-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.post-header-meta { display: flex; align-items: flex-start; gap: 10px; flex: 1; min-width: 0; }
+.post-avatar {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff; font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.post-meta-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.post-meta-row { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.post-meta-row--sub { gap: 4px; }
+.post-author { font-size: 12.5px; font-weight: 700; color: var(--app-text); }
+.post-time   { font-size: 11.5px; color: var(--app-text-subtle); }
+.post-sep    { color: rgba(255,255,255,0.15); font-size: 11px; }
+.post-community { display: flex; align-items: center; gap: 3px; font-size: 11px; color: var(--app-text-subtle); }
+
+.post-identity-badge {
+  font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
+  padding: 2px 6px; border-radius: 5px;
+}
+.post-identity-badge.unverified     { background: rgba(var(--ion-color-warning-rgb),0.08); color: var(--ion-color-warning); }
+.post-identity-badge.trusted-issuer { background: rgba(var(--ion-color-success-rgb),0.1);  color: var(--ion-color-success); }
+
+/* Relay attribution */
+.post-relay-attr {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 9.5px; font-weight: 600; color: var(--app-text-subtle);
+  padding: 1px 6px; border-radius: 5px;
+  background: rgba(255,255,255,0.04); border: 0.5px solid rgba(255,255,255,0.07);
+}
+
+/* Time-lock badge */
+.post-timelock-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: #fbbf24; padding: 1px 6px; border-radius: 5px;
+  background: rgba(251,191,36,0.08); border: 0.5px solid rgba(251,191,36,0.18);
+}
+
+.post-flag-dot { color: var(--ion-color-warning); flex-shrink: 0; }
+
+/* ── Content ─────────────────────────────────────── */
+.post-title {
+  margin: 0; font-size: 17px; font-weight: 800;
+  line-height: 1.28; letter-spacing: -0.025em;
+  color: var(--app-text);
+}
+.post-excerpt {
+  font-size: 13.5px; line-height: 1.6; color: var(--app-text-muted); margin: 0;
+}
+.post-read-more {
+  background: none; border: none; color: var(--app-accent-bright);
+  font-size: 13px; font-weight: 600; cursor: pointer; padding: 0 0 0 4px;
+}
+
+.post-media { border-radius: 10px; overflow: hidden; margin-top: 2px; }
+.post-media-img { width: 100%; max-height: 320px; object-fit: cover; display: block; }
+.post-media-video { width: 100%; }
+
+/* ── Nostr strip ─────────────────────────────────── */
+.post-nostr-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(167, 139, 250, 0.06);
+  border: 0.5px solid rgba(167, 139, 250, 0.16);
+  border-radius: 8px;
+  cursor: default;
+}
+.post-nostr-icon { color: #a78bfa; flex-shrink: 0; }
+.post-nostr-id {
+  flex: 1;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--app-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.post-nostr-open, .post-nostr-copy {
+  background: none; border: none;
+  color: var(--app-text-subtle); font-size: 11px; font-weight: 700;
+  cursor: pointer; padding: 2px 4px; border-radius: 4px;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+.post-nostr-open:hover { color: #a78bfa; }
+.post-nostr-copy:hover { color: var(--app-accent-bright); }
+
+/* ── Footer / actions ────────────────────────────── */
+.post-footer { display: flex; align-items: center; justify-content: space-between; }
+.post-actions { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+
+.post-action-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 11px; border-radius: 999px;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07);
+  font-size: 12px; font-weight: 600;
+  color: var(--app-text-muted); cursor: pointer;
+  transition: color 0.14s, background 0.14s;
+}
+.post-action-btn:hover { color: var(--app-text); background: rgba(255,255,255,0.08); }
+.post-action-btn svg { flex-shrink: 0; }
+
+.post-action-btn--heart             { color: var(--app-text-muted); }
+.post-action-btn--heart.active      { color: #f43f5e; }
+.post-action-btn--down              { color: var(--app-text-muted); }
+.post-action-btn--down.active       { color: #ef4444; }
+.post-action-btn--down .thumb-down-icon { color: currentColor; opacity: 0.55; }
+.post-action-btn--down.active .thumb-down-icon { opacity: 1; }
+.post-action-btn--down.active       { color: #f87171; }
+.post-action-btn--nostr             { color: #a78bfa; }
+.post-action-btn--nostr:hover       { color: #c4b5fd; background: rgba(167,139,250,0.08); }
+
+.post-mod-btn { --color: var(--ion-color-warning); font-size: 12px; }
+
+/* ── Tag chips ───────────────────────────────────── */
+.post-tag-chips {
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.post-tag-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 999px;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+  color: var(--app-text-muted); font-size: 11.5px; font-weight: 600;
+  cursor: pointer; transition: color 0.14s, background 0.14s, border-color 0.14s;
+}
+.post-tag-chip:hover { color: var(--app-text); background: rgba(255,255,255,0.07); }
+.post-tag-chip--highlight {
+  color: #fbbf24; border-color: rgba(251,191,36,0.28); background: rgba(251,191,36,0.08);
+}
+.post-tag-chip--highlight:hover { background: rgba(251,191,36,0.14); }
+
+@media (max-width: 576px) {
+  .post-card  { padding: 14px 12px 12px; }
+  .post-title { font-size: 15px; }
+}
+</style>

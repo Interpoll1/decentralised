@@ -1,5 +1,7 @@
 <template>
-  <nav class="side-nav surface-card">
+  <nav class="side-nav surface-card" :class="{ collapsed: isCollapsed }">
+
+    <!-- Brand -->
     <div class="side-nav-brand" @click="goHome()">
       <span class="side-nav-brand-mark" aria-hidden="true">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
@@ -10,67 +12,93 @@
       <span class="side-nav-brand-name">Interpoll</span>
     </div>
 
-    <!-- Primary nav tabs -->
-    <button
-      class="side-nav-item"
-      :class="{ active: activeTab === 'home' }"
-      @click="goTab('home')"
-    >
+    <!-- Collapse toggle -->
+    <button class="side-nav-collapse-btn" @click="isCollapsed = !isCollapsed" :title="isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'">
+      <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
+        <path v-if="!isCollapsed" d="M11 19l-7-7 7-7M18 19l-7-7 7-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <path v-else              d="M13 5l7 7-7 7M6 5l7 7-7 7"  stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span v-if="!isCollapsed">Collapse</span>
+    </button>
+
+    <!-- Primary nav -->
+    <button class="side-nav-item" :class="{ active: activeTab === 'home' }" @click="goTab('home')">
       <ion-icon :icon="activeTab === 'home' ? home : homeOutline"></ion-icon>
-      <span>Home</span>
+      <span>Feed</span>
     </button>
-    <button
-      class="side-nav-item"
-      :class="{ active: activeTab === 'communities' }"
-      @click="goTab('communities')"
-    >
+    <button class="side-nav-item" :class="{ active: activeTab === 'communities' }" @click="goTab('communities')">
       <ion-icon :icon="activeTab === 'communities' ? people : peopleOutline"></ion-icon>
-      <span>Communities</span>
+      <span>Spaces</span>
     </button>
-    <button
-      class="side-nav-item"
-      :class="{ active: activeTab === 'chat' }"
-      @click="goTab('chat')"
-    >
+    <button class="side-nav-item" :class="{ active: activeTab === 'chat' }" @click="goTab('chat')">
       <ion-icon :icon="activeTab === 'chat' ? chatbubble : chatbubbleOutline"></ion-icon>
-      <span>Chat</span>
+      <span>Messages</span>
     </button>
-    <button
-      class="side-nav-item"
-      :class="{ active: activeTab === 'create' }"
-      @click="goTab('create')"
-    >
+    <button class="side-nav-item" :class="{ active: activeTab === 'create' }" @click="goTab('create')">
       <ion-icon :icon="activeTab === 'create' ? addCircle : addCircleOutline"></ion-icon>
-      <span>Create</span>
+      <span>Publish</span>
     </button>
 
     <div class="side-nav-divider"></div>
 
-    <p class="side-nav-section-label">Categories</p>
-    <button
-      v-for="cat in feedCategories"
-      :key="cat.id"
-      class="side-nav-item side-nav-util side-nav-category"
-      :class="{ active: activeTab === 'home' && selectedCategory === cat.id }"
-      @click="goCategory(cat.id)"
-    >
-      <ion-icon :icon="cat.icon" :class="cat.tone"></ion-icon>
-      <span>{{ cat.label }}</span>
+    <!-- Browse scope -->
+    <p class="side-nav-section-label">Browse</p>
+    <button class="side-nav-item side-nav-util" :class="{ active: activeTab === 'home' && selectedScope === 'mine' }"  @click="goScope('mine')">
+      <svg class="nav-svg-icon" viewBox="0 0 24 24" fill="none" width="18" height="18">
+        <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>My Spaces</span>
     </button>
-    <button class="side-nav-item side-nav-util side-nav-category" @click="goCategory('all')">
-      <ion-icon :icon="ellipsisHorizontalOutline"></ion-icon>
-      <span>More</span>
+    <button class="side-nav-item side-nav-util" :class="{ active: activeTab === 'home' && selectedScope === 'relay' }" @click="goScope('relay')">
+      <svg class="nav-svg-icon" viewBox="0 0 24 24" fill="none" width="18" height="18">
+        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/>
+        <path d="M12 2a10 10 0 100 20A10 10 0 0012 2z" stroke="currentColor" stroke-width="1.8"/>
+        <path d="M2 12h20M12 2c-3 3-4.5 6.5-4.5 10S9 19 12 22c3-3 4.5-6.5 4.5-10S15 5 12 2z" stroke="currentColor" stroke-width="1.8"/>
+      </svg>
+      <span>This Relay</span>
+    </button>
+    <button class="side-nav-item side-nav-util" :class="{ active: activeTab === 'home' && selectedScope === 'explore' }" @click="goScope('explore')">
+      <svg class="nav-svg-icon" viewBox="0 0 24 24" fill="none" width="18" height="18">
+        <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="1.8"/>
+        <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+      <span>Explore</span>
     </button>
 
     <div class="side-nav-divider"></div>
 
+    <!-- Categories — collapsible -->
+    <button class="side-nav-section-toggle" @click="categoriesOpen = !categoriesOpen">
+      <p class="side-nav-section-label" style="margin:0">Categories</p>
+      <svg viewBox="0 0 24 24" fill="none" width="12" height="12" :style="categoriesOpen ? 'transform:rotate(180deg)' : ''">
+        <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+
+    <template v-if="categoriesOpen && !isCollapsed">
+      <button
+        v-for="cat in ALL_CATEGORIES"
+        :key="cat.id"
+        class="side-nav-category"
+        :class="{ active: selectedCategory === cat.id }"
+        @click="goCategory(cat.id)"
+        :title="cat.label"
+      >
+        <ion-icon :icon="cat.icon" :class="'tone-' + cat.id" style="font-size:15px;flex-shrink:0"></ion-icon>
+        <span>{{ cat.label }}</span>
+      </button>
+    </template>
+
+    <div class="side-nav-divider"></div>
+
+    <!-- Utility -->
     <button class="side-nav-item side-nav-util" @click="$router.push('/search')">
       <ion-icon :icon="searchOutline"></ion-icon>
       <span>Search</span>
     </button>
     <button class="side-nav-item side-nav-util" @click="$router.push('/profile')">
       <ion-icon :icon="personCircleOutline"></ion-icon>
-      <span>Profile</span>
+      <span>Identity</span>
     </button>
     <button class="side-nav-item side-nav-util" @click="$router.push('/settings')">
       <ion-icon :icon="settingsOutline"></ion-icon>
@@ -80,176 +108,131 @@
       <ion-icon :icon="cube"></ion-icon>
       <span>Chain Explorer</span>
     </button>
-    <button class="side-nav-item side-nav-util" @click="$router.push('/resilience')">
-      <ion-icon :icon="shieldOutline"></ion-icon>
-      <span>Resilience Center</span>
-    </button>
+
+    <div class="side-nav-divider"></div>
+
+    <!-- Relay indicator -->
+    <RelayIndicator @open="$emit('openRelaySheet')" />
   </nav>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue';
 import { IonIcon } from '@ionic/vue';
 import { useRouter } from 'vue-router';
 import {
   home, homeOutline, people, peopleOutline, chatbubble, chatbubbleOutline,
   addCircle, addCircleOutline, searchOutline, personCircleOutline, settingsOutline,
-  cube, shieldOutline, ellipsisHorizontalOutline,
-  codeSlashOutline, gameControllerOutline, flaskOutline, businessOutline, logoBitcoin, trophyOutline,
+  cube, tvOutline, musicalNotesOutline, starOutline, bookOutline, helpCircleOutline,
+  chatbubblesOutline, businessOutline, codeSlashOutline, flaskOutline, cashOutline,
+  heartOutline, trophyOutline, leafOutline, schoolOutline, logoBitcoin,
+  gameControllerOutline, happyOutline, megaphoneOutline, newspaperOutline,
 } from 'ionicons/icons';
+import RelayIndicator from './RelayIndicator.vue';
 
-const props = defineProps<{
-  /** Which primary tab is active. Pass 'home' | 'communities' | 'chat' | 'create' | '' */
-  activeTab?: string;
-  /** Currently selected feed category, only meaningful when activeTab === 'home' */
+defineProps<{
+  activeTab?:       string;
+  selectedScope?:   string;
   selectedCategory?: string;
 }>();
+defineEmits<{ openRelaySheet: [] }>();
 
 const router = useRouter();
 
-const feedCategories = [
-  { id: 'technology', label: 'Technology', icon: codeSlashOutline, tone: 'tone-technology' },
-  { id: 'gaming', label: 'Gaming', icon: gameControllerOutline, tone: 'tone-gaming' },
-  { id: 'science', label: 'Science', icon: flaskOutline, tone: 'tone-science' },
-  { id: 'politics', label: 'Politics', icon: businessOutline, tone: 'tone-politics' },
-  { id: 'crypto', label: 'Crypto', icon: logoBitcoin, tone: 'tone-crypto' },
-  { id: 'sports', label: 'Sports', icon: trophyOutline, tone: 'tone-sports' },
-] as const;
+// Sidebar collapse — default open on desktop, closed on tablet
+const isCollapsed    = ref(window.innerWidth < 900);
+const categoriesOpen = ref(true);
 
-function goHome() {
-  router.push('/home');
+function goHome()            { router.push('/home'); }
+function goTab(tab: string)  { router.push({ path: '/home', query: { tab } }); }
+function goScope(scope: string) {
+  localStorage.setItem('interpoll_feed_scope', scope);
+  router.push({ path: '/home', query: { tab: 'home', scope } });
 }
-
-function goTab(tab: string) {
-  router.push({ path: '/home', query: { tab } });
-}
-
 function goCategory(id: string) {
   router.push({ path: '/home', query: { tab: 'home', category: id } });
 }
+
+// ── Updated category list matching new schema ──────────────────────────────
+const ALL_CATEGORIES = [
+  { id: 'politics',     label: 'Politics',     icon: businessOutline },
+  { id: 'technology',   label: 'Technology',   icon: codeSlashOutline },
+  { id: 'science',      label: 'Science',      icon: flaskOutline },
+  { id: 'finance',      label: 'Finance',      icon: cashOutline },
+  { id: 'health',       label: 'Health',       icon: heartOutline },
+  { id: 'sports',       label: 'Sports',       icon: trophyOutline },
+  { id: 'environment',  label: 'Environment',  icon: leafOutline },
+  { id: 'education',    label: 'Education',    icon: schoolOutline },
+  { id: 'crypto',       label: 'Crypto',       icon: logoBitcoin },
+  { id: 'gaming',       label: 'Gaming',       icon: gameControllerOutline },
+  { id: 'opinion',      label: 'Opinion',      icon: chatbubblesOutline },
+  { id: 'humour',       label: 'Humour',       icon: happyOutline },
+  { id: 'movies-tv',    label: 'Movies & TV',  icon: tvOutline },
+  { id: 'music',        label: 'Music',        icon: musicalNotesOutline },
+  { id: 'celebrity',    label: 'Celebrity',    icon: starOutline },
+  { id: 'story',        label: 'Story',        icon: bookOutline },
+  { id: 'ask',          label: 'Ask',          icon: helpCircleOutline },
+  { id: 'discussion',   label: 'Discussion',   icon: megaphoneOutline },
+  { id: 'news',         label: 'News',         icon: newspaperOutline },
+];
 </script>
 
 <style scoped>
-.side-nav {
-  display: none;
+/* ── All layout handled by HomePage.css side-nav classes ── */
+/* Component-scoped additions only */
+
+.side-nav-section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 14px 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+}
+.side-nav-section-toggle svg { color: var(--app-text-subtle); transition: transform 0.2s; flex-shrink: 0; }
+
+.side-nav-collapse-btn {
+  display: none; /* shown only at ≥768px via HomePage.css */
 }
 
-.side-nav-divider {
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
-  margin: 8px 12px;
-  border-radius: 1px;
-}
+.nav-svg-icon { flex-shrink: 0; color: currentColor; }
 
 @media (min-width: 768px) {
-  .side-nav {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    width: 220px;
-    flex-shrink: 0;
-    position: sticky;
-    top: 24px;
-    padding: 16px 12px 20px;
-    max-height: calc(100vh - 48px);
-    overflow-y: auto;
-  }
-
-  .side-nav-brand {
+  .side-nav-collapse-btn {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 6px 12px 14px;
-    cursor: pointer;
-    user-select: none;
-  }
-  .side-nav-brand-mark {
-    width: 32px;
-    height: 32px;
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #a5b4fc;
-    background: linear-gradient(145deg, rgba(94, 106, 210, 0.28), rgba(139, 92, 246, 0.18));
-    border: 1px solid rgba(124, 140, 255, 0.35);
-    box-shadow: 0 8px 20px rgba(94, 106, 210, 0.2);
-  }
-  .side-nav-brand-name {
-    font-size: 17px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    color: var(--app-text);
-  }
-
-  .side-nav-section-label {
-    margin: 10px 14px 6px;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--app-text-subtle);
-  }
-
-  .side-nav-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+    gap: 6px;
     background: none;
     border: none;
-    padding: 10px 14px;
-    border-radius: 12px;
-    font-size: 15px;
-    font-weight: 500;
-    color: var(--app-text-muted);
-    cursor: pointer;
-    transition: var(--app-transition);
-    text-align: left;
-    width: 100%;
-    position: relative;
-  }
-  .side-nav-item ion-icon { font-size: 20px; flex-shrink: 0; }
-
-  .side-nav-item:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: var(--app-text);
-  }
-
-  .side-nav-item.active {
-    background: rgba(var(--app-accent-rgb), 0.14);
-    border: 1px solid rgba(var(--app-accent-rgb), 0.28);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 12px 24px rgba(var(--app-accent-rgb), 0.12);
-    color: var(--app-accent-bright);
+    color: var(--app-text-subtle);
+    font-size: 11px;
     font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    padding: 4px 14px 8px;
+    transition: color 0.15s;
+    width: 100%;
   }
+  .side-nav-collapse-btn:hover { color: var(--app-text); }
 
-  .side-nav-util {
-    font-size: 14px;
-    padding: 8px 14px;
-  }
-  .side-nav-util ion-icon {
-    font-size: 18px;
-  }
-  .side-nav-category.active {
-    background: transparent;
-    border: none;
-    box-shadow: none;
-    color: var(--app-text);
-    font-weight: 600;
-  }
+  /* Collapsed: hide text labels, section labels, dividers */
+  .side-nav.collapsed .side-nav-brand-name,
+  .side-nav.collapsed .side-nav-item > span,
+  .side-nav.collapsed .side-nav-util > span,
+  .side-nav.collapsed .side-nav-section-label,
+  .side-nav.collapsed .side-nav-section-toggle p,
+  .side-nav.collapsed .side-nav-section-toggle svg,
+  .side-nav.collapsed .side-nav-category,
+  .side-nav.collapsed .side-nav-divider,
+  .side-nav.collapsed .side-nav-collapse-btn span { display: none; }
 
-  .tone-technology { color: #a78bfa; }
-  .tone-gaming     { color: #4ade80; }
-  .tone-science    { color: #38bdf8; }
-  .tone-politics   { color: #fb7185; }
-  .tone-crypto     { color: #fbbf24; }
-  .tone-sports     { color: #2dd4bf; }
-}
-
-@media (min-width: 1024px) {
-  .side-nav { width: 220px; }
-}
-
-@media (min-width: 1280px) {
-  .side-nav { width: 240px; }
+  .side-nav.collapsed { width: 58px; padding: 16px 6px 20px; }
+  .side-nav.collapsed .side-nav-brand  { justify-content: center; padding: 6px 4px 14px; }
+  .side-nav.collapsed .side-nav-item,
+  .side-nav.collapsed .side-nav-util   { justify-content: center; padding: 10px; }
+  .side-nav.collapsed .side-nav-collapse-btn { justify-content: center; padding: 4px; }
 }
 </style>

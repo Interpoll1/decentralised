@@ -192,15 +192,8 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
         n.close();
       };
     }
-    const toast = await toastController.create({
-      message: `💬 <strong>${senderName}</strong>: ${preview}`,
-      duration: 5000, position: 'top', cssClass: 'chat-incoming-toast',
-      buttons: [
-        { text: 'Reply', handler: () => { void router.push({ name: 'Chat', params: { userId: fromUserId }, query: { name: senderName } }); } },
-        { icon: 'close', role: 'cancel' },
-      ],
-    });
-    await toast.present();
+    // In-app toast suppressed — native Notification (above) handles foreground alerts.
+    // The raw HTML message with <strong> tags was leaking into the UI as escaped markup.
   }
 
   async function initBackgroundChat(activeTabRef: { value: string }) {

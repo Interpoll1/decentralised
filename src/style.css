@@ -168,7 +168,7 @@ body.dark {
   --app-bg-deep: #0c0d14;
   --app-bg-base: #0e0f1a;
   --app-bg-elevated: #13152a;
-  --app-surface: rgba(22, 24, 30, 0.66);
+  --app-surface: rgba(22, 24, 30, 0.45);
   --app-surface-strong: rgba(30, 32, 40, 0.80);
   --app-surface-hover: rgba(38, 41, 50, 0.86);
   --app-border: rgba(255, 255, 255, 0.08);
@@ -818,8 +818,6 @@ ion-modal::part(backdrop) {
 .poll-card:hover,
 .post-card:hover {
   background: var(--app-item-surface);
-  border-radius: 12px;
-  /* skip backdrop-filter on hover — causes GPU layer promotion on every card */
 }
 
 .poll-footer { border-top-color: var(--app-border); }
@@ -924,3 +922,23 @@ p {
 .chat-incoming-toast::part(message) { font-size: 14px; line-height: 1.4; }
 .chat-incoming-toast::part(button) { font-weight: 700; font-size: 13px; color: #818cf8; }
 .chat-incoming-toast::part(container) { border-left: 3px solid #6366f1; }
+
+/* ── Mobile: strip card boxes on feed, flush divider rows ── */
+@media (max-width: 767px) {
+  /* Only strip glass from feed cards — not from all surface-cards globally */
+  .poll-card,
+  .post-card {
+    border-radius: 0 !important;
+    border-top: none !important;
+    border-left: none !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--app-border) !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+  }
+  .poll-card:hover,
+  .post-card:hover {
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+}

@@ -9,7 +9,7 @@ import { BroadcastService } from '../services/broadcastService';
 import { WebSocketService } from '../services/websocketService';
 import { GunService } from '../services/gunService';
 import { generatePseudonym } from '../utils/pseudonym';
-// relayFeedService imports removed from store — REST warmup lives in dbWarmup.ts
+import { fetchVoteTallies } from '../services/relayFeedService';
 
 const PAGE_SIZE      = 10;
 const SEEN_POLLS_KEY = 'seen-poll-ids';
@@ -518,17 +518,19 @@ export const usePollStore = defineStore('poll', () => {
     // Toggle: same direction → remove; different → switch
     const predicted = previous === direction ? null : direction;
 
-    // Optimistic update on counts
+    // Optimistic update on counts — use original (pre-optimistic) counts as base
+    // so the delta is applied exactly once. Using pollsMap current value risks
+    // double-counting if hydrateCommentCounts already set the correct relay value.
+    const baseUpvotes   = original?.upvotes   ?? 0;
+    const baseDownvotes = original?.downvotes ?? 0;
+    const uDelta = (predicted === 'up' ? 1 : 0) - (previous === 'up' ? 1 : 0);
+    const dDelta = (predicted === 'down' ? 1 : 0) - (previous === 'down' ? 1 : 0);
     if (original) {
-      const upvotes = original.upvotes || 0;
-      const downvotes = original.downvotes || 0;
-      const uDelta = (predicted === 'up' ? 1 : 0) - (previous === 'up' ? 1 : 0);
-      const dDelta = (predicted === 'down' ? 1 : 0) - (previous === 'down' ? 1 : 0);
       const optimistic: Poll = {
         ...original,
-        upvotes: Math.max(0, upvotes + uDelta),
-        downvotes: Math.max(0, downvotes + dDelta),
-        score: Math.max(0, upvotes + uDelta) - Math.max(0, downvotes + dDelta),
+        upvotes:   Math.max(0, baseUpvotes   + uDelta),
+        downvotes: Math.max(0, baseDownvotes + dDelta),
+        score:     Math.max(0, baseUpvotes   + uDelta) - Math.max(0, baseDownvotes + dDelta),
       };
       pollsMap.value.set(pollId, optimistic);
       if (currentPoll.value?.id === pollId) currentPoll.value = optimistic;
@@ -541,7 +543,13 @@ export const usePollStore = defineStore('poll', () => {
     saveMyPollContentVotes(myPollContentVotes.value);
 
     try {
-      const patch = await PollService.voteOnPollContent(pollId, direction, user.id, communityId);
+      // Pass original (pre-optimistic) counts so voteOnPollContent applies the
+      // delta from the correct baseline — not from the optimistic value which
+      // would double-count the user's contribution.
+      const patch = await PollService.voteOnPollContent(
+        pollId, direction, user.id, communityId,
+        { upvotes: baseUpvotes, downvotes: baseDownvotes, previous },
+      );
       const current = pollsMap.value.get(pollId);
       if (current) {
         const updated = { ...current, ...patch };
@@ -550,6 +558,23 @@ export const usePollStore = defineStore('poll', () => {
         BroadcastService.broadcast('poll-updated', updated);
         void WebSocketService.broadcast('poll-updated', updated);
       }
+
+      // After relay DB has had time to index the new vote, re-fetch the
+      // authoritative tally so the displayed count is correct.
+      setTimeout(async () => {
+        try {
+          const tallies = await fetchVoteTallies([pollId]);
+          const tally = tallies[pollId];
+          if (tally && typeof tally.upvotes === 'number') {
+            const latest = pollsMap.value.get(pollId);
+            if (latest) {
+              const refreshed = { ...latest, ...tally };
+              pollsMap.value.set(pollId, refreshed);
+              if (currentPoll.value?.id === pollId) currentPoll.value = refreshed;
+            }
+          }
+        } catch { /* non-fatal */ }
+      }, 500);
     } catch (err) {
       // Roll back optimistic changes
       console.warn('Poll content vote failed — rolling back', err);
@@ -688,6 +713,17 @@ export const usePollStore = defineStore('poll', () => {
   // Start watching after a short delay so initial load completes first
   setTimeout(watchCategoryUpdates, 3000);
 
+  /** Apply relay-derived tally to a poll in pollsMap without a full reload. */
+  function patchPollTally(pollId: string, tally: { upvotes: number; downvotes: number; score: number }) {
+    const existing = pollsMap.value.get(pollId);
+    if (!existing) return;
+    const upvotes   = Math.max(tally.upvotes   ?? 0, existing.upvotes   ?? 0);
+    const downvotes = Math.max(tally.downvotes ?? 0, existing.downvotes ?? 0);
+    const patched = { ...existing, upvotes, downvotes, score: upvotes - downvotes };
+    pollsMap.value.set(pollId, patched);
+    if (currentPoll.value?.id === pollId) currentPoll.value = patched;
+  }
+
   return {
     polls, pollsMap, currentPoll, isLoading,
     sortedPolls, activePolls,
@@ -697,7 +733,7 @@ export const usePollStore = defineStore('poll', () => {
     flushNewPolls, injectPoll, saveSeenNow,
     createPoll, voteOnPoll, selectPoll,
     voteOnPollContent, upvotePoll, downvotePoll,
-    myPollContentVote, togglePollContentVote,
+    myPollContentVote, togglePollContentVote, patchPollTally,
     refreshCommunityPolls,
   };
 });

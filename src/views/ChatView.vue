@@ -15,13 +15,17 @@
           </div>
           <div class="hdr-info">
             <span class="hdr-name">{{ recipientName }}</span>
-            <span class="hdr-status" :class="{ connected: connected && !chatError, error: chatError }">
-              {{ statusLabel }}
+            <span class="hdr-status">
+              <span class="presence-dot" :class="recipientOnline ? 'presence-dot--online' : 'presence-dot--offline'"></span>
+              {{ recipientOnline ? 'Online' : 'Offline' }}
             </span>
           </div>
         </div>
 
         <ion-buttons slot="end">
+          <span class="hdr-ws-status" :class="{ 'hdr-ws-status--ok': connected && !chatError }">
+            {{ connected && !chatError ? 'Connected' : chatError ? 'Error' : 'Offline' }}
+          </span>
           <button class="header-action-btn danger" @click="confirmDeleteAll" title="Delete all messages">
             <svg viewBox="0 0 24 24" fill="none">
               <polyline points="3 6 5 6 21 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -33,12 +37,6 @@
         </ion-buttons>
       </ion-toolbar>
     </ion-header>
-
-    <!-- Typing indicator -->
-    <div v-if="isTypingState" class="typing-bar">
-      <span class="typing-dots"><span></span><span></span><span></span></span>
-      {{ recipientName }} is typing…
-    </div>
 
     <ion-content ref="content">
       <div class="chat-container">
@@ -84,9 +82,33 @@
           </template>
 
           <!-- P2P transfer progress -->
-          <div v-if="p2pTransfer" class="p2p-progress">
-            <div class="p2p-bar" :style="{ width: p2pTransfer.progress + '%' }"></div>
-            <span>{{ p2pTransfer.name }} · {{ p2pTransfer.progress }}%</span>
+          <div v-if="p2pTransfer" class="p2p-progress-card">
+            <div class="p2p-progress-header">
+              <!-- File thumbnail preview -->
+              <div class="p2p-thumb">
+                <img v-if="p2pTransfer.previewUrl" :src="p2pTransfer.previewUrl" class="p2p-thumb-img" />
+                <span v-else class="p2p-direction-icon">
+                  <svg v-if="p2pTransfer.direction === 'sending'" viewBox="0 0 24 24" fill="none">
+                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  <svg v-else viewBox="0 0 24 24" fill="none">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
+              </div>
+              <div class="p2p-file-info">
+                <span class="p2p-file-name">{{ p2pTransfer.name }}</span>
+                <span class="p2p-file-status">
+                  {{ p2pTransfer.direction === 'sending' ? 'Sending' : 'Receiving' }} · {{ p2pTransfer.progress < 5 && p2pTransfer.direction === 'sending' ? 'Connecting…' : p2pTransfer.progress + '%' }}
+                </span>
+              </div>
+              <span class="p2p-pct">{{ p2pTransfer.progress }}%</span>
+            </div>
+            <div class="p2p-track">
+              <div class="p2p-fill" :style="{ width: Math.max(p2pTransfer.progress, 3) + '%' }">
+                <div class="p2p-shimmer"></div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -97,6 +119,31 @@
         </div>
         <div v-else-if="!connected && chatReady" class="chat-warning-banner">
           Offline — messages are queued and sent when connectivity returns.
+        </div>
+
+        <!-- P2P info banner: shown when hovering attach or actively transferring -->
+        <div class="p2p-info-banner" :class="{ 'p2p-info-banner--active': showP2PInfo || !!p2pTransfer }">
+          <svg viewBox="0 0 24 24" fill="none" class="p2p-info-icon">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M12 8h.01M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+          <span>
+            Image &amp; video transfers are <strong>direct peer-to-peer</strong> — no server involved.
+            <strong>Both users must be online</strong> at the same time. Unlike text messages, files
+            cannot be queued for offline delivery.
+          </span>
+        </div>
+
+        <!-- Presence + typing indicator above input -->
+        <div class="bottom-status-bar">
+          <div v-if="isTypingState" class="typing-indicator">
+            <span class="typing-dots"><span></span><span></span><span></span></span>
+            <span class="typing-label">{{ recipientName }} is typing…</span>
+          </div>
+          <div v-else class="presence-status">
+            <span class="presence-dot" :class="recipientOnline ? 'presence-dot--online' : 'presence-dot--offline'"></span>
+            <span class="presence-label">{{ recipientOnline ? 'Online' : 'Offline' }}</span>
+          </div>
         </div>
 
         <!-- Input row -->
@@ -119,7 +166,9 @@
           </div>
 
           <!-- Attach button — right of input -->
-          <button class="attach-btn" @click="fileInput?.click()" :disabled="!chatReady" title="Send image or video">
+          <button class="attach-btn" @click="openFilePickerWithPresence()" :disabled="!chatReady" title="Send image or video"
+            @mouseenter="showP2PInfo = true" @mouseleave="showP2PInfo = false"
+            @focus="showP2PInfo = true"   @blur="showP2PInfo = false">
             <svg viewBox="0 0 24 24" fill="none">
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66L9.41 17.41a2 2 0 01-2.83-2.83l8.49-8.48" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
@@ -171,229 +220,546 @@ const typingTimer         = ref<number | null>(null);
 const fileInput           = ref<HTMLInputElement | null>(null);
 const messagesContainer   = ref<HTMLDivElement | null>(null);
 
-interface P2PTransfer { name: string; progress: number }
-const p2pTransfer = ref<P2PTransfer | null>(null);
+interface P2PTransfer { name: string; progress: number; direction: 'sending' | 'receiving'; previewUrl?: string }
+const p2pTransfer  = ref<P2PTransfer | null>(null);
+const showP2PInfo  = ref(false);
 
 let chatService: ChatService | null = null;
 let initGeneration = 0;
 
+// ── P2P debug logger ───────────────────────────────────────────────────────────
+let lastP2PLog = '';
+let lastP2PLogCount = 0;
+function p2pLog(step: string, data?: any) {
+  const ts = new Date().toISOString().slice(11, 23);
+  const key = step + (data ? JSON.stringify(data) : '');
+  if (key === lastP2PLog) {
+    lastP2PLogCount++;
+    if (lastP2PLogCount > 3) return; // suppress after 3 repeats
+  } else {
+    lastP2PLog = key; lastP2PLogCount = 0;
+  }
+  data !== undefined
+    ? console.log(`[P2P ${ts}] ${step}`, data)
+    : console.log(`[P2P ${ts}] ${step}`);
+}
+function p2pErr(step: string, err?: any) {
+  console.error(`[P2P ERR] ${step}`, err ?? '');
+}
+
+// ── Presence ────────────────────────────────────────────────────────────────────
+// Presence is fully owned by ChatService. This ref is updated via
+// service.onPeerPresence → bindChatCallbacks → recipientOnline.value = online.
+const recipientOnline = ref(false);
+
 // ── WebRTC P2P ─────────────────────────────────────────────────────────────────
-let peerConn: RTCPeerConnection | null = null;
-let dataChannel: RTCDataChannel | null = null;
+let peerConn:    RTCPeerConnection | null = null;
+let dataChannel: RTCDataChannel   | null = null;
 let myUserId = '';
+let p2pSession = '';
 
-const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }];
-const CHUNK_SIZE  = 16 * 1024; // 16 KB
+const ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+];
+const CHUNK_SIZE    = 64 * 1024;
+const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
-function gunSignal() {
-  return GunService.getGun().get('chat-signals').get([myUserId, recipientId.value].sort().join(':'));
-}
+// ── Relay WS P2P signaling ────────────────────────────────────────────────────
+const _rtcWaiters = new Map<string, (payload: any) => void>();
+let _rtcListenerAttached = false;
 
-function closePeer() {
-  dataChannel?.close();
-  peerConn?.close();
-  dataChannel = null;
-  peerConn    = null;
-}
-
-async function createPeer(initiator: boolean): Promise<RTCDataChannel> {
-  closePeer();
-  peerConn = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-
-  // ICE candidates → Gun
-  peerConn.onicecandidate = ({ candidate }) => {
-    if (candidate) {
-      gunSignal().get(`ice-${myUserId}-${Date.now()}`).put(JSON.stringify({ from: myUserId, candidate: candidate.toJSON() }));
-    }
-  };
-
-  // Listen for remote ICE via Gun
-  gunSignal().map().on((raw: any, key: string) => {
-    if (!raw || typeof raw !== 'string') return;
+function ensureRtcListener() {
+  if (_rtcListenerAttached) return;
+  _rtcListenerAttached = true;
+  // Primary: chatService.onRtcSignal fires for relay WS frames
+  if (chatService) {
+    chatService.onRtcSignal = (d: { from: string; payload: any }) => {
+      if (!d?.payload) return;
+      const key  = `${d.from}:${d.payload.kind}:${d.payload.sess || ''}`;
+      const wild = `${d.from}:${d.payload.kind}:*`;
+      const cb   = _rtcWaiters.get(key) || _rtcWaiters.get(wild);
+      if (cb) cb(d.payload);
+    };
+  }
+  // Fallback: Gun peer wire
+  const attachToWire = () => {
     try {
-      const data = JSON.parse(raw);
-      if (data.from === myUserId) return; // own candidate
-      if (data.candidate && peerConn?.remoteDescription) {
-        void peerConn.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(() => {});
+      const peers = (GunService.getGun() as any)?._.opt?.peers || {};
+      for (const k of Object.keys(peers)) {
+        const wire = peers[k]?.wire as WebSocket | undefined;
+        if (!wire || (wire as any).__rtcPatched) continue;
+        (wire as any).__rtcPatched = true;
+        wire.addEventListener('message', (e: MessageEvent) => {
+          try {
+            const d = JSON.parse(e.data);
+            if (d?.type !== 'rtc-signal' || !d.payload) return;
+            const key  = `${d.from}:${d.payload.kind}:${d.payload.sess || ''}`;
+            const wild = `${d.from}:${d.payload.kind}:*`;
+            const cb   = _rtcWaiters.get(key) || _rtcWaiters.get(wild);
+            if (cb) cb(d.payload);
+          } catch {}
+        });
+      }
+    } catch {}
+  };
+  attachToWire();
+  GunService.onReconnect(() => {
+    _rtcListenerAttached = false;
+    setTimeout(() => {
+      _rtcListenerAttached = true;
+      // Re-assign chatService handler in case service was reconnected
+      if (chatService) {
+        chatService.onRtcSignal = (d: { from: string; payload: any }) => {
+          if (!d?.payload) return;
+          const key  = `${d.from}:${d.payload.kind}:${d.payload.sess || ''}`;
+          const wild = `${d.from}:${d.payload.kind}:*`;
+          const cb   = _rtcWaiters.get(key) || _rtcWaiters.get(wild);
+          if (cb) cb(d.payload);
+        };
+      }
+      attachToWire();
+    }, 500);
+  });
+}
+
+function sendRtcSignal(toUserId: string, payload: Record<string, any>) {
+  // Primary: chat relay WS via chatService (routed by userId, always authed)
+  if (chatService) { chatService.sendRtcSignal(toUserId, payload); }
+  // Also try Gun peer wire as fallback in case relay rtc-signal not deployed
+  try {
+    const peers = (GunService.getGun() as any)?._.opt?.peers || {};
+    for (const k of Object.keys(peers)) {
+      const wire = peers[k]?.wire as WebSocket | undefined;
+      if (wire?.readyState === WebSocket.OPEN) {
+        wire.send(JSON.stringify({ type: 'rtc-signal', to: toUserId, payload }));
+        return;
+      }
+    }
+  } catch {}
+}
+
+function waitForRtcSignal(fromUserId: string, kind: string, sess: string, timeoutMs: number): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const key   = `${fromUserId}:${kind}:${sess}`;
+    const timer = setTimeout(() => { _rtcWaiters.delete(key); reject(new Error(`rtc-signal timeout: ${kind}`)); }, timeoutMs);
+    _rtcWaiters.set(key, (payload) => { clearTimeout(timer); _rtcWaiters.delete(key); resolve(payload); });
+    const roomKey  = [myUserId, fromUserId].sort().join(':');
+    const gunChain = GunService.getGun().get('chat-p2p').get(roomKey).map().on((raw: any) => {
+      if (!raw) return;
+      try {
+        const d = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (d?.kind === kind && (d?.sess === sess || !sess) && d?.from !== myUserId) {
+          clearTimeout(timer); _rtcWaiters.delete(key);
+          try { gunChain?.off?.(); } catch {}
+          resolve(d);
+        }
+      } catch {}
+    });
+  });
+}
+
+let _iceQueue: any[] = [];
+let _iceHandler: ((c: any) => void) | null = null;
+
+function startIceQueue(fromUserId: string, sess: string) {
+  _iceQueue = []; _iceHandler = null;
+  const wildKey = `${fromUserId}:ice:*`;
+  const handler = (payload: any) => {
+    if (payload.sess !== sess) return;
+    if (_iceHandler) _iceHandler(payload.ice); else _iceQueue.push(payload.ice);
+    _rtcWaiters.set(wildKey, handler);
+  };
+  _rtcWaiters.set(wildKey, handler);
+  const roomKey = [myUserId, fromUserId].sort().join(':');
+  GunService.getGun().get('chat-p2p').get(roomKey).map().on((raw: any, key: string) => {
+    if (!raw || !key?.includes('ice')) return;
+    try {
+      const d = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (d?.ice && d?.sess === sess && d?.from !== myUserId) {
+        if (_iceHandler) _iceHandler(d.ice); else _iceQueue.push(d.ice);
       }
     } catch {}
   });
-
-  if (initiator) {
-    dataChannel = peerConn.createDataChannel('media', { ordered: true });
-    setupDataChannel(dataChannel);
-
-    const offer = await peerConn.createOffer();
-    await peerConn.setLocalDescription(offer);
-    gunSignal().get('offer').put(JSON.stringify({ from: myUserId, sdp: offer }));
-
-    // Wait for answer
-    await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('P2P answer timeout')), 20_000);
-      gunSignal().get('answer').on(async (raw: any) => {
-        if (!raw) return;
-        try {
-          const data = JSON.parse(raw);
-          if (data.from === myUserId) return;
-          await peerConn!.setRemoteDescription(new RTCSessionDescription(data.sdp));
-          clearTimeout(timeout);
-          resolve();
-        } catch {}
-      });
-    });
-  } else {
-    // Receiver: wait for offer, send answer
-    await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('P2P offer timeout')), 20_000);
-      gunSignal().get('offer').on(async (raw: any) => {
-        if (!raw) return;
-        try {
-          const data = JSON.parse(raw);
-          if (data.from === myUserId) return;
-          await peerConn!.setRemoteDescription(new RTCSessionDescription(data.sdp));
-          const answer = await peerConn!.createAnswer();
-          await peerConn!.setLocalDescription(answer);
-          gunSignal().get('answer').put(JSON.stringify({ from: myUserId, sdp: answer }));
-          clearTimeout(timeout);
-          resolve();
-        } catch {}
-      });
-    });
-
-    await new Promise<void>((resolve) => {
-      peerConn!.ondatachannel = (e) => {
-        dataChannel = e.channel;
-        setupDataChannel(dataChannel);
-        resolve();
-      };
-    });
-  }
-
-  await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('P2P connection timeout')), 15_000);
-    peerConn!.oniceconnectionstatechange = () => {
-      const s = peerConn?.iceConnectionState;
-      if (s === 'connected' || s === 'completed') { clearTimeout(timeout); resolve(); }
-      if (s === 'failed') { clearTimeout(timeout); reject(new Error('ICE failed')); }
-    };
-  });
-
-  return dataChannel!;
 }
 
-// Incoming file receive state
-let recvMeta: { name: string; size: number; type: string } | null = null;
-let recvChunks: ArrayBuffer[] = [];
-let recvReceived = 0;
+function stopIceQueue(fromUserId: string) {
+  _rtcWaiters.delete(`${fromUserId}:ice:*`);
+  _iceQueue = []; _iceHandler = null;
+}
 
-function setupDataChannel(dc: RTCDataChannel) {
+function onNextIce(handler: (candidate: any) => void) {
+  _iceHandler = handler;
+  for (const c of _iceQueue.splice(0)) handler(c);
+}
+
+function startSignalKeepAlive() {}
+function stopSignalKeepAlive() {}
+
+// Sender sets this true in offererConnect(), receiver sets false in answererConnect().
+// Must NOT be derived from userId comparison — that made only the alphabetically-
+// lower user capable of initiating, deadlocking the other user's send attempts.
+let iAmOfferer = false;
+
+function closePeer() {
+  dataChannel?.close(); peerConn?.close();
+  dataChannel = null;   peerConn    = null;
+}
+
+async function clearSignals() {
+  // Null want-p2p so Gun's in-memory graph doesn't replay it to the next
+  // answerer subscriber. The relay no longer persists bare chat-p2p nodes
+  // to MySQL, but Gun's own in-memory graph still holds the last value.
+  p2pLog('clearSignals: nulling want-p2p');
+  // Clear stale want-p2p from Gun graph so it doesn't replay to new subscribers
+  const roomKey = [myUserId, recipientId.value].sort().join(':');
+  try { GunService.getGun().get('chat-p2p').get(roomKey).get('want-p2p').put(null as any); } catch {}
+  await new Promise<void>(r => setTimeout(r, 100));
+}
+
+async function setupPeerConnection(): Promise<void> {
+  closePeer();
+  p2pLog('setupPeerConnection: creating RTCPeerConnection', { isOfferer: iAmOfferer, session: p2pSession });
+  peerConn = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+
+  // Buffer remote ICE candidates that arrive before setRemoteDescription
+  const pendingIce: RTCIceCandidateInit[] = [];
+
+
+  peerConn.onicecandidate = ({ candidate }) => {
+    if (!candidate) { p2pLog('ICE: gathering complete'); return; }
+    p2pLog('ICE: local candidate', { type: candidate.type, protocol: candidate.protocol });
+    sendRtcSignal(recipientId.value, { kind: 'ice', sess: p2pSession, from: myUserId, ice: candidate.toJSON() });
+  };
+
+  peerConn.onicegatheringstatechange  = () => { p2pLog('ICE gathering state:', peerConn?.iceGatheringState); };
+  peerConn.oniceconnectionstatechange = () => { p2pLog('ICE connection state:', peerConn?.iceConnectionState); };
+  peerConn.onsignalingstatechange     = () => { p2pLog('Signaling state:', peerConn?.signalingState); };
+  peerConn.onconnectionstatechange    = () => { p2pLog('Connection state:', peerConn?.connectionState); };
+
+  async function flushPendingIce() {
+    if (!peerConn?.remoteDescription || pendingIce.length === 0) return;
+    p2pLog(`ICE: flushing ${pendingIce.length} buffered candidates`);
+    for (const ice of pendingIce.splice(0)) {
+      await peerConn.addIceCandidate(new RTCIceCandidate(ice)).catch(e => p2pErr('addIceCandidate (flush)', e));
+    }
+  }
+
+  const origSetRemote = peerConn.setRemoteDescription.bind(peerConn);
+  peerConn.setRemoteDescription = async (desc: RTCSessionDescriptionInit) => {
+    await origSetRemote(desc);
+    await flushPendingIce();
+  };
+
+  // ICE candidates arrive via relay WS queue (fast) + Gun fallback
+  startIceQueue(recipientId.value, p2pSession);
+  onNextIce((ice) => {
+    const apply = (candidate: any) => {
+      if (!peerConn?.remoteDescription) { p2pLog('ICE: buffering candidate'); pendingIce.push(candidate); return; }
+      p2pLog('ICE: applying remote candidate', { type: candidate?.type });
+      void peerConn.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => p2pErr('addIceCandidate', e));
+    };
+    apply(ice);
+    onNextIce(apply);
+  });
+}
+
+async function waitForDataChannel(): Promise<RTCDataChannel> {
+  if (iAmOfferer) {
+    p2pLog('DataChannel: creating as offerer');
+    dataChannel = peerConn!.createDataChannel('media', { ordered: true });
+    dataChannel.onopen  = () => p2pLog('DataChannel: open (offerer)');
+    dataChannel.onclose = () => p2pLog('DataChannel: closed (offerer)');
+    dataChannel.onerror = (e) => p2pErr('DataChannel error (offerer)', e);
+    return dataChannel;
+  }
+  p2pLog('DataChannel: waiting for ondatachannel (answerer)');
+  return new Promise(resolve => {
+    peerConn!.ondatachannel = e => {
+      p2pLog('DataChannel: received (answerer)');
+      dataChannel = e.channel;
+      dataChannel.onopen  = () => p2pLog('DataChannel: open (answerer)');
+      dataChannel.onclose = () => p2pLog('DataChannel: closed (answerer)');
+      dataChannel.onerror = ev => p2pErr('DataChannel error (answerer)', ev);
+      resolve(e.channel);
+    };
+  });
+}
+
+async function negotiate(preRegisteredReadyPromise?: Promise<any>): Promise<void> {
+  const sess = p2pSession;
+  p2pLog('negotiate: start', { role: iAmOfferer ? 'offerer' : 'answerer', sess });
+
+  if (iAmOfferer) {
+    p2pLog('negotiate: waiting for answerer-ready...');
+    await (preRegisteredReadyPromise ?? waitForRtcSignal(recipientId.value, 'ready', sess, 30_000));
+    p2pLog('negotiate: answerer-ready received');
+
+    const offer = await peerConn!.createOffer();
+    await peerConn!.setLocalDescription(offer);
+    p2pLog('negotiate: sending offer via relay WS');
+    sendRtcSignal(recipientId.value, { kind: 'offer', sess, from: myUserId, sdp: peerConn!.localDescription });
+
+    p2pLog('negotiate: waiting for answer…');
+    const answerPayload = await waitForRtcSignal(recipientId.value, 'answer', sess, 30_000);
+    if (peerConn!.signalingState !== 'have-local-offer') { p2pErr('negotiate: unexpected state', peerConn?.signalingState); return; }
+    await peerConn!.setRemoteDescription(new RTCSessionDescription(answerPayload.sdp));
+    p2pLog('negotiate: remote answer applied ✓');
+
+  } else {
+    p2pLog('negotiate: listening for offer, then sending ready');
+    const offerPromise = waitForRtcSignal(recipientId.value, 'offer', sess, 30_000);
+
+    sendRtcSignal(recipientId.value, { kind: 'ready', sess, from: myUserId, ts: Date.now() });
+    p2pLog('negotiate: answerer-ready sent ✓');
+
+    const offerPayload = await offerPromise;
+    if (peerConn!.signalingState !== 'stable') { p2pErr('negotiate: unexpected state', peerConn?.signalingState); return; }
+    p2pLog('negotiate: applying remote offer');
+    await peerConn!.setRemoteDescription(new RTCSessionDescription(offerPayload.sdp));
+    const answer = await peerConn!.createAnswer();
+    await peerConn!.setLocalDescription(answer);
+    sendRtcSignal(recipientId.value, { kind: 'answer', sess, from: myUserId, sdp: peerConn!.localDescription });
+    p2pLog('negotiate: answer sent ✓');
+  }
+
+  p2pLog('negotiate: complete ✓');
+}
+
+async function waitForConnected(): Promise<void> {
+  const s = peerConn!.iceConnectionState;
+  p2pLog('waitForConnected: current state', { state: s });
+  if (s === 'connected' || s === 'completed') { p2pLog('waitForConnected: already connected'); return; }
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => {
+      p2pErr('waitForConnected: ICE timeout', { finalState: peerConn?.iceConnectionState });
+      reject(new Error('Could not establish direct connection (ICE timeout)'));
+    }, 15_000);
+    peerConn!.oniceconnectionstatechange = () => {
+      const st = peerConn?.iceConnectionState;
+      p2pLog('waitForConnected: state change', { st });
+      if (st === 'connected' || st === 'completed') { clearTimeout(t); p2pLog('waitForConnected: connected'); resolve(); }
+      if (st === 'failed') { clearTimeout(t); p2pErr('waitForConnected: ICE failed'); reject(new Error('Direct connection failed')); }
+    };
+  });
+}
+
+let recvMeta:     { name: string; size: number; type: string } | null = null;
+let recvChunks:   ArrayBuffer[] = [];
+let recvReceived: number = 0;
+
+function setupDataChannelHandlers(dc: RTCDataChannel) {
   dc.binaryType = 'arraybuffer';
-  dc.onmessage = (e) => {
+  dc.onmessage = e => {
     if (typeof e.data === 'string') {
       const msg = JSON.parse(e.data);
       if (msg.type === 'meta') {
-        recvMeta    = msg;
-        recvChunks  = [];
-        recvReceived = 0;
-        p2pTransfer.value = { name: msg.name, progress: 0 };
+        recvMeta = msg; recvChunks = []; recvReceived = 0;
+        p2pTransfer.value = { name: msg.name, progress: 0, direction: 'receiving' };
       } else if (msg.type === 'done' && recvMeta) {
-        const blob     = new Blob(recvChunks, { type: recvMeta.type });
-        const url      = URL.createObjectURL(blob);
-        const mtype    = recvMeta.type.startsWith('video') ? 'video' : 'image';
-        const fakeMsg: ChatMessage & { mediaUrl: string; mediaType: 'image' | 'video' } = {
-          id: `p2p-${Date.now()}`, from: recipientId.value, to: myUserId,
-          message: `[${mtype === 'video' ? 'Video' : 'Image'}]`,
-          timestamp: Date.now(), read: false, sent: false,
+        const blob  = new Blob(recvChunks, { type: recvMeta.type });
+        const url   = URL.createObjectURL(blob);
+        const mtype = recvMeta.type.startsWith('video') ? 'video' : 'image';
+        messages.value = [...messages.value, {
+          id: `p2p-recv-${Date.now()}`, from: recipientId.value, to: myUserId,
+          message: `[${mtype}]`, timestamp: Date.now(), read: false, sent: false,
           mediaUrl: url, mediaType: mtype,
-        };
-        messages.value.push(fakeMsg);
+        } as any];
         nextTick(() => scrollToBottom());
-        p2pTransfer.value = null;
-        recvMeta = null;
+        p2pTransfer.value = null; recvMeta = null;
       }
     } else {
-      // Binary chunk
       recvChunks.push(e.data as ArrayBuffer);
       recvReceived += (e.data as ArrayBuffer).byteLength;
-      if (recvMeta) {
-        p2pTransfer.value = { name: recvMeta.name, progress: Math.round((recvReceived / recvMeta.size) * 100) };
-      }
+      if (recvMeta) p2pTransfer.value = {
+        name: recvMeta.name,
+        progress: Math.round((recvReceived / recvMeta.size) * 100),
+        direction: 'receiving',
+      };
     }
   };
 }
 
+// Offerer: generates session, clears stale signals, drives the negotiation
+async function offererConnect(): Promise<RTCDataChannel> {
+  iAmOfferer = true;  // must be set before setupPeerConnection/negotiate/waitForDataChannel
+  p2pSession = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  p2pLog('offererConnect: new session', { sess: p2pSession, myUserId, recipientId: recipientId.value });
+
+  startSignalKeepAlive();
+  await clearSignals();
+
+  await setupPeerConnection();
+  p2pLog('offererConnect: peer conn ready');
+
+  ensureRtcListener();
+  startIceQueue(recipientId.value, p2pSession);
+
+  // Pre-register 'ready' waiter BEFORE sending want-p2p.
+  // The answerer can send 'ready' very fast (sub-ms on same device) and if
+  // we haven't registered the waiter yet the signal is dropped and we timeout.
+  const readyPromise = waitForRtcSignal(recipientId.value, 'ready', p2pSession, 30_000);
+
+  p2pLog('offererConnect: sending want-p2p');
+  sendRtcSignal(recipientId.value, { kind: 'want-p2p', sess: p2pSession, from: myUserId, ts: Date.now() });
+  // Gun fallback: also write to Gun so receiver picks it up even if relay
+  // rtc-signal forwarding is not yet deployed on the production server
+  const _wantRoomKey = [myUserId, recipientId.value].sort().join(':');
+  try { GunService.getGun().get('chat-p2p').get(_wantRoomKey).get('want-p2p')
+    .put(JSON.stringify({ kind: 'want-p2p', sess: p2pSession, from: myUserId, ts: Date.now() })); } catch {}
+
+  const [dc] = await Promise.all([waitForDataChannel(), negotiate(readyPromise)]);
+  p2pLog('offererConnect: negotiation done, waiting for ICE');
+
+  await waitForConnected();
+  stopIceQueue(recipientId.value);
+  stopSignalKeepAlive();
+  p2pLog('offererConnect: READY');
+  setupDataChannelHandlers(dc);
+  return dc;
+}
+
+// Answerer: takes the session token from the offerer's want-p2p signal, never generates one
+async function answererConnect(sess: string): Promise<void> {
+  iAmOfferer = false;
+  if (dataChannel?.readyState === 'open') { p2pLog('answererConnect: channel already open'); return; }
+
+  p2pSession = sess;
+  p2pLog('answererConnect: using offerer session', { sess: p2pSession, myUserId, recipientId: recipientId.value });
+
+  ensureRtcListener();
+  startIceQueue(recipientId.value, p2pSession);
+
+  await setupPeerConnection();
+  p2pLog('answererConnect: peer conn ready');
+
+  const [dc] = await Promise.all([waitForDataChannel(), negotiate()]);
+  p2pLog('answererConnect: negotiation done, waiting for ICE');
+
+  await waitForConnected();
+  stopIceQueue(recipientId.value);
+  stopSignalKeepAlive();
+  p2pLog('answererConnect: READY');
+  setupDataChannelHandlers(dc);
+}
+
 async function sendFileP2P(file: File) {
-  const toast = await toastController.create({ message: 'Connecting peer-to-peer…', duration: 3000, position: 'top' });
-  await toast.present();
+  p2pLog('sendFileP2P: start', { name: file.name, size: file.size, type: file.type });
 
-  // Signal to recipient that we want to send via WebRTC
-  gunSignal().get('want-p2p').put(JSON.stringify({ from: myUserId, ts: Date.now() }));
-
-  try {
-    const dc = await createPeer(true);
-
-    // Send meta
-    dc.send(JSON.stringify({ type: 'meta', name: file.name, size: file.size, type: file.type }));
-
-    // Stream chunks
-    const buffer = await file.arrayBuffer();
-    let offset   = 0;
-    p2pTransfer.value = { name: file.name, progress: 0 };
-
-    while (offset < buffer.byteLength) {
-      const chunk = buffer.slice(offset, offset + CHUNK_SIZE);
-      dc.send(chunk);
-      offset += chunk.byteLength;
-      p2pTransfer.value = { name: file.name, progress: Math.round((offset / buffer.byteLength) * 100) };
-      // Backpressure: yield if buffer is getting full
-      if (dc.bufferedAmount > 1_048_576) {
-        await new Promise(r => setTimeout(r, 50));
-      }
-    }
-
-    dc.send(JSON.stringify({ type: 'done' }));
-
-    // Show preview on sender side
-    const url   = URL.createObjectURL(file);
-    const mtype = file.type.startsWith('video') ? 'video' : 'image';
-    const fakeMsg: ChatMessage & { mediaUrl: string; mediaType: 'image' | 'video' } = {
-      id: `p2p-sent-${Date.now()}`, from: myUserId, to: recipientId.value,
-      message: `[${mtype === 'video' ? 'Video' : 'Image'}]`,
-      timestamp: Date.now(), read: false, sent: true,
-      mediaUrl: url, mediaType: mtype,
-    };
-    messages.value.push(fakeMsg);
-    nextTick(() => scrollToBottom());
-    p2pTransfer.value = null;
-  } catch (err: any) {
-    p2pTransfer.value = null;
-    const t = await toastController.create({ message: `P2P failed: ${err?.message || 'unknown error'}`, duration: 3000, position: 'top', color: 'warning' });
+  if (file.size > MAX_FILE_SIZE) {
+    const t = await toastController.create({
+      message: `File too large (${(file.size / 1024 / 1024).toFixed(0)} MB). Maximum is 100 MB.`,
+      duration: 4000, position: 'top', color: 'warning',
+    });
     await t.present();
+    return;
   }
+
+  // Suppress offline signal for the full transfer duration.
+  const releaseOfflineSuppression = chatService?.suppressOffline(120_000) ?? (() => {});
+
+  // Warn if offline but still attempt
+  if (chatService && !(await chatService.isPeerOnline(recipientId.value))) {
+    const tw = await toastController.create({ message: recipientName.value + ' appears offline. Attempting anyway...', duration: 3000, position: 'top', color: 'warning' });
+    await tw.present();
+  }
+    const previewUrl = file.type.startsWith('image') ? URL.createObjectURL(file) : undefined;
+  p2pTransfer.value = { name: file.name, progress: 0, direction: 'sending', previewUrl };
+
+  const doTransfer = async () => {
+    const dc = await offererConnect();
+    dc.send(JSON.stringify({ type: 'meta', name: file.name, size: file.size, type: file.type }));
+    const buffer = await file.arrayBuffer();
+    let offset = 0;
+    while (offset < buffer.byteLength) {
+      while (dc.bufferedAmount > 256 * 1024) await new Promise(r => setTimeout(r, 20));
+      const chunk = buffer.slice(offset, offset + CHUNK_SIZE);
+      dc.send(chunk); offset += chunk.byteLength;
+      p2pTransfer.value = { name: file.name, progress: Math.round(offset / buffer.byteLength * 100), direction: 'sending', previewUrl };
+    }
+    dc.send(JSON.stringify({ type: 'done' }));
+  };
+  let lastErr: any;
+  for (const [attempt, delay] of [[0,0],[1,3000],[2,8000]] as [number,number][]) {
+    if (delay) { closePeer(); p2pTransfer.value = { name: file.name, progress: 0, direction: 'sending', previewUrl }; await new Promise(r => setTimeout(r, delay)); }
+    try {
+      await doTransfer();
+      const url = URL.createObjectURL(file);
+      const mtype = file.type.startsWith('video') ? 'video' : 'image';
+      messages.value = [...messages.value, { id: 'p2p-sent-' + Date.now(), from: myUserId, to: recipientId.value, message: '[' + mtype + ']', timestamp: Date.now(), read: false, sent: true, mediaUrl: url, mediaType: mtype } as any];
+      nextTick(() => scrollToBottom(true)); p2pTransfer.value = null; releaseOfflineSuppression();
+      p2pLog('sendFileP2P: complete', { attempt }); return;
+    } catch (e: any) { lastErr = e; p2pErr('sendFileP2P attempt ' + attempt, e); }
+  }
+  p2pTransfer.value = null; releaseOfflineSuppression(); closePeer();
+  const t = await toastController.create({ message: 'File transfer failed after 3 attempts.', duration: 5000, position: 'top', color: 'warning' });
+  await t.present();
 }
 
 function listenForIncomingP2P() {
-  gunSignal().get('want-p2p').on(async (raw: any) => {
+  p2pLog('listenForIncomingP2P: watching for want-p2p via relay WS + Gun fallback');
+  let answering = false;
+  let lastProcessedKey = '';
+
+  ensureRtcListener();
+
+  const handleWantP2P = async (d: any) => {
+    const signalKey = `${d.sess}-${d.ts}`;
+    if (d.from === myUserId)                { p2pLog('listenForIncomingP2P: ignoring own signal'); return; }
+    if (dataChannel?.readyState === 'open') { p2pLog('listenForIncomingP2P: channel already open'); return; }
+    if (signalKey === lastProcessedKey)     { p2pLog('listenForIncomingP2P: duplicate, skipping'); return; }
+    if (answering)                          { p2pLog('listenForIncomingP2P: already answering'); return; }
+    const age = Date.now() - (d.ts ?? 0);
+    if (age > 60_000) { p2pLog('listenForIncomingP2P: stale signal, ignoring', { ageMs: age }); return; }
+    lastProcessedKey = signalKey;
+    answering = true;
+    p2pLog('listenForIncomingP2P: parsed', { from: d.from, myUserId, sess: d.sess, signalKey });
+    p2pLog('listenForIncomingP2P: starting answererConnect', { sess: d.sess });
+    try {
+      await answererConnect(d.sess || '');
+      p2pLog('listenForIncomingP2P: answererConnect complete');
+    } catch (e) { p2pErr('listenForIncomingP2P', e); }
+    finally { answering = false; }
+  };
+
+  // Layer 1: relay WS (fast)
+  const wantKey = `${recipientId.value}:want-p2p:*`;
+  const wantHandler = async (payload: any) => {
+    await handleWantP2P(payload);
+    _rtcWaiters.set(wantKey, wantHandler);
+  };
+  _rtcWaiters.set(wantKey, wantHandler);
+
+  // Layer 2: Gun fallback
+  const roomKey = [myUserId, recipientId.value].sort().join(':');
+  GunService.getGun().get('chat-p2p').get(roomKey).get('want-p2p').on(async (raw: any) => {
     if (!raw) return;
     try {
-      const data = JSON.parse(raw);
-      if (data.from === myUserId) return;
-      // Peer wants to send us a file — connect as receiver
-      await createPeer(false);
-    } catch {}
+      const d = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      await handleWantP2P(d);
+    } catch (e) { p2pErr('listenForIncomingP2P Gun', e); }
   });
 }
 
 async function onFileSelected(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0];
-  if (!file) return;
   (e.target as HTMLInputElement).value = '';
+  if (!file) {
+    // User cancelled picker — release suppression immediately
+    chatService?.suppressOffline(0);
+    return;
+  }
   await sendFileP2P(file);
 }
 
-function openMedia(url: string) {
-  window.open(url, '_blank');
+function openFilePickerWithPresence() {
+  // Suppress offline signal before file picker opens — on mobile the picker
+  // triggers visibilitychange (hidden=true) which would flash us offline to peer.
+  chatService?.suppressOffline(60_000);
+  fileInput.value?.click();
 }
+
+function openMedia(url: string) { window.open(url, '_blank'); }
 
 // ── Avatar tone ────────────────────────────────────────────────────────────────
 const TONES = ['tone-violet','tone-blue','tone-teal','tone-amber','tone-rose'];
@@ -406,17 +772,30 @@ function avatarTone(id: string) {
 async function confirmDeleteAll() {
   const alert = await alertController.create({
     header: 'Delete all messages?',
-    message: 'This clears your local copy only. The other person keeps their copy.',
+    message: 'This clears your copy of the conversation. The other person keeps their copy.',
     buttons: [
       { text: 'Cancel', role: 'cancel' },
       {
         text: 'Delete', role: 'destructive', cssClass: 'alert-danger',
         handler: async () => {
           if (!chatService) return;
-          const stored = await StorageService.getAllChatMessages();
           const roomId = [myUserId, recipientId.value].sort().join(':');
-          for (const m of stored.filter(m => m.roomId === roomId)) {
-            await StorageService.deleteChatMessage(m.id);
+          try {
+            const all  = await StorageService.getAllChatMessages();
+            const mine = all.filter((m: any) => m.roomId === roomId);
+            // Overwrite each message as corrupted so it never re-renders
+            for (const m of mine) {
+              await StorageService.saveChatMessage({ ...m, text: '', syncStatus: 'corrupted' as any });
+            }
+            // Nullify our own outgoing Gun nodes and write deletion marker
+            const gun = GunService.getGun();
+            for (const m of mine.filter((m: any) => m.outgoing)) {
+              try { gun.get('chats').get(roomId).get(m.id).put(null as any); } catch {}
+            }
+            try { gun.get('chat-deleted').get(roomId).get(myUserId)
+              .put({ ts: Date.now(), cleared: true }); } catch {}
+          } catch (err) {
+            console.error('[Chat] delete failed:', err);
           }
           messages.value = [];
         },
@@ -444,26 +823,48 @@ function deliveryMark(msg: ChatMessage): string {
 
 function upsertMessage(msg: ChatMessage) {
   const at = messages.value.findIndex(m => m.id === msg.id);
-  if (at === -1) messages.value.push(msg);
-  else messages.value[at] = { ...messages.value[at], ...msg };
+  if (at === -1) {
+    messages.value = [...messages.value, msg]; // new reference → Vue re-renders
+  } else {
+    const updated = [...messages.value];
+    updated[at] = { ...updated[at], ...msg };
+    messages.value = updated;
+  }
 }
 
 function bindChatCallbacks(service: ChatService) {
   service.onConnectionChange = (status) => { connected.value = status; };
-  service.onMessage = (msg) => { upsertMessage(msg); nextTick(() => scrollToBottom()); };
+  service.onMessage = (msg) => { upsertMessage(msg); nextTick(() => scrollToBottom(true)); };
   service.onMessageStatus = ({ id, status, error }) => {
     const at = messages.value.findIndex(m => m.id === id);
-    if (at !== -1) messages.value[at] = { ...messages.value[at], status, error };
+    if (at !== -1) {
+      const updated = [...messages.value];
+      updated[at] = { ...updated[at], status, error };
+      messages.value = updated;
+    }
   };
-  service.onTyping = ({ from, isTyping }) => { if (from === recipientId.value) typingState.value = isTyping; };
+  let _typingClearTimer: number | null = null;
+  service.onTyping = ({ from, isTyping }) => {
+    if (from !== recipientId.value) return;
+    typingState.value = isTyping;
+    if (_typingClearTimer) clearTimeout(_typingClearTimer);
+    if (isTyping) _typingClearTimer = window.setTimeout(() => { typingState.value = false; }, 4000);
+  };
   service.onReadReceipt = ({ from, at }) => {
     if (from !== recipientId.value) return;
-    messages.value.forEach(m => { if (m.sent && m.timestamp <= at) m.read = true; });
+    messages.value = messages.value.map(m =>
+      m.sent && m.timestamp <= at ? { ...m, read: true } : m
+    );
   };
   service.onRecipientKeyChange = ({ userId, available }) => {
     if (userId === recipientId.value) recipientKeyMissing.value = !available;
   };
   service.onDelivered = () => {};
+  // Presence — chatService fires this whenever the peer's Gun node updates.
+  // The stale-check logic lives in chatService; we just reflect the result.
+  service.onPeerPresence = ({ userId, online }) => {
+    if (userId === recipientId.value) recipientOnline.value = online;
+  };
 }
 
 function resetChatState() {
@@ -480,11 +881,27 @@ async function initializeChat() {
   const gen = ++initGeneration;
   disconnectChat(); resetChatState(); closePeer();
 
-  const currentUser = await UserService.getCurrentUser();
+  // Resolve identity — authenticated users get their real userId (Schnorr publicKey),
+  // anonymous users get a stable random ID from localStorage.
+  let resolvedUserId = '';
+  try {
+    const currentUser = await UserService.getCurrentUser();
+    resolvedUserId = currentUser?.id || '';
+  } catch { }
+  if (!resolvedUserId) {
+    const ANON_KEY = 'interpoll-anon-id';
+    let anonId = localStorage.getItem(ANON_KEY);
+    if (!anonId) {
+      const bytes = crypto.getRandomValues(new Uint8Array(32));
+      anonId = Array.from(bytes).map((b: number) => b.toString(16).padStart(2, '0')).join('');
+      localStorage.setItem(ANON_KEY, anonId);
+    }
+    resolvedUserId = anonId;
+  }
   if (gen !== initGeneration) return;
-  myUserId = currentUser.id;
+  myUserId = resolvedUserId;
 
-  const service = new ChatService(WS_URL, currentUser.id);
+  const service = new ChatService(WS_URL, resolvedUserId);
   bindChatCallbacks(service);
   chatService = service;
 
@@ -508,7 +925,7 @@ async function initializeChat() {
     const history = await service.loadHistory(targetUserId);
     if (gen !== initGeneration) { service.disconnect(); return; }
     history.forEach(upsertMessage);
-    messages.value.sort((a, b) => a.timestamp - b.timestamp);
+    messages.value = [...messages.value].sort((a, b) => a.timestamp - b.timestamp);
   } catch (err) {
     chatError.value = err instanceof Error ? err.message : 'Could not start encrypted chat.';
   }
@@ -524,7 +941,18 @@ onIonViewWillEnter(() => {
 onUnmounted(() => { initGeneration++; disconnectChat(); closePeer(); });
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-const scrollToBottom = () => { if (content.value) content.value.$el.scrollToBottom(300); };
+const scrollToBottom = (force = false) => {
+  if (!content.value) return;
+  const el = content.value.$el;
+  if (!force) {
+    // Only auto-scroll if user is already near the bottom (within 150px)
+    // so reading history isn't interrupted by new messages
+    const inner = el.shadowRoot?.querySelector('.inner-scroll') ?? el;
+    const distFromBottom = inner.scrollHeight - inner.scrollTop - inner.clientHeight;
+    if (distFromBottom > 150) return;
+  }
+  el.scrollToBottom(300);
+};
 watch(currentMessages, () => nextTick(() => scrollToBottom()), { deep: true });
 
 const handleSend = async () => {
@@ -534,7 +962,7 @@ const handleSend = async () => {
   try {
     upsertMessage(await chatService.sendMessage(recipientId.value, text));
     chatService.sendTyping(recipientId.value, false);
-    nextTick(() => scrollToBottom());
+    nextTick(() => scrollToBottom(true)); // force scroll after own send
   } catch (err) {
     messageInput.value = text;
     chatError.value = err instanceof Error ? err.message : 'Message could not be sent';
@@ -613,9 +1041,35 @@ ion-content { --background: transparent; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   max-width: 100%;
 }
-.hdr-status { font-size: 10.5px; color: var(--app-text-subtle); font-weight: 500; }
-.hdr-status.connected { color: #34d399; }
-.hdr-status.error     { color: #f87171; }
+.hdr-ws-status {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; padding: 3px 8px; border-radius: 999px;
+  color: var(--app-text-subtle);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  margin-right: 4px; white-space: nowrap;
+}
+.hdr-ws-status--ok {
+  color: #34d399;
+  background: rgba(52,211,153,0.1);
+  border-color: rgba(52,211,153,0.25);
+}
+.hdr-status { font-size: 10.5px; color: var(--app-text-subtle); font-weight: 500; display: flex; align-items: center; gap: 4px; }
+
+.presence-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; display: inline-block;
+}
+.presence-dot--online  { background: #34d399; box-shadow: 0 0 5px rgba(52,211,153,0.7); }
+.presence-dot--offline { background: rgba(255,255,255,0.2); }
+
+/* Bottom presence + typing bar above input */
+.bottom-status-bar {
+  display: flex; align-items: center;
+  padding: 4px 16px; min-height: 24px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.typing-indicator, .presence-status { display: flex; align-items: center; gap: 6px; }
+.typing-label, .presence-label { font-size: 11px; color: rgba(255,255,255,0.45); }
 
 /* ── Avatar tones ──────────────────────────────────────────── */
 .tone-violet { background: linear-gradient(135deg,#6366f1,#8b5cf6); }
@@ -674,7 +1128,7 @@ ion-content { --background: transparent; }
 .message {
   display: flex; flex-direction: column; max-width: 78%;
   animation: bubbleIn .2s cubic-bezier(0.34,1.56,0.64,1) both;
-  margin-bottom: 1px; position: relative;
+  margin-bottom: 3px; position: relative;
 }
 .message.sent     { align-self: flex-end;   align-items: flex-end;   }
 .message.received { align-self: flex-start; align-items: flex-start; }
@@ -683,8 +1137,8 @@ ion-content { --background: transparent; }
 @keyframes bubbleIn { from { opacity: 0; transform: translateY(6px) scale(0.96); } to { opacity: 1; transform: none; } }
 
 .message-content {
-  padding: 8px 14px;
-  border-radius: 20px; /* comfortable, not pill */
+  padding: 10px 16px;
+  border-radius: 16px; /* comfortable, not pill */
   position: relative;
 }
 
@@ -741,16 +1195,93 @@ ion-content { --background: transparent; }
 }
 
 /* ── P2P progress ───────────────────────────────────────────── */
-.p2p-progress {
-  margin: 6px 12px; padding: 10px 14px; border-radius: 12px;
+/* ── P2P info banner ───────────────────────────────────────── */
+.p2p-info-banner {
+  display: flex; align-items: flex-start; gap: 9px;
+  margin: 0 10px 4px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: rgba(99,102,241,0.07);
+  border: 1px solid rgba(99,102,241,0.16);
+  font-size: 11.5px; line-height: 1.5;
+  color: var(--app-text-muted);
+  /* Hidden by default, slides in on hover/active */
+  max-height: 0; opacity: 0; overflow: hidden; padding-top: 0; padding-bottom: 0;
+  transition: max-height 250ms ease, opacity 200ms ease, padding 200ms ease;
+}
+.p2p-info-banner--active {
+  max-height: 120px; opacity: 1;
+  padding: 9px 12px;
+}
+.p2p-info-icon {
+  width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px;
+  color: #818cf8; opacity: 0.8;
+}
+.p2p-info-banner strong { color: var(--app-text); font-weight: 600; }
+
+/* ── P2P progress card ─────────────────────────────────────── */
+.p2p-progress-card {
+  margin: 6px 10px;
+  padding: 12px 14px 10px;
+  border-radius: 14px;
+  background: rgba(99,102,241,0.08);
+  border: 1px solid rgba(99,102,241,0.2);
+}
+
+.p2p-progress-header {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+}
+
+.p2p-direction-icon {
+  width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
+  background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.25);
+  display: flex; align-items: center; justify-content: center; color: #818cf8;
+}
+.p2p-thumb {
+  width: 40px; height: 40px; border-radius: 8px; flex-shrink: 0; overflow: hidden;
   background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.2);
-  font-size: 12px; color: var(--app-text-muted); position: relative; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
 }
-.p2p-bar {
-  position: absolute; top: 0; left: 0; height: 100%;
-  background: rgba(99,102,241,0.15); transition: width 200ms;
+.p2p-thumb-img { width: 100%; height: 100%; object-fit: cover; }
+.p2p-direction-icon svg { width: 16px; height: 16px; }
+
+.p2p-file-info {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px;
 }
-.p2p-progress span { position: relative; z-index: 1; }
+.p2p-file-name {
+  font-size: 13px; font-weight: 600; color: var(--app-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.p2p-file-status { font-size: 11px; color: var(--app-text-subtle); }
+
+.p2p-pct {
+  font-size: 13px; font-weight: 700; color: #818cf8;
+  font-variant-numeric: tabular-nums; flex-shrink: 0;
+}
+
+/* Progress bar track */
+.p2p-track {
+  height: 5px; border-radius: 999px;
+  background: rgba(255,255,255,0.07);
+  overflow: hidden;
+}
+.p2p-fill {
+  height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+  transition: width 180ms ease;
+  position: relative; overflow: hidden;
+}
+/* Shimmer sweep on the fill */
+.p2p-shimmer {
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.35) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: p2p-sweep 1.4s linear infinite;
+}
+@keyframes p2p-sweep {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
 
 /* ── Banners ────────────────────────────────────────────────── */
 .chat-error-banner, .chat-warning-banner {
@@ -822,11 +1353,3 @@ ion-content { --background: transparent; }
 
 @media (prefers-reduced-motion: reduce) { .message, .send-button, .input-pill { animation: none; transition: none; } }
 </style>
-
-
-
-
-
-
-
-

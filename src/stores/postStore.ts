@@ -12,7 +12,7 @@ import { generatePseudonym } from '../utils/pseudonym';
 import { enabledVersions, type DataVersion } from '../utils/dataVersionSettings';
 import { GUN_NAMESPACE } from '../services/gunService';
 import { BoundedMap } from '../utils/boundedMap';
-// relayFeedService imports removed from store — REST warmup lives in dbWarmup.ts
+import { fetchCommentCounts, fetchVoteTallies } from '../services/relayFeedService';
 
 const PAGE_SIZE      = 10;
 const SEEN_POSTS_KEY = 'seen-post-ids';
@@ -193,17 +193,32 @@ export const usePostStore = defineStore('post', () => {
   }
 
   function setTally(postId: string, tally: PostTally) {
-    tallies.set(postId, tally);
+    // Never let a Gun-sourced tally downgrade counts that the relay already
+    // confirmed. subscribeTally emits {upvotes:0} while its baseline read is
+    // still in-flight (Gun returns stale data), which overwrites the correct
+    // relay-derived value fetched by hydrateCommentCounts/fetchVoteTallies.
+    // Only apply the new tally if it's strictly better (higher upvotes+downvotes
+    // total, meaning more voter records were folded in) than what's stored.
     const existing = postsMap.value.get(postId);
+    const currentTotal = (existing?.upvotes ?? 0) + (existing?.downvotes ?? 0);
+    const newTotal = (tally.upvotes ?? 0) + (tally.downvotes ?? 0);
+    const mergedTally: PostTally = newTotal >= currentTotal ? tally : {
+      upvotes:   Math.max(tally.upvotes   ?? 0, existing?.upvotes   ?? 0),
+      downvotes: Math.max(tally.downvotes ?? 0, existing?.downvotes ?? 0),
+      score:     Math.max(tally.upvotes   ?? 0, existing?.upvotes   ?? 0)
+               - Math.max(tally.downvotes ?? 0, existing?.downvotes ?? 0),
+    };
+    tallies.set(postId, mergedTally);
     if (existing) {
-      const scoreChanged = existing.score !== tally.score;
-      postsMap.value.set(postId, { ...existing, ...tally });
-      // Only notify sorted computed when score changes — otherwise the upvote
-      // counter update on a single card was triggering a full feed re-sort.
-      if (scoreChanged) triggerRef(postsMap);
+      const scoreChanged = existing.score !== mergedTally.score;
+      const countsChanged = existing.upvotes !== mergedTally.upvotes || existing.downvotes !== mergedTally.downvotes;
+      postsMap.value.set(postId, { ...existing, ...mergedTally });
+      // triggerRef when score changes (re-sort) OR when individual counts change
+      // (upvotes/downvotes displayed on card, even if score is identical).
+      if (scoreChanged || countsChanged) triggerRef(postsMap);
     }
     if (currentPost.value?.id === postId) {
-      currentPost.value = { ...currentPost.value, ...tally };
+      currentPost.value = { ...currentPost.value, ...mergedTally };
     }
   }
   const getPendingIncomingPostCount = () => {
@@ -247,6 +262,17 @@ export const usePostStore = defineStore('post', () => {
     setTally(payload.postId, payload.tally);
   });
 
+  // Listen for local vote-tally events dispatched by postVoteService immediately
+  // after a vote write. This bypasses the 30s Gun rehydration cooldown in
+  // subscribeToAllPosts so feed card counts update the moment any vote lands,
+  // without waiting for a Gun echo.
+  if (typeof window !== 'undefined') {
+    window.addEventListener('interpoll:vote-tally', (ev: Event) => {
+      const { postId, tally } = (ev as CustomEvent<{ postId: string; tally: PostTally }>).detail ?? {};
+      if (postId && tally) setTally(postId, tally);
+    });
+  }
+
   /** Attempt to decrypt an encrypted post and update the store */
   function tryDecryptPost(post: Post) {
     if (!post.isEncrypted || !post.encryptedContent) return;
@@ -272,8 +298,9 @@ export const usePostStore = defineStore('post', () => {
     const alreadyInStore  = postsMap.value.has(post.id);
     // Allow through if: correct namespace, OR it's a category patch for a known post
     if (!isCategoryPatch || !alreadyInStore) {
+      // Only reject posts that explicitly claim a different namespace.
+      // No dataVersion = relay-sourced post, treat as current namespace.
       if (postDataVersion && postDataVersion !== GUN_NAMESPACE) return;
-      if (!postDataVersion && namespaceVersion >= 3) return;
     }
 
     // Always update existing posts in-place (vote counts, edits, category patches)
@@ -290,8 +317,15 @@ export const usePostStore = defineStore('post', () => {
         // them (or vice-versa), preserve whichever side has the data so a
         // partial Gun delivery never silently clears fields we already have.
         const updated = withKnownTally(post);
+        // Never let a Gun echo downgrade vote counts. Use the tallies map as the
+        // authoritative source — it's populated by fetchVoteTallies (relay-derived)
+        // and by reconcileVote. Math.max against existing postsMap values is a
+        // second layer of protection for the window before tallies is populated.
+        const knownTally = tallies.get(post.id);
         merged = {
           ...updated,
+          upvotes:           knownTally?.upvotes   ?? Math.max(updated.upvotes   ?? 0, existing.upvotes   ?? 0),
+          downvotes:         knownTally?.downvotes ?? Math.max(updated.downvotes ?? 0, existing.downvotes ?? 0),
           videoCID:          updated.videoCID          ?? existing.videoCID,
           videoThumbnailCID: updated.videoThumbnailCID ?? existing.videoThumbnailCID,
           videoDuration:     updated.videoDuration     ?? existing.videoDuration,
@@ -300,6 +334,7 @@ export const usePostStore = defineStore('post', () => {
           imageIPFS:         updated.imageIPFS         ?? existing.imageIPFS,
           imageThumbnail:    updated.imageThumbnail    ?? existing.imageThumbnail,
         };
+        merged = { ...merged, score: (merged.upvotes ?? 0) - (merged.downvotes ?? 0) };
       }
       postsMap.value.set(post.id, merged);
       triggerRef(postsMap);
@@ -362,7 +397,11 @@ export const usePostStore = defineStore('post', () => {
         }
         cursor = (cursor + 1) % queues.length;
       }
-      if (processed > 0) logPostFlushRate(processed);
+      if (processed > 0) {
+        logPostFlushRate(processed);
+        // Notify Vue once per flush batch rather than per-post.
+        triggerRef(postsMap);
+      }
       if (pendingPostsByCommunity.size > 0) scheduleIncomingPostsFlush();
     }, INCOMING_POST_FLUSH_MS);
   }
@@ -382,6 +421,9 @@ export const usePostStore = defineStore('post', () => {
     for (const post of queue.values()) {
       processIncomingPost(communityId, post);
     }
+    // Notify Vue that postsMap changed so rebuildSortedPosts fires.
+    // processIncomingPost only calls triggerRef for updates; new posts need this.
+    triggerRef(postsMap);
   }
 
   // ─── Computed ──────────────────────────────────────────────────────────────
@@ -390,8 +432,12 @@ export const usePostStore = defineStore('post', () => {
 
   function matchesVersion(p: Post): boolean {
     const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;
-    // In v3+ mode, require explicit dataVersion match to avoid legacy bleed.
-    if (namespaceVersion >= 3) return p.dataVersion === GUN_NAMESPACE;
+    if (namespaceVersion >= 3) {
+      // injectPost already rejects foreign-namespace entries, so anything that
+      // made it into postsMap without a dataVersion tag is safe to treat as
+      // belonging to the current namespace rather than silently dropping it.
+      return !p.dataVersion || p.dataVersion === GUN_NAMESPACE;
+    }
     const v = p.dataVersion || GUN_NAMESPACE;
     return enabledVersions.value.includes(v as DataVersion);
   }
@@ -493,14 +539,15 @@ export const usePostStore = defineStore('post', () => {
   }
 
   function injectPost(post: Post) {
-    // Prevent injecting posts from other namespace versions
+    // Prevent injecting posts from other namespace versions.
+    // Posts without dataVersion are assumed to belong to the current namespace
+    // (dataVersion is client-side only and not stored on the relay).
     const postDataVersion = (post as any).dataVersion || null;
-    const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;
     if (postDataVersion && postDataVersion !== GUN_NAMESPACE) return;
-    if (!postDataVersion && namespaceVersion >= 3) return;
 
     if (!postsMap.value.has(post.id)) {
       postsMap.value.set(post.id, post);
+      triggerRef(postsMap);
       tryDecryptPost(post);
       if (POST_DEBUG) {
         postDebug('inject-post', {
@@ -717,8 +764,6 @@ export const usePostStore = defineStore('post', () => {
    * rendering uses, so the number and the icon can never disagree mid-flight.
    */
   function applyOptimisticToggle(postId: string, next: 'up' | 'down' | null): Post | null {
-    // A post open on the detail page may not be in postsMap — fall back to
-    // currentPost so the count moves there too, not just the button state.
     const existing = postsMap.value.get(postId)
       ?? (currentPost.value?.id === postId ? currentPost.value : null);
     if (!existing) return null;
@@ -726,8 +771,16 @@ export const usePostStore = defineStore('post', () => {
     const previous = myVote(postId);
     const delta = (vote: 'up' | 'down') =>
       (next === vote ? 1 : 0) - (previous === vote ? 1 : 0);
-    const upvotes = Math.max(0, (existing.upvotes || 0) + delta('up'));
-    const downvotes = Math.max(0, (existing.downvotes || 0) + delta('down'));
+
+    // Use relay-authoritative tally as base if available — postsMap may already
+    // include the correct count from hydrateCommentCounts, and myVotes may lag
+    // behind, causing the delta to double-count and show e.g. upvotes:2.
+    const knownTally = tallies.get(postId);
+    const baseUpvotes   = knownTally?.upvotes   ?? existing.upvotes   ?? 0;
+    const baseDownvotes = knownTally?.downvotes ?? existing.downvotes ?? 0;
+
+    const upvotes   = Math.max(0, baseUpvotes   + delta('up'));
+    const downvotes = Math.max(0, baseDownvotes + delta('down'));
     const optimistic: Post = { ...existing, upvotes, downvotes, score: upvotes - downvotes };
     postsMap.value.set(postId, optimistic);
     if (currentPost.value?.id === postId) currentPost.value = optimistic;
@@ -771,6 +824,50 @@ export const usePostStore = defineStore('post', () => {
       reconcileVote(postId, post, resolved);
       const karmaDelta = karmaFor(resolved) - karmaFor(previousVote);
       if (karmaDelta !== 0) void UserService.incrementKarma(post.authorId, karmaDelta).catch(() => {});
+
+      // Re-hydrate all OTHER posts so triggerRef from reconcileVote doesn't
+      // expose stale counts for them during rebuildSortedPosts.
+      // Exclude the voted post itself — the relay DB may not have indexed the
+      // new vote yet, so fetching its tally now would return the old count and
+      // overwrite the optimistic state. subscribeTally handles it instead.
+      void (async () => {
+        try {
+          const allIds = Array.from(postsMap.value.keys())
+            .filter(id => id !== postId)
+            .slice(0, 30);
+          await hydrateCommentCounts(allIds);
+        } catch { /* non-fatal */ }
+      })();
+
+      // After a short delay, re-hydrate the voted post too — by then the relay
+      // DB will have the new vote record persisted via Gun → MySQL.
+      setTimeout(() => {
+        void hydrateCommentCounts([postId]).catch(() => {});
+      }, 500);
+
+      // The tally in reconcileVote was computed from a Gun-local baseline that
+      // may be stale (Gun LWW means upvotes:0 even if the relay has 5). Kick
+      // off a short-lived subscribeTally so the relay-authoritative full count
+      // corrects the displayed value within a few seconds without us having to
+      // wait for it before returning. This is the same mechanism PostDetailPage
+      // uses — we just need it for feed posts too.
+      void (async () => {
+        await new Promise<void>((resolve) => {
+          let unsub: (() => void) | undefined;
+          // subscribeTally may call the callback synchronously on first emit
+          // before the `unsub` assignment completes (TDZ). Defer via microtask
+          // so the assignment always finishes before the callback can fire.
+          Promise.resolve().then(() => {
+            unsub = PostService.subscribeToVotes(postId, (tally) => {
+              setTally(postId, tally);
+              BroadcastService.broadcast('post-vote-tally', { postId, tally });
+              unsub?.();
+              resolve();
+            });
+            setTimeout(() => { unsub?.(); resolve(); }, 5_000);
+          });
+        });
+      })();
     } catch (error) {
       rollbackVote(postId, snapshot, previousVote);
       console.error('Error voting:', error); throw error;
@@ -789,6 +886,21 @@ export const usePostStore = defineStore('post', () => {
       reconcileVote(postId, post, resolved);
       const karmaDelta = karmaFor(resolved) - karmaFor(previousVote);
       if (karmaDelta !== 0) void UserService.incrementKarma(post.authorId, karmaDelta).catch(() => {});
+
+      void (async () => {
+        await new Promise<void>((resolve) => {
+          let unsub: (() => void) | undefined;
+          Promise.resolve().then(() => {
+            unsub = PostService.subscribeToVotes(postId, (tally) => {
+              setTally(postId, tally);
+              BroadcastService.broadcast('post-vote-tally', { postId, tally });
+              unsub?.();
+              resolve();
+            });
+            setTimeout(() => { unsub?.(); resolve(); }, 5_000);
+          });
+        });
+      })();
     } catch (error) {
       rollbackVote(postId, snapshot, previousVote);
       console.error('Error clearing vote:', error); throw error;
@@ -833,6 +945,44 @@ export const usePostStore = defineStore('post', () => {
   const removeUpvote = (postId: string) => clearVote(postId);
   const removeDownvote = (postId: string) => clearVote(postId);
 
+  /**
+   * Fetch accurate comment counts for a batch of post IDs from the relay's
+   * index endpoint and apply them via setCommentCount. The relay derives counts
+   * from the comment index (soul child count) rather than the mutable
+   * commentCount field on the post node, which resets to 0 on refresh due to
+   * Gun LWW races. Call this after the initial feed loads.
+   */
+  async function hydrateCommentCounts(postIds: string[]): Promise<void> {
+    if (postIds.length === 0) return;
+    try {
+      // Fetch both comment counts and vote tallies in parallel — both come from
+      // relay-derived index data (gun_nodes children) rather than mutable Gun
+      // node fields, so they survive refresh correctly.
+      const [counts, tallies] = await Promise.all([
+        fetchCommentCounts(postIds),
+        fetchVoteTallies(postIds),
+      ]);
+      for (const [postId, count] of Object.entries(counts)) {
+        if (typeof count === 'number') setCommentCount(postId, count);
+      }
+      for (const [postId, tally] of Object.entries(tallies)) {
+        if (tally && typeof tally.upvotes === 'number') setTally(postId, tally);
+      }
+    } catch {
+      // non-fatal
+    }
+  }
+
+  /**
+   * Pull authoritative vote state (tally + myVote) for a batch of post IDs.
+   * Call this on mount so button states and counts are correct after refresh,
+   * even for users who voted from another device or tab.
+   */
+  async function hydrateVoteStates(postIds: string[]): Promise<void> {
+    if (postIds.length === 0) return;
+    await Promise.allSettled(postIds.map((id) => refreshVoteState(id)));
+  }
+
   // ─── Refresh ───────────────────────────────────────────────────────────────
 
   async function refreshPosts() {
@@ -874,7 +1024,7 @@ export const usePostStore = defineStore('post', () => {
     createPost, selectPost,
     toggleVote, clearVote, myVote, myVotes, refreshVoteState, subscribeToVotes,
     voteOnPost, upvotePost, downvotePost, removeUpvote, removeDownvote,
-    setCommentCount,
+    setCommentCount, hydrateCommentCounts, hydrateVoteStates,
     refreshPosts,
   };
 });

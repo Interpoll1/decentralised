@@ -33,6 +33,7 @@
 
 import { GunService } from './gunService';
 import { gunPut, gunOnce, gunReadChildren } from '../utils/gunAsync';
+import config from '../config';
 
 export type VoteType = 'up' | 'down';
 /** `'none'` is a cleared vote — an explicit tombstone, not a Gun delete. */
@@ -167,7 +168,7 @@ export class PostVoteService {
   static async getTally(postId: string): Promise<PostTally> {
     const [baseline, children] = await Promise.all([
       PostVoteService.readBaseline(postId),
-      gunReadChildren<any>(postVotesNode(postId), { minMs: 300, maxMs: 4_000 }),
+      gunReadChildren<any>(postVotesNode(postId), { minMs: 200, maxMs: 2_000 }),
     ]);
     return foldVotes(
       baseline,
@@ -182,9 +183,11 @@ export class PostVoteService {
    */
   static async castVote(postId: string, userId: string, direction: VoteType): Promise<PostVoteResult> {
     if (!userId) throw new Error('userId is required to vote');
-    const current = await PostVoteService.getMyVote(postId, userId);
-    const next: VoteValue = current === direction ? 'none' : direction;
-    return PostVoteService.writeVote(postId, userId, next);
+    // The store (toggleVote) already resolved toggle direction from its local
+    // myVotes state before calling here. A graph read to confirm would add up
+    // to 3s of latency and could disagree with what the store predicted.
+    // writeVote still reads the existing node to preserve baselineType.
+    return PostVoteService.writeVote(postId, userId, direction);
   }
 
   /** Clear this user's vote unconditionally. */
@@ -194,46 +197,115 @@ export class PostVoteService {
   }
 
   private static async writeVote(postId: string, userId: string, next: VoteValue): Promise<PostVoteResult> {
-    const baseline = await PostVoteService.ensureBaseline(postId);
-
-    // Preserve any baseline correction already recorded for this user; only
-    // discover it from the legacy key the first time we write their node.
-    const existing = await gunOnce(postVotesNode(postId).get(userId), READ_TIMEOUT_MS);
-    const baselineType = parseVote(existing)
-      ? parseBaselineType(existing)
-      : await PostVoteService.readLegacyVote(postId, userId);
-
-    const record: Record<string, string | number> = {
-      type: next,
-      userId,
-      postId,
-      at: Date.now(),
+    const minimalRecord: Record<string, string | number> = {
+      type: next, userId, postId, at: Date.now(),
     };
-    if (baselineType) record.baselineType = baselineType;
 
-    const ack = await gunPut(postVotesNode(postId).get(userId), record);
-    // 'timeout' means Gun wrote locally but didn't get a relay ack within 8s.
-    // This is acceptable — Gun will sync when the relay reconnects.
-    // Only throw on explicit Gun error responses (network rejection, auth failure).
-    if (!ack.ok && ack.err !== 'timeout') throw new Error(ack.err || 'Vote could not be recorded');
+    // ── Write via HTTP POST directly to relay MySQL — fast path ──────────────
+    // Gun WebSocket writes take 1+ minutes when the WS round-trip is slow.
+    // A direct HTTP POST to /api/content-vote writes straight to gun_nodes
+    // (<100ms) so /api/vote-tally reflects the vote immediately on refresh.
+    // Gun write runs in parallel as a fallback for peer sync.
+    const httpWritePromise = fetch(`${config.relay.api}/api/content-vote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(minimalRecord),
+    }).then(r => r.ok).catch(() => false);
 
-    const children = await gunReadChildren<any>(postVotesNode(postId), { minMs: 300, maxMs: 4_000 });
-    const folded = new Map(children.map(({ key, value }) => [key, value]));
-    // Our own write may not have echoed back yet — count it from what we sent.
-    folded.set(userId, record);
-    const tally = foldVotes(
-      baseline,
-      [...folded.values()].map((value) => ({ vote: parseVote(value), baselineType: parseBaselineType(value) })),
-    );
+    // Gun write in parallel — keeps peer-to-peer sync working
+    gunPut(postVotesNode(postId).get(userId), minimalRecord)
+      .then(ack => { if (!ack.ok && ack.err !== 'timeout') console.warn('[vote] gun write error:', ack.err); })
+      .catch(() => {});
 
-    // Advisory mirror for readers that render a post before its vote set loads.
-    // Never authoritative — every read path here prefers the derived tally.
-    // Update vote counters on the post/poll node (hint — non-blocking)
+    // ── Read baseline and existing vote in parallel (capped at 1s) ───────────
+    const FAST_READ_MS = 1_000;
+    const [post, existingVote, httpOk] = await Promise.all([
+      gunOnce(postNode(postId), FAST_READ_MS) as Promise<any>,
+      gunOnce(postVotesNode(postId).get(userId), FAST_READ_MS) as Promise<any>,
+      httpWritePromise,
+    ]);
+
+    if (!httpOk) console.warn('[vote] HTTP write failed, Gun fallback in progress');
+
+    // ── Baseline — prefer relay-derived tally over stale Gun node ────────────
+    // Gun's post node upvotes/downvotes is stale (LWW races). The relay's
+    // /api/vote-tally counts postVotes children directly and is now up-to-date
+    // (we just wrote our vote via HTTP). Use it as the base for tally computation.
+    let baseline: { up: number; down: number };
+    try {
+      const tallyRes = await fetch(
+        `${config.relay.api}/api/vote-tally?ids=${encodeURIComponent(postId)}`,
+        { signal: AbortSignal.timeout?.(1500) ?? undefined }
+      );
+      if (tallyRes.ok) {
+        const tallyJson = await tallyRes.json();
+        const t = tallyJson?.tallies?.[postId];
+        // This tally already includes our just-written vote (HTTP write landed first)
+        // so we return it directly without folding again.
+        if (t && typeof t.upvotes === 'number') {
+          const tally: PostTally = { upvotes: t.upvotes, downvotes: t.downvotes, score: t.score };
+          const tallyHint = { upvotes: tally.upvotes, downvotes: tally.downvotes, score: tally.score };
+          void gunPut(postNode(postId), tallyHint).catch(() => {});
+          if (postId.startsWith('poll-')) void gunPut(gun().get('polls').get(postId), tallyHint).catch(() => {});
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('interpoll:vote-tally', { detail: { postId, tally: tallyHint } }));
+          }
+          return { tally, myVote: next === 'none' ? null : next };
+        }
+      }
+    } catch { /* fallback to Gun baseline below */ }
+
+    // Fallback: Gun-based baseline (used when relay unreachable)
+    if (!post) {
+      baseline = { up: 0, down: 0 };
+    } else if (post.voteBaselineAt) {
+      baseline = {
+        up: Number(post.voteBaselineUp) || 0,
+        down: Number(post.voteBaselineDown) || 0,
+      };
+    } else {
+      baseline = {
+        up: Number(post.upvotes) || 0,
+        down: Number(post.downvotes) || 0,
+      };
+      void gunPut(postNode(postId), {
+        voteBaselineUp: baseline.up,
+        voteBaselineDown: baseline.down,
+        voteBaselineAt: Date.now(),
+      }).catch(() => {});
+    }
+
+    // ── Baseline correction ───────────────────────────────────────────────────
+    const knownVote = parseVote(existingVote);
+    let baselineType: 'up' | 'down' | null = null;
+    if (knownVote) {
+      baselineType = parseBaselineType(existingVote);
+    } else {
+      baselineType = await Promise.race([
+        PostVoteService.readLegacyVote(postId, userId),
+        new Promise<null>((r) => setTimeout(() => r(null), 500)),
+      ]);
+    }
+
+    // Patch baselineType onto record non-blocking if we found one
+    if (baselineType) {
+      void gunPut(postVotesNode(postId).get(userId), { ...minimalRecord, baselineType }).catch(() => {});
+    }
+
+    // ── Tally ─────────────────────────────────────────────────────────────────
+    const tally = foldVotes(baseline, [{ vote: next, baselineType }]);
     const tallyHint = { upvotes: tally.upvotes, downvotes: tally.downvotes, score: tally.score };
     void gunPut(postNode(postId), tallyHint).catch(() => {});
-    // For poll IDs, also update the polls path so the poll's displayed score stays current
     if (postId.startsWith('poll-')) {
       void gunPut(gun().get('polls').get(postId), tallyHint).catch(() => {});
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('interpoll:vote-tally', {
+          detail: { postId, tally: tallyHint },
+        }),
+      );
     }
 
     return { tally, myVote: next === 'none' ? null : next };
