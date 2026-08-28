@@ -462,16 +462,17 @@ const isValid = computed(() => {
   );
 });
 
-const joinedCommunities = computed(() =>
-  communityStore.communities.filter(c => communityStore.isJoined(c.id))
-);
+const joinedCommunities = computed(() => {
+  const joined = communityStore.communities.filter(c => communityStore.isJoined(c.id));
+  return joined.length > 0 ? joined : communityStore.communities;
+});
 
 async function showCommunityPicker() {
-  if (joinedCommunities.value.length === 0) {
+  if (communityStore.communities.length === 0) {
     const toast = await toastController.create({
-      message: 'Please join a community first',
+      message: 'Loading communities, please wait…',
       duration: 2000,
-      color: 'warning',
+      color: 'medium',
     });
     await toast.present();
     return;
@@ -522,6 +523,10 @@ async function createPoll() {
 
   try {
     isSubmitting.value = true;
+    // Auto-join community if user selected from fallback list (not yet joined)
+    if (selectedCommunity.value && !communityStore.isJoined(selectedCommunity.value)) {
+      await communityStore.joinCommunity(selectedCommunity.value);
+    }
 
     // Spam check — question
     const qCheck = checkContent(question.value.trim(), 'title');
@@ -698,6 +703,9 @@ watch(
 onMounted(async () => {
   if (communityStore.communities.length === 0) {
     await communityStore.loadCommunities();
+  }
+  if (joinedCommunities.value.length === 0 && communityStore.communities.length > 0) {
+    await communityStore.syncJoinedFromRelay?.().catch(() => {});
   }
 });
 </script>

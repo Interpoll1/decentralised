@@ -68,9 +68,7 @@ export default defineConfig({
           navigateFallback: '/index.html',
           navigateFallbackDenylist: [/^\/gun/, /^\/api/, /^\/oauth/, /^\/db/],
           cleanupOutdatedCaches: true,
-          // Ionic vendor chunk ~1.1 MB — raise limit so SW caches it
           maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
-          // Runtime cache for relay REST feed endpoints (stale-while-revalidate)
           runtimeCaching: [
             {
               urlPattern: /\/api\/(posts|polls|communities|feed|comment-counts|trending-categories)/,
@@ -106,17 +104,15 @@ export default defineConfig({
   },
 
   optimizeDeps: {
-    // Pre-bundle these for instant dev cold starts
     include: [
       'vue', 'vue-router', 'pinia',
       '@ionic/vue',
       'buffer', 'os-browserify/browser',
       'ionicons/icons',
     ],
-    // Skip dead deps and heavy async-only libs from the dep scan
     exclude: [
-      'ipfs-core',            // dead dep — ipfsService.ts never imports it
-      'libp2p-webrtc-star',   // dead dep — never imported anywhere
+      'ipfs-core',
+      'libp2p-webrtc-star',
     ],
     esbuildOptions: { define: { global: 'globalThis' } },
   },
@@ -128,20 +124,18 @@ export default defineConfig({
     target: 'es2020',
     minify: 'esbuild',
     cssMinify: true,
-    // Per-chunk CSS — each lazy component only loads its own stylesheet
     cssCodeSplit: true,
-    // Skip gzip size report — saves 2-3s per build, misleading anyway
     reportCompressedSize: false,
     commonjsOptions: { transformMixedEsModules: true },
 
     rollupOptions: {
-      // Dead deps: in package.json but never imported — exclude from bundle entirely
-      external: (id) =>
-        id === 'ipfs-core' ||
-        id === 'libp2p-webrtc-star',
+      external: (id) => {
+        if (id === 'ipfs-core' || id === 'libp2p-webrtc-star') return true;
+        return false;
+      },
 
       onwarn(warning, warn) {
-        if (warning.code === 'SOURCEMAP_ERROR')    return;
+        if (warning.code === 'SOURCEMAP_ERROR')     return;
         if (warning.code === 'CIRCULAR_DEPENDENCY') return;
         warn(warning);
       },
@@ -152,35 +146,31 @@ export default defineConfig({
         assetFileNames:  'assets2/[name]-[hash].[ext]',
 
         manualChunks(id) {
-          // Dead — never actually imported, just in package.json
           if (
             id.includes('node_modules/ipfs-core') ||
             id.includes('node_modules/libp2p-webrtc-star')
           ) return 'vendor-dead';
 
-          // Ionic UI ~1.1 MB — own cache key, independent of app logic changes
+          // Gun bundled via shim — gets its own cache key
+          if (id.includes('node_modules/gun')) return 'vendor-gun';
+
+          // Ionic UI — own cache key
           if (id.includes('node_modules/@ionic')) return 'vendor-ionic';
 
-          // Ionicons — SVG icon data, split from Ionic components so
-          // icon tree-shaking doesn't bust the component chunk cache
+          // Ionicons SVG data
           if (id.includes('node_modules/ionicons')) return 'vendor-ionicons';
 
-          // Image compression — only used in ipfsService (dynamic import),
-          // never on the critical path
+          // Image compression — only via dynamic import
           if (id.includes('node_modules/browser-image-compression')) return 'vendor-image';
 
-          // Crypto / keys — only needed at post-create time (signing)
-          // and identity setup. Already behind dynamic import() in postService.
+          // Crypto / keys — signing only, already behind dynamic import()
           if (
             id.includes('node_modules/@noble') ||
             id.includes('node_modules/bip39')  ||
             id.includes('node_modules/@scure')
           ) return 'vendor-crypto';
 
-          // GunDB — relay/SEA code isolated from Vue runtime chunk
-          if (id.includes('node_modules/gun')) return 'vendor-gun';
-
-          // Vue ecosystem — rarely changes, long cache lifetime
+          // Vue ecosystem — long cache lifetime
           if (
             id.includes('node_modules/vue')       ||
             id.includes('node_modules/pinia')      ||
@@ -189,11 +179,11 @@ export default defineConfig({
             id.includes('node_modules/@unhead')
           ) return 'vendor-vue';
 
-          // Remaining node_modules — one shared chunk avoids HTTP/2 stream explosion
-          if (id.includes('node_modules')) return 'vendor-misc';
+          // Signal Protocol — chat-only, must be lazy
+          // Verify it's never eagerly imported: grep -r "signalProtocol" src --include="*.ts" | grep -v "dynamic\|import()"
+          if (id.includes('signalProtocol')) return 'vendor-signal';
 
-          // App code: Rollup handles route-level splitting automatically
-          // via dynamic imports in router/index.ts and defineAsyncComponent.
+          if (id.includes('node_modules')) return 'vendor-misc';
         },
       },
     },
@@ -203,3 +193,25 @@ export default defineConfig({
     fs: { strict: false },
   },
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
