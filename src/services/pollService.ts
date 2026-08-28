@@ -1628,48 +1628,81 @@ export class PollService {
   /**
    * Content-level upvote/downvote on the poll itself (independent of option voting).
    * Mirrors PostService.voteOnPost's toggle semantics.
+   *
+   * `knownCounts` is supplied by the store (from pollsMap) so we never need to
+   * load the poll from Gun — the poll may not be in the local graph if it was
+   * loaded via the relay REST feed (radisk/localStorage disabled).
    */
   static async voteOnPollContent(
     pollId: string,
     direction: 'up' | 'down',
     userId: string,
     communityId?: string,
+    knownCounts?: { upvotes: number; downvotes: number; previous: 'up' | 'down' | null },
   ): Promise<{ upvotes: number; downvotes: number; score: number }> {
-    const poll = await this.loadPollFromGun(pollId, false, false)
-      ?? (communityId ? await this.loadPollFromCommunityPath(communityId, pollId, false, false) : null);
-    if (!poll) throw new Error('Poll not found');
-
     const gun = this.gun;
-    const voteKey = `vote_${userId}_poll_${pollId}`;
-    const existingVote = await this.onceNode<any>(gun.get('votes').get(voteKey), 2000);
-    let upvotes = poll.upvotes || 0;
-    let downvotes = poll.downvotes || 0;
 
-    if (existingVote?.type === 'up') {
-      upvotes = Math.max(0, upvotes - 1);
-    } else if (existingVote?.type === 'down') {
-      downvotes = Math.max(0, downvotes - 1);
-    }
+    // knownCounts is the pre-optimistic snapshot from the store — delta not yet
+    // applied here, we apply it below exactly once.
+    let upvotes: number;
+    let downvotes: number;
+    let existingDirection: 'up' | 'down' | null;
 
-    const togglingOffSameVote = existingVote?.type === direction;
-    if (togglingOffSameVote) {
-      await this.putPromise(gun.get('votes').get(voteKey), null, { label: 'poll content vote clear' });
+    if (knownCounts) {
+      upvotes           = knownCounts.upvotes;
+      downvotes         = knownCounts.downvotes;
+      existingDirection = knownCounts.previous;
     } else {
-      if (direction === 'up') upvotes += 1; else downvotes += 1;
-      await this.putPromise(gun.get('votes').get(voteKey), {
-        userId,
-        pollId,
-        type: direction,
-        timestamp: Date.now(),
-      }, { label: 'poll content vote write' });
+      const poll = await this.loadPollFromGun(pollId, false, false)
+        ?? (communityId ? await this.loadPollFromCommunityPath(communityId, pollId, false, false) : null);
+      if (!poll) throw new Error('Poll not found');
+      upvotes   = poll.upvotes   || 0;
+      downvotes = poll.downvotes || 0;
+      const voteKey = `vote_${userId}_poll_${pollId}`;
+      const existingVote = await this.onceNode<any>(gun.get('votes').get(voteKey), 2000);
+      existingDirection = existingVote?.type === 'up' ? 'up' : existingVote?.type === 'down' ? 'down' : null;
     }
+
+    const togglingOff = existingDirection === direction;
+
+    // Remove previous contribution, then apply new direction
+    if (existingDirection === 'up')   upvotes   = Math.max(0, upvotes   - 1);
+    if (existingDirection === 'down') downvotes = Math.max(0, downvotes - 1);
+    if (!togglingOff) {
+      if (direction === 'up') upvotes += 1; else downvotes += 1;
+    }
+
+    // ── Write vote via HTTP POST (fast) + Gun (peer sync fallback) ──────────
+    const voteRecord = { userId, pollId, postId: pollId, at: Date.now(), type: togglingOff ? 'none' : direction };
+    // HTTP write — direct to MySQL via relay, <100ms
+    void fetch(`${(await import('../config')).default.relay.api}/api/content-vote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(voteRecord),
+    }).catch(() => {});
+    // Gun write — parallel, for peer sync
+    void new Promise<void>((resolve) => {
+      gun.get('postVotes').get(pollId).get(userId).put(
+        this.sanitizeForGun(voteRecord), () => resolve(),
+      );
+      setTimeout(resolve, 3_000);
+    }).catch(() => {});
 
     const score = upvotes - downvotes;
     const patch = { upvotes, downvotes, score };
-    await this.putPromise(this.getPollPath(pollId), patch, { label: 'poll content vote patch (root)' });
-    if (poll.communityId) {
-      await this.putPromise(this.getCommunityPollPath(poll.communityId, pollId), patch, { label: 'poll content vote patch (community)' });
+
+    // Write tally hints fire-and-forget
+    void new Promise<void>((resolve) => {
+      this.getPollPath(pollId).put(this.sanitizeForGun(patch), () => resolve());
+      setTimeout(resolve, 3_000);
+    }).catch(() => {});
+    if (communityId) {
+      void new Promise<void>((resolve) => {
+        this.getCommunityPollPath(communityId, pollId).put(this.sanitizeForGun(patch), () => resolve());
+        setTimeout(resolve, 3_000);
+      }).catch(() => {});
     }
+
     return patch;
   }
 

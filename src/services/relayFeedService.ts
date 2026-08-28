@@ -220,3 +220,42 @@ export async function fetchCommentCounts(
   );
   return results;
 }
+
+export interface PostTallyResult {
+  upvotes: number;
+  downvotes: number;
+  score: number;
+}
+
+/**
+ * Fetch authoritative vote tallies for a batch of post/poll IDs from the
+ * relay's /api/vote-tally endpoint. The relay derives counts from postVotes
+ * children in gun_nodes rather than the mutable upvotes/downvotes field on the
+ * post node (which goes stale after refresh due to Gun LWW races).
+ */
+export async function fetchVoteTallies(
+  ids: string[],
+): Promise<Record<string, PostTallyResult>> {
+  if (ids.length === 0) return {};
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += 50) chunks.push(ids.slice(i, i + 50));
+  const results: Record<string, PostTallyResult> = {};
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      try {
+        const res = await fetchWithTimeout(
+          `${apiBase()}/api/vote-tally?ids=${encodeURIComponent(chunk.join(','))}`,
+          5_000,
+        );
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json?.tallies && typeof json.tallies === 'object') {
+          Object.assign(results, json.tallies);
+        }
+      } catch {
+        // non-fatal — store falls back to Gun-stored counts
+      }
+    }),
+  );
+  return results;
+}

@@ -1,5 +1,6 @@
-import Gun from 'gun';
-import 'gun/sea';
+
+
+import Gun from '../lib/gun-shim';
 import config, { getPeerPreferences } from '../config';
 
 export const GUN_NAMESPACE = 'v3';
@@ -12,7 +13,7 @@ export const GUN_NAMESPACE = 'v3';
 // so the WebRTC wire bridge drops them in `enforce` mode — comment votes and
 // direct messages could never replicate P2P. They are namespaced now; the chat
 // service still reads the legacy un-namespaced paths so no history is lost.
-const NAMESPACED_ROOTS = new Set(['posts', 'communities', 'polls', 'postVotes', 'users', 'comments', 'commentVotes', 'events', 'chatrooms', 'chats', 'chat-presence', 'chat-read', 'server-config', 'user-pubkey-index']);
+const NAMESPACED_ROOTS = new Set(['posts', 'communities', 'polls', 'postVotes', 'users', 'comments', 'commentVotes', 'events', 'chatrooms', 'chats', 'chat-presence', 'chat-read', 'chat-p2p', 'server-config', 'user-pubkey-index']);
 
 function createNamespacedProxy(gun: any, nsNode: any): any {
   return new Proxy(gun, {

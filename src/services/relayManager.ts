@@ -487,6 +487,16 @@ export class RelayManager {
     };
   }
 
+  /** Alias for onRelayListChange — used by RelayIndicator, RelaySheet, and NetworkPage. */
+  static onChange(callback: (relays: RelayEndpoint[]) => void): () => void {
+    return this.onRelayListChange(callback);
+  }
+
+  /** Alias for probeAllRelays — used by NetworkPage refresh button. */
+  static async probeAll(): Promise<void> {
+    await this.probeAllRelays();
+  }
+
   static isEndpointSetSafe(ws: string, gun: string, api: string): boolean {
     let wsUrl: URL;
     let gunUrl: URL;

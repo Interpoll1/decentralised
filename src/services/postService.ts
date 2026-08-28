@@ -638,6 +638,25 @@ export class PostService {
         // appears immediately rather than waiting up to 30s for the next window.
         const hasCachedVideo = !!(postMemoryCache.get(postId) as any)?.videoCID;
         const incomingHasVideo = !!(data as any)?.videoCID;
+        // Exception: vote tally hints (upvotes/downvotes patch with no title)
+        // must bypass the cooldown so other tabs see vote changes immediately
+        // rather than waiting up to 30s. These are lightweight — no full refetch.
+        const isTallyHint = data && typeof data === 'object' && !data.title
+          && (data.upvotes !== undefined || data.downvotes !== undefined || data.score !== undefined);
+        if (isTallyHint) {
+          // Apply the tally hint directly without a full refetch
+          const existing = postMemoryCache.get(postId) as any;
+          if (existing) {
+            const patched = {
+              ...existing,
+              upvotes:   data.upvotes   ?? existing.upvotes,
+              downvotes: data.downvotes ?? existing.downvotes,
+              score:     data.score     ?? existing.score,
+            };
+            onPost(patched);
+          }
+          return;
+        }
         if (!hasCachedVideo && incomingHasVideo) {
           // fall through to refetch
         } else {
@@ -819,9 +838,15 @@ export class PostService {
     direction: 'up' | 'down',
     userId: string,
   ): Promise<{ post: Post; myVote: 'up' | 'down' | null }> {
+    // Use memory cache first — avoids a blocking onceWithTimeout (up to 1.5s)
+    // before the vote write. The post fields are only needed to carry metadata
+    // into reconcileVote; the tally comes from castVote, not this read.
+    const cached = postMemoryCache.get(postId) as Post | undefined;
+    const { tally, myVote } = await PostVoteService.castVote(postId, userId, direction);
+    if (cached) return { post: PostService.applyTally(cached, tally), myVote };
+    // Fallback: Gun read if not cached (cold load)
     const post = await PostService.getPostForCounterUpdate(postId);
     if (!post) throw new Error('Post not found');
-    const { tally, myVote } = await PostVoteService.castVote(postId, userId, direction);
     return { post: PostService.applyTally(post, tally), myVote };
   }
 

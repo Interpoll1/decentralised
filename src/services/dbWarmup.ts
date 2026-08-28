@@ -134,12 +134,11 @@ export async function warmupFromDB(): Promise<void> {
       let n = 0
       for (const d of posts || []) {
         if (!d?.id || !d?.title || !d?.communityId) continue
-        // Skip posts from other namespace versions (avoid importing v2 posts into v3 clients)
+        // Skip posts that explicitly declare a different namespace version.
+        // Posts without dataVersion are assumed to belong to the current namespace
+        // (the field is client-side only and never stored on the relay).
         const postDataVersion = typeof d.dataVersion === 'string' ? d.dataVersion : null
-        const namespaceVersion = getNamespaceVersion(GUN_NAMESPACE)
         if (postDataVersion && postDataVersion !== GUN_NAMESPACE) continue
-        // If running v3+ and the post lacks dataVersion, be conservative and skip it
-        if (!postDataVersion && namespaceVersion >= 3) continue
 
         // Always inject — overwrite stale if present
         postStore.injectPost({

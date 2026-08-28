@@ -78,13 +78,13 @@
             <!-- Vote & Actions Bar -->
             <div class="actions-bar">
               <div class="vote-buttons">
-                <button class="vote-button upvote" @click="handleUpvote" :class="{ active: hasUpvoted }">
-                  <ion-icon :icon="arrowUpOutline"></ion-icon>
+                <button class="vote-button heart" @click="handleUpvote" :class="{ active: hasUpvoted }">
+                  <ion-icon :icon="hasUpvoted ? heart : heartOutline"></ion-icon>
                   <span>{{ formatNumber(post.upvotes) }}</span>
                 </button>
-                
-                <button class="vote-button downvote" @click="handleDownvote" :class="{ active: hasDownvoted }">
-                  <ion-icon :icon="arrowDownOutline"></ion-icon>
+
+                <button class="vote-button dislike" @click="handleDownvote" :class="{ active: hasDownvoted }">
+                  <ion-icon :icon="hasDownvoted ? thumbsDown : thumbsDownOutline"></ion-icon>
                   <span>{{ formatNumber(post.downvotes) }}</span>
                 </button>
 
@@ -207,7 +207,7 @@ import {
   toastController, actionSheetController
 } from '@ionic/vue';
 import {
-  peopleOutline, arrowUpOutline, arrowDownOutline,
+  peopleOutline, heart, heartOutline, thumbsDownOutline, thumbsDown,
   trendingUpOutline, chatbubbleOutline, sendOutline,
   shareSocialOutline, alertCircleOutline, refreshOutline
 } from 'ionicons/icons';
@@ -503,8 +503,9 @@ async function handlePostVote(direction: 'up' | 'down') {
   const version = voteVersion.value;
   try {
     await postStore.toggleVote(id, direction);
-    const labels = { up: 'Upvote', down: 'Downvote' };
-    await presentVoteToast(wasActive ? `${labels[direction]} removed` : `${labels[direction]}d`, version);
+    const labels = { up: 'Liked', down: 'Disliked' };
+    const removeLabels = { up: 'Like removed', down: 'Dislike removed' };
+    await presentVoteToast(wasActive ? removeLabels[direction] : labels[direction], version);
   } catch (error) {
     console.error('Error voting:', error);
   }
@@ -744,24 +745,24 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
-.vote-button.upvote.active {
-  background: rgba(var(--ion-color-primary-rgb), 0.15);
-  color: var(--ion-color-primary);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.3);
+.vote-button.heart.active {
+  background: rgba(167, 139, 250, 0.15);
+  color: #c4b5fd;
+  border-color: rgba(167, 139, 250, 0.3);
 }
 
-.vote-button.upvote.active ion-icon {
-  color: var(--ion-color-primary);
+.vote-button.heart.active ion-icon {
+  color: #c4b5fd;
 }
 
-.vote-button.downvote.active {
-  color: var(--ion-color-danger);
-  background: rgba(var(--ion-color-danger-rgb), 0.15);
-  border-color: rgba(var(--ion-color-danger-rgb), 0.3);
+.vote-button.dislike.active {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
 }
 
-.vote-button.downvote.active ion-icon {
-  color: var(--ion-color-danger);
+.vote-button.dislike.active ion-icon {
+  color: #ef4444;
 }
 
 .stat-item {

@@ -29,7 +29,7 @@ const DEFAULT_PUT_TIMEOUT_MS = 8_000;
 const DEFAULT_READ_TIMEOUT_MS = 5_000;
 
 /** Relay origin for HTTP side-channels (`config.relay.gun` ends in `/gun`). */
-function gunRelayBase(): string {
+export function gunRelayBase(): string {
   return config.relay.gun.replace(/\/gun$/, '');
 }
 

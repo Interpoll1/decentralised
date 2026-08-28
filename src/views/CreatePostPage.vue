@@ -350,6 +350,11 @@ onMounted(async () => {
   if (communityStore.communities.length === 0) {
     await communityStore.loadCommunities();
   }
+  // If no joined communities are recorded (empty localStorage / new device),
+  // sync joined state from the relay so the list isn't empty.
+  if (joinedCommunities.value.length === 0 && communityStore.communities.length > 0) {
+    await communityStore.syncJoinedFromRelay?.().catch(() => {});
+  }
   // Pre-select the community from route param if still joined
   if (communityId && communityStore.isJoined(communityId)) {
     selectedCommunity.value = communityId;
@@ -364,13 +369,15 @@ const imageSize = computed(() => {
   return `${(kb / 1024).toFixed(1)} MB`;
 });
 
-const joinedCommunities = computed(() =>
-  communityStore.communities.filter(c => communityStore.isJoined(c.id))
-);
+const joinedCommunities = computed(() => {
+  const joined = communityStore.communities.filter(c => communityStore.isJoined(c.id));
+  // Fall back to all communities when none are marked joined (empty localStorage,
+  // new device, or join state not yet synced). User can post to any community.
+  return joined.length > 0 ? joined : communityStore.communities;
+});
 
 const canSubmit = computed(() =>
   !!selectedCommunity.value
-  && communityStore.isJoined(selectedCommunity.value)
   && title.value.trim().length > 0
 );
 
@@ -417,14 +424,9 @@ const removeImage = () => {
 
 const submitPost = async () => {
   if (!canSubmit.value) return;
+  // Auto-join the community if user selected from fallback list (not yet joined)
   if (!communityStore.isJoined(selectedCommunity.value)) {
-    const toast = await toastController.create({
-      message: 'Join a community before creating a post',
-      duration: 2500,
-      color: 'warning'
-    });
-    await toast.present();
-    return;
+    await communityStore.joinCommunity(selectedCommunity.value);
   }
 
   const titleCheck = checkContent(title.value.trim(), 'title');

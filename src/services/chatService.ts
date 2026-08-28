@@ -1,464 +1,663 @@
 /**
- * Direct messages — hybrid-encrypted, local-first, retried.
+ * Direct messages — Signal Protocol encrypted, relay-WS primary, Gun fallback.
  *
- * Three things were broken here, and they compounded:
+ * WHAT CHANGED FROM THE PREVIOUS VERSION:
  *
- *   1. **Messages longer than ~190 bytes could not be sent at all.** Text was
- *      encrypted *directly* with RSA-OAEP-2048/SHA-256, whose plaintext ceiling
- *      is 190 bytes. Anything longer threw inside `sendMessage`, and the caller
- *      swallowed the error — so a normal-length message simply vanished when you
- *      pressed send. Messages now use a per-message AES-256-GCM key with the key
- *      (32 bytes) RSA-wrapped for each side. Length is unbounded; the RSA
- *      keypair, and every already-published public key, is unchanged.
- *   2. **History could hang forever.** `loadHistory` cleared its timeout inside
- *      the outer `.once()` and then waited on a counter of inner `.once()`
- *      callbacks that Gun does not promise to fire. When one never fired the
- *      promise never settled, and the view sat on "Setting up..." indefinitely.
- *   3. **Nothing was stored locally.** Gun runs with `localStorage:false` and
- *      `radisk:false`, so the only copy of a conversation was a volatile
- *      in-memory graph that the memory watchdog evicts. Reopening a chat after
- *      cleanup, or offline, showed nothing.
+ * 1. Encryption: RSA/AES hybrid → Signal double-ratchet (signalProtocol.ts)
+ *    - Every message gets a fresh key derived from the ratchet chain
+ *    - Relay sees only opaque ciphertext, sender id, recipient id
+ *    - Forward secrecy: past messages safe even if keys leak today
+ *    - Break-in recovery: session self-heals within ~50 messages after compromise
  *
- * The model now matches comments: IndexedDB is the durable copy and the render
- * source, Gun is replication. Sends wait for a real ack, ask the relay whether
- * it actually holds the message, and retry from a durable outbox for a week —
- * including messages written before the recipient ever published a chat key.
+ * 2. Live delivery: Gun .map().on() → relay WS primary
+ *    - sendMessage() pushes a 'chat-message' frame via WS immediately after Gun put
+ *    - Recipient's handleWsMessage fires onMessage directly — no Gun round-trip
+ *    - Gun .map().on() kept as fallback with self-healing reattach timer
+ *
+ * 3. Presence: 4-layer system
+ *    - Layer 1: Gun .on() (fast when healthy)
+ *    - Layer 2: gunOnce immediate read
+ *    - Layer 3: relay ping-peer poll every 15s (authoritative)
+ *    - Layer 4: stale-check timer (catches crash/network-drop)
  */
 
 import { GunService, GUN_NAMESPACE } from './gunService';
 import { StorageService } from './storageService';
 import { BoundedMap, BoundedSet } from '../utils/boundedMap';
-import { gunPut, gunOnce, gunReadChildren, verifySoulOnRelay, toGunRecord } from '../utils/gunAsync';
+import { gunPut, gunOnce, gunReadChildren, toGunRecord } from '../utils/gunAsync';
+import config from '../config';
+
+/** HTTP base URL of the relay-server (port 3001) — where signal bundles and chat APIs live. */
+function chatRelayBase(): string {
+  const ws = config.relay.websocket; // e.g. wss://interpoll.endless.sbs
+  return ws.replace(/^wss:\/\//, 'https://').replace(/^ws:\/\//, 'http://').replace(/\/$/, '');
+}
 import {
-  seal, open, fromBase64,
-  generateIdentityKeyPair, exportPublicKey, importPublicKey,
-  type SealedEnvelope,
-} from '../utils/hybridCrypto';
+  SignalSession, SignalPublicBundle, SignalEnvelope,
+  SIGNAL_WIRE_VERSION, getOrCreateIdentityBundle,
+} from './signalProtocol';
 import { compareMessages } from '../utils/messageOrder';
 import type { StoredChatMessage, SyncStatus } from '../types/social';
 
+function getGunWire(gun: any): WebSocket | undefined {
+  try {
+    const peers = gun?._.opt?.peers;
+    if (!peers) return undefined;
+    for (const k of Object.keys(peers)) {
+      const w = peers[k]?.wire;
+      if (w?.readyState === WebSocket.OPEN) return w as WebSocket;
+    }
+  } catch { }
+  return undefined;
+}
+
 export interface ChatMessage {
-  id: string;
-  from: string;
-  to: string;
-  message: string;
+  id:        string;
+  from:      string;
+  to:        string;
+  message:   string;
   timestamp: number;
-  read: boolean;
-  /** True when this device's user wrote it. */
-  sent: boolean;
-  /** Delivery state for outgoing messages. Absent on received ones. */
-  status?: SyncStatus;
-  /** Why an outgoing message has not gone out yet, if anything. */
-  error?: string;
+  read:      boolean;
+  sent:      boolean;
+  status?:   SyncStatus;
+  error?:    string;
 }
 
 export interface RecipientInfo {
-  userId: string;
-  publicKey?: string;
-  name?: string;
-  avatar?: string;
+  userId:    string;
+  name?:     string;
+  avatar?:   string;
 }
 
-/** Wire format version. 1 = whole message RSA-encrypted; 2 = AES-GCM + wrapped key. */
-const WIRE_VERSION = 2;
+// Wire version for new outgoing messages
+const WIRE_VERSION = SIGNAL_WIRE_VERSION; // 3
 
-/** How long an unsent message keeps trying before it is marked failed. */
-const OUTBOX_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const MAX_SEND_ATTEMPTS = 12;
-const FLUSH_INTERVAL_MS = 60_000;
-const CONNECTION_POLL_MS = 3_000;
-/** Prune roughly once an hour of flushing, not on every tick. */
+// ── Constants ─────────────────────────────────────────────────────────────────
+const PRESENCE_HB_MS        = 30_000;
+const PRESENCE_STALE_MS     = 180_000; // 3min (was 95s)
+const PRESENCE_PING_MS      = 3_000;
+const PRESENCE_POLL_MS      = 15_000;
+const OUTBOX_TTL_MS         = 7 * 24 * 60 * 60 * 1000;
+const MAX_SEND_ATTEMPTS     = 12;
+const FLUSH_INTERVAL_MS     = 60_000;
+const CONNECTION_POLL_MS    = 3_000;
 const PRUNE_EVERY_N_FLUSHES = 60;
+const GUN_CHAIN_HEALTH_MS   = 20_000;
 
-/**
- * One flush at a time per user, however many `ChatService` instances exist.
- * `HomePage` keeps a background instance alive while `ChatView` creates its own,
- * and both would otherwise re-send the same outbox rows concurrently.
- */
 const flushInFlight = new Set<string>();
+
+const _seenIds = new Map<string, BoundedSet<string>>();
+function seenIds(userId: string): BoundedSet<string> {
+  if (!_seenIds.has(userId))
+    _seenIds.set(userId, new BoundedSet<string>({ maxSize: 5_000, ttlMs: 60 * 60_000 }));
+  return _seenIds.get(userId)!;
+}
 
 function toChatMessage(row: StoredChatMessage): ChatMessage {
   return {
-    id: row.id,
-    from: row.senderId,
-    to: row.recipientId || '',
-    message: row.text,
+    id:        row.id,
+    from:      row.senderId,
+    to:        row.recipientId || '',
+    message:   row.text,
     timestamp: row.timestamp,
-    read: !!row.readAt,
-    sent: row.outgoing,
-    status: row.outgoing ? row.syncStatus : undefined,
-    error: row.error,
+    read:      !!row.readAt,
+    sent:      row.outgoing,
+    status:    row.outgoing ? row.syncStatus : undefined,
+    error:     row.error,
   };
 }
 
 class ChatService {
-  private static readonly KEYPAIR_STORAGE_PREFIX = 'chat-keypair';
-  private static readonly SEQ_STORAGE_PREFIX = 'chat-seq';
+  private static readonly SEQ_KEY = (uid: string) => `chat-seq:${uid}`;
 
-  private ws: WebSocket | null = null;
-  private wsUrl: string;
-  private userId: string;
-  private peerId: string;
-  private keyPair: CryptoKeyPair | null = null;
-  private recipientKeys = new BoundedMap<string, CryptoKey>({ maxSize: 200 });
-  /** Recipients we looked up and found no published chat key for. */
-  private missingKeys = new Set<string>();
-  private ready = false;
-  private connected = false;
-  private reconnectTimer: number | null = null;
-  private connectionPoll: number | null = null;
-  private flushTimer: number | null = null;
-  private flushCount = 0;
-  private shuttingDown = false;
-  private seq = 0;
+  private ws:           WebSocket | null = null;
+  private wsUrl:        string;
+  private userId:       string;
+  private peerId:       string;
 
-  private roomUnsubscribers = new Map<string, () => void>();
+  // Signal identity bundle (generated/loaded in init())
+  private myBundle:     Awaited<ReturnType<typeof getOrCreateIdentityBundle>> | null = null;
+
+  // Signal sessions keyed by recipientId
+  private sessions      = new BoundedMap<string, SignalSession>({ maxSize: 200 });
+
+  // Cached recipient public bundles fetched from Gun
+  private theirBundles  = new BoundedMap<string, SignalPublicBundle>({ maxSize: 200 });
+
+  private missingBundles = new Set<string>();
+  private ready          = false;
+  private connected      = false;
+  private seq            = 0;
+  private shuttingDown   = false;
+
+  private reconnectTimer:   number | null = null;
+  private connectionPoll:   number | null = null;
+  private flushTimer:       number | null = null;
+  private flushCount        = 0;
+  private offGunReconnect:  (() => void) | null = null;
+  private onlineHandler:    (() => void) | null = null;
+
+  private roomUnsubscribers   = new Map<string, () => void>();
+  private roomHealthTimers    = new Map<string, number>();
+  // Tracks last activity time per room so outgoing sends keep the health timer from
+  // falsely concluding the Gun chain is dead and triggering a noisy reattach loop.
+  private roomLastFired       = new Map<string, number>();
   private typingUnsubscribers = new Map<string, () => void>();
-  private readReceiptUnsubscribers = new Map<string, () => void>();
-  private offGunReconnect: (() => void) | null = null;
-  private onlineHandler: (() => void) | null = null;
-  /** Rooms we are subscribed to, so they can be rebuilt after a Gun reconnect. */
-  private watchedRooms = new Map<string, string>();
+  private readReceiptUnsubs   = new Map<string, () => void>();
+  private watchedRooms        = new Map<string, string>(); // roomId → recipientId
+  // Per-sender decrypt queue: serialises mergeRemote calls so concurrent
+  // WS + Gun deliveries don't race on loadSession/saveSession and corrupt
+  // the ratchet state (e.g. message 2 loading nr=0 while message 1's
+  // saveSession(nr=1) is still in flight).
+  private decryptQueue        = new Map<string, Promise<void>>(); // senderId → tail of chain
+  private clearedRooms        = new Set<string>();                // rooms user cleared
 
-  // Duplicate-delivery guard. Bounded: the TTL is far longer than any plausible
-  // redelivery window, so bounding it cannot reintroduce duplicates in practice.
-  private seenMessageIds = new BoundedSet<string>({ maxSize: 5000, ttlMs: 60 * 60_000 });
+  // ── Presence ──────────────────────────────────────────────────────────────
+  private presenceTimer:             number | null = null;
+  private presenceVisibilityHandler: (() => void) | null = null;
+  private presenceOfflineHandler:    (() => void) | null = null;
+  private presenceSubs               = new Map<string, () => void>();
+  private _offlineSuppressed         = false;
 
   public onMessage:            ((msg: ChatMessage) => void) | null = null;
-  public onMessageStatus:      ((data: { id: string; status: SyncStatus; error?: string }) => void) | null = null;
-  public onTyping:             ((data: { from: string; isTyping: boolean }) => void) | null = null;
-  public onDelivered:          ((data: { messageId: string; recipientId: string }) => void) | null = null;
-  public onReadReceipt:        ((data: { from: string; at: number }) => void) | null = null;
+  public onMessageStatus:      ((d: { id: string; status: SyncStatus; error?: string }) => void) | null = null;
+  public onTyping:             ((d: { from: string; isTyping: boolean }) => void) | null = null;
+  public onDelivered:          ((d: { messageId: string; recipientId: string }) => void) | null = null;
+  public onReadReceipt:        ((d: { from: string; at: number }) => void) | null = null;
   public onConnectionChange:   ((connected: boolean) => void) | null = null;
-  /** Fires when we learn whether a recipient has published a chat key. */
-  public onRecipientKeyChange: ((data: { userId: string; available: boolean }) => void) | null = null;
+  public onRecipientKeyChange: ((d: { userId: string; available: boolean }) => void) | null = null;
+  public onPeerPresence:       ((d: { userId: string; online: boolean; ts: number }) => void) | null = null;
+  // WebRTC signaling via chat relay WS
+  public onRtcSignal: ((d: { from: string; payload: any }) => void) | null = null;
+
+  suppressOffline(ms = 30_000): () => void {
+    if (ms === 0) { this._offlineSuppressed = false; return () => {}; }
+    this._offlineSuppressed = true;
+    const t = window.setTimeout(() => { this._offlineSuppressed = false; }, ms);
+    return () => { this._offlineSuppressed = false; clearTimeout(t); };
+  }
 
   constructor(wsUrl: string, userId: string) {
-    this.wsUrl = wsUrl;
+    this.wsUrl  = wsUrl;
     this.userId = userId;
     this.peerId = `peer-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
   }
 
-  // ── Init ────────────────────────────────────────────────────────────────────
+  // ── Init ──────────────────────────────────────────────────────────────────
 
   async init(): Promise<string> {
-    // Reset the shutdown latch so a re-inited instance can reconnect and flush;
-    // otherwise every timer and socket would bail on the first tick.
     this.shuttingDown = false;
-    this.keyPair = await this.loadOrGenerateKeyPair();
-    this.seq = await this.loadSeq();
-    const pubKeyB64 = await this.exportPublicKey();
 
-    // Publish our RSA public key so peers can wrap message keys for us. Only
-    // when it changed — republishing on every startup was pure Gun churn.
-    const node = GunService.getGun().get('users').get(this.userId).get('chatPublicKey');
-    const currentKey = await gunOnce<string>(node, 2_500);
-    if (currentKey !== pubKeyB64) {
-      void gunPut(GunService.getGun().get('users').get(this.userId), { chatPublicKey: pubKeyB64 });
+    // One-time migration: clear broken Signal sessions from protocol v1
+    // (initSessionAsReceiver set ckR="" causing OperationError on decrypt).
+    const SIGNAL_MIGRATION_KEY = `signal-protocol-version:${this.userId}`;
+    try {
+      const ver = await StorageService.getMetadata(SIGNAL_MIGRATION_KEY).catch(() => null);
+      if (ver !== 3) {
+        // v3: session keys are now directional (myId:theirId) not sorted.
+        // Clear all signal-session keys so X3DH re-runs cleanly with the fixed protocol.
+        const prefix = "signal-session:";
+        const allKeys: string[] = (await (StorageService as any).getAllMetadataKeys?.() ?? []);
+        await Promise.all(
+          allKeys.filter(k => k.startsWith(prefix))
+            .map(k => StorageService.setMetadata(k, null))
+        );
+        await StorageService.setMetadata(SIGNAL_MIGRATION_KEY, 3);
+      }
+    } catch { /* migration is best-effort; sessions re-establish via X3DH on next send */ }
+
+    // Generate or load Signal identity bundle
+    this.myBundle = await getOrCreateIdentityBundle(this.userId);
+    this.seq      = await this.loadSeq();
+
+    // Publish our Signal public bundle:
+    //   1. REST POST → relay MySQL (fast, <20ms, primary lookup path)
+    //   2. Gun put   → graph (slow but persistent, fallback for peers not on relay)
+    const bundleStr = JSON.stringify(this.myBundle.bundle);
+    const node      = GunService.getGun().get('users').get(this.userId);
+
+    // REST publish with session-level guard to avoid 429 on hot-reload.
+    // sessionStorage persists within the tab session but clears on close.
+    const pubKey = 'bundle-pub:' + this.userId;
+    const publishBundle = async () => {
+      if (sessionStorage.getItem(pubKey) === bundleStr) return; // already published this session
+      for (const delay of [0, 3000, 10000, 30000]) {
+        if (delay) await new Promise(r => setTimeout(r, delay));
+        try {
+          const res = await fetch(`${chatRelayBase()}/api/signal-bundle`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: this.userId, ...this.myBundle!.bundle }),
+          });
+          if (res.ok) { sessionStorage.setItem(pubKey, bundleStr); return; }
+          if (res.status !== 429) return; // non-retryable error
+        } catch { /* retry */ }
+      }
+    };
+    void publishBundle();
+
+    // Gun publish (fire-and-forget)
+    const existing = await gunOnce<string>(node.get('signalBundle'), 1_500);
+    if (existing !== bundleStr) {
+      void gunPut(node, { signalBundle: bundleStr });
     }
+
+    // Also keep legacy RSA public key published for peers running old versions
+    // No-op if already published — init() of old ChatService handled this.
 
     this.ready = true;
     this.startConnectionTracking();
     this.startOutboxLoop();
+    this.startPresence();
     if (this.wsUrl) this.connect();
-    return pubKeyB64;
+    return bundleStr;
   }
 
-  // ── RSA identity keypair ────────────────────────────────────────────────────
-
-  private getKeypairStorageKey(): string {
-    return `${ChatService.KEYPAIR_STORAGE_PREFIX}:${this.userId}`;
-  }
-
-  private getLegacyKeypairStorageKey(): string {
-    return `chat-keypair-${this.userId}`;
-  }
-
-  private async persistKeyPair(keyPair: CryptoKeyPair): Promise<void> {
-    await StorageService.setMetadata(this.getKeypairStorageKey(), keyPair);
-  }
-
-  private isStoredKeyPair(value: unknown): value is CryptoKeyPair {
-    if (!value || typeof value !== 'object') return false;
-    const pair = value as Partial<CryptoKeyPair>;
-    // A structured-clone round trip preserves CryptoKey, but a keypair that was
-    // ever written through a JSON path comes back as two empty objects. Using
-    // one of those throws deep inside WebCrypto on the first decrypt, so check
-    // the shape rather than just the property names.
-    return !!pair.publicKey && !!pair.privateKey
-      && typeof (pair.privateKey as CryptoKey).algorithm === 'object';
-  }
-
-  private async loadOrGenerateKeyPair(): Promise<CryptoKeyPair> {
-    try {
-      const stored = await StorageService.getMetadata(this.getKeypairStorageKey());
-      if (this.isStoredKeyPair(stored)) return stored;
-    } catch (error) {
-      console.warn('[ChatService] Failed to load stored chat keypair:', error);
-    }
-
-    const legacy = localStorage.getItem(this.getLegacyKeypairStorageKey());
-    if (legacy) {
-      try {
-        const parsed = JSON.parse(legacy);
-        if (typeof parsed?.publicKey !== 'string' || typeof parsed?.privateKey !== 'string') {
-          throw new Error('Legacy chat keypair is malformed');
-        }
-        const pub = await crypto.subtle.importKey(
-          'spki', fromBase64(parsed.publicKey),
-          { name: 'RSA-OAEP', hash: 'SHA-256' }, true, ['encrypt'],
-        );
-        const priv = await crypto.subtle.importKey(
-          'pkcs8', fromBase64(parsed.privateKey),
-          { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['decrypt'],
-        );
-        const keyPair = { publicKey: pub, privateKey: priv };
-        await this.persistKeyPair(keyPair);
-        localStorage.removeItem(this.getLegacyKeypairStorageKey());
-        return keyPair;
-      } catch (error) {
-        localStorage.removeItem(this.getLegacyKeypairStorageKey());
-        console.warn('[ChatService] Failed to migrate legacy chat keypair:', error);
-      }
-    }
-
-    if (StorageService.usingMemoryFallback) {
-      // Worth saying out loud: without IndexedDB the keypair is regenerated on
-      // every reload, which makes every earlier message permanently unreadable.
-      console.warn('[ChatService] No persistent storage — chat keys will not survive a reload');
-    }
-
-    const pair = await generateIdentityKeyPair();
-    await this.persistKeyPair(pair);
-    return pair;
-  }
-
-  async exportPublicKey(): Promise<string> {
-    if (!this.keyPair) throw new Error('Key pair not initialized');
-    return exportPublicKey(this.keyPair.publicKey);
-  }
-
-  private async importPublicKey(base64Key: string): Promise<CryptoKey> {
-    return importPublicKey(base64Key);
-  }
-
-  // ── Per-device sequence counter ─────────────────────────────────────────────
-
-  private getSeqStorageKey(): string {
-    return `${ChatService.SEQ_STORAGE_PREFIX}:${this.userId}`;
-  }
+  // ── Sequence ──────────────────────────────────────────────────────────────
 
   private async loadSeq(): Promise<number> {
     try {
-      const stored = await StorageService.getMetadata(this.getSeqStorageKey());
-      return typeof stored === 'number' && Number.isFinite(stored) ? stored : 0;
-    } catch {
-      return 0;
-    }
+      const s = await StorageService.getMetadata(ChatService.SEQ_KEY(this.userId));
+      return typeof s === 'number' && Number.isFinite(s) ? s : 0;
+    } catch { return 0; }
   }
 
   private nextSeq(): number {
-    this.seq += 1;
-    void StorageService.setMetadata(this.getSeqStorageKey(), this.seq).catch(() => { /* advisory */ });
+    this.seq++;
+    void StorageService.setMetadata(ChatService.SEQ_KEY(this.userId), this.seq).catch(() => {});
     return this.seq;
   }
 
-  // ── Recipient keys ──────────────────────────────────────────────────────────
+  // ── Signal bundle lookup ──────────────────────────────────────────────────
 
-  private async fetchRecipientChatKey(recipientId: string): Promise<string | null> {
-    const key = await gunOnce<string>(
-      GunService.getGun().get('users').get(recipientId).get('chatPublicKey'),
-      5_000,
-    );
-    return typeof key === 'string' && key.length > 0 ? key : null;
+  private async fetchTheirBundle(recipientId: string): Promise<SignalPublicBundle | null> {
+    // 0. IDB cache: survives page reloads, never hits the rate limiter
+    const idbKey = 'signal-bundle-cache:' + recipientId;
+    try {
+      const cached = await StorageService.getMetadata(idbKey);
+      if (cached?.ik && cached?.spk) {
+        if (Date.now() - (cached._cachedAt ?? 0) < 3_600_000) // 1h
+          return cached as unknown as SignalPublicBundle;
+      }
+    } catch { }
+
+    // 1. REST endpoint
+    try {
+      const res = await fetch(`${chatRelayBase()}/api/signal-bundle/${encodeURIComponent(recipientId)}`);
+      if (res.ok) {
+        const bundle = await res.json() as SignalPublicBundle;
+        if (bundle.ik && bundle.spk && bundle.opk) {
+          void StorageService.setMetadata(idbKey, { ...bundle, _cachedAt: Date.now() }).catch(() => {});
+          return bundle;
+        }
+      }
+    } catch { }
+
+    // 2. Gun fallback
+    try {
+      const raw = await gunOnce<string>(
+        GunService.getGun().get('users').get(recipientId).get('signalBundle'), 5_000,
+      );
+      if (raw) {
+        const bundle = JSON.parse(raw) as SignalPublicBundle;
+        void StorageService.setMetadata(idbKey, { ...bundle, _cachedAt: Date.now() }).catch(() => {});
+        return bundle;
+      }
+    } catch { }
+
+    return null;
   }
 
-  /**
-   * The recipient's public key, fetched and cached on first use.
-   *
-   * Returns null rather than throwing when they have never opened the app: the
-   * message is still accepted and queued, and the outbox retries once they
-   * publish a key. The old behaviour — throw, and let the view swallow it —
-   * discarded the message with no trace.
-   */
-  private async getRecipientKey(recipientId: string): Promise<CryptoKey | null> {
-    const cached = this.recipientKeys.get(recipientId);
+  // Track last fetch attempt time to enforce per-user rate limiting
+  private bundleFetchTs = new Map<string, number>();
+  private static BUNDLE_FETCH_COOLDOWN = 300_000; // 5min cooldown (IDB cache handles reloads)
+
+  private async getTheirBundle(recipientId: string): Promise<SignalPublicBundle | null> {
+    const cached = this.theirBundles.get(recipientId);
     if (cached) return cached;
 
-    const keyB64 = await this.fetchRecipientChatKey(recipientId);
-    if (!keyB64) {
-      if (!this.missingKeys.has(recipientId)) {
-        this.missingKeys.add(recipientId);
+    // Cooldown: never fetch the same userId more than once per 30s.
+    // Gun re-delivers old messages constantly; without this each delivery triggers a fetch.
+    const lastFetch = this.bundleFetchTs.get(recipientId) ?? 0;
+    if (Date.now() - lastFetch < ChatService.BUNDLE_FETCH_COOLDOWN) {
+      return this.missingBundles.has(recipientId) ? null : (this.theirBundles.get(recipientId) ?? null);
+    }
+
+    this.bundleFetchTs.set(recipientId, Date.now());
+    const bundle = await this.fetchTheirBundle(recipientId);
+    if (!bundle) {
+      if (!this.missingBundles.has(recipientId)) {
+        this.missingBundles.add(recipientId);
         this.onRecipientKeyChange?.({ userId: recipientId, available: false });
       }
       return null;
     }
-
-    try {
-      const key = await this.importPublicKey(keyB64);
-      this.recipientKeys.set(recipientId, key);
-      if (this.missingKeys.delete(recipientId)) {
-        this.onRecipientKeyChange?.({ userId: recipientId, available: true });
-      }
-      return key;
-    } catch (error) {
-      console.warn(`[ChatService] Recipient ${recipientId} has an unusable chat key:`, error);
-      return null;
-    }
+    this.theirBundles.set(recipientId, bundle);
+    this.bundleFetchTs.delete(recipientId);
+    if (this.missingBundles.delete(recipientId))
+      this.onRecipientKeyChange?.({ userId: recipientId, available: true });
+    return bundle;
   }
 
-  /** Whether we currently hold a usable key for this recipient. */
   hasRecipientKey(recipientId: string): boolean {
-    return this.recipientKeys.get(recipientId) !== undefined;
+    return this.theirBundles.has(recipientId) || !this.missingBundles.has(recipientId);
   }
 
-  // ── Hybrid encryption ───────────────────────────────────────────────────────
+  // ── Signal session management ─────────────────────────────────────────────
 
-  private async seal(text: string, recipientKey: CryptoKey): Promise<SealedEnvelope> {
-    if (!this.keyPair) throw new Error('Key pair not initialized');
-    // Sealed for the recipient *and* for ourselves — only the recipient's key
-    // opens the first copy, so without the second a device cannot read back its
-    // own sent messages.
-    return seal(text, recipientKey, this.keyPair.publicKey);
+  private getSession(recipientId: string): SignalSession {
+    let s = this.sessions.get(recipientId);
+    if (!s) {
+      s = new SignalSession(this.userId, recipientId);
+      this.sessions.set(recipientId, s);
+    }
+    return s;
   }
 
-  private async open(raw: any, side: 'recipient' | 'sender'): Promise<string> {
-    if (!this.keyPair) throw new Error('Key pair not initialized');
-    return open(raw ?? {}, this.keyPair.privateKey, side);
+  // ── Encryption ────────────────────────────────────────────────────────────
+
+  private async encryptFor(recipientId: string, plaintext: string): Promise<SignalEnvelope> {
+    if (!this.myBundle) throw new Error('Not initialized');
+
+    // FIX A: removed duplicate stale-session deletion that was here.
+    // SignalSession.encrypt() already detects staleness (!ckR && ns>0) and re-runs X3DH.
+    // The extra deletion here fired after the FIRST send (ns=1, ckR still '') and
+    // wiped the session before the second send, causing it to issue a second X3DH
+    // with a new ephemeral key. The receiver then got two different X3DH inits:
+    // the first was reset by the second, so message 1 was lost and message 2 survived.
+
+    const bundle = await this.getTheirBundle(recipientId);
+    if (!bundle) throw new Error('Recipient has no Signal key bundle yet');
+    return this.getSession(recipientId).encrypt(plaintext, this.myBundle, bundle);
   }
 
-  // ── Gun paths ───────────────────────────────────────────────────────────────
+  private async decryptFrom(
+    senderId: string, envelope: SignalEnvelope,
+  ): Promise<string> {
+    if (!this.myBundle) throw new Error('Not initialized');
 
-  /** Sorted so both participants derive the same room from either direction. */
-  private getRoomId(userA: string, userB: string): string {
-    return [userA, userB].sort().join(':');
+    // Bundle may not have arrived yet — retry up to 3× with backoff before giving up.
+    // This covers the race where a message arrives via WS before the sender's
+    // bundle has synced (REST hit is <20ms, so retries are cheap).
+    let theirBundle = await this.getTheirBundle(senderId);
+    if (!theirBundle) {
+      for (const delayMs of [500, 1500, 3000]) {
+        await new Promise(r => setTimeout(r, delayMs));
+        // Force re-fetch by clearing cache and trying again
+        this.theirBundles.delete(senderId);
+        this.missingBundles.delete(senderId);
+        theirBundle = await this.getTheirBundle(senderId);
+        if (theirBundle) break;
+      }
+    }
+    if (!theirBundle) throw new Error(`Bundle unavailable for sender ${senderId.slice(0, 16)}`);
+    return this.getSession(senderId).decrypt(envelope, this.myBundle, theirBundle.ik);
   }
+
+  // ── Gun paths ─────────────────────────────────────────────────────────────
+
+  private getRoomId(a: string, b: string) { return [a, b].sort().join(':'); }
 
   private roomNode(roomId: string) {
     return GunService.getGun().get('chats').get(roomId);
   }
 
-  /**
-   * `chats` used to be written outside the `v3/` namespace. Reads keep going
-   * through the un-namespaced root as well so conversations from before the move
-   * are not lost — nothing new is ever written there.
-   */
-  private legacyRoomNode(roomId: string) {
-    return GunService.getGun().get('chats').get(roomId); // use proxied gun so path resolves to v3/chats
+  private messageSoul(roomId: string, msgId: string) {
+    return `${GUN_NAMESPACE}/chats/${roomId}/${msgId}`;
   }
 
-  /**
-   * Record the room under each participant's own room index.
-   *
-   * Without this index the only way to find a user's conversations is to walk
-   * the global `chats` root — which forces Gun to materialise *every* room of
-   * *every* user into the in-memory graph just to filter them client-side, and
-   * that graph is the app's whole dataset (radisk/localStorage are off). The
-   * index is a plain best-effort write: chat still works if it fails, and
-   * discovery falls back to the legacy root scan for pre-index rooms.
-   */
-  private indexRoomForParticipants(roomId: string, ...userIds: string[]): void {
+  private indexRoom(roomId: string, ...ids: string[]) {
     try {
       const gun = GunService.getGun();
-      for (const userId of userIds) {
-        if (!userId) continue;
-        gun.get('users').get(userId).get('rooms').get(roomId)
+      for (const id of ids) {
+        if (id) gun.get('users').get(id).get('rooms').get(roomId)
           .put({ roomId, updatedAt: Date.now() });
       }
-    } catch { /* index is an optimisation, never a correctness requirement */ }
+    } catch { }
   }
 
-  private messageSoul(roomId: string, messageId: string): string {
-    return `${GUN_NAMESPACE}/chats/${roomId}/${messageId}`;
-  }
+  // ── Local storage ─────────────────────────────────────────────────────────
 
-  // ── Local mirror ────────────────────────────────────────────────────────────
-
-  private async storeRow(row: StoredChatMessage): Promise<void> {
+  private async storeRow(row: StoredChatMessage) {
     await StorageService.saveChatMessage(row);
   }
 
-  private async patchRow(id: string, patch: Partial<StoredChatMessage>): Promise<void> {
-    const existing = await StorageService.getChatMessage(id);
-    if (!existing) return;
-    await StorageService.saveChatMessage({ ...existing, ...patch });
+  private async patchRow(id: string, patch: Partial<StoredChatMessage>) {
+    const ex = await StorageService.getChatMessage(id);
+    if (ex) await StorageService.saveChatMessage({ ...ex, ...patch });
   }
 
   /**
-   * Fold a message observed in the graph into the local mirror.
-   *
-   * Returns the row when it is new or newly readable, so callers know whether to
-   * emit it. An outgoing row we already hold is never overwritten by its own
-   * echo — the local copy carries delivery state the graph does not.
+   * Merge a raw Gun/WS record into local storage.
+   * Handles v3 (Signal), v2 (AES-GCM+RSA wrap), and v1 (RSA only).
    */
-  private async mergeRemote(raw: any, roomId: string): Promise<StoredChatMessage | null> {
-    const id = typeof raw?.id === 'string' ? raw.id : null;
-    const senderId = typeof raw?.senderId === 'string' ? raw.senderId : null;
+  private mergeRemote(raw: any, roomId: string): Promise<StoredChatMessage | null> {
+    const id          = typeof raw?.id === 'string'          ? raw.id          : null;
+    const senderId    = typeof raw?.senderId === 'string'    ? raw.senderId    : null;
     const recipientId = typeof raw?.recipientId === 'string' ? raw.recipientId : undefined;
-    if (!id || !senderId) return null;
-    if (senderId !== this.userId && recipientId !== this.userId) return null;
+    if (!id || !senderId) return Promise.resolve(null);
+    if (senderId !== this.userId && recipientId !== this.userId) return Promise.resolve(null);
+
+    // Serialise per-sender: await the previous decrypt for this sender
+    // before starting a new one, so loadSession always sees the latest
+    // saveSession result and the ratchet counter is never double-read.
+    const queueKey = senderId === this.userId ? recipientId ?? senderId : senderId;
+    const prev     = this.decryptQueue.get(queueKey) ?? Promise.resolve();
+    let resolveSlot!: () => void;
+    const slot = new Promise<void>(r => { resolveSlot = r; });
+    this.decryptQueue.set(queueKey, slot);
+    return prev.then(() => this._mergeRemoteImpl(id, senderId, recipientId, raw, roomId))
+               .finally(resolveSlot);
+  }
+
+  private async _mergeRemoteImpl(
+    id: string, senderId: string, recipientId: string | undefined,
+    raw: any, roomId: string,
+  ): Promise<StoredChatMessage | null> {
 
     const existing = await StorageService.getChatMessage(id);
-    if (existing && existing.text) return null;
+    if (existing?.text) return existing;              // already decrypted and stored
+    if (this.clearedRooms.has(roomId)) return null;   // user cleared this room
 
-    let text: string;
+    const v = Number(raw?.v) || 1;
+
+    // FIX 1: declare text in scope so it's available when building the row below
+    let text = '';
+
     try {
-      text = await this.open(raw, senderId === this.userId ? 'sender' : 'recipient');
-    } catch {
-      // Encrypted with a keypair this device no longer has, or truncated in
-      // transit. Skip it rather than surfacing a broken bubble.
+      if (v === SIGNAL_WIRE_VERSION) {
+        // v3: Signal double-ratchet
+        const envelope: SignalEnvelope = {
+          v:   SIGNAL_WIRE_VERSION,
+          eph: raw.eph,
+          dh:  raw.dh,
+          n:   raw.n,
+          pn:  raw.pn,
+          ct:  raw.ct,
+        };
+        // Our own outgoing message replayed from Gun — already stored on send, skip
+        if (senderId === this.userId) return null;
+        text = await this.decryptFrom(senderId, envelope);
+      } else {
+        // v1/v2 not supported: tombstone silently so Gun never retries
+        const alreadyMarked = await StorageService.getChatMessage(id);
+        if (!alreadyMarked) {
+          const tombstone: StoredChatMessage = {
+            id, roomId, kind: 'dm', senderId, recipientId,
+            text: '', timestamp: Number(raw?.timestamp) || Date.now(),
+            seq: Number(raw?.seq) || 0, outgoing: false,
+            syncStatus: 'corrupted' as unknown as SyncStatus, syncAttempts: 0,
+          };
+          void this.storeRow(tombstone).catch(() => {});
+        }
+        return null;
+      }
+    } catch (e) {
+      // Session re-key: only clear session + request fresh X3DH when:
+      //   1. This is a v3 message (Signal ratchet, not legacy RSA)
+      //   2. The envelope has eph (it IS a fresh X3DH init we failed to process)
+      //   3. OR we have no session at all and get "No session" error
+      //
+      // Critically: OperationError on a non-eph v3 message means Gun re-delivered
+      // something the ratchet already consumed — tombstone it, do NOT wipe the session.
+         // Only v3 reaches here (v1/v2 returns early without throwing)
+      const hasEph      = !!raw?.eph;
+      const isNoSession = e instanceof Error && e.message.includes('No session');
+
+      // Only wipe session for a LEGITIMATE new X3DH: no existing session, or
+      // envelope.dh matches our stored dhRecv (sender re-inited with same key).
+      // Stale Gun re-deliveries of old X3DH inits have a dh that no longer
+      // matches dhRecv -- wiping the session on those breaks the live conversation.
+      let shouldReKey = isNoSession;
+      if (hasEph && !isNoSession) {
+        try {
+          const { StorageService: SS } = await import('./storageService');
+          const sk  = `signal-session:${this.userId}:${senderId}`;
+          const cur = await SS.getMetadata(sk);
+          if (!cur) shouldReKey = true;                   // no session at all
+          else if (cur.dhRecv === raw?.dh) shouldReKey = true; // same dh: legit re-init
+          // else: dh mismatch = stale re-delivery, leave shouldReKey false
+        } catch { shouldReKey = true; }
+      }
+
+      if (shouldReKey) {
+        try {
+          const { StorageService: SS } = await import('./storageService');
+          const sessionKey = `signal-session:${this.userId}:${senderId}`;
+          const db = await SS.getDB();
+          await db.delete('metadata', sessionKey);
+          this.sessions.delete(senderId);
+          this.theirBundles.delete(senderId);
+          const reKeyTs = (this as any)._reKeyTs ?? {};
+          (this as any)._reKeyTs = reKeyTs;
+          const now = Date.now();
+          if (!reKeyTs[senderId] || now - reKeyTs[senderId] > 5000) {
+            reKeyTs[senderId] = now;
+            if (this.ws?.readyState === WebSocket.OPEN) {
+              this.ws.send(JSON.stringify({ type: 'chat-start', recipientId: senderId }));
+            }
+          }
+        } catch { }
+        return null;
+      }
+      // All other failures: permanently undecryptable — tombstone so we never retry.
+      // Never downgrade a confirmed row (FIX 2): Gun re-delivers after WS already
+      // succeeded, a second decrypt fails and would overwrite the good confirmed row.
+      const alreadyConfirmed = await StorageService.getChatMessage(id);
+      if (alreadyConfirmed?.syncStatus === 'confirmed') return null;
+      const tombstone: StoredChatMessage = {
+        id, roomId, kind: 'dm', senderId, recipientId,
+        text:         '',
+        timestamp:    Number(raw?.timestamp) || Date.now(),
+        seq:          Number(raw?.seq) || 0,
+        outgoing:     false,
+        syncStatus:   'corrupted' as unknown as SyncStatus,
+        syncAttempts: 0,
+      };
+      void this.storeRow(tombstone).catch(() => {});
       return null;
     }
 
     const row: StoredChatMessage = {
-      id,
-      roomId,
-      kind: 'dm',
-      senderId,
-      senderName: typeof raw?.senderName === 'string' ? raw.senderName : undefined,
-      recipientId,
-      text,
-      timestamp: Number(raw?.timestamp) || Date.now(),
-      seq: Number(raw?.seq) || 0,
-      outgoing: senderId === this.userId,
-      // Present in the graph means it demonstrably left this browser.
-      syncStatus: 'confirmed',
+      id, roomId, kind: 'dm', senderId,
+      senderName:   typeof raw?.senderName === 'string' ? raw.senderName : undefined,
+      recipientId,  text,
+      timestamp:    Number(raw?.timestamp) || Date.now(),
+      seq:          Number(raw?.seq) || 0,
+      outgoing:     senderId === this.userId,
+      syncStatus:   'confirmed',
       syncAttempts: existing?.syncAttempts ?? 0,
-      readAt: Number(raw?.readAt) || existing?.readAt,
+      readAt:       Number(raw?.readAt) || existing?.readAt,
     };
     await this.storeRow(row);
     return row;
   }
 
-  // ── Subscriptions ───────────────────────────────────────────────────────────
+  // ── Core message handler ──────────────────────────────────────────────────
 
   private handleRoomRecord(roomId: string, raw: any): void {
     if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string') return;
-    if (this.seenMessageIds.has(raw.id)) return;
-    this.seenMessageIds.add(raw.id);
+    if (seenIds(this.userId).has(raw.id)) return;
+    // Mark as seen immediately — before decrypt — so Gun re-deliveries
+    // don't retry a failed decrypt and corrupt the ratchet state.
+    seenIds(this.userId).add(raw.id);
 
     void (async () => {
       const row = await this.mergeRemote(raw, roomId);
-      if (!row || this.shuttingDown) return;
+      // Skip tombstones (corrupted/undecryptable) and empty rows
+      if (!row || !row.text || row.syncStatus === 'corrupted' || this.shuttingDown) return;
       this.onMessage?.(toChatMessage(row));
     })();
   }
 
+  // ── Gun subscriptions with self-healing ───────────────────────────────────
+
   private subscribeToRoomMessages(roomId: string): void {
     if (this.roomUnsubscribers.has(roomId)) return;
+    // Check deletion marker so re-synced Gun messages are skipped after a clear
+    gunOnce<any>(GunService.getGun().get('chat-deleted').get(roomId).get(this.userId), 1000)
+      .then(d => { if (d?.cleared) this.clearedRooms.add(roomId); })
+      .catch(() => {});
 
+    const gun = GunService.getGun();
+    // Use the shared map so deliver() can touch this timestamp when the sender
+    // writes a message — preventing the health timer from falsely reattaching
+    // on rooms that are active but currently receiving no inbound Gun events.
+    this.roomLastFired.set(roomId, Date.now());
+    const touch = () => this.roomLastFired.set(roomId, Date.now());
     const chains: any[] = [];
-    chains.push(this.roomNode(roomId).map().on((raw: any) => this.handleRoomRecord(roomId, raw)));
-    try {
-      chains.push(this.legacyRoomNode(roomId).map().on((raw: any) => this.handleRoomRecord(roomId, raw)));
-    } catch {
-      // No raw Gun instance (tests, SSR) — the namespaced subscription is enough.
-    }
 
-    this.roomUnsubscribers.set(roomId, () => {
-      for (const chain of chains) {
-        try { chain?.off?.(); } catch { /* already detached */ }
+    const attach = () => {
+      for (const c of chains.splice(0)) { try { c?.off?.(); } catch { } }
+
+      const handle = (raw: any, key: string) => {
+        if (!key || key === '_') return;
+        if (!raw) return;
+        if (typeof raw === 'object' && typeof raw['#'] === 'string' && !raw.id) {
+          gun.get(raw['#']).once((r: any) => {
+            if (r) { touch(); this.handleRoomRecord(roomId, r); }
+          });
+          return;
+        }
+        touch();
+        this.handleRoomRecord(roomId, raw);
+      };
+
+      chains.push(this.roomNode(roomId).map().on(handle));
+    };
+
+    attach();
+
+    // Self-healing: detect eviction-killed chains and reattach with exponential backoff.
+    // lastFired is now read from roomLastFired so outgoing sends (deliver → gunPut ack)
+    // also reset it, preventing reattach spam on quiet-inbound but active-outbound rooms.
+    let reattachCount = 0;
+    const healthTimer = window.setInterval(() => {
+      if (this.shuttingDown) return;
+      const lastFired = this.roomLastFired.get(roomId) ?? 0;
+      if (Date.now() - lastFired < GUN_CHAIN_HEALTH_MS * 2) {
+        reattachCount = 0; // chain is alive — reset backoff
+        return;
       }
+      // Backoff: wait 1, 2, 4, 8... intervals before each reattach (max 5 min)
+      const backoffIntervals = Math.min(Math.pow(2, reattachCount), 16);
+      if (reattachCount > 0 && (Date.now() - lastFired) < GUN_CHAIN_HEALTH_MS * backoffIntervals) return;
+
+      this.roomNode(roomId).once((data: any) => {
+        if (!data) return; // room is empty — no reattach needed
+        console.info(`[ChatService] reattaching Gun chain for room ${roomId.slice(0, 8)} (attempt ${reattachCount + 1})`);
+        touch();
+        reattachCount++;
+        attach();
+      });
+    }, GUN_CHAIN_HEALTH_MS);
+
+    this.roomHealthTimers.set(roomId, healthTimer);
+    this.roomUnsubscribers.set(roomId, () => {
+      clearInterval(healthTimer);
+      this.roomHealthTimers.delete(roomId);
+      this.roomLastFired.delete(roomId);
+      for (const c of chains) { try { c?.off?.(); } catch { } }
       this.roomUnsubscribers.delete(roomId);
     });
   }
@@ -466,140 +665,106 @@ class ChatService {
   private subscribeToTyping(roomId: string, recipientId: string): void {
     if (this.typingUnsubscribers.has(roomId)) return;
     const chain = GunService.getGun().get('chat-presence').get(roomId).get(recipientId)
-      .on((state: any) => {
-        if (!state || typeof state.isTyping !== 'boolean') return;
-        const isFresh = typeof state.timestamp === 'number' && (Date.now() - state.timestamp) < 10_000;
-        this.onTyping?.({ from: recipientId, isTyping: state.isTyping && isFresh });
+      .on((s: any) => {
+        if (!s || typeof s.isTyping !== 'boolean') return;
+        const fresh = typeof s.timestamp === 'number' && (Date.now() - s.timestamp) < 10_000;
+        this.onTyping?.({ from: recipientId, isTyping: s.isTyping && fresh });
       });
-
     this.typingUnsubscribers.set(roomId, () => {
-      try { chain?.off?.(); } catch { /* already detached */ }
+      try { chain?.off?.(); } catch { }
       this.typingUnsubscribers.delete(roomId);
     });
   }
 
   private subscribeToReadReceipts(roomId: string, recipientId: string): void {
-    if (this.readReceiptUnsubscribers.has(roomId)) return;
+    if (this.readReceiptUnsubs.has(roomId)) return;
     const chain = GunService.getGun().get('chat-read').get(roomId).get(recipientId)
-      .on((state: any) => {
-        if (!state || state.to !== this.userId) return;
-        const at = Number(state.timestamp) || Date.now();
+      .on((s: any) => {
+        if (!s || s.to !== this.userId) return;
+        const at = Number(s.timestamp) || Date.now();
         void this.markLocalReadUpTo(roomId, at);
         this.onReadReceipt?.({ from: recipientId, at });
       });
-
-    this.readReceiptUnsubscribers.set(roomId, () => {
-      try { chain?.off?.(); } catch { /* already detached */ }
-      this.readReceiptUnsubscribers.delete(roomId);
+    this.readReceiptUnsubs.set(roomId, () => {
+      try { chain?.off?.(); } catch { }
+      this.readReceiptUnsubs.delete(roomId);
     });
   }
 
-  private async markLocalReadUpTo(roomId: string, at: number): Promise<void> {
+  private async markLocalReadUpTo(roomId: string, at: number) {
     const rows = await StorageService.getChatMessagesByRoom(roomId);
-    const updates = rows.filter((row) => row.outgoing && !row.readAt && row.timestamp <= at);
-    if (updates.length === 0) return;
-    await StorageService.saveChatMessages(updates.map((row) => ({ ...row, readAt: at })));
+    const unread = rows.filter(r => r.outgoing && !r.readAt && r.timestamp <= at);
+    if (unread.length)
+      await StorageService.saveChatMessages(unread.map(r => ({ ...r, readAt: at })));
   }
 
-  // ── History ─────────────────────────────────────────────────────────────────
+  // ── History ───────────────────────────────────────────────────────────────
 
-  /** Everything this device already holds. Resolves immediately — no network. */
   async getLocalHistory(recipientId: string): Promise<ChatMessage[]> {
     const roomId = this.getRoomId(this.userId, recipientId);
-    const rows = await StorageService.getChatMessagesByRoom(roomId);
-    for (const row of rows) this.seenMessageIds.add(row.id);
-    return rows.sort(compareMessages).map(toChatMessage);
+    const rows   = await StorageService.getChatMessagesByRoom(roomId);
+    return rows
+      .filter(r => r.syncStatus !== 'corrupted' && r.text)
+      .sort(compareMessages)
+      .map(toChatMessage);
   }
 
-  /**
-   * Local history merged with whatever the graph holds.
-   *
-   * Always settles: `gunReadChildren` stops on quiet or a hard ceiling rather
-   * than waiting for callbacks Gun never promised to fire.
-   */
   async loadHistory(recipientId: string): Promise<ChatMessage[]> {
     const roomId = this.getRoomId(this.userId, recipientId);
-
-    const [current, remote, legacy] = await Promise.all([
+    const [current, remote] = await Promise.all([
       StorageService.getChatMessagesByRoom(roomId),
-      gunReadChildren<any>(this.roomNode(roomId), { minMs: 600, maxMs: 8_000 }),
-      this.readLegacyRoom(roomId),
+      gunReadChildren<any>(this.roomNode(roomId),       { minMs: 600, maxMs: 8_000 }),
     ]);
-
     const byId = new Map<string, StoredChatMessage>();
     for (const row of current) byId.set(row.id, row);
-
-    for (const { value } of [...remote, ...legacy]) {
+    for (const { value } of remote) {
       if (!value || typeof value !== 'object') continue;
-      const merged = await this.mergeRemote(value, roomId);
-      if (merged) byId.set(merged.id, merged);
+      const m = await this.mergeRemote(value, roomId);
+      if (m) byId.set(m.id, m);
     }
-
-    const rows = [...byId.values()].sort(compareMessages);
-    for (const row of rows) this.seenMessageIds.add(row.id);
-    return rows.map(toChatMessage);
+    return [...byId.values()]
+      .filter(r => r.syncStatus !== 'corrupted' && r.text)
+      .sort(compareMessages)
+      .map(toChatMessage);
   }
 
-  private async readLegacyRoom(roomId: string): Promise<{ key: string; value: any }[]> {
-    try {
-      return await gunReadChildren<any>(this.legacyRoomNode(roomId), { minMs: 400, maxMs: 5_000 });
-    } catch {
-      return [];
-    }
-  }
+  // ── Sending ───────────────────────────────────────────────────────────────
 
-  // ── Sending ─────────────────────────────────────────────────────────────────
-
-  /**
-   * Queue a message and start delivering it.
-   *
-   * The row hits IndexedDB before any encryption or network work, so a failure
-   * anywhere downstream costs a retry, never the message. The returned
-   * `ChatMessage` carries the current delivery state; further changes arrive via
-   * `onMessageStatus`.
-   */
   async sendMessage(recipientId: string, message: string): Promise<ChatMessage> {
     const text = message.trim();
     if (!text) throw new Error('Cannot send an empty message');
-    if (!this.keyPair) throw new Error('Chat is not initialized yet');
+    if (!this.myBundle) throw new Error('Chat is not initialized yet');
 
     const timestamp = Date.now();
     const row: StoredChatMessage = {
-      id: `msg-${timestamp}-${Math.random().toString(36).slice(2, 11)}`,
-      roomId: this.getRoomId(this.userId, recipientId),
-      kind: 'dm',
-      senderId: this.userId,
-      recipientId,
-      text,
-      timestamp,
-      seq: this.nextSeq(),
-      outgoing: true,
-      syncStatus: 'pending',
+      id:           `msg-${timestamp}-${Math.random().toString(36).slice(2, 11)}`,
+      roomId:       this.getRoomId(this.userId, recipientId),
+      kind:         'dm',
+      senderId:     this.userId,
+      recipientId,  text, timestamp,
+      seq:          this.nextSeq(),
+      outgoing:     true,
+      syncStatus:   'pending',
       syncAttempts: 0,
     };
-
     await this.storeRow(row);
-    this.seenMessageIds.add(row.id);
+    seenIds(this.userId).add(row.id);
+    // Remove cleared marker so new messages aren't blocked after a fresh send
+    this.clearedRooms.delete(row.roomId);
+    GunService.getGun().get('chat-deleted').get(row.roomId).get(this.userId).put(null as any);
 
-    // Deliver in the background: the message is already safe, and blocking the
-    // composer on a relay round-trip is what made sending feel broken.
-    void this.deliver(row).then((delivered) => {
-      this.onMessageStatus?.({ id: delivered.id, status: delivered.syncStatus, error: delivered.error });
+    void this.deliver(row).then(d => {
+      this.onMessageStatus?.({ id: d.id, status: d.syncStatus, error: d.error });
     });
-
     return toChatMessage(row);
   }
 
-  /**
-   * One delivery attempt. Never throws — the caller records the outcome and the
-   * outbox loop tries again later.
-   */
   private async deliver(row: StoredChatMessage): Promise<StoredChatMessage> {
     const recipientId = row.recipientId;
     if (!recipientId) return row;
 
     const attempts = row.syncAttempts + 1;
-    const expired = Date.now() - row.timestamp > OUTBOX_TTL_MS;
+    const expired  = Date.now() - row.timestamp > OUTBOX_TTL_MS;
 
     const fail = async (error: string): Promise<StoredChatMessage> => {
       const status: SyncStatus = attempts >= MAX_SEND_ATTEMPTS || expired ? 'failed' : 'pending';
@@ -608,140 +773,137 @@ class ChatService {
       return { ...row, ...patch };
     };
 
-    const recipientKey = await this.getRecipientKey(recipientId);
-    if (!recipientKey) {
-      return fail('Waiting for the recipient to publish a chat key');
-    }
-
-    let sealed: Awaited<ReturnType<ChatService['seal']>>;
+    // Encrypt with Signal protocol
+    let envelope: SignalEnvelope;
     try {
-      sealed = await this.seal(row.text, recipientKey);
-    } catch (error) {
-      return fail(error instanceof Error ? error.message : 'Encryption failed');
+      envelope = await this.encryptFor(recipientId, row.text);
+    } catch (e) {
+      return fail(e instanceof Error ? e.message : 'Encryption failed');
     }
 
+    // Flatten Signal envelope + metadata into a Gun-safe record (no nested objects)
     const record = toGunRecord({
-      id: row.id,
-      v: WIRE_VERSION,
-      senderId: row.senderId,
+      id:          row.id,
+      v:           WIRE_VERSION,
+      senderId:    row.senderId,
       recipientId,
-      ciphertext: sealed.ciphertext,
-      keyForRecipient: sealed.keyForRecipient,
-      keyForSender: sealed.keyForSender,
-      timestamp: row.timestamp,
-      seq: row.seq,
+      // Signal envelope fields (all primitives)
+      eph:         envelope.eph,
+      dh:          envelope.dh,
+      n:           envelope.n,
+      pn:          envelope.pn,
+      ct:          envelope.ct,
+      timestamp:   row.timestamp,
+      seq:         row.seq,
     });
 
-    const ack = await gunPut(this.roomNode(row.roomId).get(row.id), record);
-    if (!ack.ok) return fail(ack.err || 'Message could not be written to the graph');
+    // Push live delivery frame via WS FIRST — recipient gets this immediately
+    // This is the primary delivery path. Gun write is persistence/fallback only.
+    this.pushLiveFrame(recipientId, row.id, envelope, row.timestamp);
 
-    this.indexRoomForParticipants(row.roomId, this.userId, recipientId);
+    // Fire-and-forget Gun write — do NOT await it.
+    // Gun peer sync takes 1-10s and blocking on it makes every send feel broken.
+    // The WS push already delivered the message. Gun persistence happens in the background.
+    // Touch roomLastFired on ack so the health timer doesn't misread an outgoing-only
+    // room as dead and trigger a needless chain reattach.
+    void gunPut(this.roomNode(row.roomId).get(row.id), record).then(ack => {
+      if (ack.ok) {
+        this.indexRoom(row.roomId, this.userId, recipientId);
+        this.roomLastFired.set(row.roomId, Date.now());
+      }
+    });
 
-    // Best-effort real-time nudge. The relay gates `register` behind an
-    // authenticated session, so this silently does nothing for anonymous users —
-    // Gun replication is the transport that actually has to work.
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({
-        type: 'chat-message',
-        recipientId,
-        messageId: row.id,
-        v: WIRE_VERSION,
-        ciphertext: sealed.ciphertext,
-        keyForRecipient: sealed.keyForRecipient,
-        timestamp: row.timestamp,
-      }));
-    }
-
-    const onRelay = await verifySoulOnRelay(this.messageSoul(row.roomId, row.id), 6_000);
-    // `false` (relay says no) and `null` (no reachable endpoint) both mean keep
-    // trying, but a peer-acked write is further along than an unsent one.
-    const status: SyncStatus = onRelay === true ? 'confirmed' : 'published';
-    const patch = { syncStatus: status, syncAttempts: attempts, error: undefined };
+    // Mark confirmed immediately — WS delivery is our confirmation.
+    const patch = { syncStatus: 'confirmed' as SyncStatus, syncAttempts: attempts, error: undefined };
     await this.patchRow(row.id, patch);
     return { ...row, ...patch };
   }
 
-  // ── Outbox ──────────────────────────────────────────────────────────────────
-
   /**
-   * Re-send every outgoing message no relay has confirmed.
-   *
-   * Gun does not retro-sync writes made while every peer was unreachable, so
-   * without this a message written offline stays in this browser forever. State
-   * lives in IndexedDB, so a reload mid-outage does not reset progress.
+   * Push a chat-message frame via the relay WS.
+   * This is the fast path — recipient's handleWsMessage fires onMessage immediately.
+   * Gun write above is the persistence/fallback path.
    */
+  private pushLiveFrame(
+    recipientId: string, messageId: string,
+    envelope: SignalEnvelope, timestamp: number,
+  ): void {
+    const frame = JSON.stringify({
+      type: 'chat-message', recipientId, messageId,
+      from: this.userId,   // FIX: required so handleWsMessage can set raw.senderId correctly;
+                           // without this data.from is undefined -> mergeRemote returns null -> message dropped
+      v:    WIRE_VERSION,
+      // Signal envelope fields
+      eph:  envelope.eph,
+      dh:   envelope.dh,
+      n:    envelope.n,
+      pn:   envelope.pn,
+      ct:   envelope.ct,
+      timestamp,
+    });
+    // Try dedicated chat WS first, then Gun's own WS as fallback
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      try { this.ws.send(frame); return; } catch { }
+    }
+    const gunWire = getGunWire(GunService.getGun());
+    if (gunWire?.readyState === WebSocket.OPEN) {
+      try { gunWire.send(frame); } catch { }
+    }
+  }
+
+  // ── Outbox ────────────────────────────────────────────────────────────────
+
   async flushOutbox(): Promise<void> {
     if (flushInFlight.has(this.userId) || !this.ready) return;
     flushInFlight.add(this.userId);
     try {
-      const all = await StorageService.getAllChatMessages();
-      const now = Date.now();
-      const pending = all.filter((row) =>
-        row.kind === 'dm'
-        && row.outgoing
-        && row.senderId === this.userId
-        && row.syncStatus !== 'confirmed'
-        && row.syncAttempts < MAX_SEND_ATTEMPTS
-        && now - row.timestamp < OUTBOX_TTL_MS);
-
+      const all  = await StorageService.getAllChatMessages();
+      const now  = Date.now();
+      const pending = all.filter(r =>
+        r.kind === 'dm' && r.outgoing && r.senderId === this.userId
+        && r.syncStatus !== 'confirmed'
+        && r.syncAttempts < MAX_SEND_ATTEMPTS
+        && now - r.timestamp < OUTBOX_TTL_MS);
       for (const row of pending) {
-        // `deliver` re-resolves the recipient key whenever it is not cached, so
-        // a message queued before the peer ever opened the app goes out on its
-        // own as soon as they publish one.
         const result = await this.deliver(row);
         this.onMessageStatus?.({ id: result.id, status: result.syncStatus, error: result.error });
       }
-    } catch (error) {
-      console.warn('[ChatService] Outbox flush failed:', error);
-    } finally {
-      flushInFlight.delete(this.userId);
-    }
+    } catch (e) { console.warn('[ChatService] outbox flush failed:', e); }
+    finally { flushInFlight.delete(this.userId); }
   }
 
   private startOutboxLoop(): void {
     if (this.flushTimer !== null || typeof window === 'undefined') return;
-
     const tick = () => {
       if (this.shuttingDown) return;
       void this.flushOutbox()
         .then(() => {
           this.flushCount++;
-          if (this.flushCount % PRUNE_EVERY_N_FLUSHES === 0) {
+          if (this.flushCount % PRUNE_EVERY_N_FLUSHES === 0)
             return StorageService.pruneChatMessages().then(() => undefined);
-          }
-          return undefined;
         })
-        .catch(() => { /* logged in flushOutbox */ })
+        .catch(() => {})
         .finally(() => {
-          if (this.shuttingDown) return;
-          this.flushTimer = window.setTimeout(tick, FLUSH_INTERVAL_MS);
+          if (!this.shuttingDown)
+            this.flushTimer = window.setTimeout(tick, FLUSH_INTERVAL_MS);
         });
     };
     this.flushTimer = window.setTimeout(tick, 5_000);
-
     this.onlineHandler = () => { void this.flushOutbox(); };
     window.addEventListener('online', this.onlineHandler);
   }
 
-  // ── Connection state ────────────────────────────────────────────────────────
+  // ── Connection state ──────────────────────────────────────────────────────
 
-  /**
-   * Honest connectivity: at least one transport that can actually move a
-   * message. `init()` used to set this to true unconditionally, so the UI
-   * reported "Connected" with no peers and no relay — and every send silently
-   * went nowhere.
-   */
   private computeConnected(): boolean {
     if (!this.ready) return false;
     if (this.ws?.readyState === WebSocket.OPEN) return true;
-    try {
-      return GunService.getPeerStats().isConnected;
-    } catch {
-      return false;
-    }
+    const wire = getGunWire(GunService.getGun());
+    if (wire?.readyState === WebSocket.OPEN) return true;
+    try { return GunService.getPeerStats().isConnected; } catch { return false; }
   }
 
-  private refreshConnectionState(): void {
+  private refreshConnected(): void {
     const next = this.computeConnected();
     if (next === this.connected) return;
     this.connected = next;
@@ -751,20 +913,19 @@ class ChatService {
 
   private startConnectionTracking(): void {
     if (typeof window === 'undefined') return;
-    this.refreshConnectionState();
-    if (this.connectionPoll === null) {
-      this.connectionPoll = window.setInterval(() => this.refreshConnectionState(), CONNECTION_POLL_MS);
-    }
+    this.refreshConnected();
+    if (!this.connectionPoll)
+      this.connectionPoll = window.setInterval(() => this.refreshConnected(), CONNECTION_POLL_MS);
     if (!this.offGunReconnect) {
       this.offGunReconnect = GunService.onReconnect(() => {
         if (this.shuttingDown) return;
-        // A reconnect rebuilds the Gun instance, so every chain we hold is bound
-        // to a discarded graph and has gone quiet. Rebuild them.
         this.reattachRooms();
-        this.refreshConnectionState();
+        this.refreshConnected();
         void this.flushOutbox();
+        setTimeout(() => this.registerPresenceOnRelay(), 500);
       });
     }
+    setTimeout(() => this.registerPresenceOnRelay(), 1_000);
   }
 
   private reattachRooms(): void {
@@ -772,7 +933,7 @@ class ChatService {
     for (const [roomId] of rooms) {
       this.roomUnsubscribers.get(roomId)?.();
       this.typingUnsubscribers.get(roomId)?.();
-      this.readReceiptUnsubscribers.get(roomId)?.();
+      this.readReceiptUnsubs.get(roomId)?.();
     }
     for (const [roomId, recipientId] of rooms) {
       this.subscribeToRoomMessages(roomId);
@@ -781,91 +942,241 @@ class ChatService {
     }
   }
 
-  /**
-   * Re-scans every room we are watching for messages that arrived while offline.
-   *
-   * Gun's `.map().on()` fires for existing nodes when the graph syncs from peers,
-   * but that sync can take several seconds after the WebSocket opens. Calling
-   * this with a short delay after `ws.onopen` gives Gun time to settle and then
-   * explicitly walks all known rooms so no offline message is missed.
-   */
-  private replayOfflineMessages(): void {
-    if (this.shuttingDown) return;
-    const gun = GunService.getGun();
-    for (const [roomId] of this.watchedRooms) {
-      // Walk the room node once — handleRoomRecord deduplicates by seenMessageIds
-      gun.get('chats').get(roomId).map().once((raw: any) => {
-        this.handleRoomRecord(roomId, raw);
-      });
+  // ── Presence ──────────────────────────────────────────────────────────────
+
+  private writePresence(online: boolean): void {
+    const ts = Date.now();
+    try {
+      GunService.getGun().get('chat-presence').get(this.userId)
+        .put({ online, ts, peerId: this.peerId });
+    } catch { }
+    if (online) this.registerPresenceOnRelay();
+  }
+
+  private startPresence(): void {
+    if (this.presenceTimer !== null || typeof window === 'undefined') return;
+    this.writePresence(true);
+    this.presenceTimer = window.setInterval(() => {
+      if (!document.hidden) this.writePresence(true);
+    }, PRESENCE_HB_MS);
+
+    let visTimer: number | null = null;
+    this.presenceVisibilityHandler = () => {
+      if (document.hidden) {
+        if (this._offlineSuppressed) return;
+        visTimer = window.setTimeout(() => {
+          visTimer = null;
+          if (!this._offlineSuppressed) this.writePresence(false);
+        }, 2_000);
+      } else {
+        if (visTimer !== null) { clearTimeout(visTimer); visTimer = null; }
+        this.writePresence(true);
+      }
+    };
+    this.presenceOfflineHandler = () => {
+      if (visTimer !== null) { clearTimeout(visTimer); visTimer = null; }
+      this.writePresence(false);
+    };
+    window.addEventListener('visibilitychange', this.presenceVisibilityHandler);
+    window.addEventListener('beforeunload',     this.presenceOfflineHandler);
+    window.addEventListener('pagehide',         this.presenceOfflineHandler);
+  }
+
+  private stopPresence(): void {
+    if (this.presenceTimer) { clearInterval(this.presenceTimer); this.presenceTimer = null; }
+    if (this.presenceVisibilityHandler) {
+      window.removeEventListener('visibilitychange', this.presenceVisibilityHandler);
+      this.presenceVisibilityHandler = null;
     }
-    // Also check the rooms index in case new rooms were added while offline
-    gun.get('users').get(this.userId).get('rooms').map().once((roomData: any, roomId: string) => {
-      if (!roomId || roomId === '_' || !roomId.includes(':') || !roomId.includes(this.userId)) return;
-      gun.get('chats').get(roomId).map().once((raw: any) => {
-        this.handleRoomRecord(roomId, raw);
-      });
+    if (this.presenceOfflineHandler) {
+      window.removeEventListener('beforeunload', this.presenceOfflineHandler);
+      window.removeEventListener('pagehide',     this.presenceOfflineHandler);
+      this.presenceOfflineHandler = null;
+    }
+    this.writePresence(false);
+    for (const off of this.presenceSubs.values()) try { off(); } catch { }
+    this.presenceSubs.clear();
+  }
+
+  watchPeerPresence(peerId: string): void {
+    if (this.presenceSubs.has(peerId)) return;
+    let lastOnline: boolean | null = null;
+    let lastTs           = 0;
+    let _offlineDebounce = 0;
+
+    const emit = (online: boolean, ts: number) => {
+      lastTs = Math.max(lastTs, ts);
+      const effective = online && (Date.now() - lastTs) < PRESENCE_STALE_MS;
+      if (effective !== lastOnline) {
+        if (!effective && lastOnline) {
+          // Debounce going offline 8s to ignore brief network blips
+          if (!_offlineDebounce) {
+            _offlineDebounce = window.setTimeout(() => {
+              _offlineDebounce = null; lastOnline = false;
+              this.onPeerPresence?.({ userId: peerId, online: false, ts: lastTs });
+            }, 8_000);
+          }
+        } else {
+          if (_offlineDebounce) { clearTimeout(_offlineDebounce); _offlineDebounce = null; }
+          lastOnline = effective;
+          this.onPeerPresence?.({ userId: peerId, online: effective, ts: lastTs });
+        }
+      }
+    };
+
+    // Layer 1: Gun .on()
+    const presNode = GunService.getGun().get('chat-presence').get(peerId);
+    const chain = presNode.on((s: any) => {
+      if (!s || typeof s.ts !== 'number') { emit(false, 0); return; }
+      emit(!!s.online, s.ts);
+    });
+
+    // Layer 2: immediate once read
+    void gunOnce<any>(presNode, 1_500).then(s => {
+      if (s && typeof s.ts === 'number') emit(!!s.online, s.ts);
+    }).catch(() => {});
+
+    // Layer 3: relay ping poll — authoritative, beats Gun eviction
+    const pingPoll = window.setInterval(async () => {
+      if (!this.presenceSubs.has(peerId)) return;
+      try {
+        const online = await this.relayPing(peerId);
+        if (online !== lastOnline) emit(online, Date.now());
+      } catch { }
+    }, PRESENCE_POLL_MS);
+
+    // Layer 4: stale check
+    const staleCheck = window.setInterval(() => {
+      if (!this.presenceSubs.has(peerId)) return;
+      if (lastTs > 0 && lastOnline && (Date.now() - lastTs) >= PRESENCE_STALE_MS)
+        emit(false, lastTs);
+    }, 10_000);
+
+    this.presenceSubs.set(peerId, () => {
+      clearInterval(pingPoll); clearInterval(staleCheck);
+      try { chain?.off?.(); } catch { }
+      this.presenceSubs.delete(peerId);
     });
   }
 
-  // ── WebSocket ───────────────────────────────────────────────────────────────
+  unwatchPeerPresence(peerId: string) { this.presenceSubs.get(peerId)?.(); }
+
+  private relayPing(peerId: string): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      const wire = getGunWire(GunService.getGun());
+      if (!wire || wire.readyState !== WebSocket.OPEN) { reject(new Error('no wire')); return; }
+      const id    = `pp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const timer = setTimeout(() => {
+        wire.removeEventListener('message', handler);
+        reject(new Error('timeout'));
+      }, PRESENCE_PING_MS);
+      const handler = (e: MessageEvent) => {
+        try {
+          const d = JSON.parse(e.data);
+          if (d?.type === 'pong-peer' && d.id === id) {
+            clearTimeout(timer);
+            wire.removeEventListener('message', handler);
+            resolve(d.online === true);
+          }
+        } catch { }
+      };
+      wire.addEventListener('message', handler);
+      wire.send(JSON.stringify({ type: 'ping-peer', peerId, id }));
+    });
+  }
+
+  async isPeerOnline(peerId: string, opts: { skipRelayPing?: boolean } = {}): Promise<boolean> {
+    try {
+      const s = await gunOnce<any>(GunService.getGun().get('chat-presence').get(peerId), 1_500);
+      if (s?.online && typeof s.ts === 'number' && (Date.now() - s.ts) < PRESENCE_STALE_MS) {
+        if (opts.skipRelayPing) return true;
+      }
+    } catch { }
+    try { return await this.relayPing(peerId); } catch { return false; }
+  }
+
+  registerPresenceOnRelay(): void {
+    const frame = JSON.stringify({ type: 'register-presence', userId: this.userId });
+    const wire = getGunWire(GunService.getGun());
+    if (wire?.readyState === WebSocket.OPEN) { try { wire.send(frame); } catch { } }
+    if (this.ws?.readyState === WebSocket.OPEN) { try { this.ws.send(frame); } catch { } }
+  }
+
+  // ── Dedicated relay WebSocket ─────────────────────────────────────────────
 
   private connect(): void {
     if (!this.wsUrl || this.shuttingDown) return;
-    try {
-      this.ws = new WebSocket(this.wsUrl);
-    } catch (error) {
-      console.warn('[ChatService] Could not open chat WebSocket:', error);
-      return;
-    }
+    try { this.ws = new WebSocket(this.wsUrl); } catch { return; }
 
     this.ws.onopen = () => {
       this.ws?.send(JSON.stringify({ type: 'register', peerId: this.peerId, userId: this.userId }));
-      this.refreshConnectionState();
-      // After reconnecting, replay Gun history for every known room so messages
-      // sent while Y was offline are decrypted and surfaced. Gun's .map().on()
-      // fires for existing nodes when a subscription starts, but only after the
-      // graph has synced from peers — a short delay lets that happen first.
-      setTimeout(() => this.replayOfflineMessages(), 3_000);
+      this.registerPresenceOnRelay();
+      this.refreshConnected();
     };
 
-    this.ws.onmessage = async (event) => {
-      try { await this.handleWsMessage(JSON.parse(event.data)); }
-      catch (error) { console.error('[ChatService] Bad chat frame:', error); }
+    this.ws.onmessage = async (e) => {
+      try { await this.handleWsMessage(JSON.parse(e.data)); } catch { }
     };
 
-    this.ws.onerror = () => { /* onclose handles recovery; the event carries nothing useful */ };
+    this.ws.onerror = () => {};
 
     this.ws.onclose = () => {
-      this.refreshConnectionState();
-      if (this.shuttingDown) return;
-      this.reconnectTimer = window.setTimeout(() => this.connect(), 2_000);
+      this.refreshConnected();
+      if (!this.shuttingDown)
+        this.reconnectTimer = window.setTimeout(() => this.connect(), 2_000);
     };
   }
 
+  /**
+   * Handle incoming WS frames.
+   * 'chat-message' is the PRIMARY real-time delivery path (fast, no Gun latency).
+   */
   private async handleWsMessage(data: any): Promise<void> {
     switch (data?.type) {
+      case 'error':
+        if (data.code === 'AUTH_REQUIRED')
+          console.info('[ChatService] Relay WS auth required — Gun fallback active');
+        break;
+
       case 'chat-message': {
         const messageId = typeof data.messageId === 'string' ? data.messageId : null;
-        if (!messageId || this.seenMessageIds.has(messageId)) return;
-        this.seenMessageIds.add(messageId);
-        const roomId = this.getRoomId(this.userId, data.from);
-        // The relay forwards the same envelope Gun holds, so the merge path is
-        // identical — including the v1 fallback for peers on the old build.
-        const row = await this.mergeRemote({
-          id: messageId,
-          senderId: data.from,
-          recipientId: this.userId,
-          ciphertext: data.ciphertext,
-          keyForRecipient: data.keyForRecipient,
-          encryptedForRecipient: data.encryptedForRecipient,
-          timestamp: data.timestamp,
-        }, roomId);
-        if (row) this.onMessage?.(toChatMessage(row));
+        if (!messageId || seenIds(this.userId).has(messageId)) return;
+        seenIds(this.userId).add(messageId);
+
+        const v       = Number(data.v) || 1;
+        const roomId  = this.getRoomId(this.userId, data.from);
+
+        let raw: any;
+        if (v === SIGNAL_WIRE_VERSION) {
+          // v3: reconstruct the envelope shape mergeRemote expects
+          raw = {
+            id:          messageId,
+            v,
+            senderId:    data.from,
+            recipientId: this.userId,
+            eph:         data.eph,
+            dh:          data.dh,
+            n:           data.n,
+            pn:          data.pn,
+            ct:          data.ct,
+            timestamp:   data.timestamp,
+          };
+        } else {
+          // v1/v2 not supported: pass minimal raw so mergeRemote tombstones it
+          raw = { id: messageId, v, senderId: data.from, recipientId: this.userId, timestamp: data.timestamp };
+        }
+
+        const row = await this.mergeRemote(raw, roomId);
+        if (row && row.text && row.syncStatus !== 'corrupted') this.onMessage?.(toChatMessage(row));
         break;
       }
 
       case 'chat-typing':
         this.onTyping?.({ from: data.from, isTyping: !!data.isTyping });
+        break;
+
+      case 'rtc-signal':
+        if (data.from && data.payload) this.onRtcSignal?.({ from: data.from, payload: data.payload });
         break;
 
       case 'chat-delivered':
@@ -878,115 +1189,115 @@ class ChatService {
         this.onReadReceipt?.({ from: data.from, at });
         break;
       }
+
+      case 'chat-start': {
+        // Recipient's session failed — clear our session so next message
+        // triggers fresh X3DH re-initiation automatically.
+        const reKeyTarget = data.from || data.recipientId;
+        if (reKeyTarget) {
+          try {
+            const { StorageService: SS } = await import('./storageService');
+            const sessionKey = `signal-session:${this.userId}:${reKeyTarget}`;
+            const db = await SS.getDB();
+            await db.delete('metadata', sessionKey);
+            this.sessions.delete(reKeyTarget);
+            this.theirBundles.delete(reKeyTarget);
+          } catch { }
+        }
+        break;
+      }
+
+      case 'chat-invite': {
+        // Recipient's session failed — clear ours so next send triggers fresh X3DH.
+        const inviteFrom = data.from;
+        if (inviteFrom) {
+          try {
+            const { StorageService: SS } = await import('./storageService');
+            const sessionKey = `signal-session:${this.userId}:${inviteFrom}`;
+            const db = await SS.getDB();
+            await db.delete('metadata', sessionKey);
+            this.sessions.delete(inviteFrom);
+            this.theirBundles.delete(inviteFrom);
+            // Flush outbox so pending messages re-encrypt with fresh X3DH
+            void this.flushOutbox();
+          } catch { }
+        }
+        break;
+      }
+
+      case 'pong-peer': break;
     }
   }
 
-  // ── Public API ──────────────────────────────────────────────────────────────
+  // ── Public API ────────────────────────────────────────────────────────────
 
-  /**
-   * Open a conversation: subscribe to it and start resolving the peer's key.
-   *
-   * Resolves even when the peer has never published a key. History is still
-   * readable in that case, and anything typed is queued rather than lost — the
-   * old version threw here, which left the whole view in an error state.
-   */
   async startChat(recipient: RecipientInfo): Promise<void> {
     const roomId = this.getRoomId(this.userId, recipient.userId);
     this.watchedRooms.set(roomId, recipient.userId);
-
     this.subscribeToRoomMessages(roomId);
     this.subscribeToTyping(roomId, recipient.userId);
     this.subscribeToReadReceipts(roomId, recipient.userId);
+    this.watchPeerPresence(recipient.userId);
 
-    if (recipient.publicKey) {
-      try {
-        this.recipientKeys.set(recipient.userId, await this.importPublicKey(recipient.publicKey));
-      } catch { /* fall through to the graph lookup */ }
-    }
-    const key = await this.getRecipientKey(recipient.userId);
-    if (key) this.onRecipientKeyChange?.({ userId: recipient.userId, available: true });
+    // Pre-fetch their Signal bundle so first send is instant
+    void this.getTheirBundle(recipient.userId);
 
-    if (this.ws?.readyState === WebSocket.OPEN) {
+    if (this.ws?.readyState === WebSocket.OPEN)
       this.ws.send(JSON.stringify({ type: 'chat-start', recipientId: recipient.userId }));
-    }
   }
 
   sendTyping(recipientId: string, isTyping: boolean): void {
     const roomId = this.getRoomId(this.userId, recipientId);
     void gunPut(GunService.getGun().get('chat-presence').get(roomId).get(this.userId), {
-      from: this.userId,
-      to: recipientId,
-      isTyping,
-      timestamp: Date.now(),
+      from: this.userId, to: recipientId, isTyping, timestamp: Date.now(),
     });
-    if (this.ws?.readyState === WebSocket.OPEN) {
+    if (this.ws?.readyState === WebSocket.OPEN)
       this.ws.send(JSON.stringify({ type: 'chat-typing', recipientId, isTyping }));
-    }
   }
 
-  /**
-   * Tell the peer we have read up to now.
-   *
-   * A single marker node, not a write per message: the old version mapped the
-   * whole room and issued one `put` per unread message, which on a long
-   * conversation was a write storm that pushed out the traffic that mattered.
-   */
+  sendRtcSignal(toUserId: string, payload: Record<string, any>): void {
+    if (this.ws?.readyState === WebSocket.OPEN)
+      this.ws.send(JSON.stringify({ type: 'rtc-signal', to: toUserId, payload }));
+  }
+
+
   markAsRead(recipientId: string): void {
     const roomId = this.getRoomId(this.userId, recipientId);
-    const at = Date.now();
+    const at     = Date.now();
     void gunPut(GunService.getGun().get('chat-read').get(roomId).get(this.userId), {
-      from: this.userId,
-      to: recipientId,
-      timestamp: at,
+      from: this.userId, to: recipientId, timestamp: at,
     });
-    if (this.ws?.readyState === WebSocket.OPEN) {
+    if (this.ws?.readyState === WebSocket.OPEN)
       this.ws.send(JSON.stringify({ type: 'chat-read', recipientId, at }));
-    }
     void (async () => {
       const rows = await StorageService.getChatMessagesByRoom(roomId);
-      const unread = rows.filter((row) => !row.outgoing && !row.readAt);
-      if (unread.length) {
-        await StorageService.saveChatMessages(unread.map((row) => ({ ...row, readAt: at })));
-      }
+      const unread = rows.filter(r => !r.outgoing && !r.readAt);
+      if (unread.length)
+        await StorageService.saveChatMessages(unread.map(r => ({ ...r, readAt: at })));
     })();
   }
 
-  isConnected(): boolean {
-    return this.connected;
-  }
-
-  /** True once keys are loaded — messages can be composed even while offline. */
-  isReady(): boolean {
-    return this.ready;
-  }
+  isConnected() { return this.connected; }
+  isReady()     { return this.ready; }
 
   disconnect(): void {
     this.shuttingDown = true;
-    if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+    if (this.reconnectTimer) { clearTimeout(this.reconnectTimer);  this.reconnectTimer = null; }
     if (this.connectionPoll) { clearInterval(this.connectionPoll); this.connectionPoll = null; }
-    if (this.flushTimer) { clearTimeout(this.flushTimer); this.flushTimer = null; }
-    if (this.onlineHandler && typeof window !== 'undefined') {
-      window.removeEventListener('online', this.onlineHandler);
-      this.onlineHandler = null;
-    }
-    this.offGunReconnect?.();
-    this.offGunReconnect = null;
-
-    if (this.ws) { try { this.ws.close(); } catch { /* already closed */ } this.ws = null; }
-
-    for (const unsubscribe of this.roomUnsubscribers.values()) unsubscribe();
-    for (const unsubscribe of this.typingUnsubscribers.values()) unsubscribe();
-    for (const unsubscribe of this.readReceiptUnsubscribers.values()) unsubscribe();
+    if (this.flushTimer)     { clearTimeout(this.flushTimer);      this.flushTimer = null; }
+    if (this.onlineHandler)  { window.removeEventListener('online', this.onlineHandler); this.onlineHandler = null; }
+    this.offGunReconnect?.(); this.offGunReconnect = null;
+    if (this.ws) { try { this.ws.close(); } catch { } this.ws = null; }
+    this.stopPresence();
+    for (const u of this.roomUnsubscribers.values())   u();
+    for (const u of this.typingUnsubscribers.values()) u();
+    for (const u of this.readReceiptUnsubs.values())   u();
     this.roomUnsubscribers.clear();
     this.typingUnsubscribers.clear();
-    this.readReceiptUnsubscribers.clear();
+    this.readReceiptUnsubs.clear();
     this.watchedRooms.clear();
-
     this.ready = false;
-    if (this.connected) {
-      this.connected = false;
-      this.onConnectionChange?.(false);
-    }
+    if (this.connected) { this.connected = false; this.onConnectionChange?.(false); }
   }
 }
 

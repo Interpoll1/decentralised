@@ -1,13 +1,27 @@
 import { createRouter, createWebHistory } from '@ionic/vue-router';
 import { RouteRecordRaw } from 'vue-router';
 
+const ONBOARDING_KEY = 'interpoll_onboarding_complete';
+
 const routes: Array<RouteRecordRaw> = [
-  { path: '/', redirect: '/home' },
+  {
+    path: '/',
+    redirect: () => {
+      const done = localStorage.getItem(ONBOARDING_KEY) === 'true';
+      return done ? '/home' : '/onboarding';
+    },
+  },
+  {
+    path: '/onboarding',
+    name: 'Onboarding',
+    component: () => import('../views/OnboardingPage.vue'),
+  },
   { path: '/home', name: 'Home', component: () => import('../views/HomePage.vue') },
   // Shareable aliases for the HomePage tabs (tab state lives in the ?tab query)
   { path: '/communities', redirect: { path: '/home', query: { tab: 'communities' } } },
-  { path: '/chat', redirect: { path: '/home', query: { tab: 'chat' } } },
-  { path: '/create', redirect: { path: '/home', query: { tab: 'create' } } },
+  { path: '/spaces',      redirect: { path: '/home', query: { tab: 'communities' } } },
+  { path: '/chat',        redirect: { path: '/home', query: { tab: 'chat' } } },
+  { path: '/create',      redirect: { path: '/home', query: { tab: 'create' } } },
   {
     path: '/community/:communityId',
     name: 'Community',
@@ -38,6 +52,8 @@ const routes: Array<RouteRecordRaw> = [
   { path: '/profile', name: 'Profile', component: () => import('../views/ProfilePage.vue') },
   { path: '/user/:userId', name: 'UserProfile', component: () => import('../views/UserProfileView.vue'), props: true },
   { path: '/settings', name: 'Settings', component: () => import('../views/SettingsPage.vue') },
+  // ── NEW: promoted Network page ───────────────────────────────────────────────
+  { path: '/network', name: 'Network', component: () => import('../views/NetworkPage.vue') },
   { path: '/chain-explorer', name: 'ChainExplorer', component: () => import('../views/ChainExplorerPage.vue') },
   { path: '/vote/:pollId', name: 'Vote', component: () => import('../views/VotePage.vue'), props: true },
   { path: '/results/:pollId', name: 'Results', component: () => import('../views/ResultsPage.vue'), props: true },
@@ -48,18 +64,12 @@ const routes: Array<RouteRecordRaw> = [
   { path: '/chatroom/:roomId', name: 'ChatRoom', component: () => import('../views/ChatRoomPage.vue'), props: true },
   { path: '/chatrooms', name: 'ChatRoomList', component: () => import('../views/ChatRoomListPage.vue') },
   { path: '/join/:type/:id', name: 'JoinPrivate', component: () => import('../views/JoinPrivatePage.vue') },
-
-  // ── NEW: username claim / trust verification ──────────────────────────────
   {
     path: '/claim-username',
     name: 'ClaimUsername',
     component: () => import('../views/ClaimUsernamePage.vue')
   },
-
-  // OAuth return handler (previously fell through to the catch-all → /home,
-  // silently dropping the callback). Consumes the return URL / token.
   { path: '/auth/callback', name: 'AuthCallback', component: () => import('../views/AuthCallbackPage.vue') },
-
   // Catch-all
   { path: '/:pathMatch(.*)*', redirect: '/home' }
 ];

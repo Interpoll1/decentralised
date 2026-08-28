@@ -47,8 +47,11 @@ export interface UserStats {
 // ── Signing helpers ───────────────────────────────────────────────────────────
 
 function profilePayload(profile: UserProfile): Record<string, unknown> {
-  // Strip previous integrity fields before re-signing
-  const { _sig, _pub, _hash, ...rest } = profile as any;
+  // Strip previous integrity fields before re-signing, and Gun's internal
+  // metadata field `_` (contains soul + state-vector) which Gun injects into
+  // every node returned by .once()/.on(). If `_` leaks into the canonical
+  // string, verification always fails because it wasn't present when signed.
+  const { _sig, _pub, _hash, _, ...rest } = profile as any;
   return rest;
 }
 
@@ -70,7 +73,10 @@ async function signProfile(profile: UserProfile): Promise<UserProfile> {
 
 function verifyProfileSignature(profile: UserProfile): boolean {
   try {
-    const { _sig, _pub, _hash, ...rest } = profile as any;
+    // Strip integrity fields AND Gun's `_` metadata field (soul + state-vector)
+    // before rebuilding the canonical string. Gun injects `_` on every read-back
+    // so it must be excluded or the hash never matches what was signed.
+    const { _sig, _pub, _hash, _, ...rest } = profile as any;
     if (!_sig || !_pub || !_hash) return false;
     const canonical = stableStringify(rest as Record<string, unknown>);
     const expectedHash = CryptoService.hash(canonical);
