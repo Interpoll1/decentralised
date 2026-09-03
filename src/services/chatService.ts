@@ -94,16 +94,38 @@ function seenIds(userId: string): BoundedSet<string> {
 }
 
 function toChatMessage(row: StoredChatMessage): ChatMessage {
+  let mediaUrl: string|undefined, mediaType: 'image'|'video'|'file'|undefined;
+  let fileName: string|undefined, fileSize: number|undefined;
+  let displayText = row.text;
+  try {
+    if (row.text?.startsWith('{"_file":true')) {
+      const f = JSON.parse(row.text);
+      if (f._url) {
+        // Large file: relay-hosted URL — serve directly, no blob creation needed
+        mediaUrl  = f.url;
+        mediaType = f.mime?.startsWith('video') ? 'video' : f.mime?.startsWith('image') ? 'image' : 'file';
+        fileName  = f.name; fileSize = f.size; displayText = f.name;
+      } else if (f.data) {
+        // Small file: inline base64 — decode to blob URL
+        const bin = atob(f.data); const buf = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+        mediaUrl  = URL.createObjectURL(new Blob([buf], { type: f.mime || 'application/octet-stream' }));
+        mediaType = f.mime?.startsWith('video') ? 'video' : f.mime?.startsWith('image') ? 'image' : 'file';
+        fileName  = f.name; fileSize = f.size; displayText = f.name;
+      }
+    }
+  } catch { }
   return {
     id:        row.id,
     from:      row.senderId,
     to:        row.recipientId || '',
-    message:   row.text,
+    message:   displayText,
     timestamp: row.timestamp,
     read:      !!row.readAt,
     sent:      row.outgoing,
     status:    row.outgoing ? row.syncStatus : undefined,
     error:     row.error,
+    mediaUrl, mediaType, fileName, fileSize,
   };
 }
 
@@ -1246,6 +1268,48 @@ class ChatService {
       this.ws.send(JSON.stringify({ type: 'chat-start', recipientId: recipient.userId }));
   }
 
+  static readonly MAX_INLINE_FILE_BYTES = 400 * 1024;       // 400 KB — inline base64
+  static readonly MAX_FILE_BYTES        = 100 * 1024 * 1024; // 100 MB — relay upload
+
+  async sendFile(recipientId: string, file: File): Promise<ChatMessage> {
+    if (file.size > ChatService.MAX_FILE_BYTES)
+      throw new Error('File too large (max 100 MB).');
+
+    const mime = file.type || 'application/octet-stream';
+
+    if (file.size <= ChatService.MAX_INLINE_FILE_BYTES) {
+      // Small file: encode inline as base64 and send encrypted through Signal
+      const arr = new Uint8Array(await file.arrayBuffer());
+      let b64 = '';
+      for (let i = 0; i < arr.length; i += 8192)
+        b64 += btoa(String.fromCharCode(...Array.from(arr.slice(i, i + 8192))));
+      return this.sendMessage(recipientId,
+        JSON.stringify({ _file: true, name: file.name, mime, size: file.size, data: b64 }));
+    }
+
+    // Large file: upload to relay, send URL as the encrypted message payload.
+    // The file bytes themselves never pass through Signal encryption.
+    const senderPub = this.userId;
+    const formData  = new FormData();
+    formData.append('file', file, file.name);
+    formData.append('mimeType', mime);
+
+    const uploadRes = await fetch(`${chatRelayBase()}/api/chat-media`, {
+      method:  'POST',
+      headers: { Authorization: `Bearer ${senderPub}` },
+      body:    formData,
+    });
+    if (!uploadRes.ok) {
+      const err = await uploadRes.json().catch(() => ({ error: 'Upload failed' }));
+      throw new Error(err.error || `Upload failed (${uploadRes.status})`);
+    }
+    const { mediaId } = await uploadRes.json();
+    const url = `${chatRelayBase()}/api/chat-media/${mediaId}`;
+
+    return this.sendMessage(recipientId,
+      JSON.stringify({ _file: true, _url: true, name: file.name, mime, size: file.size, url }));
+  }
+
   sendTyping(recipientId: string, isTyping: boolean): void {
     const roomId = this.getRoomId(this.userId, recipientId);
     void gunPut(GunService.getGun().get('chat-presence').get(roomId).get(this.userId), {
@@ -1264,6 +1328,18 @@ class ChatService {
   markAsRead(recipientId: string): void {
     const roomId = this.getRoomId(this.userId, recipientId);
     const at     = Date.now();
+
+    // Null-put ALL confirmed received messages from Gun so the relay/Gun
+    // doesn't hold them indefinitely. Messages are stored locally in IDB;
+    // the Gun node is just the delivery vehicle — once read, it can go.
+    StorageService.getChatMessagesByRoom(roomId).then(rows => {
+      const gun = GunService.getGun();
+      for (const r of rows) {
+        if (!r.outgoing && r.syncStatus === 'confirmed')
+          try { gun.get('chats').get(roomId).get(r.id).put(null as any); } catch {}
+      }
+    }).catch(() => {});
+
     void gunPut(GunService.getGun().get('chat-read').get(roomId).get(this.userId), {
       from: this.userId, to: recipientId, timestamp: at,
     });

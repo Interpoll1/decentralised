@@ -3,7 +3,7 @@
 /* ─────────────────────────────────────────────────────
    RESET / BASE
    ───────────────────────────────────────────────────── */
-.hp-root .main-content { padding: 16px 12px 20px; }
+.hp-root .main-content { padding: 24px 16px 28px; }
 
 .logo-title {
   font-family: 'Grand Hotel', cursive;
@@ -37,7 +37,7 @@ ion-header.header-hidden { transform: translateY(-100%); }
 /* ─────────────────────────────────────────────────────
    MESSAGE BADGE — amber, sits on the Messages nav item
    ───────────────────────────────────────────────────── */
-.hp-root .nav-badge {
+.nav-badge {
   position: absolute;
   top: 4px; right: 4px;
   background: #f59e0b;
@@ -105,8 +105,9 @@ ion-header.header-hidden { transform: translateY(-100%); }
 .feed-toolbar {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 6px;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-top: 4px;
 }
 .feed-toolbar-row {
   display: flex;
@@ -117,14 +118,14 @@ ion-header.header-hidden { transform: translateY(-100%); }
 .feed-scope-tabs {
   display: flex; gap: 2px;
   background: rgba(0,0,0,0.14);
-  border-radius: 12px; padding: 3px;
+  border-radius: 12px; padding: 4px;
   border: 1px solid rgba(255,255,255,0.07);
 }
 .scope-tab {
-  display: flex; align-items: center; gap: 5px;
-  padding: 7px 12px; border-radius: 9px;
+  display: flex; align-items: center; gap: 6px;
+  padding: 9px 16px; border-radius: 10px;
   background: none; border: none;
-  font-size: 13px; font-weight: 600;
+  font-size: 13.5px; font-weight: 600;
   color: var(--app-text-muted); cursor: pointer;
   transition: all 160ms ease; white-space: nowrap; flex-shrink: 0;
 }
@@ -317,7 +318,7 @@ ion-header.header-hidden { transform: translateY(-100%); }
     padding: 0 !important;
   }
 }
-.hp-root .side-nav     { display: none; }
+/* AppSideNav self-manages display via its scoped styles */
 .hp-root .right-sidebar { display: none; }
 
 .hp-root .side-nav-divider {
@@ -368,7 +369,7 @@ ion-header.header-hidden { transform: translateY(-100%); }
 /* ─────────────────────────────────────────────────────
    BOTTOM NAV (mobile only)
    ───────────────────────────────────────────────────── */
-.hp-root .bottom-nav-footer {
+.bottom-nav-footer {
   --background: transparent;
   --border: none;
   /* ion-footer handles its own fixed positioning — don't override */
@@ -376,63 +377,69 @@ ion-header.header-hidden { transform: translateY(-100%); }
 
 /* Hide entirely on desktop — left sidebar covers navigation */
 @media (min-width: 768px) {
-  .hp-root .bottom-nav-footer { display: none !important; }
+  .bottom-nav-footer { display: none !important; }
 }
 
-.hp-root .bottom-nav {
+.bottom-nav {
   display: flex;
   align-items: stretch;
   justify-content: space-around;
-  background: var(--app-bg, rgba(14,14,26,1));
-  backdrop-filter: blur(24px) saturate(1.4);
-  -webkit-backdrop-filter: blur(24px) saturate(1.4);
-  border-top: 1px solid var(--app-border);
+  /* Translucent glass — same recipe as surface-card */
+  background: rgba(14, 14, 26, 0.72);
+  backdrop-filter: blur(28px) saturate(1.5);
+  -webkit-backdrop-filter: blur(28px) saturate(1.5);
+  border-top: 1px solid rgba(140, 120, 255, 0.15);
   padding: 0;
   padding-bottom: env(safe-area-inset-bottom);
   transition: transform 240ms cubic-bezier(0.4,0,0.2,1);
   pointer-events: all;
 }
-.hp-root .bottom-nav-hidden { transform: translateY(100%); }
+.bottom-nav-hidden { transform: translateY(100%); }
 
-.hp-root .nav-item {
+.nav-item {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 3px;
   flex: 1;
-  padding: 10px 4px 10px;
+  padding: 11px 4px 9px;
   background: none;
   border: none;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+  transition: color 140ms;
+  color: rgba(255,255,255,0.45);
+}
+.nav-item:hover { color: rgba(255,255,255,0.75); background: rgba(255,255,255,0.04); }
+.nav-item:active { opacity: 0.6; background: transparent; }
+
+/* Active: accent colour + pill indicator on top */
+.nav-item.active {
+  color: #a78bfa; /* soft violet — not harsh blue */
+}
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 32px; height: 2.5px;
+  border-radius: 0 0 3px 3px;
+  background: linear-gradient(90deg, #818cf8, #a78bfa);
+}
+
+/* Label */
+.nav-label {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: var(--app-text-muted);
-  transition: color 160ms;
-  position: relative;
-  -webkit-tap-highlight-color: transparent;
-}
-.hp-root .nav-item:active { opacity: 0.7; }
-
-/* Active indicator: small pill above icon */
-.hp-root .nav-item.active { color: var(--app-accent-bright); }
-.hp-root .nav-item.active::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 32px;
-  height: 3px;
-  border-radius: 0 0 3px 3px;
-  background: var(--app-accent-bright);
+  line-height: 1;
 }
 
 /* SVG icons */
 .nav-svg {
-  width: 24px;
-  height: 24px;
+  width: 24px; height: 24px;
   display: block;
   flex-shrink: 0;
   pointer-events: none;
@@ -442,6 +449,7 @@ ion-header.header-hidden { transform: translateY(-100%); }
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 24px; height: 24px;
 }
 
 /* ─────────────────────────────────────────────────────
@@ -493,7 +501,7 @@ ion-header.header-hidden { transform: translateY(-100%); }
    ≥ 768px — TABLET/DESKTOP
    ───────────────────────────────────────────────────── */
 @media (min-width: 768px) {
-  .hp-root .bottom-nav-footer { display: none; }
+  .bottom-nav-footer { display: none; }
 
   .hp-root .page-layout { gap: 20px; padding: 20px 16px 40px; }
 
@@ -501,15 +509,7 @@ ion-header.header-hidden { transform: translateY(-100%); }
   .hp-root .main-content { flex: 1; min-width: 0; }
 
   /* ── Left sidebar — same bg as centre card ── */
-  .hp-root .side-nav {
-    display: flex; flex-direction: column; gap: 2px;
-    width: 190px; flex-shrink: 0;
-    position: sticky; top: 24px;
-    padding: 16px 10px 20px;
-    max-height: calc(100vh - 48px); overflow-y: auto;
-    /* surface-card class already applies glass — just set structural props */
-    border-radius: var(--app-radius-md, 14px);
-  }
+  /* .hp-root .side-nav layout now lives in AppSideNav.vue scoped styles */
 
   /* ── Right sidebar — same bg as centre card ── */
   .hp-root .right-sidebar {
@@ -797,7 +797,7 @@ ion-header.header-hidden { transform: translateY(-100%); }
   }
 
   /* Bottom nav: translucent glass */
-  .hp-root .bottom-nav {
+  .bottom-nav {
     background: var(--ion-tab-bar-background, rgba(14,14,26,0.85));
     backdrop-filter: blur(20px) saturate(1.3);
     -webkit-backdrop-filter: blur(20px) saturate(1.3);

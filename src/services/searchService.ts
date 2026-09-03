@@ -293,51 +293,69 @@ export class SearchService {
   }
 
   private static _searchLocal(query: string, options: SearchOptions): SearchResponse {
-    const limit = options.limit ?? 20;
+    const limit  = options.limit  ?? 20;
     const offset = options.offset ?? 0;
 
-    // Search title (higher weight) and excerpt separately, then merge
-    const titleHits: string[] = ((this.index!.search(query, { index: 'title', limit: limit + offset + 100 }) as any[])[0]?.result) || [];
-    const excerptHits: string[] = ((this.index!.search(query, { index: 'excerpt', limit: limit + offset + 100 }) as any[])[0]?.result) || [];
+    // Query all indexed fields — tags is the critical missing one.
+    // We query each field separately so we can apply different weights.
+    const search = (field: string) =>
+      ((this.index!.search(query, { index: field, limit: limit + offset + 200 }) as any[])[0]?.result as string[]) || [];
 
-    const seen = new Set<string>();
+    const titleHits   = search('title');
+    const excerptHits = search('excerpt');
+    const tagHits     = search('tags');
+    const authorHits  = search('author');
+
+    const scoreMap = new Map<string, number>();
+
+    const award = (ids: string[], points: number) => {
+      for (const id of ids) scoreMap.set(id, (scoreMap.get(id) ?? 0) + points);
+    };
+
+    award(titleHits,   10);  // title match — highest signal
+    award(excerptHits,  5);  // body match
+    award(tagHits,      8);  // tag match — almost as strong as title
+    award(authorHits,   2);  // author match — weak signal
+
+    // Category bonus: if the caller inferred a category from the query
+    // (e.g. "games" → "gaming"), boost items in that category rather than
+    // hard-filtering. This way items tagged "gaming" but with no "game"
+    // in their title still surface, and items from other categories that
+    // literally contain the query word still appear too.
+    if (options.category) {
+      for (const [id, doc] of this._docStore) {
+        if (doc.category === options.category) {
+          scoreMap.set(id, (scoreMap.get(id) ?? 0) + 6);
+        }
+      }
+    }
+
+    const seen = new Set<string>(scoreMap.keys());
     const scored: Array<{ doc: IndexedDoc; score: number }> = [];
 
-    for (const id of titleHits) {
-      if (seen.has(id)) continue;
-      seen.add(id);
+    for (const id of seen) {
       const doc = this._docStore.get(id);
-      if (doc) scored.push({ doc, score: 10 });
-    }
-    for (const id of excerptHits) {
-      if (seen.has(id)) continue;
-      seen.add(id);
-      const doc = this._docStore.get(id);
-      if (doc) scored.push({ doc, score: 5 });
+      if (!doc) continue;
+      // Apply hard filters (type and community only — category is now a boost)
+      if (options.type      && doc.type      !== options.type)      continue;
+      if (options.community && doc.community !== options.community)  continue;
+      scored.push({ doc, score: scoreMap.get(id)! });
     }
 
-    const filtered = scored.filter(({ doc }) => {
-      if (options.type && doc.type !== options.type) return false;
-      if (options.community && doc.community !== options.community) return false;
-      if (options.category && doc.category !== options.category) return false;
-      return true;
-    });
+    scored.sort((a, b) => b.score - a.score || b.doc.created_at - a.doc.created_at);
 
-    filtered.sort((a, b) => b.score - a.score || b.doc.created_at - a.doc.created_at);
-
-    const total = filtered.length;
-    const page = filtered.slice(offset, offset + limit);
+    const total = scored.length;
+    const page  = scored.slice(offset, offset + limit);
 
     const results: SearchResult[] = page.map(({ doc, score }) => ({
-      id: doc.id,
-      type: doc.type,
-      title: doc.title,
-      content: doc.excerpt,
-      author: doc.author,
-      community: doc.community,
+      id:         doc.id,
+      type:       doc.type,
+      title:      doc.title,
+      content:    doc.excerpt,
+      author:     doc.author,
+      community:  doc.community,
       created_at: doc.created_at,
-      relevance: score,
-      // Include category so search results can show CategoryBadge
+      relevance:  score,
       ...(doc.category ? { category: doc.category } : {}),
     }));
 

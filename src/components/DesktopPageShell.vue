@@ -1,43 +1,31 @@
 <template>
   <div class="dps-root">
-    <!-- Left sidebar — desktop only, hidden on mobile -->
-    <DesktopSideNav
-      class="dps-sidenav"
-      :active-tab="activeTab"
-      :selected-category="selectedCategory"
-    />
+    <AppSideNav @open-relay="relaySheetOpen = true" />
 
-    <!-- Page content -->
     <main class="dps-main surface-card">
       <slot />
     </main>
+
+    <AppRightSidebar />
+
+    <RelaySheet v-model="relaySheetOpen" />
   </div>
 </template>
 
 <script setup lang="ts">
-import DesktopSideNav from './DesktopSideNav.vue';
+import { ref } from 'vue';
+import AppSideNav      from './AppSideNav.vue';
+import AppRightSidebar from './AppRightSidebar.vue';
+import RelaySheet      from './RelaySheet.vue';
 
-defineProps<{
-  activeTab?: string;
-  selectedCategory?: string;
-  hideSidebar?: boolean; // kept for API compat, ignored — sidebar always shows on desktop
-}>();
+defineProps<{ activeTab?: string; selectedCategory?: string; hideSidebar?: boolean; }>();
+
+const relaySheetOpen = ref(false);
 </script>
 
 <style scoped>
-.dps-root {
-  display: block;
-  width: 100%;
-}
-
-.dps-sidenav {
-  display: none; /* hidden on mobile */
-}
-
-.dps-main {
-  width: 100%;
-  min-width: 0;
-}
+.dps-root { display: block; width: 100%; }
+.dps-main { width: 100%; min-width: 0; }
 
 @media (min-width: 768px) {
   .dps-root {
@@ -48,29 +36,13 @@ defineProps<{
     margin: 0 auto;
     padding: 24px 0 80px;
   }
-
-  .dps-sidenav {
-    display: flex !important; /* override DesktopSideNav's own display:none-on-mobile */
-    flex-direction: column;
-    width: 220px;
-    flex-shrink: 0;
-    position: sticky;
-    top: 24px;
-    max-height: calc(100vh - 48px);
-    overflow-y: auto;
-  }
-
   .dps-main {
     flex: 1;
     min-width: 0;
-    padding: 24px 28px;
+    padding: 28px 32px;
     border-radius: var(--app-radius-lg);
-    overflow: hidden;
+    /* No overflow:hidden — it clips Teleported burst overlays */
   }
 }
-
-@media (min-width: 1024px) {
-  .dps-root { gap: 28px; }
-  .dps-sidenav { width: 230px; }
-}
+@media (min-width: 1024px) { .dps-root { gap: 28px; } }
 </style>

@@ -40,6 +40,15 @@ const routes: Array<RouteRecordRaw> = [
     component: () => import('../views/PollDetailPage.vue'),
     props: true
   },
+  {
+    // Standalone poll route — polls without a communityId are navigated here.
+    // navigateToPoll() in HomePage falls back to /poll/:id when communityId is absent,
+    // and direct URL sharing of community-less polls also lands here.
+    path: '/poll/:pollId',
+    name: 'PollDetailStandalone',
+    component: () => import('../views/PollDetailPage.vue'),
+    props: true
+  },
   { path: '/post/:postId', name: 'PostDetail', component: () => import('../views/PostDetailPage.vue'), props: true },
   { path: '/create-community', name: 'CreateCommunity', component: () => import('../views/CreateCommunityPage.vue') },
   { path: '/create-poll', name: 'CreatePoll', component: () => import('../views/CreatePollPage.vue') },

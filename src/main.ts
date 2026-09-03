@@ -144,6 +144,26 @@ router.isReady().then(() => {
 
   // Defer after first paint
   setTimeout(() => {
+    // Init view tracking — use UserService identity (RSA public key hex), not Gun auth
+    import('./services/viewTrackingService').then(({ initViewTracking, flushViewsSync }) => {
+      // Cache the user ID once resolved — UserService.getCurrentUser() reads from
+      // IndexedDB / localStorage KeyService so it works without Gun being authenticated.
+      let cachedUserId: string | null = null;
+      import('./services/userService').then(({ UserService }) => {
+        UserService.getCurrentUser().then(u => {
+          cachedUserId = u?.id || u?.publicKey || null;
+        }).catch(() => {});
+      }).catch(() => {});
+
+      initViewTracking(() => cachedUserId);
+
+      // Flush remaining views on page leave / tab hide
+      window.addEventListener('beforeunload', flushViewsSync);
+      window.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') flushViewsSync();
+      });
+    }).catch(() => {});
+
     import('./services/gunService').then(({ GunService }) => {
       GunService.initialize();
       // Dev-only console handle. Importing the module from DevTools can resolve

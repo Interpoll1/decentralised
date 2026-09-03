@@ -16,6 +16,8 @@
 
     <ion-content>
       <DesktopPageShell>
+      <BurstOverlay />
+
       <!-- Loading -->
       <div v-if="isLoading" class="loading-container">
         <ion-spinner></ion-spinner>
@@ -34,18 +36,25 @@
         <!-- Post Section -->
         <div class="post-detail-section">
           <div class="post-header">
-            <div class="post-meta">
-              <ion-chip @click="$router.push(`/community/${post.communityId}`)">
-                <ion-icon :icon="peopleOutline"></ion-icon>
-                <ion-label>{{ communityName }}</ion-label>
-              </ion-chip>
-              <span class="separator">•</span>
-              <span class="author">u/{{ postAuthorDisplayName }}</span>
-              <span class="identity-badge" :class="postAuthorIdentityClass">
-                {{ postAuthorIdentityLabel }}
-              </span>
-              <span class="separator">•</span>
-              <span class="timestamp">{{ formatTime(post.createdAt) }}</span>
+            <!-- Author row with avatar -->
+            <div class="post-author-row">
+              <div class="post-author-avatar" :class="postAuthorAvatarTone">
+                {{ (postAuthorDisplayName || '?').charAt(0).toUpperCase() }}
+              </div>
+              <div class="post-author-info">
+                <div class="post-author-name-row">
+                  <span class="author-name">{{ postAuthorDisplayName }}</span>
+                  <span class="identity-badge" :class="postAuthorIdentityClass">{{ postAuthorIdentityLabel }}</span>
+                </div>
+                <div class="post-author-sub">
+                  <ion-chip class="community-chip" @click="$router.push(`/community/${post.communityId}`)">
+                    <ion-icon :icon="peopleOutline"></ion-icon>
+                    <ion-label>{{ communityName }}</ion-label>
+                  </ion-chip>
+                  <span class="separator">·</span>
+                  <span class="timestamp">{{ formatTime(post.createdAt) }}</span>
+                </div>
+              </div>
             </div>
             <h1 class="post-title">{{ post.title }}</h1>
           </div>
@@ -78,20 +87,47 @@
             <!-- Vote & Actions Bar -->
             <div class="actions-bar">
               <div class="vote-buttons">
-                <button class="vote-button heart" @click="handleUpvote" :class="{ active: hasUpvoted }">
-                  <ion-icon :icon="hasUpvoted ? heart : heartOutline"></ion-icon>
-                  <span>{{ formatNumber(post.upvotes) }}</span>
+
+                <!-- Heart upvote — inline SVG so fill animates -->
+                <button
+                  class="vote-button heart"
+                  :class="{ active: hasUpvoted, 'pop-heart': heartPop }"
+                  @click="handleUpvote"
+                >
+                  <svg class="vote-svg heart-svg" viewBox="0 0 24 24" fill="none">
+                    <path
+                      class="heart-path"
+                      d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"
+                      :fill="hasUpvoted ? '#c4b5fd' : 'none'"
+                      :stroke="hasUpvoted ? '#c4b5fd' : 'currentColor'"
+                      stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+                    />
+                  </svg>
+                  <span class="vote-count">{{ formatNumber(post.upvotes) }}</span>
                 </button>
 
-                <button class="vote-button dislike" @click="handleDownvote" :class="{ active: hasDownvoted }">
-                  <ion-icon :icon="hasDownvoted ? thumbsDown : thumbsDownOutline"></ion-icon>
-                  <span>{{ formatNumber(post.downvotes) }}</span>
+                <!-- Thumb-down — PollCard style, rotate(-20deg) -->
+                <button
+                  class="vote-button dislike"
+                  :class="{ active: hasDownvoted, 'pop-down': downPop }"
+                  @click="handleDownvote"
+                >
+                  <svg class="vote-svg thumb-svg" viewBox="0 0 24 24" fill="none" style="transform:rotate(-20deg) scaleX(-1)">
+                    <path
+                      d="M15 3H6C5.17 3 4.46 3.5 4.16 4.22l-3.02 7.05C1.05 11.5 1 11.74 1 12v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.59-6.59c.36-.36.58-.86.58-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z"
+                      :fill="hasDownvoted ? '#ef4444' : 'currentColor'"
+                    />
+                  </svg>
+                  <span class="vote-count">{{ formatNumber(post.downvotes) }}</span>
                 </button>
 
                 <div class="stat-item score">
                   <ion-icon :icon="trendingUpOutline"></ion-icon>
                   <span>Score: {{ post.score }}</span>
                 </div>
+                <span v-if="post.viewCount && post.viewCount > 0" class="detail-view-count">
+                  {{ post.viewCount >= 1_000_000 ? (post.viewCount/1_000_000).toFixed(1)+'M' : post.viewCount >= 1000 ? (post.viewCount/1000).toFixed(1)+'K' : post.viewCount }} views
+                </span>
               </div>
 
               <button class="action-button share" @click="sharePost">
@@ -104,47 +140,53 @@
           <div class="section-separator"></div>
         </div>
 
-        <!-- Commenters Panel -->
-        <div v-if="uniqueCommenters.length > 0" class="commenters-section">
-          <h3 class="section-title">
-            Commenters ({{ uniqueCommenters.length }})
-          </h3>
-          <div class="commenters-list">
-            <div v-for="commenter in uniqueCommenters" :key="commenter.authorId" class="commenter-chip">
-              <span class="commenter-online-dot"></span>
-              <span class="commenter-name">u/{{ commenter.displayName }}</span>
-              <span class="identity-badge" :class="commenter.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'">
-                {{ commenter.identityTrustLabel }}
-              </span>
-              <ion-badge color="medium" class="commenter-count">{{ commenter.commentCount }}</ion-badge>
-            </div>
-          </div>
-          <div class="section-separator"></div>
+        <!-- Commenters panel removed — redundant with comments list -->
+
+        <!-- Tab row: Comments | Related -->
+        <div class="section-tabs">
+          <button
+            class="section-tab"
+            :class="{ active: activeSection === 'comments' }"
+            @click="activeSection = 'comments'"
+          >
+            Comments ({{ allComments.length }})
+          </button>
+          <button
+            v-if="relatedPosts.length > 0"
+            class="section-tab"
+            :class="{ active: activeSection === 'related' }"
+            @click="activeSection = 'related'"
+          >
+            Related ({{ relatedPosts.length }})
+          </button>
         </div>
 
         <!-- Comments Section -->
-        <div class="comments-section">
-          <h3 class="section-title">
-            Comments ({{ allComments.length }})
-          </h3>
-
+        <div v-if="activeSection === 'comments'" class="comments-section">
           <!-- Add Comment Form -->
           <div class="add-comment-form">
-            <ion-textarea
-              v-model="newCommentText"
-              placeholder="Add a comment..."
-              :auto-grow="true"
-              :rows="3"
-              class="comment-textarea"
-            ></ion-textarea>
-            <ion-button 
-              expand="block" 
-              @click="submitComment"
-              :disabled="!newCommentText.trim()"
-            >
-              <ion-icon slot="start" :icon="sendOutline"></ion-icon>
-              Post Comment
-            </ion-button>
+            <div class="comment-input-row">
+              <div class="commenter-self-avatar" :class="selfAvatarTone">
+                {{ selfAvatarInitial }}
+              </div>
+              <input
+                v-model="newCommentText"
+                placeholder="Add a comment…"
+                class="comment-input"
+                @keydown.enter.ctrl="submitComment"
+                @keydown.enter.meta="submitComment"
+              />
+              <button
+                class="comment-send-btn"
+                :disabled="!newCommentText.trim()"
+                @click="submitComment"
+              >
+                <svg viewBox="0 0 24 24" fill="none" width="18" height="18">
+                  <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </div>
           </div>
 
           <!-- Comments List -->
@@ -169,6 +211,28 @@
             <p class="subtitle">Be the first to comment!</p>
           </div>
         </div>
+
+        <!-- Related Posts Section -->
+        <div v-else-if="activeSection === 'related'" class="related-section">
+          <div class="related-list">
+            <div
+              v-for="rp in relatedPosts"
+              :key="rp.id"
+              class="related-row"
+              @click="$router.push(`/post/${rp.id}`)"
+            >
+              <div class="related-meta">
+                <span class="related-community">{{ rp.communityId }}</span>
+                <span class="related-dot">·</span>
+                <span class="related-time">{{ formatTime(rp.createdAt) }}</span>
+              </div>
+              <div class="related-title">{{ rp.title }}</div>
+              <div v-if="rp.tags && rp.tags.length" class="related-tags">
+                <span v-for="t in rp.tags.slice(0,3)" :key="t" class="related-tag">#{{ t }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
       </DesktopPageShell>
     </ion-content>
@@ -177,6 +241,9 @@
 
 <script setup lang="ts">
 import DesktopPageShell from '../components/DesktopPageShell.vue';
+import { trackDetailView } from '../services/viewTrackingService';
+import BurstOverlay     from '../components/BurstOverlay.vue';
+import { useBurst }     from '../composables/useBurst';
 
 function autoLink(text: string): string {
   if (!text) return '';
@@ -184,7 +251,7 @@ function autoLink(text: string): string {
   return text.replace(/(https?:\/\/[\w\-\.\/?#&=;%+~:@,]+[\w\/])/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
 }
 
-import { ref, computed, onMounted, onUnmounted, watch, defineAsyncComponent, h } from 'vue';
+import { ref, computed, type Ref, onMounted, onUnmounted, watch, defineAsyncComponent, h } from 'vue';
 const VideoPlayer = defineAsyncComponent({
   loader: () => import('../components/VideoPlayer.vue'),
   loadingComponent: {
@@ -311,6 +378,12 @@ const postAuthorIdentityLabel = computed(() =>
 const postAuthorIdentityClass = computed(() =>
   postAuthorTrustLevel.value === 'trusted-issuer' ? 'trusted-issuer' : 'unverified'
 );
+
+const POST_AUTHOR_TONES = ['av-violet','av-blue','av-teal','av-amber','av-rose','av-indigo','av-green'];
+const postAuthorAvatarTone = computed(() => {
+  const code = (post.value?.authorId || '').split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0);
+  return POST_AUTHOR_TONES[code % POST_AUTHOR_TONES.length];
+});
 
 const allComments = computed(() =>
   commentStore.comments.filter(c => {
@@ -439,8 +512,64 @@ const uniqueCommenters = computed(() => {
   return Array.from(authorMap.values()).sort((a, b) => b.commentCount - a.commentCount);
 });
 
+// Avatar tone for commenter chips
+const COMMENTER_TONES = ['av-violet','av-blue','av-teal','av-amber','av-rose','av-indigo'];
+function commenterAvatarTone(authorId: string): string {
+  const code = (authorId || '').split('').reduce((a,c) => a + c.charCodeAt(0), 0);
+  return COMMENTER_TONES[code % COMMENTER_TONES.length];
+}
+
+// Related posts — same community, category, or overlapping tags, excluding current post
+const activeSection = ref<'comments' | 'related'>('comments');
+
+const relatedPosts = computed(() => {
+  if (!post.value) return [];
+  const current     = post.value;
+  const currentTags = Array.isArray(current.tags) ? current.tags
+    : typeof current.tags === 'string' ? (current.tags as string).split(',').map((t: string) => t.trim()).filter(Boolean)
+    : [];
+  const currentCat  = current.category || '';
+  const currentComm = current.communityId || '';
+
+  return postStore.sortedPosts
+    .filter(p => {
+      if (p.id === current.id) return false;
+      const pTags = Array.isArray(p.tags) ? p.tags
+        : typeof p.tags === 'string' ? (p.tags as string).split(',').map((t: string) => t.trim()).filter(Boolean)
+        : [];
+      const tagOverlap  = currentTags.length > 0 && pTags.some((t: string) => currentTags.includes(t));
+      const sameCat     = currentCat && p.category === currentCat;
+      const sameComm    = currentComm && p.communityId === currentComm;
+      return tagOverlap || sameCat || sameComm;
+    })
+    .slice(0, 8);
+});
+
 const hasUpvoted = computed(() => postStore.myVote(postId.value) === 'up');
 const hasDownvoted = computed(() => postStore.myVote(postId.value) === 'down');
+
+// Pop animation state — triggers the keyframe on each click
+const heartPop = ref(false);
+const downPop  = ref(false);
+const { triggerBurst } = useBurst();
+
+function triggerPop(popRef: Ref<boolean>) {
+  popRef.value = true;
+  setTimeout(() => { popRef.value = false; }, 600);
+}
+
+// Self avatar for comment input box
+const SELF_TONES = ['av-violet','av-blue','av-teal','av-amber','av-rose','av-indigo','av-green'];
+const selfAvatarInitial = computed(() => {
+  const name = (userStore.currentUser as any)?.displayName
+    || (userStore.currentUser as any)?.username || '?';
+  return name.charAt(0).toUpperCase();
+});
+const selfAvatarTone = computed(() => {
+  const id = (userStore.currentUser as any)?.id || '';
+  const code = id.split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0);
+  return SELF_TONES[code % SELF_TONES.length];
+});
 
 function formatTime(timestamp: number): string {
   const diff = Date.now() - timestamp;
@@ -512,10 +641,14 @@ async function handlePostVote(direction: 'up' | 'down') {
 }
 
 async function handleUpvote() {
+  triggerPop(heartPop);
+  triggerBurst('heart');
   await handlePostVote('up');
 }
 
 async function handleDownvote() {
+  triggerPop(downPop);
+  triggerBurst('dislike');
   await handlePostVote('down');
 }
 
@@ -601,6 +734,7 @@ async function loadPost() {
   isLoading.value = true;
   try {
     await postStore.selectPost(postId.value);
+    if (postId.value) trackDetailView(postId.value, 'post');
     if (post.value) {
       // Authoritative counts + this user's real vote state, straight from the
       // vote set — worth the round trip on a post being read directly.
@@ -730,39 +864,99 @@ onUnmounted(() => {
   gap: 8px;
 }
 
+/* ── Vote button base ── */
 .vote-button {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(var(--ion-card-background-rgb), 0.20);
-  border: 1px solid rgba(var(--ion-text-color-rgb), 0.1);
-  padding: 8px 12px;
-  font-size: 14px;
-  color: var(--ion-color-medium);
-  cursor: pointer;
-  border-radius: 14px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.09);
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 600;
   font-family: inherit;
-  font-weight: 500;
+  color: rgba(255,255,255,0.55);
+  cursor: pointer;
+  border-radius: 12px;
+  transition: background 150ms, border-color 150ms, color 150ms;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+  overflow: hidden;
+}
+.vote-button:hover {
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.8);
 }
 
+/* SVG icon sizing */
+.vote-svg {
+  width: 17px; height: 17px;
+  flex-shrink: 0;
+  transition: transform 200ms;
+}
+.vote-count { line-height: 1; }
+
+/* ── Heart (upvote) ── */
+.vote-button.heart { color: rgba(196,181,253,0.7); }
+.vote-button.heart:hover { color: #c4b5fd; background: rgba(167,139,250,0.08); }
 .vote-button.heart.active {
-  background: rgba(167, 139, 250, 0.15);
-  color: #c4b5fd;
-  border-color: rgba(167, 139, 250, 0.3);
-}
-
-.vote-button.heart.active ion-icon {
+  background: rgba(167,139,250,0.15);
+  border-color: rgba(167,139,250,0.35);
   color: #c4b5fd;
 }
 
+/* ── Dislike (downvote) ── */
+.vote-button.dislike { color: rgba(255,255,255,0.4); }
+.vote-button.dislike:hover { color: rgba(255,255,255,0.75); background: rgba(239,68,68,0.06); }
 .vote-button.dislike.active {
+  background: rgba(239,68,68,0.13);
+  border-color: rgba(239,68,68,0.3);
   color: #ef4444;
-  background: rgba(239, 68, 68, 0.15);
-  border-color: rgba(239, 68, 68, 0.3);
 }
 
-.vote-button.dislike.active ion-icon {
-  color: #ef4444;
+/* ── Instagram-style pop on upvote ── */
+@keyframes heart-pop {
+  0%   { transform: scale(1); }
+  25%  { transform: scale(1.45); }
+  50%  { transform: scale(0.88); }
+  75%  { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+@keyframes down-pop {
+  0%   { transform: rotate(-20deg) scaleX(-1) scale(1); }
+  30%  { transform: rotate(-20deg) scaleX(-1) scale(1.4); }
+  60%  { transform: rotate(-20deg) scaleX(-1) scale(0.85); }
+  100% { transform: rotate(-20deg) scaleX(-1) scale(1); }
+}
+@keyframes ripple {
+  0%   { transform: scale(0); opacity: 0.35; }
+  100% { transform: scale(3.5); opacity: 0; }
+}
+
+.pop-heart .heart-svg {
+  animation: heart-pop 0.55s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+.pop-down .thumb-svg {
+  animation: down-pop 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+/* Ripple layer — appears behind icon on click */
+.vote-button::after {
+  content: '';
+  position: absolute;
+  inset: 0; margin: auto;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+}
+.pop-heart::after {
+  background: rgba(196,181,253,0.4);
+  animation: ripple 0.5s ease-out;
+}
+.pop-down::after {
+  background: rgba(239,68,68,0.35);
+  animation: ripple 0.45s ease-out;
 }
 
 .stat-item {
@@ -791,7 +985,7 @@ onUnmounted(() => {
 .section-separator {
   height: 1px;
   background: rgba(var(--ion-text-color-rgb), 0.08);
-  margin: 16px 0;
+  margin: 10px 0;
 }
 
 html.dark .section-separator {
@@ -804,11 +998,12 @@ html.dark .section-separator {
 }
 
 .section-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin: 0 0 12px 0;
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
   padding: 0 16px;
   color: var(--ion-text-color);
+  letter-spacing: -0.1px;
 }
 
 .commenters-list {
@@ -867,12 +1062,12 @@ html.dark .section-separator {
 }
 
 .comments-section {
-  padding: 16px 0;
+  padding: 10px 0 0;
   background: transparent;
 }
 
 .add-comment-form {
-  margin-bottom: 24px;
+  margin-bottom: 12px;
   padding: 0 16px;
 }
 
@@ -946,5 +1141,278 @@ html.dark .section-separator {
 @keyframes vl-pulse {
   0%, 100% { opacity: 0.6; transform: scale(0.97); }
   50%       { opacity: 1;   transform: scale(1.03); }
+}
+
+ion-content {
+  --background:
+    radial-gradient(ellipse at 15% 0%,   rgba(139, 92, 246, 0.30) 0%%, transparent 50%%),
+    radial-gradient(ellipse at 85% 10%%,  rgba(99, 102, 241, 0.20) 0%%, transparent 45%%),
+    radial-gradient(ellipse at 50%% 100%%, rgba(79,  70, 229, 0.20) 0%%, transparent 55%%),
+    #0d0e1c;
+}
+
+/* ── Commenter chips ── */
+.commenter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 5px 6px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 999px;
+  font-size: 12px;
+}
+.commenter-avatar {
+  width: 22px; height: 22px;
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 800; flex-shrink: 0;
+}
+.av-violet { background: rgba(99,102,241,0.25); color: #a5b4fc; }
+.av-blue   { background: rgba(59,130,246,0.22);  color: #93c5fd; }
+.av-teal   { background: rgba(20,184,166,0.22);  color: #5eead4; }
+.av-amber  { background: rgba(245,158,11,0.22);  color: #fcd34d; }
+.av-rose   { background: rgba(236,72,153,0.22);  color: #f9a8d4; }
+.av-indigo { background: rgba(129,140,248,0.22); color: #c7d2fe; }
+
+.commenter-name  { font-weight: 700; color: var(--app-text); }
+.commenter-count {
+  font-size: 10px; font-weight: 700;
+  background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.6);
+  padding: 1px 5px; border-radius: 999px;
+}
+
+/* ── Section tabs (Comments | Related) ── */
+.section-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  padding-bottom: 0;
+}
+.section-tab {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.4);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color 150ms, border-color 150ms;
+  margin-bottom: -1px;
+}
+.section-tab:hover { color: rgba(255,255,255,0.7); }
+.section-tab.active {
+  color: var(--app-text);
+  border-bottom-color: #818cf8;
+}
+
+/* ── Related posts ── */
+.related-section { margin-top: 0; }
+
+.related-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.02);
+  margin-top: 10px;
+}
+
+.related-row {
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  cursor: pointer;
+  transition: background 120ms;
+}
+.related-row:last-child { border-bottom: none; }
+.related-row:hover { background: rgba(255,255,255,0.04); }
+
+.related-meta {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; color: rgba(255,255,255,0.35);
+  margin-bottom: 4px;
+}
+.related-community { font-weight: 600; color: rgba(255,255,255,0.5); }
+.related-dot { opacity: 0.4; }
+
+.related-title {
+  font-size: 14px; font-weight: 600;
+  color: var(--app-text);
+  line-height: 1.4;
+  margin-bottom: 5px;
+}
+
+.related-tags { display: flex; gap: 5px; flex-wrap: wrap; }
+.related-tag {
+  font-size: 11px; font-weight: 600;
+  color: #818cf8; background: rgba(99,102,241,0.1);
+  padding: 1px 6px; border-radius: 999px;
+}
+
+/* ── Post author row ── */
+.post-author-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.post-author-avatar {
+  width: 42px; height: 42px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; font-weight: 800;
+  flex-shrink: 0;
+}
+/* reuse av- tone classes from commenter avatars */
+.av-violet { background: rgba(99,102,241,0.22);  color: #a5b4fc; }
+.av-blue   { background: rgba(59,130,246,0.22);   color: #93c5fd; }
+.av-teal   { background: rgba(20,184,166,0.22);   color: #5eead4; }
+.av-amber  { background: rgba(245,158,11,0.22);   color: #fcd34d; }
+.av-rose   { background: rgba(236,72,153,0.22);   color: #f9a8d4; }
+.av-indigo { background: rgba(129,140,248,0.22);  color: #c7d2fe; }
+.av-green  { background: rgba(52,211,153,0.22);   color: #6ee7b7; }
+
+.post-author-info { display: flex; flex-direction: column; gap: 3px; }
+.post-author-name-row { display: flex; align-items: center; gap: 7px; }
+.author-name { font-size: 15px; font-weight: 700; color: var(--app-text); }
+.post-author-sub {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 12px; color: rgba(255,255,255,0.4);
+}
+.community-chip {
+  height: 22px !important;
+  --padding-start: 7px; --padding-end: 7px;
+  font-size: 11px !important;
+}
+.community-chip ion-icon { font-size: 12px; }
+
+
+
+/* ── Commenter avatars: round ── */
+.commenter-avatar {
+  border-radius: 50% !important;
+}
+
+/* burst CSS moved to global style block below */
+
+/* ══ Compact comment input row ══════════════════════════════════ */
+.comment-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 999px;
+  padding: 6px 8px 6px 10px;
+}
+.commenter-self-avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 800;
+  flex-shrink: 0;
+}
+.comment-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--app-text, #fff);
+  font-size: 14px;
+  font-family: inherit;
+  padding: 2px 0;
+}
+.comment-input::placeholder { color: rgba(255,255,255,0.3); }
+.comment-send-btn {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: var(--app-accent, #6366f1);
+  border: none;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  color: #fff;
+  flex-shrink: 0;
+  transition: background 120ms, opacity 120ms;
+}
+.comment-send-btn:disabled { opacity: 0.35; cursor: default; }
+.comment-send-btn:not(:disabled):hover { background: #818cf8; }
+
+/* ══ Two-column comments + related ══════════════════════════════ */
+.related-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.02);
+  margin-top: 4px;
+}
+.related-row {
+  padding: 11px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  cursor: pointer;
+  transition: background 120ms;
+}
+.related-row:last-child { border-bottom: none; }
+.related-row:hover { background: rgba(255,255,255,0.04); }
+
+/* ── Burst overlay (teleported to body — must NOT be scoped) ── */
+/* These rules are in <style scoped> so we use :global() */
+</style>
+<style>
+/* ── Instagram burst — GLOBAL (teleported outside scoped component) ── */
+.burst-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.burst-heart {
+  width: 160px; height: 160px;
+  animation: burst-scale 0.75s cubic-bezier(0.17, 0.89, 0.32, 1.28) forwards;
+  filter: drop-shadow(0 0 32px rgba(196,181,253,0.8));
+}
+.burst-overlay.dislike .burst-heart {
+  filter: drop-shadow(0 0 32px rgba(239,68,68,0.8));
+}
+@keyframes burst-scale {
+  0%   { transform: scale(0.1) rotate(-15deg); opacity: 0; }
+  35%  { transform: scale(1.4) rotate(5deg);  opacity: 1; }
+  55%  { transform: scale(0.95) rotate(-2deg); opacity: 1; }
+  75%  { transform: scale(1.1) rotate(1deg);  opacity: 0.9; }
+  100% { transform: scale(1.2) rotate(0deg);  opacity: 0; }
+}
+.burst-particles { position: absolute; inset: 0; }
+.burst-particle {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  animation: burst-particle-fly 0.8s ease-out forwards;
+  animation-delay: calc(var(--i) * 0.035s);
+  transform-origin: 0 0;
+}
+@keyframes burst-particle-fly {
+  0%   { transform: translate(-50%,-50%) rotate(calc(var(--i)*45deg)) translateY(0px) scale(1); opacity:1; }
+  100% { transform: translate(-50%,-50%) rotate(calc(var(--i)*45deg)) translateY(-110px) scale(0.3); opacity:0; }
+}
+.heart-burst-enter-active { animation: burst-scale 0.75s cubic-bezier(0.17,0.89,0.32,1.28); }
+.heart-burst-leave-active { transition: opacity 0.1s ease; }
+.heart-burst-leave-to    { opacity: 0; }
+
+.detail-view-count {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.3);
+  pointer-events: none;
+  margin-left: 4px;
 }
 </style>

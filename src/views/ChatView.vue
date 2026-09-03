@@ -62,6 +62,10 @@
               <div v-if="msg.mediaUrl" class="message-content media-bubble">
                 <img v-if="msg.mediaType === 'image'" :src="msg.mediaUrl" class="media-img" @click="openMedia(msg.mediaUrl)" />
                 <video v-else-if="msg.mediaType === 'video'" :src="msg.mediaUrl" controls class="media-video" />
+                <div v-if="(msg as any).mediaExpired" class="media-expired">
+                  <svg viewBox="0 0 24 24" fill="none" width="20" height="20"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8"/><path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  Media expired or deleted
+                </div>
                 <div v-if="msg.mediaLoading" class="media-loading">
                   <div class="mini-spinner"></div>
                 </div>
@@ -198,6 +202,11 @@ import { UserService } from '../services/userService';
 import { GunService } from '../services/gunService';
 import { StorageService } from '../services/storageService';
 import config from '@/config';
+import {
+  encryptAndUpload, fetchAndDecrypt,
+  encodeMediaMessage, decodeMediaMessage,
+  type MediaMeta,
+} from '../services/chatMediaService';
 
 const route = useRoute();
 const props = defineProps<{ userId: string }>();
@@ -744,12 +753,54 @@ function listenForIncomingP2P() {
 async function onFileSelected(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0];
   (e.target as HTMLInputElement).value = '';
-  if (!file) {
-    // User cancelled picker — release suppression immediately
-    chatService?.suppressOffline(0);
-    return;
+  if (!file) { chatService?.suppressOffline(0); return; }
+  await sendMediaViaRelay(file);
+}
+
+/**
+ * Relay-routed encrypted media — no P2P needed, works async (recipient can be offline).
+ * 1. AES-256-GCM encrypt locally.
+ * 2. Upload ciphertext to relay (relay never sees plaintext).
+ * 3. Send mediaId + key inside a normal Signal-encrypted text message.
+ * 4. Recipient decrypts message, downloads + decrypts media, relay auto-deletes.
+ */
+async function sendMediaViaRelay(file: File) {
+  if (!chatService) return;
+
+  // Use Gun user pub as a lightweight bearer token (relay verifies via Gun)
+  const authToken = GunService.getUser()?.is?.pub || myUserId;
+
+  // Show local optimistic preview immediately
+  const previewUrl = file.type.startsWith('image') ? URL.createObjectURL(file) : undefined;
+  const mtype      = file.type.startsWith('video') ? 'video' : 'image';
+  const localId    = 'media-local-' + Date.now();
+
+  messages.value = [...messages.value, {
+    id: localId, from: myUserId, to: recipientId.value,
+    message: '[uploading…]', timestamp: Date.now(), read: false, sent: false,
+    mediaUrl: previewUrl, mediaType: mtype, mediaLoading: true,
+  } as any];
+  nextTick(() => scrollToBottom(true));
+
+  try {
+    const meta = await encryptAndUpload(file, authToken);
+    const payload = encodeMediaMessage(meta);
+    const sent = await chatService.sendMessage(recipientId.value, payload);
+
+    // Replace optimistic with confirmed
+    messages.value = messages.value.map(m =>
+      m.id === localId
+        ? { ...sent, mediaUrl: previewUrl, mediaType: mtype, mediaLoading: false }
+        : m
+    );
+  } catch (err: any) {
+    messages.value = messages.value.filter(m => m.id !== localId);
+    const t = await toastController.create({
+      message: 'Media send failed: ' + (err?.message || 'unknown error'),
+      duration: 4000, position: 'top', color: 'warning',
+    });
+    await t.present();
   }
-  await sendFileP2P(file);
 }
 
 function openFilePickerWithPresence() {
@@ -824,11 +875,48 @@ function deliveryMark(msg: ChatMessage): string {
 function upsertMessage(msg: ChatMessage) {
   const at = messages.value.findIndex(m => m.id === msg.id);
   if (at === -1) {
-    messages.value = [...messages.value, msg]; // new reference → Vue re-renders
+    messages.value = [...messages.value, msg];
   } else {
     const updated = [...messages.value];
     updated[at] = { ...updated[at], ...msg };
     messages.value = updated;
+  }
+  // Auto-decrypt relay media messages
+  void resolveMedia(msg);
+}
+
+async function resolveMedia(msg: any) {
+  if (!msg.message) return;
+  const meta = decodeMediaMessage(msg.message);
+  if (!meta) return;
+
+  const authToken = GunService.getUser()?.is?.pub || myUserId;
+  const mtype = meta.mediaType.startsWith('video') ? 'video' : 'image';
+
+  // Mark loading while we fetch
+  const updIdx = messages.value.findIndex(m => m.id === msg.id);
+  if (updIdx !== -1) {
+    const arr = [...messages.value];
+    arr[updIdx] = { ...arr[updIdx], mediaLoading: true, mediaType: mtype };
+    messages.value = arr;
+  }
+
+  try {
+    const url = await fetchAndDecrypt(meta, authToken);
+    const arr2 = [...messages.value];
+    const i2 = arr2.findIndex(m => m.id === msg.id);
+    if (i2 !== -1) {
+      arr2[i2] = { ...arr2[i2], mediaUrl: url, mediaType: mtype, mediaLoading: false };
+      messages.value = arr2;
+    }
+  } catch {
+    // Media expired or deleted — show a placeholder
+    const arr3 = [...messages.value];
+    const i3 = arr3.findIndex(m => m.id === msg.id);
+    if (i3 !== -1) {
+      arr3[i3] = { ...arr3[i3], mediaLoading: false, mediaExpired: true };
+      messages.value = arr3;
+    }
   }
 }
 
