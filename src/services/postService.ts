@@ -73,6 +73,10 @@ export interface Post {
   videoSize?: number;
   /** Video MIME type, e.g. 'video/mp4' */
   videoMimeType?: string;
+  /** Relay-derived view count — hydrated from post_views, not stored in Gun. */
+  viewCount?: number;
+  /** Relay-derived unique viewer count — hydrated from post_views, not stored in Gun. */
+  uniqueViewers?: number;
 }
 
 /** @deprecated Legacy per-service canonicalizer, kept for verifying posts signed before the shared canonicalJSON was adopted. Never sign new posts with this. */

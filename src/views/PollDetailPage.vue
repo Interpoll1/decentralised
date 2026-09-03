@@ -91,6 +91,13 @@
                 <span>Time Left</span>
               </div>
             </div>
+            <div v-if="poll.viewCount && poll.viewCount > 0" class="stat-item">
+              <ion-icon :icon="eyeOutline" color="tertiary"></ion-icon>
+              <div>
+                <strong>{{ poll.viewCount >= 1_000_000 ? (poll.viewCount / 1_000_000).toFixed(1) + 'M' : poll.viewCount >= 1000 ? (poll.viewCount / 1000).toFixed(1) + 'K' : poll.viewCount }}</strong>
+                <span>Views</span>
+              </div>
+            </div>
           </div>
           <div class="separator"></div>
         </div>
@@ -344,6 +351,7 @@ import {
   checkmarkCircleOutline,
   alertCircleOutline,
   eyeOffOutline,
+  eyeOutline,
   lockClosedOutline,
   shareOutline,
   copyOutline,
@@ -366,6 +374,7 @@ import type { Vote } from '../types/chain';
 import { generatePseudonym } from '../utils/pseudonym';
 import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 import config from '../config';
+import { trackDetailView } from '../services/viewTrackingService';
 
 const route = useRoute();
 const router = useRouter();
@@ -674,6 +683,8 @@ async function submitVote() {
                 requireLogin: false, isPrivate: !!data.isPrivate,
                 totalVotes: data.totalVotes || 0,
                 isExpired: !!data.isExpired,
+                ...(data.viewCount     != null ? { viewCount:     data.viewCount }     : {}),
+                ...(data.uniqueViewers != null ? { uniqueViewers: data.uniqueViewers } : {}),
               })
               if (poll.value?.id === pollIdForReload) {
                 poll.value = pollStore.pollsMap.get(pollIdForReload) || poll.value
@@ -699,6 +710,7 @@ async function loadPoll() {
   const requestId = ++loadPollRequestId.value;
   const isStale = () => requestId !== loadPollRequestId.value;
   const pollId = route.params.pollId as string
+  if (pollId) trackDetailView(pollId, 'poll');
   poll.value = null
   selectedOption.value = ''
   selectedOptions.value = []
@@ -740,6 +752,8 @@ async function loadPoll() {
             requireLogin: false, isPrivate: !!data.isPrivate,
             totalVotes: data.totalVotes || 0,
             isExpired: !!data.isExpired,
+            ...(data.viewCount     != null ? { viewCount:     data.viewCount }     : {}),
+            ...(data.uniqueViewers != null ? { uniqueViewers: data.uniqueViewers } : {}),
           })
           poll.value = pollStore.pollsMap.get(pollId) || data
           isLoading.value = false
@@ -1221,5 +1235,13 @@ watch(
 }
 .verified-note.inflated {
   color: var(--ion-color-warning);
+}
+
+ion-content {
+  --background:
+    radial-gradient(ellipse at 15% 0%,   rgba(139, 92, 246, 0.30) 0%%, transparent 50%%),
+    radial-gradient(ellipse at 85% 10%%,  rgba(99, 102, 241, 0.20) 0%%, transparent 45%%),
+    radial-gradient(ellipse at 50%% 100%%, rgba(79,  70, 229, 0.20) 0%%, transparent 55%%),
+    #0d0e1c;
 }
 </style>

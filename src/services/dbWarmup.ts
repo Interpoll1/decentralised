@@ -163,6 +163,9 @@ export async function warmupFromDB(): Promise<void> {
           ...(d.videoDuration     ? { videoDuration:     Number(d.videoDuration) || 0 } : {}),
           ...(d.videoSize         ? { videoSize:         Number(d.videoSize) || 0 }     : {}),
           ...(d.videoMimeType     ? { videoMimeType:     d.videoMimeType }     : {}),
+          // View count — passed through from relay's search_index enrichment
+          ...(d.viewCount     ? { viewCount:     d.viewCount }     : {}),
+          ...(d.uniqueViewers ? { uniqueViewers: d.uniqueViewers } : {}),
         })
         n++
       }
@@ -199,6 +202,9 @@ export async function warmupFromDB(): Promise<void> {
           isPrivate:             !!p.isPrivate,
           totalVotes:            p.totalVotes     || 0,
           isExpired:             !!p.isExpired,
+          // View count — passed through from relay's search_index enrichment
+          ...(p.viewCount     ? { viewCount:     p.viewCount }     : {}),
+          ...(p.uniqueViewers ? { uniqueViewers: p.uniqueViewers } : {}),
         })
         n++
       }

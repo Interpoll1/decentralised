@@ -230,9 +230,8 @@ ion-content {
     #0d0e1c;
 }
 
-:deep(.surface-card),
-:deep(.main-content),
-:deep(.page-layout) {
+/* Only strip glass from the shell content area — leave sidebars intact */
+:deep(.dps-main) {
   background: transparent !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;

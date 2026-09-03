@@ -328,17 +328,26 @@ export const usePollStore = defineStore('poll', () => {
 
   function injectPoll(poll: Poll) {
     const existing = pollsMap.value.get(poll.id);
+    // Relay-only fields (never stored in Gun) — carry forward from existing entry
+    // so Gun snapshot overwrites never silently clear them.
+    const relayFields = existing ? {
+      viewCount:     poll.viewCount     ?? existing.viewCount,
+      uniqueViewers: poll.uniqueViewers ?? existing.uniqueViewers,
+    } : {
+      viewCount:     poll.viewCount,
+      uniqueViewers: poll.uniqueViewers,
+    };
     if (!existing) {
-      pollsMap.value.set(poll.id, poll);
+      pollsMap.value.set(poll.id, { ...poll, ...relayFields });
       triggerRef(pollsMap);
       tryDecryptPoll(poll);
     } else if (poll.options.length > 0 && existing.options.length === 0) {
-      pollsMap.value.set(poll.id, poll);
+      pollsMap.value.set(poll.id, { ...poll, ...relayFields });
       triggerRef(pollsMap);
       tryDecryptPoll(poll);
     } else if (poll.options.length > 0 && getTotalVotes(poll) >= getTotalVotes(existing)) {
       if (!isVoteProtected(poll.id) || getTotalVotes(poll) > getTotalVotes(existing)) {
-        pollsMap.value.set(poll.id, poll);
+        pollsMap.value.set(poll.id, { ...poll, ...relayFields });
         triggerRef(pollsMap);
         tryDecryptPoll(poll);
       }
@@ -347,6 +356,7 @@ export const usePollStore = defineStore('poll', () => {
       // merge category fields only and trigger so combinedFeed re-evaluates.
       pollsMap.value.set(poll.id, {
         ...existing,
+        ...relayFields,
         category:  poll.category,
         tags:      poll.tags  ?? existing.tags,
         sentiment: poll.sentiment ?? existing.sentiment,
@@ -724,6 +734,20 @@ export const usePollStore = defineStore('poll', () => {
     if (currentPoll.value?.id === pollId) currentPoll.value = patched;
   }
 
+  /** Apply relay-derived view counts to polls in pollsMap without a full reload. */
+  function patchViewCounts(counts: Record<string, { viewCount: number; uniqueViewers: number }>) {
+    let changed = false;
+    for (const [pollId, vc] of Object.entries(counts)) {
+      const existing = pollsMap.value.get(pollId);
+      if (!existing) continue;
+      const patched = { ...existing, viewCount: vc.viewCount, uniqueViewers: vc.uniqueViewers };
+      pollsMap.value.set(pollId, patched);
+      if (currentPoll.value?.id === pollId) currentPoll.value = patched;
+      changed = true;
+    }
+    if (changed) triggerRef(pollsMap);
+  }
+
   return {
     polls, pollsMap, currentPoll, isLoading,
     sortedPolls, activePolls,
@@ -733,7 +757,7 @@ export const usePollStore = defineStore('poll', () => {
     flushNewPolls, injectPoll, saveSeenNow,
     createPoll, voteOnPoll, selectPoll,
     voteOnPollContent, upvotePoll, downvotePoll,
-    myPollContentVote, togglePollContentVote, patchPollTally,
+    myPollContentVote, togglePollContentVote, patchPollTally, patchViewCounts,
     refreshCommunityPolls,
   };
 });

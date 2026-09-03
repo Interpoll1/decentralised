@@ -39,6 +39,8 @@ export interface FeedPost {
   sentiment: string | null;
   nsfw: boolean;
   dataVersion: string;
+  viewCount?: number;
+  uniqueViewers?: number;
 }
 
 export interface FeedPollOption {
@@ -68,6 +70,8 @@ export interface FeedPoll {
   category: string | null;
   tags: string | null;
   dataVersion: string;
+  viewCount?: number;
+  uniqueViewers?: number;
 }
 
 export type FeedItem =
@@ -215,6 +219,43 @@ export async function fetchCommentCounts(
         }
       } catch {
         // non-fatal — feed still renders with Gun-stored counts
+      }
+    }),
+  );
+  return results;
+}
+
+export interface ViewCountResult {
+  viewCount: number;
+  uniqueViewers: number;
+}
+
+/**
+ * Fetch relay-derived view counts for a batch of post/poll IDs.
+ * Reads from post_views — counts are authoritative and never stored in Gun.
+ * Safe to call after each flush; returns empty object on any error.
+ */
+export async function fetchViewCounts(
+  ids: string[],
+): Promise<Record<string, ViewCountResult>> {
+  if (ids.length === 0) return {};
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += 50) chunks.push(ids.slice(i, i + 50));
+  const results: Record<string, ViewCountResult> = {};
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      try {
+        const res = await fetchWithTimeout(
+          `${apiBase()}/api/view-counts?ids=${encodeURIComponent(chunk.join(','))}`,
+          5_000,
+        );
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json?.counts && typeof json.counts === 'object') {
+          Object.assign(results, json.counts);
+        }
+      } catch {
+        // non-fatal — cards just keep showing previous count
       }
     }),
   );

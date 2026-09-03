@@ -47,7 +47,7 @@
   --app-search-surface: rgba(255, 255, 255, 0.48);
   --app-heading-start: #111827;
   --app-heading-end: rgba(17, 24, 39, 0.62);
-  --glass-blur: 18px;
+  --glass-blur: 28px;
   --glass-saturation: 1.15;
   --glass-item-blur: 14px;
   --glass-item-saturation: 1.08;
@@ -168,7 +168,7 @@ body.dark {
   --app-bg-deep: #0c0d14;
   --app-bg-base: #0e0f1a;
   --app-bg-elevated: #13152a;
-  --app-surface: rgba(22, 24, 30, 0.45);
+  --app-surface: rgba(18, 19, 28, 0.38);
   --app-surface-strong: rgba(30, 32, 40, 0.80);
   --app-surface-hover: rgba(38, 41, 50, 0.86);
   --app-border: rgba(255, 255, 255, 0.08);
@@ -182,8 +182,8 @@ body.dark {
   --app-ambient-spot-2: rgba(140, 92, 246, 0.14);
   --app-ambient-spot-3: rgba(99, 102, 241, 0.16);
   --app-ambient-spot-4: rgba(94, 106, 210, 0.12);
-  --app-surface-tint-top: rgba(255, 255, 255, 0.07);
-  --app-surface-tint-bottom: rgba(255, 255, 255, 0.015);
+  --app-surface-tint-top: rgba(120, 100, 255, 0.08);
+  --app-surface-tint-bottom: rgba(80, 60, 200, 0.02);
   --app-surface-tint-top-hover: rgba(255, 255, 255, 0.10);
   --app-surface-tint-bottom-hover: rgba(255, 255, 255, 0.02);
   --app-pill-surface: rgba(255, 255, 255, 0.06);
@@ -201,7 +201,7 @@ body.dark {
   --glass-item-saturation: 1.05;
   --toolbar-blur: 16px;
   --toolbar-saturation: 1.05;
-  --glass-border-top: rgba(255, 255, 255, 0.10);
+  --glass-border-top: rgba(140, 120, 255, 0.18);
   --glass-border-bottom: rgba(0, 0, 0, 0.3);
   --glass-inner-glow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 

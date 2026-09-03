@@ -1,5 +1,5 @@
 <template>
-  <article class="post-card" :class="{ 'post-card--flagged': flagged && filterAction === 'blur' && !revealed }">
+  <article ref="cardEl" class="post-card" :class="{ 'post-card--flagged': flagged && filterAction === 'blur' && !revealed }" :data-post-id="post.id" :data-category="post.category || ''" :data-tags="Array.isArray(post.tags) ? post.tags.join(',') : (post.tags || '')">
 
     <!-- Flagged overlay -->
     <div v-if="flagged && filterAction === 'blur' && !revealed" class="post-flagged-overlay" @click.stop="revealed = true">
@@ -12,10 +12,10 @@
       <!-- ── Header ───────────────────────────────── -->
       <div class="post-header">
         <div class="post-header-meta">
-          <div class="post-avatar" :title="'u/' + authorDisplayName">{{ authorInitial }}</div>
+          <div class="post-avatar" :title="authorDisplayName">{{ authorInitial }}</div>
           <div class="post-meta-text">
             <div class="post-meta-row">
-              <span class="post-author">u/{{ authorDisplayName }}</span>
+              <span class="post-author">{{ authorDisplayName }}</span>
               <span class="post-identity-badge" :class="authorIdentityClass">{{ authorIdentityLabel }}</span>
               <span class="post-sep">·</span>
               <span class="post-time">{{ formatTime(post.createdAt) }}</span>
@@ -61,16 +61,36 @@
       </div>
 
       <!-- Media preview -->
-      <div v-if="post.mediaUrl" class="post-media">
+      <div v-if="post.mediaUrl || post.videoCID" class="post-media">
         <img
-          v-if="isImageUrl(post.mediaUrl)"
+          v-if="post.mediaUrl && isImageUrl(post.mediaUrl)"
           :src="post.mediaUrl"
           :alt="post.title"
           class="post-media-img"
           loading="lazy"
           @click.stop
         />
-        <VideoPlayer v-else :src="post.mediaUrl" class="post-media-video" />
+        <!-- Video: use IPFS CID path with skeleton while async component loads -->
+        <template v-else-if="post.videoCID">
+          <Suspense>
+            <VideoPlayer
+              :cid="post.videoCID"
+              :thumbnail-url="post.videoThumbnailCID
+                ? `https://ipfs.filebase.io/ipfs/${post.videoThumbnailCID}`
+                : null"
+              :duration="post.videoDuration"
+              :file-size="post.videoSize"
+              :mime-type="post.videoMimeType"
+              :compact="true"
+              class="post-media-video"
+            />
+            <template #fallback>
+              <div class="post-video-skeleton">
+                <div class="post-video-skeleton__icon">▶</div>
+              </div>
+            </template>
+          </Suspense>
+        </template>
       </div>
 
       <!-- ── Nostr event ID strip ─────────────────── -->
@@ -89,6 +109,11 @@
             <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
+      </div>
+
+      <!-- View count — below content, no icon, subtle -->
+      <div v-if="post.viewCount && post.viewCount > 0" class="post-view-count-row">
+        {{ formatViewCount(post.viewCount) }} views
       </div>
 
       <!-- ── Footer ───────────────────────────────── -->
@@ -171,10 +196,13 @@ import { generatePseudonym } from '../utils/pseudonym';
 import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 import { useUserStore } from '../stores/userStore';
 import type { UserProfile } from '../services/userService';
+// onMounted/nextTick not needed — view tracking via HomePage MutationObserver
 import { shareLink } from '../composables/useShare';
+// observePost called by HomePage MutationObserver, not directly here
 
 const VideoPlayer = defineAsyncComponent(() => import('./VideoPlayer.vue'));
 
+const cardEl = ref<HTMLElement | null>(null);
 const props = defineProps<{
   post: Post;
   communityName?: string;
@@ -286,6 +314,14 @@ function handleShare() {
     : `/post/${props.post.id}`;
   void shareLink(url, props.post.title || 'Interpoll post', 'Read this post on Interpoll');
 }
+function formatViewCount(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000)     return (n / 1_000).toFixed(1) + 'K';
+  return n.toString();
+}
+
+// View tracking handled by HomePage MutationObserver on the feed container.
+// observePost is called when the article element is inserted into the DOM.
 </script>
 
 <style scoped>
@@ -371,6 +407,20 @@ function handleShare() {
 .post-media { border-radius: 10px; overflow: hidden; margin-top: 2px; }
 .post-media-img { width: 100%; max-height: 320px; object-fit: cover; display: block; }
 .post-media-video { width: 100%; }
+.post-video-skeleton {
+  width: 100%; height: 180px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+.post-video-skeleton__icon {
+  font-size: 28px; opacity: 0.2;
+}
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
 
 /* ── Nostr strip ─────────────────────────────────── */
 .post-nostr-strip {
@@ -418,12 +468,20 @@ function handleShare() {
 .post-action-btn:hover { color: var(--app-text); background: rgba(255,255,255,0.08); }
 .post-action-btn svg { flex-shrink: 0; }
 
-.post-action-btn--heart             { color: var(--app-text-muted); }
-.post-action-btn--heart.active      { color: #f43f5e; }
+.post-view-count-row {
+  font-size: 11px;
+  color: var(--app-text-subtle);
+  opacity: 0.6;
+  margin: 2px 0 4px;
+  letter-spacing: 0.01em;
+}
+.post-action-btn--heart             { color: #a78bfa; }
+.post-action-btn--heart.active      { color: #c4b5fd; }
 .post-action-btn--down              { color: var(--app-text-muted); }
 .post-action-btn--down.active       { color: #ef4444; }
-.post-action-btn--down .thumb-down-icon { color: currentColor; opacity: 0.55; }
-.post-action-btn--down.active .thumb-down-icon { opacity: 1; }
+.post-action-btn--down .thumb-down-icon { color: var(--app-text-subtle); transform: rotate(-20deg) scaleX(-1); }
+.post-action-btn--down.active { color: #ef4444; }
+.post-action-btn--down.active .thumb-down-icon { color: #ef4444; }
 .post-action-btn--down.active       { color: #f87171; }
 .post-action-btn--nostr             { color: #a78bfa; }
 .post-action-btn--nostr:hover       { color: #c4b5fd; background: rgba(167,139,250,0.08); }

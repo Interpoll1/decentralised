@@ -584,8 +584,20 @@
                   <span class="relay-difficulty medium">Medium</span>
                   <span class="relay-option-name">Home Server</span>
                 </div>
-                <p class="relay-option-desc">Deploys a GunDB relay on a Raspberry Pi or spare Linux machine on your local network. The installer prints the relay URL and optionally guides you through port-forwarding for external access.</p>
-                <div class="code-block">curl -sSL https://interpoll.endless.sbs/install.sh | bash</div>
+                <p class="relay-option-desc">Deploys a GunDB relay on a Raspberry Pi or spare Linux/Windows/Mac machine. The installer prints the relay URL when done.</p>
+                <div class="os-tabs">
+                  <button v-for="os in ['Linux / Pi', 'macOS', 'Windows']" :key="os"
+                    class="os-tab" :class="{ active: homeOs === os }"
+                    @click="homeOs = os">{{ os }}</button>
+                </div>
+                <div class="code-block-copy">
+                  <code class="code-text">{{ homeCmd }}</code>
+                  <button class="copy-btn" @click="copyText(homeCmd, 'home')" :title="copied === 'home' ? 'Copied!' : 'Copy'">
+                    {{ copied === 'home' ? '✓' : '⎘' }}
+                  </button>
+                </div>
+                <p v-if="homeOs === 'Windows'" class="relay-option-desc" style="margin-top:6px;font-size:11.5px">Run in <strong>PowerShell as Administrator</strong>.</p>
+                <p v-else class="relay-option-desc" style="margin-top:6px;font-size:11.5px">Run in a terminal on the target machine.</p>
               </div>
 
               <div class="relay-option">
@@ -593,8 +605,19 @@
                   <span class="relay-difficulty advanced">Technical</span>
                   <span class="relay-option-name">Cloud VPS</span>
                 </div>
-                <p class="relay-option-desc">Provisions a production-grade relay on any VPS with a domain name. The script handles Docker, Caddy reverse-proxy, and automatic TLS certificate issuance in a single command.</p>
-                <div class="code-block">curl -sSL https://interpoll.endless.sbs/vps.sh | bash -s yourdomain.com</div>
+                <p class="relay-option-desc">Provisions a production-grade relay on any VPS with a domain name. SSH into your server first, then run:</p>
+                <div class="os-tabs">
+                  <button v-for="os in ['Linux (bash)', 'macOS (zsh)']" :key="os"
+                    class="os-tab" :class="{ active: vpsOs === os }"
+                    @click="vpsOs = os">{{ os }}</button>
+                </div>
+                <div class="code-block-copy">
+                  <code class="code-text">{{ vpsCmd }}</code>
+                  <button class="copy-btn" @click="copyText(vpsCmd, 'vps')" :title="copied === 'vps' ? 'Copied!' : 'Copy'">
+                    {{ copied === 'vps' ? '✓' : '⎘' }}
+                  </button>
+                </div>
+                <p class="relay-option-desc" style="margin-top:6px;font-size:11.5px">Replace <code>yourdomain.com</code> with your actual domain. Handles Docker, Caddy + TLS automatically.</p>
               </div>
             </div>
           </div>
@@ -870,9 +893,8 @@ ion-content {
 }
 
 /* Kill DesktopPageShell's opaque surface-card so our gradient shows through */
-:deep(.surface-card),
-:deep(.main-content),
-:deep(.page-layout) {
+/* Only strip glass from the shell content area — leave sidebars intact */
+:deep(.dps-main) {
   background: transparent !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
@@ -1347,6 +1369,36 @@ code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0
   padding: 10px 14px; border-radius: 10px; color: #a5b4fc;
   word-break: break-all;
 }
+
+/* OS tab selector for relay commands */
+.os-tabs {
+  display: flex; gap: 4px; margin-bottom: 8px; margin-top: 10px;
+}
+.os-tab {
+  padding: 4px 12px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
+  border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03);
+  color: rgba(255,255,255,0.45); cursor: pointer; transition: all 130ms;
+  font-family: inherit;
+}
+.os-tab:hover { color: var(--app-text); background: rgba(255,255,255,0.07); }
+.os-tab.active { background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.4); color: #a5b4fc; }
+
+.code-block-copy {
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
+  padding: 10px 14px; border-radius: 10px;
+}
+.code-text {
+  flex: 1; font-family: monospace; font-size: 12px;
+  color: #a5b4fc; word-break: break-all;
+}
+.copy-btn {
+  flex-shrink: 0; background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1); border-radius: 6px;
+  color: rgba(255,255,255,0.55); font-size: 14px; cursor: pointer;
+  padding: 3px 8px; transition: all 120ms; font-family: inherit;
+}
+.copy-btn:hover { background: rgba(99,102,241,0.15); color: #a5b4fc; }
 
 /* ── Range rows ─────────────────────────────── */
 .range-row { padding: 6px 0; }
@@ -1963,6 +2015,38 @@ const editRelay = ref({
   gun: config.relay.gun,
   api: config.relay.api
 });
+
+// ── Relay setup OS selector ────────────────────────────────────────────────
+const homeOs  = ref('Linux / Pi');
+const vpsOs   = ref('Linux (bash)');
+const copied  = ref<'home' | 'vps' | null>(null);
+
+const HOME_CMDS: Record<string, string> = {
+  'Linux / Pi': 'curl -sSL https://interpoll.endless.sbs/install.sh | bash',
+  'macOS':      'curl -sSL https://interpoll.endless.sbs/install.sh | bash',
+  'Windows':    "irm https://interpoll.endless.sbs/install.ps1 | iex",
+};
+const VPS_CMDS: Record<string, string> = {
+  'Linux (bash)': 'curl -sSL https://interpoll.endless.sbs/vps.sh | bash -s yourdomain.com',
+  'macOS (zsh)':  'curl -sSL https://interpoll.endless.sbs/vps.sh | bash -s yourdomain.com',
+};
+const homeCmd = computed(() => HOME_CMDS[homeOs.value] ?? HOME_CMDS['Linux / Pi']);
+const vpsCmd  = computed(() => VPS_CMDS[vpsOs.value]  ?? VPS_CMDS['Linux (bash)']);
+
+function copyText(text: string, which: 'home' | 'vps') {
+  navigator.clipboard.writeText(text).then(() => {
+    copied.value = which;
+    setTimeout(() => { copied.value = null; }, 1800);
+  }).catch(() => {
+    // Fallback for browsers without clipboard API
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+    copied.value = which;
+    setTimeout(() => { copied.value = null; }, 1800);
+  });
+}
 
 const hasCustomRelay = computed(() => {
   const overrides = config.getRelayOverrides();

@@ -178,8 +178,32 @@ const ALL_CATEGORIES = [
 </script>
 
 <style scoped>
-/* ── All layout handled by HomePage.css side-nav classes ── */
-/* Component-scoped additions only */
+/* ── Self-contained layout — works on any page, not just hp-root ── */
+
+.side-nav {
+  display: none; /* mobile: hidden */
+}
+
+@media (min-width: 768px) {
+  .side-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 190px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 24px;
+    padding: 16px 10px 20px;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    border-radius: var(--app-radius-md, 14px);
+    /* Override surface-card border-radius to use md not lg */
+    --app-radius-lg: var(--app-radius-md, 14px);
+  }
+}
+
+@media (min-width: 1024px) { .side-nav { width: 210px; } }
+@media (min-width: 1280px) { .side-nav { width: 220px; } }
 
 .side-nav-section-toggle {
   display: flex;

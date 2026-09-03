@@ -428,6 +428,14 @@
 .rules-list li:last-child {
   margin-bottom: 0;
 }
+
+ion-content {
+  --background:
+    radial-gradient(ellipse at 15% 0%,   rgba(139, 92, 246, 0.30) 0%%, transparent 50%%),
+    radial-gradient(ellipse at 85% 10%%,  rgba(99, 102, 241, 0.20) 0%%, transparent 45%%),
+    radial-gradient(ellipse at 50%% 100%%, rgba(79,  70, 229, 0.20) 0%%, transparent 55%%),
+    #0d0e1c;
+}
 </style>
 
 <script setup lang="ts">

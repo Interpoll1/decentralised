@@ -32,21 +32,23 @@
         />
       </div>
 
+      <!-- Filter row 1: type + community -->
       <div class="search-filters">
         <select v-model="filterType" @change="handleFilterChange" class="filter-select">
           <option value="">All Types</option>
-          <option value="post">Posts Only</option>
-          <option value="poll">Polls Only</option>
+          <option value="post">Posts</option>
+          <option value="poll">Polls</option>
         </select>
-
         <input
           v-model="filterCommunity"
           @input="handleFilterChange"
           type="text"
-          placeholder="Filter by community..."
+          placeholder="Community..."
           class="filter-input"
         />
       </div>
+
+
     </div>
 
     <!-- Results Area -->
@@ -447,6 +449,58 @@ ion-content { --background: transparent; }
   .spinner { animation: none; }
 }
 
+
+ion-content {
+  --background:
+    radial-gradient(ellipse at 15% 0%,   rgba(139, 92, 246, 0.30) 0%%, transparent 50%%),
+    radial-gradient(ellipse at 85% 10%%,  rgba(99, 102, 241, 0.20) 0%%, transparent 45%%),
+    radial-gradient(ellipse at 50%% 100%%, rgba(79,  70, 229, 0.20) 0%%, transparent 55%%),
+    #0d0e1c;
+}
+/* ── Category pills ── */
+.category-pills {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 2px 0 4px;
+  -webkit-overflow-scrolling: touch;
+}
+.category-pills::-webkit-scrollbar { display: none; }
+
+.cat-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.09);
+  background: transparent;
+  color: var(--app-text-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: all 130ms;
+  -webkit-tap-highlight-color: transparent;
+}
+.cat-pill:hover { background: rgba(255,255,255,0.06); color: var(--app-text); }
+.cat-pill.active {
+  background: var(--app-accent, #6366f1);
+  border-color: var(--app-accent, #6366f1);
+  color: #fff;
+}
+
+/* ── Tag hint ── */
+.tag-search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+  font-size: 12px;
+  color: var(--app-text-subtle);
+}
+
 </style>
 <script setup lang="ts">
 import { ref, computed } from 'vue';
@@ -460,6 +514,7 @@ import {
   IonBadge, IonButton
 } from '@ionic/vue';
 import { useSearch } from '../composables/useSearch';
+import { ALL_CATEGORIES } from '../composables/useCategories';
 
 const router  = useRouter();
 
@@ -479,6 +534,7 @@ const {
 const searchQuery     = ref('');
 const filterType      = ref<'post' | 'poll' | ''>('');
 const filterCommunity = ref('');
+const filterCategory  = ref('');
 const debounceTimer   = ref<number | null>(null);
 
 const hasNextPage = computed(() => currentPage.value * perPage.value < total.value);
@@ -520,10 +576,40 @@ const handleFilterChange = () => {
   if (searchQuery.value.length >= 2) performSearch();
 };
 
+// Map common user words → category IDs so "music", "sport" etc auto-filter
+const CATEGORY_KEYWORDS: Record<string,string> = {
+  music: 'music', song: 'music', songs: 'music', playlist: 'music', band: 'music', album: 'music',
+  sport: 'sports', sports: 'sports', football: 'sports', soccer: 'sports', basketball: 'sports', cricket: 'sports',
+  tech: 'technology', technology: 'technology', coding: 'technology', programming: 'technology', dev: 'technology',
+  science: 'science', biology: 'science', physics: 'science', chemistry: 'science',
+  finance: 'finance', crypto: 'crypto', bitcoin: 'crypto', ethereum: 'crypto', nft: 'crypto',
+  movie: 'movies-tv', film: 'movies-tv', series: 'movies-tv', netflix: 'movies-tv', tv: 'movies-tv',
+  gaming: 'gaming', game: 'gaming', games: 'gaming', esports: 'gaming',
+  health: 'health', fitness: 'health', diet: 'health', mental: 'health',
+  politics: 'politics', election: 'politics', government: 'politics', law: 'politics',
+  celebrity: 'celebrity', actor: 'celebrity', actress: 'celebrity',
+  news: 'news', breaking: 'news', world: 'news',
+  environment: 'environment', climate: 'environment', nature: 'environment',
+  education: 'education', school: 'education', university: 'education', learning: 'education',
+  opinion: 'opinion', discussion: 'discussion', ask: 'ask', question: 'ask',
+  story: 'story', creative: 'story', humour: 'humour', funny: 'humour', meme: 'humour',
+};
+
+function inferCategory(query: string): string {
+  const words = query.toLowerCase().split(/\s+/);
+  for (const word of words) {
+    if (CATEGORY_KEYWORDS[word]) return CATEGORY_KEYWORDS[word];
+  }
+  return '';
+}
+
 const performSearch = async () => {
   const options: any = {};
   if (filterType.value)      options.type      = filterType.value;
   if (filterCommunity.value) options.community = filterCommunity.value;
+  // Auto-infer category from query words — user never needs to pick manually
+  const inferred = inferCategory(searchQuery.value);
+  if (inferred) options.category = inferred;
   await searchPage(searchQuery.value, 1, options);
 };
 
@@ -532,6 +618,8 @@ const goToPage = async (page: number | string) => {
   const options: any = {};
   if (filterType.value)      options.type      = filterType.value;
   if (filterCommunity.value) options.community = filterCommunity.value;
+  const inferred = inferCategory(searchQuery.value);
+  if (inferred) options.category = inferred;
   await searchPage(searchQuery.value, page, options);
 };
 
