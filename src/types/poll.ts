@@ -62,6 +62,10 @@ export interface Poll {
    * See voteTierService.ts for tiers and useVerifiedPollResults for display.
    */
   voteTrustPolicy?: VoteTrustPolicy;
+  /** Relay-derived view count — hydrated from post_views, not stored in Gun. */
+  viewCount?: number;
+  /** Relay-derived unique viewer count — hydrated from post_views, not stored in Gun. */
+  uniqueViewers?: number;
 }
 
 export interface VoteTrustPolicy {

@@ -1,5 +1,5 @@
 <template>
-  <article class="poll-card">
+  <article ref="cardEl" class="poll-card" :data-poll-id="poll.id" :data-category="poll.category || ''" :data-tags="Array.isArray(poll.tags) ? poll.tags.join(',') : (poll.tags || '')">
     <div v-if="flagged && filterAction === 'blur' && !revealed" class="flagged-overlay" @click.stop="revealed = true">
       <ion-icon :icon="warningOutline"></ion-icon>
       <span>Poll hidden by word filter — tap to reveal</span>
@@ -66,6 +66,11 @@
         </div>
       </div>
       <div v-else class="no-options"><p>No options available</p></div>
+
+      <!-- View count — below options, no icon, subtle -->
+      <div v-if="poll.viewCount && poll.viewCount > 0" class="poll-view-count-row">
+        {{ formatViewCount(poll.viewCount) }} views
+      </div>
 
       <!-- ── Footer ─────────────────────────────────── -->
       <div class="poll-footer" @click.stop>
@@ -158,7 +163,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, onMounted, nextTick, computed, watch } from 'vue';
 import { IonIcon, IonButton } from '@ionic/vue';
 import {
   statsChartOutline, peopleOutline, timeOutline, checkmarkDoneOutline,
@@ -175,7 +180,9 @@ import { useUserStore } from '../stores/userStore';
 import type { UserProfile } from '../services/userService';
 import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 import TrustTierBadge from './TrustTierBadge.vue';
+// observePost called by HomePage MutationObserver, not directly here
 
+const cardEl = ref<HTMLElement | null>(null);
 const props = defineProps<{
   poll: Poll;
   flagged?: boolean;
@@ -288,6 +295,13 @@ function getTimeRemaining(): string {
   if (h > 0) return `${h}h left`;
   return 'Ending soon';
 }
+function formatViewCount(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000)     return (n / 1_000).toFixed(1) + 'K';
+  return n.toString();
+}
+
+// View tracking handled by HomePage MutationObserver on the feed container.
 </script>
 
 <style scoped>
@@ -402,6 +416,13 @@ function getTimeRemaining(): string {
   border-radius: 999px; font-size: 12px; color: var(--app-text-muted);
 }
 .stat-item ion-icon { font-size: 13px; color: var(--app-text-subtle); }
+.poll-view-count-row {
+  font-size: 11px;
+  color: var(--app-text-subtle);
+  opacity: 0.6;
+  margin: -6px 0 8px;
+  letter-spacing: 0.01em;
+}
 .stat-item--timelock {
   color: #fbbf24; border-color: rgba(251,191,36,0.22); background: rgba(251,191,36,0.07);
 }

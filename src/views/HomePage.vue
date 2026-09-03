@@ -28,99 +28,18 @@
     </ion-header>
 
     <ion-content class="ambient-page" :scroll-events="true" @ionScroll="handleScroll">
+      <BurstOverlay />
       <div class="hp-root page-layout ambient-page__content">
 
         <!-- ── LEFT NAV (desktop only) ─────────────────────────────── -->
-        <nav class="side-nav surface-card">
-          <div class="side-nav-brand" @click="activeTab = 'home'">
-            <span class="side-nav-brand-mark" aria-hidden="true">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                <path d="M12 3L4 7.5V16.5L12 21L20 16.5V7.5L12 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
-                <path d="M12 8V16M8.5 10.5L12 12.5L15.5 10.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </span>
-            <span class="side-nav-brand-name">Interpoll</span>
-          </div>
-
-          <!-- Primary nav -->
-          <button class="side-nav-item" :class="{ active: activeTab === 'home' }" @click="activeTab = 'home'">
-            <ion-icon :icon="activeTab === 'home' ? home : homeOutline"></ion-icon>
-            <span>Feed</span>
-          </button>
-          <button class="side-nav-item" :class="{ active: activeTab === 'communities' }" @click="activeTab = 'communities'">
-            <ion-icon :icon="activeTab === 'communities' ? people : peopleOutline"></ion-icon>
-            <span>Spaces</span>
-          </button>
-          <button class="side-nav-item" :class="{ active: activeTab === 'chat' }" @click="activeTab = 'chat'">
-            <ion-icon :icon="activeTab === 'chat' ? chatbubble : chatbubbleOutline"></ion-icon>
-            <span>Messages</span>
-            <span v-if="totalUnread > 0" class="nav-badge nav-badge--desktop">
-              {{ totalUnread > 99 ? '99+' : totalUnread }}
-            </span>
-          </button>
-          <button class="side-nav-item" :class="{ active: activeTab === 'create' }" @click="activeTab = 'create'">
-            <ion-icon :icon="activeTab === 'create' ? addCircle : addCircleOutline"></ion-icon>
-            <span>Publish</span>
-          </button>
-
-          <div class="side-nav-divider"></div>
-
-          <!-- Categories — 5 by default, expandable -->
-          <button class="side-nav-section-toggle" @click="sidebarCatsOpen = !sidebarCatsOpen">
-            <span class="side-nav-section-label" style="margin:0">Categories</span>
-            <svg viewBox="0 0 24 24" fill="none" width="12" height="12"
-                 :style="sidebarCatsOpen ? 'transform:rotate(180deg)' : ''" style="transition:transform 0.2s">
-              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-          <template v-if="sidebarCatsOpen">
-            <button
-              v-for="cat in (sidebarCatsExpanded ? ALL_CATEGORIES : ALL_CATEGORIES.slice(0, 5))"
-              :key="'sc-' + cat.id"
-              class="side-nav-category"
-              :class="{ active: selectedCategory === cat.id }"
-              @click="selectCategory(cat.id); activeTab = 'home'"
-            >
-              <ion-icon :icon="cat.icon" :class="'tone-' + cat.id"></ion-icon>
-              <span>{{ cat.label }}</span>
-            </button>
-            <button class="side-nav-category side-nav-cats-more" @click="sidebarCatsExpanded = !sidebarCatsExpanded">
-              <svg viewBox="0 0 24 24" fill="none" width="14" height="14" style="flex-shrink:0;opacity:0.5">
-                <path v-if="sidebarCatsExpanded" d="M18 15l-6-6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                <path v-else d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              <span style="opacity:0.6;font-size:12px">{{ sidebarCatsExpanded ? 'Show less' : `+${ALL_CATEGORIES.length - 5} more` }}</span>
-            </button>
-          </template>
-
-          <div class="side-nav-divider"></div>
-
-          <button v-if="canScanQr" class="side-nav-item side-nav-util" @click="scanQr()">
-            <ion-icon :icon="qrCodeOutline"></ion-icon>
-            <span>Scan QR</span>
-          </button>
-          <button class="side-nav-item side-nav-util" @click="$router.push('/search')">
-            <ion-icon :icon="searchOutline"></ion-icon>
-            <span>Search</span>
-          </button>
-          <button class="side-nav-item side-nav-util" @click="$router.push('/profile')">
-            <ion-icon :icon="personCircleOutline"></ion-icon>
-            <span>Identity</span>
-          </button>
-          <button class="side-nav-item side-nav-util" @click="$router.push('/settings')">
-            <ion-icon :icon="settingsOutline"></ion-icon>
-            <span>Settings</span>
-          </button>
-          <button class="side-nav-item side-nav-util" @click="$router.push('/chain-explorer')">
-            <ion-icon :icon="cube"></ion-icon>
-            <span>Chain Explorer</span>
-          </button>
-
-          <div class="side-nav-divider"></div>
-
-          <!-- Persistent relay indicator -->
-          <RelayIndicator @open="relaySheetOpen = true" />
-        </nav>
+        <AppSideNav
+          :active-tab="activeTab"
+          :total-unread="totalUnread"
+          :active-category="selectedCategory"
+          @update:active-tab="activeTab = $event"
+          @select-category="selectCategory($event); activeTab = 'home'"
+          @open-relay="relaySheetOpen = true"
+        />
 
         <!-- ── MAIN CONTENT ──────────────────────────────────────────── -->
         <main class="main-content surface-card">
@@ -270,7 +189,7 @@
               <p>Loading content…</p>
             </div>
 
-            <div v-else-if="combinedFeed.length > 0" class="feed-list">
+            <div v-else-if="combinedFeed.length > 0" ref="feedListEl" class="feed-list">
               <div v-if="newContentCount > 0" class="new-content-banner" @click="flushNewContent">
                 ↑ {{ newContentCount }} new
                 {{ postStore.newPostCount > 0 && pollStore.newPollCount > 0 ? 'posts & polls' : postStore.newPostCount > 0 ? 'posts' : 'polls' }}
@@ -373,95 +292,7 @@
         </main>
 
         <!-- ── RIGHT SIDEBAR ─────────────────────────────────────────── -->
-        <aside class="right-sidebar">
-          <div class="sidebar-section surface-card">
-            <div class="sidebar-header">
-              <span>Spaces</span>
-              <button class="sidebar-link" @click="activeTab = 'communities'">See all</button>
-            </div>
-
-            <button class="sidebar-create-cta" @click="$router.push('/create-community')">
-              <ion-icon :icon="addOutline"></ion-icon>
-              Create Space
-            </button>
-
-            <div class="sidebar-communities">
-              <div
-                v-for="community in sidebarCommunities.slice(0, 5)"
-                :key="community.id"
-                class="sidebar-community-item"
-                @click="$router.push(`/community/${community.id}`)"
-              >
-                <div class="sidebar-community-avatar" :class="communityAvatarTone(community)">
-                  <ion-icon v-if="community.isPrivate" :icon="lockClosedOutline"></ion-icon>
-                  <template v-else>{{ community.displayName?.charAt(0)?.toUpperCase() }}</template>
-                </div>
-                <div class="sidebar-community-info">
-                  <span class="sidebar-community-name">
-                    <span class="sidebar-community-name-text">{{ community.displayName }}</span>
-                    <span
-                      v-if="communityBadge(community)"
-                      class="community-tag"
-                      :class="'tag-' + communityBadge(community)?.tone"
-                    >{{ communityBadge(community)?.label }}</span>
-                  </span>
-                  <span class="sidebar-community-meta">{{ community.memberCount || 0 }} members</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="sidebar-section surface-card">
-            <div class="sidebar-header">
-              <span>Trending</span>
-            </div>
-            <div class="trending-list">
-              <button
-                v-for="row in trendingCategories.filter(r => r.id !== 'other').slice(0, 5)"
-                :key="row.id"
-                class="trending-row"
-                @click="selectCategory(row.id)"
-              >
-                <span class="trending-left">
-                  <ion-icon :icon="row.icon" :class="row.tone"></ion-icon>
-                  <span>{{ row.label }}</span>
-                </span>
-                <span class="trending-meta">{{ row.posts }} posts</span>
-                <ion-icon :icon="chevronForwardOutline" class="trending-chevron"></ion-icon>
-              </button>
-            </div>
-          </div>
-
-          <div class="sidebar-section sidebar-about surface-card">
-            <div class="sidebar-about-row">
-              <div>
-                <p class="sidebar-about-title">Interpoll</p>
-                <p class="sidebar-about-text">A peer-to-peer network built on GunDB. Content syncs across all peers — no central server required.</p>
-              </div>
-              <div class="sidebar-about-graph" aria-hidden="true">
-                <svg width="56" height="48" viewBox="0 0 56 48" fill="none">
-                  <circle cx="28" cy="24" r="7" fill="url(#g1)"/>
-                  <circle cx="10" cy="12" r="4" fill="#7c8cff" opacity="0.85"/>
-                  <circle cx="46" cy="14" r="4" fill="#a78bfa" opacity="0.85"/>
-                  <circle cx="12" cy="38" r="3.5" fill="#7c8cff" opacity="0.7"/>
-                  <circle cx="44" cy="36" r="3.5" fill="#a78bfa" opacity="0.7"/>
-                  <circle cx="28" cy="6" r="3" fill="#5e6ad2" opacity="0.8"/>
-                  <line x1="28" y1="24" x2="10" y2="12" stroke="#7c8cff" stroke-width="1.2" opacity="0.5"/>
-                  <line x1="28" y1="24" x2="46" y2="14" stroke="#a78bfa" stroke-width="1.2" opacity="0.5"/>
-                  <line x1="28" y1="24" x2="12" y2="38" stroke="#7c8cff" stroke-width="1.2" opacity="0.4"/>
-                  <line x1="28" y1="24" x2="44" y2="36" stroke="#a78bfa" stroke-width="1.2" opacity="0.4"/>
-                  <line x1="28" y1="24" x2="28" y2="6" stroke="#5e6ad2" stroke-width="1.2" opacity="0.45"/>
-                  <defs>
-                    <radialGradient id="g1" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(28 24) rotate(90) scale(7)">
-                      <stop stop-color="#a78bfa"/>
-                      <stop offset="1" stop-color="#5e6ad2"/>
-                    </radialGradient>
-                  </defs>
-                </svg>
-              </div>
-            </div>
-          </div>
-        </aside>
+        <AppRightSidebar />
 
       </div>
     </ion-content>
@@ -550,47 +381,73 @@
     <!-- Bottom Nav (mobile only) -->
     <ion-footer class="bottom-nav-footer">
       <div class="bottom-nav" :class="{ 'bottom-nav-hidden': isTabBarHidden }">
+
+        <!-- Feed -->
         <button class="nav-item" :class="{ active: activeTab === 'home' }" @click="activeTab = 'home'">
-          <svg class="nav-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path v-if="activeTab === 'home'" d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H5a1 1 0 01-1-1V9.5z" fill="currentColor"/>
-            <path v-else d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H5a1 1 0 01-1-1V9.5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
-            <path v-if="activeTab !== 'home'" d="M9 21V12h6v9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-          </svg>
-          <span>Feed</span>
+          <span class="nav-icon-wrap">
+            <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path v-if="activeTab==='home'" d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" fill="currentColor" stroke="none"/>
+              <template v-else>
+                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+                <path d="M9 22V12h6v10"/>
+              </template>
+            </svg>
+          </span>
+          <span class="nav-label">Feed</span>
         </button>
+
+        <!-- Spaces -->
         <button class="nav-item" :class="{ active: activeTab === 'communities' }" @click="activeTab = 'communities'">
-          <svg class="nav-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle v-if="activeTab === 'communities'" cx="9" cy="7" r="4" fill="currentColor"/>
-            <circle v-else cx="9" cy="7" r="4" stroke="currentColor" stroke-width="1.8"/>
-            <path d="M3 21v-1a6 6 0 0112 0v1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-            <path d="M16 3.13a4 4 0 010 7.75M21 21v-1a4 4 0 00-3-3.85" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-          </svg>
-          <span>Spaces</span>
+          <span class="nav-icon-wrap">
+            <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round">
+              <circle :fill="activeTab==='communities' ? 'currentColor' : 'none'" cx="9" cy="8" r="3.5"/>
+              <path d="M3 21v-.5A5.5 5.5 0 018.5 15h1A5.5 5.5 0 0115 20.5v.5"/>
+              <path d="M16 4a3.5 3.5 0 010 7"/>
+              <path d="M21 21v-.5a5.5 5.5 0 00-4-5.32"/>
+            </svg>
+          </span>
+          <span class="nav-label">Spaces</span>
         </button>
+
+        <!-- Messages -->
         <button class="nav-item" :class="{ active: activeTab === 'chat' }" @click="activeTab = 'chat'">
           <span class="nav-icon-wrap">
-            <svg class="nav-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path v-if="activeTab === 'chat'" d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" fill="currentColor"/>
-              <path v-else d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path :fill="activeTab==='chat' ? 'currentColor' : 'none'"
+                d="M20 2H4a2 2 0 00-2 2v14l4-4h14a2 2 0 002-2V4a2 2 0 00-2-2z"/>
             </svg>
-            <span v-if="totalUnread > 0" class="nav-badge nav-badge--mobile">
-              {{ totalUnread > 99 ? '99+' : totalUnread }}
-            </span>
+            <span v-if="totalUnread > 0" class="nav-badge nav-badge--mobile">{{ totalUnread > 99 ? "99+" : totalUnread }}</span>
           </span>
-          <span>Messages</span>
+          <span class="nav-label">Messages</span>
         </button>
+
+        <!-- Publish -->
         <button class="nav-item" :class="{ active: activeTab === 'create' }" @click="activeTab = 'create'">
-          <svg class="nav-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle v-if="activeTab === 'create'" cx="12" cy="12" r="10" fill="currentColor"/>
-            <circle v-else cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8"/>
-            <path d="M12 8v8M8 12h8" stroke="currentColor" :stroke="activeTab === 'create' ? 'white' : 'currentColor'" stroke-width="1.8" stroke-linecap="round"/>
-          </svg>
-          <span>Publish</span>
+          <span class="nav-icon-wrap">
+            <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"
+                :fill="activeTab==='create' ? 'currentColor' : 'none'"
+                :stroke="activeTab==='create' ? 'none' : 'currentColor'"
+                stroke-width="1.75"/>
+              <line x1="12" y1="8" x2="12" y2="16"
+                :stroke="activeTab==='create' ? 'white' : 'currentColor'"
+                stroke-width="2" stroke-linecap="round"/>
+              <line x1="8" y1="12" x2="16" y2="12"
+                :stroke="activeTab==='create' ? 'white' : 'currentColor'"
+                stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span class="nav-label">Publish</span>
         </button>
+
+        <!-- Network -->
         <button class="nav-item" @click="$router.push('/network')">
-          <RelayIndicator :compact="true" />
-          <span>Network</span>
+          <span class="nav-icon-wrap">
+            <RelayIndicator :compact="true" />
+          </span>
+          <span class="nav-label">Network</span>
         </button>
+
       </div>
     </ion-footer>
 
@@ -629,16 +486,19 @@ import { usePostStore } from '../stores/postStore';
 import { usePollStore } from '../stores/pollStore';
 
 // ── Lazy-loaded tab components ─────────────────────────────────────────────
-const CommunitiesTab = defineAsyncComponent(() => import('../components/CommunitiesTab.vue'));
-const CreateTab      = defineAsyncComponent(() => import('../components/CreateTab.vue'));
-const ChatTab        = defineAsyncComponent(() => import('../components/ChatTab.vue'));
-const PostCard       = defineAsyncComponent(() => import('../components/PostCard.vue'));
-const PollCard       = defineAsyncComponent(() => import('../components/PollCard.vue'));
+const CommunitiesTab   = defineAsyncComponent(() => import('../components/CommunitiesTab.vue'));
+const CreateTab        = defineAsyncComponent(() => import('../components/CreateTab.vue'));
+const ChatTab          = defineAsyncComponent(() => import('../components/ChatTab.vue'));
+const PostCard         = defineAsyncComponent(() => import('../components/PostCard.vue'));
+const PollCard         = defineAsyncComponent(() => import('../components/PollCard.vue'));
+// Heavy sidebar/overlay components — loaded async so they don't block initial paint
+const RelayIndicator   = defineAsyncComponent(() => import('../components/RelayIndicator.vue'));
+const AppSideNav       = defineAsyncComponent(() => import('../components/AppSideNav.vue'));
+const BurstOverlay     = defineAsyncComponent(() => import('../components/BurstOverlay.vue'));
+const AppRightSidebar  = defineAsyncComponent(() => import('../components/AppRightSidebar.vue'));
+const RelaySheet       = defineAsyncComponent(() => import('../components/RelaySheet.vue'));
 
 // ── New components ─────────────────────────────────────────────────────────
-import RelayIndicator from '../components/RelayIndicator.vue';
-import RelaySheet     from '../components/RelaySheet.vue';
-
 import { Post } from '../services/postService';
 import { Poll } from '../services/pollService';
 import { GunService } from '../services/gunService';
@@ -682,6 +542,10 @@ const isTabBarHidden     = ref(false);
 const warmupComplete     = ref(false);
 const showMoreCategories = ref(false);
 const relaySheetOpen     = ref(false);
+
+// ── View tracking — feed list ref (must be in setup scope for template binding) ──
+const feedListEl = ref<HTMLElement | null>(null);
+let feedMutObs: MutationObserver | null = null;
 
 // ── Feed scope: 'mine' | 'relay' | 'explore' ──────────────────────────────
 type FeedScope = 'mine' | 'relay' | 'explore';
@@ -807,7 +671,10 @@ watch(() => route.query.category, () => {
 });
 
 import { useCategories } from '../composables/useCategories';
-const { ALL_CATEGORIES, recordEngagement, recentTags, isUserTag, loadTrendingTags } = useCategories();
+import { useBurst }      from '../composables/useBurst';
+import { observePost, isAlreadyTracked, setOnViewConfirmed, getViewedIds } from '../services/viewTrackingService';
+const { ALL_CATEGORIES, recordEngagement, recentTags, isUserTag, loadTrendingTags, topCategories } = useCategories();
+const { triggerBurst } = useBurst();
 const VISIBLE_CATEGORIES = ALL_CATEGORIES;
 const feedCategories = computed(() =>
   showMoreCategories.value ? VISIBLE_CATEGORIES : VISIBLE_CATEGORIES.slice(0, 6)
@@ -877,49 +744,135 @@ function hashStringToInt(str: string): number {
   return Math.abs(hash);
 }
 
+// Session shuffle seed — fixed at page load so the For You order is stable
+// while the user scrolls, but different on each page reload.
+const SESSION_SHUFFLE_SEED = Math.floor(Date.now() / 1000);
+// Memoised For You weights — keyed by itemId+prefSig so unchanged items skip recomputation
+const _weightCache = new Map<string, number>();
+
+// ── Feed order stability ──────────────────────────────────────────────────────
+// Gun delivers peer updates continuously — every write triggers triggerRef on
+// postsMap/pollsMap which would cause combinedFeed to re-sort and visually
+// reshuffle cards the user is actively reading.
+// Fix: _rankedOrder caches the sorted id list. It only rebuilds when the user
+// explicitly changes mode/category/scope, or when preferences change from
+// engagement. New content from Gun is appended at the top; existing order is
+// preserved. Gun-triggered count/tally updates do NOT reshuffle.
+const _rankedOrder   = ref<string[]>([]);        // ordered list of item ids
+const _rankedItems   = new Map<string, any>();   // id → feed item (kept fresh)
+const _rankDirty     = ref(0);                   // increment to force a re-rank
+
+// Explicit re-rank triggers: mode, category, scope, preferences
+watch([feedMode, selectedCategory, feedScope, topCategories, recentTags],
+  () => { _rankDirty.value++; _weightCache.clear(); },
+  { flush: 'post' }
+);
+
 const combinedFeed = computed(() => {
   moderationVersion.value;
   selectedCategory.value;
   feedScope.value;
-  const items: Array<{ type: 'post' | 'poll'; data: any; createdAt: number }> = [];
-  postStore.sortedPosts
-    .filter(post => !ModerationService.isPostBodyBlocked(getPostModerationText(post)))
-    .forEach(post => items.push({ type: 'post', data: post, createdAt: post.createdAt }));
-  pollStore.sortedPolls.forEach(poll => {
-    if (poll.isPrivate) return;
-    if (!ModerationService.isPostBodyBlocked(getPollModerationText(poll))) {
-      items.push({ type: 'poll', data: poll, createdAt: poll.createdAt });
-    }
-  });
+  feedMode.value;
+  _rankDirty.value; // explicit re-rank trigger only
 
-  // Apply scope + category + tag filters
-  const filtered = items.filter(i =>
-    itemMatchesScope(i) &&
-    itemMatchesCategory(i) &&
-    (!activeTagFilter.value || itemMatchesTag(i, activeTagFilter.value))
-  );
+  const allPosts = postStore.sortedPosts
+    .filter(post => !ModerationService.isPostBodyBlocked(getPostModerationText(post)));
+  const allPolls = postStore.visibleCount !== undefined
+    ? pollStore.sortedPolls.filter(p => !p.isPrivate && !ModerationService.isPostBodyBlocked(getPollModerationText(p)))
+    : [];
 
-  if (feedMode.value === 'latest') {
-    filtered.sort((a, b) => b.createdAt - a.createdAt);
-    return filtered.slice(0, postStore.visibleCount);
+  // Build current item map (always fresh so counts/votes update in-place)
+  _rankedItems.clear();
+  for (const post of allPosts) {
+    _rankedItems.set(`post-${post.id}`, { type: 'post' as const, data: post, createdAt: post.createdAt });
+  }
+  for (const poll of allPolls) {
+    _rankedItems.set(`poll-${poll.id}`, { type: 'poll' as const, data: poll, createdAt: poll.createdAt });
   }
 
-  const now    = Date.now();
-  const maxAge = 30 * 24 * 60 * 60 * 1000;
-  const weighted = filtered.map(item => {
-    const id    = `${item.type}-${item.data.id}`;
-    const score = item.type === 'post' ? (item.data.score ?? 0) : (item.data.totalVotes ?? 0);
-    const seed  = hashStringToInt(id);
-    const rand  = seededRandom(seed);
-    if (rand < 0.2) return { item, weight: seededRandom(seed + 1) };
-    const age      = Math.max(0, 1 - (now - item.createdAt) / maxAge);
-    const engBoost = score < 5 ? 0.15 : 0;
-    const oldBoost = (now - item.createdAt) > 7 * 24 * 60 * 60 * 1000 ? seededRandom(seed + 999) * 0.2 : 0;
-    const weight   = age * 0.4 + Math.min(score / 20, 1) * 0.25 + seededRandom(seed) * 0.15 + engBoost + oldBoost;
-    return { item, weight };
-  });
-  weighted.sort((a, b) => b.weight - a.weight);
-  return weighted.map(w => w.item).slice(0, postStore.visibleCount);
+  // Apply category filter
+  const filtered: Array<{ type: 'post' | 'poll'; data: any; createdAt: number }> = [];
+  for (const item of _rankedItems.values()) {
+    if (selectedCategory.value && selectedCategory.value !== 'all') {
+      if (item.data.category !== selectedCategory.value) continue;
+    }
+    filtered.push(item);
+  }
+
+  if (filtered.length === 0) return [];
+
+  // Latest mode — simple date sort, stable
+  if (feedMode.value === 'latest') {
+    return filtered
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, postStore.visibleCount);
+  }
+
+  // ── For You ranking ────────────────────────────────────────────────────────
+  // Check which filtered ids already have a stable rank order
+  const filteredIds = new Set(filtered.map(i => `${i.type}-${i.data.id}`));
+  const existingOrder = _rankedOrder.value.filter(id => filteredIds.has(id));
+  const newIds = filtered
+    .map(i => `${i.type}-${i.data.id}`)
+    .filter(id => !_rankedOrder.value.includes(id));
+
+  // Only recompute weights for items not yet in the ranked order
+  // (new arrivals from Gun get scored and prepended to top)
+  if (newIds.length > 0 || existingOrder.length === 0) {
+    const userTopCats = topCategories.value;
+    const userTags    = new Set(recentTags.value);
+    const viewedIds   = getViewedIds();
+    const now         = Date.now();
+    const WEEK        = 7 * 24 * 60 * 60 * 1000;
+    const prefSig     = userTopCats.join(',') + '|' + recentTags.value.join(',');
+
+    const toScore = existingOrder.length === 0 ? filtered.map(i => `${i.type}-${i.data.id}`) : newIds;
+
+    const scored = toScore.map(itemId => {
+      const item = _rankedItems.get(itemId);
+      if (!item) return { itemId, weight: 0 };
+
+      const cacheKey = itemId + prefSig + (viewedIds.has(item.data.id) ? '|seen' : '');
+      const cached = _weightCache.get(cacheKey);
+      if (cached !== undefined) return { itemId, weight: cached };
+
+      const category     = item.data.category as string | null | undefined;
+      const tags         = item.data.tags as string[] | null | undefined;
+      const score        = item.type === 'post' ? (item.data.score ?? 0) : (item.data.totalVotes ?? 0);
+      const ageMs        = now - item.createdAt;
+      const catRank      = category ? userTopCats.indexOf(category) : -1;
+      const catScore     = catRank === 0 ? 1.0 : catRank === 1 ? 0.5 : catRank === 2 ? 0.25 : 0;
+      const tagScore     = tags?.some(t => userTags.has(t)) ? 0.3 : 0;
+      const engScore     = Math.min(Math.max(score, 0) / 50, 1);
+      const recencyScore = Math.exp(-ageMs / (WEEK * 0.43));
+      const shuffleSeed  = hashStringToInt(itemId + String(SESSION_SHUFFLE_SEED));
+      const shuffleScore = seededRandom(shuffleSeed);
+      const seenPenalty  = viewedIds.has(item.data.id) ? -0.6 : 0;
+      const weight = catScore * 0.40 + tagScore * 0.10 + engScore * 0.25
+                   + recencyScore * 0.20 + shuffleScore * 0.15 + seenPenalty;
+      _weightCache.set(cacheKey, weight);
+      return { itemId, weight };
+    });
+
+    scored.sort((a, b) => b.weight - a.weight);
+    const newScoredIds = scored.map(s => s.itemId);
+
+    // New items go to the top; existing stable order preserved below
+    _rankedOrder.value = existingOrder.length === 0
+      ? newScoredIds
+      : [...newScoredIds, ...existingOrder];
+  }
+
+  // Materialise from stable order, skipping items filtered out
+  const result: Array<{ type: 'post' | 'poll'; data: any; createdAt: number }> = [];
+  for (const id of _rankedOrder.value) {
+    if (filteredIds.has(id)) {
+      const item = _rankedItems.get(id);
+      if (item) result.push(item);
+    }
+    if (result.length >= postStore.visibleCount) break;
+  }
+  return result;
 });
 
 const hasMore         = computed(() => postStore.hasMorePosts || pollStore.hasMorePolls);
@@ -963,10 +916,11 @@ async function handlePostVote(post: Post, direction: 'up' | 'down') {
     (await toastController.create({ message: 'Failed to vote', duration: 2000 })).present();
   }
 }
-const handleUpvote   = (post: Post) => handlePostVote(post, 'up');
-const handleDownvote = (post: Post) => handlePostVote(post, 'down');
+const handleUpvote   = (post: Post) => { triggerBurst('heart');   handlePostVote(post, 'up'); };
+const handleDownvote = (post: Post) => { triggerBurst('dislike'); handlePostVote(post, 'down'); };
 
 async function handleUpvotePoll(poll: Poll) {
+  triggerBurst('heart');
   const wasActive = pollStore.myPollContentVote(poll.id) === 'up';
   voteVersion.value++;
   const version = voteVersion.value;
@@ -980,6 +934,7 @@ async function handleUpvotePoll(poll: Poll) {
   }
 }
 async function handleDownvotePoll(poll: Poll) {
+  triggerBurst('dislike');
   const wasActive = pollStore.myPollContentVote(poll.id) === 'down';
   voteVersion.value++;
   const version = voteVersion.value;
@@ -1153,6 +1108,16 @@ onMounted(async () => {
   void loadTrendingCategories();
   void loadTrendingTags();
 
+  // Record engagement when a card is dwelled on — feed personalisation learns
+  // from what you actually read, not just what you upvote.
+  setOnViewConfirmed((id, type, el) => {
+    const article = el as HTMLElement;
+    const category = article.dataset.category || undefined;
+    const tagsRaw  = article.dataset.tags || '';
+    const tags     = tagsRaw ? tagsRaw.split(',').filter(Boolean) : [];
+    if (category || tags.length) recordEngagement(category, tags);
+  });
+
   // Load trending tag chips
   try {
     const res = await fetch(`${config.relay.api}/api/tags/trending?limit=12&window=7d`);
@@ -1175,31 +1140,37 @@ onMounted(async () => {
 
   const feedPromise = communityStore.loadCommunities();
 
-  let earlyHydrateDone = false;
-  let stopEarlyWatch: (() => void) | undefined;
-  Promise.resolve().then(() => {
-    stopEarlyWatch = watch(
-      () => combinedFeed.value.filter(item => item.type === 'post').length,
-      (postCount) => {
-        if (postCount === 0 || earlyHydrateDone) return;
-        earlyHydrateDone = true;
-        stopEarlyWatch?.();
-        const ids = combinedFeed.value.filter(item => item.type === 'post').slice(0, 30).map(item => item.data.id as string);
-        void postStore.hydrateCommentCounts(ids).catch(() => {});
-        const pollIds = combinedFeed.value.filter(item => item.type === 'poll').slice(0, 30).map(item => item.data.id as string);
-        if (pollIds.length > 0) {
-          void fetchVoteTallies(pollIds).then(tallies => {
-            for (const [id, tally] of Object.entries(tallies)) {
-              const poll = pollStore.pollsMap?.get(id);
-              if (poll && tally) pollStore.patchPollTally(id, tally);
-            }
-          }).catch(() => {});
-        }
-      },
-      { immediate: true },
-    );
-  });
+  await feedPromise;
+  if (combinedFeed.value.length === 0) {
+    await tryRecoverEmptyFeedFromGun();
+    ensureInitialFeedVisible('empty-feed-recovery');
+  }
 
+  // Single deduped hydration pass — runs once after feed is populated.
+  // Collapsed from 3 separate calls (early watch + post-feedPromise + 5s timeout)
+  // that all fetched the same first-30 IDs.
+  void (async () => {
+    try {
+      const visiblePostIds = combinedFeed.value
+        .filter(item => item.type === 'post').slice(0, 30)
+        .map(item => item.data.id as string);
+      const visiblePollIds = combinedFeed.value
+        .filter(item => item.type === 'poll').slice(0, 30)
+        .map(item => item.data.id as string);
+      await Promise.allSettled([
+        visiblePostIds.length ? postStore.hydrateCommentCounts(visiblePostIds) : Promise.resolve(),
+        visiblePollIds.length
+          ? fetchVoteTallies(visiblePollIds).then(tallies => {
+              for (const [id, tally] of Object.entries(tallies)) {
+                if (tally) pollStore.patchPollTally(id, tally);
+              }
+            })
+          : Promise.resolve(),
+      ]);
+    } catch { /* non-fatal */ }
+  })();
+
+  // Heavy user-dependent init — runs in background, non-blocking
   void (async () => {
     try {
       const currentUser = await UserService.getCurrentUser();
@@ -1214,44 +1185,66 @@ onMounted(async () => {
       console.warn('Heavy init error (non-critical):', err);
     }
   })();
+});
 
-  await feedPromise;
-  if (combinedFeed.value.length === 0) {
-    await tryRecoverEmptyFeedFromGun();
-    ensureInitialFeedVisible('empty-feed-recovery');
-  }
+// ── View tracking via MutationObserver on the feed list ──────────────────
+// feedListEl is bound via ref="feedListEl" in the template.
+// Uses data-post-id / data-poll-id attributes — reliable, no Vue-internal hacks.
+// nextTick() after MutationObserver fires gives async components time to stamp
+// their data-* attributes before we try to read them.
+//
+// IMPORTANT: wireViewObservers must NEVER be called on the full root on every
+// mutation — that disconnects and recreates IntersectionObservers for cards
+// already being tracked, resetting their dwell timers and causing double-counts.
+// Only new/untracked elements are wired; already-tracked ones are skipped.
+function wireOneCard(el: Element) {
+  const isPost = el.classList.contains('post-card');
+  const id = isPost
+    ? (el as HTMLElement).dataset.postId
+    : (el as HTMLElement).dataset.pollId;
+  if (id) observePost(el, id, isPost ? 'post' : 'poll');
+}
 
-  void (async () => {
-    try {
-      const visiblePostIds = combinedFeed.value.filter(item => item.type === 'post').slice(0, 30).map(item => item.data.id as string);
-      await postStore.hydrateCommentCounts(visiblePostIds);
-      const visiblePollIds = combinedFeed.value.filter(item => item.type === 'poll').slice(0, 30).map(item => item.data.id as string);
-      if (visiblePollIds.length > 0) {
-        const tallies = await fetchVoteTallies(visiblePollIds);
-        for (const [id, tally] of Object.entries(tallies)) {
-          if (tally) pollStore.patchPollTally(id, tally);
-        }
-      }
-    } catch { /* non-fatal */ }
-  })();
+function wireNewCards(root: Element) {
+  root.querySelectorAll('article.post-card[data-post-id], article.poll-card[data-poll-id]').forEach(el => {
+    const isPost = el.classList.contains('post-card');
+    const id = isPost
+      ? (el as HTMLElement).dataset.postId
+      : (el as HTMLElement).dataset.pollId;
+    // Skip cards already tracked — do NOT disconnect and recreate their observer
+    if (id && !isAlreadyTracked(id)) wireOneCard(el);
+  });
+}
 
-  setTimeout(() => {
-    const visiblePostIds = combinedFeed.value.filter(item => item.type === 'post').slice(0, 30).map(item => item.data.id as string);
-    if (visiblePostIds.length > 0) void postStore.hydrateCommentCounts(visiblePostIds).catch(() => {});
-    const visiblePollIds = combinedFeed.value.filter(item => item.type === 'poll').slice(0, 30).map(item => item.data.id as string);
-    if (visiblePollIds.length > 0) {
-      void fetchVoteTallies(visiblePollIds).then(tallies => {
-        for (const [id, tally] of Object.entries(tallies)) {
-          if (tally) pollStore.patchPollTally(id, tally);
-        }
-      }).catch(() => {});
-    }
-  }, 5_000);
+watch(feedListEl, (el) => {
+  if (feedMutObs) { feedMutObs.disconnect(); feedMutObs = null; }
+  if (!el) return;
+
+  // Wire cards already in the DOM when the ref first connects
+  nextTick(() => wireNewCards(el));
+
+  // Watch for cards added later (infinite scroll, feed updates, async component resolution).
+  // On each mutation, only scan for NEW untracked cards — never re-scan existing ones.
+  feedMutObs = new MutationObserver((mutations) => {
+    // Fast path: check if any added node contains a card article before doing nextTick
+    const hasNewCards = mutations.some(m =>
+      [...m.addedNodes].some(n =>
+        n instanceof Element && (
+          n.matches('article.post-card, article.poll-card') ||
+          n.querySelector('article.post-card, article.poll-card')
+        )
+      )
+    );
+    if (!hasNewCards) return; // attribute mutations, text nodes etc — skip entirely
+    nextTick(() => wireNewCards(el));
+  });
+  feedMutObs.observe(el, { childList: true, subtree: true });
 });
 
 onUnmounted(() => {
   ensureChat()?.teardown();
   gunListeners.forEach(off => off());
+  if (feedMutObs) { feedMutObs.disconnect(); feedMutObs = null; }
 });
 
 // ── DEV DEBUG — window.__interpoll ────────────────────────────────────────
@@ -1367,6 +1360,23 @@ if (typeof window !== 'undefined') {
     },
   };
   console.log('%c[Interpoll] Debug ready → window.__interpoll.diagnose()', 'color:#6366f1;font-style:italic');
+
+  // View tracking debug shortcuts
+  (window as any).__interpoll.views = {
+    diagnose() {
+      const vt = (window as any).__viewTracking;
+      if (!vt) { console.warn('[views] not initialised yet'); return; }
+      console.group('%c[View Tracking]', 'color:#34d399;font-weight:bold');
+      const tok = vt.token();
+      console.log('auth token:', tok ? tok.slice(0,20)+'…' : 'NULL ← flush will be skipped');
+      console.log('pending views:', vt.pending());
+      console.log('sent this session:', vt.sent().length);
+      console.groupEnd();
+      return { hasToken: !!tok, pending: vt.pending().length, sent: vt.sent().length };
+    },
+    forceFlush() { return (window as any).__viewTracking?.forceFlush(); },
+    reset()      { return (window as any).__viewTracking?.reset(); },
+  };
 }
 
 </script>

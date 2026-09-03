@@ -557,6 +557,17 @@ export const usePostStore = defineStore('post', () => {
           totalPostsInStore: postsMap.value.size,
         });
       }
+    } else if (post.viewCount !== undefined || post.uniqueViewers !== undefined) {
+      // Re-injection from warmup may carry a fresh viewCount — preserve it.
+      // viewCount is a relay-only field not stored in Gun, so Gun snapshots
+      // arriving later must not silently clear it.
+      const existing = postsMap.value.get(post.id)!;
+      const viewCount     = post.viewCount     ?? existing.viewCount;
+      const uniqueViewers = post.uniqueViewers ?? existing.uniqueViewers;
+      if (viewCount !== existing.viewCount || uniqueViewers !== existing.uniqueViewers) {
+        postsMap.value.set(post.id, { ...existing, viewCount, uniqueViewers });
+        triggerRef(postsMap);
+      }
     }
     seenPostIds.add(post.id);
   }
@@ -1025,6 +1036,17 @@ export const usePostStore = defineStore('post', () => {
     toggleVote, clearVote, myVote, myVotes, refreshVoteState, subscribeToVotes,
     voteOnPost, upvotePost, downvotePost, removeUpvote, removeDownvote,
     setCommentCount, hydrateCommentCounts, hydrateVoteStates,
+    patchViewCounts,
     refreshPosts,
   };
+
+  /** Apply relay-derived view counts to posts in postsMap without a full reload. */
+  function patchViewCounts(counts: Record<string, { viewCount: number; uniqueViewers: number }>) {
+    for (const [postId, vc] of Object.entries(counts)) {
+      const existing = postsMap.value.get(postId);
+      if (!existing) continue;
+      postsMap.value.set(postId, { ...existing, viewCount: vc.viewCount, uniqueViewers: vc.uniqueViewers });
+    }
+    triggerRef(postsMap);
+  }
 });

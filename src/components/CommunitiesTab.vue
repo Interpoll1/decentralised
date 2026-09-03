@@ -169,25 +169,26 @@ const filteredCommunities = computed(() =>
   justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
+  padding: 8px 0 12px;
 }
 
 /* Filter pills */
 .filter-pills {
   display: flex;
   gap: 4px;
-  padding: 4px;
+  padding: 5px;
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(255,255,255,0.07);
   border-radius: 999px;
 }
 
 .filter-pill {
-  padding: 6px 16px;
+  padding: 8px 20px;
   border-radius: 999px;
   border: none;
   background: transparent;
   color: var(--app-text-muted);
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
   transition: background 160ms ease, color 160ms ease;
@@ -270,7 +271,12 @@ const filteredCommunities = computed(() =>
 .communities-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
+  border-radius: 0;
+  overflow: visible;
+  border: none;
+  background: transparent;
+  margin-top: 8px;
 }
 
 /* ── Loading ─────────────────────────────────── */
