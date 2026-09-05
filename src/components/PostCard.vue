@@ -61,13 +61,14 @@
       </div>
 
       <!-- Media preview -->
-      <div v-if="post.mediaUrl || post.videoCID" class="post-media">
+      <div v-if="post.imageIPFS || post.imageThumbnail || post.videoCID" class="post-media">
         <img
-          v-if="post.mediaUrl && isImageUrl(post.mediaUrl)"
-          :src="post.mediaUrl"
+          v-if="post.imageThumbnail || post.imageIPFS"
+          :src="post.imageThumbnail || `https://ipfs.filebase.io/ipfs/${post.imageIPFS}`"
           :alt="post.title"
           class="post-media-img"
           loading="lazy"
+          @error="(e: any) => { if (post.imageIPFS && e.target.src !== `https://ipfs.filebase.io/ipfs/${post.imageIPFS}`) e.target.src = `https://ipfs.filebase.io/ipfs/${post.imageIPFS}`; }"
           @click.stop
         />
         <!-- Video: use IPFS CID path with skeleton while async component loads -->
