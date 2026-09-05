@@ -212,25 +212,31 @@
           </div>
         </div>
 
-        <!-- Related Posts Section -->
+        <!-- Related Posts/Polls Section -->
         <div v-else-if="activeSection === 'related'" class="related-section">
-          <div class="related-list">
-            <div
-              v-for="rp in relatedPosts"
-              :key="rp.id"
-              class="related-row"
-              @click="$router.push(`/post/${rp.id}`)"
-            >
-              <div class="related-meta">
-                <span class="related-community">{{ rp.communityId }}</span>
-                <span class="related-dot">·</span>
-                <span class="related-time">{{ formatTime(rp.createdAt) }}</span>
-              </div>
-              <div class="related-title">{{ rp.title }}</div>
-              <div v-if="rp.tags && rp.tags.length" class="related-tags">
-                <span v-for="t in rp.tags.slice(0,3)" :key="t" class="related-tag">#{{ t }}</span>
-              </div>
-            </div>
+          <div class="related-cards">
+            <template v-for="item in relatedPosts" :key="`${item.type}-${item.data.id}`">
+              <PostCard
+                v-if="item.type === 'post'"
+                :post="item.data"
+                :has-upvoted="postStore.myVote(item.data.id) === 'up'"
+                :has-downvoted="postStore.myVote(item.data.id) === 'down'"
+                @click="$router.push(`/post/${item.data.id}`)"
+                @upvote="postStore.toggleVote(item.data.id, 'up')"
+                @downvote="postStore.toggleVote(item.data.id, 'down')"
+                @comments="$router.push(`/post/${item.data.id}`)"
+              />
+              <PollCard
+                v-else-if="item.type === 'poll'"
+                :poll="item.data"
+                @click="$router.push(item.data.communityId
+                  ? `/community/${item.data.communityId}/poll/${item.data.id}`
+                  : `/poll/${item.data.id}`)"
+                @vote="$router.push(item.data.communityId
+                  ? `/community/${item.data.communityId}/poll/${item.data.id}`
+                  : `/poll/${item.data.id}`)"
+              />
+            </template>
           </div>
         </div>
       </div>
@@ -265,6 +271,8 @@ const VideoPlayer = defineAsyncComponent({
   delay: 200,
   timeout: 10_000,
 });
+const PostCard = defineAsyncComponent(() => import('../components/PostCard.vue'));
+const PollCard = defineAsyncComponent(() => import('../components/PollCard.vue'));
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
@@ -279,6 +287,7 @@ import {
   shareSocialOutline, alertCircleOutline, refreshOutline
 } from 'ionicons/icons';
 import { usePostStore } from '../stores/postStore';
+import { usePollStore } from '../stores/pollStore';
 import { useCommentStore } from '../stores/commentStore';
 import { useCommunityStore } from '../stores/communityStore';
 import { useUserStore } from '../stores/userStore';
@@ -293,7 +302,8 @@ import { checkContent } from '../utils/contentGuard';
 
 const route = useRoute();
 const router = useRouter();
-const postStore = usePostStore();
+const postStore  = usePostStore();
+const pollStore  = usePollStore();
 const commentStore = useCommentStore();
 const communityStore = useCommunityStore();
 const userStore = useUserStore();
@@ -519,31 +529,50 @@ function commenterAvatarTone(authorId: string): string {
   return COMMENTER_TONES[code % COMMENTER_TONES.length];
 }
 
-// Related posts — same community, category, or overlapping tags, excluding current post
+// Related posts — overlapping tags only (community too broad, category way too broad)
 const activeSection = ref<'comments' | 'related'>('comments');
 
-const relatedPosts = computed(() => {
+const relatedItems = computed<Array<{ type: 'post' | 'poll'; data: any }>>(() => {
   if (!post.value) return [];
   const current     = post.value;
   const currentTags = Array.isArray(current.tags) ? current.tags
     : typeof current.tags === 'string' ? (current.tags as string).split(',').map((t: string) => t.trim()).filter(Boolean)
     : [];
-  const currentCat  = current.category || '';
   const currentComm = current.communityId || '';
+  const hasTags     = currentTags.length > 0;
 
-  return postStore.sortedPosts
-    .filter(p => {
-      if (p.id === current.id) return false;
+  // No tags and no community — nothing meaningful to match on
+  if (!hasTags && !currentComm) return [];
+
+  function matches(p: any) {
+    if (p.id === current.id) return false;
+    if (hasTags) {
+      // Tags available — only use tag overlap (most precise signal)
       const pTags = Array.isArray(p.tags) ? p.tags
         : typeof p.tags === 'string' ? (p.tags as string).split(',').map((t: string) => t.trim()).filter(Boolean)
         : [];
-      const tagOverlap  = currentTags.length > 0 && pTags.some((t: string) => currentTags.includes(t));
-      const sameCat     = currentCat && p.category === currentCat;
-      const sameComm    = currentComm && p.communityId === currentComm;
-      return tagOverlap || sameCat || sameComm;
-    })
-    .slice(0, 8);
+      return pTags.some((t: string) => currentTags.includes(t));
+    }
+    // No tags — fall back to same community only
+    return currentComm && p.communityId === currentComm;
+  }
+
+  const relPosts = postStore.sortedPosts.filter(matches).slice(0, 6)
+    .map(p => ({ type: 'post' as const, data: p }));
+  const relPolls = pollStore.sortedPolls.filter(p => !p.isPrivate && matches(p)).slice(0, 4)
+    .map(p => ({ type: 'poll' as const, data: p }));
+
+  // Interleave posts and polls, capped at 8
+  const merged: Array<{ type: 'post' | 'poll'; data: any }> = [];
+  let pi = 0, qi = 0;
+  while (merged.length < 8 && (pi < relPosts.length || qi < relPolls.length)) {
+    if (pi < relPosts.length) merged.push(relPosts[pi++]);
+    if (merged.length < 8 && qi < relPolls.length) merged.push(relPolls[qi++]);
+  }
+  return merged;
 });
+
+const relatedPosts = relatedItems; // template alias
 
 const hasUpvoted = computed(() => postStore.myVote(postId.value) === 'up');
 const hasDownvoted = computed(() => postStore.myVote(postId.value) === 'down');
@@ -1342,24 +1371,29 @@ ion-content {
 .comment-send-btn:not(:disabled):hover { background: #818cf8; }
 
 /* ══ Two-column comments + related ══════════════════════════════ */
-.related-list {
+/* ── Related posts — full cards ── */
+.related-cards {
   display: flex;
   flex-direction: column;
   gap: 0;
-  border-radius: 12px;
-  overflow: hidden;
-  border: 1px solid rgba(255,255,255,0.07);
-  background: rgba(255,255,255,0.02);
-  margin-top: 4px;
 }
-.related-row {
-  padding: 11px 14px;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-  cursor: pointer;
-  transition: background 120ms;
+/* Cards inside related inherit their own styles; just remove outer padding */
+.related-cards :deep(.post-card),
+.related-cards :deep(.poll-card) {
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
 }
-.related-row:last-child { border-bottom: none; }
-.related-row:hover { background: rgba(255,255,255,0.04); }
+.related-cards :deep(.post-card:first-child),
+.related-cards :deep(.poll-card:first-child) {
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.related-cards :deep(.post-card:last-child),
+.related-cards :deep(.poll-card:last-child) {
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-radius: 0 0 12px 12px;
+}
 
 /* ── Burst overlay (teleported to body — must NOT be scoped) ── */
 /* These rules are in <style scoped> so we use :global() */

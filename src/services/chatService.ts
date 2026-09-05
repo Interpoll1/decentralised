@@ -96,25 +96,37 @@ function seenIds(userId: string): BoundedSet<string> {
 function toChatMessage(row: StoredChatMessage): ChatMessage {
   let mediaUrl: string|undefined, mediaType: 'image'|'video'|'file'|undefined;
   let fileName: string|undefined, fileSize: number|undefined;
+  // Default display text — overwritten below if we successfully parse a _file payload.
+  // Kept as the raw JSON only as a last resort; the view guards against rendering it.
   let displayText = row.text;
   try {
     if (row.text?.startsWith('{"_file":true')) {
       const f = JSON.parse(row.text);
-      if (f._url) {
-        // Large file: relay-hosted URL — serve directly, no blob creation needed
+      if (f._url && f.url) {
+        // Large file: relay-hosted persistent URL
         mediaUrl  = f.url;
         mediaType = f.mime?.startsWith('video') ? 'video' : f.mime?.startsWith('image') ? 'image' : 'file';
         fileName  = f.name; fileSize = f.size; displayText = f.name;
       } else if (f.data) {
-        // Small file: inline base64 — decode to blob URL
-        const bin = atob(f.data); const buf = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+        // Small file: inline base64 encoded with 8190-byte chunks (divisible by 3).
+        // Use Uint8Array directly — faster and avoids charCodeAt loop issues.
+        const raw64  = f.data as string;
+        const binary = atob(raw64);
+        const buf    = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) buf[i] = binary.charCodeAt(i);
         mediaUrl  = URL.createObjectURL(new Blob([buf], { type: f.mime || 'application/octet-stream' }));
         mediaType = f.mime?.startsWith('video') ? 'video' : f.mime?.startsWith('image') ? 'image' : 'file';
         fileName  = f.name; fileSize = f.size; displayText = f.name;
+      } else {
+        // _file payload but no data or url — show as unavailable rather than raw JSON
+        displayText = f.name || '';
       }
     }
-  } catch { }
+  } catch (e) {
+    // Parse/decode failure — clear displayText so the view shows "Media unavailable"
+    // instead of dumping raw JSON or base64 into the chat bubble.
+    if (row.text?.startsWith('{"_file":true')) displayText = '';
+  }
   return {
     id:        row.id,
     from:      row.senderId,
@@ -699,25 +711,55 @@ class ChatService {
   }
 
   private subscribeToReadReceipts(roomId: string, recipientId: string): void {
-    if (this.readReceiptUnsubs.has(roomId)) return;
-    const chain = GunService.getGun().get('chat-read').get(roomId).get(recipientId)
-      .on((s: any) => {
-        if (!s || s.to !== this.userId) return;
-        const at = Number(s.timestamp) || Date.now();
-        void this.markLocalReadUpTo(roomId, at);
-        this.onReadReceipt?.({ from: recipientId, at });
-      });
+    // Always unsub previous listener before re-subscribing
+    this.readReceiptUnsubs.get(roomId)?.();
+
+    const handleReadNode = (s: any) => {
+      if (!s || typeof s !== 'object' || Array.isArray(s)) return;
+      // Gun fires internal metadata nodes (keyed '_') — skip them
+      if (Object.keys(s).every(k => k === '_')) return;
+      // Accept node if to field matches us, or if to field is absent (legacy writes)
+      if (s.to && s.to !== this.userId) return;
+      const at = Number(s.timestamp);
+      if (!at || at < 1_000_000) return; // reject bogus timestamps
+      void this.markLocalReadUpTo(roomId, at);
+      this.onReadReceipt?.({ from: recipientId, at });
+    };
+
+    const gun = GunService.getGun();
+
+    // Live ephemeral soul — fires in real-time while both peers are online
+    const liveNode = gun.get('chat-read').get(roomId).get(recipientId);
+    liveNode.on(handleReadNode);
+
+    // Persistent soul — survives relay restarts; stored in MySQL on relay
+    const ackNode  = gun.get('chat-read-ack').get(roomId).get(recipientId);
+    const ackChain = ackNode.on(handleReadNode);
+
+    // Probe persistent node at increasing delays: Gun needs time to sync from relay.
+    // Cold start: relay serves persisted data ~1-4s after Gun connects.
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    for (const delay of [1000, 3000, 6000]) {
+      timers.push(setTimeout(() => {
+        ackNode.once((s: any) => { if (s) handleReadNode(s); });
+      }, delay));
+    }
+
     this.readReceiptUnsubs.set(roomId, () => {
-      try { chain?.off?.(); } catch { }
+      timers.forEach(clearTimeout);
+      try { liveNode.off?.(); } catch {}
+      try { ackChain?.off?.(); } catch {}
       this.readReceiptUnsubs.delete(roomId);
     });
   }
 
   private async markLocalReadUpTo(roomId: string, at: number) {
     const rows = await StorageService.getChatMessagesByRoom(roomId);
+    // Mark outgoing messages as read-by-recipient (for sender's double tick in IDB)
     const unread = rows.filter(r => r.outgoing && !r.readAt && r.timestamp <= at);
     if (unread.length)
       await StorageService.saveChatMessages(unread.map(r => ({ ...r, readAt: at })));
+    return unread.length > 0;
   }
 
   // ── History ───────────────────────────────────────────────────────────────
@@ -1207,7 +1249,8 @@ class ChatService {
 
       case 'chat-read-receipt': {
         const at = Number(data.at) || Date.now();
-        void this.markLocalReadUpTo(this.getRoomId(this.userId, data.from), at);
+const rrRoomId = this.getRoomId(this.userId, data.from);
+        void this.markLocalReadUpTo(rrRoomId, at);
         this.onReadReceipt?.({ from: data.from, at });
         break;
       }
@@ -1266,6 +1309,30 @@ class ChatService {
 
     if (this.ws?.readyState === WebSocket.OPEN)
       this.ws.send(JSON.stringify({ type: 'chat-start', recipientId: recipient.userId }));
+
+    // Re-probe Gun ack on every tab focus — catches receipts written while hidden
+    if (typeof document !== 'undefined') {
+      const onVisible = () => {
+        if (document.visibilityState !== 'visible') return;
+        const gun    = GunService.getGun();
+        const node   = gun.get('chat-read-ack').get(roomId).get(recipient.userId);
+        node.once((s: any) => {
+          if (!s || typeof s !== 'object') return;
+          const at = Number(s.timestamp);
+          if (at > 1_000_000 && (!s.to || s.to === this.userId)) {
+            void this.markLocalReadUpTo(roomId, at);
+            this.onReadReceipt?.({ from: recipient.userId, at });
+          }
+        });
+      };
+      document.addEventListener('visibilitychange', onVisible);
+      // Store cleanup alongside room unsub
+      const prevUnsub = this.readReceiptUnsubs.get(roomId);
+      this.readReceiptUnsubs.set(roomId, () => {
+        prevUnsub?.();
+        document.removeEventListener('visibilitychange', onVisible);
+      });
+    }
   }
 
   static readonly MAX_INLINE_FILE_BYTES = 400 * 1024;       // 400 KB — inline base64
@@ -1278,11 +1345,17 @@ class ChatService {
     const mime = file.type || 'application/octet-stream';
 
     if (file.size <= ChatService.MAX_INLINE_FILE_BYTES) {
-      // Small file: encode inline as base64 and send encrypted through Signal
+      // Small file: encode inline as base64 and send encrypted through Signal.
+      // IMPORTANT: chunk size must be divisible by 3 so each chunk encodes to
+      // valid non-padded base64 and concatenation produces a correct result.
+      // 8192 % 3 == 2 (broken) → use 8190 (8190 % 3 == 0).
       const arr = new Uint8Array(await file.arrayBuffer());
+      // Chunk size divisible by 3 → no mid-stream padding issues.
+      // Apply is used instead of spread to avoid call-stack overflow on large arrays.
+      const CHUNK = 8190;
       let b64 = '';
-      for (let i = 0; i < arr.length; i += 8192)
-        b64 += btoa(String.fromCharCode(...Array.from(arr.slice(i, i + 8192))));
+      for (let i = 0; i < arr.length; i += CHUNK)
+        b64 += btoa(String.fromCharCode.apply(null, arr.subarray(i, i + CHUNK) as any));
       return this.sendMessage(recipientId,
         JSON.stringify({ _file: true, name: file.name, mime, size: file.size, data: b64 }));
     }
@@ -1294,11 +1367,21 @@ class ChatService {
     formData.append('file', file, file.name);
     formData.append('mimeType', mime);
 
-    const uploadRes = await fetch(`${chatRelayBase()}/api/chat-media`, {
-      method:  'POST',
-      headers: { Authorization: `Bearer ${senderPub}` },
-      body:    formData,
-    });
+    const uploadController = new AbortController();
+    const uploadTimeout = setTimeout(() => uploadController.abort(), 2 * 60 * 1000);
+    let uploadRes: Response;
+    try {
+      uploadRes = await fetch(`${chatRelayBase()}/api/chat-media`, {
+        method:  'POST',
+        headers: { Authorization: `Bearer ${senderPub}` },
+        body:    formData,
+        signal:  uploadController.signal,
+      });
+    } catch (e: any) {
+      clearTimeout(uploadTimeout);
+      throw new Error(e?.name === 'AbortError' ? 'Upload timed out (> 2 min)' : 'Upload failed — check connection');
+    }
+    clearTimeout(uploadTimeout);
     if (!uploadRes.ok) {
       const err = await uploadRes.json().catch(() => ({ error: 'Upload failed' }));
       throw new Error(err.error || `Upload failed (${uploadRes.status})`);
@@ -1329,9 +1412,7 @@ class ChatService {
     const roomId = this.getRoomId(this.userId, recipientId);
     const at     = Date.now();
 
-    // Null-put ALL confirmed received messages from Gun so the relay/Gun
-    // doesn't hold them indefinitely. Messages are stored locally in IDB;
-    // the Gun node is just the delivery vehicle — once read, it can go.
+    // Null-put confirmed received Gun nodes (ephemeral delivery vehicle cleanup)
     StorageService.getChatMessagesByRoom(roomId).then(rows => {
       const gun = GunService.getGun();
       for (const r of rows) {
@@ -1340,11 +1421,21 @@ class ChatService {
       }
     }).catch(() => {});
 
-    void gunPut(GunService.getGun().get('chat-read').get(roomId).get(this.userId), {
-      from: this.userId, to: recipientId, timestamp: at,
-    });
-    if (this.ws?.readyState === WebSocket.OPEN)
-      this.ws.send(JSON.stringify({ type: 'chat-read', recipientId, at }));
+    // Write read receipt to a PERSISTENT Gun soul (not ephemeral) so the sender
+    // picks it up via .once() even after reconnecting. Use 'chat-read-ack' which
+    // is NOT in EPHEMERAL_PREFIXES and therefore persisted to MySQL on the relay.
+    void gunPut(
+      GunService.getGun().get('chat-read-ack').get(roomId).get(this.userId),
+      { from: this.userId, to: recipientId, timestamp: at }
+    );
+
+    // WS path — relay's websocket.js handles 'chat-read' and forwards
+    // 'chat-read-receipt' to the sender's live connection.
+    if (this.ws?.readyState === WebSocket.OPEN) {
+this.ws.send(JSON.stringify({ type: 'chat-read', recipientId, at }));
+}
+
+    // Patch local IDB so receiver's own history shows messages as read
     void (async () => {
       const rows = await StorageService.getChatMessagesByRoom(roomId);
       const unread = rows.filter(r => !r.outgoing && !r.readAt);
@@ -1378,3 +1469,4 @@ class ChatService {
 }
 
 export default ChatService;
+

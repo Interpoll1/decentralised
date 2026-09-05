@@ -60,20 +60,67 @@
             <div class="message" :class="{ sent: msg.sent, received: !msg.sent, tail: showTail(i) }">
               <!-- Media bubble -->
               <div v-if="msg.mediaUrl" class="message-content media-bubble">
-                <img v-if="msg.mediaType === 'image'" :src="msg.mediaUrl" class="media-img" @click="openMedia(msg.mediaUrl)" />
-                <video v-else-if="msg.mediaType === 'video'" :src="msg.mediaUrl" controls class="media-video" />
-                <div v-if="(msg as any).mediaExpired" class="media-expired">
-                  <svg viewBox="0 0 24 24" fill="none" width="20" height="20"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8"/><path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                  Media expired or deleted
+                <!-- Image -->
+                <div v-if="msg.mediaType === 'image'" class="media-wrap" @click="openLightbox(msg)">
+                  <img :src="msg.mediaUrl" class="media-img" loading="lazy" />
+                  <div class="media-overlay-btns">
+                    <button class="media-dl-btn" @click.stop="downloadMedia(msg)" title="Download">
+                      <svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                  </div>
                 </div>
-                <div v-if="msg.mediaLoading" class="media-loading">
-                  <div class="mini-spinner"></div>
+                <!-- Video -->
+                <div v-else-if="msg.mediaType === 'video'" class="media-wrap media-wrap--video">
+                  <div class="video-thumb-shell" @click="openLightbox(msg)">
+                    <video
+                      :src="msg.mediaUrl"
+                      playsinline preload="metadata"
+                      class="media-video"
+                      @loadedmetadata="(e: any) => e.target.closest('.video-thumb-shell')?.classList.add('loaded')"
+                      @click.stop
+                    />
+                    <!-- shimmer shown until metadata loaded -->
+                    <div class="video-shimmer">
+                      <div class="video-shimmer-wave"></div>
+                      <svg class="video-film-icon" viewBox="0 0 24 24" fill="none">
+                        <rect x="2" y="2" width="20" height="20" rx="3" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="M2 7h20M2 17h20M7 2v20M17 2v20" stroke="currentColor" stroke-width="1.2" opacity=".5"/>
+                      </svg>
+                    </div>
+                    <!-- play icon overlay -->
+                    <div class="video-play-btn">
+                      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    </div>
+                  </div>
+                  <div class="media-overlay-btns">
+                    <button class="media-dl-btn" @click.stop="downloadMedia(msg)" title="Download">
+                      <svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <!-- Generic file -->
+                <a v-else :href="msg.mediaUrl" :download="msg.fileName || msg.message" target="_blank" rel="noopener" class="file-download-link">
+                  <span class="file-icon">&#128196;</span>
+                  <span class="file-name">{{ msg.fileName || msg.message }}</span>
+                  <span v-if="msg.fileSize" class="file-size">{{ msg.fileSize >= 1048576 ? (msg.fileSize / 1048576).toFixed(1) + ' MB' : (msg.fileSize / 1024).toFixed(1) + ' KB' }}</span>
+                </a>
+                <!-- Upload progress overlay (relay upload) -->
+                <div v-if="msg.uploadProgress != null && msg.uploadProgress != undefined && msg.uploadProgress < 100" class="media-upload-overlay">
+                  <div class="media-upload-bar" :style="{ width: msg.uploadProgress + '%' }"></div>
+                  <span class="media-upload-pct">{{ msg.uploadProgress }}%</span>
                 </div>
               </div>
 
-              <!-- Text bubble -->
-              <div v-else class="message-content">
+              <!-- Text bubble — guard against raw _file JSON or empty failed-decode rows -->
+              <div v-else-if="msg.message && !msg.message.startsWith('{&quot;_file&quot;')" class="message-content">
                 <p>{{ msg.message }}</p>
+              </div>
+              <!-- _file message that failed to decode, or raw JSON leaked through -->
+              <div v-else class="message-content media-bubble" style="background:transparent!important;box-shadow:none!important;">
+                <div class="media-decode-err">
+                  <svg viewBox="0 0 24 24" fill="none" style="width:22px;height:22px;opacity:.5"><path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm0 6v4m0 4h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                  <span>Media unavailable</span>
+                </div>
               </div>
 
               <div class="message-meta">
@@ -85,7 +132,22 @@
             </div>
           </template>
 
-          <!-- P2P transfer progress -->
+          <!-- Lightbox -->
+        <Teleport to="body">
+          <div v-if="lightbox" class="lightbox-backdrop" @click.self="lightbox = null" @keydown.esc="lightbox = null" tabindex="-1">
+            <div class="lightbox-inner">
+              <button class="lightbox-close" @click="lightbox = null">&#10005;</button>
+              <button class="lightbox-dl" @click="downloadMedia(lightbox)" title="Download">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Download
+              </button>
+              <img v-if="lightbox.mediaType === 'image'" :src="lightbox.mediaUrl" class="lightbox-media" />
+              <video v-else-if="lightbox.mediaType === 'video'" :src="lightbox.mediaUrl" controls autoplay playsinline class="lightbox-media" />
+            </div>
+          </div>
+        </Teleport>
+
+        <!-- P2P transfer progress -->
           <div v-if="p2pTransfer" class="p2p-progress-card">
             <div class="p2p-progress-header">
               <!-- File thumbnail preview -->
@@ -138,15 +200,11 @@
           </span>
         </div>
 
-        <!-- Presence + typing indicator above input -->
-        <div class="bottom-status-bar">
+        <!-- Typing indicator above input (presence is shown in header only) -->
+        <div class="bottom-status-bar" :class="{ 'bottom-status-bar--visible': isTypingState }">
           <div v-if="isTypingState" class="typing-indicator">
             <span class="typing-dots"><span></span><span></span><span></span></span>
             <span class="typing-label">{{ recipientName }} is typing…</span>
-          </div>
-          <div v-else class="presence-status">
-            <span class="presence-dot" :class="recipientOnline ? 'presence-dot--online' : 'presence-dot--offline'"></span>
-            <span class="presence-label">{{ recipientOnline ? 'Online' : 'Offline' }}</span>
           </div>
         </div>
 
@@ -202,11 +260,6 @@ import { UserService } from '../services/userService';
 import { GunService } from '../services/gunService';
 import { StorageService } from '../services/storageService';
 import config from '@/config';
-import {
-  encryptAndUpload, fetchAndDecrypt,
-  encodeMediaMessage, decodeMediaMessage,
-  type MediaMeta,
-} from '../services/chatMediaService';
 
 const route = useRoute();
 const props = defineProps<{ userId: string }>();
@@ -753,53 +806,82 @@ function listenForIncomingP2P() {
 async function onFileSelected(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0];
   (e.target as HTMLInputElement).value = '';
-  if (!file) { chatService?.suppressOffline(0); return; }
-  await sendMediaViaRelay(file);
-}
-
-/**
- * Relay-routed encrypted media — no P2P needed, works async (recipient can be offline).
- * 1. AES-256-GCM encrypt locally.
- * 2. Upload ciphertext to relay (relay never sees plaintext).
- * 3. Send mediaId + key inside a normal Signal-encrypted text message.
- * 4. Recipient decrypts message, downloads + decrypts media, relay auto-deletes.
- */
-async function sendMediaViaRelay(file: File) {
-  if (!chatService) return;
-
-  // Use Gun user pub as a lightweight bearer token (relay verifies via Gun)
-  const authToken = GunService.getUser()?.is?.pub || myUserId;
-
-  // Show local optimistic preview immediately
-  const previewUrl = file.type.startsWith('image') ? URL.createObjectURL(file) : undefined;
-  const mtype      = file.type.startsWith('video') ? 'video' : 'image';
-  const localId    = 'media-local-' + Date.now();
-
-  messages.value = [...messages.value, {
-    id: localId, from: myUserId, to: recipientId.value,
-    message: '[uploading…]', timestamp: Date.now(), read: false, sent: false,
-    mediaUrl: previewUrl, mediaType: mtype, mediaLoading: true,
-  } as any];
-  nextTick(() => scrollToBottom(true));
-
-  try {
-    const meta = await encryptAndUpload(file, authToken);
-    const payload = encodeMediaMessage(meta);
-    const sent = await chatService.sendMessage(recipientId.value, payload);
-
-    // Replace optimistic with confirmed
-    messages.value = messages.value.map(m =>
-      m.id === localId
-        ? { ...sent, mediaUrl: previewUrl, mediaType: mtype, mediaLoading: false }
-        : m
-    );
-  } catch (err: any) {
-    messages.value = messages.value.filter(m => m.id !== localId);
-    const t = await toastController.create({
-      message: 'Media send failed: ' + (err?.message || 'unknown error'),
-      duration: 4000, position: 'top', color: 'warning',
-    });
-    await t.present();
+  if (!file || !chatService) return;
+  // For small files (<= 400 KB) chatService sends inline — instant.
+  // For large files it uploads to the relay; we show a progress placeholder.
+  const isLarge = file.size > 400 * 1024;
+  let placeholderId: string | null = null;
+  if (isLarge) {
+    // Insert a placeholder bubble with a preview URL and 0% progress
+    placeholderId = `upload-${Date.now()}`;
+    // Create a local preview URL for both image and video — shown during upload
+    const previewUrl = (file.type.startsWith('image') || file.type.startsWith('video'))
+      ? URL.createObjectURL(file) : undefined;
+    const mtype = file.type.startsWith('video') ? 'video' : file.type.startsWith('image') ? 'image' : 'file';
+    upsertMessage({
+      id: placeholderId, from: myUserId, to: recipientId.value,
+      message: file.name, timestamp: Date.now(), read: false, sent: true,
+      mediaUrl: previewUrl, mediaType: mtype as any,
+      fileName: file.name, fileSize: file.size,
+      uploadProgress: 0,
+    } as any);
+    nextTick(() => scrollToBottom(true));
+    // Estimate upload duration from file size (assume ~500 KB/s on a typical connection)
+    // and advance progress smoothly to 92%, leaving the last 8% for server processing.
+    const estimatedMs  = Math.max(800, (file.size / (500 * 1024)) * 1000);
+    const tickMs       = 250;
+    const totalTicks   = estimatedMs / tickMs;
+    const stepPerTick  = 92 / totalTicks;
+    let fakePct = 0;
+    const fakeTimer = setInterval(() => {
+      // Ease-out: slow down as we approach 92% so it doesn't look frozen if upload runs long
+      const remaining = 92 - fakePct;
+      fakePct = Math.min(fakePct + stepPerTick * (remaining / 92 + 0.3), 92);
+      const idx = messages.value.findIndex(m => m.id === placeholderId);
+      if (idx !== -1) {
+        const updated = [...messages.value];
+        (updated[idx] as any).uploadProgress = Math.round(fakePct);
+        messages.value = updated;
+      }
+    }, tickMs);
+    try {
+      const msg = await chatService.sendFile(recipientId.value, file);
+      clearInterval(fakeTimer);
+      // Replace placeholder with the real sent message.
+      // Keep the local blob URL (previewUrl) as the sender's mediaUrl — avoids a
+      // network round-trip back to the relay just to show your own sent video/image.
+      const idx = messages.value.findIndex(m => m.id === placeholderId);
+      const existingPreview = idx !== -1 ? (messages.value[idx] as any).mediaUrl : undefined;
+      const finalMsg = {
+        ...msg,
+        mediaUrl: existingPreview || msg.mediaUrl, // prefer local blob
+        uploadProgress: undefined, // clear progress overlay
+      };
+      if (idx !== -1) {
+        const updated = [...messages.value];
+        updated[idx] = finalMsg as any;
+        messages.value = updated;
+      } else {
+        upsertMessage(finalMsg);
+      }
+      nextTick(() => scrollToBottom(true));
+    } catch (err: any) {
+      clearInterval(fakeTimer);
+      // Remove placeholder on error
+      messages.value = messages.value.filter(m => m.id !== placeholderId);
+      const t = await toastController.create({ message: err?.message || 'Failed to send file', duration: 5000, position: 'top', color: 'danger' });
+      await t.present();
+    }
+  } else {
+    // Small file — instant, no progress UI needed
+    try {
+      const msg = await chatService.sendFile(recipientId.value, file);
+      upsertMessage(msg);
+      nextTick(() => scrollToBottom(true));
+    } catch (err: any) {
+      const t = await toastController.create({ message: err?.message || 'Failed to send file', duration: 5000, position: 'top', color: 'danger' });
+      await t.present();
+    }
   }
 }
 
@@ -810,7 +892,17 @@ function openFilePickerWithPresence() {
   fileInput.value?.click();
 }
 
-function openMedia(url: string) { window.open(url, '_blank'); }
+// Lightbox state
+const lightbox = ref<{ mediaUrl: string; mediaType: 'image'|'video'; fileName?: string } | null>(null);
+function openLightbox(msg: any) { lightbox.value = { mediaUrl: msg.mediaUrl, mediaType: msg.mediaType, fileName: msg.fileName }; }
+function downloadMedia(msg: any) {
+  if (!msg?.mediaUrl) return;
+  const a = document.createElement('a');
+  a.href = msg.mediaUrl;
+  a.download = msg.fileName || (msg.mediaType === 'video' ? 'video.mp4' : 'image');
+  a.target = '_blank';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
 
 // ── Avatar tone ────────────────────────────────────────────────────────────────
 const TONES = ['tone-violet','tone-blue','tone-teal','tone-amber','tone-rose'];
@@ -873,56 +965,56 @@ function deliveryMark(msg: ChatMessage): string {
 }
 
 function upsertMessage(msg: ChatMessage) {
-  const at = messages.value.findIndex(m => m.id === msg.id);
+  // Primary dedup: by message id (covers 99% of cases)
+  let at = messages.value.findIndex(m => m.id === msg.id);
+
+  // Secondary dedup: only for upload placeholders whose id was temporary.
+  // A placeholder id starts with 'upload-'; Gun re-delivers the real message
+  // with a different id shortly after. Match by exact timestamp + from + mediaType.
+  // Window is 500ms (not 2s) to avoid false-positives on rapid-fire messages.
+  if (at === -1 && msg.sent) {
+    at = messages.value.findIndex(m =>
+      m.sent &&
+      m.from === msg.from &&
+      m.id.startsWith('upload-') &&
+      Math.abs(m.timestamp - msg.timestamp) < 500 &&
+      m.mediaType === msg.mediaType
+    );
+  }
+
   if (at === -1) {
     messages.value = [...messages.value, msg];
   } else {
     const updated = [...messages.value];
-    updated[at] = { ...updated[at], ...msg };
+    const existing = updated[at];
+    updated[at] = {
+      ...existing,
+      ...msg,
+      // Never downgrade sent:true → sent:false from a Gun re-delivery where
+      // senderId comparison fails (e.g. case/encoding mismatch). Once a message
+      // is known to be outgoing, keep it that way.
+      sent: existing.sent || msg.sent,
+      // Never downgrade read:true → read:false
+      read: existing.read || msg.read,
+      // Keep local blob URL while it's still valid (avoids flicker to relay URL)
+      mediaUrl: existing.mediaUrl || msg.mediaUrl,
+      id: existing.id.startsWith('upload-') ? msg.id : existing.id,
+    };
     messages.value = updated;
-  }
-  // Auto-decrypt relay media messages
-  void resolveMedia(msg);
-}
-
-async function resolveMedia(msg: any) {
-  if (!msg.message) return;
-  const meta = decodeMediaMessage(msg.message);
-  if (!meta) return;
-
-  const authToken = GunService.getUser()?.is?.pub || myUserId;
-  const mtype = meta.mediaType.startsWith('video') ? 'video' : 'image';
-
-  // Mark loading while we fetch
-  const updIdx = messages.value.findIndex(m => m.id === msg.id);
-  if (updIdx !== -1) {
-    const arr = [...messages.value];
-    arr[updIdx] = { ...arr[updIdx], mediaLoading: true, mediaType: mtype };
-    messages.value = arr;
-  }
-
-  try {
-    const url = await fetchAndDecrypt(meta, authToken);
-    const arr2 = [...messages.value];
-    const i2 = arr2.findIndex(m => m.id === msg.id);
-    if (i2 !== -1) {
-      arr2[i2] = { ...arr2[i2], mediaUrl: url, mediaType: mtype, mediaLoading: false };
-      messages.value = arr2;
-    }
-  } catch {
-    // Media expired or deleted — show a placeholder
-    const arr3 = [...messages.value];
-    const i3 = arr3.findIndex(m => m.id === msg.id);
-    if (i3 !== -1) {
-      arr3[i3] = { ...arr3[i3], mediaLoading: false, mediaExpired: true };
-      messages.value = arr3;
-    }
   }
 }
 
 function bindChatCallbacks(service: ChatService) {
   service.onConnectionChange = (status) => { connected.value = status; };
-  service.onMessage = (msg) => { upsertMessage(msg); nextTick(() => scrollToBottom(true)); };
+  service.onMessage = (msg) => {
+    upsertMessage(msg);
+    nextTick(() => scrollToBottom(true));
+    // If an incoming message arrives while we're actively viewing this chat,
+    // immediately send a read receipt so the sender gets their double tick.
+    if (!msg.sent && document.visibilityState === 'visible') {
+      service.markAsRead(recipientId.value);
+    }
+  };
   service.onMessageStatus = ({ id, status, error }) => {
     const at = messages.value.findIndex(m => m.id === id);
     if (at !== -1) {
@@ -939,10 +1031,18 @@ function bindChatCallbacks(service: ChatService) {
     if (isTyping) _typingClearTimer = window.setTimeout(() => { typingState.value = false; }, 4000);
   };
   service.onReadReceipt = ({ from, at }) => {
+
     if (from !== recipientId.value) return;
-    messages.value = messages.value.map(m =>
-      m.sent && m.timestamp <= at ? { ...m, read: true } : m
-    );
+    const cutoff = at || Date.now();
+    let changed = false;
+    const updated = messages.value.map(m => {
+      // Use m.sent OR m.from === myUserId as fallback — Gun re-delivery can
+      // set sent:false if senderId comparison fails, but from===myUserId is reliable
+      const isOurs = m.sent || m.from === myUserId;
+      if (isOurs && !m.read && m.timestamp <= cutoff) { changed = true; return { ...m, read: true, sent: true }; }
+      return m;
+    });
+    if (changed) messages.value = updated;
   };
   service.onRecipientKeyChange = ({ userId, available }) => {
     if (userId === recipientId.value) recipientKeyMissing.value = !available;
@@ -1001,7 +1101,7 @@ async function initializeChat() {
     if (gen !== initGeneration) { service.disconnect(); return; }
     chatReady.value = true;
     recipientKeyMissing.value = !service.hasRecipientKey(targetUserId);
-    scrollToBottom();
+    forceScrollImmediate();
 
     // Start listening for incoming P2P file transfers
     listenForIncomingP2P();
@@ -1018,30 +1118,76 @@ async function initializeChat() {
     chatError.value = err instanceof Error ? err.message : 'Could not start encrypted chat.';
   }
   service.markAsRead(targetUserId);
-  scrollToBottom();
+  forceScrollImmediate();
 }
 
 watch(recipientId, async (n, o) => { if (n && n !== o) await initializeChat(); });
 onIonViewWillEnter(() => {
   if (!chatReady.value && recipientId.value) { void initializeChat(); return; }
+  // Re-bind callbacks every time the view becomes active
+  if (chatService) bindChatCallbacks(chatService);
   chatService?.markAsRead(recipientId.value);
+  forceScrollImmediate();
+  // Re-probe Gun ack soul when view becomes active — catches receipts written while away
+  if (chatService && recipientId.value) {
+    const roomId = [myUserId, recipientId.value].sort().join(':');
+    const applyReceipt = (at: number) => {
+      let changed = false;
+      const updated = messages.value.map(m => {
+        if (m.sent && !m.read && m.timestamp <= at) { changed = true; return { ...m, read: true }; }
+        return m;
+      });
+      if (changed) messages.value = updated;
+    };
+    const probeAck = (delay: number) => setTimeout(() => {
+      try {
+        GunService.getGun()
+          .get('chat-read-ack').get(roomId).get(recipientId.value)
+          .once((s: any) => {
+            if (!s || typeof s !== 'object') return;
+            if (Object.keys(s).every(k => k === '_')) return;
+            const at = Number(s.timestamp);
+            if (at > 1_000_000 && (!s.to || s.to === myUserId)) applyReceipt(at);
+          });
+      } catch {}
+    }, delay);
+    probeAck(300);
+    probeAck(1500);
+    probeAck(4000);
+  }
 });
 onUnmounted(() => { initGeneration++; disconnectChat(); closePeer(); });
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+
+// messagesContainer (.messages-area) is the actual overflow-y:auto scroller.
+// We target it directly — no ion-content shadow DOM gymnastics needed.
+
 const scrollToBottom = (force = false) => {
-  if (!content.value) return;
-  const el = content.value.$el;
-  if (!force) {
-    // Only auto-scroll if user is already near the bottom (within 150px)
-    // so reading history isn't interrupted by new messages
-    const inner = el.shadowRoot?.querySelector('.inner-scroll') ?? el;
-    const distFromBottom = inner.scrollHeight - inner.scrollTop - inner.clientHeight;
-    if (distFromBottom > 150) return;
-  }
-  el.scrollToBottom(300);
+  nextTick(() => {
+    const el = messagesContainer.value;
+    if (!el) return;
+    if (!force) {
+      const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+      if (dist > 200) return; // user scrolled up to read history — don't hijack
+    }
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  });
 };
-watch(currentMessages, () => nextTick(() => scrollToBottom()), { deep: true });
+
+// On initial load the DOM isn't fully painted after one nextTick.
+// Retry a few times so the last message is always visible on open.
+const forceScrollImmediate = () => {
+  let tries = 0;
+  const attempt = () => {
+    const el = messagesContainer.value;
+    if (el) el.scrollTop = el.scrollHeight;
+    if (++tries < 6) setTimeout(attempt, 80);
+  };
+  nextTick(attempt);
+};
+
+watch(currentMessages, () => scrollToBottom(), { deep: true });
 
 const handleSend = async () => {
   if (!messageInput.value.trim() || !chatReady.value || !chatService) return;
@@ -1150,14 +1296,19 @@ ion-content { --background: transparent; }
 .presence-dot--online  { background: #34d399; box-shadow: 0 0 5px rgba(52,211,153,0.7); }
 .presence-dot--offline { background: rgba(255,255,255,0.2); }
 
-/* Bottom presence + typing bar above input */
+/* Typing bar above input — collapsed when not typing */
 .bottom-status-bar {
-  display: flex; align-items: center;
-  padding: 4px 16px; min-height: 24px;
-  border-top: 1px solid rgba(255,255,255,0.06);
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 200ms ease, padding 200ms ease;
+  padding: 0 14px;
 }
-.typing-indicator, .presence-status { display: flex; align-items: center; gap: 6px; }
-.typing-label, .presence-label { font-size: 11px; color: rgba(255,255,255,0.45); }
+.bottom-status-bar--visible {
+  max-height: 36px;
+  padding: 4px 14px;
+}
+.typing-indicator { display: flex; align-items: center; gap: 6px; }
+.typing-label { font-size: 11px; color: rgba(255,255,255,0.45); }
 
 /* ── Avatar tones ──────────────────────────────────────────── */
 .tone-violet { background: linear-gradient(135deg,#6366f1,#8b5cf6); }
@@ -1216,16 +1367,16 @@ ion-content { --background: transparent; }
 .message {
   display: flex; flex-direction: column; max-width: 78%;
   animation: bubbleIn .2s cubic-bezier(0.34,1.56,0.64,1) both;
-  margin-bottom: 3px; position: relative;
+  margin-bottom: 1px; position: relative;
 }
 .message.sent     { align-self: flex-end;   align-items: flex-end;   }
 .message.received { align-self: flex-start; align-items: flex-start; }
 /* Extra breathing room when sender switches */
-.message.tail     { margin-bottom: 10px; }
+.message.tail     { margin-bottom: 7px; }
 @keyframes bubbleIn { from { opacity: 0; transform: translateY(6px) scale(0.96); } to { opacity: 1; transform: none; } }
 
 .message-content {
-  padding: 10px 16px;
+  padding: 7px 13px;
   border-radius: 16px; /* comfortable, not pill */
   position: relative;
 }
@@ -1248,39 +1399,171 @@ ion-content { --background: transparent; }
   border-color: transparent transparent transparent #8b5cf6;
 }
 
-/* Received: dark glass, sharp bottom-left corner */
+/* Received: same purple gradient as sent, mirrored direction — same bubble, different side */
 .message.received .message-content {
-  background: rgba(255,255,255,0.09);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: linear-gradient(225deg,#6366f1,#8b5cf6);
+  box-shadow: 0 2px 8px rgba(99,102,241,0.28);
   border-bottom-left-radius: 4px;
 }
-.message.received .message-content p { color: var(--app-text); }
+.message.received .message-content p { color: #fff; }
 
-/* Tail — received, bottom-left */
+/* Tail — received, bottom-left (true mirror of sent bottom-right) */
 .message.received.tail .message-content::after {
   content: '';
   position: absolute; bottom: 0; left: -7px;
   width: 0; height: 0;
   border-style: solid;
-  border-width: 0 0 8px 8px;
-  border-color: transparent transparent rgba(255,255,255,0.09) transparent;
+  border-width: 8px 8px 0 0;
+  border-color: transparent #6366f1 transparent transparent;
 }
 
 .message-content p { margin: 0; font-size: 14.5px; line-height: 1.55; word-break: break-word; }
 
 .message-meta { display: flex; align-items: center; gap: 4px; margin-top: 2px; padding: 0 3px; }
-.message-time   { font-size: 10.5px; color: var(--app-text-subtle); }
-.message-status { font-size: 10.5px; color: #a5b4fc; letter-spacing: -0.5px; }
+.message-time   { font-size: 10.5px; color: rgba(255,255,255,0.45); }
+.message-status { font-size: 10.5px; color: rgba(165,180,252,0.9); letter-spacing: -0.5px; }
 .message-status.stalled { color: #fbbf24; font-weight: 700; }
 
 /* ── Media bubbles ──────────────────────────────────────────── */
-.media-bubble { padding: 4px !important; overflow: hidden; }
-.media-img { display: block; max-width: 240px; max-height: 300px; border-radius: 16px; object-fit: cover; cursor: zoom-in; }
-.media-video { display: block; max-width: 260px; border-radius: 16px; }
+/* Strip the inherited chat-bubble colour so image/video sit clean */
+.media-bubble {
+  padding: 3px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.message.sent  .media-bubble { background: transparent !important; }
+.message.received .media-bubble { background: transparent !important; }
+
+.media-wrap {
+  position: relative; display: inline-block; border-radius: 14px; overflow: hidden;
+  cursor: zoom-in; line-height: 0;
+}
+.media-wrap--video { cursor: default; }
+.media-img  { display: block; max-width: 230px; max-height: 250px; object-fit: cover; border-radius: 14px; }
+.media-video { display: block; max-width: 240px; max-height: 250px; border-radius: 14px; background: #000; }
+
+/* Video thumbnail shell — shimmer until metadata loads */
+.video-thumb-shell {
+  position: relative; width: 230px; height: 170px; border-radius: 14px;
+  overflow: hidden; cursor: pointer; background: #0d0d14;
+}
+.video-thumb-shell .media-video {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; opacity: 0; transition: opacity 300ms ease;
+}
+.video-thumb-shell.loaded .media-video  { opacity: 1; }
+.video-thumb-shell.loaded .video-shimmer { opacity: 0; pointer-events: none; }
+
+/* Shimmer skeleton shown before video metadata arrives */
+.video-shimmer {
+  position: absolute; inset: 0; border-radius: 14px;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%);
+  display: flex; align-items: center; justify-content: center;
+  transition: opacity 300ms ease;
+  overflow: hidden;
+}
+.video-shimmer-wave {
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg,
+    transparent 0%, rgba(255,255,255,0.04) 40%,
+    rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 60%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer-sweep 1.6s infinite ease-in-out;
+}
+@keyframes shimmer-sweep { from { background-position: -200% 0; } to { background-position: 200% 0; } }
+.video-film-icon { width: 36px; height: 36px; color: rgba(255,255,255,0.2); position: relative; z-index: 1; }
+
+/* Play button overlay */
+.video-play-btn {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  z-index: 2;
+}
+.video-play-btn svg {
+  width: 44px; height: 44px; color: rgba(255,255,255,0.85);
+  filter: drop-shadow(0 2px 8px rgba(0,0,0,0.5));
+  transition: transform 160ms ease;
+}
+.video-thumb-shell:hover .video-play-btn svg { transform: scale(1.1); }
+
+/* Media decode error */
+.media-decode-err {
+  display: flex; align-items: center; gap: 8px; padding: 12px 16px;
+  color: rgba(255,255,255,0.4); font-size: 13px;
+  background: rgba(255,255,255,0.04); border-radius: 12px; min-width: 160px;
+}
+
+/* Download button shown on hover */
+.media-overlay-btns {
+  position: absolute; top: 6px; right: 6px;
+  display: flex; gap: 4px;
+  opacity: 0; transition: opacity 180ms ease;
+  pointer-events: none;
+}
+.media-wrap:hover .media-overlay-btns { opacity: 1; pointer-events: auto; }
+.media-dl-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 50%; border: none; cursor: pointer;
+  background: rgba(0,0,0,0.55); backdrop-filter: blur(4px); color: #fff;
+}
+.media-dl-btn svg { width: 15px; height: 15px; }
+
+/* Upload progress overlay */
+.media-upload-overlay {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: flex-end; padding-bottom: 10px;
+  background: rgba(0,0,0,0.35); border-radius: 14px;
+}
+.media-upload-bar {
+  position: absolute; bottom: 0; left: 0; height: 3px;
+  background: #a78bfa; border-radius: 0 0 14px 14px;
+  transition: width 300ms ease;
+}
+.media-upload-pct {
+  font-size: 13px; font-weight: 700; color: #fff;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+}
+
+.file-download-link {
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+  background: rgba(255,255,255,0.08); border-radius: 8px;
+  color: #a78bfa; text-decoration: none; min-width: 160px;
+}
+.file-icon { font-size: 20px; flex-shrink: 0; }
+.file-name { font-size: 13px; font-weight: 500; flex: 1; word-break: break-all; }
+.file-size { font-size: 11px; color: rgba(255,255,255,0.45); white-space: nowrap; }
 .media-loading {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  background: rgba(0,0,0,0.3); border-radius: 16px;
+  background: rgba(0,0,0,0.3); border-radius: 14px;
 }
+
+/* ── Lightbox ────────────────────────────────────────────────── */
+.lightbox-backdrop {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.92); display: flex; align-items: center; justify-content: center;
+  animation: lb-in 160ms ease;
+}
+@keyframes lb-in { from { opacity: 0 } to { opacity: 1 } }
+.lightbox-inner {
+  position: relative; max-width: 96vw; max-height: 92vh;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+}
+.lightbox-media {
+  max-width: 96vw; max-height: 82vh; border-radius: 10px;
+  object-fit: contain; box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+}
+.lightbox-close {
+  position: absolute; top: -38px; right: 0;
+  background: rgba(255,255,255,0.1); border: none; color: #fff;
+  font-size: 18px; width: 32px; height: 32px; border-radius: 50%; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.lightbox-dl {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(167,139,250,0.18); border: 1px solid rgba(167,139,250,0.35);
+  color: #a78bfa; border-radius: 8px; padding: 6px 16px; font-size: 13px;
+  font-weight: 600; cursor: pointer;
+}
+.lightbox-dl svg { width: 14px; height: 14px; }
 
 /* ── P2P progress ───────────────────────────────────────────── */
 /* ── P2P info banner ───────────────────────────────────────── */
