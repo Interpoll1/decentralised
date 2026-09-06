@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Interpoll is a browser-first decentralized social and polling app for communities, posts, chat, and verifiable voting."
+    />
+    <title>InterPoll — decentralized polls, no company in control</title>
+
+    <!-- Open Graph / social link previews -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="InterPoll" />
+    <meta property="og:title" content="InterPoll — decentralized polls, no company in control" />
+    <meta property="og:description" content="Create polls and discussions that live across peers, not one company's servers. Every vote is cryptographically signed and tamper-evident." />
+    <meta property="og:image" content="/og-preview.svg" />
+    <meta property="og:url" content="https://interpoll.endless.sbs/" />
+
+    <!-- Twitter card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="InterPoll — decentralized polls, no company in control" />
+    <meta name="twitter:description" content="Create polls and discussions that live across peers, not one company's servers. Every vote is cryptographically signed and tamper-evident." />
+    <meta name="twitter:image" content="/og-preview.svg" />
+    <script>
+      // Apply dark mode class ASAP to prevent flash of light theme.
+      // Only target <html> here since <body> doesn't exist yet in <head>.
+      (function() {
+        var storedTheme = localStorage.getItem('theme');
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (storedTheme === 'dark' || (!storedTheme && prefersDark)) {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets2/index-CBRTm0T4.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets2/vendor-misc-D3onbQe-.js">
+    <link rel="modulepreload" crossorigin href="/assets2/vendor-vue-BiYa0jMH.js">
+    <link rel="modulepreload" crossorigin href="/assets2/vendor-ionic-Dz2FvtR9.js">
+    <link rel="modulepreload" crossorigin href="/assets2/vendor-crypto-CBqg2YUR.js">
+    <link rel="modulepreload" crossorigin href="/assets2/vendor-gun-C-Wo9m74.js">
+    <link rel="stylesheet" crossorigin href="/assets2/vendor-ionic-DQHlluBt.css">
+    <link rel="stylesheet" crossorigin href="/assets2/index-B6hJgDFe.css">
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
