@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /home/viktor/Documents/interpoll2/decentralised/.claude/hooks/bash-tool-guard.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /home/viktor/Documents/interpoll2/decentralised/.claude/hooks/handoff-reminder.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
