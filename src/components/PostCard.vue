@@ -406,10 +406,23 @@ function formatViewCount(n: number): string {
 }
 
 .post-media { border-radius: 10px; overflow: hidden; margin-top: 2px; }
-.post-media-img { width: 100%; max-height: 320px; object-fit: cover; display: block; }
+.post-media-img {
+  width: 100%;
+  /* No max-height cap — let image render at its natural aspect ratio.
+     object-fit: contain keeps full image visible without cropping.
+     Background matches card surface so letterboxing is invisible. */
+  max-height: 520px;
+  object-fit: contain;
+  object-position: center;
+  display: block;
+  background: rgba(0,0,0,0.18);
+}
+@media (min-width: 768px) {
+  .post-media-img { max-height: 600px; }
+}
 .post-media-video { width: 100%; }
 .post-video-skeleton {
-  width: 100%; height: 180px;
+  width: 100%; height: 220px;
   background: rgba(255,255,255,0.05);
   border-radius: 10px;
   display: flex; align-items: center; justify-content: center;
@@ -457,6 +470,10 @@ function formatViewCount(n: number): string {
 /* ── Footer / actions ────────────────────────────── */
 .post-footer { display: flex; align-items: center; justify-content: space-between; }
 .post-actions { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+
+@media (min-width: 768px) {
+  .post-actions { gap: 10px; }
+}
 
 .post-action-btn {
   display: inline-flex; align-items: center; gap: 5px;

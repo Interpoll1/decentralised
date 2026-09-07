@@ -134,9 +134,9 @@
   --ion-color-light-shade: #141519;
   --ion-color-light-tint: #2a2b30;
 
-  --ion-toolbar-background: rgba(255, 255, 255, 0.62);
+  --ion-toolbar-background: rgba(255, 255, 255, 0.38);
   --ion-toolbar-color: var(--app-text);
-  --ion-tab-bar-background: rgba(255, 255, 255, 0.75);
+  --ion-tab-bar-background: rgba(255, 255, 255, 0.38);
   --ion-tab-bar-color: var(--app-text-muted);
   --ion-tab-bar-color-selected: var(--app-accent-bright);
   --ion-placeholder-color: var(--app-text-subtle);
@@ -217,8 +217,8 @@ body.dark {
   --ion-card-background-rgb: 22, 24, 30;
   --ion-item-background: rgba(255, 255, 255, 0.04);
   --ion-text-color-rgb: 245, 245, 246;
-  --ion-toolbar-background: rgba(12, 13, 22, 0.80);
-  --ion-tab-bar-background: rgba(10, 11, 20, 0.92);
+  --ion-toolbar-background: rgba(12, 13, 22, 0.35);
+  --ion-tab-bar-background: rgba(10, 11, 20, 0.28);
   --ion-color-step-50: #050505;
   --ion-color-step-100: #0a0a0a;
   --ion-color-step-150: #111111;
@@ -553,10 +553,9 @@ ion-toolbar {
   --background: var(--ion-toolbar-background);
   --color: var(--ion-toolbar-color);
   --border-width: 0;
-  border-bottom: 1px solid var(--glass-border-top);
-  box-shadow: var(--app-shadow-inset);
-  backdrop-filter: blur(var(--toolbar-blur)) saturate(var(--toolbar-saturation));
-  -webkit-backdrop-filter: blur(var(--toolbar-blur)) saturate(var(--toolbar-saturation));
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
 }
 
 /* Kill the blue square on any button rendered inside ion-toolbar slots */
@@ -942,3 +941,14 @@ p {
     box-shadow: none !important;
   }
 }
+
+
+
+
+
+
+
+
+
+
+

@@ -15,6 +15,7 @@
     </ion-header>
 
     <ion-content>
+      <BurstOverlay />
       <DesktopPageShell>
       <!-- Community Header -->
       <div v-if="community" class="community-header">
@@ -439,7 +440,7 @@ ion-content {
 </style>
 
 <script setup lang="ts">
-import { ref, computed, watchEffect, watch, onUnmounted } from 'vue';
+import { ref, computed, watchEffect, watch, onUnmounted, defineAsyncComponent } from 'vue';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
@@ -494,6 +495,9 @@ import { InviteLinkService } from '../services/inviteLinkService';
 import { ModerationService, moderationVersion } from '../services/moderationService';
 import { useFeedPreferences } from '../composables/useFeedPreferences';
 import { rankFeedItems } from '../utils/feedRanking';
+import { useBurst } from '../composables/useBurst';
+
+const BurstOverlay = defineAsyncComponent(() => import('../components/BurstOverlay.vue'));
 
 const route = useRoute();
 const router = useRouter();
@@ -502,6 +506,7 @@ const postStore = usePostStore();
 const pollStore = usePollStore();
 const userStore = useUserStore();
 const { preferences: feedPreferences } = useFeedPreferences();
+const { triggerBurst } = useBurst();
 
 const communityId = computed(() => route.params.communityId as string);
 const community = computed(() => communityStore.currentCommunity);
@@ -878,12 +883,14 @@ async function handlePostVote(post: Post, direction: 'up' | 'down') {
   }
 }
 
-async function handleUpvote(post: Post) {
-  await handlePostVote(post, 'up');
+function handleUpvote(post: Post) {
+  triggerBurst('heart');
+  handlePostVote(post, 'up');
 }
 
-async function handleDownvote(post: Post) {
-  await handlePostVote(post, 'down');
+function handleDownvote(post: Post) {
+  triggerBurst('dislike');
+  handlePostVote(post, 'down');
 }
 
 function formatNumber(num: number | undefined | null): string {

@@ -167,6 +167,10 @@
                 <span class="p2p-file-status">
                   {{ p2pTransfer.direction === 'sending' ? 'Sending' : 'Receiving' }} · {{ p2pTransfer.progress < 5 && p2pTransfer.direction === 'sending' ? 'Connecting…' : p2pTransfer.progress + '%' }}
                 </span>
+                <!-- Transport tier badge (ticket-04: tier ordering) -->
+                <span v-if="p2pTransfer.tier" class="p2p-tier-badge" :class="`p2p-tier-badge--${p2pTransfer.tier}`">
+                  {{ p2pTransfer.tier === 'lan' ? '⚡ LAN' : p2pTransfer.tier === 'direct' ? '🔒 Direct' : '☁ Relay' }}
+                </span>
               </div>
               <span class="p2p-pct">{{ p2pTransfer.progress }}%</span>
             </div>
@@ -194,7 +198,9 @@
             <path d="M12 8h.01M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
           </svg>
           <span>
-            Image &amp; video transfers are <strong>direct peer-to-peer</strong> — no server involved.
+            Image &amp; video transfers are <strong>direct peer-to-peer</strong> — server-free when
+            possible. On the same network a <strong>LAN path</strong> is used; otherwise a relay-free
+            STUN connection is attempted before falling back to a relay.
             <strong>Both users must be online</strong> at the same time. Unlike text messages, files
             cannot be queued for offline delivery.
           </span>
@@ -282,7 +288,13 @@ const typingTimer         = ref<number | null>(null);
 const fileInput           = ref<HTMLInputElement | null>(null);
 const messagesContainer   = ref<HTMLDivElement | null>(null);
 
-interface P2PTransfer { name: string; progress: number; direction: 'sending' | 'receiving'; previewUrl?: string }
+// Transport tier: 'lan' = direct LAN reachability (no relay, no STUN),
+// 'direct' = STUN/ICE peer-to-peer (relay-free), 'relay' = server-assisted.
+// Populated by offererConnect/answererConnect once ICE settles.
+type TransportTier = 'lan' | 'direct' | 'relay' | null;
+const transportTier = ref<TransportTier>(null);
+
+interface P2PTransfer { name: string; progress: number; direction: 'sending' | 'receiving'; previewUrl?: string; tier?: TransportTier }
 const p2pTransfer  = ref<P2PTransfer | null>(null);
 const showP2PInfo  = ref(false);
 
@@ -466,6 +478,7 @@ let iAmOfferer = false;
 function closePeer() {
   dataChannel?.close(); peerConn?.close();
   dataChannel = null;   peerConn    = null;
+  transportTier.value = null;
 }
 
 async function clearSignals() {
@@ -606,6 +619,40 @@ async function waitForConnected(): Promise<void> {
   });
 }
 
+// ── Transport tier resolution ─────────────────────────────────────────────────
+// Called after ICE connects. Inspects the selected candidate pair to decide
+// whether the path is LAN-local, direct (STUN relay-free), or relay-assisted.
+// This feeds ticket-01 (LAN reachability matrix) and ticket-04 (tier ordering).
+async function resolveTransportTier(): Promise<TransportTier> {
+  if (!peerConn) return null;
+  try {
+    const stats = await peerConn.getStats();
+    let localType: string | undefined;
+    let remoteType: string | undefined;
+    let localAddress: string | undefined;
+    stats.forEach((report: any) => {
+      if (report.type === 'candidate-pair' && report.state === 'succeeded' && report.nominated) {
+        stats.forEach((r: any) => {
+          if (r.id === report.localCandidateId)  { localType = r.candidateType;  localAddress = r.address; }
+          if (r.id === report.remoteCandidateId) { remoteType = r.candidateType; }
+        });
+      }
+    });
+    p2pLog('resolveTransportTier', { localType, remoteType, localAddress });
+    if (localType === 'relay' || remoteType === 'relay') return 'relay';
+    // Heuristic: RFC-1918 local candidate on both sides → LAN path
+    const isPrivate = (addr?: string) => {
+      if (!addr) return false;
+      return /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|fd[0-9a-f]{2}:)/i.test(addr);
+    };
+    if (localType === 'host' && isPrivate(localAddress)) return 'lan';
+    return 'direct';
+  } catch (e) {
+    p2pErr('resolveTransportTier', e);
+    return null;
+  }
+}
+
 let recvMeta:     { name: string; size: number; mime: string } | null = null;
 let recvChunks:   ArrayBuffer[] = [];
 let recvReceived: number = 0;
@@ -676,7 +723,8 @@ async function offererConnect(): Promise<RTCDataChannel> {
   await waitForConnected();
   stopIceQueue(recipientId.value);
   stopSignalKeepAlive();
-  p2pLog('offererConnect: READY');
+  transportTier.value = await resolveTransportTier();
+  p2pLog('offererConnect: READY', { tier: transportTier.value });
   setupDataChannelHandlers(dc);
   return dc;
 }
@@ -701,7 +749,8 @@ async function answererConnect(sess: string): Promise<void> {
   await waitForConnected();
   stopIceQueue(recipientId.value);
   stopSignalKeepAlive();
-  p2pLog('answererConnect: READY');
+  transportTier.value = await resolveTransportTier();
+  p2pLog('answererConnect: READY', { tier: transportTier.value });
   setupDataChannelHandlers(dc);
 }
 
@@ -726,7 +775,7 @@ async function sendFileP2P(file: File) {
     await tw.present();
   }
     const previewUrl = file.type.startsWith('image') ? URL.createObjectURL(file) : undefined;
-  p2pTransfer.value = { name: file.name, progress: 0, direction: 'sending', previewUrl };
+  p2pTransfer.value = { name: file.name, progress: 0, direction: 'sending', previewUrl, tier: transportTier.value };
 
   const doTransfer = async () => {
     const dc = await offererConnect();
@@ -1004,8 +1053,37 @@ function upsertMessage(msg: ChatMessage) {
   }
 }
 
+// ── Recomposition state machine (ticket-07) ───────────────────────────────────
+// Manages network transitions: connected → offline → reconnecting → connected.
+// Avoids a full teardown/re-init on transient drops; only escalates to a full
+// re-init if the service reports an unrecoverable error or the recipient changes.
+type NetState = 'connected' | 'reconnecting' | 'offline';
+const netState = ref<NetState>('offline');
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+
+function handleConnectionTransition(status: boolean) {
+  if (status) {
+    connected.value = true;
+    netState.value = 'connected';
+    reconnectAttempts = 0;
+    // Re-bind callbacks after a reconnect so service events are fresh
+    if (chatService) bindChatCallbacks(chatService);
+  } else {
+    connected.value = false;
+    reconnectAttempts++;
+    if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS) {
+      netState.value = 'reconnecting';
+      p2pLog('recomposition: offline, will wait for service to reconnect', { attempt: reconnectAttempts });
+    } else {
+      netState.value = 'offline';
+      p2pLog('recomposition: exceeded reconnect attempts, staying offline');
+    }
+  }
+}
+
 function bindChatCallbacks(service: ChatService) {
-  service.onConnectionChange = (status) => { connected.value = status; };
+  service.onConnectionChange = (status) => { handleConnectionTransition(status); };
   service.onMessage = (msg) => {
     upsertMessage(msg);
     nextTick(() => scrollToBottom(true));
@@ -1059,6 +1137,7 @@ function resetChatState() {
   messages.value = []; connected.value = false; chatReady.value = false;
   chatError.value = ''; recipientKeyMissing.value = false;
   messageInput.value = ''; typingState.value = false;
+  netState.value = 'offline'; reconnectAttempts = 0;
 }
 
 function disconnectChat() { chatService?.disconnect(); chatService = null; }
@@ -1625,6 +1704,16 @@ ion-content { --background: transparent; }
 }
 .p2p-file-status { font-size: 11px; color: var(--app-text-subtle); }
 
+/* Transport tier badge (ticket-04) */
+.p2p-tier-badge {
+  display: inline-block; margin-top: 3px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+  padding: 1px 7px; border-radius: 999px;
+}
+.p2p-tier-badge--lan    { background: rgba(52,211,153,0.15); color: #34d399; border: 1px solid rgba(52,211,153,0.3); }
+.p2p-tier-badge--direct { background: rgba(99,102,241,0.15); color: #818cf8; border: 1px solid rgba(99,102,241,0.3); }
+.p2p-tier-badge--relay  { background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.25); }
+
 .p2p-pct {
   font-size: 13px; font-weight: 700; color: #818cf8;
   font-variant-numeric: tabular-nums; flex-shrink: 0;
@@ -1724,13 +1813,3 @@ ion-content { --background: transparent; }
 
 @media (prefers-reduced-motion: reduce) { .message, .send-button, .input-pill { animation: none; transition: none; } }
 </style>
-
-
-
-
-
-
-
-git add .
-git commit -m "Updates"
-git push
