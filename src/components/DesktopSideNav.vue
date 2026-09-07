@@ -108,6 +108,10 @@
       <ion-icon :icon="cube"></ion-icon>
       <span>Chain Explorer</span>
     </button>
+    <button class="side-nav-item side-nav-util" @click="$router.push('/resilience')">
+      <ion-icon :icon="shieldOutline"></ion-icon>
+      <span>Resilience Center</span>
+    </button>
 
     <div class="side-nav-divider"></div>
 
@@ -123,7 +127,7 @@ import { useRouter } from 'vue-router';
 import {
   home, homeOutline, people, peopleOutline, chatbubble, chatbubbleOutline,
   addCircle, addCircleOutline, searchOutline, personCircleOutline, settingsOutline,
-  cube, tvOutline, musicalNotesOutline, starOutline, bookOutline, helpCircleOutline,
+  cube, shieldOutline, tvOutline, musicalNotesOutline, starOutline, bookOutline, helpCircleOutline,
   chatbubblesOutline, businessOutline, codeSlashOutline, flaskOutline, cashOutline,
   heartOutline, trophyOutline, leafOutline, schoolOutline, logoBitcoin,
   gameControllerOutline, happyOutline, megaphoneOutline, newspaperOutline,

@@ -120,6 +120,12 @@
       </svg>
       <span>Chain Explorer</span>
     </button>
+    <button class="asn-item asn-util" :class="{ active: activeRoute==='resilience' }" @click="router.push('/resilience')">
+      <svg class="asn-icon" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2l8 3v6c0 5-3.4 8.4-8 11-4.6-2.6-8-6-8-11V5l8-3z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+      </svg>
+      <span>Resilience Center</span>
+    </button>
 
     <div class="asn-divider"></div>
     <RelayIndicator @open="$emit('open-relay')" />
@@ -167,6 +173,7 @@ const activeRoute = computed(() => {
   if (p.includes('profile'))       return 'profile';
   if (p.includes('setting'))       return 'settings';
   if (p.includes('chain'))         return 'chain';
+  if (p.includes('resilience'))    return 'resilience';
   return '';
 });
 
