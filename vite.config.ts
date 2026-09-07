@@ -14,6 +14,53 @@ function getBuildHash(): string {
   }
 }
 
+// Changes on every build. Used to give the service worker a fresh URL each
+// deploy — see swRegisterInlinePlugin.
+const BUILD_TIME = new Date().toISOString();
+const BUILD_ID   = Date.now().toString(36);
+
+/**
+ * Registers the service worker from an inline <script> in index.html, at a
+ * per-build URL (`/sw.js?v=<BUILD_ID>`).
+ *
+ * Why not vite-plugin-pwa's injectRegister: the host (Hostinger/LiteSpeed
+ * behind Cloudflare) serves every .js with `max-age=31536000, immutable`,
+ * including sw.js and registerSW.js — our .htaccess overrides are not applied.
+ * Cloudflare then pins both at the edge for a year, so new builds are never
+ * fetched and the old service worker keeps serving its old precache forever.
+ *
+ * index.html is the one entry point the host sends `no-cache` for (and CF
+ * leaves uncached), so the registration must live inside it, and the SW URL
+ * must differ per build — CF's cache key includes the query string, so a new
+ * ?v= is a guaranteed cache miss.
+ *
+ * updateViaCache: 'none' additionally stops the browser's own HTTP cache from
+ * satisfying update checks with the immutable copy.
+ */
+function swRegisterInlinePlugin() {
+  return {
+    name: 'sw-register-inline',
+    apply: 'build' as const,
+    transformIndexHtml() {
+      if (isNativeBuild) return;
+      return [{
+        tag: 'script',
+        injectTo: 'body' as const,
+        children: [
+          `if ('serviceWorker' in navigator) {`,
+          `  window.addEventListener('load', function () {`,
+          `    navigator.serviceWorker`,
+          `      .register('/sw.js?v=${BUILD_ID}', { scope: '/', updateViaCache: 'none' })`,
+          `      .then(function (r) { r.update(); })`,
+          `      .catch(function () {});`,
+          `  });`,
+          `}`,
+        ].join('\n'),
+      }];
+    },
+  };
+}
+
 function spaRouteFallbackPlugin() {
   const blockedPrefixes = ['/src/', '/node_modules/', '/@vite/', '/@fs/', '/assets', '/public/'];
   return {
@@ -47,10 +94,13 @@ export default defineConfig({
   plugins: [
     vue(),
     spaRouteFallbackPlugin(),
+    swRegisterInlinePlugin(),
     ...(isNativeBuild ? [] : [
       VitePWA({
         registerType: 'autoUpdate',
-        injectRegister: 'auto',
+        // Registration is inlined into index.html instead — the emitted
+        // registerSW.js is served immutable by the host and goes stale.
+        injectRegister: null,
         manifest: {
           name: 'InterPoll',
           short_name: 'InterPoll',
@@ -100,7 +150,7 @@ export default defineConfig({
     'process.versions': JSON.stringify({}),
     global:             'globalThis',
     'import.meta.env.VITE_BUILD_HASH': JSON.stringify(getBuildHash()),
-    'import.meta.env.VITE_BUILD_TIME': JSON.stringify(new Date().toISOString()),
+    'import.meta.env.VITE_BUILD_TIME': JSON.stringify(BUILD_TIME),
   },
 
   optimizeDeps: {
@@ -121,7 +171,8 @@ export default defineConfig({
     sourcemap: false,
     assetsDir: 'assets2',
     chunkSizeWarningLimit: 600,
-    target: 'es2020',
+    // es2022: gun-shim.ts uses top-level await to load Gun from CDN
+    target: 'es2022',
     minify: 'esbuild',
     cssMinify: true,
     cssCodeSplit: true,

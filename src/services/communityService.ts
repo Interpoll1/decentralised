@@ -1,5 +1,6 @@
 // src/services/communityService.ts
-import { GunService } from './gunService';
+import { GunService, GUN_NAMESPACE } from './gunService';
+import config from '../config';
 import { BoundedMap, BoundedSet } from '../utils/boundedMap';
 import { CryptoService } from './cryptoService';
 import { KeyService } from './keyService';
@@ -7,6 +8,11 @@ import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
 import { InviteLinkService } from './inviteLinkService';
 import type { DecryptedCommunityMeta, StoredEncryptionKey } from '../types/encryption';
+
+/** How long to wait for a Gun put ack before continuing without it. */
+const PUT_ACK_TIMEOUT_MS = 6_000;
+/** How many times to (re)write community metadata while the relay denies holding it. */
+const WRITE_CONFIRM_ATTEMPTS = 3;
 
 export interface Community {
   id: string;
@@ -99,11 +105,14 @@ export class CommunityService {
       console.warn('Failed to sign community creation:', err);
     }
 
-    await this.put(this.getCommunityNode(id), gunData);
+    const confirmed = await this.confirmCommunityWrite(id, gunData);
+    if (!confirmed) {
+      console.warn(`[CommunityService] ${id} created locally but not confirmed on the relay`);
+    }
 
     if (community.rules.length > 0) {
       const rulesObj = Object.fromEntries(community.rules.map((rule, i) => [i, rule]));
-      await this.put(this.getCommunityNode(id).get('rules'), rulesObj);
+      await this.put(this.getCommunityNode(id).get('rules'), rulesObj, `communities/${id}/rules`);
     }
 
     return community;
@@ -178,7 +187,10 @@ export class CommunityService {
       console.warn('Failed to sign community creation:', err);
     }
 
-    await this.put(this.getCommunityNode(id), gunData);
+    const confirmed = await this.confirmCommunityWrite(id, gunData);
+    if (!confirmed) {
+      console.warn(`[CommunityService] ${id} created locally but not confirmed on the relay`);
+    }
 
     const keyBase64 = await EncryptionService.exportKey(aesKey);
     await KeyVaultService.storeKey({
@@ -397,10 +409,101 @@ export class CommunityService {
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
 
-  private static put(node: any, value: any): Promise<void> {
-    return new Promise((res, rej) =>
-      node.put(value, (ack: any) => (ack.err ? rej(ack.err) : res()))
-    );
+  /**
+   * Gun is initialised with `localStorage:false, radisk:false`, so a put ack can
+   * only ever come from a peer. When the relay socket is mid-reconnect, rate
+   * limiting, or the graph node gets evicted under memory pressure, that ack
+   * never arrives — an unbounded `await` there left "Creating…" spinning forever
+   * with no error. Always resolve: ack, ack error, or timeout. Durability is the
+   * job of confirmCommunityWrite() below, not of this ack.
+   */
+  private static put(node: any, value: any, label = 'community', timeoutMs = PUT_ACK_TIMEOUT_MS): Promise<void> {
+    return new Promise((res) => {
+      let settled = false;
+      const finish = () => { if (!settled) { settled = true; res(); } };
+      const timer = setTimeout(() => {
+        console.warn(`[CommunityService] Gun ack timeout for ${label} — continuing`);
+        finish();
+      }, timeoutMs);
+      try {
+        node.put(value, (ack: any) => {
+          clearTimeout(timer);
+          if (ack?.err) console.warn(`[CommunityService] Gun ack error for ${label}:`, ack.err);
+          finish();
+        });
+      } catch (err) {
+        clearTimeout(timer);
+        console.warn(`[CommunityService] Gun put threw for ${label}:`, err);
+        finish();
+      }
+    });
+  }
+
+  /**
+   * Ask the relay's DB mirror whether the community's *metadata* actually landed.
+   *
+   * Soul existence is not enough: a community soul is also created by the child
+   * links Gun writes for `polls`/`posts`, so several communities exist on the
+   * relay as `{polls:…, posts:…}` with no name at all — created while the ack
+   * was lost. Only a `createdAt` field proves the metadata write persisted.
+   *
+   * Returns true (relay has it), false (relay reachable, metadata absent) or
+   * null (relay unreachable — inconclusive).
+   */
+  private static async verifyRelayPersistence(id: string, deadlineMs = 5_000): Promise<boolean | null> {
+    const soul = encodeURIComponent(`${GUN_NAMESPACE}/communities/${id}`);
+    const url = `${config.relay.gun.replace(/\/gun$/, '')}/db/soul?soul=${soul}`;
+    const deadline = Date.now() + deadlineMs;
+    const retryDelayMs = 1_000;
+    let reachable = false;
+    for (;;) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3_000);
+      try {
+        const res = await fetch(url, { signal: controller.signal });
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.data && typeof json.data === 'object' && json.data.createdAt) return true;
+          reachable = true;
+        } else if (res.status === 404) {
+          reachable = true;
+        }
+      } catch {
+        // Network error / abort — relay state unknown for this attempt.
+      } finally {
+        clearTimeout(timer);
+      }
+      if (Date.now() + retryDelayMs > deadline) return reachable ? false : null;
+      await new Promise((r) => setTimeout(r, retryDelayMs));
+    }
+  }
+
+  /**
+   * Write community metadata and make sure it survives. Re-puts (with a fresh
+   * ack wait) whenever the relay says it does not hold the metadata, so a
+   * community created during a reconnect/eviction window is not left as a
+   * nameless husk that every other peer sees as an empty node.
+   */
+  private static async confirmCommunityWrite(id: string, gunData: Record<string, any>): Promise<boolean> {
+    for (let attempt = 1; attempt <= WRITE_CONFIRM_ATTEMPTS; attempt++) {
+      // Last attempt writes the soul directly off the raw root instead of through
+      // the cached namespace chain. If that chain is broken (its `root.next` entry
+      // was evicted), every chained put silently produces no wire message at all;
+      // a soul-addressed put still reaches the relay.
+      const node = attempt === WRITE_CONFIRM_ATTEMPTS
+        ? GunService.getRawGun().get(`${GUN_NAMESPACE}/communities/${id}`)
+        : this.getCommunityNode(id);
+      await this.put(node, gunData, `communities/${id} (attempt ${attempt})`);
+      const confirmed = await this.verifyRelayPersistence(id);
+      if (confirmed === true) return true;
+      if (confirmed === null) {
+        // Relay unreachable — nothing to gain from re-putting into the void.
+        console.warn(`[CommunityService] Relay unreachable; ${id} unconfirmed`);
+        return false;
+      }
+      console.warn(`[CommunityService] Relay does not hold ${id} yet (attempt ${attempt}) — re-putting`);
+    }
+    return false;
   }
 
   private static once<T = any>(node: any): Promise<T | null> {
