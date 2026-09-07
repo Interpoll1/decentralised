@@ -606,7 +606,7 @@ async function waitForConnected(): Promise<void> {
   });
 }
 
-let recvMeta:     { name: string; size: number; type: string } | null = null;
+let recvMeta:     { name: string; size: number; mime: string } | null = null;
 let recvChunks:   ArrayBuffer[] = [];
 let recvReceived: number = 0;
 
@@ -619,9 +619,9 @@ function setupDataChannelHandlers(dc: RTCDataChannel) {
         recvMeta = msg; recvChunks = []; recvReceived = 0;
         p2pTransfer.value = { name: msg.name, progress: 0, direction: 'receiving' };
       } else if (msg.type === 'done' && recvMeta) {
-        const blob  = new Blob(recvChunks, { type: recvMeta.type });
+        const blob  = new Blob(recvChunks, { type: recvMeta.mime });
         const url   = URL.createObjectURL(blob);
-        const mtype = recvMeta.type.startsWith('video') ? 'video' : 'image';
+        const mtype = recvMeta.mime.startsWith('video') ? 'video' : 'image';
         messages.value = [...messages.value, {
           id: `p2p-recv-${Date.now()}`, from: recipientId.value, to: myUserId,
           message: `[${mtype}]`, timestamp: Date.now(), read: false, sent: false,
@@ -730,7 +730,7 @@ async function sendFileP2P(file: File) {
 
   const doTransfer = async () => {
     const dc = await offererConnect();
-    dc.send(JSON.stringify({ type: 'meta', name: file.name, size: file.size, type: file.type }));
+    dc.send(JSON.stringify({ type: 'meta', name: file.name, size: file.size, mime: file.type }));
     const buffer = await file.arrayBuffer();
     let offset = 0;
     while (offset < buffer.byteLength) {
@@ -1724,3 +1724,13 @@ ion-content { --background: transparent; }
 
 @media (prefers-reduced-motion: reduce) { .message, .send-button, .input-pill { animation: none; transition: none; } }
 </style>
+
+
+
+
+
+
+
+git add .
+git commit -m "Updates"
+git push
