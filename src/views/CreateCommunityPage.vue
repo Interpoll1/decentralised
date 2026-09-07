@@ -471,7 +471,7 @@ select.field-native option { background: #1a1a2e; color: #fff; }
 </style>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, defineAsyncComponent } from 'vue';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRouter } from 'vue-router';
 import {
@@ -481,28 +481,15 @@ import {
   IonTitle,
   IonContent,
   IonButtons,
-  IonBackButton,
-  IonCard,
-  IonCardHeader,
-  IonCardTitle,
-  IonCardSubtitle,
-  IonCardContent,
-  IonItem,
-  IonInput,
-  IonTextarea,
-  IonSelect,
-  IonSelectOption,
-  IonToggle,
-  IonLabel,
-  IonButton,
   IonIcon,
   IonSpinner,
   toastController
 } from '@ionic/vue';
-import { add, closeCircle, informationCircle } from 'ionicons/icons';
+import { informationCircle } from 'ionicons/icons';
 import { useCommunityStore } from '../stores/communityStore';
-import PrivateCommunityToggle from '../components/PrivateCommunityToggle.vue';
 import type { PrivateCommunityConfig } from '../components/PrivateCommunityToggle.vue';
+
+const PrivateCommunityToggle = defineAsyncComponent(() => import('../components/PrivateCommunityToggle.vue'));
 
 const router = useRouter();
 const communityStore = useCommunityStore();

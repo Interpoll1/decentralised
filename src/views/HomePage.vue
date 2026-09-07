@@ -1555,7 +1555,7 @@ if (typeof window !== 'undefined') {
   padding: 4px 0 8px;
 }
 @media (min-width: 768px) {
-  .desktop-tag-strip { display: flex; }
+  .desktop-tag-strip { display: flex; padding: 8px 0 12px 20px; }
   .mobile-top-strip { display: none; }
   /* Scope tabs always visible — not hidden on desktop anymore */
   .feed-scope-tabs  { display: flex; }

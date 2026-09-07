@@ -1,33 +1,77 @@
 <template>
-  <!-- Flat row — no card border/background, just a divider -->
   <div class="community-row" @click="$emit('click')">
 
-    <div class="community-avatar" :class="avatarTone">
-      <ion-icon v-if="community.isPrivate" :icon="lockClosedOutline"></ion-icon>
-      <template v-else>{{ initial }}</template>
+    <!-- Round glass avatar -->
+    <div class="avatar-wrap" :class="avatarTone">
+      <svg class="avatar-svg" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <filter :id="`glow-${community.id}`" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="1.8" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <!-- Subtle outer ring -->
+        <circle cx="22" cy="22" r="20.5" fill="none" stroke="currentColor" stroke-opacity="0.2" stroke-width="0.75"/>
+        <!-- Tiny inner accent arc — top-left highlight -->
+        <path d="M10 14 A14 14 0 0 1 22 8" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="0.75" stroke-linecap="round"/>
+        <!-- Lock icon for private communities -->
+        <g v-if="community.isPrivate">
+          <rect x="14" y="20" width="16" height="12" rx="2.5" fill="currentColor" fill-opacity="0.8"/>
+          <path d="M17 20v-3.5a5 5 0 0110 0V20" stroke="currentColor" stroke-opacity="0.8" stroke-width="2" fill="none" stroke-linecap="round"/>
+        </g>
+        <!-- Stylish initial — italic serif with glow -->
+        <text
+          v-else
+          x="22" y="29"
+          text-anchor="middle"
+          font-size="21"
+          font-weight="700"
+          font-style="italic"
+          font-family="Georgia,'Times New Roman',serif"
+          fill="currentColor"
+          fill-opacity="0.95"
+          :filter="`url(#glow-${community.id})`"
+        >{{ initial }}</text>
+      </svg>
     </div>
 
+    <!-- Info -->
     <div class="community-info">
-      <div class="community-name-row">
+      <div class="name-row">
         <span class="community-name">{{ community.displayName || community.name }}</span>
-        <span v-if="community.isPrivate" class="type-badge private">Private</span>
-        <span v-else class="type-badge general">General</span>
+        <span v-if="community.isPrivate" class="badge badge--private">Private</span>
+        <span v-else-if="community.category" class="badge badge--cat">{{ community.category }}</span>
       </div>
-      <div class="community-meta">
-        <span class="stat">
-          <svg viewBox="0 0 24 24" fill="none" width="12" height="12"><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M3 21v-1a6 6 0 0112 0v1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          {{ formatNumber(community.memberCount ?? 1) }}
+      <p v-if="truncatedDescription" class="community-desc">{{ truncatedDescription }}</p>
+      <div class="meta-row">
+        <span class="meta-stat">
+          <!-- People / members icon -->
+          <svg viewBox="0 0 18 18" fill="none" width="13" height="13" aria-hidden="true">
+            <circle cx="7" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M1 16v-.5a6 6 0 0112 0V16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <circle cx="14" cy="6" r="2.2" stroke="currentColor" stroke-width="1.3" opacity="0.6"/>
+            <path d="M16.5 14.5a4.5 4.5 0 00-4-2.6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" opacity="0.6"/>
+          </svg>
+          <span class="meta-label">{{ formatNumber(community.memberCount ?? 1) }} members</span>
         </span>
-        <span class="stat">
-          <svg viewBox="0 0 24 24" fill="none" width="12" height="12"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" stroke-width="1.8"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          {{ formatNumber(community.postCount ?? 0) }}
+        <span class="meta-sep">·</span>
+        <span class="meta-stat">
+          <!-- Speech bubble / posts icon -->
+          <svg viewBox="0 0 18 18" fill="none" width="13" height="13" aria-hidden="true">
+            <path d="M2 3.5A1.5 1.5 0 013.5 2h11A1.5 1.5 0 0116 3.5v8A1.5 1.5 0 0114.5 13H10l-4 3v-3H3.5A1.5 1.5 0 012 11.5v-8z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            <path d="M5.5 7h7M5.5 9.5h4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+          </svg>
+          <span class="meta-label">{{ formatNumber(community.postCount ?? 0) }} posts</span>
         </span>
-        <span v-if="truncatedDescription" class="community-desc-inline">· {{ truncatedDescription }}</span>
       </div>
     </div>
 
-    <div class="join-chip" :class="isJoined ? 'joined' : 'not-joined'">
-      {{ isJoined ? '✓ Joined' : 'Join' }}
+    <!-- Join chip -->
+    <div class="join-chip" :class="isJoined ? 'join-chip--joined' : 'join-chip--open'">
+      <svg v-if="isJoined" viewBox="0 0 12 12" fill="none" width="10" height="10" aria-hidden="true">
+        <path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      {{ isJoined ? 'Joined' : 'Join' }}
     </div>
 
   </div>
@@ -35,8 +79,6 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { IonIcon } from '@ionic/vue';
-import { lockClosedOutline } from 'ionicons/icons';
 import { Community } from '../services/communityService';
 import { useCommunityStore } from '../stores/communityStore';
 
@@ -47,7 +89,7 @@ const communityStore = useCommunityStore();
 const isJoined = computed(() => communityStore.isJoined(props.community.id));
 const initial  = computed(() => (props.community.displayName || props.community.name || 'C').charAt(0).toUpperCase());
 
-const TONES = ['tone-violet', 'tone-blue', 'tone-teal', 'tone-amber', 'tone-rose'];
+const TONES = ['tone-violet', 'tone-blue', 'tone-teal', 'tone-amber', 'tone-rose'] as const;
 const avatarTone = computed(() => {
   const code = (props.community.id || '').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
   return TONES[code % TONES.length];
@@ -55,85 +97,150 @@ const avatarTone = computed(() => {
 
 const truncatedDescription = computed(() => {
   const d = props.community.description || '';
-  return d.length <= 60 ? d : d.substring(0, 60) + '…';
+  return d.length <= 72 ? d : d.substring(0, 72) + '…';
 });
 
-const formatNumber = (n: number | undefined | null): string => {
-  const v = n ?? 0;
-  if (v >= 1_000_000) return (v / 1_000_000).toFixed(1) + 'M';
-  if (v >= 1_000)     return (v / 1_000).toFixed(1) + 'K';
-  return v.toString();
-};
+function formatNumber(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000)     return (n / 1_000).toFixed(1) + 'K';
+  return n.toString();
+}
 </script>
 
 <style scoped>
 .community-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 13px 4px;
+  gap: 14px;
+  padding: 12px 14px;
   cursor: pointer;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-  background: transparent;
-  transition: background 130ms;
+  border-radius: 12px;
+  transition: background 130ms ease;
 }
-.community-row:last-child { border-bottom: none; }
-.community-row:hover { background: rgba(99,102,241,0.04); }
-.community-row:active { background: rgba(99,102,241,0.07); }
+.community-row:hover  { background: var(--app-surface-hover, rgba(255,255,255,0.05)); }
+.community-row:active { background: rgba(255,255,255,0.07); }
 
-/* Avatar — colour comes from tone class, not global white */
-.community-avatar {
-  width: 40px; height: 40px;
-  border-radius: 10px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 16px; font-weight: 800;
+/* ── Round glass avatar ── */
+.avatar-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Glass: frosted backdrop over the aurora background */
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  border: 1px solid rgba(255,255,255,0.14);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.18),
+    inset 0 -1px 0 rgba(0,0,0,0.12),
+    0 2px 8px rgba(0,0,0,0.18);
 }
-.community-avatar ion-icon { font-size: 17px; }
 
-/* Muted translucent tones — consistent with comment avatars and sidebar chips */
-.tone-violet { background: rgba(99,  102, 241, 0.20); color: #a5b4fc; }
-.tone-blue   { background: rgba(59,  130, 246, 0.20); color: #93c5fd; }
-.tone-teal   { background: rgba(20,  184, 166, 0.20); color: #5eead4; }
-.tone-amber  { background: rgba(245, 158,  11, 0.20); color: #fcd34d; }
-.tone-rose   { background: rgba(236,  72, 153, 0.20); color: #f9a8d4; }
+.avatar-svg { width: 44px; height: 44px; display: block; }
 
-/* Info */
+/* Per-tone tints — colour the avatar's glass */
+.tone-violet { background: rgba(99,102,241,0.18);  color: #a5b4fc; }
+.tone-blue   { background: rgba(59,130,246,0.18);  color: #93c5fd; }
+.tone-teal   { background: rgba(20,184,166,0.16);  color: #5eead4; }
+.tone-amber  { background: rgba(245,158,11,0.16);  color: #fcd34d; }
+.tone-rose   { background: rgba(236,72,153,0.16);  color: #f9a8d4; }
+
+/* ── Info ── */
 .community-info { flex: 1; min-width: 0; }
 
-.community-name-row {
-  display: flex; align-items: center; gap: 5px;
-  margin-bottom: 2px;
+.name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
 }
 .community-name {
-  font-size: 14px; font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--app-text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.type-badge {
-  padding: 1px 6px; border-radius: 999px;
-  font-size: 9px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.06em; flex-shrink: 0;
-}
-.type-badge.general { background: rgba(99,102,241,0.1); color: #818cf8; }
-.type-badge.private { background: rgba(251,191,36,0.1);  color: #fbbf24; }
-
-.community-meta {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 12px; color: var(--app-text-subtle);
-}
-.stat { display: inline-flex; align-items: center; gap: 3px; font-weight: 600; }
-.community-desc-inline {
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  max-width: 200px; font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* Join chip */
+.badge {
+  padding: 1.5px 7px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  flex-shrink: 0;
+}
+.badge--cat {
+  background: rgba(99,102,241,0.1);
+  color: rgba(165,180,252,0.9);
+  border: 1px solid rgba(99,102,241,0.18);
+}
+.badge--private {
+  background: rgba(245,158,11,0.08);
+  color: rgba(251,191,36,0.9);
+  border: 1px solid rgba(245,158,11,0.18);
+}
+
+.community-desc {
+  font-size: 12px;
+  color: var(--app-text-subtle);
+  margin: 0 0 5px;
+  line-height: 1.45;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.meta-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--app-text-subtle);
+}
+.meta-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--app-text-subtle);
+}
+.meta-sep {
+  font-size: 11px;
+  color: var(--app-text-subtle);
+  opacity: 0.4;
+  user-select: none;
+}
+
+/* ── Join chip ── */
 .join-chip {
-  padding: 4px 10px; border-radius: 999px;
-  font-size: 11px; font-weight: 700;
-  white-space: nowrap; flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  flex-shrink: 0;
+  letter-spacing: 0.01em;
 }
-.join-chip.joined  { background: rgba(52,211,153,0.12); color: #34d399; }
-.join-chip.not-joined { background: rgba(255,255,255,0.06); color: var(--app-text-muted); border: 1px solid rgba(255,255,255,0.1); }
+.join-chip--joined {
+  background: rgba(52,211,153,0.1);
+  color: #34d399;
+  border: 1px solid rgba(52,211,153,0.2);
+}
+.join-chip--open {
+  background: var(--app-item-surface, rgba(255,255,255,0.04));
+  color: var(--app-text-muted);
+  border: 1px solid var(--app-border);
+}
 </style>
