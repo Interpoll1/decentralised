@@ -13,6 +13,17 @@ export const GUN_NAMESPACE = 'v3';
 // so the WebRTC wire bridge drops them in `enforce` mode — comment votes and
 // direct messages could never replicate P2P. They are namespaced now; the chat
 // service still reads the legacy un-namespaced paths so no history is lost.
+// Souls that must survive every level of cache eviction. `initialize()` caches a
+// single chain for GUN_NAMESPACE and routes every namespaced write through it,
+// so dropping these from `root.next` permanently breaks writes for the session.
+export const PROTECTED_SOULS = new Set([
+  GUN_NAMESPACE,
+  `${GUN_NAMESPACE}/communities`,
+  `${GUN_NAMESPACE}/posts`,
+  `${GUN_NAMESPACE}/polls`,
+  `${GUN_NAMESPACE}/users`,
+]);
+
 const NAMESPACED_ROOTS = new Set(['posts', 'communities', 'polls', 'postVotes', 'users', 'comments', 'commentVotes', 'events', 'chatrooms', 'chats', 'chat-presence', 'chat-read', 'chat-p2p', 'server-config', 'user-pubkey-index']);
 
 function createNamespacedProxy(gun: any, nsNode: any): any {
@@ -744,42 +755,41 @@ export class GunService {
         // of an `in` tag means at least one handler is still attached.
         return !!(chain && chain.tag && chain.tag.in);
       };
+      // The namespace root and its top-level collections are never evictable, at
+      // any level. `initialize()` caches ONE chain for `GUN_NAMESPACE` (`nsNode`)
+      // and every app write goes through it via the namespaced proxy. Deleting
+      // `root.next['v3']` (or `v3/communities`) leaves that cached chain unable
+      // to resolve a soul, so `gun.get('communities').get(id).put(...)` produces
+      // no wire message and no ack — writes stop reaching the relay for the rest
+      // of the session while reads still work. The `light` branch used to be able
+      // to do exactly that: it applied only `keepPrefixes`, and these roots are
+      // the OLDEST keys in the graph, i.e. the first ones `keys.slice(0, n)`
+      // takes. Enforce the keep set inside evict() so no branch can drop them.
+      const isProtectedSoul = (key: string): boolean =>
+        PROTECTED_SOULS.has(key) || keepPrefixes.some(p => key.startsWith(p));
       const evict = (key: string) => {
+        if (isProtectedSoul(key)) return;
         delete graph[key];
         delete next[key];
         evictedCount++;
       };
 
       if (level === 'emergency') {
-        const keepRoots = new Set([
-          GUN_NAMESPACE,
-          `${GUN_NAMESPACE}/communities`,
-          `${GUN_NAMESPACE}/posts`,
-          `${GUN_NAMESPACE}/polls`,
-          `${GUN_NAMESPACE}/users`,
-        ]);
         // At emergency severity, a soul with a live `.map().on()` listener (e.g. a
         // whole-feed subscription) would otherwise be permanently eviction-immune —
         // on pages that subscribe broadly, that made eviction a total no-op and the
         // heap climbed until the tab crashed. Force-detach the chain and evict
         // anyway; staying alive matters more than one subscriber missing an update.
         for (const key of keys) {
-          if (keepRoots.has(key) || keepPrefixes.some(p => key.startsWith(p))) continue;
+          if (isProtectedSoul(key)) continue;
           if (hasLiveListeners(key)) {
             try { next[key]?.off?.(); } catch { /* best-effort detach */ }
           }
           evict(key);
         }
       } else if (level === 'aggressive') {
-        const keepRoots = new Set([
-          GUN_NAMESPACE,
-          `${GUN_NAMESPACE}/communities`,
-          `${GUN_NAMESPACE}/posts`,
-          `${GUN_NAMESPACE}/polls`,
-          `${GUN_NAMESPACE}/users`,
-        ]);
         for (const key of keys) {
-          if (keepRoots.has(key) || keepPrefixes.some(p => key.startsWith(p))) continue;
+          if (isProtectedSoul(key)) continue;
           if (hasLiveListeners(key)) continue;
           if (key.includes('/')) evict(key);
         }
@@ -788,7 +798,7 @@ export class GunService {
         if (totalBefore > MAX_NODES) {
           const toEvict = keys.slice(0, totalBefore - MAX_NODES);
           for (const key of toEvict) {
-            if (keepPrefixes.some(p => key.startsWith(p))) continue;
+            if (isProtectedSoul(key)) continue;
             if (hasLiveListeners(key)) continue;
             evict(key);
           }
