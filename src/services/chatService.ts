@@ -162,7 +162,9 @@ class ChatService {
   private ready          = false;
   private connected      = false;
   private seq            = 0;
-  private shuttingDown   = false;
+  private shuttingDown        = false;
+  private wsRegistered        = false;        // true once relay confirms 'registered'
+  private pendingReadRecipients = new Set<string>(); // markAsRead calls before registered
 
   private reconnectTimer:   number | null = null;
   private connectionPoll:   number | null = null;
@@ -711,44 +713,12 @@ class ChatService {
   }
 
   private subscribeToReadReceipts(roomId: string, recipientId: string): void {
-    // Always unsub previous listener before re-subscribing
+    // Receipts are delivered purely via WS (chat-read-receipt frames from the relay).
+    // No Gun listeners needed — they were the source of timing bugs and false positives.
+    // The WS handler in handleWsMessage case 'chat-read-receipt' calls onReadReceipt.
+    // Nothing to subscribe to here; just ensure any old unsub is cleared.
     this.readReceiptUnsubs.get(roomId)?.();
-
-    const handleReadNode = (s: any) => {
-      if (!s || typeof s !== 'object' || Array.isArray(s)) return;
-      // Gun fires internal metadata nodes (keyed '_') — skip them
-      if (Object.keys(s).every(k => k === '_')) return;
-      // Accept node if to field matches us, or if to field is absent (legacy writes)
-      if (s.to && s.to !== this.userId) return;
-      const at = Number(s.timestamp);
-      if (!at || at < 1_000_000) return; // reject bogus timestamps
-      void this.markLocalReadUpTo(roomId, at);
-      this.onReadReceipt?.({ from: recipientId, at });
-    };
-
-    const gun = GunService.getGun();
-
-    // Live ephemeral soul — fires in real-time while both peers are online
-    const liveNode = gun.get('chat-read').get(roomId).get(recipientId);
-    liveNode.on(handleReadNode);
-
-    // Persistent soul — survives relay restarts; stored in MySQL on relay
-    const ackNode  = gun.get('chat-read-ack').get(roomId).get(recipientId);
-    const ackChain = ackNode.on(handleReadNode);
-
-    // Probe persistent node at increasing delays: Gun needs time to sync from relay.
-    // Cold start: relay serves persisted data ~1-4s after Gun connects.
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    for (const delay of [1000, 3000, 6000]) {
-      timers.push(setTimeout(() => {
-        ackNode.once((s: any) => { if (s) handleReadNode(s); });
-      }, delay));
-    }
-
     this.readReceiptUnsubs.set(roomId, () => {
-      timers.forEach(clearTimeout);
-      try { liveNode.off?.(); } catch {}
-      try { ackChain?.off?.(); } catch {}
       this.readReceiptUnsubs.delete(roomId);
     });
   }
@@ -1171,6 +1141,7 @@ class ChatService {
   private connect(): void {
     if (!this.wsUrl || this.shuttingDown) return;
     try { this.ws = new WebSocket(this.wsUrl); } catch { return; }
+    this.wsRegistered = false; // reset — must wait for 'registered' ack again
 
     this.ws.onopen = () => {
       this.ws?.send(JSON.stringify({ type: 'register', peerId: this.peerId, userId: this.userId }));
@@ -1185,6 +1156,13 @@ class ChatService {
     this.ws.onerror = () => {};
 
     this.ws.onclose = () => {
+      this.wsRegistered = false;
+      // Re-queue all watched recipients as pending reads so the next 'registered'
+      // ack (or the onConnectionChange flush) will re-send receipts that may have
+      // been in-flight when the socket dropped.
+      for (const recipientId of this.watchedRooms.values()) {
+        this.pendingReadRecipients.add(recipientId);
+      }
       this.refreshConnected();
       if (!this.shuttingDown)
         this.reconnectTimer = window.setTimeout(() => this.connect(), 2_000);
@@ -1197,6 +1175,26 @@ class ChatService {
    */
   private async handleWsMessage(data: any): Promise<void> {
     switch (data?.type) {
+      case 'registered': {
+        // Relay confirmed our register frame is fully processed — safe to send chat-read now
+        this.wsRegistered = true;
+        // Flush explicitly pending reads first
+        for (const recipientId of this.pendingReadRecipients) {
+          this.pendingReadRecipients.delete(recipientId);
+          this._doMarkAsRead(recipientId);
+        }
+        // Also re-send for all currently watched rooms: covers the case where a live
+        // 'chat-message' arrived and triggered markAsRead just before 'registered' came in,
+        // wsRegistered was still false so it got queued, but then the pendingReadRecipients
+        // was already drained by the fallback timer and the receipt was silently dropped.
+        for (const recipientId of this.watchedRooms.values()) {
+          if (!this.pendingReadRecipients.has(recipientId)) {
+            this._doMarkAsRead(recipientId);
+          }
+        }
+        break;
+      }
+
       case 'error':
         if (data.code === 'AUTH_REQUIRED')
           console.info('[ChatService] Relay WS auth required — Gun fallback active');
@@ -1310,29 +1308,7 @@ const rrRoomId = this.getRoomId(this.userId, data.from);
     if (this.ws?.readyState === WebSocket.OPEN)
       this.ws.send(JSON.stringify({ type: 'chat-start', recipientId: recipient.userId }));
 
-    // Re-probe Gun ack on every tab focus — catches receipts written while hidden
-    if (typeof document !== 'undefined') {
-      const onVisible = () => {
-        if (document.visibilityState !== 'visible') return;
-        const gun    = GunService.getGun();
-        const node   = gun.get('chat-read-ack').get(roomId).get(recipient.userId);
-        node.once((s: any) => {
-          if (!s || typeof s !== 'object') return;
-          const at = Number(s.timestamp);
-          if (at > 1_000_000 && (!s.to || s.to === this.userId)) {
-            void this.markLocalReadUpTo(roomId, at);
-            this.onReadReceipt?.({ from: recipient.userId, at });
-          }
-        });
-      };
-      document.addEventListener('visibilitychange', onVisible);
-      // Store cleanup alongside room unsub
-      const prevUnsub = this.readReceiptUnsubs.get(roomId);
-      this.readReceiptUnsubs.set(roomId, () => {
-        prevUnsub?.();
-        document.removeEventListener('visibilitychange', onVisible);
-      });
-    }
+
   }
 
   static readonly MAX_INLINE_FILE_BYTES = 400 * 1024;       // 400 KB — inline base64
@@ -1408,32 +1384,79 @@ const rrRoomId = this.getRoomId(this.userId, data.from);
   }
 
 
+  private _markReadDebounce = new Map<string, ReturnType<typeof setTimeout>>();
+
   markAsRead(recipientId: string): void {
+    // Debounce rapid calls (e.g. onConnectionChange + initializeChat firing together)
+    const existing = this._markReadDebounce.get(recipientId);
+    if (existing) clearTimeout(existing);
+    this._markReadDebounce.set(recipientId, setTimeout(() => {
+      this._markReadDebounce.delete(recipientId);
+      this._doMarkAsRead(recipientId);
+    }, 80));
+  }
+
+  private _doMarkAsRead(recipientId: string): void {
+    // If WS is already open (state=1) we're registered — send immediately.
+    // Only queue if WS is still connecting (state=0).
+    if (!this.wsRegistered && this.ws?.readyState !== WebSocket.OPEN) {
+      this.pendingReadRecipients.add(recipientId);
+      // Fallback: old relay may never send 'registered' ack.
+      // IMPORTANT: do NOT set wsRegistered=true here — only the 'registered' ack
+      // from the relay should flip that flag. Setting it here before the WS is open
+      // causes _doMarkAsRead to run while the socket is still CONNECTING, sendFrame()
+      // returns false, and the receipt is silently dropped with no further retry.
+      setTimeout(() => {
+        if (!this.pendingReadRecipients.has(recipientId)) return; // already handled by 'registered' ack
+        this.pendingReadRecipients.delete(recipientId);
+        if (this.ws?.readyState === WebSocket.OPEN) {
+          // WS is open now — safe to send. Mark registered so the gate passes.
+          this.wsRegistered = true;
+          this._doMarkAsRead(recipientId);
+        } else {
+          // WS still not open — re-queue so onConnectionChange flushes it when ready.
+          // Do NOT set wsRegistered; let the real 'registered' ack do that.
+          this.pendingReadRecipients.add(recipientId);
+        }
+      }, 3000);
+      return;
+    }
+
     const roomId = this.getRoomId(this.userId, recipientId);
     const at     = Date.now();
 
-    // Null-put confirmed received Gun nodes (ephemeral delivery vehicle cleanup)
-    StorageService.getChatMessagesByRoom(roomId).then(rows => {
-      const gun = GunService.getGun();
-      for (const r of rows) {
-        if (!r.outgoing && r.syncStatus === 'confirmed')
-          try { gun.get('chats').get(roomId).get(r.id).put(null as any); } catch {}
+    // Pure WS path — mirrors pushLiveFrame exactly.
+    // No Gun involved: Gun read-receipt paths were unreliable and caused
+    // the single-tick-stuck bug. WS is the only delivery mechanism.
+    const sendFrame = () => {
+      const frame = JSON.stringify({ type: 'chat-read', recipientId, at });
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        try { this.ws.send(frame); return true; } catch {}
       }
-    }).catch(() => {});
+      // Fallback: Gun's own WS connection (same relay, different socket)
+      const gunWire = getGunWire(GunService.getGun());
+      if (gunWire?.readyState === WebSocket.OPEN) {
+        try { gunWire.send(frame); return true; } catch {}
+      }
+      return false;
+    };
 
-    // Write read receipt to a PERSISTENT Gun soul (not ephemeral) so the sender
-    // picks it up via .once() even after reconnecting. Use 'chat-read-ack' which
-    // is NOT in EPHEMERAL_PREFIXES and therefore persisted to MySQL on the relay.
-    void gunPut(
-      GunService.getGun().get('chat-read-ack').get(roomId).get(this.userId),
-      { from: this.userId, to: recipientId, timestamp: at }
-    );
-
-    // WS path — relay's websocket.js handles 'chat-read' and forwards
-    // 'chat-read-receipt' to the sender's live connection.
-    if (this.ws?.readyState === WebSocket.OPEN) {
-this.ws.send(JSON.stringify({ type: 'chat-read', recipientId, at }));
-}
+    if (!sendFrame()) {
+      // WS not open — retry every 200ms up to 10 times (2s window).
+      // After that, queue into pendingReadRecipients so the next 'registered' ack
+      // or onConnectionChange flush picks it up rather than dropping it silently.
+      let attempts = 0;
+      const retry = setInterval(() => {
+        if (this.shuttingDown) { clearInterval(retry); return; }
+        if (sendFrame()) { clearInterval(retry); return; }
+        if (++attempts >= 10) {
+          clearInterval(retry);
+          // Still not sent — park it so the next reconnect flushes it
+          this.wsRegistered = false;
+          this.pendingReadRecipients.add(recipientId);
+        }
+      }, 200);
+    }
 
     // Patch local IDB so receiver's own history shows messages as read
     void (async () => {
@@ -1469,4 +1492,3 @@ this.ws.send(JSON.stringify({ type: 'chat-read', recipientId, at }));
 }
 
 export default ChatService;
-
