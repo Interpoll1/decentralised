@@ -2812,15 +2812,18 @@ onMounted(async () => {
     // Key generation failed silently
   }
 
+  // Reflect the actual stored theme — dark/glass is the default.
   const storedTheme = localStorage.getItem('theme');
-  // Default to dark — light mode is coming soon
-  if (storedTheme === 'light') {
-    // Light mode disabled — override to dark silently
-    localStorage.setItem('theme', 'dark');
+  const prefersDark = storedTheme !== 'light';
+  isDarkMode.value = prefersDark;
+  if (prefersDark) {
+    document.documentElement.classList.add('dark');
+    document.body.classList.add('dark');
+    if (!storedTheme) localStorage.setItem('theme', 'dark');
+  } else {
+    document.documentElement.classList.remove('dark');
+    document.body.classList.remove('dark');
   }
-  isDarkMode.value = true;
-  document.documentElement.classList.add('dark');
-  document.body.classList.add('dark');
 
   // Load moderation settings (may have migrated legacy minUserKarma)
   modSettings.value = ModerationService.getSettings();
@@ -2859,6 +2862,8 @@ const savePolicy = async () => {
 };
 
 const toggleDarkMode = () => {
+  // isDarkMode.value is already updated by the v-model before this fires,
+  // so true = user just switched TO dark, false = user just switched TO light.
   if (isDarkMode.value) {
     document.documentElement.classList.add('dark');
     document.body.classList.add('dark');
