@@ -114,13 +114,20 @@
             </div>
             <div class="toggle-row">
               <div>
-                <div class="toggle-label">{{ isDarkMode ? 'Dark mode' : 'Light mode' }}</div>
-                <div class="toggle-sub">Switch between light and dark theme</div>
+                <div class="toggle-label">Dark mode</div>
+                <div class="toggle-sub">Currently the only available theme</div>
               </div>
-              <label class="toggle-switch">
-                <input type="checkbox" v-model="isDarkMode" @change="toggleDarkMode" />
+              <label class="toggle-switch toggle-switch--locked" title="Dark mode is always on">
+                <input type="checkbox" checked disabled />
                 <span class="toggle-track"></span>
               </label>
+            </div>
+            <div class="theme-coming-soon">
+              <svg viewBox="0 0 16 16" fill="none" width="13" height="13" aria-hidden="true">
+                <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4"/>
+                <path d="M8 5v3.5m0 2.5h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              Light mode is coming in a future update
             </div>
           </div>
 
@@ -1071,6 +1078,27 @@ ion-content {
 }
 .toggle-switch input:checked + .toggle-track::after { transform: translateX(18px); }
 
+/* Locked toggle — always on, non-interactive */
+.toggle-switch--locked { cursor: not-allowed; opacity: 0.7; }
+.toggle-switch--locked .toggle-track { cursor: not-allowed; }
+
+/* Light mode coming soon notice */
+.theme-coming-soon {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--app-text-subtle);
+  letter-spacing: 0.01em;
+  width: fit-content;
+}
+
 /* ── Field inputs ───────────────────────────── */
 .field-group { display: flex; flex-direction: column; gap: 6px; }
 .field-label {
@@ -1591,7 +1619,7 @@ const policy = ref({
   autoPruneOldContent: true
 });
 
-const isDarkMode = ref(false);
+const isDarkMode = ref(true);
 const userProfile = ref<any>(null);
 const deviceId = ref('');
 const buildHash = BUILD_HASH;
@@ -2785,11 +2813,14 @@ onMounted(async () => {
   }
 
   const storedTheme = localStorage.getItem('theme');
-  if (storedTheme === 'dark') {
-    isDarkMode.value = true;
-    document.documentElement.classList.add('dark');
-    document.body.classList.add('dark');
+  // Default to dark — light mode is coming soon
+  if (storedTheme === 'light') {
+    // Light mode disabled — override to dark silently
+    localStorage.setItem('theme', 'dark');
   }
+  isDarkMode.value = true;
+  document.documentElement.classList.add('dark');
+  document.body.classList.add('dark');
 
   // Load moderation settings (may have migrated legacy minUserKarma)
   modSettings.value = ModerationService.getSettings();

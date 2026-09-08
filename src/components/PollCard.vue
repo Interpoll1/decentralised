@@ -390,16 +390,21 @@ function formatViewCount(n: number): string {
 
 .poll-footer {
   display: flex; justify-content: space-between; align-items: center;
-  gap: 8px; padding-top: 12px; border-top: 1px solid rgba(15,23,42,0.08); flex-wrap: wrap;
+  gap: 6px; padding-top: 12px; border-top: 1px solid rgba(15,23,42,0.08);
+  flex-wrap: nowrap; overflow: hidden;
 }
-.poll-stats  { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-.poll-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.poll-stats  {
+  display: flex; align-items: center; flex-wrap: nowrap;
+  gap: 4px; min-width: 0; flex: 1; overflow: hidden;
+}
+.poll-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; margin-left: auto; }
 
 .stat-icon-btn {
-  display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px;
+  display: inline-flex; align-items: center; gap: 4px; padding: 6px 9px;
   background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07);
   border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--app-text-muted); cursor: pointer;
   transition: color 160ms, background 160ms;
+  flex-shrink: 1; min-width: 0; white-space: nowrap;
 }
 .stat-icon-btn ion-icon { font-size: 15px; color: var(--app-text-subtle); }
 .stat-icon-btn.heart,
@@ -411,9 +416,10 @@ function formatViewCount(n: number): string {
 .stat-icon-btn.downvote.active .thumb-down-icon { color: #ef4444; }
 
 .stat-item {
-  display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px;
+  display: inline-flex; align-items: center; gap: 4px; padding: 6px 9px;
   background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07);
   border-radius: 999px; font-size: 12px; color: var(--app-text-muted);
+  flex-shrink: 1; min-width: 0; white-space: nowrap;
 }
 .stat-item ion-icon { font-size: 13px; color: var(--app-text-subtle); }
 .poll-view-count-row {

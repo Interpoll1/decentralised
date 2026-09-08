@@ -8,13 +8,56 @@
 .logo-title {
   font-family: 'Grand Hotel', cursive;
   font-size: 26px; font-weight: 400; letter-spacing: 0.01em;
-  --color: var(--app-text); color: var(--app-text);
-  padding-inline-start: 0; padding-inline-end: 8px;
-  max-width: calc(100% - 128px);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--app-text);
+  white-space: nowrap;
+  padding-inline-start: 4px;
 }
 
-ion-header { transition: transform var(--app-transition, all 0.15s); }
+/* ── Mobile header: compress everything so title + buttons all fit ── */
+@media (max-width: 767px) {
+  .logo-title {
+    font-size: 28px;
+  }
+  ion-header ion-toolbar {
+    --padding-start: 6px; --padding-end: 2px;
+    padding-inline-start: max(6px, env(safe-area-inset-left));
+    padding-inline-end:   max(2px, env(safe-area-inset-right));
+  }
+  .header-util-buttons ion-button {
+    --padding-start: 4px; --padding-end: 4px;
+    width: 34px; height: 40px;
+  }
+  .header-util-buttons ion-button ion-icon { font-size: 19px; }
+  /* Inline SVG icons inside buttons (relay, resilience) */
+  .header-util-buttons ion-button svg { width: 18px; height: 18px; }
+}
+
+/* ─────────────────────────────────────────────────────
+   HEADER — height-collapse hide architecture
+   ─────────────────────────────────────────────────────
+   WHY NOT transform: translateY(-100%):
+     transform moves the element visually but keeps its
+     layout box intact. ion-content's flex:1 still starts
+     below the header's full height, AND Ionic's inner
+     scroll div keeps its padding-top = header height.
+     Result: a blank gap the exact size of the header.
+
+   THE FIX — max-height collapse:
+     Collapsing to max-height:0 + overflow:hidden
+     actually shrinks the element's layout box to zero.
+     Ionic's ResizeObserver on ion-header fires, it
+     recalculates --offset-top = 0, and ion-content
+     expands to fill the freed space. No JS needed.
+   ───────────────────────────────────────────────────── */
+ion-header {
+  max-height: 200px; /* large enough to never clip content */
+  overflow: hidden;
+  transition: max-height 240ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+ion-header.header-hidden {
+  max-height: 0;
+}
+
 ion-header::after { display: none; }
 ion-header ion-toolbar {
   --border-width: 0; --box-shadow: none;
@@ -32,7 +75,6 @@ ion-header ion-toolbar {
   width: 40px; height: 40px;
 }
 .header-util-buttons ion-button ion-icon { font-size: 22px; }
-ion-header.header-hidden { transform: translateY(-100%); }
 
 /* ─────────────────────────────────────────────────────
    MESSAGE BADGE — amber, sits on the Messages nav item
@@ -373,6 +415,16 @@ ion-header.header-hidden { transform: translateY(-100%); }
   --padding-start: 6px; --padding-end: 6px; --color: var(--app-text);
 }
 
+/* Resilience Center: header button, mobile only */
+.resilience-header-btn {
+  --padding-start: 6px; --padding-end: 6px;
+  --color: var(--app-text-muted);
+  --background: transparent;
+}
+@media (min-width: 768px) {
+  .resilience-header-btn { display: none; }
+}
+
 /* ─────────────────────────────────────────────────────
    BOTTOM NAV (mobile only)
    ───────────────────────────────────────────────────── */
@@ -387,20 +439,34 @@ ion-header.header-hidden { transform: translateY(-100%); }
   .bottom-nav-footer { display: none !important; }
 }
 
+/* ─────────────────────────────────────────────────────
+   FOOTER — same height-collapse pattern as header.
+   Collapsing ion-footer's layout height triggers
+   Ionic's ResizeObserver → --offset-bottom = 0 →
+   ion-content expands down to fill the freed space.
+   The inner .bottom-nav never needs transform at all.
+   ───────────────────────────────────────────────────── */
+ion-footer.bottom-nav-footer {
+  max-height: 200px;
+  overflow: hidden;
+  transition: max-height 240ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+ion-footer.bottom-nav-footer.footer-hidden {
+  max-height: 0;
+}
+
 .bottom-nav {
   display: flex;
   align-items: stretch;
   justify-content: space-around;
-  background: rgba(10, 11, 20, 0.18);
-  backdrop-filter: blur(32px) saturate(1.6);
-  -webkit-backdrop-filter: blur(32px) saturate(1.6);
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(8, 8, 18, 0.04);
+  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
   padding: 0;
   padding-bottom: env(safe-area-inset-bottom);
-  transition: transform 240ms cubic-bezier(0.4,0,0.2,1);
   pointer-events: all;
 }
-.bottom-nav-hidden { transform: translateY(100%); }
 
 .nav-item {
   display: flex;
