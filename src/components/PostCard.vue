@@ -469,7 +469,7 @@ function formatViewCount(n: number): string {
 
 /* ── Footer / actions ────────────────────────────── */
 .post-footer { display: flex; align-items: center; justify-content: space-between; }
-.post-actions { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+.post-actions { display: flex; align-items: center; gap: 2px; flex-wrap: nowrap; overflow: hidden; }
 
 @media (min-width: 768px) {
   .post-actions { gap: 10px; }

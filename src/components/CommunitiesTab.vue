@@ -123,11 +123,16 @@
       <!-- List -->
       <div v-if="filteredCommunities.length > 0" class="community-list">
         <CommunityCard
-          v-for="community in filteredCommunities"
+          v-for="community in visibleCommunities"
           :key="community.id"
           :community="community"
           @click="$router.push(`/community/${community.id}`)"
         />
+
+        <!-- Sentinel for IntersectionObserver — triggers next page load -->
+        <div v-if="hasMore" ref="sentinelEl" class="list-sentinel" aria-hidden="true">
+          <div class="sentinel-spinner"></div>
+        </div>
 
         <div v-if="isSearching && searchResults.some(c => !communityStore.isJoined(c.id))" class="join-nudge">
           <svg viewBox="0 0 16 16" fill="none" width="13" height="13" aria-hidden="true">
@@ -170,7 +175,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useCommunityStore } from '../stores/communityStore';
 import CommunityCard from './CommunityCard.vue';
 import type { Community } from '../services/communityService';
@@ -185,10 +190,18 @@ defineEmits<{
 const communityStore = useCommunityStore();
 const communitySearchQuery = ref('');
 
+// ── Pagination ──────────────────────────────────────────────
+const PAGE_SIZE   = 8;
+const visibleCount = ref(PAGE_SIZE);
+const sentinelEl  = ref<HTMLElement | null>(null);
+let   observer: IntersectionObserver | null = null;
+
+// ── Source data ─────────────────────────────────────────────
 const allPublicCommunities = computed(() =>
   communityStore.communities.filter(c => !c.isPrivate)
 );
 
+// Full unsliced list — always contains everything for search to work across
 const displayedCommunities = computed(() => {
   const all = communityStore.communities;
   if (props.communityFilter === 'joined')  return all.filter(c => communityStore.isJoined(c.id));
@@ -198,6 +211,7 @@ const displayedCommunities = computed(() => {
 
 const isSearching = computed(() => communitySearchQuery.value.trim().length > 0);
 
+// Search always runs across the full set — never sliced
 const searchResults = computed(() => {
   const q = communitySearchQuery.value.trim().toLowerCase();
   if (!q) return [];
@@ -208,10 +222,59 @@ const searchResults = computed(() => {
   );
 });
 
+// Full list for the current state (search or filter) — used for hasMore, empty checks
 const filteredCommunities = computed(() =>
   isSearching.value ? searchResults.value : displayedCommunities.value
 );
 
+// What actually renders — sliced by visibleCount, but search always shows all results immediately
+const visibleCommunities = computed(() =>
+  isSearching.value
+    ? filteredCommunities.value                         // search: show all matches at once
+    : filteredCommunities.value.slice(0, visibleCount.value) // normal: paginated
+);
+
+const hasMore = computed(() =>
+  !isSearching.value && visibleCount.value < filteredCommunities.value.length
+);
+
+// ── IntersectionObserver ─────────────────────────────────────
+function setupObserver() {
+  disconnectObserver();
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries[0]?.isIntersecting && hasMore.value) {
+        visibleCount.value += PAGE_SIZE;
+      }
+    },
+    { rootMargin: '120px' }  // start loading 120px before sentinel enters view
+  );
+  if (sentinelEl.value) observer.observe(sentinelEl.value);
+}
+
+function disconnectObserver() {
+  observer?.disconnect();
+  observer = null;
+}
+
+// Re-attach observer whenever sentinelEl mounts/unmounts (v-if toggles it)
+watch(sentinelEl, (el) => {
+  if (el) setupObserver();
+  else    disconnectObserver();
+});
+
+// Reset pagination when filter tab or search changes
+watch([() => props.communityFilter, isSearching], () => {
+  visibleCount.value = PAGE_SIZE;
+  nextTick(() => {
+    if (sentinelEl.value) setupObserver();
+  });
+});
+
+onMounted(() => { if (sentinelEl.value) setupObserver(); });
+onUnmounted(() => disconnectObserver());
+
+// ── Featured strip ───────────────────────────────────────────
 const featuredCommunities = computed(() =>
   [...allPublicCommunities.value]
     .sort((a, b) => (b.memberCount ?? 0) - (a.memberCount ?? 0))
@@ -305,7 +368,7 @@ function formatNumber(n: number): string {
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: 999px;
   background: var(--app-search-surface, rgba(255,255,255,0.05));
   border: 1px solid var(--app-border);
   transition: border-color 150ms, box-shadow 150ms;
@@ -414,6 +477,21 @@ function formatNumber(n: number): string {
 .feat-tile.tone-teal,
 .feat-tile.tone-amber,
 .feat-tile.tone-rose { background: transparent; }
+
+/* ── Pagination sentinel ── */
+.list-sentinel {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0 8px;
+}
+.sentinel-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(99,102,241,0.15);
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
 
 /* ── Community list ── */
 .community-list {

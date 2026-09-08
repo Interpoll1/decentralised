@@ -2,7 +2,9 @@
   <ion-page>
     <ion-header :class="{ 'header-hidden': isHeaderHidden }">
       <ion-toolbar>
-        <ion-title class="logo-title">Interpoll</ion-title>
+        <ion-buttons slot="start">
+          <div class="logo-title">Interpoll</div>
+        </ion-buttons>
         <ion-buttons slot="end" class="header-util-buttons">
           <ion-button v-if="canScanQr" @click="scanQr()" aria-label="Scan QR code">
             <ion-icon :icon="qrCodeOutline"></ion-icon>
@@ -13,9 +15,18 @@
           <ion-button @click="$router.push('/profile')">
             <ion-icon :icon="personCircleOutline"></ion-icon>
           </ion-button>
+          <!-- Resilience Center — mobile only, side nav shows it on desktop -->
+          <ion-button class="resilience-header-btn" @click="$router.push('/resilience')" aria-label="Resilience Center">
+            <svg viewBox="0 0 24 24" fill="none" style="flex-shrink:0;width:21px;height:21px">
+              <path d="M12 21C12 21 3 15 3 9a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 6-9 12-9 12z"
+                stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+              <path d="M5.5 11.5h2.5l1.5-3 2 6 1.5-3H18"
+                stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </ion-button>
           <!-- Relay status — tap to open relay sheet -->
           <ion-button class="relay-header-btn" @click="relaySheetOpen = true" aria-label="Relay status">
-            <svg viewBox="0 0 24 24" fill="none" width="20" height="20" style="flex-shrink:0">
+            <svg viewBox="0 0 24 24" fill="none" style="flex-shrink:0;width:20px;height:20px">
               <!-- broadcast tower -->
               <path d="M12 20v-8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
               <path d="M8.5 16.5C7 15.2 6 13.2 6 11a6 6 0 0112 0c0 2.2-1 4.2-2.5 5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
@@ -379,18 +390,17 @@
     <RelaySheet v-model="relaySheetOpen" />
 
     <!-- Bottom Nav (mobile only) -->
-    <ion-footer class="bottom-nav-footer">
-      <div class="bottom-nav" :class="{ 'bottom-nav-hidden': isTabBarHidden }">
+    <ion-footer class="bottom-nav-footer" :class="{ 'footer-hidden': isTabBarHidden }">
+      <div class="bottom-nav">
 
         <!-- Feed -->
         <button class="nav-item" :class="{ active: activeTab === 'home' }" @click="activeTab = 'home'">
           <span class="nav-icon-wrap">
             <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-              <path v-if="activeTab==='home'" d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" fill="currentColor" stroke="none"/>
-              <template v-else>
-                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
-                <path d="M9 22V12h6v10"/>
-              </template>
+              <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"
+                :fill="activeTab==='home' ? 'currentColor' : 'none'"
+                :fill-opacity="activeTab==='home' ? '0.18' : '1'"/>
+              <path d="M9 22V12h6v10"/>
             </svg>
           </span>
           <span class="nav-label">Feed</span>
@@ -975,15 +985,29 @@ async function handleModerationSubmitPoll(poll: Poll) {
   await ModerationService.submitPollHash(poll);
 }
 
-// ── Scroll ─────────────────────────────────────────────────────────────────
-let lastScrollTop    = 0;
+// ── Scroll / chrome hide-show ──────────────────────────────────────────────
+//
+// Architecture: header and footer use max-height collapse (not translateY).
+// Collapsing the layout height triggers Ionic's internal ResizeObserver which
+// recalculates --offset-top / --offset-bottom automatically. ion-content then
+// expands to fill the freed space with no JS padding manipulation required.
+// See HomePage.css for the max-height transition on ion-header / ion-footer.
+
+let lastScrollTop     = 0;
 const scrollThreshold = 50;
+
 function handleScroll(event: CustomEvent) {
   const scrollTop = event.detail.scrollTop;
   if (scrollTop > lastScrollTop && scrollTop > scrollThreshold) {
-    isTabBarHidden.value = true; isHeaderHidden.value = true;
+    if (!isHeaderHidden.value) {
+      isHeaderHidden.value = true;
+      isTabBarHidden.value = true;
+    }
   } else if (scrollTop < lastScrollTop) {
-    isTabBarHidden.value = false; isHeaderHidden.value = false;
+    if (isHeaderHidden.value) {
+      isHeaderHidden.value = false;
+      isTabBarHidden.value = false;
+    }
   }
   lastScrollTop = scrollTop;
 }
