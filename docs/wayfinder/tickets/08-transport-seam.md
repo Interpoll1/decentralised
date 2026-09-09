@@ -27,7 +27,7 @@ Decide:
   underneath the seam, a consumer above it, or does it keep its own parallel path? This is
   the decision most likely to be quietly fudged — do not leave it ambiguous.
 - **The blast radius**: which stores, views, and components change shape as a result, and
-  which `copilot-*.md` contracts need updating when this is eventually built.
+  which subsystem contracts need updating when this is eventually built.
 
 ## Why it matters
 

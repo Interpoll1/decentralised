@@ -263,7 +263,7 @@ Legend: "Conditional" always has the specific condition named in the row.
   (`https:` or the loopback/`localhost` exemption from §1). An InterPoll instance served over
   plain `http://` on a LAN IP (not loopback) cannot use `crypto.subtle` for its
   device-key signing/verification flows or register a Service Worker, both of which
-  CLAUDE.md's architecture description says are core to InterPoll (`cryptoService.ts` uses
+  the architecture docs describe as core to InterPoll (`cryptoService.ts` uses
   SHA-256 hashing/verification, `ChainService` signs with device keys). This is a structural,
   not incidental, tradeoff of the `http://`-LAN deployment path.
 
@@ -289,7 +289,7 @@ Legend: "Conditional" always has the specific condition named in the row.
   user consent before information is extracted" for this particular tier.
 - Deploying over plain `http://` to dodge mixed-content/LNA restrictions trades away
   `crypto.subtle` and Service Workers (both secure-context-gated), which are load-bearing for
-  InterPoll's signing/chain architecture per CLAUDE.md — this is not a free unlock.
+  InterPoll's signing/chain architecture — this is not a free unlock.
 - Firefox and Safari's local-network access model is **not settled evidence** as of this
   research pass: Firefox shows a regressing/undocumented local-network permission behavior
   (Bugzilla #2059274) and Safari shows no public web-facing LNA/PNA equivalent at all — so
