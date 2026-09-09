@@ -4,7 +4,7 @@ title: Browser LAN reachability matrix
 map: ../MAP-p2p-recomposition.md
 labels: [wayfinder:research]
 status: closed
-assignee: research-agent (charting session)
+assignee: unassigned
 blocked-by: []
 ---
 
