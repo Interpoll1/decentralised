@@ -47,18 +47,22 @@ export const SIGNAL_WIRE_VERSION = 3;
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface SignalEnvelope {
-  v:    3;
-  eph?: string;   // X3DH ephemeral pub (first message only)
-  dh:   string;   // sender's current ratchet pub
-  n:    number;   // message number in sending chain
-  pn:   number;   // previous chain length
-  ct:   string;   // base64 iv(12B)+ciphertext
+  v:     3;
+  eph?:  string;   // X3DH ephemeral pub (first message only)
+  opkId?: string;  // id of the OPK from the pool the sender used (first message only)
+  dh:    string;   // sender's current ratchet pub
+  n:     number;   // message number in sending chain
+  pn:    number;   // previous chain length
+  ct:    string;   // base64 iv(12B)+ciphertext
 }
 
 export interface SignalPublicBundle {
-  ik:  string;   // identity pub (base64)
-  spk: string;   // signed pre-key pub (base64)
-  opk: string;   // one-time pre-key pub (base64)
+  ik:        string;   // identity pub (base64, ECDH P-256 raw) — used for X3DH DH operations
+  ikSignPub: string;   // identity signing pub (base64, ECDSA P-256 raw) — used to verify spkSig
+  spk:       string;   // signed pre-key pub (base64)
+  opk?:      string;   // one-time pre-key pub (base64) — may be absent if pool exhausted
+  opkId?:    string;   // pool id of the OPK — included in envelope so receiver can consume it
+  spkSig:    string;   // ECDSA-P256-SHA256 signature over spk, signed by ikSignPub (base64 DER)
 }
 
 interface DHKeyPair {
@@ -138,6 +142,67 @@ async function dh(priv: CryptoKey, pub: CryptoKey): Promise<ArrayBuffer> {
   return crypto.subtle.deriveBits({ name: 'ECDH', public: pub }, priv, 256);
 }
 
+// ── ECDSA P-256 (SPK signature) ───────────────────────────────────────────────
+// We re-use the P-256 curve but as ECDSA for signing, distinct from ECDH keys.
+// The identity key (IK) signs the signed pre-key (SPK) so peers can verify the
+// bundle hasn't been tampered with by the relay or the Gun graph layer.
+//
+// NOTE: We import the ECDH IK raw public key into an ECDSA key for verification
+// only. The private signing key is stored separately (signal-ik-sign:<uid>).
+
+const ECDSA_PARAMS = { name: 'ECDSA', namedCurve: 'P-256' } as const;
+const ECDSA_SIGN_PARAMS = { name: 'ECDSA', hash: 'SHA-256' } as const;
+
+async function generateSigningKey(): Promise<{ pub: CryptoKey; priv: CryptoKey; pubB64: string }> {
+  const kp = await crypto.subtle.generateKey(ECDSA_PARAMS, true, ['sign', 'verify']);
+  const pubRaw = await crypto.subtle.exportKey('raw', kp.publicKey);
+  return { pub: kp.publicKey, priv: kp.privateKey, pubB64: toB64(pubRaw) };
+}
+
+async function importEcdsaPub(b64: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey('raw', fromB64(b64), ECDSA_PARAMS, true, ['verify']);
+}
+
+async function importEcdsaPriv(jwk: JsonWebKey): Promise<CryptoKey> {
+  return crypto.subtle.importKey('jwk', jwk, ECDSA_PARAMS, false, ['sign']);
+}
+
+async function signSpk(ikSignPriv: CryptoKey, spkPubB64: string): Promise<string> {
+  const sig = await crypto.subtle.sign(ECDSA_SIGN_PARAMS, ikSignPriv, fromB64(spkPubB64));
+  return toB64(sig);
+}
+
+/**
+ * Verify that bundle.spk was signed by the identity signing key.
+ * - Missing spkSig: logs a warning and returns (graceful rollout — old peers
+ *   haven't regenerated their bundle yet; we still allow the session).
+ * - Present but invalid spkSig: throws (active tamper attempt; refuse session).
+ */
+export async function verifySpkSignature(bundle: SignalPublicBundle): Promise<void> {
+  if (!bundle.spkSig) {
+    // Old bundle — peer hasn't updated yet. Warn once; don't block.
+    console.warn('[Signal] Bundle missing SPK signature — peer may be on an old version');
+    return;
+  }
+  // Use ikSignPub (the ECDSA signing key) not ik (the ECDH key) — they are
+  // different keypairs. Mixing them up means verify always fails with a
+  // DOMException because the key usage flags don't match.
+  const signingPub = bundle.ikSignPub || bundle.ik; // fallback to ik for old bundles without ikSignPub
+  try {
+    const ikSignPub = await importEcdsaPub(signingPub);
+    const valid = await crypto.subtle.verify(
+      ECDSA_SIGN_PARAMS, ikSignPub, fromB64(bundle.spkSig), fromB64(bundle.spk),
+    );
+    if (!valid) throw new Error('SPK signature verification failed — bundle may have been tampered with');
+  } catch (e) {
+    if (e instanceof Error && e.message.includes('tampered')) throw e;
+    // importEcdsaPub throws if the key bytes aren't a valid ECDSA P-256 key
+    // (e.g. old peer whose ik is ECDH-only and ikSignPub isn't in the bundle yet).
+    // Treat the same as a missing signature — warn, allow, don't block.
+    console.warn('[Signal] Could not verify SPK signature (key format mismatch — old peer?):', (e as Error).message);
+  }
+}
+
 // ── HKDF-SHA256 ───────────────────────────────────────────────────────────────
 
 async function hkdf(
@@ -201,9 +266,10 @@ async function aeadDecrypt(mk: string, ctB64: string, aad: string): Promise<stri
 
 // ── Identity key storage ──────────────────────────────────────────────────────
 
-const IK_KEY  = (uid: string) => `signal-ik:${uid}`;
-const SPK_KEY = (uid: string) => `signal-spk:${uid}`;
-const OPK_KEY = (uid: string) => `signal-opk:${uid}`;
+const IK_KEY      = (uid: string) => `signal-ik:${uid}`;
+const IK_SIGN_KEY = (uid: string) => `signal-ik-sign:${uid}`; // ECDSA signing keypair
+const SPK_KEY     = (uid: string) => `signal-spk:${uid}`;
+const OPK_KEY     = (uid: string) => `signal-opk:${uid}`;
 
 async function loadOrCreateDHKey(storageKey: string): Promise<DHKeyPair> {
   try {
@@ -220,15 +286,46 @@ async function loadOrCreateDHKey(storageKey: string): Promise<DHKeyPair> {
   return kp;
 }
 
+async function loadOrCreateSigningKey(storageKey: string): Promise<{ pub: CryptoKey; priv: CryptoKey; pubB64: string }> {
+  try {
+    const stored = await StorageService.getMetadata(storageKey);
+    if (stored?.pub && stored?.priv) {
+      const pub  = await importEcdsaPub(stored.pub);
+      const priv = await importEcdsaPriv(stored.priv);
+      return { pub, priv, pubB64: stored.pub };
+    }
+  } catch { }
+  const kp      = await generateSigningKey();
+  const privJwk = await crypto.subtle.exportKey('jwk', kp.priv);
+  await StorageService.setMetadata(storageKey, { pub: kp.pubB64, priv: privJwk });
+  return kp;
+}
+
 export async function getOrCreateIdentityBundle(userId: string): Promise<{
-  ik: DHKeyPair; spk: DHKeyPair; opk: DHKeyPair; bundle: SignalPublicBundle;
+  ik: DHKeyPair; spk: DHKeyPair; opk: DHKeyPair;
+  ikSign: { pub: CryptoKey; priv: CryptoKey; pubB64: string };
+  bundle: SignalPublicBundle;
 }> {
-  const [ik, spk, opk] = await Promise.all([
+  const [ik, spk, opk, ikSign] = await Promise.all([
     loadOrCreateDHKey(IK_KEY(userId)),
     loadOrCreateDHKey(SPK_KEY(userId)),
     loadOrCreateDHKey(OPK_KEY(userId)),
+    loadOrCreateSigningKey(IK_SIGN_KEY(userId)),
   ]);
-  return { ik, spk, opk, bundle: { ik: ik.pubB64, spk: spk.pubB64, opk: opk.pubB64 } };
+
+  // Sign the SPK with the identity signing key so recipients can detect substitution.
+  // The SPK public key bytes are the signed material; no encoding needed beyond raw b64.
+  const spkSig = await signSpk(ikSign.priv, spk.pubB64);
+
+  const bundle: SignalPublicBundle = {
+    ik:        ik.pubB64,
+    ikSignPub: ikSign.pubB64,   // separate ECDSA key — NOT the same as the ECDH ik
+    spk:       spk.pubB64,
+    opk:       opk.pubB64,
+    spkSig,
+  };
+
+  return { ik, spk, opk, ikSign, bundle };
 }
 
 // ── Session storage ───────────────────────────────────────────────────────────
@@ -263,32 +360,44 @@ async function x3dhCombine(parts: ArrayBuffer[]): Promise<string> {
 
 /**
  * Sender X3DH: produces masterKey + ephemeral public key (b64) for the envelope.
+ * Verifies the recipient's SPK signature before performing X3DH so a relay that
+ * substitutes the SPK is detected here rather than producing a silently broken session.
+ * Returns the opkId used so the receiver knows which private key to consume.
  */
 async function x3dhSend(
   senderIK: DHKeyPair,
   bundle: SignalPublicBundle,
-): Promise<{ masterKey: string; x3dhEphPub: string }> {
+): Promise<{ masterKey: string; x3dhEphPub: string; opkId: string | null }> {
+  // Warns for missing sig, throws only for actively invalid sig
+  await verifySpkSignature(bundle);
   const rIK  = await importDHPub(bundle.ik);
   const rSPK = await importDHPub(bundle.spk);
-  const rOPK = bundle.opk ? await importDHPub(bundle.opk) : null;
   const eph  = await generateDH();
 
-  const dh1 = await dh(senderIK.priv, rSPK);   // DH(IK_S,  SPK_R)
-  const dh2 = await dh(eph.priv,      rIK);    // DH(EK_S,  IK_R)
-  const dh3 = await dh(eph.priv,      rSPK);   // DH(EK_S,  SPK_R)
-  const dh4 = rOPK ? await dh(eph.priv, rOPK) : null; // DH(EK_S, OPK_R)
+  // Use the OPK from the bundle if present (one-time pre-key from pool)
+  const opkEntry = bundle.opk && bundle.opkId
+    ? { pub: await importDHPub(bundle.opk), id: bundle.opkId }
+    : null;
+
+  const dh1 = await dh(senderIK.priv, rSPK);             // DH(IK_S,  SPK_R)
+  const dh2 = await dh(eph.priv,      rIK);              // DH(EK_S,  IK_R)
+  const dh3 = await dh(eph.priv,      rSPK);             // DH(EK_S,  SPK_R)
+  const dh4 = opkEntry ? await dh(eph.priv, opkEntry.pub) : null; // DH(EK_S, OPK_R)
 
   const masterKey = await x3dhCombine([dh1, dh2, dh3, ...(dh4 ? [dh4] : [])]);
-  return { masterKey, x3dhEphPub: eph.pubB64 };
+  return { masterKey, x3dhEphPub: eph.pubB64, opkId: opkEntry?.id ?? null };
 }
 
 /**
  * Receiver X3DH: derives the same masterKey from the sender's ephemeral key.
+ * myOPK is an OPKEntry from the local pool (consumed by id from the envelope).
+ * If null (OPK was already consumed or pool was exhausted), X3DH runs without dh4 —
+ * still secure; just weaker forward secrecy for that session initiation.
  */
 async function x3dhReceive(
   myIK:  DHKeyPair,
   mySPK: DHKeyPair,
-  myOPK: DHKeyPair | null,
+  myOPK: { priv: JsonWebKey } | null,
   senderIKPub:  string,
   senderEphPub: string,
 ): Promise<string> {
@@ -298,7 +407,11 @@ async function x3dhReceive(
   const dh1 = await dh(mySPK.priv, sIK);    // DH(SPK_R, IK_S)
   const dh2 = await dh(myIK.priv,  sEph);   // DH(IK_R,  EK_S)
   const dh3 = await dh(mySPK.priv, sEph);   // DH(SPK_R, EK_S)
-  const dh4 = myOPK ? await dh(myOPK.priv, sEph) : null; // DH(OPK_R, EK_S)
+  let dh4: ArrayBuffer | null = null;
+  if (myOPK) {
+    const opkPriv = await importDHPriv(myOPK.priv);
+    dh4 = await dh(opkPriv, sEph);          // DH(OPK_R, EK_S)
+  }
 
   return x3dhCombine([dh1, dh2, dh3, ...(dh4 ? [dh4] : [])]);
 }
@@ -489,6 +602,7 @@ export class SignalSession {
   ): Promise<SignalEnvelope> {
     let state = await loadSession(this.myId, this.theirId);
     let x3dhEphPub: string | undefined;
+    let x3dhOpkId:  string | undefined;
 
     // Session is stale if it exists but has no receiving chain (ckR) after
     // having already sent messages (ns > 0). This happens when the other side
@@ -497,8 +611,9 @@ export class SignalSession {
 
     if (!state || isStale) {
       // First message or stale session: X3DH → bootstrap session
-      const { masterKey, x3dhEphPub: ep } = await x3dhSend(myBundle.ik, theirBundle);
+      const { masterKey, x3dhEphPub: ep, opkId } = await x3dhSend(myBundle.ik, theirBundle);
       x3dhEphPub = ep;
+      if (opkId) x3dhOpkId = opkId;
       const { state: s } = await initSessionAsSender(
         this.myId, this.theirId, masterKey, theirBundle.spk,
       );
@@ -538,59 +653,177 @@ export class SignalSession {
     );
     await saveSession(this.myId, this.theirId, newState);
 
-    return { v: SIGNAL_WIRE_VERSION, ...envelope, ...(x3dhEphPub ? { eph: x3dhEphPub } : {}) };
+    return { v: SIGNAL_WIRE_VERSION, ...envelope,
+      ...(x3dhEphPub ? { eph: x3dhEphPub } : {}),
+      ...(x3dhOpkId  ? { opkId: x3dhOpkId } : {}),
+    };
   }
 
   /**
    * Decrypt a received envelope. On first receive performs X3DH to establish
    * the receiving chain; subsequent calls advance the double-ratchet.
+   * myUserId is needed to look up the OPK pool in IDB and consume the right entry.
    */
   async decrypt(
     envelope:     SignalEnvelope,
-    myBundle:     { ik: DHKeyPair; spk: DHKeyPair; opk: DHKeyPair },
+    myBundle:     { ik: DHKeyPair; spk: DHKeyPair },
     senderIKPub:  string,
+    myUserId:     string,
   ): Promise<string> {
     let state = await loadSession(this.myId, this.theirId);
 
     // If eph is present this is a new X3DH initiation — always reset session.
-    // This handles the case where a stale session exists from a previous
-    // conversation (e.g. after key rotation or IndexedDB clear on one side).
     if (envelope.eph) {
-      // Reset session when:
-      //   1. No existing session at all
-      //   2. envelope.dh differs from dhRecv = NEW X3DH init, always accept
-      //   3. envelope.dh matches dhRecv but session not yet active (nr=0, no ckR)
-      // Do NOT reset when: session is already active (nr>0 or ckR set)
-      //   AND dh matches dhRecv = stale Gun re-delivery of original X3DH msg.
-      const noSession    = !state;
-      const newDHKey     = state && envelope.dh !== state.dhRecv;
-      const sameDH       = state && envelope.dh === state.dhRecv;
-      const sessionLive  = sameDH && (state.nr > 0 || !!state.ckR);
-      const shouldReset  = noSession || newDHKey || (sameDH && !sessionLive);
+      // Always reset when eph is present UNLESS the session is already live with messages
+      // having been successfully received (nr > 0). The only safe "don't reset" case is
+      // a stale Gun re-delivery of the original X3DH message after a session is established.
+      // Any other case — including a failed prior X3DH that saved bad state — must reset.
+      // Previously, sameDH + ckR-set was treated as "sessionLive" and skipped the reset,
+      // but ckR gets set by initSessionAsReceiver BEFORE aeadDecrypt runs, so a failed
+      // decrypt leaves a corrupted session that blocks all future messages from that peer.
+      const sessionHasSuccessfullyDecrypted = state && state.nr > 0;
+      const shouldReset = !sessionHasSuccessfullyDecrypted;
       if (shouldReset) {
+        // Look up the OPK the sender used. consumeOPK removes it from the local
+        // pool so it can never be reused, giving per-session forward secrecy.
+        // If the id is absent or already consumed, X3DH still works without OPK.
+        let myOPK: { priv: JsonWebKey } | null = null;
+        if (envelope.opkId) {
+          myOPK = await consumeOPK(myUserId, envelope.opkId);
+        }
         const masterKey = await x3dhReceive(
-          myBundle.ik, myBundle.spk, myBundle.opk,
+          myBundle.ik, myBundle.spk, myOPK,
           senderIKPub, envelope.eph,
         );
         state = await initSessionAsReceiver(
           this.myId, this.theirId, masterKey, myBundle.spk, envelope.dh,
         );
       }
-      // else: active session, stale Gun re-delivery, skip reset
+      // else: active session, stale Gun re-delivery — skip reset
     } else if (!state) {
       throw new Error('No session and no X3DH ephemeral key — cannot establish session');
     }
 
-    const { plaintext, state: newState } = await ratchetDecrypt(state, envelope, senderIKPub);
+    const { plaintext, state: newState } = await ratchetDecrypt(state!, envelope, senderIKPub);
     await saveSession(this.myId, this.theirId, newState);
     return plaintext;
   }
-
   async hasSession(): Promise<boolean> {
     return !!(await loadSession(this.myId, this.theirId));
+  }
+
+  /** Wipe the local session state for this pair. Called when decrypt fails so
+   *  the next message triggers a clean X3DH instead of retrying with bad state. */
+  async clearSession(): Promise<void> {
+    await StorageService.setMetadata(SESSION_KEY(this.myId, this.theirId), null);
   }
 
   async clearSession(): Promise<void> {
     await StorageService.setMetadata(SESSION_KEY(this.myId, this.theirId), null);
   }
+}
+
+// ── Safety numbers ────────────────────────────────────────────────────────────
+
+/**
+ * Derive a safety number from both parties' identity signing keys.
+ *
+ * Uses SHA-256 over the sorted concatenation of both ikSignPub values so the
+ * result is identical regardless of who initiates the comparison. Formatted as
+ * 12 groups of 5 digits (same visual style as Signal) so users can read it
+ * aloud or compare screenshots to detect a MitM.
+ *
+ * @param myIKSignPub    Your ikSignPub (base64) from getOrCreateIdentityBundle
+ * @param theirIKSignPub Their ikSignPub (base64) from their SignalPublicBundle
+ */
+export async function getSafetyNumber(
+  myIKSignPub: string,
+  theirIKSignPub: string,
+): Promise<string> {
+  // Sort so both parties derive the same number regardless of who calls first
+  const [a, b] = [myIKSignPub, theirIKSignPub].sort();
+  const combined = new TextEncoder().encode(a + '|' + b);
+  const hash     = await crypto.subtle.digest('SHA-256', combined);
+  const bytes    = new Uint8Array(hash);
+  // 12 groups × 5 digits.  Each group = two bytes as 0..65535 mod 100000.
+  return Array.from({ length: 12 }, (_, i) =>
+    String(((bytes[i * 2] << 8) | bytes[i * 2 + 1]) % 100000).padStart(5, '0')
+  ).join(' ');
+}
+
+// ── OPK pool ──────────────────────────────────────────────────────────────────
+
+export const OPK_POOL_SIZE       = 20;  // keep this many OPKs published on the relay
+export const OPK_POOL_LOW_WATER  = 5;   // replenish when pool drops below this
+
+const OPK_POOL_KEY = (uid: string) => `signal-opk-pool:${uid}`;
+
+export interface OPKEntry {
+  id:     string;          // random UUID — used as the relay key
+  pubB64: string;          // ECDH public key (base64)
+  priv:   JsonWebKey;      // private key — NEVER leaves the device
+}
+
+/**
+ * Load the local OPK pool from IDB, or generate a fresh one if it doesn't exist.
+ * The pool is stored as an array of { id, pubB64, priv } entries.
+ */
+export async function loadOrCreateOPKPool(userId: string): Promise<OPKEntry[]> {
+  try {
+    const stored = await StorageService.getMetadata(OPK_POOL_KEY(userId));
+    if (Array.isArray(stored) && stored.length > 0) return stored as OPKEntry[];
+  } catch { }
+  return generateOPKBatch(OPK_POOL_SIZE, userId);
+}
+
+/**
+ * Generate a fresh batch of OPKs, persist to IDB, and return them.
+ * Does NOT publish to the relay — that's the caller's job.
+ */
+export async function generateOPKBatch(count: number, userId: string): Promise<OPKEntry[]> {
+  const batch: OPKEntry[] = [];
+  for (let i = 0; i < count; i++) {
+    const kp      = await generateDH();
+    const privJwk = await crypto.subtle.exportKey('jwk', kp.priv);
+    batch.push({
+      id:     crypto.randomUUID(),
+      pubB64: kp.pubB64,
+      priv:   privJwk,
+    });
+  }
+  // Merge with any existing pool (prepend new ones, keep old ones that haven't been consumed)
+  let existing: OPKEntry[] = [];
+  try {
+    const stored = await StorageService.getMetadata(OPK_POOL_KEY(userId));
+    if (Array.isArray(stored)) existing = stored as OPKEntry[];
+  } catch { }
+  const merged = [...batch, ...existing];
+  await StorageService.setMetadata(OPK_POOL_KEY(userId), merged);
+  return merged;
+}
+
+/**
+ * Find and remove an OPK from the local pool by id. Returns the entry so the
+ * caller can use the private key for X3DH. Returns null if the id isn't found
+ * (already consumed or from a previous install — session still works without OPK).
+ */
+export async function consumeOPK(userId: string, opkId: string): Promise<OPKEntry | null> {
+  try {
+    const pool = await loadOrCreateOPKPool(userId);
+    const idx  = pool.findIndex(e => e.id === opkId);
+    if (idx === -1) return null;
+    const [entry] = pool.splice(idx, 1);
+    await StorageService.setMetadata(OPK_POOL_KEY(userId), pool);
+    return entry;
+  } catch { return null; }
+}
+
+/**
+ * Return the current pool size without modifying it.
+ */
+export async function getOPKPoolSize(userId: string): Promise<number> {
+  try {
+    const pool = await StorageService.getMetadata(OPK_POOL_KEY(userId));
+    return Array.isArray(pool) ? pool.length : 0;
+  } catch { return 0; }
 }

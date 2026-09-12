@@ -35,6 +35,10 @@ function chatRelayBase(): string {
 import {
   SignalSession, SignalPublicBundle, SignalEnvelope,
   SIGNAL_WIRE_VERSION, getOrCreateIdentityBundle,
+  getSafetyNumber,
+  loadOrCreateOPKPool, generateOPKBatch,
+  getOPKPoolSize, OPK_POOL_SIZE, OPK_POOL_LOW_WATER,
+  type OPKEntry,
 } from './signalProtocol';
 import { compareMessages } from '../utils/messageOrder';
 import type { StoredChatMessage, SyncStatus } from '../types/social';
@@ -79,7 +83,7 @@ const PRESENCE_PING_MS      = 3_000;
 const PRESENCE_POLL_MS      = 15_000;
 const OUTBOX_TTL_MS         = 7 * 24 * 60 * 60 * 1000;
 const MAX_SEND_ATTEMPTS     = 12;
-const FLUSH_INTERVAL_MS     = 60_000;
+const FLUSH_INTERVAL_MS     = 15_000; // retry pending messages every 15s (was 60s)
 const CONNECTION_POLL_MS    = 3_000;
 const PRUNE_EVERY_N_FLUSHES = 60;
 const GUN_CHAIN_HEALTH_MS   = 20_000;
@@ -181,6 +185,7 @@ class ChatService {
   private typingUnsubscribers = new Map<string, () => void>();
   private readReceiptUnsubs   = new Map<string, () => void>();
   private watchedRooms        = new Map<string, string>(); // roomId → recipientId
+  private _visibilityHandler: (() => void) | null = null;  // fires markAsRead on tab-focus
   // Per-sender decrypt queue: serialises mergeRemote calls so concurrent
   // WS + Gun deliveries don't race on loadSession/saveSession and corrupt
   // the ratchet state (e.g. message 2 loading nr=0 while message 1's
@@ -246,33 +251,16 @@ class ChatService {
     this.myBundle = await getOrCreateIdentityBundle(this.userId);
     this.seq      = await this.loadSeq();
 
-    // Publish our Signal public bundle:
-    //   1. REST POST → relay MySQL (fast, <20ms, primary lookup path)
-    //   2. Gun put   → graph (slow but persistent, fallback for peers not on relay)
+    // Publish our Signal public bundle to Gun immediately (no auth needed).
+    // The REST POST to the relay is deferred until after 'registered' arrives
+    // (see handleWsMessage case 'registered') so the relay's liveClient ownership
+    // check can find our WS session. Doing it here before connect() causes a 403
+    // for anonymous users and the bundle is never stored in MySQL → recipients
+    // can't fetch it → encryptFor throws → messages silently fail to send.
     const bundleStr = JSON.stringify(this.myBundle.bundle);
     const node      = GunService.getGun().get('users').get(this.userId);
 
-    // REST publish with session-level guard to avoid 429 on hot-reload.
-    // sessionStorage persists within the tab session but clears on close.
-    const pubKey = 'bundle-pub:' + this.userId;
-    const publishBundle = async () => {
-      if (sessionStorage.getItem(pubKey) === bundleStr) return; // already published this session
-      for (const delay of [0, 3000, 10000, 30000]) {
-        if (delay) await new Promise(r => setTimeout(r, delay));
-        try {
-          const res = await fetch(`${chatRelayBase()}/api/signal-bundle`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: this.userId, ...this.myBundle!.bundle }),
-          });
-          if (res.ok) { sessionStorage.setItem(pubKey, bundleStr); return; }
-          if (res.status !== 429) return; // non-retryable error
-        } catch { /* retry */ }
-      }
-    };
-    void publishBundle();
-
-    // Gun publish (fire-and-forget)
+    // Gun publish (fire-and-forget, no auth needed)
     const existing = await gunOnce<string>(node.get('signalBundle'), 1_500);
     if (existing !== bundleStr) {
       void gunPut(node, { signalBundle: bundleStr });
@@ -285,6 +273,7 @@ class ChatService {
     this.startConnectionTracking();
     this.startOutboxLoop();
     this.startPresence();
+    this.startVisibilityTracking();
     if (this.wsUrl) this.connect();
     return bundleStr;
   }
@@ -312,22 +301,38 @@ class ChatService {
     try {
       const cached = await StorageService.getMetadata(idbKey);
       if (cached?.ik && cached?.spk) {
-        if (Date.now() - (cached._cachedAt ?? 0) < 3_600_000) // 1h
+        if (Date.now() - (cached._cachedAt ?? 0) < 3_600_000) { // 1h TTL
+          // verifySpkSignature handles missing spkSig gracefully (warn only),
+          // so serve the cached bundle regardless of whether spkSig is present.
           return cached as unknown as SignalPublicBundle;
-      }
-    } catch { }
-
-    // 1. REST endpoint
-    try {
-      const res = await fetch(`${chatRelayBase()}/api/signal-bundle/${encodeURIComponent(recipientId)}`);
-      if (res.ok) {
-        const bundle = await res.json() as SignalPublicBundle;
-        if (bundle.ik && bundle.spk && bundle.opk) {
-          void StorageService.setMetadata(idbKey, { ...bundle, _cachedAt: Date.now() }).catch(() => {});
-          return bundle;
         }
       }
     } catch { }
+
+    // 1. REST endpoint — retry once after 1.5s on 404 to handle the race where
+    // the peer's publishBundleToRelay() is still in-flight when we fetch.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 1500));
+      try {
+        const res = await fetch(`${chatRelayBase()}/api/signal-bundle/${encodeURIComponent(recipientId)}`);
+        if (res.ok) {
+          const bundle = await res.json() as SignalPublicBundle;
+          if (bundle.ik && bundle.spk) {
+            try {
+              const { verifySpkSignature } = await import('./signalProtocol');
+              await verifySpkSignature(bundle);
+            } catch (e) {
+              console.error('[ChatService] SPK signature invalid for', recipientId, '— refusing bundle:', e);
+              this.onRecipientKeyChange?.({ userId: recipientId, available: false });
+              return null;
+            }
+            void StorageService.setMetadata(idbKey, { ...bundle, _cachedAt: Date.now() }).catch(() => {});
+            return bundle;
+          }
+        }
+        if (res.status !== 404) break; // non-404 errors won't be fixed by waiting
+      } catch { break; }
+    }
 
     // 2. Gun fallback
     try {
@@ -336,6 +341,13 @@ class ChatService {
       );
       if (raw) {
         const bundle = JSON.parse(raw) as SignalPublicBundle;
+        try {
+          const { verifySpkSignature } = await import('./signalProtocol');
+          await verifySpkSignature(bundle);
+        } catch (e) {
+          console.error('[ChatService] Gun bundle SPK signature invalid for', recipientId, '— refusing:', e);
+          return null;
+        }
         void StorageService.setMetadata(idbKey, { ...bundle, _cachedAt: Date.now() }).catch(() => {});
         return bundle;
       }
@@ -402,9 +414,13 @@ class ChatService {
     // with a new ephemeral key. The receiver then got two different X3DH inits:
     // the first was reset by the second, so message 1 was lost and message 2 survived.
 
-    const bundle = await this.getTheirBundle(recipientId);
+    const bundle   = await this.getTheirBundle(recipientId);
     if (!bundle) throw new Error('Recipient has no Signal key bundle yet');
-    return this.getSession(recipientId).encrypt(plaintext, this.myBundle, bundle);
+    const envelope = await this.getSession(recipientId).encrypt(plaintext, this.myBundle, bundle);
+    // If this was a new X3DH session (eph present), the relay consumed one OPK.
+    // Replenish in the background so the pool stays healthy.
+    if (envelope.eph) void this.ensureOPKPool();
+    return envelope;
   }
 
   private async decryptFrom(
@@ -427,7 +443,7 @@ class ChatService {
       }
     }
     if (!theirBundle) throw new Error(`Bundle unavailable for sender ${senderId.slice(0, 16)}`);
-    return this.getSession(senderId).decrypt(envelope, this.myBundle, theirBundle.ik);
+    return this.getSession(senderId).decrypt(envelope, this.myBundle, theirBundle.ik, this.userId);
   }
 
   // ── Gun paths ─────────────────────────────────────────────────────────────
@@ -504,16 +520,26 @@ class ChatService {
       if (v === SIGNAL_WIRE_VERSION) {
         // v3: Signal double-ratchet
         const envelope: SignalEnvelope = {
-          v:   SIGNAL_WIRE_VERSION,
-          eph: raw.eph,
-          dh:  raw.dh,
-          n:   raw.n,
-          pn:  raw.pn,
-          ct:  raw.ct,
+          v:     SIGNAL_WIRE_VERSION,
+          eph:   raw.eph,
+          opkId: raw.opkId,
+          dh:    raw.dh,
+          n:     Number(raw.n)  || 0,
+          pn:    Number(raw.pn) || 0,
+          ct:    raw.ct,
         };
         // Our own outgoing message replayed from Gun — already stored on send, skip
         if (senderId === this.userId) return null;
-        text = await this.decryptFrom(senderId, envelope);
+        try {
+          text = await this.decryptFrom(senderId, envelope);
+        } catch (decryptErr) {
+          // Decrypt failed — wipe the local session so the next message triggers
+          // a clean X3DH instead of retrying with corrupted ratchet state forever.
+          // Common causes: IK rotation (fresh install), OPK mismatch, ratchet desync.
+          console.warn(`[ChatService] Decrypt failed for ${senderId.slice(0,8)}, clearing session:`, (decryptErr as Error).message);
+          await this.getSession(senderId).clearSession();
+          throw decryptErr; // re-throw so the tombstone path handles it below
+        }
       } else {
         // v1/v2 not supported: tombstone silently so Gun never retries
         const alreadyMarked = await StorageService.getChatMessage(id);
@@ -807,12 +833,36 @@ class ChatService {
       return { ...row, ...patch };
     };
 
-    // Encrypt with Signal protocol
+    // Encrypt with Signal protocol — but ONLY on the first attempt.
+    // On retries, reuse the stored envelope so the ratchet counter (n) stays
+    // the same across all delivery attempts. Re-encrypting on retry advances ns
+    // in the saved session: the receiver would get n=1, n=2, … but never n=0,
+    // causing skipMessageKeys to derive wrong keys → AES-GCM decrypt fails.
     let envelope: SignalEnvelope;
-    try {
-      envelope = await this.encryptFor(recipientId, row.text);
-    } catch (e) {
-      return fail(e instanceof Error ? e.message : 'Encryption failed');
+    if (row.encryptedEnvelope) {
+      // Retry path: reuse the envelope we already encrypted (idempotent)
+      try {
+        envelope = JSON.parse(row.encryptedEnvelope) as SignalEnvelope;
+      } catch {
+        // Stored envelope is corrupt — clear it and re-encrypt (last resort)
+        row = { ...row, encryptedEnvelope: undefined };
+        try {
+          envelope = await this.encryptFor(recipientId, row.text);
+        } catch (e) {
+          return fail(e instanceof Error ? e.message : 'Encryption failed');
+        }
+      }
+    } else {
+      // First attempt: encrypt and persist the envelope immediately
+      try {
+        envelope = await this.encryptFor(recipientId, row.text);
+      } catch (e) {
+        return fail(e instanceof Error ? e.message : 'Encryption failed');
+      }
+      // Persist the envelope so retries are idempotent
+      const encryptedEnvelope = JSON.stringify(envelope);
+      await this.patchRow(row.id, { encryptedEnvelope });
+      row = { ...row, encryptedEnvelope };
     }
 
     // Flatten Signal envelope + metadata into a Gun-safe record (no nested objects)
@@ -823,6 +873,7 @@ class ChatService {
       recipientId,
       // Signal envelope fields (all primitives)
       eph:         envelope.eph,
+      opkId:       envelope.opkId,  // OPK pool id — receiver must consumeOPK() on first message
       dh:          envelope.dh,
       n:           envelope.n,
       pn:          envelope.pn,
@@ -831,15 +882,28 @@ class ChatService {
       seq:         row.seq,
     });
 
-    // Push live delivery frame via WS FIRST — recipient gets this immediately
-    // This is the primary delivery path. Gun write is persistence/fallback only.
+    // Push live delivery frame via WS FIRST — recipient gets this immediately.
+    // The relay echoes back a 'chat-delivered' frame when it has forwarded the
+    // message (or stored it for offline delivery). We wait up to 5s for that ack
+    // before marking confirmed — if it doesn't arrive, we stay 'pending' so the
+    // outbox retries rather than silently losing the message.
+    const wsOpen = this.ws?.readyState === WebSocket.OPEN;
+    const deliveredPromise = wsOpen
+      ? new Promise<void>(resolve => {
+          const timeout = setTimeout(() => {
+            this.pendingDeliveryAcks.delete(row.id);
+            resolve();  // timeout — stays pending, outbox will retry
+          }, 5_000);
+          this.pendingDeliveryAcks.set(row.id, () => {
+            clearTimeout(timeout);
+            resolve();
+          });
+        })
+      : Promise.resolve();
+
     this.pushLiveFrame(recipientId, row.id, envelope, row.timestamp);
 
-    // Fire-and-forget Gun write — do NOT await it.
-    // Gun peer sync takes 1-10s and blocking on it makes every send feel broken.
-    // The WS push already delivered the message. Gun persistence happens in the background.
-    // Touch roomLastFired on ack so the health timer doesn't misread an outgoing-only
-    // room as dead and trigger a needless chain reattach.
+    // Fire-and-forget Gun write (persistence/fallback). Do NOT await.
     void gunPut(this.roomNode(row.roomId).get(row.id), record).then(ack => {
       if (ack.ok) {
         this.indexRoom(row.roomId, this.userId, recipientId);
@@ -847,8 +911,25 @@ class ChatService {
       }
     });
 
-    // Mark confirmed immediately — WS delivery is our confirmation.
-    const patch = { syncStatus: 'confirmed' as SyncStatus, syncAttempts: attempts, error: undefined };
+    if (wsOpen) {
+      // Wait for relay ack before confirming
+      await deliveredPromise;
+      // Check if the ack actually came (vs timeout)
+      if (this.pendingDeliveryAcks.has(row.id)) {
+        // Timeout fired — relay didn't ack. Stay pending for outbox retry.
+        this.pendingDeliveryAcks.delete(row.id);
+        return fail('Relay did not acknowledge delivery');
+      }
+      // Ack received — confirm and clear stored envelope
+      const ackPatch = { syncStatus: 'confirmed' as SyncStatus, syncAttempts: attempts,
+                         error: undefined, encryptedEnvelope: undefined };
+      await this.patchRow(row.id, ackPatch);
+      return { ...row, ...ackPatch };
+    }
+    // WS was closed — Gun fallback handled it, mark confirmed optimistically
+    // Clear encryptedEnvelope on confirm — no longer needed for retries
+    const patch = { syncStatus: 'confirmed' as SyncStatus, syncAttempts: attempts, 
+                    error: undefined, encryptedEnvelope: undefined };
     await this.patchRow(row.id, patch);
     return { ...row, ...patch };
   }
@@ -864,15 +945,15 @@ class ChatService {
   ): void {
     const frame = JSON.stringify({
       type: 'chat-message', recipientId, messageId,
-      from: this.userId,   // FIX: required so handleWsMessage can set raw.senderId correctly;
-                           // without this data.from is undefined -> mergeRemote returns null -> message dropped
+      from: this.userId,
       v:    WIRE_VERSION,
       // Signal envelope fields
-      eph:  envelope.eph,
-      dh:   envelope.dh,
-      n:    envelope.n,
-      pn:   envelope.pn,
-      ct:   envelope.ct,
+      eph:   envelope.eph,
+      opkId: envelope.opkId,  // OPK pool id — must be forwarded so receiver can consumeOPK()
+      dh:    envelope.dh,
+      n:     envelope.n,
+      pn:    envelope.pn,
+      ct:    envelope.ct,
       timestamp,
     });
     // Try dedicated chat WS first, then Gun's own WS as fallback
@@ -985,6 +1066,75 @@ class ChatService {
         .put({ online, ts, peerId: this.peerId });
     } catch { }
     if (online) this.registerPresenceOnRelay();
+  }
+
+  // ── Bundle publish ────────────────────────────────────────────────────────
+  // Called from the 'registered' WS handler so the relay's liveClient
+  // ownership check finds our active session.  Using sessionStorage to avoid
+  // re-posting the exact same bundle bytes on every reconnect (hot-reload,
+  // tab focus, etc.) — clears when the tab closes so a fresh session always
+  // publishes at least once.
+  private async publishBundleToRelay(): Promise<void> {
+    if (!this.myBundle) return;
+    const bundleStr = JSON.stringify(this.myBundle.bundle);
+    const pubKey    = 'bundle-pub:' + this.userId;
+    try {
+      if (sessionStorage.getItem(pubKey) === bundleStr) return;
+    } catch { /* private-browsing may block sessionStorage */ }
+
+    for (const delay of [0, 3_000, 10_000, 30_000]) {
+      if (delay) await new Promise(r => setTimeout(r, delay));
+      if (this.shuttingDown) return;
+      try {
+        const res = await fetch(`${chatRelayBase()}/api/signal-bundle`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ userId: this.userId, ...this.myBundle!.bundle }),
+        });
+        if (res.ok) {
+          try { sessionStorage.setItem(pubKey, bundleStr); } catch { }
+          return;
+        }
+        // Retry on 429 (rate-limited) or 503 (relay hasn't seen our WS session yet).
+        // Any other status (400 missing spkSig, 403 auth mismatch, 500 DB) is a
+        // hard failure — log and stop retrying.
+        if (res.status !== 429 && res.status !== 503) {
+          console.warn(`[ChatService] Bundle publish failed (${res.status}) — not retrying`);
+          return;
+        }
+        // 429: fall through to next delay
+      } catch { /* network error — retry */ }
+    }
+    console.warn('[ChatService] Bundle publish failed after all retries');
+  }
+
+  // ── Visibility tracking ───────────────────────────────────────────────────
+  // On mobile browsers (and Capacitor) the document can be hidden even while
+  // the chat view is in the foreground (app backgrounded briefly).  When it
+  // comes back to the foreground we must re-send any pending read receipts so
+  // the sender's double-tick updates without needing a new incoming message.
+
+  private startVisibilityTracking(): void {
+    if (typeof document === 'undefined' || this._visibilityHandler) return;
+    this._visibilityHandler = () => {
+      if (document.visibilityState !== 'visible') return;
+      // Re-send markAsRead only for rooms that actually have unread messages.
+      // Sending unconditionally causes spurious double-ticks on the other side
+      // even when they haven't received anything yet.
+      for (const [roomId, recipientId] of this.watchedRooms.entries()) {
+        void this.hasUnreadMessages(roomId).then(has => {
+          if (has) this.markAsRead(recipientId);
+        });
+      }
+    };
+    document.addEventListener('visibilitychange', this._visibilityHandler);
+  }
+
+  private stopVisibilityTracking(): void {
+    if (this._visibilityHandler) {
+      document.removeEventListener('visibilitychange', this._visibilityHandler);
+      this._visibilityHandler = null;
+    }
   }
 
   private startPresence(): void {
@@ -1178,18 +1328,37 @@ class ChatService {
       case 'registered': {
         // Relay confirmed our register frame is fully processed — safe to send chat-read now
         this.wsRegistered = true;
+
+        // Publish our Signal bundle to the relay's MySQL now that our WS session
+        // is confirmed live. The liveClient ownership check in routes.js looks up
+        // clients.get(peerId) — that entry exists from the moment 'register' was
+        // processed, so this POST will pass. We intentionally didn't publish in
+        // init() because the WS wasn't open yet and the check would reject us.
+        void this.publishBundleToRelay();
+
+        // Ensure we have a healthy OPK pool on the relay.
+        // Also runs after any new X3DH session (relay consumed one OPK).
+        void this.ensureOPKPool();
+
+        // Immediately flush the outbox — any messages that failed to send because
+        // the bundle wasn't published yet (the common case on first load) will be
+        // retried right now rather than waiting up to FLUSH_INTERVAL_MS.
+        void this.flushOutbox();
+
         // Flush explicitly pending reads first
         for (const recipientId of this.pendingReadRecipients) {
           this.pendingReadRecipients.delete(recipientId);
           this._doMarkAsRead(recipientId);
         }
-        // Also re-send for all currently watched rooms: covers the case where a live
-        // 'chat-message' arrived and triggered markAsRead just before 'registered' came in,
-        // wsRegistered was still false so it got queued, but then the pendingReadRecipients
-        // was already drained by the fallback timer and the receipt was silently dropped.
-        for (const recipientId of this.watchedRooms.values()) {
+        // Re-send for watched rooms that have actual unread messages — handles the case
+        // where a 'chat-message' triggered markAsRead just before 'registered' arrived,
+        // wsRegistered was false so it was queued, then the fallback timer drained it.
+        // Only send if there are genuinely unread messages to avoid spurious double-ticks.
+        for (const [roomId, recipientId] of this.watchedRooms.entries()) {
           if (!this.pendingReadRecipients.has(recipientId)) {
-            this._doMarkAsRead(recipientId);
+            void this.hasUnreadMessages(roomId).then(has => {
+              if (has) this._doMarkAsRead(recipientId);
+            });
           }
         }
         break;
@@ -1217,6 +1386,7 @@ class ChatService {
             senderId:    data.from,
             recipientId: this.userId,
             eph:         data.eph,
+            opkId:       data.opkId,   // needed for OPK consumption in decrypt()
             dh:          data.dh,
             n:           data.n,
             pn:          data.pn,
@@ -1228,8 +1398,23 @@ class ChatService {
           raw = { id: messageId, v, senderId: data.from, recipientId: this.userId, timestamp: data.timestamp };
         }
 
-        const row = await this.mergeRemote(raw, roomId);
-        if (row && row.text && row.syncStatus !== 'corrupted') this.onMessage?.(toChatMessage(row));
+        try {
+          const row = await this.mergeRemote(raw, roomId);
+          if (row && row.text && row.syncStatus !== 'corrupted') this.onMessage?.(toChatMessage(row));
+        } catch (e) {
+          // mergeRemote threw (decrypt failed). clearSession() already ran inside mergeRemote.
+          // Ask the relay to re-send this message after a short delay — by then the session
+          // is cleared and fresh X3DH will run on the next attempt, recovering without
+          // requiring the user to manually refresh.
+          const failedId = messageId;
+          const failedFrom = data.from;
+          console.warn('[ChatService] Decrypt failed for WS message', failedId, '— scheduling resend request');
+          setTimeout(() => {
+            if (this.ws?.readyState === WebSocket.OPEN && failedId && failedFrom) {
+              this.ws.send(JSON.stringify({ type: 'chat-resend-request', messageId: failedId, from: failedFrom }));
+            }
+          }, 2_000);
+        }
         break;
       }
 
@@ -1241,13 +1426,24 @@ class ChatService {
         if (data.from && data.payload) this.onRtcSignal?.({ from: data.from, payload: data.payload });
         break;
 
-      case 'chat-delivered':
+      case 'chat-delivered': {
+        const ackFn = this.pendingDeliveryAcks.get(data.messageId);
+        if (ackFn) {
+          this.pendingDeliveryAcks.delete(data.messageId);
+          ackFn(); // resolves the deliveredPromise in deliver()
+        }
         this.onDelivered?.({ messageId: data.messageId, recipientId: data.recipientId });
         break;
+      }
 
       case 'chat-read-receipt': {
-        const at = Number(data.at) || Date.now();
-const rrRoomId = this.getRoomId(this.userId, data.from);
+        // Use Number.MAX_SAFE_INTEGER as the fallback so a missing or zero `at`
+        // marks ALL outgoing messages as read rather than only those with
+        // timestamp ≤ Date.now(). This avoids clock-skew issues where the
+        // sender's messages have timestamps slightly ahead of the receiver's
+        // clock and would otherwise remain stuck on a single tick.
+        const at = (Number(data.at) > 0) ? Number(data.at) : Number.MAX_SAFE_INTEGER;
+        const rrRoomId = this.getRoomId(this.userId, data.from);
         void this.markLocalReadUpTo(rrRoomId, at);
         this.onReadReceipt?.({ from: data.from, at });
         break;
@@ -1297,6 +1493,20 @@ const rrRoomId = this.getRoomId(this.userId, data.from);
   async startChat(recipient: RecipientInfo): Promise<void> {
     const roomId = this.getRoomId(this.userId, recipient.userId);
     this.watchedRooms.set(roomId, recipient.userId);
+
+    // Seed seenIds from IDB BEFORE subscribing to Gun so that Gun's .map().on()
+    // re-deliveries of messages already in IDB are deduplicated on the first
+    // callback, not just after the second one hits the Set.  Without this, a
+    // page refresh empties the module-level seenIds map; the WS offline-replay
+    // arrives first (correct), seenIds is seeded, but Gun fires for the same
+    // node milliseconds later and slips past the check, producing a duplicate
+    // row in the message list.
+    try {
+      const existingRows = await StorageService.getChatMessagesByRoom(roomId);
+      const seen = seenIds(this.userId);
+      for (const r of existingRows) if (r.id) seen.add(r.id);
+    } catch { /* best-effort — Gun subscription still happens */ }
+
     this.subscribeToRoomMessages(roomId);
     this.subscribeToTyping(roomId, recipient.userId);
     this.subscribeToReadReceipts(roomId, recipient.userId);
@@ -1307,8 +1517,6 @@ const rrRoomId = this.getRoomId(this.userId, data.from);
 
     if (this.ws?.readyState === WebSocket.OPEN)
       this.ws.send(JSON.stringify({ type: 'chat-start', recipientId: recipient.userId }));
-
-
   }
 
   static readonly MAX_INLINE_FILE_BYTES = 400 * 1024;       // 400 KB — inline base64
@@ -1384,7 +1592,17 @@ const rrRoomId = this.getRoomId(this.userId, data.from);
   }
 
 
-  private _markReadDebounce = new Map<string, ReturnType<typeof setTimeout>>();
+  // Returns true if the room has any received (incoming) messages not yet read.
+  // Used to guard markAsRead calls so we never send chat-read when there's nothing to ack.
+  private async hasUnreadMessages(roomId: string): Promise<boolean> {
+    try {
+      const rows = await StorageService.getChatMessagesByRoom(roomId);
+      return rows.some(r => !r.outgoing && !r.readAt);
+    } catch { return false; }
+  }
+
+  private _markReadDebounce      = new Map<string, ReturnType<typeof setTimeout>>();
+  private pendingDeliveryAcks    = new Map<string, () => void>(); // messageId → resolve fn
 
   markAsRead(recipientId: string): void {
     // Debounce rapid calls (e.g. onConnectionChange + initializeChat firing together)
@@ -1470,6 +1688,50 @@ const rrRoomId = this.getRoomId(this.userId, data.from);
   isConnected() { return this.connected; }
   isReady()     { return this.ready; }
 
+  /**
+   * Return this user's identity signing pub key and the cached bundle for a
+   * peer. Used by ChatView to compute safety numbers for display.
+   */
+  getIdentityKeys(): { myIKSignPub: string } | null {
+    if (!this.myBundle) return null;
+    return { myIKSignPub: this.myBundle.bundle.ikSignPub };
+  }
+
+  async getTheirIKSignPub(peerId: string): Promise<string | null> {
+    const bundle = await this.getTheirBundle(peerId);
+    return bundle?.ikSignPub ?? null;
+  }
+
+  // ── OPK pool management ───────────────────────────────────────────────────
+  // Called after init() to ensure the relay has a fresh batch of OPKs.
+  // Also called periodically and after each new X3DH session is established
+  // (the relay consumes one OPK per session; we replenish when running low).
+
+  private async ensureOPKPool(): Promise<void> {
+    if (!this.myBundle) return;
+    const size = await getOPKPoolSize(this.userId);
+    if (size > OPK_POOL_LOW_WATER) return; // pool is healthy
+    // Generate enough to bring us back to OPK_POOL_SIZE
+    const needed = OPK_POOL_SIZE - size;
+    const pool   = await generateOPKBatch(needed, this.userId);
+    await this.publishOPKBatch(pool.slice(0, needed));
+  }
+
+  private async publishOPKBatch(entries: OPKEntry[]): Promise<void> {
+    if (!entries.length) return;
+    try {
+      const res = await fetch(`${chatRelayBase()}/api/opk-pool`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          userId: this.userId,
+          opks:   entries.map(e => ({ id: e.id, pub: e.pubB64 })),
+        }),
+      });
+      if (!res.ok) console.warn('[ChatService] OPK pool publish failed:', res.status);
+    } catch (e) { console.warn('[ChatService] OPK pool publish error:', e); }
+  }
+
   disconnect(): void {
     this.shuttingDown = true;
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer);  this.reconnectTimer = null; }
@@ -1479,6 +1741,7 @@ const rrRoomId = this.getRoomId(this.userId, data.from);
     this.offGunReconnect?.(); this.offGunReconnect = null;
     if (this.ws) { try { this.ws.close(); } catch { } this.ws = null; }
     this.stopPresence();
+    this.stopVisibilityTracking();
     for (const u of this.roomUnsubscribers.values())   u();
     for (const u of this.typingUnsubscribers.values()) u();
     for (const u of this.readReceiptUnsubs.values())   u();
