@@ -44,6 +44,7 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
   let   bgChatService: ChatService | null = null;
   let   bgChatInitialised = false;
   let   bgChatInitPromise: Promise<void> | null = null;
+  let   _stopRouteWatch:   (() => void) | null  = null; // router.afterEach unsub
 
   // ─── Room helpers ─────────────────────────────────────────────────────────
 
@@ -235,6 +236,38 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
         void showIncomingMessageNotification(msg.from, msg.from, preview, isInThisChat);
       }
     };
+
+    // When the remote peer reads our messages, ChatService fires onReadReceipt.
+    // We don't need to update unread count here (that's the COUNT of messages we
+    // haven't read — unrelated to whether THEY read ours), but we do need to
+    // trigger a refreshRoomSummary so the last-message preview stays accurate.
+    bgChatService.onReadReceipt = ({ from }) => {
+      const roomId = getRoomId(currentUserId, from);
+      refreshRoomSummary(roomId, from);
+    };
+
+    // When the user opens a chat room that has an unread badge, zeroing it via
+    // openChat() only works when they tap from the chat list. Direct URL navigation
+    // (deep link, back-button, notification tap) bypasses that path.
+    // Watch the route so any navigation into a specific chat zeros the badge
+    // and recalculates totalUnread from IDB truth — no stale UI state.
+    const stopRouteWatch = router.afterEach((to) => {
+      if (to.name !== 'Chat') return;
+      const otherUserId = String(to.params.userId || '');
+      if (!otherUserId) return;
+      const entry = chatList.value.find(c => c.userId === otherUserId);
+      if (entry && entry.unreadCount > 0) {
+        entry.unreadCount = 0;
+        totalUnread.value = chatList.value.reduce((s, c) => s + c.unreadCount, 0);
+      }
+      // Re-derive the room summary from IDB after a short delay so IDB reflects
+      // the read receipts that ChatView's initializeChat just wrote
+      const roomId = getRoomId(currentUserId, otherUserId);
+      setTimeout(() => refreshRoomSummary(roomId, otherUserId), 800);
+    });
+    // Store cleanup for teardown
+    _stopRouteWatch = stopRouteWatch;
+
     bgChatInitialised = true;
   }
 
@@ -344,6 +377,8 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
     bgChatService?.disconnect?.();
     bgChatService = null;
     bgChatInitialised = false;
+    _stopRouteWatch?.();
+    _stopRouteWatch = null;
   }
 
   return {

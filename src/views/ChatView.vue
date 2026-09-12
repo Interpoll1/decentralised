@@ -26,6 +26,13 @@
           <span class="hdr-ws-status" :class="{ 'hdr-ws-status--ok': connected && !chatError }">
             {{ connected && !chatError ? 'Connected' : chatError ? 'Error' : 'Offline' }}
           </span>
+          <button class="header-action-btn sn-btn" @click="showSafetyNumber = true" title="Verify encryption">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              <path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="12" cy="16" r="1.5" fill="currentColor"/>
+            </svg>
+          </button>
           <button class="header-action-btn danger" @click="confirmDeleteAll" title="Delete all messages">
             <svg viewBox="0 0 24 24" fill="none">
               <polyline points="3 6 5 6 21 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -251,7 +258,51 @@
         </div>
       </div>
     </ion-content>
-  </ion-page>
+
+    <!-- Safety number modal -->
+    <transition name="sn-fade">
+      <div v-if="showSafetyNumber" class="sn-overlay" @click.self="showSafetyNumber = false">
+        <div class="sn-modal">
+          <div class="sn-modal-header">
+            <svg viewBox="0 0 24 24" fill="none" class="sn-icon">
+              <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.8"/>
+              <path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              <circle cx="12" cy="16" r="1.5" fill="currentColor"/>
+            </svg>
+            <h2 class="sn-title">Safety Number</h2>
+          </div>
+
+          <p class="sn-desc">
+            Compare this code with <strong>{{ recipientName }}</strong> in person or
+            over a trusted channel. If it matches on both sides your conversation is
+            end-to-end encrypted and has not been intercepted.
+          </p>
+
+          <div v-if="safetyNumberMissing" class="sn-warning">
+            <svg viewBox="0 0 24 24" fill="none" width="16" height="16" style="flex-shrink:0">
+              <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            {{ recipientName }} has not yet published an identity key.
+            Ask them to open the app and send a message.
+          </div>
+
+          <div v-else-if="!safetyNumber" class="sn-loading">
+            <span class="sn-spinner"></span> Computing…
+          </div>
+
+          <div v-else class="sn-number-grid">
+            <span v-for="(chunk, i) in safetyNumberChunks" :key="i" class="sn-chunk">{{ chunk }}</span>
+          </div>
+
+          <p v-if="safetyNumber" class="sn-footnote">
+            This number changes if either party reinstalls or rotates their keys.
+          </p>
+
+          <button class="sn-done-btn" @click="showSafetyNumber = false">Done</button>
+        </div>
+      </div>
+    </transition>
+    </ion-page>
 </template>
 
 <script setup lang="ts">
@@ -262,6 +313,7 @@ import {
   IonButtons, onIonViewWillEnter, alertController, toastController,
 } from '@ionic/vue';
 import ChatService, { type ChatMessage } from '../services/chatService';
+import { getSafetyNumber } from '../services/signalProtocol';
 import { UserService } from '../services/userService';
 import { GunService } from '../services/gunService';
 import { StorageService } from '../services/storageService';
@@ -299,6 +351,30 @@ const p2pTransfer  = ref<P2PTransfer | null>(null);
 const showP2PInfo  = ref(false);
 
 let chatService: ChatService | null = null;
+
+// ── Safety number ─────────────────────────────────────────────────────────────
+const showSafetyNumber    = ref(false);
+const safetyNumber        = ref<string | null>(null);
+const safetyNumberMissing = ref(false);
+
+const safetyNumberChunks = computed(() =>
+  safetyNumber.value ? safetyNumber.value.split(' ') : []
+);
+
+watch(showSafetyNumber, async (open) => {
+  if (!open) return;
+  safetyNumber.value        = null;
+  safetyNumberMissing.value = false;
+  try {
+    const myKeys = chatService?.getIdentityKeys();
+    if (!myKeys) return;
+    const theirIKSignPub = await chatService?.getTheirIKSignPub(recipientId.value);
+    if (!theirIKSignPub) { safetyNumberMissing.value = true; return; }
+    safetyNumber.value = await getSafetyNumber(myKeys.myIKSignPub, theirIKSignPub);
+  } catch (e) {
+    console.warn('[ChatView] Safety number computation failed:', e);
+  }
+});
 let initGeneration = 0;
 
 // ── P2P debug logger ───────────────────────────────────────────────────────────
@@ -1089,9 +1165,9 @@ function bindChatCallbacks(service: ChatService) {
     nextTick(() => scrollToBottom(true));
     // If an incoming message arrives while we're actively viewing this chat,
     // immediately send a read receipt so the sender gets their double tick.
-    if (!msg.sent && document.visibilityState === 'visible') {
-      service.markAsRead(recipientId.value);
-    }
+    // Always fire markAsRead — ChatService's visibilitychange listener
+    // handles the re-send when the tab returns from the background.
+    if (!msg.sent) service.markAsRead(recipientId.value);
   };
   service.onMessageStatus = ({ id, status, error }) => {
     const at = messages.value.findIndex(m => m.id === id);
@@ -1111,7 +1187,7 @@ function bindChatCallbacks(service: ChatService) {
   service.onReadReceipt = ({ from, at }) => {
 
     if (from !== recipientId.value) return;
-    const cutoff = at || Date.now();
+    const cutoff = (at && at < Number.MAX_SAFE_INTEGER) ? at : Number.MAX_SAFE_INTEGER;
     let changed = false;
     const updated = messages.value.map(m => {
       // Use m.sent OR m.from === myUserId as fallback — Gun re-delivery can
@@ -1203,37 +1279,9 @@ async function initializeChat() {
 watch(recipientId, async (n, o) => { if (n && n !== o) await initializeChat(); });
 onIonViewWillEnter(() => {
   if (!chatReady.value && recipientId.value) { void initializeChat(); return; }
-  // Re-bind callbacks every time the view becomes active
   if (chatService) bindChatCallbacks(chatService);
   chatService?.markAsRead(recipientId.value);
   forceScrollImmediate();
-  // Re-probe Gun ack soul when view becomes active — catches receipts written while away
-  if (chatService && recipientId.value) {
-    const roomId = [myUserId, recipientId.value].sort().join(':');
-    const applyReceipt = (at: number) => {
-      let changed = false;
-      const updated = messages.value.map(m => {
-        if (m.sent && !m.read && m.timestamp <= at) { changed = true; return { ...m, read: true }; }
-        return m;
-      });
-      if (changed) messages.value = updated;
-    };
-    const probeAck = (delay: number) => setTimeout(() => {
-      try {
-        GunService.getGun()
-          .get('chat-read-ack').get(roomId).get(recipientId.value)
-          .once((s: any) => {
-            if (!s || typeof s !== 'object') return;
-            if (Object.keys(s).every(k => k === '_')) return;
-            const at = Number(s.timestamp);
-            if (at > 1_000_000 && (!s.to || s.to === myUserId)) applyReceipt(at);
-          });
-      } catch {}
-    }, delay);
-    probeAck(300);
-    probeAck(1500);
-    probeAck(4000);
-  }
 });
 onUnmounted(() => { initGeneration++; disconnectChat(); closePeer(); });
 
@@ -1812,4 +1860,71 @@ ion-content { --background: transparent; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 @media (prefers-reduced-motion: reduce) { .message, .send-button, .input-pill { animation: none; transition: none; } }
+
+/* ─── Safety number ─────────────────────────────────────────────────────── */
+.sn-btn       { color: #a5b4fc; }
+.sn-btn:hover { background: rgba(165,180,252,0.1); }
+
+.sn-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.65); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.sn-modal {
+  background: #1a1d2e; border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 18px; padding: 28px 24px 20px;
+  max-width: 380px; width: 100%;
+  display: flex; flex-direction: column; gap: 16px;
+  box-shadow: 0 24px 48px rgba(0,0,0,0.5);
+}
+.sn-modal-header { display: flex; align-items: center; gap: 10px; }
+.sn-icon   { width: 26px; height: 26px; color: #a5b4fc; flex-shrink: 0; }
+.sn-title  { font-size: 16px; font-weight: 700; color: var(--app-text, #e2e8f0); margin: 0; }
+.sn-desc   { font-size: 13px; color: var(--app-text-subtle, #94a3b8); line-height: 1.6; margin: 0; }
+.sn-desc strong { color: var(--app-text, #e2e8f0); font-weight: 600; }
+
+.sn-number-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+}
+.sn-chunk {
+  background: rgba(255,255,255,0.06); border-radius: 8px;
+  padding: 9px 4px; text-align: center;
+  font-size: 14px; font-weight: 700;
+  font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
+  color: #a5b4fc; letter-spacing: 0.04em; user-select: all; cursor: text;
+}
+.sn-loading {
+  display: flex; align-items: center; gap: 10px;
+  color: var(--app-text-subtle, #94a3b8); font-size: 13px; padding: 8px 0;
+}
+.sn-spinner {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid rgba(165,180,252,0.25); border-top-color: #a5b4fc;
+  animation: sn-spin 0.75s linear infinite; flex-shrink: 0;
+}
+@keyframes sn-spin { to { transform: rotate(360deg); } }
+
+.sn-warning {
+  display: flex; align-items: flex-start; gap: 8px;
+  background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.22);
+  border-radius: 10px; padding: 10px 12px;
+  font-size: 12.5px; color: #fbbf24; line-height: 1.5;
+}
+.sn-footnote {
+  font-size: 11.5px; color: rgba(255,255,255,0.28);
+  text-align: center; margin: 0; line-height: 1.5;
+}
+.sn-done-btn {
+  background: #6366f1; color: #fff; border: none; border-radius: 12px;
+  padding: 12px; font-size: 14px; font-weight: 700;
+  cursor: pointer; transition: background 150ms; width: 100%;
+}
+.sn-done-btn:active,
+.sn-done-btn:hover { background: #5154d3; }
+
+.sn-fade-enter-active,
+.sn-fade-leave-active { transition: opacity 180ms ease; }
+.sn-fade-enter-from,
+.sn-fade-leave-to    { opacity: 0; }
+
 </style>

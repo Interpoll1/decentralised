@@ -93,4 +93,7 @@ export interface StoredChatMessage {
   readAt?: number;
   /** Set when the message could not be encrypted/sent, so the UI can offer a retry. */
   error?: string;
+  /** Serialised SignalEnvelope JSON. Stored on first successful encrypt so retries
+   *  reuse the same envelope without advancing the ratchet counter. */
+  encryptedEnvelope?: string;
 }
