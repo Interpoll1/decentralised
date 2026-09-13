@@ -1,120 +1,147 @@
 # InterPoll
 
-> **"101% Uptime!!!"** — *A voice for everyone, with records that are harder to erase.*
+> Polls, posts, and discussions that no single company can take down.
 
-<img width="1918" height="966" alt="InterPoll screenshot" src="https://github.com/user-attachments/assets/31717176-eb42-43b2-8200-8da9cf022550" />
-
----
-
-## What is InterPoll?
-
-InterPoll is a **free, open, decentralised polling + discussion platform** — a place where communities can vote, post, comment, and organise without any single company in control.
-
-When you vote, publish a post, or leave a comment on InterPoll, your activity is stored locally first and then shared across the network. No central server owns your community history. Poll results are backed by verifiable receipts, while posts and comments are replicated across peers so they are harder to suppress or quietly erase.
-
-We built InterPoll because we noticed that other platforms censor a lot — and even when they don't, they shadow-ban. On InterPoll, **anyone can create their own community, set their own rules, and design their own experience**. There is no algorithm deciding what you see. There is no central team that can quietly remove your poll.
+<p align="center">
+  <img width="1920" alt="InterPoll — decentralized polling platform" src="docs/screenshots/homepage.jpg" />
+</p>
 
 ---
 
-## Why it matters
+## So what is this, exactly?
 
-Traditional online communities share a fundamental weakness: **one server, one point of control**. The company that runs the server can delete a poll, hide a post, remove comments, alter results, or simply go offline. This is as true of small community forums as it is of massive social platforms.
+InterPoll is a free, open-source polling and discussion platform where **your data doesn't live on someone else's server**. When you vote, post, or comment, everything is stored on your device first, then replicated across the network. No central database. No single point of failure. No one person who can flip a switch and erase your community's history.
 
-InterPoll takes a different approach:
-
-- **No single owner.** Data is spread across every participant's device and a network of relay servers. Anyone can run a relay. Communities can run their own.
-- **Your vote, signed by you.** Every action you take is cryptographically signed with a key that lives only on your device. No relay or server can forge a vote in your name.
-- **Posts and comments that persist.** Community discussion is replicated across peers and relays, not trapped in a single vendor database.
-- **Verifiable receipts.** After voting you get a short verification code. You can check it in the built-in Chain Explorer at any time to confirm your vote is intact.
-  **Works offline.** Lost your connection? Your votes and local activity are still saved and sync when connectivity returns.
-- **Private communities.** Sensitive discussions can be fully encrypted so that only invited members can read them — not even the relay server knows the contents.
+We built it because we kept running into the same problem: platforms censor, shadow-ban, or just quietly remove things. On InterPoll, you create your own community, set your own rules, and no algorithm decides what shows up in your feed. If a relay goes down, the data lives on in every peer that has a copy.
 
 ---
 
-## Key features
+## What makes it different
 
-| Feature | What it means for you |
-|---|---|
-| **Tamper-evident voting** | Every vote is chained to the previous one. If anyone tries to alter or delete a record, the entire chain breaks — and it shows. |
-| **Public posts & threaded comments** | Run community conversations in the same network: publish updates, debate in comments, and keep context attached to each poll. |
-| **Verifiable receipt** | You get a short code after voting. Enter it in the Chain Explorer to confirm your vote was recorded, unchanged. |
-| **Offline-first** | Vote even without internet. Your record is kept locally and synced when you reconnect. |
-| **Private & encrypted communities** | Create communities where all content is encrypted in your browser. Relay servers see only scrambled data. |
-| **No algorithm** | You see what your community posts. No hidden ranking, no shadow-banning, no promoted content. |
-| **Community-run relays** | Any group can host its own relay server, giving communities full sovereignty over their data. |
-| **Optional login gates** | Poll creators can optionally require a Google or Microsoft login to vote — useful for verified, members-only polls. |
-| **Invite-only polls** | Generate single-use invite codes for private polls. Each code can only be used once. |
+- **Your vote is cryptographically signed.** A key lives on your device and signs every action you take. No relay or server can forge a vote in your name.
+- **Every vote chains to the last one.** Tamper with a past record and the chain snaps — visibly. You can verify this yourself in the built-in Chain Explorer.
+- **Posts and comments replicate everywhere.** Not locked in a vendor database. They spread across peers and relay servers, and survive as long as anyone holds a copy.
+- **Works offline.** Vote without internet. Your data syncs when connectivity comes back.
+- **Encrypted communities.** Create spaces where everything is encrypted in your browser. Relay servers see scrambled data — they can't read it even if they wanted to.
+- **No algorithm, no shadow-banning.** You see what your community posts. That's it.
+- **Anyone can run a relay.** Communities can host their own, giving them full sovereignty over their data.
 
 ---
 
-## How it works (plain language)
+## How it actually works
 
-InterPoll has three layers working together:
+InterPoll runs on three layers that work together:
 
-**1. Your local chain (the record)**
-Votes and key actions are written to a local integrity log in your browser. Each new block links to the previous one using a unique fingerprint (a cryptographic hash). Changing past records would snap the chain — making tampering instantly visible.
+**Your local chain** — Every vote and key action gets written to a tamper-evident log right in your browser. Each entry links to the one before it with a cryptographic hash. Change anything and the chain breaks.
 
-**2. The distributed network (the copies)**
-Your data — polls, posts, comments, communities, and profiles — is replicated across a distributed database called GunDB. Every connected device holds a copy. If one relay goes down, the data lives on in the others and syncs back up when connectivity returns.
+**The distributed network** — Polls, posts, comments, communities, and profiles replicate across a peer-to-peer database (GunDB). Every connected device holds a copy. A relay going down doesn't kill the data — it syncs back up when any peer reconnects.
 
-**3. The relay (the messenger)**
-A lightweight WebSocket relay helps devices find each other and share updates in real time. Anyone can run a relay. If one relay is blocked or shut down, peers can switch to another. The more relays exist, the more resilient the network becomes.
-
-> **In short:** your polls, posts, comments, and vote history exist on your device, on your peers' devices, and across relay servers — all at once. Erasing them would require erasing every copy simultaneously. That is the core principle: sooner or later, a peer with a copy reconnects and reseeds the network.
+**The relay** — A lightweight WebSocket server helps devices find each other and share updates in real time. Anyone can run one. If one gets blocked, peers switch to another. More relays = more resilience.
 
 ```mermaid
 graph TD
     A[Your Browser] -->|signs & stores actions| B[Local Chain — your device]
-    A -->|replicates polls, posts, comments, communities| C[GunDB — distributed]
-    A -->|syncs new blocks| D[WebSocket Relay]
-    A -->|syncs other tabs| E[BroadcastChannel]
-    D -->|broadcasts| F[Other Participants]
-    C -->|replicates| G[Community Relay Servers]
+    A -->|replicates polls, posts, comments| C[GunDB — distributed]
+    A -->|syncs new blocks in real time| D[WebSocket Relay]
+    A -->|syncs across your own tabs| E[BroadcastChannel]
+    D -->|broadcasts to| F[Other Participants]
+    C -->|replicates to| G[Community Relay Servers]
 ```
+
+> **The short version:** your polls, posts, and vote history exist on your device, your peers' devices, and across relay servers — all at once. Erasing them would mean erasing every copy simultaneously. Sooner or later, a peer with a copy reconnects and reseeds the network.
+
+---
+
+## Chain Explorer
+
+Every vote is part of a verifiable chain. After voting, you get a short verification code — enter it in the Chain Explorer to confirm your vote is intact and hasn't been altered.
+
+<p align="center">
+  <img width="1920" alt="Chain Explorer — blockchain verification with Schnorr signatures" src="docs/screenshots/chain-explorer.jpg" />
+</p>
+
+---
+
+## Resilience Center
+
+Monitor your network health, scan for relays, switch to backups instantly, and fall back to a deterministic rendezvous point if every relay gets blocked.
+
+<p align="center">
+  <img width="1920" alt="Resilience Center — network health and relay management" src="docs/screenshots/resilience-center.jpg" />
+</p>
+
+---
+
+## Cryptographic Identity
+
+Your signing keys are generated and stored locally. Schnorr signatures (secp256k1) prove that every action came from your device — no one can impersonate you.
+
+<p align="center">
+  <img width="1920" alt="Settings — cryptographic identity with Schnorr keypair" src="docs/screenshots/settings.jpg" />
+</p>
+
+---
+
+## Features at a glance
+
+| Feature | What it means |
+|---|---|
+| **Tamper-evident voting** | Every vote chains to the previous one. Alter a record and the chain breaks visibly. |
+| **Verifiable receipts** | Get a code after voting. Check it anytime in the Chain Explorer. |
+| **Posts & threaded comments** | Full community discussions — publish updates, debate in comments, keep context attached to each poll. |
+| **Offline-first** | Vote without internet. Records sync when you reconnect. |
+| **Encrypted communities** | All content encrypted in-browser (AES-256-GCM). Relays see only ciphertext. |
+| **Community-run relays** | Any group can host their own relay server for full data sovereignty. |
+| **Fallback rendezvous** | When all relays are blocked, nodes derive a shared reconnection point and self-heal. |
+| **Optional login gates** | Poll creators can require Google or Microsoft sign-in for verified polls. |
+| **Invite-only polls** | Single-use invite codes — each one works exactly once. |
+| **Censorship-resistant by design** | The relay can delay messages, but it cannot forge a signed action from your device key. |
 
 ---
 
 ## Honest about the limits
 
-InterPoll is designed to be **harder to censor and tamper with than a single-server platform** — not impossible. Here is what that means in practice:
+This is designed to be **harder to censor and tamper with** than a traditional platform — not impossible. Here's what that means in practice:
 
-- Data survives as long as **at least one honest participant** retains a copy and later reconnects.
-- The relay server can **delay or censor** messages, but it **cannot forge** a vote or signed action from your device key.
-- Anti-fraud controls (device fingerprinting, two-phase vote authorization, invite codes, OAuth gating) **raise the cost** of duplicate voting — they do not provide one-human-one-vote mathematical guarantees.
-- **Private communities** encrypt content in your browser. The encryption is strong (AES-256-GCM), but if you lose your key, there is no recovery.
+- Data survives as long as **at least one honest participant** holds a copy and eventually reconnects.
+- A relay can **delay or censor** messages, but it **cannot forge** a vote or signed action from your device key.
+- Anti-fraud measures (device fingerprinting, two-phase vote authorization, invite codes, OAuth gating) **raise the cost** of duplicate voting. They don't provide mathematical one-person-one-vote guarantees.
+- Private community encryption is strong (AES-256-GCM), but if you lose your key, there is no recovery. That's by design.
 
-For the full technical threat model, see the [**IPP specification series**](docs/protocol/IPP-00-overview.md).
+For the full technical threat model, see the [IPP specification series](docs/protocol/IPP-00-overview.md).
 
 ---
 
 ## Get involved
 
-**Run a peer** — the simplest way to strengthen the network. Running `peer.js` on any laptop adds another copy of the data and helps other participants sync faster.
+**Run a peer** — the simplest way to strengthen the network. Another device running the app means another copy of the data and faster sync for everyone.
 
 ```bash
 node peer.js
 ```
 
-**Run a relay** — give your community full data sovereignty. See `gun-relay/` for the GunDB relay and `relay-server.js` for the WebSocket relay. Or run the official one.
+**Run a relay** — give your community full data sovereignty. See `gun-relay-server/` for the GunDB relay and `relay-server.js` for the WebSocket relay.
 
-**Contribute code** — open a PR. The project is fully open source.
+**Contribute** — the project is fully open source. Open a PR.
 
 ---
 
-## Quick start (for developers)
-
-You need two things running: the frontend dev server and the relay server.
+## Quick start
 
 ```bash
+# Start everything in tmux (recommended)
 chmod +x run.sh
 ./run.sh
-```
 
-The app opens at `http://localhost:5173`. The relay listens on port 8080.
+# Or run each service manually:
+npm run dev              # Vite frontend → http://localhost:5173
+node relay-server.js     # WebSocket relay → ws://localhost:8080
+cd gun-relay-server && node gun-relay.js  # GunDB relay → http://localhost:8765/gun
+```
 
 ### Environment variables
 
-**Frontend** (prefix with `VITE_`, set at build time):
+**Frontend** (set at build time with `VITE_` prefix):
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -122,97 +149,98 @@ The app opens at `http://localhost:5173`. The relay listens on port 8080.
 | `VITE_GUN_RELAY_URL` | `http://localhost:8765/gun` | GunDB relay |
 | `VITE_API_BASE_URL` | `http://localhost:8080` | Backend API |
 
-Relay URLs can also be changed at runtime from the Settings page (saved in `localStorage`).
+Relay URLs can also be changed at runtime from Settings (saved in `localStorage`).
 
-**Relay server** (set in environment):
+**Relay server:**
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | CORS origin |
-| `SERVER_ORIGIN` | `http://localhost:8080` | Public relay origin used for OAuth callback URIs (required and must be HTTPS in production) |
-| `JWT_SECRET` | random per process | HMAC secret for relay session JWTs |
+| `SERVER_ORIGIN` | `http://localhost:8080` | Public relay origin for OAuth callbacks (must be HTTPS in production) |
+| `JWT_SECRET` | random per process | HMAC secret for session JWTs |
 | `VOTE_RESERVATION_SECRET` | random per process | HMAC secret for vote reservation tokens |
-| `GOOGLE_CLIENT_ID` | — | Google OAuth app ID |
-| `GOOGLE_CLIENT_SECRET` | — | Google OAuth secret |
-| `MS_CLIENT_ID` | — | Microsoft OAuth app ID |
-| `MS_CLIENT_SECRET` | — | Microsoft OAuth secret |
-| `MS_TENANT` | `common` | Azure AD tenant |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | — | Google OAuth (optional) |
+| `MS_CLIENT_ID` / `MS_CLIENT_SECRET` / `MS_TENANT` | — | Microsoft OAuth (optional) |
 
-OAuth is optional — the app works without it. It is only required for polls that enforce a login-to-vote policy.
-
-Use `.env.example` as a template. Keep real `.env` files and data directories out of git.
+OAuth is optional — only needed for polls that require a login to vote. Use `.env.example` as a template.
 
 ### Build commands
 
 ```bash
-npm run dev       # Start Vite dev server
+npm run dev       # Dev server
 npm run build     # Type-check + production build
-npm run preview   # Serve the built dist/ folder locally
-npm test          # Run the Vitest test suite
+npm run preview   # Serve built dist/
+npm test          # Vitest test suite
 ```
 
 ---
 
-## Technical deep-dive
-
-For an implementation-aligned protocol specification — including the full block structure, vote flow, sync protocol, encryption details, relay trust model, and threat model — read the numbered IPP specification series (RFC 2119-style, NIP-inspired):
-
-**[`docs/protocol/IPP-00-overview.md`](docs/protocol/IPP-00-overview.md)** (index of all IPP documents)
-
-### Project layout
+## Architecture
 
 ```
 src/
   components/     UI components (VoteForm, PollCard, PostCard, etc.)
-  views/          Page-level components (HomePage, VotePage, SettingsPage, etc.)
+  views/          Page-level views (HomePage, PollDetailPage, SettingsPage, etc.)
   services/       Core logic — blockchain, GunDB, WebSocket, crypto, storage
   stores/         Pinia state stores (chainStore, pollStore, communityStore, etc.)
   router/         Vue Router configuration
-  config.ts       Centralised config with runtime-mutable relay URLs
+  composables/    Reusable Vue 3 composition functions
+  config.ts       Runtime-mutable relay URLs and app configuration
 
 relay-server.js                          Dev WebSocket relay + OAuth + vote authorization
-relay-server/relay-server-enhanced.js   Production PM2 relay with persisted vote registry
-gun-relay/gun-relay.js                  GunDB relay server
+relay-server/relay-server-enhanced.js   Production relay (PM2, persisted vote registry)
+gun-relay-server/                       GunDB relay server
+shared-validation/                      Validation shared between frontend and relay
 ```
 
 ### Key services
 
-| File | Responsibility |
+| Service | What it does |
 |---|---|
-| `chainService.ts` | Block creation, hashing, signing, chain validation |
-| `gunService.ts` | GunDB read/write/subscribe wrapper |
-| `websocketService.ts` | WebSocket connection, peer discovery, server-list sharing |
-| `broadcastService.ts` | Cross-tab sync via BroadcastChannel |
-| `pollService.ts` | Poll CRUD, invite code generation and validation |
-| `voteTrackerService.ts` | Device fingerprinting, duplicate-vote prevention |
-| `cryptoService.ts` | SHA-256 hashing, verification code generation |
-| `auditService.ts` | OAuth login/logout, backend vote authorization |
-| `storageService.ts` | IndexedDB wrapper for blocks, votes, receipts |
-| `encryptionService.ts` | AES-256-GCM community/content encryption |
-| `keyVaultService.ts` | Local key storage and export/import |
-| `ipfsService.ts` | Image compression, upload, and retrieval via GunDB |
+| `chainService` | Block creation, hashing, signing, chain validation |
+| `gunService` | GunDB read/write/subscribe wrapper |
+| `websocketService` | WebSocket connection, peer discovery, relay failover |
+| `pollService` | Poll CRUD, invite codes |
+| `encryptionService` | AES-256-GCM encryption for private communities |
+| `keyVaultService` | Local key storage and export/import |
+| `cryptoService` | SHA-256 hashing, verification codes |
+| `voteTrackerService` | Device fingerprinting, duplicate-vote prevention |
+| `storageService` | IndexedDB wrapper for blocks, votes, receipts |
 
 ### Vote flow
 
 ```mermaid
 graph LR
-    G[Genesis Block<br/>index 0] -->|hash link| B1[Block 1<br/>Vote: Alice → A]
-    B1 -->|hash link| B2[Block 2<br/>Vote: Bob → B]
-    B2 -->|hash link| B3[Block 3<br/>Vote: Carol → A]
+    G[Genesis Block] -->|hash link| B1[Block 1 — Vote A]
+    B1 -->|hash link| B2[Block 2 — Vote B]
+    B2 -->|hash link| B3[Block 3 — Vote C]
 ```
 
-1. Vote payload is created and hashed (SHA-256).
-2. A new block is appended — linked to the previous block's hash.
-3. The block is signed with your device key and saved locally.
-4. A receipt with a short verification code is generated.
-5. The block is broadcast to peers via WebSocket and BroadcastChannel.
-6. The relay two-phase authorization path (`/api/vote-authorize` → `/api/vote-confirm`) prevents duplicate registration backend-side.
+1. Vote payload is hashed (SHA-256) and a new block is appended, linked to the previous block's hash.
+2. The block is signed with your device key and saved locally.
+3. A receipt with a verification code is generated.
+4. The block is broadcast to peers via WebSocket and BroadcastChannel.
+5. The relay's two-phase path (`/api/vote-authorize` → `/api/vote-confirm`) prevents duplicate registration server-side.
 
 ### Anti-fraud layers
 
-- **Device fingerprinting** — a SHA-256 hash of browser properties creates a persistent device ID.
-- **Two-phase backend authorization** — the relay issues a short-lived reservation token; only confirming with that token commits the vote to the registry.
-- **Invite codes** — single-use codes, consumed atomically in GunDB on use.
-- **OAuth gating** — optional Google or Microsoft login required to vote.
-- **Rate limiting and bot scoring** — reduces automated spam.
-- **Proof-of-Work (optional)** — raises the cost of high-frequency message floods.
+- **Device fingerprinting** — SHA-256 hash of browser properties → persistent device ID
+- **Two-phase authorization** — relay issues a short-lived reservation token; only confirming with it commits the vote
+- **Single-use invite codes** — consumed atomically in GunDB
+- **Optional OAuth gating** — Google or Microsoft login required to vote
+- **Rate limiting and bot scoring** — reduces automated spam
+- **Proof-of-Work (optional)** — raises the cost of high-frequency message floods
+
+---
+
+## Protocol spec
+
+For the full technical specification — block structure, vote flow, sync protocol, encryption, relay trust model, and threat model — see the numbered IPP series:
+
+**[`docs/protocol/IPP-00-overview.md`](docs/protocol/IPP-00-overview.md)**
+
+---
+
+## License
+
+Open source. See [LICENSE](LICENSE) for details.
