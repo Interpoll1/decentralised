@@ -46,15 +46,36 @@ export class IPFSService {
       useWebWorker: true,
     });
 
-    // Thumbnail for Gun sync (max 100 KB / 800px) — small enough to propagate
+    // Thumbnail for Gun sync — must stay small enough to fit in a single Gun WS
+    // message. The ws library's default maxPayload is 64 KB; even with our raised
+    // limit on the relay, keeping this tight avoids issues with any intermediate
+    // proxy or peer relay that still uses the default. Target 30 KB blob → ~40 KB
+    // base64 string, leaving plenty of room inside a 64 KB WS frame once the
+    // surrounding JSON is accounted for.
     const thumbnailBlob = await imageCompression(file, {
-      maxSizeMB: 0.1,
-      maxWidthOrHeight: 800,
+      maxSizeMB: 0.03,
+      maxWidthOrHeight: 400,
       useWebWorker: true,
     });
 
+    // Hard clamp: if compression still produced something larger than 40 KB
+    // (can happen with PNGs or images that don't compress well), re-compress
+    // more aggressively rather than risk a silent WS drop on a vanilla relay.
+    let finalThumbnailBlob = thumbnailBlob;
+    if (thumbnailBlob.size > 40 * 1024) {
+      try {
+        finalThumbnailBlob = await imageCompression(thumbnailBlob, {
+          maxSizeMB: 0.02,
+          maxWidthOrHeight: 300,
+          useWebWorker: true,
+        });
+      } catch {
+        finalThumbnailBlob = thumbnailBlob; // use original if re-compression fails
+      }
+    }
+
     const fullImageBase64 = await this.fileToBase64(compressed);
-    const thumbnailBase64 = await this.fileToBase64(thumbnailBlob);
+    const thumbnailBase64 = await this.fileToBase64(finalThumbnailBlob);
 
     const cid = `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 

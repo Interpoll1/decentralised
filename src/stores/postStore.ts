@@ -331,8 +331,12 @@ export const usePostStore = defineStore('post', () => {
           videoDuration:     updated.videoDuration     ?? existing.videoDuration,
           videoSize:         updated.videoSize         ?? existing.videoSize,
           videoMimeType:     updated.videoMimeType     ?? existing.videoMimeType,
-          imageIPFS:         updated.imageIPFS         ?? existing.imageIPFS,
-          imageThumbnail:    updated.imageThumbnail    ?? existing.imageThumbnail,
+          // Use || not ?? for string media fields: API warmup returns imageThumbnail
+          // as '' (empty string via serializePost's `d.imageThumbnail || ''`).
+          // '' is not nullish so ?? would wipe a stored base64 thumbnail with ''.
+          // || treats '' as absent and correctly falls back to the existing value.
+          imageIPFS:         updated.imageIPFS      || existing.imageIPFS,
+          imageThumbnail:    updated.imageThumbnail || existing.imageThumbnail,
         };
         merged = { ...merged, score: (merged.upvotes ?? 0) - (merged.downvotes ?? 0) };
       }
@@ -557,15 +561,26 @@ export const usePostStore = defineStore('post', () => {
           totalPostsInStore: postsMap.value.size,
         });
       }
-    } else if (post.viewCount !== undefined || post.uniqueViewers !== undefined) {
-      // Re-injection from warmup may carry a fresh viewCount — preserve it.
-      // viewCount is a relay-only field not stored in Gun, so Gun snapshots
-      // arriving later must not silently clear it.
+    } else {
+      // Re-injection from warmup or a later Gun delivery may carry fields that
+      // the first injection lacked (e.g. imageThumbnail arriving after viewCount,
+      // or a relay snapshot that has the thumbnail where the Gun node didn't).
+      // Always merge in any enriched fields rather than silently discarding them.
       const existing = postsMap.value.get(post.id)!;
       const viewCount     = post.viewCount     ?? existing.viewCount;
       const uniqueViewers = post.uniqueViewers ?? existing.uniqueViewers;
-      if (viewCount !== existing.viewCount || uniqueViewers !== existing.uniqueViewers) {
-        postsMap.value.set(post.id, { ...existing, viewCount, uniqueViewers });
+      // For string media fields use || so an empty string from the API path
+      // (serializePost returns `d.imageThumbnail || ''`) never overwrites a
+      // real base64 thumbnail already in the store.
+      const imageIPFS      = post.imageIPFS      || existing.imageIPFS;
+      const imageThumbnail = post.imageThumbnail || existing.imageThumbnail;
+      const changed =
+        viewCount     !== existing.viewCount     ||
+        uniqueViewers !== existing.uniqueViewers ||
+        imageIPFS     !== existing.imageIPFS     ||
+        imageThumbnail !== existing.imageThumbnail;
+      if (changed) {
+        postsMap.value.set(post.id, { ...existing, viewCount, uniqueViewers, imageIPFS, imageThumbnail });
         triggerRef(postsMap);
       }
     }
