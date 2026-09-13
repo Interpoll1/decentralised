@@ -554,26 +554,39 @@ export class PollService {
     predicate: (value: T | null) => boolean,
     timeoutMs = 1500, // was 3500 — cut by more than half
   ): Promise<T | null> {
+    // Poll with short-lived `.once()` reads instead of a `.on()` listener. A
+    // `.on()` that times out stays attached until the soul next changes, and
+    // chain.off() would tear down unrelated feed listeners on the same soul, so
+    // there is no safe way to detach it from the timeout. The subscription feeds
+    // re-run this on every poll update, so those orphans piled up in
+    // root.next[soul].echo, fanned every inbound message out across them and
+    // flooded Gun's setTimeout.turn queue until no put could reach the wire.
+    const RETRY_MS = 250;
     return new Promise((resolve) => {
+      const deadline = Date.now() + timeoutMs;
       let settled = false;
-      // `node.on(cb)` returns the *chain*, and chain.off() detaches every
-      // listener on that soul — including unrelated live feed subscriptions
-      // sharing the same path. Gun binds `this` inside the handler to that one
-      // listener, so `this.off()` detaches only ours.
-      node.on(function (this: any, value: T | null) {
-        // Detach as soon as we're done — either we just resolved, or the
-        // timeout already fired and this is a late event.
-        if (settled) { try { this?.off?.(); } catch { /* already detached */ } return; }
-        if (!predicate(value)) return;
-        settled = true;
-        try { this?.off?.(); } catch { /* already detached */ }
-        resolve(value ?? null);
-      });
+      const attempt = () => {
+        if (settled) return;
+        node.once((value: T | null) => {
+          if (settled) return;
+          if (predicate(value)) {
+            settled = true;
+            resolve(value ?? null);
+            return;
+          }
+          const remaining = deadline - Date.now();
+          if (remaining <= 0) {
+            settled = true;
+            resolve(null);
+            return;
+          }
+          setTimeout(attempt, Math.min(RETRY_MS, remaining));
+        });
+      };
+      attempt();
       setTimeout(() => {
         if (settled) return;
         settled = true;
-        // The listener detaches itself on its next fire (see above); we can't
-        // detach it from here without tearing down every listener on the soul.
         resolve(null);
       }, timeoutMs);
     });
