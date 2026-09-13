@@ -717,10 +717,6 @@ export class SignalSession {
   async clearSession(): Promise<void> {
     await StorageService.setMetadata(SESSION_KEY(this.myId, this.theirId), null);
   }
-
-  async clearSession(): Promise<void> {
-    await StorageService.setMetadata(SESSION_KEY(this.myId, this.theirId), null);
-  }
 }
 
 // ── Safety numbers ────────────────────────────────────────────────────────────
