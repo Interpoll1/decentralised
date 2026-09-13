@@ -538,6 +538,16 @@ class ChatService {
           // Common causes: IK rotation (fresh install), OPK mismatch, ratchet desync.
           console.warn(`[ChatService] Decrypt failed for ${senderId.slice(0,8)}, clearing session:`, (decryptErr as Error).message);
           await this.getSession(senderId).clearSession();
+          // Also drop the cached bundle — a decrypt failure is commonly caused by
+          // the sender having rotated their identity keys (fresh install/cleared
+          // storage). The in-memory theirBundles.delete() below only clears this
+          // tab's session cache; the persistent IDB bundle cache (1h TTL) would
+          // otherwise keep serving the same stale, now-wrong bundle on every
+          // re-key attempt, so decrypt fails forever and the safety number never
+          // matches the peer's real current key.
+          this.theirBundles.delete(senderId);
+          this.bundleFetchTs.delete(senderId);
+          void StorageService.setMetadata('signal-bundle-cache:' + senderId, null).catch(() => {});
           throw decryptErr; // re-throw so the tombstone path handles it below
         }
       } else {
@@ -590,6 +600,8 @@ class ChatService {
           await db.delete('metadata', sessionKey);
           this.sessions.delete(senderId);
           this.theirBundles.delete(senderId);
+          this.bundleFetchTs.delete(senderId);
+          void StorageService.setMetadata('signal-bundle-cache:' + senderId, null).catch(() => {});
           const reKeyTs = (this as any)._reKeyTs ?? {};
           (this as any)._reKeyTs = reKeyTs;
           const now = Date.now();
