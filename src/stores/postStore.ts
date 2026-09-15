@@ -287,7 +287,7 @@ export const usePostStore = defineStore('post', () => {
   }
 
   function processIncomingPost(communityId: string, post: Post) {
-    // Avoid accepting legacy posts into a v3 client.
+    // Avoid accepting legacy posts into a v4 client.
     // Exception: category-only patches ({category, tags, nsfw} with no title)
     // are synthetic objects built in postService with dataVersion already injected —
     // but for safety we also allow them through if the post already exists in store
@@ -593,7 +593,7 @@ export const usePostStore = defineStore('post', () => {
 
   /**
    * Purge any posts from the store and local Gun cache that do not match
-   * the current active namespace (eradicate v2 when running v3).
+   * the current active namespace (eradicate v3 when running v4).
    */
   async function purgeLegacyPosts(): Promise<number> {
     const removed: string[] = [];
@@ -1025,7 +1025,7 @@ export const usePostStore = defineStore('post', () => {
     await loadPostsForCommunity(currentCommunityId.value);
   }
 
-  // Run immediate purge on initialization for v3 clients to ensure no legacy posts persist
+  // Run immediate purge on initialization for v4 clients to ensure no legacy posts persist
   (async () => {
     try {
       const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;

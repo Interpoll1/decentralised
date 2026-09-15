@@ -3,7 +3,7 @@
 import Gun from '../lib/gun-shim';
 import config, { getPeerPreferences } from '../config';
 
-export const GUN_NAMESPACE = 'v3';
+export const GUN_NAMESPACE = 'v4';
 
 // Roots that get namespaced under GUN_NAMESPACE — Gun is now live-updates only,
 // not the initial load source. These namespaced paths are still written to on
@@ -582,8 +582,8 @@ export class GunService {
    */
   /**
    * Whether a Gun soul belongs to this app's namespace (or is a Gun/SEA system
-   * soul). Souls are hierarchical path strings — `v3`, `v3/polls/<id>`,
-   * `v3/communities/<cid>/polls/<pid>` — so a namespace prefix check is exact.
+   * soul). Souls are hierarchical path strings — `v4`, `v4/polls/<id>`,
+   * `v4/communities/<cid>/polls/<pid>` — so a namespace prefix check is exact.
    * `~`/`_`-prefixed souls are SEA user-space / Gun internals and always allowed
    * (mirrors the keep-prefixes in evictCache).
    */
@@ -758,7 +758,7 @@ export class GunService {
       // The namespace root and its top-level collections are never evictable, at
       // any level. `initialize()` caches ONE chain for `GUN_NAMESPACE` (`nsNode`)
       // and every app write goes through it via the namespaced proxy. Deleting
-      // `root.next['v3']` (or `v3/communities`) leaves that cached chain unable
+      // `root.next['v4']` (or `v4/communities`) leaves that cached chain unable
       // to resolve a soul, so `gun.get('communities').get(id).put(...)` produces
       // no wire message and no ack — writes stop reaching the relay for the rest
       // of the session while reads still work. The `light` branch used to be able

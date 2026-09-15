@@ -32,7 +32,7 @@ function makeTrackingGun() {
 
 const tracking = makeTrackingGun();
 vi.mock('../src/services/gunService', () => ({
-  GUN_NAMESPACE: 'v3',
+  GUN_NAMESPACE: 'v4',
   GunService: { getGun: () => tracking.gun, getRawGun: () => tracking.gun },
 }));
 

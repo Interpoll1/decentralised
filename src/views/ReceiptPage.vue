@@ -192,7 +192,7 @@ async function doLookup() {
         try {
           const GunService = require('../services/gunService').GunService;
           GunService.gun
-            ?.get('v3/receipts')
+            ?.get('v4/receipts')
             .get(raw.replace(/\s/g, '-'))
             .once((data: any) => {
               clearTimeout(timeout);

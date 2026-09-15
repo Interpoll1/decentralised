@@ -63,7 +63,7 @@ export async function warmupFromDB(): Promise<void> {
     const postStore      = usePostStore()
     const pollStore      = usePollStore()
 
-    // Eradicate legacy posts when running v3+: remove any cached posts whose
+    // Eradicate legacy posts when running v4+: remove any cached posts whose
     // dataVersion does not match the active namespace to avoid importing v2.
     try {
       if (getNamespaceVersion(GUN_NAMESPACE) >= 3 && typeof postStore.purgeLegacyPosts === 'function') {
@@ -128,7 +128,7 @@ export async function warmupFromDB(): Promise<void> {
       console.warn('Communities fetch failed:', communitiesResult.reason)
     }
 
-    // ── Posts — v2 API warmup only; v3+ stays Gun-namespace-only ─────────────
+    // ── Posts — v2 API warmup only; v4+ stays Gun-namespace-only ─────────────
     if (postsResult.status === 'fulfilled') {
       const { posts } = postsResult.value
       let n = 0
@@ -179,7 +179,7 @@ export async function warmupFromDB(): Promise<void> {
       console.warn('Posts fetch failed:', postsResult.reason)
     }
 
-    // ── Polls — v2 API warmup only; v3+ stays Gun-namespace-only ─────────────
+    // ── Polls — v2 API warmup only; v4+ stays Gun-namespace-only ─────────────
     if (pollsResult.status === 'fulfilled') {
       const { polls } = pollsResult.value
       let n = 0

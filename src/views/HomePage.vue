@@ -1307,7 +1307,7 @@ if (typeof window !== 'undefined') {
       console.log('Full sample (first 5):', entries.slice(0, 5).map((p: any) => ({
         id: p.id, title: p.title?.slice(0,40), dataVersion: p.dataVersion
       })));
-      console.log('GUN_NAMESPACE expected:', 'v3');
+      console.log('GUN_NAMESPACE expected:', 'v4');
       console.groupEnd();
       return byVersion;
     },

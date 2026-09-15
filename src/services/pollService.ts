@@ -97,7 +97,7 @@ export class PollService {
    */
   static async verifyRelayPersistence(pollId: string, deadlineMs = 8000): Promise<boolean | null> {
     // The relay DB stores polls at 'polls/<id>' (bare path).
-    // Also check 'v3/polls/<id>' in case the namespace is stored explicitly.
+    // Also check 'v4/polls/<id>' in case the namespace is stored explicitly.
     // Endpoint returns 200 if found, 404 if absent.
     const souls = [
       encodeURIComponent(`polls/${pollId}`),

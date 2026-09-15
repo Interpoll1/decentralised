@@ -75,9 +75,9 @@ describe('GunService.attachWireBridge', () => {
 
 describe('GunService namespace soul classification', () => {
   it('accepts in-namespace and system souls, rejects foreign ones', () => {
-    expect(GunService.isInNamespaceSoul('v3')).toBe(true);
-    expect(GunService.isInNamespaceSoul('v3/polls/abc')).toBe(true);
-    expect(GunService.isInNamespaceSoul('v3/communities/c1/polls/p1')).toBe(true);
+    expect(GunService.isInNamespaceSoul('v4')).toBe(true);
+    expect(GunService.isInNamespaceSoul('v4/polls/abc')).toBe(true);
+    expect(GunService.isInNamespaceSoul('v4/communities/c1/polls/p1')).toBe(true);
     expect(GunService.isInNamespaceSoul('~pubkeyhex')).toBe(true); // SEA user-space
     expect(GunService.isInNamespaceSoul('_')).toBe(true);          // Gun internal
 
@@ -87,7 +87,7 @@ describe('GunService namespace soul classification', () => {
   });
 
   it('enumerates only the out-of-namespace souls of a put', () => {
-    const msg = { '#': 'm', put: { 'v3/polls/p1': {}, 'evil/root': {}, '~ok': {} } };
+    const msg = { '#': 'm', put: { 'v4/polls/p1': {}, 'evil/root': {}, '~ok': {} } };
     expect(GunService.outOfNamespaceSouls(msg)).toEqual(['evil/root']);
     expect(GunService.outOfNamespaceSouls({ '#': 'x' })).toEqual([]); // non-put
   });
@@ -134,7 +134,7 @@ describe('GunService.attachWireBridge namespace filtering', () => {
     bridge.receive({ '#': 'e2', put: { 'evil/root': { hacked: true } } });
     expect(inbound.some((m) => (m as any)['#'] === 'e2')).toBe(false); // dropped
 
-    bridge.receive({ '#': 'ok1', put: { 'v3/polls/p1': { votes: 3 } } });
+    bridge.receive({ '#': 'ok1', put: { 'v4/polls/p1': { votes: 3 } } });
     expect(inbound.some((m) => (m as any)['#'] === 'ok1')).toBe(true); // legit passes
   });
 

@@ -9,7 +9,7 @@ import imageCompression from 'browser-image-compression';
 //   graph, ballooning storage and sync time for every relay.
 //
 // New:
-//   • Full image  → stored in IndexedDB (local only, no Gun sync overhead)
+//   • Full image  → stored in IndexedDB at ORIGINAL quality (local only, no Gun sync overhead)
 //   • Thumbnail   → stored in Gun (small, fast, displayable without full load)
 //   • Metadata    → stored in Gun: { id, size, uploadedAt, hasFull: true }
 //
@@ -39,28 +39,23 @@ export class IPFSService {
   }> {
     // initialize() is a no-op — removed redundant await
 
-    // Compress full image (max 1 MB) — stored locally only
-    const compressed = await imageCompression(file, {
-      maxSizeMB: 1,
-      maxWidthOrHeight: 1920,
-      useWebWorker: true,
-    });
+    // Full image is stored VERBATIM — no compression, no resizing, no re-encode.
+    // Quality matters more than bytes here: the original file goes to IndexedDB
+    // (local only) so it never costs the Gun graph anything.
+    const original = file;
 
-    // Thumbnail for Gun sync — must stay small enough to fit in a single Gun WS
-    // message. The ws library's default maxPayload is 64 KB; even with our raised
-    // limit on the relay, keeping this tight avoids issues with any intermediate
-    // proxy or peer relay that still uses the default. Target 30 KB blob → ~40 KB
-    // base64 string, leaving plenty of room inside a 64 KB WS frame once the
-    // surrounding JSON is accounted for.
+    // Thumbnail for Gun sync — this is a preview, not the image. It must stay
+    // small enough to fit in a single Gun WS message (the ws library's default
+    // maxPayload is 64 KB), so it is still downscaled. The full-resolution
+    // original is always preferred by downloadImage().
     const thumbnailBlob = await imageCompression(file, {
       maxSizeMB: 0.03,
       maxWidthOrHeight: 400,
       useWebWorker: true,
     });
 
-    // Hard clamp: if compression still produced something larger than 40 KB
-    // (can happen with PNGs or images that don't compress well), re-compress
-    // more aggressively rather than risk a silent WS drop on a vanilla relay.
+    // Hard clamp: if the thumbnail is still larger than 40 KB (can happen with
+    // PNGs), shrink it further rather than risk a silent WS drop on a vanilla relay.
     let finalThumbnailBlob = thumbnailBlob;
     if (thumbnailBlob.size > 40 * 1024) {
       try {
@@ -74,7 +69,7 @@ export class IPFSService {
       }
     }
 
-    const fullImageBase64 = await this.fileToBase64(compressed);
+    const fullImageBase64 = await this.fileToBase64(original);
     const thumbnailBase64 = await this.fileToBase64(finalThumbnailBlob);
 
     const cid = `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -97,7 +92,7 @@ export class IPFSService {
       gun.get('images').get(cid).put({
         id: cid,
         thumbnail: thumbnailBase64,
-        size: compressed.size,
+        size: original.size,
         uploadedAt: Date.now(),
         hasFull: true,
       }, (ack: any) => {
@@ -107,7 +102,7 @@ export class IPFSService {
       });
     });
 
-    return { cid, thumbnail: thumbnailBase64, size: compressed.size };
+    return { cid, thumbnail: thumbnailBase64, size: original.size };
   }
 
   /**

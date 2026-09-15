@@ -127,25 +127,25 @@ describe('verifySoulOnRelay', () => {
 
   it('true when the relay reports it holds the soul', async () => {
     globalThis.fetch = vi.fn(async () => ({ ok: true, status: 200 })) as any;
-    await expect(verifySoulOnRelay('v3/comments/abc', 2_000)).resolves.toBe(true);
+    await expect(verifySoulOnRelay('v4/comments/abc', 2_000)).resolves.toBe(true);
   });
 
   it('false when the endpoint answers but does not have it — a real negative', async () => {
     globalThis.fetch = vi.fn(async () => ({ ok: false, status: 404 })) as any;
-    await expect(verifySoulOnRelay('v3/comments/abc', 1_000)).resolves.toBe(false);
+    await expect(verifySoulOnRelay('v4/comments/abc', 1_000)).resolves.toBe(false);
   });
 
   it('null when the endpoint is unreachable, so callers retry instead of assuming loss', async () => {
     globalThis.fetch = vi.fn(async () => { throw new Error('offline'); }) as any;
-    await expect(verifySoulOnRelay('v3/comments/abc', 1_000)).resolves.toBeNull();
+    await expect(verifySoulOnRelay('v4/comments/abc', 1_000)).resolves.toBeNull();
   });
 
   it('queries the relay origin with the soul encoded', async () => {
     const fetchMock = vi.fn(async () => ({ ok: true, status: 200 }));
     globalThis.fetch = fetchMock as any;
-    await verifySoulOnRelay('v3/chats/a:b/msg-1', 2_000);
+    await verifySoulOnRelay('v4/chats/a:b/msg-1', 2_000);
     expect(fetchMock.mock.calls[0][0]).toBe(
-      'http://relay.test/db/soul?soul=v3%2Fchats%2Fa%3Ab%2Fmsg-1',
+      'http://relay.test/db/soul?soul=v4%2Fchats%2Fa%3Ab%2Fmsg-1',
     );
   });
 });

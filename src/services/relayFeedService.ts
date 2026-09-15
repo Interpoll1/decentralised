@@ -106,7 +106,7 @@ export interface FeedOptions {
   before?: number;
   /** Page size 1–50. Default 20. */
   limit?: number;
-  dataVersion?: 'v3' | 'v2';
+  dataVersion?: 'v4' | 'v3' | 'v2';
 }
 
 export async function fetchFeedPage(opts: FeedOptions = {}): Promise<FeedPage> {
@@ -134,7 +134,7 @@ export interface PostsOptions {
   communityId?: string;
   before?: number;
   limit?: number;
-  dataVersion?: 'v3' | 'v2';
+  dataVersion?: 'v4' | 'v3' | 'v2';
 }
 
 export async function fetchPostsPage(
@@ -164,7 +164,7 @@ export interface PollsOptions {
   communityId?: string;
   before?: number;
   limit?: number;
-  dataVersion?: 'v3' | 'v2';
+  dataVersion?: 'v4' | 'v3' | 'v2';
 }
 
 export async function fetchPollsPage(

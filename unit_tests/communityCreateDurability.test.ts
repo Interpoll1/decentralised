@@ -24,7 +24,7 @@ vi.mock('../src/services/keyVaultService', () => ({
 
 const { puts, gun } = makeSilentGun();
 vi.mock('../src/services/gunService', () => ({
-  GUN_NAMESPACE: 'v3',
+  GUN_NAMESPACE: 'v4',
   GunService: { getGun: () => gun, getRawGun: () => gun },
 }));
 
@@ -63,7 +63,7 @@ describe('CommunityService.createCommunity durability', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
       status: 200,
-      json: async () => ({ soul: 'v3/communities/c-gtaclips', data: { polls: { '#': 'x' }, posts: { '#': 'y' } } }),
+      json: async () => ({ soul: 'v4/communities/c-gtaclips', data: { polls: { '#': 'x' }, posts: { '#': 'y' } } }),
     })));
 
     const promise = CommunityService.createCommunity(data);
@@ -73,7 +73,7 @@ describe('CommunityService.createCommunity durability', () => {
     // Two chained attempts, then one soul-addressed attempt off the raw root —
     // the fallback for a namespace chain broken by graph eviction.
     const chained = puts.filter(p => p.soul === 'communities/c-gtaclips');
-    const soulDirect = puts.filter(p => p.soul === 'v3/communities/c-gtaclips');
+    const soulDirect = puts.filter(p => p.soul === 'v4/communities/c-gtaclips');
     expect(chained.length).toBe(2);
     expect(soulDirect.length).toBe(1);
     expect(chained[0].value.displayName).toBe('GTA Clips');
