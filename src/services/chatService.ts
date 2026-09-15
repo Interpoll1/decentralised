@@ -70,6 +70,7 @@ export interface ChatMessage {
   mediaType?: 'image' | 'video' | 'file';
   fileName?: string;
   fileSize?: number;
+  uploadProgress?: number;
 }
 
 export interface RecipientInfo {
@@ -1436,7 +1437,6 @@ class ChatService {
       this.ws.send(JSON.stringify({ type: 'chat-start', recipientId: recipient.userId }));
   }
 
-  static readonly MAX_INLINE_FILE_BYTES = 400 * 1024;       // 400 KB — inline base64
   static readonly MAX_FILE_BYTES        = 100 * 1024 * 1024; // 100 MB — relay upload
 
   async sendFile(recipientId: string, file: File): Promise<ChatMessage> {

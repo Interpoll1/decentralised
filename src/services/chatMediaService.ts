@@ -21,7 +21,7 @@ export interface MediaMeta {
   mediaName: string;  // original file name
 }
 
-function aad(meta: Pick<MediaMeta, 'version' | 'context' | 'mediaType' | 'mediaSize' | 'mediaName'>): Uint8Array {
+function aad(meta: Pick<MediaMeta, 'version' | 'context' | 'mediaType' | 'mediaSize' | 'mediaName'>): Uint8Array<ArrayBuffer> {
   if (meta.version !== 1 || typeof meta.context !== 'string' || !Number.isSafeInteger(meta.mediaSize)
     || meta.mediaSize < 0 || meta.mediaSize > MAX_MEDIA_BYTES || typeof meta.mediaName !== 'string'
     || typeof meta.mediaType !== 'string') throw new Error('Unsupported or malformed media descriptor');
