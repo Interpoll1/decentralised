@@ -59,6 +59,7 @@ async function digest(id:string,env:any) {
 }
 it('authenticated exact-envelope peer receipt confirms; duplicate and late receipts are idempotent',async()=>{
   const {row,make,a,b}=await fixture();const chat=make();await chat.deliver(row);
+  expect((await StorageService.getChatMessage(row.id))?.syncStatus).toBe('pending');
   const stored=(await StorageService.getChatMessage(row.id))!;const envelope=JSON.parse(stored.encryptedEnvelope!);
   const peer=new SignalSession('bob','alice');await peer.decrypt(envelope,b,a.bundle.ik,'bob');
   const payload='\u0000DM-DELIVERED-1:'+JSON.stringify({id:row.id,digest:await digest(row.id,envelope)});
@@ -70,4 +71,32 @@ it('authenticated exact-envelope peer receipt confirms; duplicate and late recei
   await make().mergeRemote(raw,'alice:bob');
   expect(JSON.stringify(await StorageService.getMetadata('signal-session:alice:bob'))).toBe(state);
   expect((await StorageService.getChatMessage(row.id))?.encryptedEnvelope).toBe(stored.encryptedEnvelope);
+});
+
+it('encrypted receipt with substituted envelope digest does not confirm',async()=>{
+  const {row,make,a,b}=await fixture();const chat=make();await chat.deliver(row);
+  const outgoing=(await StorageService.getChatMessage(row.id))!;
+  const peer=new SignalSession('bob','alice');await peer.decrypt(JSON.parse(outgoing.encryptedEnvelope!),b,a.bundle.ik,'bob');
+  const ack=await peer.encrypt('\u0000DM-DELIVERED-1:'+JSON.stringify({id:row.id,digest:'0'.repeat(64)}),b,a.bundle);
+  await chat.mergeRemote({...ack,id:'wrong-receipt',senderId:'bob',recipientId:'alice'},'alice:bob');
+  expect((await StorageService.getChatMessage(row.id))?.syncStatus).toBe('pending');
+});
+it('32 concurrent ChatService sends and an outbox flush consume unique positions',async()=>{
+  const {make,a,b}=await fixture();
+  const sender=new SignalSession('alice','bob'), receiver=new SignalSession('bob','alice');
+  await receiver.decrypt(await sender.encrypt('init',a,b.bundle),b,a.bundle.ik,'bob');
+  await sender.decrypt(await receiver.encrypt('reply',b,a.bundle),a,b.bundle.ik,'alice');
+  const services=[make(),make(),make()];
+  const values=Array.from({length:32},(_,i)=>`concurrent-${i}`);
+  await Promise.all([...values.map((text,i)=>services[i%3].sendMessage('bob',text)),services[1].flushOutbox()]);
+  await vi.waitFor(async()=>{
+    const rows=await StorageService.getAllChatMessages();
+    expect(rows.filter(r=>r.outgoing&&r.encryptedEnvelope&&r.syncAttempts>0).length).toBe(33);
+  },{timeout:10000});
+  const rows=(await StorageService.getAllChatMessages()).filter(r=>r.outgoing);
+  const envelopes=rows.map(r=>JSON.parse(r.encryptedEnvelope!));
+  expect(new Set(envelopes.map(e=>`${e.dh}:${e.n}`)).size).toBe(33);
+  const decrypted=[];
+  for(const env of envelopes.sort((a,b)=>a.n-b.n)) decrypted.push(await receiver.decrypt(env,b,a.bundle.ik,'bob'));
+  expect(decrypted.sort()).toEqual([...values,'secret'].sort());
 });

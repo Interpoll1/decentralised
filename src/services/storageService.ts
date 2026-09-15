@@ -88,6 +88,26 @@ export class StorageService {
     }
   }
 
+  /** Serialize DM transport patches and preserve stronger authenticated evidence. */
+  static async patchDMDelivery(id: string, patch: Partial<StoredChatMessage>): Promise<StoredChatMessage | undefined> {
+    const db = await this.getDB();
+    if (this.usingMemoryFallback) throw new Error('Durable storage required for messaging');
+    const tx = db.transaction('chat-messages', 'readwrite');
+    try {
+      const row = await tx.store.get(id) as StoredChatMessage | undefined;
+      if (!row) { await tx.done; return undefined; }
+      const next = { ...row, ...patch,
+        encryptedEnvelope: row.encryptedEnvelope || patch.encryptedEnvelope,
+        deliveryEvidence: row.deliveryEvidence || patch.deliveryEvidence,
+        syncStatus: row.deliveryEvidence ? 'confirmed' as const : patch.syncStatus ?? row.syncStatus,
+        syncAttempts: Math.max(row.syncAttempts, patch.syncAttempts ?? 0) };
+      await tx.store.put(next); await tx.done; return next;
+    } catch (error) {
+      try { tx.abort(); } catch { /* already ended */ }
+      await tx.done.catch(() => {}); throw error;
+    }
+  }
+
   private static dbPromise: Promise<IDBPDatabase>;
 
   /** True when the active store is the volatile in-memory fallback (no persistence). */
@@ -310,8 +330,7 @@ export class StorageService {
   // ── Chat message mirror ─────────────────────────────────────────────────────
 
   static async saveChatMessage(message: StoredChatMessage): Promise<void> {
-    const db = await this.getDB();
-    await db.put('chat-messages', message);
+    await this.saveChatMessages([message]);
   }
 
   static async saveChatMessages(messages: StoredChatMessage[]): Promise<void> {
@@ -319,8 +338,25 @@ export class StorageService {
     const db = await this.getDB();
     const tx = db.transaction('chat-messages', 'readwrite');
     const store = tx.objectStore('chat-messages');
-    await Promise.all(messages.map((message) => store.put(message)));
-    await tx.done;
+    try {
+      for (const message of messages) {
+        const previous = await store.get(message.id) as StoredChatMessage | undefined;
+        if (previous?.kind === 'dm' && previous.outgoing && previous.encryptedEnvelope &&
+          (message.senderId !== previous.senderId || message.recipientId !== previous.recipientId ||
+           message.kind !== 'dm' || !message.outgoing)) throw new Error('Immutable DM identity changed');
+        const next = previous?.kind === 'dm' && previous.outgoing ? {
+          ...message, encryptedEnvelope: previous.encryptedEnvelope || message.encryptedEnvelope,
+          deliveryEvidence: previous.deliveryEvidence,
+          syncStatus: previous.deliveryEvidence ? 'confirmed' as const : message.syncStatus,
+          syncAttempts: Math.max(previous.syncAttempts, message.syncAttempts),
+        } : message;
+        await store.put(next);
+      }
+      await tx.done;
+    } catch (error) {
+      try { tx.abort(); } catch { /* already ended */ }
+      await tx.done.catch(() => {}); throw error;
+    }
   }
 
   static async getChatMessage(id: string): Promise<StoredChatMessage | undefined> {
