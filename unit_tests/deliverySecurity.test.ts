@@ -100,3 +100,40 @@ it('32 concurrent ChatService sends and an outbox flush consume unique positions
   for(const env of envelopes.sort((a,b)=>a.n-b.n)) decrypted.push(await receiver.decrypt(env,b,a.bundle.ik,'bob'));
   expect(decrypted.sort()).toEqual([...values,'secret'].sort());
 });
+
+it('recipient generates an encrypted receipt only after durable message acceptance',async()=>{
+  const {row,make,a,b}=await fixture();const alice=make();await alice.deliver(row);
+  const outgoing=(await StorageService.getChatMessage(row.id))!;
+  // Model the two device-local message stores sequentially; ratchets are directional.
+  await StorageService.deleteChatMessage(row.id);
+  const bob=new ChatService('wss://example.invalid','bob') as any;
+  bob.myBundle=b;bob.theirBundles.set('alice',a.bundle);bob.ensureOPKPool=vi.fn();
+  const incoming=await bob.mergeRemote({...JSON.parse(outgoing.encryptedEnvelope!),id:row.id,senderId:'alice',recipientId:'bob'},'alice:bob');
+  expect(incoming.text).toBe('secret');
+  const receipt=(await StorageService.getAllChatMessages()).find(r=>r.outgoing&&r.senderId==='bob'&&r.control)!;
+  expect(receipt.encryptedEnvelope).toBeTruthy();
+  expect(receipt.encryptedEnvelope).not.toContain(receipt.text);
+  await StorageService.deleteChatMessage(row.id);await StorageService.saveChatMessage(outgoing);
+  await StorageService.deleteChatMessage(receipt.id);
+  alice.onDelivered=vi.fn();
+  const raw={...JSON.parse(receipt.encryptedEnvelope!),id:receipt.id,senderId:'bob',recipientId:'alice'};
+  await alice.mergeRemote(raw,'alice:bob');await alice.mergeRemote(raw,'alice:bob');
+  expect(alice.onDelivered).toHaveBeenCalledTimes(1);
+  expect((await StorageService.getChatMessage(row.id))?.deliveryEvidence?.kind).toBe('peer-receipt-v1');
+  // Stale read/UI snapshots cannot erase evidence or ciphertext.
+  await StorageService.saveChatMessage({...outgoing,encryptedEnvelope:undefined});
+  const restored=(await StorageService.getChatMessage(row.id))!;
+  expect(restored.syncStatus).toBe('confirmed');expect(restored.encryptedEnvelope).toBe(outgoing.encryptedEnvelope);
+});
+it('restart reconciles an accepted receipt interrupted before status projection',async()=>{
+  const {row,make,a,b}=await fixture();const chat=make();await chat.deliver(row);
+  const outgoing=(await StorageService.getChatMessage(row.id))!,env=JSON.parse(outgoing.encryptedEnvelope!);
+  const peer=new SignalSession('bob','alice');await peer.decrypt(env,b,a.bundle.ik,'bob');
+  const ack=await peer.encrypt('\u0000DM-DELIVERED-1:'+JSON.stringify({id:row.id,digest:await digest(row.id,env)}),b,a.bundle);
+  vi.spyOn(chat,'processAccepted').mockRejectedValueOnce(new Error('simulated interruption'));
+  await chat.mergeRemote({...ack,id:'interrupted-receipt',senderId:'bob',recipientId:'alice'},'alice:bob');
+  expect((await StorageService.getChatMessage(row.id))?.syncStatus).toBe('pending');
+  (await StorageService.getDB()).close();(StorageService as any).dbPromise=undefined;
+  await make().flushOutbox();
+  expect((await StorageService.getChatMessage(row.id))?.syncStatus).toBe('confirmed');
+});
