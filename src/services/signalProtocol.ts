@@ -339,9 +339,7 @@ const SESSION_KEY = (myId: string, theirId: string) =>
   `signal-session:${myId}:${theirId}`;
 
 async function loadSession(myId: string, theirId: string): Promise<RatchetState | null> {
-  try {
-    return (await StorageService.getMetadata(SESSION_KEY(myId, theirId))) ?? null;
-  } catch { return null; }
+  return (await StorageService.getMetadata(SESSION_KEY(myId, theirId))) ?? null;
 }
 
 async function saveSession(myId: string, theirId: string, s: RatchetState): Promise<void> {
@@ -447,7 +445,6 @@ async function initSessionAsSender(
     ns: 0, nr: 0, pn: 0,
     skipped: {},
   };
-  await saveSession(myId, theirId, state);
   return { state, ratchetPub: ephRatchet.pubB64 };
 }
 
@@ -599,8 +596,17 @@ export class SignalSession {
     plaintext: string,
     myBundle:    { ik: DHKeyPair; spk: DHKeyPair; opk: DHKeyPair },
     theirBundle: SignalPublicBundle,
+    messageId?: string,
   ): Promise<SignalEnvelope> {
-    let state = await loadSession(this.myId, this.theirId);
+    for (let attempt = 0; attempt < 256; attempt++) {
+    const journalKey = messageId ? `signal-envelope:${this.myId}:${this.theirId}:${messageId}` : undefined;
+    const journal = journalKey ? await StorageService.getMetadata(journalKey) : null;
+    if (journal) {
+      if (journal.plaintext !== plaintext) throw new Error('Logical message content changed');
+      return journal.envelope as SignalEnvelope;
+    }
+    const before = await loadSession(this.myId, this.theirId);
+    let state = before;
     let x3dhEphPub: string | undefined;
     let x3dhOpkId:  string | undefined;
 
@@ -645,18 +651,20 @@ export class SignalSession {
         pn:  state.ns,
         // ckR/nr/dhRecv unchanged: still on the X3DH receive chain
       };
-      await saveSession(this.myId, this.theirId, state);
     }
 
     const { envelope, state: newState } = await ratchetEncrypt(
       state, plaintext, myBundle.ik.pubB64,
     );
-    await saveSession(this.myId, this.theirId, newState);
-
-    return { v: SIGNAL_WIRE_VERSION, ...envelope,
+    const result: SignalEnvelope = { v: SIGNAL_WIRE_VERSION, ...envelope,
       ...(x3dhEphPub ? { eph: x3dhEphPub } : {}),
       ...(x3dhOpkId  ? { opkId: x3dhOpkId } : {}),
     };
+    const changes = [{ key: SESSION_KEY(this.myId, this.theirId), before, after: newState }];
+    if (journalKey) changes.push({ key: journalKey, before: journal, after: { plaintext, envelope: result } } as any);
+    if (await StorageService.compareAndSwapMetadata(changes)) return result;
+    }
+    throw new Error('Session contention; no envelope published');
   }
 
   /**
@@ -670,6 +678,7 @@ export class SignalSession {
     senderIKPub:  string,
     myUserId:     string,
   ): Promise<string> {
+    for (let attempt = 0; attempt < 256; attempt++) {
     let state = await loadSession(this.myId, this.theirId);
 
     // If eph is present this is a new X3DH initiation — always reset session.
@@ -705,8 +714,11 @@ export class SignalSession {
     }
 
     const { plaintext, state: newState } = await ratchetDecrypt(state!, envelope, senderIKPub);
-    await saveSession(this.myId, this.theirId, newState);
-    return plaintext;
+    if (await StorageService.compareAndSwapMetadata([
+      { key: SESSION_KEY(this.myId, this.theirId), before: state, after: newState },
+    ])) return plaintext;
+    }
+    throw new Error('Session contention; retry decryption');
   }
   async hasSession(): Promise<boolean> {
     return !!(await loadSession(this.myId, this.theirId));

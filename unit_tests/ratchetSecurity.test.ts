@@ -61,3 +61,31 @@ it('64 concurrent consumers across instances decrypt exactly once', async () => 
   }
   expect(recovered.sort()).toEqual(values.sort());
 });
+
+it('logical retries reuse durable ciphertext after restart', async () => {
+  const { a, b, sender, receiver } = await peers();
+  const envelopes = await Promise.all(Array.from({length: 8}, () =>
+    new SignalSession('alice','bob').encrypt('retry', a, b.bundle, 'logical-1')));
+  expect(new Set(envelopes.map(e => JSON.stringify(e))).size).toBe(1);
+  expect(await receiver.decrypt(envelopes[0], b, a.bundle.ik, 'bob')).toBe('retry');
+  const before = JSON.stringify(await StorageService.getMetadata('signal-session:alice:bob'));
+  (await StorageService.getDB()).close(); (StorageService as any).dbPromise = undefined;
+  expect(await new SignalSession('alice','bob').encrypt('retry', a, b.bundle, 'logical-1')).toEqual(envelopes[0]);
+  expect(JSON.stringify(await StorageService.getMetadata('signal-session:alice:bob'))).toBe(before);
+  await expect(sender.encrypt('changed', a, b.bundle, 'logical-1')).rejects.toThrow();
+});
+
+it('send and receive overlap without overwriting the other chain', async () => {
+  const { a, b, sender, receiver } = await peers();
+  await sender.decrypt(await receiver.encrypt('reply', b, a.bundle), a, b.bundle.ik, 'alice');
+  await receiver.decrypt(await sender.encrypt('roundtrip', a, b.bundle), b, a.bundle.ik, 'bob');
+  const incoming = await receiver.encrypt('incoming', b, a.bundle);
+  const [outgoing, text] = await Promise.all([
+    sender.encrypt('outgoing', a, b.bundle),
+    new SignalSession('alice','bob').decrypt(incoming, a, b.bundle.ik, 'alice'),
+  ]);
+  expect(text).toBe('incoming');
+  expect(await receiver.decrypt(outgoing, b, a.bundle.ik, 'bob')).toBe('outgoing');
+  const next = await sender.encrypt('next', a, b.bundle);
+  expect(await receiver.decrypt(next, b, a.bundle.ik, 'bob')).toBe('next');
+});

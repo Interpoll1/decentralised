@@ -404,7 +404,7 @@ class ChatService {
 
   // ── Encryption ────────────────────────────────────────────────────────────
 
-  private async encryptFor(recipientId: string, plaintext: string): Promise<SignalEnvelope> {
+  private async encryptFor(recipientId: string, plaintext: string, messageId?: string): Promise<SignalEnvelope> {
     if (!this.myBundle) throw new Error('Not initialized');
 
     // FIX A: removed duplicate stale-session deletion that was here.
@@ -416,7 +416,7 @@ class ChatService {
 
     const bundle   = await this.getTheirBundle(recipientId);
     if (!bundle) throw new Error('Recipient has no Signal key bundle yet');
-    const envelope = await this.getSession(recipientId).encrypt(plaintext, this.myBundle, bundle);
+    const envelope = await this.getSession(recipientId).encrypt(plaintext, this.myBundle, bundle, messageId);
     // If this was a new X3DH session (eph present), the relay consumed one OPK.
     // Replenish in the background so the pool stays healthy.
     if (envelope.eph) void this.ensureOPKPool();
@@ -859,7 +859,7 @@ class ChatService {
         // Stored envelope is corrupt — clear it and re-encrypt (last resort)
         row = { ...row, encryptedEnvelope: undefined };
         try {
-          envelope = await this.encryptFor(recipientId, row.text);
+          envelope = await this.encryptFor(recipientId, row.text, row.id);
         } catch (e) {
           return fail(e instanceof Error ? e.message : 'Encryption failed');
         }
@@ -867,7 +867,7 @@ class ChatService {
     } else {
       // First attempt: encrypt and persist the envelope immediately
       try {
-        envelope = await this.encryptFor(recipientId, row.text);
+        envelope = await this.encryptFor(recipientId, row.text, row.id);
       } catch (e) {
         return fail(e instanceof Error ? e.message : 'Encryption failed');
       }

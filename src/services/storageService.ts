@@ -56,6 +56,31 @@ interface VotingChainDB extends DBSchema {
 const IDB_OPEN_TIMEOUT_MS = 4_000;
 
 export class StorageService {
+  /** Cross-context commit boundary. Never publish crypto backed only by RAM. */
+  static async compareAndSwapMetadata(
+    entries: { key: string; before: unknown; after: unknown }[],
+  ): Promise<boolean> {
+    const db = await this.getDB();
+    if (this.usingMemoryFallback) throw new Error('Durable storage required for messaging');
+    const tx = db.transaction('metadata', 'readwrite');
+    try {
+      for (const entry of entries) {
+        const current = await tx.store.get(entry.key);
+        if (JSON.stringify(current ?? null) !== JSON.stringify(entry.before ?? null)) {
+          await tx.done;
+          return false;
+        }
+      }
+      for (const entry of entries) await tx.store.put(entry.after, entry.key);
+      await tx.done;
+      return true;
+    } catch (error) {
+      try { tx.abort(); } catch { /* transaction already ended */ }
+      await tx.done.catch(() => {});
+      throw error;
+    }
+  }
+
   private static dbPromise: Promise<IDBPDatabase>;
 
   /** True when the active store is the volatile in-memory fallback (no persistence). */
