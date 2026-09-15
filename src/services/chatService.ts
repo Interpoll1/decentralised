@@ -26,6 +26,7 @@ import { StorageService } from './storageService';
 import { BoundedMap, BoundedSet } from '../utils/boundedMap';
 import { gunPut, gunOnce, gunReadChildren, toGunRecord } from '../utils/gunAsync';
 import config from '../config';
+import { encryptAndUpload, fetchAndDecrypt } from './chatMediaService';
 
 /** HTTP base URL of the relay-server (port 3001) — where signal bundles and chat APIs live. */
 function chatRelayBase(): string {
@@ -65,6 +66,10 @@ export interface ChatMessage {
   sent:      boolean;
   status?:   SyncStatus;
   error?:    string;
+  mediaUrl?: string;
+  mediaType?: 'image' | 'video' | 'file';
+  fileName?: string;
+  fileSize?: number;
 }
 
 export interface RecipientInfo {
@@ -97,7 +102,7 @@ function seenIds(userId: string): BoundedSet<string> {
   return _seenIds.get(userId)!;
 }
 
-function toChatMessage(row: StoredChatMessage): ChatMessage {
+async function toChatMessage(row: StoredChatMessage): Promise<ChatMessage> {
   let mediaUrl: string|undefined, mediaType: 'image'|'video'|'file'|undefined;
   let fileName: string|undefined, fileSize: number|undefined;
   // Default display text — overwritten below if we successfully parse a _file payload.
@@ -106,7 +111,12 @@ function toChatMessage(row: StoredChatMessage): ChatMessage {
   try {
     if (row.text?.startsWith('{"_file":true')) {
       const f = JSON.parse(row.text);
-      if (f._url && f.url) {
+      if (f._encryptedMedia === 1) {
+        displayText = f.media.mediaName;
+        fileName = f.media.mediaName; fileSize = f.media.mediaSize;
+        mediaType = f.media.mediaType?.startsWith('video') ? 'video' : f.media.mediaType?.startsWith('image') ? 'image' : 'file';
+        mediaUrl = await fetchAndDecrypt(f.media, row.outgoing ? row.senderId : row.recipientId || '');
+      } else if (f._url && f.url) {
         // Large file: relay-hosted persistent URL
         mediaUrl  = f.url;
         mediaType = f.mime?.startsWith('video') ? 'video' : f.mime?.startsWith('image') ? 'image' : 'file';
@@ -553,7 +563,7 @@ class ChatService {
       // Skip tombstones (corrupted/undecryptable) and empty rows
       if (!row || !row.text || row.syncStatus === 'corrupted' || this.shuttingDown) return;
       seenIds(this.userId).add(raw.id);
-      this.onMessage?.(toChatMessage(row));
+      this.onMessage?.(await toChatMessage(row));
     })();
   }
 
@@ -668,10 +678,10 @@ class ChatService {
   async getLocalHistory(recipientId: string): Promise<ChatMessage[]> {
     const roomId = this.getRoomId(this.userId, recipientId);
     const rows   = await StorageService.getChatMessagesByRoom(roomId);
-    return rows
+    return Promise.all(rows
       .filter(r => r.syncStatus !== 'corrupted' && r.text)
       .sort(compareMessages)
-      .map(toChatMessage);
+      .map(toChatMessage));
   }
 
   async loadHistory(recipientId: string): Promise<ChatMessage[]> {
@@ -687,10 +697,10 @@ class ChatService {
       const m = await this.mergeRemote(value, roomId);
       if (m) byId.set(m.id, m);
     }
-    return [...byId.values()]
+    return Promise.all([...byId.values()]
       .filter(r => r.syncStatus !== 'corrupted' && r.text)
       .sort(compareMessages)
-      .map(toChatMessage);
+      .map(toChatMessage));
   }
 
   // ── Sending ───────────────────────────────────────────────────────────────
@@ -1306,7 +1316,7 @@ class ChatService {
           const row = await this.mergeRemote(raw, roomId);
           if (row && row.text) {
             seenIds(this.userId).add(messageId);
-            this.onMessage?.(toChatMessage(row));
+            this.onMessage?.(await toChatMessage(row));
           }
         } catch (e) {
           // mergeRemote threw (decrypt failed). clearSession() already ran inside mergeRemote.
@@ -1433,55 +1443,8 @@ class ChatService {
     if (file.size > ChatService.MAX_FILE_BYTES)
       throw new Error('File too large (max 100 MB).');
 
-    const mime = file.type || 'application/octet-stream';
-
-    if (file.size <= ChatService.MAX_INLINE_FILE_BYTES) {
-      // Small file: encode inline as base64 and send encrypted through Signal.
-      // IMPORTANT: chunk size must be divisible by 3 so each chunk encodes to
-      // valid non-padded base64 and concatenation produces a correct result.
-      // 8192 % 3 == 2 (broken) → use 8190 (8190 % 3 == 0).
-      const arr = new Uint8Array(await file.arrayBuffer());
-      // Chunk size divisible by 3 → no mid-stream padding issues.
-      // Apply is used instead of spread to avoid call-stack overflow on large arrays.
-      const CHUNK = 8190;
-      let b64 = '';
-      for (let i = 0; i < arr.length; i += CHUNK)
-        b64 += btoa(String.fromCharCode.apply(null, arr.subarray(i, i + CHUNK) as any));
-      return this.sendMessage(recipientId,
-        JSON.stringify({ _file: true, name: file.name, mime, size: file.size, data: b64 }));
-    }
-
-    // Large file: upload to relay, send URL as the encrypted message payload.
-    // The file bytes themselves never pass through Signal encryption.
-    const senderPub = this.userId;
-    const formData  = new FormData();
-    formData.append('file', file, file.name);
-    formData.append('mimeType', mime);
-
-    const uploadController = new AbortController();
-    const uploadTimeout = setTimeout(() => uploadController.abort(), 2 * 60 * 1000);
-    let uploadRes: Response;
-    try {
-      uploadRes = await fetch(`${chatRelayBase()}/api/chat-media`, {
-        method:  'POST',
-        headers: { Authorization: `Bearer ${senderPub}` },
-        body:    formData,
-        signal:  uploadController.signal,
-      });
-    } catch (e: any) {
-      clearTimeout(uploadTimeout);
-      throw new Error(e?.name === 'AbortError' ? 'Upload timed out (> 2 min)' : 'Upload failed — check connection');
-    }
-    clearTimeout(uploadTimeout);
-    if (!uploadRes.ok) {
-      const err = await uploadRes.json().catch(() => ({ error: 'Upload failed' }));
-      throw new Error(err.error || `Upload failed (${uploadRes.status})`);
-    }
-    const { mediaId } = await uploadRes.json();
-    const url = `${chatRelayBase()}/api/chat-media/${mediaId}`;
-
-    return this.sendMessage(recipientId,
-      JSON.stringify({ _file: true, _url: true, name: file.name, mime, size: file.size, url }));
+    const media = await encryptAndUpload(file, this.userId);
+    return this.sendMessage(recipientId, JSON.stringify({ _file: true, _encryptedMedia: 1, media }));
   }
 
   sendTyping(recipientId: string, isTyping: boolean): void {

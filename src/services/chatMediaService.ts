@@ -1,19 +1,6 @@
-/**
- * chatMediaService.ts — Relay-routed ephemeral media for DMs
- *
- * Flow:
- *   1. Sender encrypts the file bytes with a fresh AES-256-GCM key (mediaKey).
- *   2. Ciphertext is uploaded to relay POST /api/chat-media (returns a mediaId).
- *   3. mediaKey + mediaId are embedded in a normal Signal-encrypted chat message.
- *   4. Recipient decrypts the chat message, extracts mediaId + mediaKey,
- *      fetches GET /api/chat-media/:id, decrypts locally, renders inline.
- *   5. Once the recipient has ACK'd (sent a read-receipt), relay deletes the blob.
- *   6. Client also calls DELETE /api/chat-media/:id after first successful render.
- *
- * Backend never sees plaintext. The mediaKey travels inside the Signal envelope.
- * Max relay retention: 7 days (TTL enforced by the relay).
+/** Versioned DM media: only opaque ciphertext crosses the upload boundary.
+ * Descriptors belong exclusively inside the encrypted DM envelope.
  */
-
 import config from '../config';
 
 const RELAY_BASE = (() => {
@@ -21,15 +8,25 @@ const RELAY_BASE = (() => {
   return ws.replace(/^wss:\/\//, 'https://').replace(/^ws:\/\//, 'http://').replace(/\/$/, '');
 })();
 
-const MAX_MEDIA_BYTES = 25 * 1024 * 1024; // 25 MB
+const MAX_MEDIA_BYTES = 100 * 1024 * 1024; // 100 MB
 
 export interface MediaMeta {
+  version: 1;
+  context: string;
   mediaId:   string;  // relay-assigned UUID
   mediaKey:  string;  // base64 AES-256-GCM key
   mediaIV:   string;  // base64 IV
   mediaType: string;  // MIME type (image/jpeg, video/mp4, …)
   mediaSize: number;  // original byte length
   mediaName: string;  // original file name
+}
+
+function aad(meta: Pick<MediaMeta, 'version' | 'context' | 'mediaType' | 'mediaSize' | 'mediaName'>): Uint8Array {
+  if (meta.version !== 1 || typeof meta.context !== 'string' || !Number.isSafeInteger(meta.mediaSize)
+    || meta.mediaSize < 0 || meta.mediaSize > MAX_MEDIA_BYTES || typeof meta.mediaName !== 'string'
+    || typeof meta.mediaType !== 'string') throw new Error('Unsupported or malformed media descriptor');
+  return new TextEncoder().encode(JSON.stringify(['interpoll-dm-media', meta.version, meta.context,
+    meta.mediaType, meta.mediaSize, meta.mediaName]));
 }
 
 /** Encrypt a File, upload ciphertext to relay, return meta for embedding in message. */
@@ -45,15 +42,16 @@ export async function encryptAndUpload(file: File, authToken: string): Promise<M
     'raw', rawKey, { name: 'AES-GCM' }, false, ['encrypt']
   );
 
+  const metadata = { version: 1 as const, context: crypto.randomUUID(),
+    mediaType: file.type || 'application/octet-stream', mediaSize: file.size, mediaName: file.name };
   // 2. Encrypt
   const plaintext  = await file.arrayBuffer();
-  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, cryptoKey, plaintext);
+  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: aad(metadata) }, cryptoKey, plaintext);
 
   // 3. Upload ciphertext blob to relay
   const formData = new FormData();
-  formData.append('blob', new Blob([ciphertext], { type: 'application/octet-stream' }));
-  formData.append('mimeType', file.type);
-  formData.append('size', String(file.size));
+  formData.append('file', new Blob([ciphertext], { type: 'application/octet-stream' }), 'encrypted.bin');
+  formData.append('mimeType', 'application/octet-stream');
 
   const res = await fetch(`${RELAY_BASE}/api/chat-media`, {
     method: 'POST',
@@ -62,20 +60,19 @@ export async function encryptAndUpload(file: File, authToken: string): Promise<M
   });
   if (!res.ok) throw new Error(`Media upload failed: ${res.status}`);
   const { mediaId } = await res.json();
+  if (typeof mediaId !== 'string' || !mediaId) throw new Error('Invalid media reference');
 
   return {
     mediaId,
     mediaKey:  btoa(String.fromCharCode(...rawKey)),
     mediaIV:   btoa(String.fromCharCode(...iv)),
-    mediaType: file.type,
-    mediaSize: file.size,
-    mediaName: file.name,
+    ...metadata,
   };
 }
 
-/** Download and decrypt media, returning an object URL. Deletes from relay after. */
+/** Authenticate before rendering; sender preview must not delete recipient media. */
 export async function fetchAndDecrypt(meta: MediaMeta, authToken: string): Promise<string> {
-  const res = await fetch(`${RELAY_BASE}/api/chat-media/${meta.mediaId}`, {
+  const res = await fetch(`${RELAY_BASE}/api/chat-media/${encodeURIComponent(meta.mediaId)}`, {
     headers: { Authorization: `Bearer ${authToken}` },
   });
   if (!res.ok) throw new Error(`Media fetch failed: ${res.status}`);
@@ -87,13 +84,8 @@ export async function fetchAndDecrypt(meta: MediaMeta, authToken: string): Promi
   const cryptoKey = await crypto.subtle.importKey(
     'raw', rawKey, { name: 'AES-GCM' }, false, ['decrypt']
   );
-  const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, cryptoKey, ciphertext);
-
-  // Delete from relay immediately after successful decryption
-  fetch(`${RELAY_BASE}/api/chat-media/${meta.mediaId}`, {
-    method: 'DELETE',
-    headers: { Authorization: `Bearer ${authToken}` },
-  }).catch(() => {}); // fire-and-forget
+  const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv, additionalData: aad(meta) }, cryptoKey, ciphertext);
+  if (plaintext.byteLength !== meta.mediaSize) throw new Error('Media size mismatch');
 
   return URL.createObjectURL(new Blob([plaintext], { type: meta.mediaType }));
 }
