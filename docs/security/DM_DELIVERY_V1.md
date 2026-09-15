@@ -34,3 +34,8 @@ The cryptographic envelope remains v3. Receipt plaintext and media descriptor fo
 Both peers must upgrade for meaningful confirmation and new media rendering. Older clients do not understand the receipt control payload and may display it as text; they cannot generate qualifying receipts. Older clients cannot decrypt the new media format through their legacy renderer. This is a coordinated-client rollout requirement, not transparent interoperability. Close/reload every client sharing the database before use. No Signal compatibility claim is made.
 
 Metadata such as accounts, timings, ciphertext length, and blob access remains visible to the transport. The live relay/native-client combinations have not been validated by these local tests.
+
+
+## Authenticated bundle integration (F01/F07 pass)
+
+Wire v4 adds the account/device bootstrap context `auth`. Its receipt digest uses the array above with `auth` appended after `ct`; v3 digests retain their old definition. New active DMs require the binding contract in [DM_IDENTITY_PREKEY_V1.md](DM_IDENTITY_PREKEY_V1.md). Legacy envelopes are preserved but quarantined rather than transmitted by authenticated mode. Historical v3 delivery evidence is not retroactively evidence of an account binding. This addition changes neither receipt acceptance ordering nor immutable retransmission.

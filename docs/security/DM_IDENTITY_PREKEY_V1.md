@@ -56,7 +56,7 @@ Authenticated bundles have version=1, the account-signed binding, existing IK/si
 
 New authenticated envelopes use wire v4. A canonical bootstrap context binds both device bindings, selected receiver SPK and explicit OPK choice. It persists with the session and is authenticated together with header fields (version, eph, opkId, dh, n, pn) as AES-GCM AAD. Receiver verifies the account/device chain and context before accepting plaintext; continuity and OPK changes share the authenticated commit. Both directions retain the original context.
 
-Mixed authenticated-v4/legacy-v3 negotiation is not supported. Legacy primitive/session data is not upgraded by relabeling it. Preserve old state as LEGACY_UNAUTHENTICATED; do not mark it trusted or reset it. New authenticated messaging fails closed on incompatible existing state, with a typed result. Old encrypted envelope retries retain their original bytes; they cannot acquire new authenticated identity claims. Low-level legacy cryptographic regression coverage remains separate from the authenticated ChatService path.
+Mixed authenticated-v4/legacy-v3 negotiation is not supported. Legacy primitive/session data is not upgraded by relabeling it. Preserve old state as LEGACY_UNAUTHENTICATED; do not mark it trusted or reset it. New authenticated messaging fails closed on incompatible existing state, with a typed result. Old encrypted envelopes retain their original bytes but authenticated ChatService quarantines them rather than retransmitting v3 or acquiring new identity claims. Low-level legacy cryptographic regression coverage remains separate from the authenticated ChatService path.
 
 ## Local storage and migration
 
@@ -65,3 +65,27 @@ Add namespaced local device/binding/SPK identity records, per-local-account peer
 Migration is lazy and keyed by the exact requested local account; it reads each required record explicitly and commits the full local authenticated identity record atomically. There is no optional-enumeration or global migration-complete flag. Existing malformed/mismatched local records fail closed. Missing root authority remains UNKNOWN/LEGACY_UNAUTHENTICATED. Existing receiver pools retain available entries; historical consumed IDs cannot be reconstructed from old absent records, and no retroactive history claim is made.
 
 F06 bootstrap replay/reset/session epochs remain out of scope. This contract does not authorize unauthenticated reset controls or claim full replay/reset safety, Signal compatibility, or complete authenticated E2EE.
+
+## Exact storage and wire additions
+
+| Key | Contents and authority |
+| --- | --- |
+| `nostr-keypair` (existing) | Account private key and x-only public key, managed by KeyService. Local signing checks the derived key against the requested account. |
+| `signal-ik:<account>`, `signal-ik-sign:<account>`, `signal-spk:<account>` (existing) | Messaging private/public material. Initial generation now uses CAS so concurrent local initialization cannot split the binding from its keys. |
+| `dm-local-identity-v1:<account>` | Account-signed binding (including device UUID/current IK/signing key) and SPK ID/generation/public key. No global migration-complete flag. |
+| `dm-trust-v1:<local>:<peer>` | Accepted binding, continuity state, last SPK ID/generation/key. Commit with crypto state; rejected candidates do not replace it. |
+| `signal-opk-pool:<account>` (existing) | Available local UUID/public/private entries. |
+| `dm-consumed-opks-v1:<account>` | Consumed-ID tombstones; no private key retained. |
+| `dm-sent-opk-v1:<local>:<peer>:<opkId>` | This sender's committed bootstrap selection; prevents its cached candidate reissue after session loss. |
+| `signal-session:<local>:<peer>` (existing) | Ratchet state gains `auth`, the literal authenticated bootstrap context. Absence means legacy, not implicitly trusted. |
+| `signal-envelope:<local>:<peer>:<messageId>` (existing) | Immutable outgoing ciphertext journal, preserving its original wire version. |
+
+Bundle version 1 adds `binding`, `spkId`, `spkGeneration`, **`spkAuthorization`**, `opks` and explicit `selectedOPK` (signed candidate or null). Existing `spkSig` remains the legacy signature over raw SPK bytes; it cannot substitute for spkAuthorization. Existing opk/opkId fields, when present, must exactly match selectedOPK.
+
+The v4 `auth` string is JSON.stringify of `["interpoll/dm/bootstrap",1,senderTranscriptBundle,receiverTranscriptBundle]`. Sender transcript bundle has empty candidates and null selection. Receiver transcript bundle includes only its selected candidate, or an explicit empty/null choice. The parser requires exact JSON parse/stringify round-trip equality; signed field arrays above independently define signature canonicalization. This string is public AAD, not private payload.
+
+AEAD AAD is UTF-8 JSON.stringify of `["interpoll/dm/message",4,senderIK,dh,n,pn,eph-or-null,opkId-or-null,auth]`. New and previous ratchet messages retain the same context. The delivery-receipt digest additionally appends auth for v4, while its v3 definition is unchanged. This is the minimum F10 compatibility change needed to acknowledge the exact v4 envelope.
+
+A relay may suppress all OPK candidates and force an explicit no-OPK choice before encryption; availability is not authenticated by a global signed manifest. It cannot change that choice after encryption without rejection. No claim is made that relays cannot replay public bytes, that selections across remote senders are globally exclusive, or that a failed stale selection automatically recovers. Receiver single consumption remains enforced.
+
+Existing F06 reset handlers and the prior bootstrap eligibility rules remain; context binding is not a new epoch or reset-authorization protocol. An explicit rotation/device-approval UX and distributed revocation/freshness mechanism are not implemented in this pass. Local legacy sessions cannot be silently migrated; an independently authorized transition is needed before those peers can use authenticated mode.
