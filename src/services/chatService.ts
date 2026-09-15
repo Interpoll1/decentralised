@@ -305,7 +305,7 @@ class ChatService {
 
   // ── Signal bundle lookup ──────────────────────────────────────────────────
 
-  private async fetchTheirBundle(recipientId: string): Promise<SignalPublicBundle | null> {
+  private async fetchTheirBundle(recipientId: string, persist = true): Promise<SignalPublicBundle | null> {
     // 0. IDB cache: survives page reloads, never hits the rate limiter
     const idbKey = 'signal-bundle-cache:' + recipientId;
     try {
@@ -336,7 +336,7 @@ class ChatService {
               this.onRecipientKeyChange?.({ userId: recipientId, available: false });
               return null;
             }
-            void StorageService.setMetadata(idbKey, { ...bundle, _cachedAt: Date.now() }).catch(() => {});
+            if (persist) void StorageService.setMetadata(idbKey, { ...bundle, _cachedAt: Date.now() }).catch(() => {});
             return bundle;
           }
         }
@@ -358,7 +358,7 @@ class ChatService {
           console.error('[ChatService] Gun bundle SPK signature invalid for', recipientId, '— refusing:', e);
           return null;
         }
-        void StorageService.setMetadata(idbKey, { ...bundle, _cachedAt: Date.now() }).catch(() => {});
+        if (persist) void StorageService.setMetadata(idbKey, { ...bundle, _cachedAt: Date.now() }).catch(() => {});
         return bundle;
       }
     } catch { }
@@ -442,14 +442,14 @@ class ChatService {
     // Bundle may not have arrived yet — retry up to 3× with backoff before giving up.
     // This covers the race where a message arrives via WS before the sender's
     // bundle has synced (REST hit is <20ms, so retries are cheap).
-    let theirBundle = await this.getTheirBundle(senderId);
+    let theirBundle = this.theirBundles.get(senderId) ?? await this.fetchTheirBundle(senderId, false);
     if (!theirBundle) {
       for (const delayMs of [500, 1500, 3000]) {
         await new Promise(r => setTimeout(r, delayMs));
         // Force re-fetch by clearing cache and trying again
         this.theirBundles.delete(senderId);
         this.missingBundles.delete(senderId);
-        theirBundle = await this.getTheirBundle(senderId);
+        theirBundle = this.theirBundles.get(senderId) ?? await this.fetchTheirBundle(senderId, false);
         if (theirBundle) break;
       }
     }

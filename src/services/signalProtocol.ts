@@ -425,7 +425,6 @@ async function x3dhReceive(
  *   rootKey, ckS = KDF_RK(masterKey, dhOut)
  */
 async function initSessionAsSender(
-  myId: string, theirId: string,
   masterKey: string,
   recipientSPKPub: string,
 ): Promise<{ state: RatchetState; ratchetPub: string }> {
@@ -457,7 +456,6 @@ async function initSessionAsSender(
  * The receiver then generates a fresh ratchet keypair for future sends.
  */
 async function initSessionAsReceiver(
-  myId: string, theirId: string,
   masterKey: string,
   mySPK: DHKeyPair,
   senderRatchetPub: string,  // envelope.dh
@@ -614,7 +612,7 @@ export class SignalSession {
       x3dhEphPub = ep;
       if (opkId) x3dhOpkId = opkId;
       const { state: s } = await initSessionAsSender(
-        this.myId, this.theirId, masterKey, theirBundle.spk,
+        masterKey, theirBundle.spk,
       );
       state = s;
     }
@@ -687,7 +685,7 @@ export class SignalSession {
           changes.push({ key, before: pool, after: pool!.filter(entry => entry.id !== envelope.opkId) });
         }
         const master = await x3dhReceive(myBundle.ik, myBundle.spk, opk, senderIKPub, envelope.eph);
-        state = await initSessionAsReceiver(this.myId, this.theirId, master, myBundle.spk, envelope.dh);
+        state = await initSessionAsReceiver(master, myBundle.spk, envelope.dh);
       }
       if (!state) throw new Error('No session and no X3DH ephemeral key');
       const result = await ratchetDecrypt(state, envelope, senderIKPub);

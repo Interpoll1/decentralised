@@ -1,10 +1,11 @@
 import 'fake-indexeddb/auto';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 vi.mock('../src/services/gunService', () => ({ GunService: { getGun: vi.fn() }, GUN_NAMESPACE: 'test' }));
 vi.mock('../src/utils/gunAsync', () => ({ gunPut: vi.fn(), gunOnce: vi.fn(), gunReadChildren: vi.fn(), toGunRecord: (x: unknown) => x }));
 import ChatService from '../src/services/chatService';
 import { StorageService } from '../src/services/storageService';
 import { getOrCreateIdentityBundle, generateOPKBatch, SignalSession } from '../src/services/signalProtocol';
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 beforeEach(async () => { const db = await StorageService.getDB(); await db.clear('metadata'); await db.clear('chat-messages'); });
 async function snapshot() {
   const db = await StorageService.getDB();
@@ -39,4 +40,27 @@ it('ChatService rejects unauthenticated inputs without tombstones or session del
   }
   const next = await sender.encrypt('still works', a, b.bundle);
   expect((await chat.mergeRemote({...next,id:'next',senderId:'alice',recipientId:'bob'},'alice:bob')).text).toBe('still works');
+});
+
+it('failure writing accepted message atomically rolls back session and OPK consumption', async () => {
+  const a=await getOrCreateIdentityBundle('alice'), b=await getOrCreateIdentityBundle('bob');
+  const pool=await generateOPKBatch(1,'bob');
+  const envelope=await new SignalSession('alice','bob').encrypt('authenticated',a,{...b.bundle,opk:pool[0].pubB64,opkId:pool[0].id});
+  const receiver=new SignalSession('bob','alice');
+  const before=await snapshot();
+  await expect(receiver.decrypt(envelope,b,a.bundle.ik,'bob',text=>({id:'accepted',text,uncloneable:()=>{}} as any))).rejects.toThrow();
+  expect(await snapshot()).toBe(before);
+  await receiver.decrypt(envelope,b,a.bundle.ik,'bob',text=>({id:'accepted',text} as any));
+  expect((await StorageService.getChatMessage('accepted'))?.text).toBe('authenticated');
+  expect((await StorageService.getMetadata('signal-opk-pool:bob')).length).toBe(0);
+});
+
+it('forged input with a cold bundle cache cannot persist fetched discovery material', async()=>{
+  const a=await getOrCreateIdentityBundle('alice'), b=await getOrCreateIdentityBundle('bob');
+  const env=await new SignalSession('alice','bob').encrypt('valid',a,b.bundle);
+  const chat=new ChatService('wss://example.invalid','bob') as any;chat.myBundle=b;
+  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(a.bundle))));
+  const before=await snapshot();
+  await chat.mergeRemote({...env,ct:btoa('forged'),id:'cold-forgery',senderId:'alice',recipientId:'bob'},'alice:bob');
+  expect(await snapshot()).toBe(before);
 });
