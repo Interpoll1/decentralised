@@ -753,6 +753,7 @@ class ChatService {
       }
       if (journal && journal.plaintext !== row.text) throw new Error('Logical message content changed');
       const envelope: SignalEnvelope = journal?.envelope ?? await this.encryptFor(recipientId, row.text, row.id);
+      if (envelope.v !== 4) throw new DMIdentityError('LEGACY_UNAUTHENTICATED','Legacy envelope retained; authenticated mode cannot retransmit it');
       if (envelope.v === 4) {
         const own = await verifyAuthenticatedBundle(this.myBundle!.bundle,this.userId);
         const {peer} = await verifyContext(envelope.auth!,this.userId,recipientId,own);
@@ -767,7 +768,10 @@ class ChatService {
         this.indexRoom(row.roomId, this.userId, recipientId);
         error = 'Gun local acceptance; recipient receipt pending';
       }
-    } catch (e) { error = e instanceof Error ? e.message : 'Delivery failed'; }
+    } catch (e) {
+      if (e instanceof DMIdentityError) this.onIdentityState?.({userId:recipientId,state:e.state});
+      error = e instanceof Error ? e.message : 'Delivery failed';
+    }
     // Neither local Gun ACK nor relay forwarding establishes recipient delivery.
     return await StorageService.patchDMDelivery(row.id, {
       syncStatus: 'pending', syncAttempts: attempts, error,

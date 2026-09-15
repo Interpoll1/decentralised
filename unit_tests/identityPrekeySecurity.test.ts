@@ -118,3 +118,18 @@ it('concurrent local initialization keeps one authorized device and IK across re
  (await StorageService.getDB()).close();(StorageService as any).dbPromise=undefined;
  expect((await getOrCreateIdentityBundle(ALICE)).bundle.binding).toEqual(identities[0].bundle.binding);
 });
+
+it('authenticated mode retains 64-way atomic sending and exactly-once receive after account binding',async()=>{
+ const {a,b,sender,receiver}=await peers();
+ await receiver.decrypt(await sender.encrypt('init',a,b.bundle),b,a.bundle.ik,BOB);
+ await sender.decrypt(await receiver.encrypt('reply',b,a.bundle),a,b.bundle.ik,ALICE);
+ const texts=Array.from({length:64},(_,i)=>`authenticated-${i}`);
+ const envelopes=await Promise.all(texts.map(text=>new SignalSession(ALICE,BOB).encrypt(text,a,b.bundle)));
+ expect(new Set(envelopes.map(e=>`${e.dh}:${e.n}`)).size).toBe(64);
+ const decoded=[];
+ for(const env of envelopes.sort((x,y)=>x.n-y.n)) {
+   decoded.push(await receiver.decrypt(env,b,a.bundle.ik,BOB));
+   await expect(receiver.decrypt(env,b,a.bundle.ik,BOB)).rejects.toThrow();
+ }
+ expect(decoded.sort()).toEqual(texts.sort());
+});

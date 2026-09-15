@@ -49,3 +49,17 @@ it('init refuses a profile/account ID not owned by the current KeyService signer
  expect(vi.mocked(gunPut).mock.calls.length).toBe(calls);
  expect(await StorageService.getMetadata(`dm-local-identity-v1:${BOB}`)).toBeUndefined();
 });
+
+it('legacy outbox stays quarantined with identical ciphertext rather than silently downgrading',async()=>{
+ const a=await getOrCreateIdentityBundle(ALICE),chat=new ChatService('wss://example.invalid',ALICE) as any;chat.myBundle=a;
+ const envelope={v:3,dh:'legacy',n:0,pn:0,ct:'preserve-exactly'};
+ const row={id:'legacy-outbox',roomId:`${ALICE}:${BOB}`,senderId:ALICE,recipientId:BOB,text:'legacy',kind:'dm' as const,outgoing:true,timestamp:Date.now(),seq:1,syncStatus:'pending' as const,syncAttempts:0,encryptedEnvelope:JSON.stringify(envelope)};
+ await StorageService.saveChatMessage(row);
+ const key=`signal-envelope:${ALICE}:${BOB}:${row.id}`;await StorageService.setMetadata(key,{plaintext:row.text,envelope});
+ const before=JSON.stringify(await StorageService.getMetadata(key)),calls=vi.mocked(gunPut).mock.calls.length;
+ chat.onIdentityState=vi.fn();const result=await chat.deliver(row);
+ expect(result.syncStatus).toBe('pending');expect(result.encryptedEnvelope).toBe(row.encryptedEnvelope);
+ expect(JSON.stringify(await StorageService.getMetadata(key))).toBe(before);
+ expect(vi.mocked(gunPut).mock.calls.length).toBe(calls);
+ expect(chat.onIdentityState).toHaveBeenCalledWith({userId:BOB,state:'LEGACY_UNAUTHENTICATED'});
+});
