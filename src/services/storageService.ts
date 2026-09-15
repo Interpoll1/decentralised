@@ -59,19 +59,26 @@ export class StorageService {
   /** Cross-context commit boundary. Never publish crypto backed only by RAM. */
   static async compareAndSwapMetadata(
     entries: { key: string; before: unknown; after: unknown }[],
+    accepted?: StoredChatMessage,
   ): Promise<boolean> {
     const db = await this.getDB();
     if (this.usingMemoryFallback) throw new Error('Durable storage required for messaging');
-    const tx = db.transaction('metadata', 'readwrite');
+    const tx = db.transaction(['metadata', 'chat-messages'], 'readwrite');
+    const metadata = tx.objectStore('metadata');
     try {
       for (const entry of entries) {
-        const current = await tx.store.get(entry.key);
+        const current = await metadata.get(entry.key);
         if (JSON.stringify(current ?? null) !== JSON.stringify(entry.before ?? null)) {
           await tx.done;
           return false;
         }
       }
-      for (const entry of entries) await tx.store.put(entry.after, entry.key);
+      if (accepted && await tx.objectStore('chat-messages').get(accepted.id)) {
+        await tx.done;
+        return false;
+      }
+      for (const entry of entries) await metadata.put(entry.after, entry.key);
+      if (accepted) await tx.objectStore('chat-messages').add(accepted);
       await tx.done;
       return true;
     } catch (error) {

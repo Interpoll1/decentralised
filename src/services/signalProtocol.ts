@@ -41,6 +41,7 @@
  */
 
 import { StorageService } from './storageService';
+import type { StoredChatMessage } from '../types/social';
 
 export const SIGNAL_WIRE_VERSION = 3;
 
@@ -342,9 +343,6 @@ async function loadSession(myId: string, theirId: string): Promise<RatchetState 
   return (await StorageService.getMetadata(SESSION_KEY(myId, theirId))) ?? null;
 }
 
-async function saveSession(myId: string, theirId: string, s: RatchetState): Promise<void> {
-  await StorageService.setMetadata(SESSION_KEY(myId, theirId), s);
-}
 
 // ── X3DH ─────────────────────────────────────────────────────────────────────
 
@@ -481,11 +479,6 @@ async function initSessionAsReceiver(
     ns: 0, nr: 0, pn: 0,
     skipped: {},
   };
-  // Also save under the REVERSE key (myId:theirId as sender) so that
-  // when we later send, encrypt() loads this same rootKey and derives
-  // a ckS that Tab A can match. Without this, a stale session from a
-  // previous X3DH exchange pollutes the sending path with a wrong rootKey.
-  await saveSession(myId, theirId, state);
   return state;
 }
 
@@ -673,50 +666,34 @@ export class SignalSession {
    * myUserId is needed to look up the OPK pool in IDB and consume the right entry.
    */
   async decrypt(
-    envelope:     SignalEnvelope,
-    myBundle:     { ik: DHKeyPair; spk: DHKeyPair },
-    senderIKPub:  string,
-    myUserId:     string,
+    envelope: SignalEnvelope,
+    myBundle: { ik: DHKeyPair; spk: DHKeyPair },
+    senderIKPub: string,
+    myUserId: string,
+    acceptedRow?: (plaintext: string) => StoredChatMessage,
   ): Promise<string> {
+    if (myUserId !== this.myId) throw new Error('Receiver identity mismatch');
     for (let attempt = 0; attempt < 256; attempt++) {
-    let state = await loadSession(this.myId, this.theirId);
-
-    // If eph is present this is a new X3DH initiation — always reset session.
-    if (envelope.eph) {
-      // Always reset when eph is present UNLESS the session is already live with messages
-      // having been successfully received (nr > 0). The only safe "don't reset" case is
-      // a stale Gun re-delivery of the original X3DH message after a session is established.
-      // Any other case — including a failed prior X3DH that saved bad state — must reset.
-      // Previously, sameDH + ckR-set was treated as "sessionLive" and skipped the reset,
-      // but ckR gets set by initSessionAsReceiver BEFORE aeadDecrypt runs, so a failed
-      // decrypt leaves a corrupted session that blocks all future messages from that peer.
-      const sessionHasSuccessfullyDecrypted = state && state.nr > 0;
-      const shouldReset = !sessionHasSuccessfullyDecrypted;
-      if (shouldReset) {
-        // Look up the OPK the sender used. consumeOPK removes it from the local
-        // pool so it can never be reused, giving per-session forward secrecy.
-        // If the id is absent or already consumed, X3DH still works without OPK.
-        let myOPK: { priv: JsonWebKey } | null = null;
+      const before = await loadSession(this.myId, this.theirId);
+      let state = before;
+      const changes: { key: string; before: unknown; after: unknown }[] = [];
+      if (envelope.eph && !(state && state.nr > 0)) {
+        let opk: OPKEntry | null = null;
         if (envelope.opkId) {
-          myOPK = await consumeOPK(myUserId, envelope.opkId);
+          const key = OPK_POOL_KEY(myUserId);
+          const pool = await StorageService.getMetadata(key) as OPKEntry[] | undefined;
+          opk = pool?.find(entry => entry.id === envelope.opkId) ?? null;
+          if (!opk) throw new Error('Requested one-time prekey unavailable');
+          changes.push({ key, before: pool, after: pool!.filter(entry => entry.id !== envelope.opkId) });
         }
-        const masterKey = await x3dhReceive(
-          myBundle.ik, myBundle.spk, myOPK,
-          senderIKPub, envelope.eph,
-        );
-        state = await initSessionAsReceiver(
-          this.myId, this.theirId, masterKey, myBundle.spk, envelope.dh,
-        );
+        const master = await x3dhReceive(myBundle.ik, myBundle.spk, opk, senderIKPub, envelope.eph);
+        state = await initSessionAsReceiver(this.myId, this.theirId, master, myBundle.spk, envelope.dh);
       }
-      // else: active session, stale Gun re-delivery — skip reset
-    } else if (!state) {
-      throw new Error('No session and no X3DH ephemeral key — cannot establish session');
-    }
-
-    const { plaintext, state: newState } = await ratchetDecrypt(state!, envelope, senderIKPub);
-    if (await StorageService.compareAndSwapMetadata([
-      { key: SESSION_KEY(this.myId, this.theirId), before: state, after: newState },
-    ])) return plaintext;
+      if (!state) throw new Error('No session and no X3DH ephemeral key');
+      const result = await ratchetDecrypt(state, envelope, senderIKPub);
+      changes.push({ key: SESSION_KEY(this.myId, this.theirId), before, after: result.state });
+      // Callback is pure construction; all acceptance writes share this transaction.
+      if (await StorageService.compareAndSwapMetadata(changes, acceptedRow?.(result.plaintext))) return result.plaintext;
     }
     throw new Error('Session contention; retry decryption');
   }
@@ -799,31 +776,23 @@ export async function generateOPKBatch(count: number, userId: string): Promise<O
       priv:   privJwk,
     });
   }
-  // Merge with any existing pool (prepend new ones, keep old ones that haven't been consumed)
-  let existing: OPKEntry[] = [];
-  try {
-    const stored = await StorageService.getMetadata(OPK_POOL_KEY(userId));
-    if (Array.isArray(stored)) existing = stored as OPKEntry[];
-  } catch { }
-  const merged = [...batch, ...existing];
-  await StorageService.setMetadata(OPK_POOL_KEY(userId), merged);
-  return merged;
+  for (;;) {
+    const key = OPK_POOL_KEY(userId);
+    const before = await StorageService.getMetadata(key);
+    const merged = [...batch, ...(Array.isArray(before) ? before : [])];
+    if (await StorageService.compareAndSwapMetadata([{key, before, after: merged}])) return merged;
+  }
 }
 
-/**
- * Find and remove an OPK from the local pool by id. Returns the entry so the
- * caller can use the private key for X3DH. Returns null if the id isn't found
- * (already consumed or from a previous install — session still works without OPK).
- */
+/** Local explicit consumption; receiver bootstrap uses the joint transaction above. */
 export async function consumeOPK(userId: string, opkId: string): Promise<OPKEntry | null> {
-  try {
-    const pool = await loadOrCreateOPKPool(userId);
-    const idx  = pool.findIndex(e => e.id === opkId);
-    if (idx === -1) return null;
-    const [entry] = pool.splice(idx, 1);
-    await StorageService.setMetadata(OPK_POOL_KEY(userId), pool);
-    return entry;
-  } catch { return null; }
+  for (;;) {
+    const key = OPK_POOL_KEY(userId);
+    const before = await StorageService.getMetadata(key) as OPKEntry[] | undefined;
+    const entry = before?.find(e => e.id === opkId);
+    if (!entry) return null;
+    if (await StorageService.compareAndSwapMetadata([{key, before, after: before!.filter(e => e.id !== opkId)}])) return entry;
+  }
 }
 
 /**

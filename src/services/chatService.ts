@@ -425,6 +425,7 @@ class ChatService {
 
   private async decryptFrom(
     senderId: string, envelope: SignalEnvelope,
+    acceptedRow?: (plaintext: string) => StoredChatMessage,
   ): Promise<string> {
     if (!this.myBundle) throw new Error('Not initialized');
 
@@ -443,7 +444,7 @@ class ChatService {
       }
     }
     if (!theirBundle) throw new Error(`Bundle unavailable for sender ${senderId.slice(0, 16)}`);
-    return this.getSession(senderId).decrypt(envelope, this.myBundle, theirBundle.ik, this.userId);
+    return this.getSession(senderId).decrypt(envelope, this.myBundle, theirBundle.ik, this.userId, acceptedRow);
   }
 
   // ── Gun paths ─────────────────────────────────────────────────────────────
@@ -513,138 +514,29 @@ class ChatService {
 
     const v = Number(raw?.v) || 1;
 
-    // FIX 1: declare text in scope so it's available when building the row below
-    let text = '';
-
+    if (v !== SIGNAL_WIRE_VERSION || senderId === this.userId) return null;
+    const envelope: SignalEnvelope = {
+      v: SIGNAL_WIRE_VERSION, eph: raw.eph, opkId: raw.opkId,
+      dh: raw.dh, n: raw.n, pn: raw.pn, ct: raw.ct,
+    };
+    if (!Number.isSafeInteger(envelope.n) || envelope.n < 0 ||
+        !Number.isSafeInteger(envelope.pn) || envelope.pn < 0) return null;
+    let row: StoredChatMessage | undefined;
     try {
-      if (v === SIGNAL_WIRE_VERSION) {
-        // v3: Signal double-ratchet
-        const envelope: SignalEnvelope = {
-          v:     SIGNAL_WIRE_VERSION,
-          eph:   raw.eph,
-          opkId: raw.opkId,
-          dh:    raw.dh,
-          n:     Number(raw.n)  || 0,
-          pn:    Number(raw.pn) || 0,
-          ct:    raw.ct,
+      await this.decryptFrom(senderId, envelope, text => {
+        row = {
+          id, roomId, kind: 'dm', senderId, recipientId, text,
+          timestamp: Number(raw.timestamp) || Date.now(), seq: Number(raw.seq) || 0,
+          outgoing: false, syncStatus: 'confirmed', syncAttempts: 0,
         };
-        // Our own outgoing message replayed from Gun — already stored on send, skip
-        if (senderId === this.userId) return null;
-        try {
-          text = await this.decryptFrom(senderId, envelope);
-        } catch (decryptErr) {
-          // Decrypt failed — wipe the local session so the next message triggers
-          // a clean X3DH instead of retrying with corrupted ratchet state forever.
-          // Common causes: IK rotation (fresh install), OPK mismatch, ratchet desync.
-          console.warn(`[ChatService] Decrypt failed for ${senderId.slice(0,8)}, clearing session:`, (decryptErr as Error).message);
-          await this.getSession(senderId).clearSession();
-          // Also drop the cached bundle — a decrypt failure is commonly caused by
-          // the sender having rotated their identity keys (fresh install/cleared
-          // storage). The in-memory theirBundles.delete() below only clears this
-          // tab's session cache; the persistent IDB bundle cache (1h TTL) would
-          // otherwise keep serving the same stale, now-wrong bundle on every
-          // re-key attempt, so decrypt fails forever and the safety number never
-          // matches the peer's real current key.
-          this.theirBundles.delete(senderId);
-          this.bundleFetchTs.delete(senderId);
-          void StorageService.setMetadata('signal-bundle-cache:' + senderId, null).catch(() => {});
-          throw decryptErr; // re-throw so the tombstone path handles it below
-        }
-      } else {
-        // v1/v2 not supported: tombstone silently so Gun never retries
-        const alreadyMarked = await StorageService.getChatMessage(id);
-        if (!alreadyMarked) {
-          const tombstone: StoredChatMessage = {
-            id, roomId, kind: 'dm', senderId, recipientId,
-            text: '', timestamp: Number(raw?.timestamp) || Date.now(),
-            seq: Number(raw?.seq) || 0, outgoing: false,
-            syncStatus: 'corrupted' as unknown as SyncStatus, syncAttempts: 0,
-          };
-          void this.storeRow(tombstone).catch(() => {});
-        }
-        return null;
-      }
-    } catch (e) {
-      // Session re-key: only clear session + request fresh X3DH when:
-      //   1. This is a v3 message (Signal ratchet, not legacy RSA)
-      //   2. The envelope has eph (it IS a fresh X3DH init we failed to process)
-      //   3. OR we have no session at all and get "No session" error
-      //
-      // Critically: OperationError on a non-eph v3 message means Gun re-delivered
-      // something the ratchet already consumed — tombstone it, do NOT wipe the session.
-         // Only v3 reaches here (v1/v2 returns early without throwing)
-      const hasEph      = !!raw?.eph;
-      const isNoSession = e instanceof Error && e.message.includes('No session');
-
-      // Only wipe session for a LEGITIMATE new X3DH: no existing session, or
-      // envelope.dh matches our stored dhRecv (sender re-inited with same key).
-      // Stale Gun re-deliveries of old X3DH inits have a dh that no longer
-      // matches dhRecv -- wiping the session on those breaks the live conversation.
-      let shouldReKey = isNoSession;
-      if (hasEph && !isNoSession) {
-        try {
-          const { StorageService: SS } = await import('./storageService');
-          const sk  = `signal-session:${this.userId}:${senderId}`;
-          const cur = await SS.getMetadata(sk);
-          if (!cur) shouldReKey = true;                   // no session at all
-          else if (cur.dhRecv === raw?.dh) shouldReKey = true; // same dh: legit re-init
-          // else: dh mismatch = stale re-delivery, leave shouldReKey false
-        } catch { shouldReKey = true; }
-      }
-
-      if (shouldReKey) {
-        try {
-          const { StorageService: SS } = await import('./storageService');
-          const sessionKey = `signal-session:${this.userId}:${senderId}`;
-          const db = await SS.getDB();
-          await db.delete('metadata', sessionKey);
-          this.sessions.delete(senderId);
-          this.theirBundles.delete(senderId);
-          this.bundleFetchTs.delete(senderId);
-          void StorageService.setMetadata('signal-bundle-cache:' + senderId, null).catch(() => {});
-          const reKeyTs = (this as any)._reKeyTs ?? {};
-          (this as any)._reKeyTs = reKeyTs;
-          const now = Date.now();
-          if (!reKeyTs[senderId] || now - reKeyTs[senderId] > 5000) {
-            reKeyTs[senderId] = now;
-            if (this.ws?.readyState === WebSocket.OPEN) {
-              this.ws.send(JSON.stringify({ type: 'chat-start', recipientId: senderId }));
-            }
-          }
-        } catch { }
-        return null;
-      }
-      // All other failures: permanently undecryptable — tombstone so we never retry.
-      // Never downgrade a confirmed row (FIX 2): Gun re-delivers after WS already
-      // succeeded, a second decrypt fails and would overwrite the good confirmed row.
-      const alreadyConfirmed = await StorageService.getChatMessage(id);
-      if (alreadyConfirmed?.syncStatus === 'confirmed') return null;
-      const tombstone: StoredChatMessage = {
-        id, roomId, kind: 'dm', senderId, recipientId,
-        text:         '',
-        timestamp:    Number(raw?.timestamp) || Date.now(),
-        seq:          Number(raw?.seq) || 0,
-        outgoing:     false,
-        syncStatus:   'corrupted' as unknown as SyncStatus,
-        syncAttempts: 0,
-      };
-      void this.storeRow(tombstone).catch(() => {});
+        return row;
+      });
+    } catch {
+      // Unauthenticated input cannot erase a session, consume an OPK or create
+      // an accepted-message/tombstone record. Retry legitimate input unchanged.
       return null;
     }
-
-    const row: StoredChatMessage = {
-      id, roomId, kind: 'dm', senderId,
-      senderName:   typeof raw?.senderName === 'string' ? raw.senderName : undefined,
-      recipientId,  text,
-      timestamp:    Number(raw?.timestamp) || Date.now(),
-      seq:          Number(raw?.seq) || 0,
-      outgoing:     senderId === this.userId,
-      syncStatus:   'confirmed',
-      syncAttempts: existing?.syncAttempts ?? 0,
-      readAt:       Number(raw?.readAt) || existing?.readAt,
-    };
-    await this.storeRow(row);
-    return row;
+    return row!;
   }
 
   // ── Core message handler ──────────────────────────────────────────────────
@@ -660,6 +552,7 @@ class ChatService {
       const row = await this.mergeRemote(raw, roomId);
       // Skip tombstones (corrupted/undecryptable) and empty rows
       if (!row || !row.text || row.syncStatus === 'corrupted' || this.shuttingDown) return;
+      seenIds(this.userId).add(raw.id);
       this.onMessage?.(toChatMessage(row));
     })();
   }
@@ -1384,7 +1277,6 @@ class ChatService {
       case 'chat-message': {
         const messageId = typeof data.messageId === 'string' ? data.messageId : null;
         if (!messageId || seenIds(this.userId).has(messageId)) return;
-        seenIds(this.userId).add(messageId);
 
         const v       = Number(data.v) || 1;
         const roomId  = this.getRoomId(this.userId, data.from);
@@ -1412,7 +1304,10 @@ class ChatService {
 
         try {
           const row = await this.mergeRemote(raw, roomId);
-          if (row && row.text && row.syncStatus !== 'corrupted') this.onMessage?.(toChatMessage(row));
+          if (row && row.text) {
+            seenIds(this.userId).add(messageId);
+            this.onMessage?.(toChatMessage(row));
+          }
         } catch (e) {
           // mergeRemote threw (decrypt failed). clearSession() already ran inside mergeRemote.
           // Ask the relay to re-send this message after a short delay — by then the session
