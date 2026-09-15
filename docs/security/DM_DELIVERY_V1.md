@@ -39,3 +39,7 @@ Metadata such as accounts, timings, ciphertext length, and blob access remains v
 ## Authenticated bundle integration (F01/F07 pass)
 
 Wire v4 adds the account/device bootstrap context `auth`. Its receipt digest uses the array above with `auth` appended after `ct`; v3 digests retain their old definition. New active DMs require the binding contract in [DM_IDENTITY_PREKEY_V1.md](DM_IDENTITY_PREKEY_V1.md). Legacy envelopes are preserved but quarantined rather than transmitted by authenticated mode. Historical v3 delivery evidence is not retroactively evidence of an account binding. This addition changes neither receipt acceptance ordering nor immutable retransmission.
+
+## Epoch v1 follow-up
+
+The F06 follow-up uses wire v5 and adds a device-signed epoch certificate, persistent replacement/replay authority and explicit parent-bound reset. The v5 receipt digest additionally binds the epoch certificate. Earlier v3/v4 compatibility descriptions remain historical; those sessions/envelopes are quarantined under epoch mode. See `DM_SESSION_EPOCH_V1.md`; account/device/prekey signature formats remain unchanged.

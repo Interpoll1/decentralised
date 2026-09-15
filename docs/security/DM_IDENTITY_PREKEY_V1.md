@@ -89,3 +89,7 @@ AEAD AAD is UTF-8 JSON.stringify of `["interpoll/dm/message",4,senderIK,dh,n,pn,
 A relay may suppress all OPK candidates and force an explicit no-OPK choice before encryption; availability is not authenticated by a global signed manifest. It cannot change that choice after encryption without rejection. No claim is made that relays cannot replay public bytes, that selections across remote senders are globally exclusive, or that a failed stale selection automatically recovers. Receiver single consumption remains enforced.
 
 Existing F06 reset handlers and the prior bootstrap eligibility rules remain; context binding is not a new epoch or reset-authorization protocol. An explicit rotation/device-approval UX and distributed revocation/freshness mechanism are not implemented in this pass. Local legacy sessions cannot be silently migrated; an independently authorized transition is needed before those peers can use authenticated mode.
+
+## Epoch v1 follow-up
+
+The F06 follow-up uses wire v5 and adds a device-signed epoch certificate, persistent replacement/replay authority and explicit parent-bound reset. The v5 receipt digest additionally binds the epoch certificate. Earlier v3/v4 compatibility descriptions remain historical; those sessions/envelopes are quarantined under epoch mode. See `DM_SESSION_EPOCH_V1.md`; account/device/prekey signature formats remain unchanged.
