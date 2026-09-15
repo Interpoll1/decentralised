@@ -11,15 +11,14 @@ import { SignalSession, getOrCreateIdentityBundle } from '../src/services/signal
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 it.each([17, 400*1024-1, 400*1024+1, 3*1024*1024])('encrypts active upload of %i bytes with authenticated metadata', async size => {
   const bytes = new Uint8Array(size).fill(42);
-  let uploaded: Blob | undefined, payload:any;
+  let uploaded: Blob | undefined, payload:any, uploadFields: string[] = [], uploadMime: unknown;
   let corrupt = false;
   vi.stubGlobal('fetch', vi.fn(async (_url, options) => {
     if(options?.method === 'POST') {
       const form = options.body as FormData;
-      expect([...form.keys()]).toEqual(['file', 'mimeType']);
+      uploadFields = [...form.keys()];
       uploaded = form.get('file') as Blob;
-      expect(uploaded.type).toBe('application/octet-stream');
-      expect(form.get('mimeType')).toBe('application/octet-stream');
+      uploadMime = form.get('mimeType');
       return new Response(JSON.stringify({mediaId:'opaque-id'}));
     }
     const data = new Uint8Array(await uploaded!.arrayBuffer());
@@ -31,6 +30,9 @@ it.each([17, 400*1024-1, 400*1024+1, 3*1024*1024])('encrypts active upload of %i
   await chat.sendFile('bob',new File([bytes],'private.txt',{type:'text/plain'}));
   expect(uploaded).toBeDefined();
   expect(Buffer.from(await uploaded!.arrayBuffer()).includes(Buffer.from(bytes))).toBe(false);
+  expect(uploadFields).toEqual(['file', 'mimeType']);
+  expect(uploaded!.type).toBe('application/octet-stream');
+  expect(uploadMime).toBe('application/octet-stream');
   expect(payload._encryptedMedia).toBe(1);
   const url = await fetchAndDecrypt(payload.media, 'bob');
   expect(new Uint8Array(await resolveObjectURL(url)!.arrayBuffer())).toEqual(bytes);
