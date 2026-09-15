@@ -529,7 +529,7 @@ class ChatService {
 
     if (v !== SIGNAL_WIRE_VERSION || senderId === this.userId) return null;
     const envelope: SignalEnvelope = {
-      v: SIGNAL_WIRE_VERSION, auth: raw.auth, eph: raw.eph, opkId: raw.opkId,
+      v: SIGNAL_WIRE_VERSION, auth: raw.auth, epoch: raw.epoch, eph: raw.eph, opkId: raw.opkId,
       dh: raw.dh, n: raw.n, pn: raw.pn, ct: raw.ct,
     };
     if (!Number.isSafeInteger(envelope.n) || envelope.n < 0 ||
@@ -753,8 +753,8 @@ class ChatService {
       }
       if (journal && journal.plaintext !== row.text) throw new Error('Logical message content changed');
       const envelope: SignalEnvelope = journal?.envelope ?? await this.encryptFor(recipientId, row.text, row.id);
-      if (envelope.v !== 4) throw new DMIdentityError('LEGACY_UNAUTHENTICATED','Legacy envelope retained; authenticated mode cannot retransmit it');
-      if (envelope.v === 4) {
+      if (envelope.v !== SIGNAL_WIRE_VERSION) throw new DMIdentityError('LEGACY_UNAUTHENTICATED','Legacy envelope retained; authenticated mode cannot retransmit it');
+      if (envelope.v === SIGNAL_WIRE_VERSION) {
         const own = await verifyAuthenticatedBundle(this.myBundle!.bundle,this.userId);
         const {peer} = await verifyContext(envelope.auth!,this.userId,recipientId,own);
         await continuityChange(this.userId,peer);
@@ -823,6 +823,7 @@ class ChatService {
       v:    envelope.v,
       // Signal envelope fields
       auth:  envelope.auth,
+      epoch: envelope.epoch,
       eph:   envelope.eph,
       opkId: envelope.opkId,  // OPK pool id — must be forwarded so receiver can consumeOPK()
       dh:    envelope.dh,
@@ -1262,6 +1263,7 @@ class ChatService {
             senderId:    data.from,
             recipientId: this.userId,
             auth:        data.auth,
+            epoch:       data.epoch,
             eph:         data.eph,
             opkId:       data.opkId,   // needed for OPK consumption in decrypt()
             dh:          data.dh,
@@ -1282,10 +1284,8 @@ class ChatService {
             this.onMessage?.(await toChatMessage(row));
           }
         } catch (e) {
-          // mergeRemote threw (decrypt failed). clearSession() already ran inside mergeRemote.
-          // Ask the relay to re-send this message after a short delay — by then the session
-          // is cleared and fresh X3DH will run on the next attempt, recovering without
-          // requiring the user to manually refresh.
+          // Rejected input retains the authenticated session and epoch history.
+          // A resend requests the original envelope; no replacement authority is inferred.
           const failedId = messageId;
           const failedFrom = data.from;
           console.warn('[ChatService] Decrypt failed for WS message', failedId, '— scheduling resend request');
@@ -1311,40 +1311,10 @@ class ChatService {
         // Unauthenticated relay metadata is neither a peer delivery nor read receipt.
         break;
 
-      case 'chat-start': {
-        // Recipient's session failed — clear our session so next message
-        // triggers fresh X3DH re-initiation automatically.
-        const reKeyTarget = data.from || data.recipientId;
-        if (reKeyTarget) {
-          try {
-            const { StorageService: SS } = await import('./storageService');
-            const sessionKey = `signal-session:${this.userId}:${reKeyTarget}`;
-            const db = await SS.getDB();
-            await db.delete('metadata', sessionKey);
-            this.sessions.delete(reKeyTarget);
-            this.theirBundles.delete(reKeyTarget);
-          } catch { }
-        }
+      case 'chat-start':
+      case 'chat-invite':
+        // Discovery/control frames carry no authenticated session replacement authority.
         break;
-      }
-
-      case 'chat-invite': {
-        // Recipient's session failed — clear ours so next send triggers fresh X3DH.
-        const inviteFrom = data.from;
-        if (inviteFrom) {
-          try {
-            const { StorageService: SS } = await import('./storageService');
-            const sessionKey = `signal-session:${this.userId}:${inviteFrom}`;
-            const db = await SS.getDB();
-            await db.delete('metadata', sessionKey);
-            this.sessions.delete(inviteFrom);
-            this.theirBundles.delete(inviteFrom);
-            // Flush outbox so pending messages re-encrypt with fresh X3DH
-            void this.flushOutbox();
-          } catch { }
-        }
-        break;
-      }
 
       case 'pong-peer': break;
     }

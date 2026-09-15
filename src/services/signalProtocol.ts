@@ -45,12 +45,14 @@ import type { StoredChatMessage } from '../types/social';
 import { authorizeLocalBundle, verifyAuthenticatedBundle, continuityChange, bootstrapContext,
   verifyContext, DMIdentityError, type AuthenticatedBundle, type MetadataChange } from './dmIdentity';
 
-export const SIGNAL_WIRE_VERSION = 4;
+import {readEpoch, createEpoch, verifyEpoch, admitEpoch, epochChange, DMEpochError, type EpochRecord} from './dmSessionEpoch';
+export const SIGNAL_WIRE_VERSION = 5;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface SignalEnvelope {
-  v:     3 | 4;
+  v:     3 | 4 | 5;
+  epoch?: string;
   auth?: string;
   eph?:  string;   // X3DH ephemeral pub (first message only)
   opkId?: string;  // id of the OPK from the pool the sender used (first message only)
@@ -76,6 +78,7 @@ interface DHKeyPair {
 }
 
 interface RatchetState {
+  epoch?: string;
   auth?: string;
   dhSend:  { pub: string; priv: JsonWebKey };
   dhRecv:  string;   // their current ratchet pub — '' until first recv
@@ -489,13 +492,13 @@ async function initSessionAsReceiver(
 const MAX_SKIP = 1000;
 
 function messageAAD(senderIK: string, envelope: Omit<SignalEnvelope,'v'>): string {
-  return envelope.auth ? JSON.stringify(['interpoll/dm/message',4,senderIK,envelope.dh,envelope.n,
-    envelope.pn,envelope.eph??null,envelope.opkId??null,envelope.auth]) : `${senderIK}:${envelope.dh}:${envelope.n}`;
+  return envelope.auth ? JSON.stringify(['interpoll/dm/message',envelope.epoch?5:4,senderIK,envelope.dh,envelope.n,
+    envelope.pn,envelope.eph??null,envelope.opkId??null,envelope.auth,...(envelope.epoch?[envelope.epoch]:[])]) : `${senderIK}:${envelope.dh}:${envelope.n}`;
 }
 
 async function ratchetEncrypt(
   state: RatchetState, plaintext: string, senderIKPub: string,
-  header: {auth?:string;eph?:string;opkId?:string} = {},
+  header: {auth?:string;epoch?:string;eph?:string;opkId?:string} = {},
 ): Promise<{ envelope: Omit<SignalEnvelope, 'v'>; state: RatchetState }> {
   if (!state.ckS) throw new Error('No sending chain key — session not initialised for sending');
   const { mk, ck } = await kdfCK(state.ckS);
@@ -542,7 +545,7 @@ async function ratchetStep(state: RatchetState, theirDHPub: string): Promise<Rat
   // causes ratchetDecrypt to use a wrong cached mk instead of deriving
   // the correct one from the new ckR, silently failing aeadDecrypt.
   return {
-    auth: state.auth,
+    auth: state.auth, epoch: state.epoch,
     dhSend:  { pub: newDH.pubB64, priv: privJwk },
     dhRecv:  theirDHPub,
     rootKey: rk2,
@@ -599,6 +602,7 @@ export class SignalSession {
     myBundle:    { ik: DHKeyPair; spk: DHKeyPair; opk: DHKeyPair; bundle?: SignalPublicBundle },
     theirBundle: SignalPublicBundle,
     messageId?: string,
+    resetParent?: string,
   ): Promise<SignalEnvelope> {
     for (let attempt = 0; attempt < 256; attempt++) {
     const journalKey = messageId ? `signal-envelope:${this.myId}:${this.theirId}:${messageId}` : undefined;
@@ -609,6 +613,8 @@ export class SignalSession {
     }
     const before = await loadSession(this.myId, this.theirId);
     let state = before;
+    const epochBefore = await readEpoch(this.myId,this.theirId);
+    let epochAfter: EpochRecord | null = epochBefore;
     const authenticated = (theirBundle as AuthenticatedBundle).version === 1;
     const identityChanges: MetadataChange[] = [];
     let context = state?.auth;
@@ -616,17 +622,24 @@ export class SignalSession {
       const own = await verifyAuthenticatedBundle(myBundle.bundle!,this.myId);
       const peer = await verifyAuthenticatedBundle(theirBundle,this.theirId);
       identityChanges.push(await continuityChange(this.myId,peer));
-      if (state && !state.auth) throw new DMIdentityError('LEGACY_UNAUTHENTICATED','Existing session is not identity-bound');
+      if (state && (!state.auth || !state.epoch)) throw new DMIdentityError('LEGACY_UNAUTHENTICATED','Existing session is not identity-bound');
+      if (resetParent) {
+        if (!epochBefore || epochBefore.current!==resetParent) throw new DMEpochError('STALE','Reset parent is not current');
+        if(!epochBefore.settled) throw new DMEpochError('RESET_PENDING','Peer must confirm selected session before local reset');
+        state=null;context=undefined;
+      }
       if (context) await verifyContext(context,this.myId,this.theirId,own);
       else context = bootstrapContext(own,peer);
-    } else if (state?.auth) throw new DMIdentityError('LEGACY_UNAUTHENTICATED','Cannot downgrade authenticated session');
+      if (!state && epochBefore && !resetParent) throw new DMEpochError('RESET_PENDING','Missing ratchet does not authorize reset');
+      if (state && (!epochBefore || epochBefore.candidates[epochBefore.current]?.certificate!==state.epoch)) throw new DMEpochError('STALE','Ratchet authority mismatch');
+    } else if (state?.auth || epochBefore) throw new DMIdentityError('LEGACY_UNAUTHENTICATED','Cannot downgrade authenticated session');
     let x3dhEphPub: string | undefined;
     let x3dhOpkId:  string | undefined;
 
     // Session is stale if it exists but has no receiving chain (ckR) after
     // having already sent messages (ns > 0). This happens when the other side
     // cleared their session (e.g. after key rotation). Force a fresh X3DH.
-    const isStale = state && !state.ckR && (state.ns ?? 0) >= 50; // threshold: only stale after 50 unacknowledged sends
+    const isStale = !authenticated && state && !state.ckR && (state.ns ?? 0) >= 50; // threshold: only stale after 50 unacknowledged sends
 
     if (!state || isStale) {
       // First message or stale session: X3DH → bootstrap session
@@ -637,6 +650,11 @@ export class SignalSession {
         masterKey, theirBundle.spk,
       );
       state = {...s,auth:context};
+      if(authenticated){
+        state.epoch=await createEpoch(this.myId,context!,ep,s.dhSend.pub,resetParent?epochBefore!.generation+1:1,resetParent??null);
+        const info=await verifyEpoch(state.epoch,context!);
+        epochAfter=admitEpoch(epochBefore,info,before,false);
+      }
       if (authenticated && opkId) {
         const key = `dm-sent-opk-v1:${this.myId}:${this.theirId}:${opkId}`;
         const used = await StorageService.getMetadata(key);
@@ -679,13 +697,14 @@ export class SignalSession {
 
     const { envelope, state: newState } = await ratchetEncrypt(
       state, plaintext, myBundle.ik.pubB64,
-      authenticated ? {auth:context,eph:x3dhEphPub,opkId:x3dhOpkId} : {},
+      authenticated ? {auth:context,epoch:state.epoch,eph:x3dhEphPub,opkId:x3dhOpkId} : {},
     );
-    const result: SignalEnvelope = { v: authenticated ? 4 : 3, ...envelope,
+    const result: SignalEnvelope = { v: authenticated ? 5 : 3, ...envelope,
       ...(x3dhEphPub ? { eph: x3dhEphPub } : {}),
       ...(x3dhOpkId  ? { opkId: x3dhOpkId } : {}),
     };
     const changes: MetadataChange[] = [...identityChanges,{ key: SESSION_KEY(this.myId, this.theirId), before, after: newState }];
+    if(authenticated && epochAfter) changes.push(epochChange(this.myId,this.theirId,epochBefore,epochAfter));
     if (journalKey) changes.push({ key: journalKey, before: journal, after: { plaintext, envelope: result } } as any);
     if (await StorageService.compareAndSwapMetadata(changes)) return result;
     }
@@ -709,18 +728,35 @@ export class SignalSession {
       const before = await loadSession(this.myId, this.theirId);
       let state = before;
       const changes: MetadataChange[] = [];
-      if (envelope.v === 4) {
+      const epochBefore=await readEpoch(this.myId,this.theirId);
+      let epochAfter=epochBefore;
+      let incomingId:string|undefined;
+      let bootstrap=false;
+      let branch=false;
+      if (envelope.v === 5) {
         if (!envelope.auth) throw new DMIdentityError('UNKNOWN','Authenticated transcript missing');
         const own = await verifyAuthenticatedBundle(myBundle.bundle!,this.myId);
         const {peer,receiver} = await verifyContext(envelope.auth,this.myId,this.theirId,own);
         if (peer.ik !== senderIKPub) throw new DMIdentityError('IDENTITY_CHANGED','Sender IK mismatch');
         changes.push(await continuityChange(this.myId,peer));
-        if (state && state.auth !== envelope.auth && !(state.auth && envelope.eph && state.nr === 0)) throw new DMIdentityError('LEGACY_UNAUTHENTICATED','Session context mismatch; no implicit reset');
+        if (!envelope.epoch) throw new DMEpochError('LEGACY_UNAUTHENTICATED','Epoch certificate required');
+        const info=await verifyEpoch(envelope.epoch,envelope.auth);incomingId=info.id;
+        if(envelope.eph){
+          const certificate=JSON.parse(envelope.epoch);
+          if(info.initiator!==this.theirId||certificate[5]!==envelope.eph||certificate[6]!==envelope.dh||envelope.n!==0||envelope.pn!==0) throw new DMEpochError('STALE','Bootstrap header mismatch');
+          epochAfter=admitEpoch(epochBefore,info,before,true);bootstrap=true;
+          branch=epochAfter.current!==info.id;
+        }else{
+          if(!epochBefore||info.generation!==epochBefore.generation||epochBefore.candidates[info.id]?.certificate!==envelope.epoch) throw new DMEpochError('STALE','Unknown or retired epoch');
+          branch=epochBefore.current!==info.id;
+          state=branch?epochBefore.branches[info.id]:before;
+          if(!state||state.epoch!==envelope.epoch) throw new DMEpochError('RESET_PENDING','Missing epoch ratchet');
+        }
         if (envelope.eph && (receiver.binding.accountId !== this.myId || (receiver.selectedOPK?.id ?? undefined) !== envelope.opkId))
           throw new DMIdentityError('UNKNOWN','OPK transcript mismatch');
         if (!envelope.eph && envelope.opkId) throw new DMIdentityError('UNKNOWN','Unexpected OPK header');
-      } else if (state?.auth || envelope.auth) throw new DMIdentityError('LEGACY_UNAUTHENTICATED','Cannot downgrade authenticated session');
-      if (envelope.eph && !(state && state.nr > 0)) {
+      } else if (state?.auth || envelope.auth || epochBefore || envelope.v !== 3) throw new DMIdentityError('LEGACY_UNAUTHENTICATED','Cannot downgrade authenticated session');
+      if (bootstrap || (envelope.v===3 && envelope.eph && !(state && state.nr > 0))) {
         let opk: OPKEntry | null = null;
         if (envelope.opkId) {
           const key = OPK_POOL_KEY(myUserId);
@@ -733,25 +769,41 @@ export class SignalSession {
           if (!opk) throw new Error('Requested one-time prekey unavailable');
           changes.push({ key, before: pool, after: pool!.filter(entry => entry.id !== envelope.opkId) });
         }
-        const master = await x3dhReceive(myBundle.ik, myBundle.spk, opk, senderIKPub, envelope.eph);
-        state = {...await initSessionAsReceiver(master, myBundle.spk, envelope.dh),auth:envelope.auth};
+        const master = await x3dhReceive(myBundle.ik, myBundle.spk, opk, senderIKPub, envelope.eph!);
+        state = {...await initSessionAsReceiver(master, myBundle.spk, envelope.dh),auth:envelope.auth,epoch:envelope.epoch};
       }
       if (!state) throw new Error('No session and no X3DH ephemeral key');
       const result = await ratchetDecrypt(state, envelope, senderIKPub);
-      changes.push({ key: SESSION_KEY(this.myId, this.theirId), before, after: result.state });
+      if(epochAfter && incomingId){
+        epochAfter=structuredClone(epochAfter);
+        if(branch) epochAfter.branches[incomingId]=result.state;
+        else if(!bootstrap) epochAfter.settled=true;
+        changes.push(epochChange(this.myId,this.theirId,epochBefore,epochAfter));
+      }
+      changes.push({ key: SESSION_KEY(this.myId, this.theirId), before, after: branch?before:result.state });
       // Callback is pure construction; all acceptance writes share this transaction.
       if (await StorageService.compareAndSwapMetadata(changes, acceptedRow?.(result.plaintext))) return result.plaintext;
     }
     throw new Error('Session contention; retry decryption');
   }
+  /** Explicit local replacement; retries must retain messageId and plaintext. */
+  async resetSession(plaintext:string,myBundle:Parameters<SignalSession['encrypt']>[1],theirBundle:SignalPublicBundle,parentSessionId:string,messageId:string):Promise<SignalEnvelope>{
+    if((theirBundle as AuthenticatedBundle).version!==1) throw new DMEpochError('LEGACY_UNAUTHENTICATED','Authenticated reset required');
+    return this.encrypt(plaintext,myBundle,theirBundle,messageId,parentSessionId);
+  }
   async hasSession(): Promise<boolean> {
     return !!(await loadSession(this.myId, this.theirId));
   }
 
-  /** Wipe the local session state for this pair. Called when decrypt fails so
-   *  the next message triggers a clean X3DH instead of retrying with bad state. */
+  /** Legacy-only deletion. Epoch authority must use resetSession instead. */
   async clearSession(): Promise<void> {
-    await StorageService.setMetadata(SESSION_KEY(this.myId, this.theirId), null);
+    for (;;) {
+      const before=await loadSession(this.myId,this.theirId);
+      const authority=await readEpoch(this.myId,this.theirId);
+      if(authority) throw new DMEpochError('RESET_PENDING','Use an explicit authenticated reset');
+      if(await StorageService.compareAndSwapMetadata([{key:SESSION_KEY(this.myId,this.theirId),before,after:null},
+        {key:`dm-session-epoch-v1:${this.myId}:${this.theirId}`,before:authority,after:authority}])) return;
+    }
   }
 }
 

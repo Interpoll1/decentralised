@@ -55,7 +55,7 @@ it('send overlapping flush across instances retains one envelope per logical mes
 });
 async function digest(id:string,env:any) {
   const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([
-    'interpoll-dm-delivery-1',id,ALICE,BOB,env.v,env.eph??'',env.opkId??'',env.dh,env.n,env.pn,env.ct,...(env.v===4?[env.auth]:[])])));
+    'interpoll-dm-delivery-1',id,ALICE,BOB,env.v,env.eph??'',env.opkId??'',env.dh,env.n,env.pn,env.ct,...(env.v>=4?[env.auth]:[]),...(env.v===5?[env.epoch]:[])])));
   return Buffer.from(bytes).toString('hex');
 }
 it('authenticated exact-envelope peer receipt confirms; duplicate and late receipts are idempotent',async()=>{

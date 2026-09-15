@@ -78,15 +78,17 @@ it('forged/valid bootstrap race consumes exactly the selected OPK only for the w
 });
 it('stale cached OPK cannot be reselected by sender or consumed by a second remote sender',async()=>{
  const {a,b,sender,receiver}=await peers();const first=await sender.encrypt('first',a,b.bundle);await receiver.decrypt(first,b,a.bundle.ik,BOB);
- await sender.clearSession();
- await expect(sender.encrypt('stale',a,b.bundle)).rejects.toMatchObject({state:'STALE_PREKEY'});
+ await expect(sender.clearSession()).rejects.toMatchObject({state:'RESET_PENDING'});
+ const reply=await receiver.encrypt('confirm',b,a.bundle);await sender.decrypt(reply,a,b.bundle.ik,ALICE);
+ const epoch=await StorageService.getMetadata(`dm-session-epoch-v1:${ALICE}:${BOB}`);
+ await expect(sender.resetSession('stale',a,b.bundle,epoch.current,'stale-reset')).rejects.toMatchObject({state:'STALE_PREKEY'});
  const m=await getOrCreateIdentityBundle(MALLORY);const stale=await new SignalSession(MALLORY,BOB).encrypt('stale',m,b.bundle);
  await expect(new SignalSession(BOB,MALLORY).decrypt(stale,b,m.bundle.ik,BOB)).rejects.toThrow();
 });
 it('explicit no-OPK transcript works and OPK/header stripping or substitution fails without state drift',async()=>{
  const {a,b,sender,receiver}=await peers();
  const none={...b.bundle,opks:[],selectedOPK:null,opk:undefined,opkId:undefined};
- const env=await sender.encrypt('no opk',a,none);expect(env.opkId).toBeUndefined();expect(env.v).toBe(4);
+ const env=await sender.encrypt('no opk',a,none);expect(env.opkId).toBeUndefined();expect(env.v).toBe(5);
  const before=await snapshot();
  await expect(receiver.decrypt({...env,opkId:crypto.randomUUID()},b,a.bundle.ik,BOB)).rejects.toThrow();expect(await snapshot()).toBe(before);
  expect(await receiver.decrypt(env,b,a.bundle.ik,BOB)).toBe('no opk');
