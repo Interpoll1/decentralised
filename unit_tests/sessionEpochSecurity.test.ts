@@ -146,3 +146,12 @@ it('signed reset can restore missing ratchet only with retained matching parent 
  await StorageService.setMetadata(`signal-session:${BOB}:${ALICE}`,null);await reopen();
  expect(await new SignalSession(BOB,ALICE).decrypt(reset,b,a.bundle.ik,BOB)).toBe('restore');expect((await epoch(BOB,ALICE)).generation).toBe(2);
 });
+
+it('legacy clear racing first authenticated send cannot erase newly committed epoch state',async()=>{
+ const {a,b,s}=await peers();await Promise.allSettled([s.encrypt('first',a,b.bundle),...Array.from({length:20},()=>new SignalSession(ALICE,BOB).clearSession())]);
+ const authority=await epoch();expect(authority).toBeTruthy();const state=await StorageService.getMetadata(`signal-session:${ALICE}:${BOB}`);expect(state.epoch).toBe(authority.candidates[authority.current].certificate);
+});
+it('retained epoch authority forbids legacy encryption after ratchet state loss',async()=>{
+ const {a,b,s}=await established();await StorageService.setMetadata(`signal-session:${ALICE}:${BOB}`,null);const before=await snapshot();
+ const legacy={...b.bundle,version:undefined};await expect(s.encrypt('downgrade',a,legacy as any)).rejects.toThrow();expect(await snapshot()).toBe(before);
+});
