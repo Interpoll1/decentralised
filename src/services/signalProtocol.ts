@@ -46,6 +46,7 @@ import { authorizeLocalBundle, verifyAuthenticatedBundle, continuityChange, boot
   verifyContext, DMIdentityError, type AuthenticatedBundle, type MetadataChange } from './dmIdentity';
 
 import {readEpoch, createEpoch, verifyEpoch, admitEpoch, epochChange, DMEpochError, type EpochRecord} from './dmSessionEpoch';
+import {ReceiveFailure,receiveCommitChanges,type ReceiveCommit} from './dmReceiveState';
 export const SIGNAL_WIRE_VERSION = 5;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -78,6 +79,9 @@ interface DHKeyPair {
 }
 
 interface RatchetState {
+  receiveGeneration?: number;
+  skippedAt?: Record<string,number>;
+  closedChains?: string[];
   epoch?: string;
   auth?: string;
   dhSend:  { pub: string; priv: JsonWebKey };
@@ -251,10 +255,10 @@ async function aeadEncrypt(mk: string, plaintext: string, aad: string): Promise<
 async function aeadDecrypt(mk: string, ctB64: string, aad: string): Promise<string> {
   const blob = new Uint8Array(fromB64(ctB64));
   const { aesKey, iv } = await deriveAEAD(mk);
-  const plain = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv, additionalData: enc.encode(aad) },
-    aesKey, blob.slice(12),
-  );
+  let plain:ArrayBuffer;
+  try {plain = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv, additionalData: enc.encode(aad) }, aesKey, blob.slice(12));}
+  catch {throw new ReceiveFailure('rejected-auth','Ciphertext authentication failed');}
   return dec.decode(plain);
 }
 
@@ -489,7 +493,19 @@ async function initSessionAsReceiver(
 
 // ── Double Ratchet encrypt / decrypt ─────────────────────────────────────────
 
-const MAX_SKIP = 1000;
+export const MAX_SKIP = 1000;
+export const MAX_TOTAL_SKIPPED = 1000;
+export const MAX_SKIPPED_GENERATIONS = 4;
+const MAX_CLOSED_CHAINS = 64;
+function retainSkipped(state:RatchetState):RatchetState {
+  const skipped={...state.skipped},skippedAt={...state.skippedAt},generation=state.receiveGeneration??0;
+  for(const key of Object.keys(skipped)){
+    skippedAt[key]??=generation;
+    if(generation-skippedAt[key]>MAX_SKIPPED_GENERATIONS){delete skipped[key];delete skippedAt[key];}
+  }
+  for(const key of Object.keys(skipped).slice(0,Math.max(0,Object.keys(skipped).length-MAX_TOTAL_SKIPPED))){delete skipped[key];delete skippedAt[key];}
+  return {...state,skipped,skippedAt,receiveGeneration:generation};
+}
 
 function messageAAD(senderIK: string, envelope: Omit<SignalEnvelope,'v'>): string {
   return envelope.auth ? JSON.stringify(['interpoll/dm/message',envelope.epoch?5:4,senderIK,envelope.dh,envelope.n,
@@ -512,14 +528,15 @@ async function ratchetEncrypt(
 }
 
 async function skipMessageKeys(state: RatchetState, until: number): Promise<RatchetState> {
-  if (state.nr + MAX_SKIP < until) throw new Error('Too many skipped messages');
-  let s = { ...state, skipped: { ...state.skipped } };
+  if (!Number.isSafeInteger(until)||until<0||state.nr+MAX_SKIP<until) throw new ReceiveFailure('rejected-stale','Receive gap exceeds MAX_SKIP');
+  let s = { ...state, skipped: { ...state.skipped },skippedAt:{...state.skippedAt} };
   while (s.nr < until) {
     const { mk, ck } = await kdfCK(s.ckR);
     s.skipped[`${s.dhRecv}:${s.nr}`] = mk;
+    s.skippedAt[`${s.dhRecv}:${s.nr}`]=s.receiveGeneration??0;
     s = { ...s, ckR: ck, nr: s.nr + 1 };
   }
-  return s;
+  return retainSkipped(s);
 }
 
 /**
@@ -540,19 +557,18 @@ async function ratchetStep(state: RatchetState, theirDHPub: string): Promise<Rat
   const { rk: rk2, ck: ckS } = await kdfRK(rk1, dhOut2);
 
   const privJwk = await crypto.subtle.exportKey('jwk', newDH.priv);
-  // Clear ALL skipped message keys on ratchet step: any keys stored for
-  // previous ratchet positions are now permanently stale. Keeping them
-  // causes ratchetDecrypt to use a wrong cached mk instead of deriving
-  // the correct one from the new ckR, silently failing aeadDecrypt.
-  return {
+  return retainSkipped({
+    ...state,
+    receiveGeneration:(state.receiveGeneration??0)+1,
+    closedChains:[...(state.closedChains??[]),state.dhRecv].filter(Boolean).slice(-MAX_CLOSED_CHAINS),
     auth: state.auth, epoch: state.epoch,
     dhSend:  { pub: newDH.pubB64, priv: privJwk },
     dhRecv:  theirDHPub,
     rootKey: rk2,
     ckS, ckR,
     ns: 0, nr: 0, pn: state.ns,
-    skipped: {},
-  };
+    skipped: {...state.skipped},
+  });
 }
 
 async function ratchetDecrypt(
@@ -567,10 +583,13 @@ async function ratchetDecrypt(
     delete newSkipped[skipKey];
     const aad       = messageAAD(senderIKPub,envelope);
     const plaintext = await aeadDecrypt(mk, envelope.ct, aad);
-    return { plaintext, state: { ...state, skipped: newSkipped } };
+    const skippedAt={...state.skippedAt};delete skippedAt[skipKey];
+    return { plaintext, state: { ...state, skipped: newSkipped,skippedAt } };
   }
 
-  let s = state;
+  if((envelope.dh===state.dhRecv&&envelope.n<state.nr)||(state.closedChains??[]).includes(envelope.dh))
+    throw new ReceiveFailure('rejected-stale','Consumed or evicted receive position');
+  let s = retainSkipped(state);
 
   // 2. Ratchet step if sender's DH key has changed
   if (envelope.dh !== state.dhRecv) {
@@ -722,6 +741,7 @@ export class SignalSession {
     senderIKPub: string,
     myUserId: string,
     acceptedRow?: (plaintext: string) => StoredChatMessage,
+    receiveCommit?: ReceiveCommit,
   ): Promise<string> {
     if (myUserId !== this.myId) throw new Error('Receiver identity mismatch');
     for (let attempt = 0; attempt < 256; attempt++) {
@@ -741,13 +761,21 @@ export class SignalSession {
         changes.push(await continuityChange(this.myId,peer));
         if (!envelope.epoch) throw new DMEpochError('LEGACY_UNAUTHENTICATED','Epoch certificate required');
         const info=await verifyEpoch(envelope.epoch,envelope.auth);incomingId=info.id;
+        if(epochBefore&&info.generation<epochBefore.generation)throw new DMEpochError('STALE','Retired epoch');
+        if(receiveCommit)changes.push(...await receiveCommitChanges(receiveCommit));
         if(envelope.eph){
           const certificate=JSON.parse(envelope.epoch);
           if(info.initiator!==this.theirId||certificate[5]!==envelope.eph||certificate[6]!==envelope.dh||envelope.n!==0||envelope.pn!==0) throw new DMEpochError('STALE','Bootstrap header mismatch');
           epochAfter=admitEpoch(epochBefore,info,before,true);bootstrap=true;
           branch=epochAfter.current!==info.id;
         }else{
-          if(!epochBefore||info.generation!==epochBefore.generation||epochBefore.candidates[info.id]?.certificate!==envelope.epoch) throw new DMEpochError('STALE','Unknown or retired epoch');
+          if(!epochBefore||epochBefore.candidates[info.id]?.certificate!==envelope.epoch){
+            const current=epochBefore?.candidates[epochBefore.current];
+            if((!epochBefore&&info.generation===1)||(current&&((info.generation===epochBefore!.generation&&info.parent===current.parent)||(info.generation===epochBefore!.generation+1&&info.parent===current.id))))
+              throw new ReceiveFailure('retryable','Prerequisite bootstrap unavailable');
+            throw new DMEpochError('STALE','Unknown or retired epoch');
+          }
+          if(info.generation!==epochBefore.generation)throw new DMEpochError('STALE','Retired epoch');
           branch=epochBefore.current!==info.id;
           state=branch?epochBefore.branches[info.id]:before;
           if(!state||state.epoch!==envelope.epoch) throw new DMEpochError('RESET_PENDING','Missing epoch ratchet');
@@ -784,7 +812,7 @@ export class SignalSession {
       // Callback is pure construction; all acceptance writes share this transaction.
       if (await StorageService.compareAndSwapMetadata(changes, acceptedRow?.(result.plaintext))) return result.plaintext;
     }
-    throw new Error('Session contention; retry decryption');
+    throw new ReceiveFailure('retryable','Session contention; retry decryption');
   }
   /** Explicit local replacement; retries must retain messageId and plaintext. */
   async resetSession(plaintext:string,myBundle:Parameters<SignalSession['encrypt']>[1],theirBundle:SignalPublicBundle,parentSessionId:string,messageId:string):Promise<SignalEnvelope>{

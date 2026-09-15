@@ -28,6 +28,8 @@ import { gunPut, gunOnce, gunReadChildren, toGunRecord } from '../utils/gunAsync
 import config from '../config';
 import { encryptAndUpload, fetchAndDecrypt } from './chatMediaService';
 import { RECEIPT_PREFIX, envelopeDigest } from './dmDelivery';
+import {DMEpochError,readEpoch,verifyEpoch} from './dmSessionEpoch';
+import {ReceiveFailure,protocolEnvelope,receiveFingerprint,acceptanceKey,enqueuePending,removePending,pendingEntries,MAX_PENDING,MAX_ENVELOPE_BYTES,type ReceiveResult,type ReceiveCommit} from './dmReceiveState';
 import { verifyAuthenticatedBundle, verifyContext, continuityChange, DMIdentityError, type IdentityState } from './dmIdentity';
 
 /** HTTP base URL of the relay-server (port 3001) — where signal bundles and chat APIs live. */
@@ -195,11 +197,9 @@ class ChatService {
   private readReceiptUnsubs   = new Map<string, () => void>();
   private watchedRooms        = new Map<string, string>(); // roomId → recipientId
   private _visibilityHandler: (() => void) | null = null;  // fires markAsRead on tab-focus
-  // Per-sender decrypt queue: serialises mergeRemote calls so concurrent
-  // WS + Gun deliveries don't race on loadSession/saveSession and corrupt
-  // the ratchet state (e.g. message 2 loading nr=0 while message 1's
-  // saveSession(nr=1) is still in flight).
-  private decryptQueue        = new Map<string, Promise<void>>(); // senderId → tail of chain
+  // Bound concurrent observations; durable CAS owns all receive state.
+  private receiving = 0;
+  private retryingReceive = false; // senderId → tail of chain
   private clearedRooms        = new Set<string>();                // rooms user cleared
 
   // ── Presence ──────────────────────────────────────────────────────────────
@@ -263,6 +263,7 @@ class ChatService {
     // No-op if already published — init() of old ChatService handled this.
 
     this.ready = true;
+    void this.retryPendingReceives().catch(()=>{});
     this.startConnectionTracking();
     this.startOutboxLoop();
     this.startPresence();
@@ -431,26 +432,13 @@ class ChatService {
   private async decryptFrom(
     senderId: string, envelope: SignalEnvelope,
     acceptedRow?: (plaintext: string) => StoredChatMessage,
+    receiveCommit?: ReceiveCommit,
   ): Promise<string> {
-    if (!this.myBundle) throw new Error('Not initialized');
-
-    // Bundle may not have arrived yet — retry up to 3× with backoff before giving up.
-    // This covers the race where a message arrives via WS before the sender's
-    // bundle has synced (REST hit is <20ms, so retries are cheap).
-    let theirBundle = this.theirBundles.get(senderId) ?? await this.fetchTheirBundle(senderId, false);
-    if (!theirBundle) {
-      for (const delayMs of [500, 1500, 3000]) {
-        await new Promise(r => setTimeout(r, delayMs));
-        // Force re-fetch by clearing cache and trying again
-        this.theirBundles.delete(senderId);
-        this.missingBundles.delete(senderId);
-        theirBundle = this.theirBundles.get(senderId) ?? await this.fetchTheirBundle(senderId, false);
-        if (theirBundle) break;
-      }
-    }
-    if (!theirBundle) throw new Error(`Bundle unavailable for sender ${senderId.slice(0, 16)}`);
-    await verifyAuthenticatedBundle(theirBundle,senderId);
-    return this.getSession(senderId).decrypt(envelope, this.myBundle, theirBundle.ik, this.userId, acceptedRow);
+    if (!this.myBundle) throw new ReceiveFailure('retryable','Local identity unavailable');
+    const theirBundle = this.theirBundles.get(senderId) ?? await this.fetchTheirBundle(senderId, false);
+    if (!theirBundle) throw new ReceiveFailure('retryable','Sender bundle unavailable');
+    try {await verifyAuthenticatedBundle(theirBundle,senderId);} catch {throw new ReceiveFailure('rejected-auth','Invalid sender bundle');}
+    return this.getSession(senderId).decrypt(envelope, this.myBundle, theirBundle.ik, this.userId, acceptedRow,receiveCommit);
   }
 
   // ── Gun paths ─────────────────────────────────────────────────────────────
@@ -486,85 +474,91 @@ class ChatService {
    * Merge a raw Gun/WS record into local storage.
    * Handles v3 (Signal), v2 (AES-GCM+RSA wrap), and v1 (RSA only).
    */
-  private mergeRemote(raw: any, roomId: string): Promise<StoredChatMessage | null> {
-    const id          = typeof raw?.id === 'string'          ? raw.id          : null;
-    const senderId    = typeof raw?.senderId === 'string'    ? raw.senderId    : null;
-    const recipientId = typeof raw?.recipientId === 'string' ? raw.recipientId : undefined;
-    if (!id || !senderId) return Promise.resolve(null);
-    if (senderId !== this.userId && recipientId !== this.userId) return Promise.resolve(null);
-
-    // Serialise per-sender: await the previous decrypt for this sender
-    // before starting a new one, so loadSession always sees the latest
-    // saveSession result and the ratchet counter is never double-read.
-    const queueKey = senderId === this.userId ? recipientId ?? senderId : senderId;
-    const prev     = this.decryptQueue.get(queueKey) ?? Promise.resolve();
-    let resolveSlot!: () => void;
-    const slot = new Promise<void>(r => { resolveSlot = r; });
-    this.decryptQueue.set(queueKey, slot);
-    return prev.then(() => this._mergeRemoteImpl(id, senderId, recipientId, raw, roomId))
-               .finally(resolveSlot);
+  private async mergeRemote(raw:any,roomId:string):Promise<StoredChatMessage|null>{
+    const result=await this.receiveRemote(raw,roomId);
+    return result.status==='accepted'?result.row!:null;
   }
-
-  private async _mergeRemoteImpl(
-    id: string, senderId: string, recipientId: string | undefined,
-    raw: any, roomId: string,
-  ): Promise<StoredChatMessage | null> {
-
-    const existing = await StorageService.getChatMessage(id);
-    if (existing?.text) {
-      if (existing.senderId !== senderId || existing.recipientId !== recipientId) return null;
-      if (!existing.outgoing && existing.encryptedEnvelope) {
-        // A reused outer ID is not an authenticated replay. Only the exact
-        // previously accepted ciphertext may trigger receipt retransmission.
-        const expected = await envelopeDigest(id, senderId, recipientId!, JSON.parse(existing.encryptedEnvelope));
-        const actual = await envelopeDigest(id, senderId, recipientId!, raw);
-        if (actual !== expected) return null;
-        await this.processAccepted(existing).catch(() => {});
+  async receiveRemote(raw:any,roomId:string):Promise<ReceiveResult>{
+    if(this.receiving>=MAX_PENDING)return {status:'retryable',persisted:false,reason:'Receive admission limit'};
+    this.receiving++;
+    try{return await this.receiveImpl(raw,roomId);}catch{return {status:'retryable',persisted:false,reason:'Receive storage unavailable'};}finally{this.receiving--;}
+  }
+  private async receiveImpl(raw:any,roomId:string):Promise<ReceiveResult>{
+    const id=raw?.id,senderId=raw?.senderId,recipientId=raw?.recipientId;
+    if(typeof id!=='string'||!id||id.length>256||typeof senderId!=='string'||!/^[0-9a-f]{64}$/.test(senderId)||
+      senderId===this.userId||recipientId!==this.userId||roomId!==this.getRoomId(senderId,this.userId))
+      return {status:'rejected-auth',reason:'Invalid receive routing'};
+    let envelope:SignalEnvelope,fingerprint:string;
+    try{envelope=protocolEnvelope(raw);fingerprint=await receiveFingerprint(senderId,this.userId,envelope);}
+    catch{return {status:'rejected-auth',reason:'Malformed or oversized envelope'};}
+    const candidate={...envelope,id,senderId,recipientId,timestamp:Number(raw.timestamp)||0,seq:Number(raw.seq)||0};
+    if(new TextEncoder().encode(JSON.stringify(candidate)).length>MAX_ENVELOPE_BYTES+1024)return {status:'rejected-auth',reason:'Oversized candidate'};
+    let row:StoredChatMessage|undefined;
+    let commit:ReceiveCommit|undefined;
+    try{
+      if(this.clearedRooms.has(roomId))throw new ReceiveFailure('rejected-stale','Room cleared locally');
+      if(!this.myBundle)throw new ReceiveFailure('retryable','Local identity unavailable');
+      let info;
+      try{const own=await verifyAuthenticatedBundle(this.myBundle.bundle,this.userId);await verifyContext(envelope.auth!,this.userId,senderId,own);info=await verifyEpoch(envelope.epoch!,envelope.auth!);}
+      catch{throw new ReceiveFailure('rejected-auth','Invalid authenticated receive context');}
+      const history=await readEpoch(this.userId,senderId);
+      if(history&&info.generation<history.generation)throw new ReceiveFailure('rejected-stale','Retired epoch');
+      commit={key:acceptanceKey(this.userId,senderId,info.id,envelope.dh,envelope.n),fingerprint,rowId:id,local:this.userId};
+      const accepted=await StorageService.getMetadata(commit.key);
+      if(accepted){
+        if(accepted.fingerprint!==fingerprint)throw new ReceiveFailure('rejected-auth','Different ciphertext at accepted position');
+        row=await StorageService.getChatMessage(accepted.rowId);throw new ReceiveFailure('duplicate','Already accepted');
       }
-      return existing;
-    } //              // already decrypted and stored
-    if (this.clearedRooms.has(roomId)) return null;   // user cleared this room
-
-    const v = Number(raw?.v) || 1;
-
-    if (v !== SIGNAL_WIRE_VERSION || senderId === this.userId) return null;
-    const envelope: SignalEnvelope = {
-      v: SIGNAL_WIRE_VERSION, auth: raw.auth, epoch: raw.epoch, eph: raw.eph, opkId: raw.opkId,
-      dh: raw.dh, n: raw.n, pn: raw.pn, ct: raw.ct,
-    };
-    if (!Number.isSafeInteger(envelope.n) || envelope.n < 0 ||
-        !Number.isSafeInteger(envelope.pn) || envelope.pn < 0) return null;
-    let row: StoredChatMessage | undefined;
-    try {
-      await this.decryptFrom(senderId, envelope, text => {
-        row = {
-          id, roomId, kind: 'dm', senderId, recipientId, text,
-          timestamp: Number(raw.timestamp) || Date.now(), seq: Number(raw.seq) || 0,
-          outgoing: false, syncStatus: 'confirmed', syncAttempts: 0,
-          encryptedEnvelope: JSON.stringify(envelope),
-          control: text.startsWith(RECEIPT_PREFIX) ? 'delivery-receipt-v1' : undefined,
-        };
-        return row;
-      });
-    } catch (error) {
-      if (error instanceof DMIdentityError) this.onIdentityState?.({userId:senderId,state:error.state});
-      // Unauthenticated input cannot erase a session, consume an OPK or create
-      // an accepted-message/tombstone record. Retry legitimate input unchanged.
-      return null;
+      const existing=await StorageService.getChatMessage(id);
+      if(existing){
+        if(existing.senderId===senderId&&existing.recipientId===this.userId&&existing.encryptedEnvelope&&
+          await receiveFingerprint(senderId,this.userId,protocolEnvelope(JSON.parse(existing.encryptedEnvelope)))===fingerprint){row=existing;throw new ReceiveFailure('duplicate','Existing accepted envelope');}
+        throw new ReceiveFailure('rejected-auth','Outer ID conflicts with stored row');
+      }
+      await this.decryptFrom(senderId,envelope,text=>{
+        row={id,roomId,kind:'dm',senderId,recipientId,text,timestamp:Number(raw.timestamp)||Date.now(),seq:Number(raw.seq)||0,
+          outgoing:false,syncStatus:'confirmed',syncAttempts:0,encryptedEnvelope:JSON.stringify(envelope),
+          control:text.startsWith(RECEIPT_PREFIX)?'delivery-receipt-v1':undefined};return row;
+      },commit);
+      if(envelope.opkId)void this.ensureOPKPool().catch(()=>{});
+      await this.processAccepted(row!).catch(()=>{});
+      if(!this.retryingReceive)void this.retryPendingReceives().catch(()=>{});
+      return {status:'accepted',row};
+    }catch(error){
+      let status:ReceiveResult['status']='retryable';
+      if(error instanceof ReceiveFailure)status=error.status;
+      else if(error instanceof DMEpochError)status=error.state==='RESET_PENDING'?'retryable':'rejected-stale';
+      else if(error instanceof DMIdentityError){status=error.state==='STALE_PREKEY'?'rejected-stale':'rejected-auth';this.onIdentityState?.({userId:senderId,state:error.state});}
+      else if(error instanceof DOMException&&['OperationError','DataError','InvalidCharacterError'].includes(error.name))status='rejected-auth';
+      if(status==='duplicate'){
+        if(!row&&commit){const prior=await StorageService.getMetadata(commit.key);if(prior)row=await StorageService.getChatMessage(prior.rowId);}
+        await removePending(this.userId,fingerprint).catch(()=>{});
+        if(row)await this.processAccepted(row).catch(()=>{});
+        return {status,row};
+      }
+      if(status==='retryable'){
+        let persisted=false;try{persisted=await enqueuePending(this.userId,{fingerprint,raw:candidate,roomId,observedAt:Date.now()});}catch{}
+        return {status,persisted,reason:error instanceof Error?error.message:'Receive temporarily unavailable'};
+      }
+      await removePending(this.userId,fingerprint).catch(()=>{});
+      return {status,reason:error instanceof Error?error.message:'Rejected'};
     }
-    if (envelope.opkId) void this.ensureOPKPool().catch(() => {});
-    await this.processAccepted(row!).catch(() => {});
-    return row!;
+  }
+  async retryPendingReceives():Promise<void>{
+    if(this.retryingReceive||this.shuttingDown)return;
+    this.retryingReceive=true;
+    try{
+      for(const entry of await pendingEntries(this.userId)){
+        const result=await this.receiveRemote(entry.raw,entry.roomId);
+        if(result.status==='accepted'&&result.row?.text&&!result.row.control)this.onMessage?.(await toChatMessage(result.row));
+      }
+    }finally{this.retryingReceive=false;}
   }
 
   // ── Core message handler ──────────────────────────────────────────────────
 
   private handleRoomRecord(roomId: string, raw: any): void {
     if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string') return;
-
-    // Mark as seen immediately — before decrypt — so Gun re-deliveries
-    // don't retry a failed decrypt and corrupt the ratchet state.
-    seenIds(this.userId).add(raw.id);
 
     void (async () => {
       const row = await this.mergeRemote(raw, roomId);
@@ -845,6 +839,7 @@ class ChatService {
   // ── Outbox ────────────────────────────────────────────────────────────────
 
   async flushOutbox(): Promise<void> {
+    await this.retryPendingReceives().catch(()=>{});
     if (flushInFlight.has(this.userId) || !this.ready) return;
     flushInFlight.add(this.userId);
     try {
