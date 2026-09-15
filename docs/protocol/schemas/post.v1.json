@@ -26,6 +26,6 @@
     "authorPubkey": { "type": "string", "description": "Schnorr x-only pubkey (hex) of the signer." },
     "contentSignature": { "type": "string", "description": "Schnorr signature over IPP-02 canonicalJSON of {authorId, communityId, content, createdAt, title}." },
     "canonVersion": { "type": "number", "description": "Canonicalization algorithm version for contentSignature. 2 = IPP-02 canonicalJSON. Absent = legacy v1 (canonicalPostPayloadV1). See IPP-02 §6." },
-    "dataVersion": { "type": "string", "description": "Client-side only: which Gun namespace this post came from (e.g. 'v3')." }
+    "dataVersion": { "type": "string", "description": "Client-side only: which Gun namespace this post came from (e.g. 'v4')." }
   }
 }

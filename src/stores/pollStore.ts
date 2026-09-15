@@ -685,15 +685,15 @@ export const usePollStore = defineStore('poll', () => {
     try {
       const gun = GunService.getGun();
 
-      // v3/polls/<id> — global feed path
+      // v4/polls/<id> — global feed path
       gun.get('polls').map().on((data: any, pollId: string) => {
         if (!data || !pollId || pollId === '_' || !data.category) return;
         // Only patch — don't trigger a full reload
         patchPollCategory(pollId, data);
       });
 
-      // v3/communities/<cid>/polls/<id> — community feed path
-      // Use a flat map on the polls node directly (namespaced proxy handles v3 prefix)
+      // v4/communities/<cid>/polls/<id> — community feed path
+      // Use a flat map on the polls node directly (namespaced proxy handles v4 prefix)
       // Each poll appears in both gun.get('polls') and community paths;
       // the global polls subscription above covers all polls already loaded.
       // For community-specific updates, subscribe to each community's polls node.

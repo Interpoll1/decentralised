@@ -515,7 +515,7 @@ export class PostService {
       if (!flushTimer) flushTimer = setTimeout(flushPending, 100);
     });
 
-    // v1 posts intentionally excluded from community feed — only using GUN v3 namespace
+    // v1 posts intentionally excluded from community feed — only using GUN v4 namespace
 
     const listenerKey = `${communityId}-posts-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     postActiveListeners.set(listenerKey, { subscription, v1Subscription, timer: timeboxTimer });
@@ -614,7 +614,7 @@ export class PostService {
       if (!postId || postId === '_' || inFlightIds.has(postId)) return;
 
       // ── Category/metadata patch from backend categorisation ───────────────
-      // When gun.get('v3').get('posts').get(id).put({category, tags, nsfw}) fires,
+      // When gun.get('v4').get('posts').get(id).put({category, tags, nsfw}) fires,
       // map().on() delivers the partial data as `data`. It won't have `title` or
       // `content` — only the newly written fields. Merge immediately without a
       // full re-fetch so the category badge appears within 1-3s of categorisation.
@@ -679,7 +679,7 @@ export class PostService {
       if (!flushTimer) flushTimer = setTimeout(flushPending, 100);
     });
 
-    // v1 posts intentionally excluded from global feed — only using GUN v3 namespace
+    // v1 posts intentionally excluded from global feed — only using GUN v4 namespace
 
     const listenerKey = `all-posts-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     postActiveListeners.set(listenerKey, { subscription, v1Subscription, timer: timeboxTimer });

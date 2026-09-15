@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 // Keep Gun out of the test; we only exercise the pure PoW helpers (which use the
 // real CryptoService hash).
 vi.mock('@/services/gunService', () => ({
-  GUN_NAMESPACE: 'v3',
+  GUN_NAMESPACE: 'v4',
   GunService: { getGun: vi.fn(), onReconnect: vi.fn(), map: vi.fn() },
   default: {},
 }));

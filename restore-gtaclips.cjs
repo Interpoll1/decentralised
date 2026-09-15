@@ -27,11 +27,11 @@ const put = (node, value) => new Promise((resolve) => {
 
 (async () => {
   const gun = Gun({ peers: [`${RELAY}/gun`], radisk: false, localStorage: false, file: false, axe: false, multicast: false });
-  console.log('meta ack: ', JSON.stringify(await put(gun.get(`v3/communities/${ID}`), rec)));
-  console.log('rules ack:', JSON.stringify(await put(gun.get(`v3/communities/${ID}/rules`), rules)));
+  console.log('meta ack: ', JSON.stringify(await put(gun.get(`v4/communities/${ID}`), rec)));
+  console.log('rules ack:', JSON.stringify(await put(gun.get(`v4/communities/${ID}/rules`), rules)));
 
   // The /db mirror lags the ack — poll rather than read once.
-  const url = `${RELAY}/db/soul?soul=${encodeURIComponent(`v3/communities/${ID}`)}`;
+  const url = `${RELAY}/db/soul?soul=${encodeURIComponent(`v4/communities/${ID}`)}`;
   for (let i = 0; i < 8; i++) {
     await new Promise((r) => setTimeout(r, 1_000));
     const res = await fetch(url);

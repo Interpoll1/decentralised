@@ -83,7 +83,7 @@
                 <div class="media-icon-wrap img-icon"><ion-icon :icon="imageOutline"></ion-icon></div>
                 <div>
                   <p class="media-title">Image <span class="optional">optional</span></p>
-                  <p class="media-sub">Compressed to ~200 KB and stored on GunDB</p>
+                  <p class="media-sub">Uploaded at full original quality — no compression</p>
                 </div>
               </div>
               <button v-if="!imagePreview" class="pill-btn accent-sm" @click="selectImage">
@@ -97,7 +97,7 @@
               </button>
               <div class="image-badges">
                 <span class="img-badge">{{ imageSize }}</span>
-                <span v-if="isCompressing" class="img-badge compressing">Compressing…</span>
+                <span v-if="isCompressing" class="img-badge compressing">Loading…</span>
               </div>
             </div>
           </div>
@@ -128,7 +128,7 @@
           <!-- Image info -->
           <div v-if="imageFile" class="info-box">
             <ion-icon :icon="informationCircle"></ion-icon>
-            <p>Image will be compressed to ~200 KB and stored on GunDB. Thumbnail (~15 KB) cached locally for fast loading.</p>
+            <p>Image is kept at its original resolution and quality on your device. A small preview thumbnail (~40 KB) is synced over GunDB so other peers can see it in the feed.</p>
           </div>
 
         </div>
@@ -391,7 +391,7 @@ const handleImageSelect = async (event: Event) => {
   
   if (!file) return;
 
-  // Check file size (max 10 MB before compression)
+  // Check file size — images are stored uncompressed, so cap the raw file
   if (file.size > 10 * 1024 * 1024) {
     const toast = await toastController.create({
       message: 'Image too large! Maximum 10 MB',
