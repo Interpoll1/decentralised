@@ -1,3 +1,4 @@
+import { ALICE, BOB, MEDIA_ALICE, MEDIA_BOB, getOrCreateIdentityBundle, selectedBundle } from './dmIdentityFixture';
 import 'fake-indexeddb/auto';
 import { afterEach, expect, it, vi } from 'vitest';
 vi.mock('../src/services/gunService', () => ({ GunService: { getGun: vi.fn() }, GUN_NAMESPACE: 'test' }));
@@ -7,7 +8,7 @@ import { resolveObjectURL } from 'node:buffer';
 vi.mock('../src/utils/gunAsync', () => ({gunPut:vi.fn(async()=>({ok:false})),gunOnce:vi.fn(),gunReadChildren:vi.fn(),toGunRecord:(x:any)=>x}));
 import { GunService } from '../src/services/gunService';
 import { StorageService } from '../src/services/storageService';
-import { SignalSession, getOrCreateIdentityBundle } from '../src/services/signalProtocol';
+import { SignalSession } from '../src/services/signalProtocol';
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 it.each([17, 400*1024-1, 400*1024+1, 3*1024*1024])('encrypts active upload of %i bytes with authenticated metadata', async size => {
   const bytes = new Uint8Array(size).fill(42);
@@ -25,28 +26,28 @@ it.each([17, 400*1024-1, 400*1024+1, 3*1024*1024])('encrypts active upload of %i
     if(corrupt) data[0] ^= 1;
     return new Response(data);
   }));
-  const chat = new ChatService('wss://example.invalid','alice');
+  const chat = new ChatService('wss://example.invalid',ALICE);
   vi.spyOn(chat,'sendMessage').mockImplementation(async (_, text) => { payload=JSON.parse(text);return {} as any; });
-  await chat.sendFile('bob',new File([bytes],'private.txt',{type:'text/plain'}));
+  await chat.sendFile(BOB,new File([bytes],'private.txt',{type:'text/plain'}));
   expect(uploaded).toBeDefined();
   expect(Buffer.from(await uploaded!.arrayBuffer()).includes(Buffer.from(bytes))).toBe(false);
   expect(uploadFields).toEqual(['file', 'mimeType']);
   expect(uploaded!.type).toBe('application/octet-stream');
   expect(uploadMime).toBe('application/octet-stream');
   expect(payload._encryptedMedia).toBe(1);
-  const url = await fetchAndDecrypt(payload.media, 'bob');
-  expect(new Uint8Array(await resolveObjectURL(url)!.arrayBuffer())).toEqual(bytes);
+  const url = await fetchAndDecrypt(payload.media, BOB);
+  expect(Buffer.from(await resolveObjectURL(url)!.arrayBuffer()).equals(Buffer.from(bytes))).toBe(true);
   URL.revokeObjectURL(url);
-  await expect(fetchAndDecrypt({...payload.media,mediaKey:btoa('x'.repeat(32))},'bob')).rejects.toThrow();
-  await expect(fetchAndDecrypt({...payload.media,mediaName:'other.txt'},'bob')).rejects.toThrow();
-  await expect(fetchAndDecrypt({...payload.media,mediaSize:size+1},'bob')).rejects.toThrow();
+  await expect(fetchAndDecrypt({...payload.media,mediaKey:btoa('x'.repeat(32))},BOB)).rejects.toThrow();
+  await expect(fetchAndDecrypt({...payload.media,mediaName:'other.txt'},BOB)).rejects.toThrow();
+  await expect(fetchAndDecrypt({...payload.media,mediaSize:size+1},BOB)).rejects.toThrow();
   corrupt=true;
-  await expect(fetchAndDecrypt(payload.media,'bob')).rejects.toThrow();
+  await expect(fetchAndDecrypt(payload.media,BOB)).rejects.toThrow();
 });
 
 it('active sendFile sends keys only through encrypted DM and history decrypts media after restart', async()=>{
   const db=await StorageService.getDB();await db.clear('metadata');await db.clear('chat-messages');
-  const a=await getOrCreateIdentityBundle('media-alice'), b=await getOrCreateIdentityBundle('media-bob');
+  const a=await getOrCreateIdentityBundle(MEDIA_ALICE), b=await getOrCreateIdentityBundle(MEDIA_BOB);
   const node:any={get:vi.fn(),put:vi.fn()};node.get.mockReturnValue(node);vi.mocked(GunService.getGun).mockReturnValue(node);
   vi.stubGlobal('WebSocket',{OPEN:1});
   const uploads:Blob[]=[];
@@ -57,22 +58,23 @@ it('active sendFile sends keys only through encrypted DM and history decrypts me
     }
     return new Response(await uploads[Number(String(url).split('/').pop())].arrayBuffer());
   }));
-  const chat=new ChatService('wss://example.invalid','media-alice') as any;
-  chat.myBundle=a;chat.theirBundles.set('media-bob',b.bundle);chat.ensureOPKPool=vi.fn();
+  const chat=new ChatService('wss://example.invalid',MEDIA_ALICE) as any;
+  chat.myBundle=a;chat.theirBundles.set(MEDIA_BOB,b.bundle);chat.ensureOPKPool=vi.fn().mockResolvedValue(undefined);
   const file=new File(['private media'],'private.txt',{type:'text/plain'});
-  const first=await chat.sendFile('media-bob',file),second=await chat.sendFile('media-bob',file);
+  const first=await chat.sendFile(MEDIA_BOB,file),second=await chat.sendFile(MEDIA_BOB,file);
   await vi.waitFor(async()=>expect((await StorageService.getChatMessage(second.id))?.syncAttempts).toBe(1));
   const rows=await Promise.all([first.id,second.id].map(id=>StorageService.getChatMessage(id)));
   const descriptors=rows.map(row=>JSON.parse(row!.text).media);
   expect(descriptors[0].mediaKey).not.toBe(descriptors[1].mediaKey);
   expect(descriptors[0].mediaIV).not.toBe(descriptors[1].mediaIV);
-  const receiver=new SignalSession('media-bob','media-alice');
+  const receiver=new SignalSession(MEDIA_BOB,MEDIA_ALICE);
   for(const row of rows) {
+    expect(row!.encryptedEnvelope,row!.error).toBeTruthy();
     expect(row!.encryptedEnvelope).not.toContain(JSON.parse(row!.text).media.mediaKey);
-    expect(await receiver.decrypt(JSON.parse(row!.encryptedEnvelope!),b,a.bundle.ik,'media-bob')).toBe(row!.text);
+    expect(await receiver.decrypt(JSON.parse(row!.encryptedEnvelope!),b,a.bundle.ik,MEDIA_BOB)).toBe(row!.text);
   }
   db.close();(StorageService as any).dbPromise=undefined;
-  const history=await chat.getLocalHistory('media-bob');
+  const history=await chat.getLocalHistory(MEDIA_BOB);
   for(const entry of history) {
     expect(await resolveObjectURL(entry.mediaUrl)!.text()).toBe('private media');URL.revokeObjectURL(entry.mediaUrl);
   }

@@ -28,6 +28,7 @@ import { gunPut, gunOnce, gunReadChildren, toGunRecord } from '../utils/gunAsync
 import config from '../config';
 import { encryptAndUpload, fetchAndDecrypt } from './chatMediaService';
 import { RECEIPT_PREFIX, envelopeDigest } from './dmDelivery';
+import { verifyAuthenticatedBundle, verifyContext, continuityChange, DMIdentityError, type IdentityState } from './dmIdentity';
 
 /** HTTP base URL of the relay-server (port 3001) — where signal bundles and chat APIs live. */
 function chatRelayBase(): string {
@@ -36,11 +37,10 @@ function chatRelayBase(): string {
 }
 import {
   SignalSession, SignalPublicBundle, SignalEnvelope,
-  SIGNAL_WIRE_VERSION, getOrCreateIdentityBundle,
+  SIGNAL_WIRE_VERSION, getOrCreateIdentityBundle, getOrCreateAuthenticatedIdentityBundle,
   getSafetyNumber,
   loadOrCreateOPKPool, generateOPKBatch,
   getOPKPoolSize, OPK_POOL_SIZE, OPK_POOL_LOW_WATER,
-  type OPKEntry,
 } from './signalProtocol';
 import { compareMessages } from '../utils/messageOrder';
 import type { StoredChatMessage, SyncStatus } from '../types/social';
@@ -79,9 +79,6 @@ export interface RecipientInfo {
   name?:     string;
   avatar?:   string;
 }
-
-// Wire version for new outgoing messages
-const WIRE_VERSION = SIGNAL_WIRE_VERSION; // 3
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const PRESENCE_HB_MS        = 30_000;
@@ -218,6 +215,7 @@ class ChatService {
   public onDelivered:          ((d: { messageId: string; recipientId: string }) => void) | null = null;
   public onReadReceipt:        ((d: { from: string; at: number }) => void) | null = null;
   public onConnectionChange:   ((connected: boolean) => void) | null = null;
+  public onIdentityState: ((d: { userId: string; state: IdentityState }) => void) | null = null;
   public onRecipientKeyChange: ((d: { userId: string; available: boolean }) => void) | null = null;
   public onPeerPresence:       ((d: { userId: string; online: boolean; ts: number }) => void) | null = null;
   // WebRTC signaling via chat relay WS
@@ -241,26 +239,9 @@ class ChatService {
   async init(): Promise<string> {
     this.shuttingDown = false;
 
-    // One-time migration: clear broken Signal sessions from protocol v1
-    // (initSessionAsReceiver set ckR="" causing OperationError on decrypt).
-    const SIGNAL_MIGRATION_KEY = `signal-protocol-version:${this.userId}`;
-    try {
-      const ver = await StorageService.getMetadata(SIGNAL_MIGRATION_KEY).catch(() => null);
-      if (ver !== 3) {
-        // v3: session keys are now directional (myId:theirId) not sorted.
-        // Clear all signal-session keys so X3DH re-runs cleanly with the fixed protocol.
-        const prefix = "signal-session:";
-        const allKeys: string[] = (await (StorageService as any).getAllMetadataKeys?.() ?? []);
-        await Promise.all(
-          allKeys.filter(k => k.startsWith(prefix))
-            .map(k => StorageService.setMetadata(k, null))
-        );
-        await StorageService.setMetadata(SIGNAL_MIGRATION_KEY, 3);
-      }
-    } catch { /* migration is best-effort; sessions re-establish via X3DH on next send */ }
-
-    // Generate or load Signal identity bundle
-    this.myBundle = await getOrCreateIdentityBundle(this.userId);
+    // No implicit legacy-session migration or trust promotion. Read exact local
+    // account records and require its actual signing authority.
+    this.myBundle = await getOrCreateAuthenticatedIdentityBundle(this.userId);
     this.seq      = await this.loadSeq();
 
     // Publish our Signal public bundle to Gun immediately (no auth needed).
@@ -314,8 +295,9 @@ class ChatService {
       const cached = await StorageService.getMetadata(idbKey);
       if (cached?.ik && cached?.spk) {
         if (Date.now() - (cached._cachedAt ?? 0) < 3_600_000) { // 1h TTL
-          // verifySpkSignature handles missing spkSig gracefully (warn only),
-          // so serve the cached bundle regardless of whether spkSig is present.
+          // Cached discovery data must establish the same authority as a network candidate.
+          await verifyAuthenticatedBundle(cached,recipientId);
+          await continuityChange(this.userId,cached);
           return cached as unknown as SignalPublicBundle;
         }
       }
@@ -331,12 +313,13 @@ class ChatService {
           const bundle = await res.json() as SignalPublicBundle;
           if (bundle.ik && bundle.spk) {
             try {
-              const { verifySpkSignature } = await import('./signalProtocol');
-              await verifySpkSignature(bundle);
+              const verified = await verifyAuthenticatedBundle(bundle,recipientId);
+              await continuityChange(this.userId,verified);
             } catch (e) {
+              this.onIdentityState?.({userId:recipientId,state:e instanceof DMIdentityError?e.state:'UNKNOWN'});
               console.error('[ChatService] SPK signature invalid for', recipientId, '— refusing bundle:', e);
               this.onRecipientKeyChange?.({ userId: recipientId, available: false });
-              return null;
+              break; // Try independently authenticated Gun data; never use this candidate.
             }
             if (persist) void StorageService.setMetadata(idbKey, { ...bundle, _cachedAt: Date.now() }).catch(() => {});
             return bundle;
@@ -354,9 +337,10 @@ class ChatService {
       if (raw) {
         const bundle = JSON.parse(raw) as SignalPublicBundle;
         try {
-          const { verifySpkSignature } = await import('./signalProtocol');
-          await verifySpkSignature(bundle);
+          const verified = await verifyAuthenticatedBundle(bundle,recipientId);
+          await continuityChange(this.userId,verified);
         } catch (e) {
+          this.onIdentityState?.({userId:recipientId,state:e instanceof DMIdentityError?e.state:'UNKNOWN'});
           console.error('[ChatService] Gun bundle SPK signature invalid for', recipientId, '— refusing:', e);
           return null;
         }
@@ -374,7 +358,16 @@ class ChatService {
 
   private async getTheirBundle(recipientId: string): Promise<SignalPublicBundle | null> {
     const cached = this.theirBundles.get(recipientId);
-    if (cached) return cached;
+    if (cached) {
+      try {
+        const verified = await verifyAuthenticatedBundle(cached,recipientId);
+        await continuityChange(this.userId,verified);
+        return verified;
+      } catch (error) {
+        this.onIdentityState?.({userId:recipientId,state:error instanceof DMIdentityError?error.state:'UNKNOWN'});
+        throw error;
+      }
+    }
 
     // Cooldown: never fetch the same userId more than once per 30s.
     // Gun re-delivers old messages constantly; without this each delivery triggers a fetch.
@@ -456,6 +449,7 @@ class ChatService {
       }
     }
     if (!theirBundle) throw new Error(`Bundle unavailable for sender ${senderId.slice(0, 16)}`);
+    await verifyAuthenticatedBundle(theirBundle,senderId);
     return this.getSession(senderId).decrypt(envelope, this.myBundle, theirBundle.ik, this.userId, acceptedRow);
   }
 
@@ -535,7 +529,7 @@ class ChatService {
 
     if (v !== SIGNAL_WIRE_VERSION || senderId === this.userId) return null;
     const envelope: SignalEnvelope = {
-      v: SIGNAL_WIRE_VERSION, eph: raw.eph, opkId: raw.opkId,
+      v: SIGNAL_WIRE_VERSION, auth: raw.auth, eph: raw.eph, opkId: raw.opkId,
       dh: raw.dh, n: raw.n, pn: raw.pn, ct: raw.ct,
     };
     if (!Number.isSafeInteger(envelope.n) || envelope.n < 0 ||
@@ -552,11 +546,13 @@ class ChatService {
         };
         return row;
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof DMIdentityError) this.onIdentityState?.({userId:senderId,state:error.state});
       // Unauthenticated input cannot erase a session, consume an OPK or create
       // an accepted-message/tombstone record. Retry legitimate input unchanged.
       return null;
     }
+    if (envelope.opkId) void this.ensureOPKPool().catch(() => {});
     await this.processAccepted(row!).catch(() => {});
     return row!;
   }
@@ -757,6 +753,11 @@ class ChatService {
       }
       if (journal && journal.plaintext !== row.text) throw new Error('Logical message content changed');
       const envelope: SignalEnvelope = journal?.envelope ?? await this.encryptFor(recipientId, row.text, row.id);
+      if (envelope.v === 4) {
+        const own = await verifyAuthenticatedBundle(this.myBundle!.bundle,this.userId);
+        const {peer} = await verifyContext(envelope.auth!,this.userId,recipientId,own);
+        await continuityChange(this.userId,peer);
+      }
       row = await StorageService.patchDMDelivery(row.id, { encryptedEnvelope: JSON.stringify(envelope) }) ?? row;
       const record = toGunRecord({ id: row.id, senderId: row.senderId, recipientId,
         ...envelope, timestamp: row.timestamp, seq: row.seq });
@@ -815,8 +816,9 @@ class ChatService {
     const frame = JSON.stringify({
       type: 'chat-message', recipientId, messageId,
       from: this.userId,
-      v:    WIRE_VERSION,
+      v:    envelope.v,
       // Signal envelope fields
+      auth:  envelope.auth,
       eph:   envelope.eph,
       opkId: envelope.opkId,  // OPK pool id — must be forwarded so receiver can consumeOPK()
       dh:    envelope.dh,
@@ -1255,6 +1257,7 @@ class ChatService {
             v,
             senderId:    data.from,
             recipientId: this.userId,
+            auth:        data.auth,
             eph:         data.eph,
             opkId:       data.opkId,   // needed for OPK consumption in decrypt()
             dh:          data.dh,
@@ -1516,26 +1519,10 @@ class ChatService {
   private async ensureOPKPool(): Promise<void> {
     if (!this.myBundle) return;
     const size = await getOPKPoolSize(this.userId);
-    if (size > OPK_POOL_LOW_WATER) return; // pool is healthy
-    // Generate enough to bring us back to OPK_POOL_SIZE
-    const needed = OPK_POOL_SIZE - size;
-    const pool   = await generateOPKBatch(needed, this.userId);
-    await this.publishOPKBatch(pool.slice(0, needed));
-  }
-
-  private async publishOPKBatch(entries: OPKEntry[]): Promise<void> {
-    if (!entries.length) return;
-    try {
-      const res = await fetch(`${chatRelayBase()}/api/opk-pool`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          userId: this.userId,
-          opks:   entries.map(e => ({ id: e.id, pub: e.pubB64 })),
-        }),
-      });
-      if (!res.ok) console.warn('[ChatService] OPK pool publish failed:', res.status);
-    } catch (e) { console.warn('[ChatService] OPK pool publish error:', e); }
+    if (size <= OPK_POOL_LOW_WATER) await generateOPKBatch(OPK_POOL_SIZE-size,this.userId);
+    this.myBundle = await getOrCreateAuthenticatedIdentityBundle(this.userId);
+    await gunPut(GunService.getGun().get('users').get(this.userId),{signalBundle:JSON.stringify(this.myBundle.bundle)});
+    await this.publishBundleToRelay();
   }
 
   disconnect(): void {

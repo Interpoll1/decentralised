@@ -22,7 +22,7 @@ Binding fields: version=1, accountId, deviceId, generation (positive safe intege
 
 There is no implicit signer supplied by the binding. Its accountId must equal the requested account and verification uses that requested account key. A requested/pinned deviceId must also match.
 
-SPK signature: WebCrypto ECDSA P-256/SHA-256, canonical base64 of its 64-byte IEEE-P1363 output, over UTF-8 JSON:
+New `spkAuthorization` signature (legacy `spkSig` retains its original raw-SPK semantics): WebCrypto ECDSA P-256/SHA-256, canonical base64 of its 64-byte IEEE-P1363 output, over UTF-8 JSON:
 
 ```
 ["interpoll/dm/spk",1,accountId,deviceId,bindingGeneration,ik,ikSignPub,spkId,spkGeneration,spk]

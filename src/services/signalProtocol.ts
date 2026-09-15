@@ -42,13 +42,16 @@
 
 import { StorageService } from './storageService';
 import type { StoredChatMessage } from '../types/social';
+import { authorizeLocalBundle, verifyAuthenticatedBundle, continuityChange, bootstrapContext,
+  verifyContext, DMIdentityError, type AuthenticatedBundle, type MetadataChange } from './dmIdentity';
 
-export const SIGNAL_WIRE_VERSION = 3;
+export const SIGNAL_WIRE_VERSION = 4;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface SignalEnvelope {
-  v:     3;
+  v:     3 | 4;
+  auth?: string;
   eph?:  string;   // X3DH ephemeral pub (first message only)
   opkId?: string;  // id of the OPK from the pool the sender used (first message only)
   dh:    string;   // sender's current ratchet pub
@@ -73,6 +76,7 @@ interface DHKeyPair {
 }
 
 interface RatchetState {
+  auth?: string;
   dhSend:  { pub: string; priv: JsonWebKey };
   dhRecv:  string;   // their current ratchet pub — '' until first recv
   rootKey: string;   // hex
@@ -180,28 +184,14 @@ async function signSpk(ikSignPriv: CryptoKey, spkPubB64: string): Promise<string
  * - Present but invalid spkSig: throws (active tamper attempt; refuse session).
  */
 export async function verifySpkSignature(bundle: SignalPublicBundle): Promise<void> {
-  if (!bundle.spkSig) {
-    // Old bundle — peer hasn't updated yet. Warn once; don't block.
-    console.warn('[Signal] Bundle missing SPK signature — peer may be on an old version');
+  if ((bundle as AuthenticatedBundle).version === 1) {
+    await verifyAuthenticatedBundle(bundle,(bundle as AuthenticatedBundle).binding.accountId);
     return;
   }
-  // Use ikSignPub (the ECDSA signing key) not ik (the ECDH key) — they are
-  // different keypairs. Mixing them up means verify always fails with a
-  // DOMException because the key usage flags don't match.
-  const signingPub = bundle.ikSignPub || bundle.ik; // fallback to ik for old bundles without ikSignPub
-  try {
-    const ikSignPub = await importEcdsaPub(signingPub);
-    const valid = await crypto.subtle.verify(
-      ECDSA_SIGN_PARAMS, ikSignPub, fromB64(bundle.spkSig), fromB64(bundle.spk),
-    );
-    if (!valid) throw new Error('SPK signature verification failed — bundle may have been tampered with');
-  } catch (e) {
-    if (e instanceof Error && e.message.includes('tampered')) throw e;
-    // importEcdsaPub throws if the key bytes aren't a valid ECDSA P-256 key
-    // (e.g. old peer whose ik is ECDH-only and ikSignPub isn't in the bundle yet).
-    // Treat the same as a missing signature — warn, allow, don't block.
-    console.warn('[Signal] Could not verify SPK signature (key format mismatch — old peer?):', (e as Error).message);
-  }
+  if (!bundle.spkSig || !bundle.ikSignPub) throw new Error('Signed prekey required');
+  const pub = await importEcdsaPub(bundle.ikSignPub);
+  if (!await crypto.subtle.verify(ECDSA_SIGN_PARAMS,pub,fromB64(bundle.spkSig),fromB64(bundle.spk)))
+    throw new Error('SPK signature verification failed');
 }
 
 // ── HKDF-SHA256 ───────────────────────────────────────────────────────────────
@@ -283,7 +273,10 @@ async function loadOrCreateDHKey(storageKey: string): Promise<DHKeyPair> {
   } catch { }
   const kp      = await generateDH();
   const privJwk = await crypto.subtle.exportKey('jwk', kp.priv);
-  await StorageService.setMetadata(storageKey, { pub: kp.pubB64, priv: privJwk });
+  if (!await StorageService.compareAndSwapMetadata([{key:storageKey,before:null,after:{pub:kp.pubB64,priv:privJwk}}])) {
+    const stored = await StorageService.getMetadata(storageKey);
+    return {pub:await importDHPub(stored.pub),priv:await importDHPriv(stored.priv),pubB64:stored.pub};
+  }
   return kp;
 }
 
@@ -298,7 +291,10 @@ async function loadOrCreateSigningKey(storageKey: string): Promise<{ pub: Crypto
   } catch { }
   const kp      = await generateSigningKey();
   const privJwk = await crypto.subtle.exportKey('jwk', kp.priv);
-  await StorageService.setMetadata(storageKey, { pub: kp.pubB64, priv: privJwk });
+  if (!await StorageService.compareAndSwapMetadata([{key:storageKey,before:null,after:{pub:kp.pubB64,priv:privJwk}}])) {
+    const stored = await StorageService.getMetadata(storageKey);
+    return {pub:await importEcdsaPub(stored.pub),priv:await importEcdsaPriv(stored.priv),pubB64:stored.pub};
+  }
   return kp;
 }
 
@@ -327,6 +323,14 @@ export async function getOrCreateIdentityBundle(userId: string): Promise<{
   };
 
   return { ik, spk, opk, ikSign, bundle };
+}
+
+/** Active DM publication: authorize existing messaging keys with the account root. */
+export async function getOrCreateAuthenticatedIdentityBundle(userId: string, accountPrivateKey?: string) {
+  const local = await getOrCreateIdentityBundle(userId);
+  const pool = await loadOrCreateOPKPool(userId);
+  const bundle = await authorizeLocalBundle(userId,local.bundle,local.ikSign.priv,pool,accountPrivateKey);
+  return {...local,bundle};
 }
 
 // ── Session storage ───────────────────────────────────────────────────────────
@@ -484,16 +488,22 @@ async function initSessionAsReceiver(
 
 const MAX_SKIP = 1000;
 
+function messageAAD(senderIK: string, envelope: Omit<SignalEnvelope,'v'>): string {
+  return envelope.auth ? JSON.stringify(['interpoll/dm/message',4,senderIK,envelope.dh,envelope.n,
+    envelope.pn,envelope.eph??null,envelope.opkId??null,envelope.auth]) : `${senderIK}:${envelope.dh}:${envelope.n}`;
+}
+
 async function ratchetEncrypt(
   state: RatchetState, plaintext: string, senderIKPub: string,
+  header: {auth?:string;eph?:string;opkId?:string} = {},
 ): Promise<{ envelope: Omit<SignalEnvelope, 'v'>; state: RatchetState }> {
   if (!state.ckS) throw new Error('No sending chain key — session not initialised for sending');
   const { mk, ck } = await kdfCK(state.ckS);
   // AAD: senderIK:ratchetPub:messageNumber (all stable identifiers)
-  const aad = `${senderIKPub}:${state.dhSend.pub}:${state.ns}`;
+  const aad = messageAAD(senderIKPub,{dh:state.dhSend.pub,n:state.ns,pn:state.pn,ct:'',...header});
   const ct  = await aeadEncrypt(mk, plaintext, aad);
   return {
-    envelope: { dh: state.dhSend.pub, n: state.ns, pn: state.pn, ct },
+    envelope: { dh: state.dhSend.pub, n: state.ns, pn: state.pn, ct, ...header },
     state: { ...state, ckS: ck, ns: state.ns + 1, skipped: { ...state.skipped } },
   };
 }
@@ -532,6 +542,7 @@ async function ratchetStep(state: RatchetState, theirDHPub: string): Promise<Rat
   // causes ratchetDecrypt to use a wrong cached mk instead of deriving
   // the correct one from the new ckR, silently failing aeadDecrypt.
   return {
+    auth: state.auth,
     dhSend:  { pub: newDH.pubB64, priv: privJwk },
     dhRecv:  theirDHPub,
     rootKey: rk2,
@@ -551,7 +562,7 @@ async function ratchetDecrypt(
     const mk         = state.skipped[skipKey];
     const newSkipped = { ...state.skipped };
     delete newSkipped[skipKey];
-    const aad       = `${senderIKPub}:${envelope.dh}:${envelope.n}`;
+    const aad       = messageAAD(senderIKPub,envelope);
     const plaintext = await aeadDecrypt(mk, envelope.ct, aad);
     return { plaintext, state: { ...state, skipped: newSkipped } };
   }
@@ -569,7 +580,7 @@ async function ratchetDecrypt(
   const { mk, ck } = await kdfCK(s.ckR);
   s = { ...s, ckR: ck, nr: s.nr + 1, skipped: { ...s.skipped } };
 
-  const aad       = `${senderIKPub}:${envelope.dh}:${envelope.n}`;
+  const aad       = messageAAD(senderIKPub,envelope);
   const plaintext = await aeadDecrypt(mk, envelope.ct, aad);
   return { plaintext, state: s };
 }
@@ -585,7 +596,7 @@ export class SignalSession {
    */
   async encrypt(
     plaintext: string,
-    myBundle:    { ik: DHKeyPair; spk: DHKeyPair; opk: DHKeyPair },
+    myBundle:    { ik: DHKeyPair; spk: DHKeyPair; opk: DHKeyPair; bundle?: SignalPublicBundle },
     theirBundle: SignalPublicBundle,
     messageId?: string,
   ): Promise<SignalEnvelope> {
@@ -598,6 +609,17 @@ export class SignalSession {
     }
     const before = await loadSession(this.myId, this.theirId);
     let state = before;
+    const authenticated = (theirBundle as AuthenticatedBundle).version === 1;
+    const identityChanges: MetadataChange[] = [];
+    let context = state?.auth;
+    if (authenticated) {
+      const own = await verifyAuthenticatedBundle(myBundle.bundle!,this.myId);
+      const peer = await verifyAuthenticatedBundle(theirBundle,this.theirId);
+      identityChanges.push(await continuityChange(this.myId,peer));
+      if (state && !state.auth) throw new DMIdentityError('LEGACY_UNAUTHENTICATED','Existing session is not identity-bound');
+      if (context) await verifyContext(context,this.myId,this.theirId,own);
+      else context = bootstrapContext(own,peer);
+    } else if (state?.auth) throw new DMIdentityError('LEGACY_UNAUTHENTICATED','Cannot downgrade authenticated session');
     let x3dhEphPub: string | undefined;
     let x3dhOpkId:  string | undefined;
 
@@ -614,7 +636,18 @@ export class SignalSession {
       const { state: s } = await initSessionAsSender(
         masterKey, theirBundle.spk,
       );
-      state = s;
+      state = {...s,auth:context};
+      if (authenticated && opkId) {
+        const key = `dm-sent-opk-v1:${this.myId}:${this.theirId}:${opkId}`;
+        const used = await StorageService.getMetadata(key);
+        if (used) {
+          // Another send may have atomically established this session while
+          // our speculative X3DH ran. Retry its state, never reissue the OPK.
+          if (JSON.stringify(await loadSession(this.myId,this.theirId)) !== JSON.stringify(before)) continue;
+          throw new DMIdentityError('STALE_PREKEY','Cached OPK already selected');
+        }
+        identityChanges.push({key,before:used,after:true});
+      }
     }
 
     // If ckS is empty the session was receiver-bootstrapped — do a ratchet step
@@ -646,12 +679,13 @@ export class SignalSession {
 
     const { envelope, state: newState } = await ratchetEncrypt(
       state, plaintext, myBundle.ik.pubB64,
+      authenticated ? {auth:context,eph:x3dhEphPub,opkId:x3dhOpkId} : {},
     );
-    const result: SignalEnvelope = { v: SIGNAL_WIRE_VERSION, ...envelope,
+    const result: SignalEnvelope = { v: authenticated ? 4 : 3, ...envelope,
       ...(x3dhEphPub ? { eph: x3dhEphPub } : {}),
       ...(x3dhOpkId  ? { opkId: x3dhOpkId } : {}),
     };
-    const changes = [{ key: SESSION_KEY(this.myId, this.theirId), before, after: newState }];
+    const changes: MetadataChange[] = [...identityChanges,{ key: SESSION_KEY(this.myId, this.theirId), before, after: newState }];
     if (journalKey) changes.push({ key: journalKey, before: journal, after: { plaintext, envelope: result } } as any);
     if (await StorageService.compareAndSwapMetadata(changes)) return result;
     }
@@ -665,7 +699,7 @@ export class SignalSession {
    */
   async decrypt(
     envelope: SignalEnvelope,
-    myBundle: { ik: DHKeyPair; spk: DHKeyPair },
+    myBundle: { ik: DHKeyPair; spk: DHKeyPair; bundle?: SignalPublicBundle },
     senderIKPub: string,
     myUserId: string,
     acceptedRow?: (plaintext: string) => StoredChatMessage,
@@ -674,18 +708,33 @@ export class SignalSession {
     for (let attempt = 0; attempt < 256; attempt++) {
       const before = await loadSession(this.myId, this.theirId);
       let state = before;
-      const changes: { key: string; before: unknown; after: unknown }[] = [];
+      const changes: MetadataChange[] = [];
+      if (envelope.v === 4) {
+        if (!envelope.auth) throw new DMIdentityError('UNKNOWN','Authenticated transcript missing');
+        const own = await verifyAuthenticatedBundle(myBundle.bundle!,this.myId);
+        const {peer,receiver} = await verifyContext(envelope.auth,this.myId,this.theirId,own);
+        if (peer.ik !== senderIKPub) throw new DMIdentityError('IDENTITY_CHANGED','Sender IK mismatch');
+        changes.push(await continuityChange(this.myId,peer));
+        if (state && state.auth !== envelope.auth && !(state.auth && envelope.eph && state.nr === 0)) throw new DMIdentityError('LEGACY_UNAUTHENTICATED','Session context mismatch; no implicit reset');
+        if (envelope.eph && (receiver.binding.accountId !== this.myId || (receiver.selectedOPK?.id ?? undefined) !== envelope.opkId))
+          throw new DMIdentityError('UNKNOWN','OPK transcript mismatch');
+        if (!envelope.eph && envelope.opkId) throw new DMIdentityError('UNKNOWN','Unexpected OPK header');
+      } else if (state?.auth || envelope.auth) throw new DMIdentityError('LEGACY_UNAUTHENTICATED','Cannot downgrade authenticated session');
       if (envelope.eph && !(state && state.nr > 0)) {
         let opk: OPKEntry | null = null;
         if (envelope.opkId) {
           const key = OPK_POOL_KEY(myUserId);
           const pool = await StorageService.getMetadata(key) as OPKEntry[] | undefined;
+          const consumedKey = `dm-consumed-opks-v1:${myUserId}`;
+          const consumed = await StorageService.getMetadata(consumedKey);
+          if (consumed?.[envelope.opkId]) throw new DMIdentityError('STALE_PREKEY','OPK already consumed');
           opk = pool?.find(entry => entry.id === envelope.opkId) ?? null;
+          changes.push({key:consumedKey,before:consumed,after:{...consumed,[envelope.opkId]:true}});
           if (!opk) throw new Error('Requested one-time prekey unavailable');
           changes.push({ key, before: pool, after: pool!.filter(entry => entry.id !== envelope.opkId) });
         }
         const master = await x3dhReceive(myBundle.ik, myBundle.spk, opk, senderIKPub, envelope.eph);
-        state = await initSessionAsReceiver(master, myBundle.spk, envelope.dh);
+        state = {...await initSessionAsReceiver(master, myBundle.spk, envelope.dh),auth:envelope.auth};
       }
       if (!state) throw new Error('No session and no X3DH ephemeral key');
       const result = await ratchetDecrypt(state, envelope, senderIKPub);
@@ -754,7 +803,11 @@ export interface OPKEntry {
 export async function loadOrCreateOPKPool(userId: string): Promise<OPKEntry[]> {
   try {
     const stored = await StorageService.getMetadata(OPK_POOL_KEY(userId));
-    if (Array.isArray(stored) && stored.length > 0) return stored as OPKEntry[];
+    const consumed = await StorageService.getMetadata(`dm-consumed-opks-v1:${userId}`);
+    if (Array.isArray(stored) && stored.length > 0) {
+      const available = stored.filter(entry => !consumed?.[entry.id]);
+      if (available.length) return available as OPKEntry[];
+    }
   } catch { }
   return generateOPKBatch(OPK_POOL_SIZE, userId);
 }
@@ -777,8 +830,11 @@ export async function generateOPKBatch(count: number, userId: string): Promise<O
   for (;;) {
     const key = OPK_POOL_KEY(userId);
     const before = await StorageService.getMetadata(key);
-    const merged = [...batch, ...(Array.isArray(before) ? before : [])];
-    if (await StorageService.compareAndSwapMetadata([{key, before, after: merged}])) return merged;
+    const consumedKey = `dm-consumed-opks-v1:${userId}`;
+    const consumed = await StorageService.getMetadata(consumedKey);
+    const merged = [...batch, ...(Array.isArray(before) ? before : [])].filter(entry => !consumed?.[entry.id]);
+    if (new Set(merged.map(entry=>entry.id)).size !== merged.length || batch.some(entry=>consumed?.[entry.id])) throw new Error('OPK identifier collision');
+    if (await StorageService.compareAndSwapMetadata([{key, before, after: merged},{key:consumedKey,before:consumed,after:consumed??{}}])) return merged;
   }
 }
 
@@ -787,9 +843,12 @@ export async function consumeOPK(userId: string, opkId: string): Promise<OPKEntr
   for (;;) {
     const key = OPK_POOL_KEY(userId);
     const before = await StorageService.getMetadata(key) as OPKEntry[] | undefined;
+    const consumedKey = `dm-consumed-opks-v1:${userId}`;
+    const consumed = await StorageService.getMetadata(consumedKey);
     const entry = before?.find(e => e.id === opkId);
-    if (!entry) return null;
-    if (await StorageService.compareAndSwapMetadata([{key, before, after: before!.filter(e => e.id !== opkId)}])) return entry;
+    if (!entry || consumed?.[opkId]) return null;
+    if (await StorageService.compareAndSwapMetadata([{key, before, after: before!.filter(e => e.id !== opkId)},
+      {key:consumedKey,before:consumed,after:{...consumed,[opkId]:true}}])) return entry;
   }
 }
 
