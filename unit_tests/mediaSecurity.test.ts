@@ -62,13 +62,18 @@ it('active sendFile sends keys only through encrypted DM and history decrypts me
   chat.myBundle=a;chat.theirBundles.set(MEDIA_BOB,b.bundle);chat.ensureOPKPool=vi.fn().mockResolvedValue(undefined);
   const file=new File(['private media'],'private.txt',{type:'text/plain'});
   const first=await chat.sendFile(MEDIA_BOB,file),second=await chat.sendFile(MEDIA_BOB,file);
-  await vi.waitFor(async()=>expect((await StorageService.getChatMessage(second.id))?.syncAttempts).toBe(1));
+  await Promise.all([first.id,second.id].map(id=>vi.waitFor(async()=>expect((await StorageService.getChatMessage(id))?.syncAttempts).toBe(1))));
   const rows=await Promise.all([first.id,second.id].map(id=>StorageService.getChatMessage(id)));
   const descriptors=rows.map(row=>JSON.parse(row!.text).media);
   expect(descriptors[0].mediaKey).not.toBe(descriptors[1].mediaKey);
   expect(descriptors[0].mediaIV).not.toBe(descriptors[1].mediaIV);
   const receiver=new SignalSession(MEDIA_BOB,MEDIA_ALICE);
-  for(const row of rows) {
+  // Concurrent sends acquire ratchet positions independently of UI creation order.
+  // Bootstrap must arrive before the other envelope; both media payloads remain checked.
+  for(const row of rows) expect(row!.encryptedEnvelope,row!.error).toBeTruthy();
+  const ordered=[...rows].sort((x,y)=>JSON.parse(x!.encryptedEnvelope!).n-JSON.parse(y!.encryptedEnvelope!).n);
+  expect(ordered.map(row=>JSON.parse(row!.encryptedEnvelope!).n)).toEqual([0,1]);
+  for(const row of ordered) {
     expect(row!.encryptedEnvelope,row!.error).toBeTruthy();
     expect(row!.encryptedEnvelope).not.toContain(JSON.parse(row!.text).media.mediaKey);
     expect(await receiver.decrypt(JSON.parse(row!.encryptedEnvelope!),b,a.bundle.ik,MEDIA_BOB)).toBe(row!.text);
