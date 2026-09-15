@@ -29,3 +29,14 @@ Limits: reload all clients sharing IndexedDB; old blind writers can bypass CAS. 
 - **SI-14 Deterministic simultaneous initiation:** opposite same-parent candidates select the lexicographically smaller authenticated account initiator; losing branches are receive-only until the next generation. `dmSessionEpoch.admitEpoch`, `SignalSession.encrypt/decrypt`; tests: both initial arrival orders, simultaneous resets, losing in-flight traffic, retired branch rejection.
 
 These rules supersede the earlier F06 exclusions for v5 only. v3/v4 state remains quarantined; no historical epoch migration is inferred. Whole-storage rollback/erasure and unavailable transport are outside these persistence/liveness guarantees. Contract: `DM_SESSION_EPOCH_V1.md`.
+
+## Receive retention and acceptance (F08/F09)
+
+- **SI-15 Skipped-key retention:** receive DH changes preserve keys within MAX_SKIP/MAX_TOTAL_SKIPPED and the four-transition window. `signalProtocol.skipMessageKeys/retainSkipped/ratchetStep`; `receiveStateSecurity.test.ts`: previous-chain A1, gap boundaries, total eviction, last retained transition, restart.
+- **SI-16 Authentication-before-skipped-key-consumption:** skipped consumption/expiry commits only after AEAD and the receive transaction succeed. `signalProtocol.ratchetDecrypt`, `SignalSession.decrypt`; tests: forged skipped-key first, corrected ciphertext, failed durable acceptance.
+- **SI-17 Acceptance-aware deduplication:** observation is not accepted history. `ChatService.receiveRemote/receiveImpl`, `dmReceiveState.receiveCommitChanges`; tests: concurrent exact duplicates, outer-ID collision, changed mutable metadata, Gun duplicate notifications.
+- **SI-18 Retryability preservation:** prerequisites/storage failure yield retryable state, not accepted tombstones. `ChatService.decryptFrom/retryPendingReceives`, `SignalSession.decrypt`; tests: before-bootstrap automatic/manual retry, bundle unavailable/reopen, failed DB acceptance.
+- **SI-19 Atomic receive acceptance:** ratchet, skipped consumption, epoch/OPKs, accepted row, position ledger and inbox removal share StorageService CAS. `SignalSession.decrypt`, `dmReceiveState.receiveCommitChanges`, existing `StorageService.compareAndSwapMetadata`; tests: abort after metadata writes, concurrent acceptance, duplicate replay after reopen.
+- **SI-20 Bounded pending state:** 64 candidates and 2 MiB/account, 256 KiB/envelope, first-observation TTL 24h; 64 active receives/ChatService. `dmReceiveState.enqueuePending/pendingEntries`, `ChatService.receiveRemote`; tests: count/byte/expiry bounds, duplicate lifetime, bounded admission.
+
+Contract: `DM_RECEIVE_STATE_V1.md`. Accepted conversation/epoch history is not covered by the unaccepted-inbox size bound. Transport suppression, queue saturation/eviction, whole-DB rollback and unknown account/device authority remain separate limitations.
