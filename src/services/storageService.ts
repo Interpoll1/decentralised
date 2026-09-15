@@ -389,7 +389,7 @@ export class StorageService {
   }
 
   /**
-   * Destructive: remove any persisted legacy posts (v2) from metadata store
+   * Destructive: remove any persisted legacy posts (pre-v4) from metadata store
    * This deletes offline copies of posts that were stored under legacy keys.
    */
   static async purgePersistedLegacyPosts(currentNamespace: string): Promise<number> {
@@ -411,7 +411,7 @@ export class StorageService {
             removed++;
           }
           if (!dv && Number.parseInt(currentNamespace.replace(/^v/i, ''), 10) >= 3) {
-            // no version and running v3+ -> delete conservatively
+            // no version and running v4+ -> delete conservatively
             await store.delete(key as IDBValidKey);
             removed++;
           }

@@ -11,10 +11,10 @@ const signed = { ...base(idSigned),
   creatorSignature: '0c77c6523c38b4bbeb386f6bdc8990e9bdee8e358e35592411d6f1c2cab46fdf6f980764e39f28c1111111111111111111111111111111111111111111111111111' };
 
 const t0 = Date.now();
-gun.get('v3/communities/' + idSigned).put(signed, (ack) =>
+gun.get('v4/communities/' + idSigned).put(signed, (ack) =>
   console.log('A soul-direct+signature ACK', Date.now()-t0, 'ms', JSON.stringify(ack).slice(0,150)));
 
-gun.get('v3').get('communities').get(idChained).put(base(idChained), (ack) =>
+gun.get('v4').get('communities').get(idChained).put(base(idChained), (ack) =>
   console.log('B chained ACK', Date.now()-t0, 'ms', JSON.stringify(ack).slice(0,150)));
 
 setTimeout(() => { console.log('ids:', idSigned, idChained); process.exit(0); }, 12000);

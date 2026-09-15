@@ -48,12 +48,12 @@ const put = (node, value, label) => new Promise((resolve) => {
 
 (async () => {
   const list = (await getJson(`${API}/api/communities`))?.communities || [];
-  const index = (await getJson(soulUrl('v3/communities')))?.data || {};
+  const index = (await getJson(soulUrl('v4/communities')))?.data || {};
   const ids = Object.keys(index).filter((k) => k !== '_');
 
   const husks = [];
   for (const id of ids) {
-    const node = (await getJson(soulUrl(`v3/communities/${id}`)))?.data || {};
+    const node = (await getJson(soulUrl(`v4/communities/${id}`)))?.data || {};
     if (!node.createdAt) husks.push(id);
   }
 
@@ -88,14 +88,14 @@ const put = (node, value, label) => new Promise((resolve) => {
   for (const id of repairable) {
     const c = byId.get(id);
     const rec = toGunRecord(c);
-    const ack = await put(gun.get(`v3/communities/${id}`), rec, id);
+    const ack = await put(gun.get(`v4/communities/${id}`), rec, id);
     // Independently confirm the relay stored it, rather than trusting the ack.
     // The /db mirror lags the ack by a second or two, so poll rather than read
     // once — a single immediate read reports a false negative on every row.
     let persisted = false;
     for (let i = 0; i < 5 && !persisted; i++) {
       await new Promise((r) => setTimeout(r, 1_000));
-      const after = (await getJson(soulUrl(`v3/communities/${id}`)))?.data || {};
+      const after = (await getJson(soulUrl(`v4/communities/${id}`)))?.data || {};
       persisted = !!after.createdAt && !!after.displayName;
     }
     results.push({ id, displayName: c.displayName, ack: ack.ok, persisted });

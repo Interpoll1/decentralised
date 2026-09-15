@@ -310,7 +310,7 @@ export const useCommunityStore = defineStore('community', () => {
     for (const d of json.posts) {
       const postId = asString(d.id);
       if (!postId || !asString(d.title)) continue;
-      // Avoid hydrating posts from a different dataVersion (e.g., v2 into v3)
+      // Avoid hydrating posts from a different dataVersion (e.g., v3 into v4)
       const postDataVersion = typeof d.dataVersion === 'string' ? d.dataVersion : null;
       const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;
       if (postDataVersion && postDataVersion !== GUN_NAMESPACE) continue;
@@ -354,7 +354,7 @@ export const useCommunityStore = defineStore('community', () => {
         const postId = asString(d.id);
         if (!postId || !asString(d.title)) continue; // only full post nodes
 
-        // Avoid hydrating posts from a different dataVersion (e.g., v2 into v3)
+        // Avoid hydrating posts from a different dataVersion (e.g., v3 into v4)
         const postDataVersion = typeof d.dataVersion === 'string' ? d.dataVersion : null;
         const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;
         if (postDataVersion && postDataVersion !== GUN_NAMESPACE) continue;

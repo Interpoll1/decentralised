@@ -3,7 +3,7 @@ import { schnorr } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
 
 vi.mock('@/services/gunService', () => ({
-  GUN_NAMESPACE: 'v3',
+  GUN_NAMESPACE: 'v4',
   GunService: { getGun: vi.fn(), onReconnect: vi.fn(), addPeer: vi.fn() },
   default: {},
 }));
