@@ -518,7 +518,15 @@ class ChatService {
 
     const existing = await StorageService.getChatMessage(id);
     if (existing?.text) {
-      if (!existing.outgoing) await this.processAccepted(existing).catch(() => {});
+      if (existing.senderId !== senderId || existing.recipientId !== recipientId) return null;
+      if (!existing.outgoing && existing.encryptedEnvelope) {
+        // A reused outer ID is not an authenticated replay. Only the exact
+        // previously accepted ciphertext may trigger receipt retransmission.
+        const expected = await envelopeDigest(id, senderId, recipientId!, JSON.parse(existing.encryptedEnvelope));
+        const actual = await envelopeDigest(id, senderId, recipientId!, raw);
+        if (actual !== expected) return null;
+        await this.processAccepted(existing).catch(() => {});
+      }
       return existing;
     } //              // already decrypted and stored
     if (this.clearedRooms.has(roomId)) return null;   // user cleared this room

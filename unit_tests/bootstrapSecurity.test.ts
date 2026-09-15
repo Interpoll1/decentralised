@@ -64,3 +64,14 @@ it('forged input with a cold bundle cache cannot persist fetched discovery mater
   await chat.mergeRemote({...env,ct:btoa('forged'),id:'cold-forgery',senderId:'alice',recipientId:'bob'},'alice:bob');
   expect(await snapshot()).toBe(before);
 });
+
+it('forgery reusing an accepted message ID cannot trigger receipt or crypto mutations',async()=>{
+  const a=await getOrCreateIdentityBundle('alice'),b=await getOrCreateIdentityBundle('bob');
+  const env=await new SignalSession('alice','bob').encrypt('accepted',a,b.bundle);
+  const chat=new ChatService('wss://example.invalid','bob') as any;
+  chat.myBundle=b;chat.theirBundles.set('alice',a.bundle);chat.ensureOPKPool=vi.fn();
+  await chat.mergeRemote({...env,id:'accepted-id',senderId:'alice',recipientId:'bob'},'alice:bob');
+  const before=await snapshot();
+  expect(await chat.mergeRemote({...env,ct:btoa('forged'),id:'accepted-id',senderId:'alice',recipientId:'bob'},'alice:bob')).toBeNull();
+  expect(await snapshot()).toBe(before);
+});
