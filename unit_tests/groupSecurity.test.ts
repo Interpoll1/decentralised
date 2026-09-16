@@ -189,7 +189,7 @@ it.each(['iv','ciphertext','signature','receipt'])('modified %s fails even with 
  await expect(b.receive(room,changed)).rejects.toThrow();expect((await b.receive(room,e)).status).toBe('accepted');
 });
 it('a valid owner-signed conflicting equal epoch cannot replace the persisted pin',async()=>{
- const {a,b,room,epoch}=await setup();const conflicting={...epoch,name:'different authorized fork'};conflicting.signature=await a.signControl(epochBytes(conflicting));
+ const {a,b,room,epoch}=await setup();const conflicting={...epoch,createdAt:epoch.createdAt+1};conflicting.signature=await a.signControl(epochBytes(conflicting));
  const before=JSON.stringify(await b.state(room));await expect(b.adopt(conflicting)).rejects.toThrow(/Conflicting/);expect(JSON.stringify(await b.state(room))).toBe(before);
 });
 it('signed distribution tampering fails commitment before state commit',async()=>{
@@ -225,4 +225,16 @@ it('active room approval uses expected account/device and epoch membership; publ
 it('owner close rotates epoch and cannot be reopened; explicit device approval is required for new identity',async()=>{
  const {a,b,room,epoch}=await setup();const closed=await a.change(room,{close:true});expect(closed.keyEpoch).toBe(epoch.keyEpoch+1);expect(closed.members).toEqual([]);
  await b.adopt(closed);await expect(b.candidate(room,'closed','Bob')).rejects.toThrow(/revoked/);await expect(a.change(room,{add:b.binding})).rejects.toThrow(/closed/);
+});
+
+it('room name and description stay encrypted in signed public epochs',async()=>{
+ const a=await identity(1),e=await a.create('Private room title','Private description');
+ expect(JSON.stringify(e)).not.toContain('Private room title');expect(JSON.stringify(e)).not.toContain('Private description');
+ expect((await a.state(e.roomId))!.info).toEqual({name:'Private room title',description:'Private description'});
+});
+it('discovery cannot substitute another valid owner-signed room for the requested room',async()=>{
+ const {a,b,room}=await setup(),other=await a.create('Other',''),otherEpoch=await a.change(other.roomId,{add:b.binding});
+ const path:any={get(){return this;}};vi.mocked(GunService.getGun).mockReturnValue(path);vi.mocked(gunOnce).mockResolvedValue({epoch:JSON.stringify(otherEpoch)});
+ const before=JSON.stringify(await b.state(room));await expect(GroupRoomTransport.refresh(b,room)).rejects.toThrow(/identity mismatch/);
+ expect(JSON.stringify(await b.state(room))).toBe(before);expect(await b.state(other.roomId)).toBeUndefined();
 });

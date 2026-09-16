@@ -28,7 +28,7 @@ export type GroupIdentity = Awaited<ReturnType<typeof getOrCreateAuthenticatedId
 export interface Seal { ephemeral: string; iv: string; ciphertext: string }
 export interface Epoch {
   version: 1; roomId: string; owner: DeviceBinding; membershipEpoch: number; keyEpoch: number;
-  previous: string | null; members: DeviceBinding[]; name: string; description: string; createdAt: number;
+  previous: string | null; members: DeviceBinding[]; metadata: {iv:string;ciphertext:string}; createdAt: number;
   keyCommitment: string; distributions: { member: string; seal: Seal }[]; signature: string;
 }
 export interface GroupHeader {
@@ -40,7 +40,7 @@ export interface GroupEnvelope {
   publication: number; receipt: string;
 }
 export interface GroupState {
-  mode: 'EPOCH_GROUP_V1'; epoch: Epoch; keys: { epoch: number; hash: string; key: string }[];
+  mode: 'EPOCH_GROUP_V1'; epoch: Epoch; info:{name:string;description:string}; keys: { epoch: number; hash: string; key: string }[];
   counter: number; publication: number; received: Record<string, string>; highWater: number;
   outbox: GroupEnvelope[];
   senders: Record<string, { high: number; seen: Record<string, string> }>;
@@ -50,9 +50,14 @@ export const headerBytes = (h: GroupHeader) => json(['interpoll/group/message',1
 export const authorshipBytes = (e: GroupEnvelope) => json(['interpoll/group/authorship',1,headerBytes(e.header),e.iv,e.ciphertext]);
 const receiptBytes = (e: GroupEnvelope) => json(['interpoll/group/accepted',1,hash(authorshipBytes(e)),e.signature,e.publication]);
 export const epochBytes = (e: Epoch) => json(['interpoll/group/epoch',1,e.roomId,bindingBytes(e.owner),e.owner.signature,e.membershipEpoch,e.keyEpoch,e.previous,
-  e.members.map(b=>[bindingBytes(b),b.signature]),e.name,e.description,e.createdAt,e.keyCommitment,
+  e.members.map(b=>[bindingBytes(b),b.signature]),e.metadata.iv,e.metadata.ciphertext,e.createdAt,e.keyCommitment,
   e.distributions.map(d=>[d.member,d.seal.ephemeral,d.seal.iv,d.seal.ciphertext])]);
 export const epochHash = (e: Epoch) => hash(epochBytes(e));
+const metadataContext=(e:Epoch)=>json(['interpoll/group/metadata',1,e.roomId,e.membershipEpoch,e.keyEpoch]);
+function roomInfo(value:string){
+  const info=JSON.parse(value);exact(info,['name','description']);
+  if(typeof info.name!=='string' || info.name.length>256 || typeof info.description!=='string' || info.description.length>4096)throw new Error('Invalid group metadata');return info as {name:string;description:string};
+}
 const distributionContext = (e: Epoch, b: DeviceBinding) => json(['interpoll/group/key',1,e.roomId,e.membershipEpoch,e.keyEpoch,memberId(b),hash(bindingBytes(b))]);
 export const proposalContext = (room: string, request: string) => json(['interpoll/group/proposal',1,room,request]);
 
@@ -95,11 +100,12 @@ function ownerFromRoom(room: string) {
 }
 export function isEpochRoom(room: string) { try {ownerFromRoom(room);return true;}catch{return false;} }
 export async function verifyEpoch(e: Epoch, room: string) {
-  bounded(e); exact(e,['version','roomId','owner','membershipEpoch','keyEpoch','previous','members','name','description','createdAt','keyCommitment','distributions','signature']);
+  bounded(e); exact(e,['version','roomId','owner','membershipEpoch','keyEpoch','previous','members','metadata','createdAt','keyCommitment','distributions','signature']);
   const owner=ownerFromRoom(room);
   if(e.version!==1 || e.roomId!==room || !positive(e.membershipEpoch) || e.keyEpoch!==e.membershipEpoch || !Array.isArray(e.members) || e.members.length>GROUP_LIMITS.members ||
-    typeof e.name!=='string' || e.name.length>256 || typeof e.description!=='string' || e.description.length>4096 || !positive(e.createdAt) || !/^[0-9a-f]{64}$/.test(e.keyCommitment) ||
+    !positive(e.createdAt) || !/^[0-9a-f]{64}$/.test(e.keyCommitment) ||
     (e.membershipEpoch===1?e.previous!==null:!(/^[0-9a-f]{64}$/).test(e.previous??''))) throw new Error('Malformed epoch');
+  exact(e.metadata,['iv','ciphertext']);
   await verifyBinding(e.owner,owner.account,owner.device);
   if(!Array.isArray(e.distributions) || e.distributions.length!==e.members.length) throw new Error('Incomplete distribution');
   let previous='';
@@ -144,9 +150,11 @@ export class GroupSecurity {
   }
   private owner(s: GroupState) { if(!sameBinding(s.epoch.owner,this.binding))throw new Error('Owner device required'); }
   private async makeEpoch(room: string, members: DeviceBinding[], name: string, description: string, previous?: Epoch) {
+    const info=roomInfo(json({name,description}));
     const key=b64(crypto.getRandomValues(new Uint8Array(32)));
     const e:Epoch={version:1,roomId:room,owner:this.binding,membershipEpoch:(previous?.membershipEpoch??0)+1,keyEpoch:(previous?.keyEpoch??0)+1,
-      previous:previous?epochHash(previous):null,members:[...members],name,description,createdAt:previous?.createdAt??Date.now(),keyCommitment:hash(key),distributions:[],signature:''};
+      previous:previous?epochHash(previous):null,members:[...members],metadata:{iv:'',ciphertext:''},createdAt:previous?.createdAt??Date.now(),keyCommitment:hash(key),distributions:[],signature:''};
+    e.metadata=await encrypt(await aes(key),json(info),metadataContext(e));
     // ASCII ordering must not depend on locale.
     e.members.sort((a,b)=>memberId(a)<memberId(b)?-1:memberId(a)>memberId(b)?1:0);
     if(e.members.length>GROUP_LIMITS.members)throw new Error('Group member limit');
@@ -156,7 +164,7 @@ export class GroupSecurity {
   async create(name: string, description: string) {
     const room=`g1:${memberId(this.binding)}:${crypto.randomUUID()}`;
     const {epoch,key}=await this.makeEpoch(room,[this.binding],name,description);
-    const state:GroupState={mode:'EPOCH_GROUP_V1',epoch,keys:[{epoch:1,hash:epochHash(epoch),key}],counter:0,publication:0,received:{},highWater:0,outbox:[],senders:{}};
+    const state:GroupState={mode:'EPOCH_GROUP_V1',epoch,info:{name,description},keys:[{epoch:1,hash:epochHash(epoch),key}],counter:0,publication:0,received:{},highWater:0,outbox:[],senders:{}};
     if(!await this.commit(room,undefined,state))throw new Error('Room collision');return epoch;
   }
   async adopt(epoch: Epoch) {
@@ -170,15 +178,16 @@ export class GroupSecurity {
         if(epoch.membershipEpoch===before.epoch.membershipEpoch+1 && epoch.previous!==epochHash(before.epoch))throw new Error('Epoch predecessor mismatch');
       }
       const member=epoch.members.find(b=>memberId(b)===memberId(this.binding));
-      let newKey:GroupState['keys']=[];
+      let newKey:GroupState['keys']=[];let info=before?.info??{name:'Authenticated room',description:''};
       if(member){
         if(!sameBinding(member,this.binding))throw new Error('Member identity changed');
         const d=epoch.distributions.find(d=>d.member===memberId(member))!;
         const key=await openSeal(this.identity,d.seal,distributionContext(epoch,member));await aes(key);
         if(hash(key)!==epoch.keyCommitment)throw new Error('Group key commitment mismatch');
+        info=roomInfo(await decrypt(await aes(key),epoch.metadata,metadataContext(epoch)));
         newKey=[{epoch:epoch.keyEpoch,hash:epochHash(epoch),key}];
       }
-      const after:GroupState={mode:'EPOCH_GROUP_V1',epoch,keys:[...(before?.keys??[]),...newKey].slice(-GROUP_LIMITS.keys),counter:before?.counter??0,publication:before?.publication??0,
+      const after:GroupState={mode:'EPOCH_GROUP_V1',epoch,info,keys:[...(before?.keys??[]),...newKey].slice(-GROUP_LIMITS.keys),counter:before?.counter??0,publication:before?.publication??0,
         received:before?.received??{},highWater:before?.highWater??0,outbox:before?.outbox??[],senders:{}};
       if(await this.commit(epoch.roomId,before,after))return after;
     }throw new Error('Group state busy');
@@ -198,7 +207,7 @@ export class GroupSecurity {
         if(!members.some(b=>memberId(b)===operation.remove))throw new Error('Member absent');
         members=members.filter(b=>memberId(b)!==operation.remove);
       } else members=[];
-      const {epoch,key}=await this.makeEpoch(room,members,before.epoch.name,before.epoch.description,before.epoch);
+      const {epoch,key}=await this.makeEpoch(room,members,before.info.name,before.info.description,before.epoch);
       const after={...before,epoch,senders:{},keys:[...before.keys,{epoch:epoch.keyEpoch,hash:epochHash(epoch),key}].slice(-GROUP_LIMITS.keys)};
       if(await this.commit(room,before,after))return epoch;
     }throw new Error('Group transition busy');

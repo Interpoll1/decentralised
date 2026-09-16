@@ -22,8 +22,8 @@ export interface DisplayMessage {
 function toDisplay(row:StoredChatMessage):DisplayMessage {
   return {id:row.id,roomId:row.roomId,text:row.text,senderId:row.senderId,senderName:row.senderName||'Anonymous',timestamp:row.timestamp,seq:row.seq,status:row.outgoing?row.syncStatus:undefined,error:row.error};
 }
-function roomDisplay(e:Epoch):ChatRoom {
-  return {id:e.roomId,name:e.name,description:e.description,creatorId:e.owner.accountId,isEncrypted:true,
+function roomDisplay(e:Epoch,info:{name:string;description:string}):ChatRoom {
+  return {id:e.roomId,name:info.name,description:info.description,creatorId:e.owner.accountId,isEncrypted:true,
     encryptionHint:'Account/device membership; creator must be online',createdAt:e.createdAt,memberCount:e.members.length,securityMode:'EPOCH_GROUP_V1'};
 }
 let outboxLoopStarted=false;
@@ -31,36 +31,36 @@ let flushInFlight=false;
 
 export class ChatRoomService {
   private static requireEpoch(room:string){if(!isEpochRoom(room))throw new Error('LEGACY_SHARED_KEY: explicit migration to a new authenticated room required');}
-  private static async marker(epoch:Epoch){
+  private static async marker(epoch:Epoch,name:string){
     // Discovery/UI marker only, never an encryption key. No legacy key is reused.
-    await KeyVaultService.storeKey({id:epoch.roomId,type:'chatroom',key:'epoch-v1',method:'invite',label:epoch.name,joinedAt:Date.now()});
+    await KeyVaultService.storeKey({id:epoch.roomId,type:'chatroom',key:'epoch-v1',method:'invite',label:name,joinedAt:Date.now()});
   }
   static async createRoom(name:string,description:string,creatorId:string,password?:string):Promise<{room:ChatRoom;inviteLink:string}>{
     if(password)throw new Error('Epoch rooms require explicit device approval; password membership is legacy');
     const security=await GroupSecurity.local();
     if(creatorId!==security.binding.accountId)throw new Error('Room creator account mismatch');
     const epoch=await security.create(name,description);
-    await this.marker(epoch);
+    await this.marker(epoch,name);
     await GroupRoomTransport.startOwner(security,epoch.roomId);
     await GroupRoomTransport.publishEpoch(epoch);
-    return {room:roomDisplay(epoch),inviteLink:InviteLinkService.generateInviteLink(epoch.roomId,'chatroom','epoch-v1')};
+    return {room:roomDisplay(epoch,{name,description}),inviteLink:InviteLinkService.generateInviteLink(epoch.roomId,'chatroom','epoch-v1')};
   }
   static async joinRoom(roomId:string,keyOrPassword:string,method:'invite'|'password'):Promise<ChatRoom>{
     this.requireEpoch(roomId);
     if(method!=='invite' || keyOrPassword!=='epoch-v1')throw new Error('Authenticated room invite required');
     const security=await GroupSecurity.local(),state=await GroupRoomTransport.refresh(security,roomId);
     if(!state.epoch.members.some(b=>memberId(b)===memberId(security.binding)))throw new Error('Owner must explicitly approve this account/device before joining');
-    await this.marker(state.epoch);await GroupRoomTransport.startOwner(security,roomId);return roomDisplay(state.epoch);
+    await this.marker(state.epoch,state.info.name);await GroupRoomTransport.startOwner(security,roomId);return roomDisplay(state.epoch,state.info);
   }
   /** Explicit owner approval; discovery alone never invokes this method. */
   static async approveMember(roomId:string,expectedAccount:string,expectedDevice:string,binding:DeviceBinding){
     this.requireEpoch(roomId);await verifyBinding(binding,expectedAccount,expectedDevice);
     const security=await GroupSecurity.local(),epoch=await security.change(roomId,{add:binding});
-    await GroupRoomTransport.publishEpoch(epoch);return roomDisplay(epoch);
+    await GroupRoomTransport.publishEpoch(epoch);return roomDisplay(epoch,(await security.state(roomId))!.info);
   }
   static async removeMember(roomId:string,account:string,device:string){
     this.requireEpoch(roomId);const security=await GroupSecurity.local(),epoch=await security.change(roomId,{remove:`${account}:${device}`});
-    await GroupRoomTransport.publishEpoch(epoch);return roomDisplay(epoch);
+    await GroupRoomTransport.publishEpoch(epoch);return roomDisplay(epoch,(await security.state(roomId))!.info);
   }
   static async getMemberCount(roomId:string,_fallback=1){
     this.requireEpoch(roomId);const security=await GroupSecurity.local();return (await GroupRoomTransport.refresh(security,roomId)).epoch.members.length;
@@ -138,7 +138,7 @@ export class ChatRoomService {
       }
       const state=await GroupRoomTransport.refresh(security,key.id).catch(()=>security.state(key.id));
       if(!state || !state.epoch.members.some(b=>memberId(b)===memberId(security.binding)))continue;
-      rooms.push(roomDisplay(state.epoch));await GroupRoomTransport.startOwner(security,key.id);
+      rooms.push(roomDisplay(state.epoch,state.info));await GroupRoomTransport.startOwner(security,key.id);
     }
     return rooms.sort((a,b)=>b.createdAt-a.createdAt);
   }

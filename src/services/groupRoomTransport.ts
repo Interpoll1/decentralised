@@ -24,7 +24,9 @@ export class GroupRoomTransport {
     if(own && memberId(own.epoch.owner)===memberId(security.binding))return own;
     const raw=await gunOnce<any>(this.node(room),6000);
     if(typeof raw?.epoch!=='string' || raw.epoch.length>GROUP_LIMITS.recordBytes)throw new Error('Authenticated group epoch unavailable');
-    return security.adopt(JSON.parse(raw.epoch));
+    const epoch=JSON.parse(raw.epoch) as Epoch;
+    if(epoch.roomId!==room)throw new Error('Requested group identity mismatch');
+    return security.adopt(epoch);
   }
   static async flush(security:GroupSecurity,room:string){
     const state=await security.state(room);if(!state || memberId(state.epoch.owner)!==memberId(security.binding))return;
