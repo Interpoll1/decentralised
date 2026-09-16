@@ -238,3 +238,10 @@ it('discovery cannot substitute another valid owner-signed room for the requeste
  const before=JSON.stringify(await b.state(room));await expect(GroupRoomTransport.refresh(b,room)).rejects.toThrow(/identity mismatch/);
  expect(JSON.stringify(await b.state(room))).toBe(before);expect(await b.state(other.roomId)).toBeUndefined();
 });
+it('missing owner authority state cannot be reconstructed from a stale signed relay epoch',async()=>{
+ const {a,c,room,epoch}=await setup();await a.change(room,{remove:memberId(c.binding)});
+ const db=await StorageService.getDB();await db.delete('metadata',stateKey(a.binding.accountId,room));await reopen();
+ const path:any={get(){return this;}};vi.mocked(GunService.getGun).mockReturnValue(path);vi.mocked(gunOnce).mockResolvedValue({epoch:JSON.stringify(epoch)});
+ await expect(GroupRoomTransport.refresh(new GroupSecurity(a.identity),room)).rejects.toThrow(/authority state missing/);
+ expect(await a.state(room)).toBeUndefined();
+});

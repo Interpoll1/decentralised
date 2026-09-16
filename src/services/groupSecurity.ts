@@ -171,6 +171,7 @@ export class GroupSecurity {
     await verifyEpoch(epoch,epoch.roomId);
     for(let attempt=0;attempt<16;attempt++){
       const before=await this.state(epoch.roomId);
+      if(!before && sameBinding(epoch.owner,this.binding))throw new Error('Owner authority state missing; restore trusted state or create a new room');
       if(before){
         if(!sameBinding(before.epoch.owner,epoch.owner))throw new Error('Owner identity changed');
         if(epoch.membershipEpoch<before.epoch.membershipEpoch)throw new Error('Stale group epoch');
