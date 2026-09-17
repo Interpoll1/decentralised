@@ -41,13 +41,20 @@
  */
 
 import { StorageService } from './storageService';
+import type { StoredChatMessage } from '../types/social';
+import { authorizeLocalBundle, verifyAuthenticatedBundle, continuityChange, bootstrapContext,
+  verifyContext, DMIdentityError, type AuthenticatedBundle, type MetadataChange } from './dmIdentity';
 
-export const SIGNAL_WIRE_VERSION = 3;
+import {readEpoch, createEpoch, verifyEpoch, admitEpoch, epochChange, DMEpochError, type EpochRecord} from './dmSessionEpoch';
+import {ReceiveFailure,receiveCommitChanges,type ReceiveCommit} from './dmReceiveState';
+export const SIGNAL_WIRE_VERSION = 5;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface SignalEnvelope {
-  v:     3;
+  v:     3 | 4 | 5;
+  epoch?: string;
+  auth?: string;
   eph?:  string;   // X3DH ephemeral pub (first message only)
   opkId?: string;  // id of the OPK from the pool the sender used (first message only)
   dh:    string;   // sender's current ratchet pub
@@ -72,6 +79,11 @@ interface DHKeyPair {
 }
 
 interface RatchetState {
+  receiveGeneration?: number;
+  skippedAt?: Record<string,number>;
+  closedChains?: string[];
+  epoch?: string;
+  auth?: string;
   dhSend:  { pub: string; priv: JsonWebKey };
   dhRecv:  string;   // their current ratchet pub — '' until first recv
   rootKey: string;   // hex
@@ -179,28 +191,14 @@ async function signSpk(ikSignPriv: CryptoKey, spkPubB64: string): Promise<string
  * - Present but invalid spkSig: throws (active tamper attempt; refuse session).
  */
 export async function verifySpkSignature(bundle: SignalPublicBundle): Promise<void> {
-  if (!bundle.spkSig) {
-    // Old bundle — peer hasn't updated yet. Warn once; don't block.
-    console.warn('[Signal] Bundle missing SPK signature — peer may be on an old version');
+  if ((bundle as AuthenticatedBundle).version === 1) {
+    await verifyAuthenticatedBundle(bundle,(bundle as AuthenticatedBundle).binding.accountId);
     return;
   }
-  // Use ikSignPub (the ECDSA signing key) not ik (the ECDH key) — they are
-  // different keypairs. Mixing them up means verify always fails with a
-  // DOMException because the key usage flags don't match.
-  const signingPub = bundle.ikSignPub || bundle.ik; // fallback to ik for old bundles without ikSignPub
-  try {
-    const ikSignPub = await importEcdsaPub(signingPub);
-    const valid = await crypto.subtle.verify(
-      ECDSA_SIGN_PARAMS, ikSignPub, fromB64(bundle.spkSig), fromB64(bundle.spk),
-    );
-    if (!valid) throw new Error('SPK signature verification failed — bundle may have been tampered with');
-  } catch (e) {
-    if (e instanceof Error && e.message.includes('tampered')) throw e;
-    // importEcdsaPub throws if the key bytes aren't a valid ECDSA P-256 key
-    // (e.g. old peer whose ik is ECDH-only and ikSignPub isn't in the bundle yet).
-    // Treat the same as a missing signature — warn, allow, don't block.
-    console.warn('[Signal] Could not verify SPK signature (key format mismatch — old peer?):', (e as Error).message);
-  }
+  if (!bundle.spkSig || !bundle.ikSignPub) throw new Error('Signed prekey required');
+  const pub = await importEcdsaPub(bundle.ikSignPub);
+  if (!await crypto.subtle.verify(ECDSA_SIGN_PARAMS,pub,fromB64(bundle.spkSig),fromB64(bundle.spk)))
+    throw new Error('SPK signature verification failed');
 }
 
 // ── HKDF-SHA256 ───────────────────────────────────────────────────────────────
@@ -257,10 +255,10 @@ async function aeadEncrypt(mk: string, plaintext: string, aad: string): Promise<
 async function aeadDecrypt(mk: string, ctB64: string, aad: string): Promise<string> {
   const blob = new Uint8Array(fromB64(ctB64));
   const { aesKey, iv } = await deriveAEAD(mk);
-  const plain = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv, additionalData: enc.encode(aad) },
-    aesKey, blob.slice(12),
-  );
+  let plain:ArrayBuffer;
+  try {plain = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv, additionalData: enc.encode(aad) }, aesKey, blob.slice(12));}
+  catch {throw new ReceiveFailure('rejected-auth','Ciphertext authentication failed');}
   return dec.decode(plain);
 }
 
@@ -282,7 +280,10 @@ async function loadOrCreateDHKey(storageKey: string): Promise<DHKeyPair> {
   } catch { }
   const kp      = await generateDH();
   const privJwk = await crypto.subtle.exportKey('jwk', kp.priv);
-  await StorageService.setMetadata(storageKey, { pub: kp.pubB64, priv: privJwk });
+  if (!await StorageService.compareAndSwapMetadata([{key:storageKey,before:null,after:{pub:kp.pubB64,priv:privJwk}}])) {
+    const stored = await StorageService.getMetadata(storageKey);
+    return {pub:await importDHPub(stored.pub),priv:await importDHPriv(stored.priv),pubB64:stored.pub};
+  }
   return kp;
 }
 
@@ -297,7 +298,10 @@ async function loadOrCreateSigningKey(storageKey: string): Promise<{ pub: Crypto
   } catch { }
   const kp      = await generateSigningKey();
   const privJwk = await crypto.subtle.exportKey('jwk', kp.priv);
-  await StorageService.setMetadata(storageKey, { pub: kp.pubB64, priv: privJwk });
+  if (!await StorageService.compareAndSwapMetadata([{key:storageKey,before:null,after:{pub:kp.pubB64,priv:privJwk}}])) {
+    const stored = await StorageService.getMetadata(storageKey);
+    return {pub:await importEcdsaPub(stored.pub),priv:await importEcdsaPriv(stored.priv),pubB64:stored.pub};
+  }
   return kp;
 }
 
@@ -328,6 +332,14 @@ export async function getOrCreateIdentityBundle(userId: string): Promise<{
   return { ik, spk, opk, ikSign, bundle };
 }
 
+/** Active DM publication: authorize existing messaging keys with the account root. */
+export async function getOrCreateAuthenticatedIdentityBundle(userId: string, accountPrivateKey?: string) {
+  const local = await getOrCreateIdentityBundle(userId);
+  const pool = await loadOrCreateOPKPool(userId);
+  const bundle = await authorizeLocalBundle(userId,local.bundle,local.ikSign.priv,pool,accountPrivateKey);
+  return {...local,bundle};
+}
+
 // ── Session storage ───────────────────────────────────────────────────────────
 
 // SESSION_KEY must be directional (myId:theirId), NOT sorted.
@@ -339,14 +351,9 @@ const SESSION_KEY = (myId: string, theirId: string) =>
   `signal-session:${myId}:${theirId}`;
 
 async function loadSession(myId: string, theirId: string): Promise<RatchetState | null> {
-  try {
-    return (await StorageService.getMetadata(SESSION_KEY(myId, theirId))) ?? null;
-  } catch { return null; }
+  return (await StorageService.getMetadata(SESSION_KEY(myId, theirId))) ?? null;
 }
 
-async function saveSession(myId: string, theirId: string, s: RatchetState): Promise<void> {
-  await StorageService.setMetadata(SESSION_KEY(myId, theirId), s);
-}
 
 // ── X3DH ─────────────────────────────────────────────────────────────────────
 
@@ -429,7 +436,6 @@ async function x3dhReceive(
  *   rootKey, ckS = KDF_RK(masterKey, dhOut)
  */
 async function initSessionAsSender(
-  myId: string, theirId: string,
   masterKey: string,
   recipientSPKPub: string,
 ): Promise<{ state: RatchetState; ratchetPub: string }> {
@@ -447,7 +453,6 @@ async function initSessionAsSender(
     ns: 0, nr: 0, pn: 0,
     skipped: {},
   };
-  await saveSession(myId, theirId, state);
   return { state, ratchetPub: ephRatchet.pubB64 };
 }
 
@@ -462,7 +467,6 @@ async function initSessionAsSender(
  * The receiver then generates a fresh ratchet keypair for future sends.
  */
 async function initSessionAsReceiver(
-  myId: string, theirId: string,
   masterKey: string,
   mySPK: DHKeyPair,
   senderRatchetPub: string,  // envelope.dh
@@ -484,41 +488,55 @@ async function initSessionAsReceiver(
     ns: 0, nr: 0, pn: 0,
     skipped: {},
   };
-  // Also save under the REVERSE key (myId:theirId as sender) so that
-  // when we later send, encrypt() loads this same rootKey and derives
-  // a ckS that Tab A can match. Without this, a stale session from a
-  // previous X3DH exchange pollutes the sending path with a wrong rootKey.
-  await saveSession(myId, theirId, state);
   return state;
 }
 
 // ── Double Ratchet encrypt / decrypt ─────────────────────────────────────────
 
-const MAX_SKIP = 1000;
+export const MAX_SKIP = 1000;
+export const MAX_TOTAL_SKIPPED = 1000;
+export const MAX_SKIPPED_GENERATIONS = 4;
+const MAX_CLOSED_CHAINS = 64;
+function retainSkipped(state:RatchetState):RatchetState {
+  const skipped={...state.skipped},skippedAt={...state.skippedAt},generation=state.receiveGeneration??0;
+  for(const key of Object.keys(skipped)){
+    skippedAt[key]??=generation;
+    if(generation-skippedAt[key]>MAX_SKIPPED_GENERATIONS){delete skipped[key];delete skippedAt[key];}
+  }
+  for(const key of Object.keys(skipped).slice(0,Math.max(0,Object.keys(skipped).length-MAX_TOTAL_SKIPPED))){delete skipped[key];delete skippedAt[key];}
+  return {...state,skipped,skippedAt,receiveGeneration:generation};
+}
+
+function messageAAD(senderIK: string, envelope: Omit<SignalEnvelope,'v'>): string {
+  return envelope.auth ? JSON.stringify(['interpoll/dm/message',envelope.epoch?5:4,senderIK,envelope.dh,envelope.n,
+    envelope.pn,envelope.eph??null,envelope.opkId??null,envelope.auth,...(envelope.epoch?[envelope.epoch]:[])]) : `${senderIK}:${envelope.dh}:${envelope.n}`;
+}
 
 async function ratchetEncrypt(
   state: RatchetState, plaintext: string, senderIKPub: string,
+  header: {auth?:string;epoch?:string;eph?:string;opkId?:string} = {},
 ): Promise<{ envelope: Omit<SignalEnvelope, 'v'>; state: RatchetState }> {
   if (!state.ckS) throw new Error('No sending chain key — session not initialised for sending');
   const { mk, ck } = await kdfCK(state.ckS);
   // AAD: senderIK:ratchetPub:messageNumber (all stable identifiers)
-  const aad = `${senderIKPub}:${state.dhSend.pub}:${state.ns}`;
+  const aad = messageAAD(senderIKPub,{dh:state.dhSend.pub,n:state.ns,pn:state.pn,ct:'',...header});
   const ct  = await aeadEncrypt(mk, plaintext, aad);
   return {
-    envelope: { dh: state.dhSend.pub, n: state.ns, pn: state.pn, ct },
+    envelope: { dh: state.dhSend.pub, n: state.ns, pn: state.pn, ct, ...header },
     state: { ...state, ckS: ck, ns: state.ns + 1, skipped: { ...state.skipped } },
   };
 }
 
 async function skipMessageKeys(state: RatchetState, until: number): Promise<RatchetState> {
-  if (state.nr + MAX_SKIP < until) throw new Error('Too many skipped messages');
-  let s = { ...state, skipped: { ...state.skipped } };
+  if (!Number.isSafeInteger(until)||until<0||state.nr+MAX_SKIP<until) throw new ReceiveFailure('rejected-stale','Receive gap exceeds MAX_SKIP');
+  let s = { ...state, skipped: { ...state.skipped },skippedAt:{...state.skippedAt} };
   while (s.nr < until) {
     const { mk, ck } = await kdfCK(s.ckR);
     s.skipped[`${s.dhRecv}:${s.nr}`] = mk;
+    s.skippedAt[`${s.dhRecv}:${s.nr}`]=s.receiveGeneration??0;
     s = { ...s, ckR: ck, nr: s.nr + 1 };
   }
-  return s;
+  return retainSkipped(s);
 }
 
 /**
@@ -539,18 +557,18 @@ async function ratchetStep(state: RatchetState, theirDHPub: string): Promise<Rat
   const { rk: rk2, ck: ckS } = await kdfRK(rk1, dhOut2);
 
   const privJwk = await crypto.subtle.exportKey('jwk', newDH.priv);
-  // Clear ALL skipped message keys on ratchet step: any keys stored for
-  // previous ratchet positions are now permanently stale. Keeping them
-  // causes ratchetDecrypt to use a wrong cached mk instead of deriving
-  // the correct one from the new ckR, silently failing aeadDecrypt.
-  return {
+  return retainSkipped({
+    ...state,
+    receiveGeneration:(state.receiveGeneration??0)+1,
+    closedChains:[...(state.closedChains??[]),state.dhRecv].filter(Boolean).slice(-MAX_CLOSED_CHAINS),
+    auth: state.auth, epoch: state.epoch,
     dhSend:  { pub: newDH.pubB64, priv: privJwk },
     dhRecv:  theirDHPub,
     rootKey: rk2,
     ckS, ckR,
     ns: 0, nr: 0, pn: state.ns,
-    skipped: {},
-  };
+    skipped: {...state.skipped},
+  });
 }
 
 async function ratchetDecrypt(
@@ -563,12 +581,15 @@ async function ratchetDecrypt(
     const mk         = state.skipped[skipKey];
     const newSkipped = { ...state.skipped };
     delete newSkipped[skipKey];
-    const aad       = `${senderIKPub}:${envelope.dh}:${envelope.n}`;
+    const aad       = messageAAD(senderIKPub,envelope);
     const plaintext = await aeadDecrypt(mk, envelope.ct, aad);
-    return { plaintext, state: { ...state, skipped: newSkipped } };
+    const skippedAt={...state.skippedAt};delete skippedAt[skipKey];
+    return { plaintext, state: { ...state, skipped: newSkipped,skippedAt } };
   }
 
-  let s = state;
+  if((envelope.dh===state.dhRecv&&envelope.n<state.nr)||(state.closedChains??[]).includes(envelope.dh))
+    throw new ReceiveFailure('rejected-stale','Consumed or evicted receive position');
+  let s = retainSkipped(state);
 
   // 2. Ratchet step if sender's DH key has changed
   if (envelope.dh !== state.dhRecv) {
@@ -581,7 +602,7 @@ async function ratchetDecrypt(
   const { mk, ck } = await kdfCK(s.ckR);
   s = { ...s, ckR: ck, nr: s.nr + 1, skipped: { ...s.skipped } };
 
-  const aad       = `${senderIKPub}:${envelope.dh}:${envelope.n}`;
+  const aad       = messageAAD(senderIKPub,envelope);
   const plaintext = await aeadDecrypt(mk, envelope.ct, aad);
   return { plaintext, state: s };
 }
@@ -597,17 +618,47 @@ export class SignalSession {
    */
   async encrypt(
     plaintext: string,
-    myBundle:    { ik: DHKeyPair; spk: DHKeyPair; opk: DHKeyPair },
+    myBundle:    { ik: DHKeyPair; spk: DHKeyPair; opk: DHKeyPair; bundle?: SignalPublicBundle },
     theirBundle: SignalPublicBundle,
+    messageId?: string,
+    resetParent?: string,
   ): Promise<SignalEnvelope> {
-    let state = await loadSession(this.myId, this.theirId);
+    for (let attempt = 0; attempt < 256; attempt++) {
+    const journalKey = messageId ? `signal-envelope:${this.myId}:${this.theirId}:${messageId}` : undefined;
+    const journal = journalKey ? await StorageService.getMetadata(journalKey) : null;
+    if (journal) {
+      if (journal.plaintext !== plaintext) throw new Error('Logical message content changed');
+      return journal.envelope as SignalEnvelope;
+    }
+    const before = await loadSession(this.myId, this.theirId);
+    let state = before;
+    const epochBefore = await readEpoch(this.myId,this.theirId);
+    let epochAfter: EpochRecord | null = epochBefore;
+    const authenticated = (theirBundle as AuthenticatedBundle).version === 1;
+    const identityChanges: MetadataChange[] = [];
+    let context = state?.auth;
+    if (authenticated) {
+      const own = await verifyAuthenticatedBundle(myBundle.bundle!,this.myId);
+      const peer = await verifyAuthenticatedBundle(theirBundle,this.theirId);
+      identityChanges.push(await continuityChange(this.myId,peer));
+      if (state && (!state.auth || !state.epoch)) throw new DMIdentityError('LEGACY_UNAUTHENTICATED','Existing session is not identity-bound');
+      if (resetParent) {
+        if (!epochBefore || epochBefore.current!==resetParent) throw new DMEpochError('STALE','Reset parent is not current');
+        if(!epochBefore.settled) throw new DMEpochError('RESET_PENDING','Peer must confirm selected session before local reset');
+        state=null;context=undefined;
+      }
+      if (context) await verifyContext(context,this.myId,this.theirId,own);
+      else context = bootstrapContext(own,peer);
+      if (!state && epochBefore && !resetParent) throw new DMEpochError('RESET_PENDING','Missing ratchet does not authorize reset');
+      if (state && (!epochBefore || epochBefore.candidates[epochBefore.current]?.certificate!==state.epoch)) throw new DMEpochError('STALE','Ratchet authority mismatch');
+    } else if (state?.auth || epochBefore) throw new DMIdentityError('LEGACY_UNAUTHENTICATED','Cannot downgrade authenticated session');
     let x3dhEphPub: string | undefined;
     let x3dhOpkId:  string | undefined;
 
     // Session is stale if it exists but has no receiving chain (ckR) after
     // having already sent messages (ns > 0). This happens when the other side
     // cleared their session (e.g. after key rotation). Force a fresh X3DH.
-    const isStale = state && !state.ckR && (state.ns ?? 0) >= 50; // threshold: only stale after 50 unacknowledged sends
+    const isStale = !authenticated && state && !state.ckR && (state.ns ?? 0) >= 50; // threshold: only stale after 50 unacknowledged sends
 
     if (!state || isStale) {
       // First message or stale session: X3DH → bootstrap session
@@ -615,9 +666,25 @@ export class SignalSession {
       x3dhEphPub = ep;
       if (opkId) x3dhOpkId = opkId;
       const { state: s } = await initSessionAsSender(
-        this.myId, this.theirId, masterKey, theirBundle.spk,
+        masterKey, theirBundle.spk,
       );
-      state = s;
+      state = {...s,auth:context};
+      if(authenticated){
+        state.epoch=await createEpoch(this.myId,context!,ep,s.dhSend.pub,resetParent?epochBefore!.generation+1:1,resetParent??null);
+        const info=await verifyEpoch(state.epoch,context!);
+        epochAfter=admitEpoch(epochBefore,info,before,false);
+      }
+      if (authenticated && opkId) {
+        const key = `dm-sent-opk-v1:${this.myId}:${this.theirId}:${opkId}`;
+        const used = await StorageService.getMetadata(key);
+        if (used) {
+          // Another send may have atomically established this session while
+          // our speculative X3DH ran. Retry its state, never reissue the OPK.
+          if (JSON.stringify(await loadSession(this.myId,this.theirId)) !== JSON.stringify(before)) continue;
+          throw new DMIdentityError('STALE_PREKEY','Cached OPK already selected');
+        }
+        identityChanges.push({key,before:used,after:true});
+      }
     }
 
     // If ckS is empty the session was receiver-bootstrapped — do a ratchet step
@@ -645,18 +712,22 @@ export class SignalSession {
         pn:  state.ns,
         // ckR/nr/dhRecv unchanged: still on the X3DH receive chain
       };
-      await saveSession(this.myId, this.theirId, state);
     }
 
     const { envelope, state: newState } = await ratchetEncrypt(
       state, plaintext, myBundle.ik.pubB64,
+      authenticated ? {auth:context,epoch:state.epoch,eph:x3dhEphPub,opkId:x3dhOpkId} : {},
     );
-    await saveSession(this.myId, this.theirId, newState);
-
-    return { v: SIGNAL_WIRE_VERSION, ...envelope,
+    const result: SignalEnvelope = { v: authenticated ? 5 : 3, ...envelope,
       ...(x3dhEphPub ? { eph: x3dhEphPub } : {}),
       ...(x3dhOpkId  ? { opkId: x3dhOpkId } : {}),
     };
+    const changes: MetadataChange[] = [...identityChanges,{ key: SESSION_KEY(this.myId, this.theirId), before, after: newState }];
+    if(authenticated && epochAfter) changes.push(epochChange(this.myId,this.theirId,epochBefore,epochAfter));
+    if (journalKey) changes.push({ key: journalKey, before: journal, after: { plaintext, envelope: result } } as any);
+    if (await StorageService.compareAndSwapMetadata(changes)) return result;
+    }
+    throw new Error('Session contention; no envelope published');
   }
 
   /**
@@ -665,57 +736,102 @@ export class SignalSession {
    * myUserId is needed to look up the OPK pool in IDB and consume the right entry.
    */
   async decrypt(
-    envelope:     SignalEnvelope,
-    myBundle:     { ik: DHKeyPair; spk: DHKeyPair },
-    senderIKPub:  string,
-    myUserId:     string,
+    envelope: SignalEnvelope,
+    myBundle: { ik: DHKeyPair; spk: DHKeyPair; bundle?: SignalPublicBundle },
+    senderIKPub: string,
+    myUserId: string,
+    acceptedRow?: (plaintext: string) => StoredChatMessage,
+    receiveCommit?: ReceiveCommit,
   ): Promise<string> {
-    let state = await loadSession(this.myId, this.theirId);
-
-    // If eph is present this is a new X3DH initiation — always reset session.
-    if (envelope.eph) {
-      // Always reset when eph is present UNLESS the session is already live with messages
-      // having been successfully received (nr > 0). The only safe "don't reset" case is
-      // a stale Gun re-delivery of the original X3DH message after a session is established.
-      // Any other case — including a failed prior X3DH that saved bad state — must reset.
-      // Previously, sameDH + ckR-set was treated as "sessionLive" and skipped the reset,
-      // but ckR gets set by initSessionAsReceiver BEFORE aeadDecrypt runs, so a failed
-      // decrypt leaves a corrupted session that blocks all future messages from that peer.
-      const sessionHasSuccessfullyDecrypted = state && state.nr > 0;
-      const shouldReset = !sessionHasSuccessfullyDecrypted;
-      if (shouldReset) {
-        // Look up the OPK the sender used. consumeOPK removes it from the local
-        // pool so it can never be reused, giving per-session forward secrecy.
-        // If the id is absent or already consumed, X3DH still works without OPK.
-        let myOPK: { priv: JsonWebKey } | null = null;
-        if (envelope.opkId) {
-          myOPK = await consumeOPK(myUserId, envelope.opkId);
+    if (myUserId !== this.myId) throw new Error('Receiver identity mismatch');
+    for (let attempt = 0; attempt < 256; attempt++) {
+      const before = await loadSession(this.myId, this.theirId);
+      let state = before;
+      const changes: MetadataChange[] = [];
+      const epochBefore=await readEpoch(this.myId,this.theirId);
+      let epochAfter=epochBefore;
+      let incomingId:string|undefined;
+      let bootstrap=false;
+      let branch=false;
+      if (envelope.v === 5) {
+        if (!envelope.auth) throw new DMIdentityError('UNKNOWN','Authenticated transcript missing');
+        const own = await verifyAuthenticatedBundle(myBundle.bundle!,this.myId);
+        const {peer,receiver} = await verifyContext(envelope.auth,this.myId,this.theirId,own);
+        if (peer.ik !== senderIKPub) throw new DMIdentityError('IDENTITY_CHANGED','Sender IK mismatch');
+        changes.push(await continuityChange(this.myId,peer));
+        if (!envelope.epoch) throw new DMEpochError('LEGACY_UNAUTHENTICATED','Epoch certificate required');
+        const info=await verifyEpoch(envelope.epoch,envelope.auth);incomingId=info.id;
+        if(epochBefore&&info.generation<epochBefore.generation)throw new DMEpochError('STALE','Retired epoch');
+        if(receiveCommit)changes.push(...await receiveCommitChanges(receiveCommit));
+        if(envelope.eph){
+          const certificate=JSON.parse(envelope.epoch);
+          if(info.initiator!==this.theirId||certificate[5]!==envelope.eph||certificate[6]!==envelope.dh||envelope.n!==0||envelope.pn!==0) throw new DMEpochError('STALE','Bootstrap header mismatch');
+          epochAfter=admitEpoch(epochBefore,info,before,true);bootstrap=true;
+          branch=epochAfter.current!==info.id;
+        }else{
+          if(!epochBefore||epochBefore.candidates[info.id]?.certificate!==envelope.epoch){
+            const current=epochBefore?.candidates[epochBefore.current];
+            if((!epochBefore&&info.generation===1)||(current&&((info.generation===epochBefore!.generation&&info.parent===current.parent)||(info.generation===epochBefore!.generation+1&&info.parent===current.id))))
+              throw new ReceiveFailure('retryable','Prerequisite bootstrap unavailable');
+            throw new DMEpochError('STALE','Unknown or retired epoch');
+          }
+          if(info.generation!==epochBefore.generation)throw new DMEpochError('STALE','Retired epoch');
+          branch=epochBefore.current!==info.id;
+          state=branch?epochBefore.branches[info.id]:before;
+          if(!state||state.epoch!==envelope.epoch) throw new DMEpochError('RESET_PENDING','Missing epoch ratchet');
         }
-        const masterKey = await x3dhReceive(
-          myBundle.ik, myBundle.spk, myOPK,
-          senderIKPub, envelope.eph,
-        );
-        state = await initSessionAsReceiver(
-          this.myId, this.theirId, masterKey, myBundle.spk, envelope.dh,
-        );
+        if (envelope.eph && (receiver.binding.accountId !== this.myId || (receiver.selectedOPK?.id ?? undefined) !== envelope.opkId))
+          throw new DMIdentityError('UNKNOWN','OPK transcript mismatch');
+        if (!envelope.eph && envelope.opkId) throw new DMIdentityError('UNKNOWN','Unexpected OPK header');
+      } else if (state?.auth || envelope.auth || epochBefore || envelope.v !== 3) throw new DMIdentityError('LEGACY_UNAUTHENTICATED','Cannot downgrade authenticated session');
+      if (bootstrap || (envelope.v===3 && envelope.eph && !(state && state.nr > 0))) {
+        let opk: OPKEntry | null = null;
+        if (envelope.opkId) {
+          const key = OPK_POOL_KEY(myUserId);
+          const pool = await StorageService.getMetadata(key) as OPKEntry[] | undefined;
+          const consumedKey = `dm-consumed-opks-v1:${myUserId}`;
+          const consumed = await StorageService.getMetadata(consumedKey);
+          if (consumed?.[envelope.opkId]) throw new DMIdentityError('STALE_PREKEY','OPK already consumed');
+          opk = pool?.find(entry => entry.id === envelope.opkId) ?? null;
+          changes.push({key:consumedKey,before:consumed,after:{...consumed,[envelope.opkId]:true}});
+          if (!opk) throw new Error('Requested one-time prekey unavailable');
+          changes.push({ key, before: pool, after: pool!.filter(entry => entry.id !== envelope.opkId) });
+        }
+        const master = await x3dhReceive(myBundle.ik, myBundle.spk, opk, senderIKPub, envelope.eph!);
+        state = {...await initSessionAsReceiver(master, myBundle.spk, envelope.dh),auth:envelope.auth,epoch:envelope.epoch};
       }
-      // else: active session, stale Gun re-delivery — skip reset
-    } else if (!state) {
-      throw new Error('No session and no X3DH ephemeral key — cannot establish session');
+      if (!state) throw new Error('No session and no X3DH ephemeral key');
+      const result = await ratchetDecrypt(state, envelope, senderIKPub);
+      if(epochAfter && incomingId){
+        epochAfter=structuredClone(epochAfter);
+        if(branch) epochAfter.branches[incomingId]=result.state;
+        else if(!bootstrap) epochAfter.settled=true;
+        changes.push(epochChange(this.myId,this.theirId,epochBefore,epochAfter));
+      }
+      changes.push({ key: SESSION_KEY(this.myId, this.theirId), before, after: branch?before:result.state });
+      // Callback is pure construction; all acceptance writes share this transaction.
+      if (await StorageService.compareAndSwapMetadata(changes, acceptedRow?.(result.plaintext))) return result.plaintext;
     }
-
-    const { plaintext, state: newState } = await ratchetDecrypt(state!, envelope, senderIKPub);
-    await saveSession(this.myId, this.theirId, newState);
-    return plaintext;
+    throw new ReceiveFailure('retryable','Session contention; retry decryption');
+  }
+  /** Explicit local replacement; retries must retain messageId and plaintext. */
+  async resetSession(plaintext:string,myBundle:Parameters<SignalSession['encrypt']>[1],theirBundle:SignalPublicBundle,parentSessionId:string,messageId:string):Promise<SignalEnvelope>{
+    if((theirBundle as AuthenticatedBundle).version!==1) throw new DMEpochError('LEGACY_UNAUTHENTICATED','Authenticated reset required');
+    return this.encrypt(plaintext,myBundle,theirBundle,messageId,parentSessionId);
   }
   async hasSession(): Promise<boolean> {
     return !!(await loadSession(this.myId, this.theirId));
   }
 
-  /** Wipe the local session state for this pair. Called when decrypt fails so
-   *  the next message triggers a clean X3DH instead of retrying with bad state. */
+  /** Legacy-only deletion. Epoch authority must use resetSession instead. */
   async clearSession(): Promise<void> {
-    await StorageService.setMetadata(SESSION_KEY(this.myId, this.theirId), null);
+    for (;;) {
+      const before=await loadSession(this.myId,this.theirId);
+      const authority=await readEpoch(this.myId,this.theirId);
+      if(authority) throw new DMEpochError('RESET_PENDING','Use an explicit authenticated reset');
+      if(await StorageService.compareAndSwapMetadata([{key:SESSION_KEY(this.myId,this.theirId),before,after:null},
+        {key:`dm-session-epoch-v1:${this.myId}:${this.theirId}`,before:authority,after:authority}])) return;
+    }
   }
 }
 
@@ -767,7 +883,11 @@ export interface OPKEntry {
 export async function loadOrCreateOPKPool(userId: string): Promise<OPKEntry[]> {
   try {
     const stored = await StorageService.getMetadata(OPK_POOL_KEY(userId));
-    if (Array.isArray(stored) && stored.length > 0) return stored as OPKEntry[];
+    const consumed = await StorageService.getMetadata(`dm-consumed-opks-v1:${userId}`);
+    if (Array.isArray(stored) && stored.length > 0) {
+      const available = stored.filter(entry => !consumed?.[entry.id]);
+      if (available.length) return available as OPKEntry[];
+    }
   } catch { }
   return generateOPKBatch(OPK_POOL_SIZE, userId);
 }
@@ -787,31 +907,29 @@ export async function generateOPKBatch(count: number, userId: string): Promise<O
       priv:   privJwk,
     });
   }
-  // Merge with any existing pool (prepend new ones, keep old ones that haven't been consumed)
-  let existing: OPKEntry[] = [];
-  try {
-    const stored = await StorageService.getMetadata(OPK_POOL_KEY(userId));
-    if (Array.isArray(stored)) existing = stored as OPKEntry[];
-  } catch { }
-  const merged = [...batch, ...existing];
-  await StorageService.setMetadata(OPK_POOL_KEY(userId), merged);
-  return merged;
+  for (;;) {
+    const key = OPK_POOL_KEY(userId);
+    const before = await StorageService.getMetadata(key);
+    const consumedKey = `dm-consumed-opks-v1:${userId}`;
+    const consumed = await StorageService.getMetadata(consumedKey);
+    const merged = [...batch, ...(Array.isArray(before) ? before : [])].filter(entry => !consumed?.[entry.id]);
+    if (new Set(merged.map(entry=>entry.id)).size !== merged.length || batch.some(entry=>consumed?.[entry.id])) throw new Error('OPK identifier collision');
+    if (await StorageService.compareAndSwapMetadata([{key, before, after: merged},{key:consumedKey,before:consumed,after:consumed??{}}])) return merged;
+  }
 }
 
-/**
- * Find and remove an OPK from the local pool by id. Returns the entry so the
- * caller can use the private key for X3DH. Returns null if the id isn't found
- * (already consumed or from a previous install — session still works without OPK).
- */
+/** Local explicit consumption; receiver bootstrap uses the joint transaction above. */
 export async function consumeOPK(userId: string, opkId: string): Promise<OPKEntry | null> {
-  try {
-    const pool = await loadOrCreateOPKPool(userId);
-    const idx  = pool.findIndex(e => e.id === opkId);
-    if (idx === -1) return null;
-    const [entry] = pool.splice(idx, 1);
-    await StorageService.setMetadata(OPK_POOL_KEY(userId), pool);
-    return entry;
-  } catch { return null; }
+  for (;;) {
+    const key = OPK_POOL_KEY(userId);
+    const before = await StorageService.getMetadata(key) as OPKEntry[] | undefined;
+    const consumedKey = `dm-consumed-opks-v1:${userId}`;
+    const consumed = await StorageService.getMetadata(consumedKey);
+    const entry = before?.find(e => e.id === opkId);
+    if (!entry || consumed?.[opkId]) return null;
+    if (await StorageService.compareAndSwapMetadata([{key, before, after: before!.filter(e => e.id !== opkId)},
+      {key:consumedKey,before:consumed,after:{...consumed,[opkId]:true}}])) return entry;
+  }
 }
 
 /**

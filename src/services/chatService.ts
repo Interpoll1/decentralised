@@ -26,6 +26,11 @@ import { StorageService } from './storageService';
 import { BoundedMap, BoundedSet } from '../utils/boundedMap';
 import { gunPut, gunOnce, gunReadChildren, toGunRecord } from '../utils/gunAsync';
 import config from '../config';
+import { encryptAndUpload, fetchAndDecrypt } from './chatMediaService';
+import { RECEIPT_PREFIX, envelopeDigest } from './dmDelivery';
+import {DMEpochError,readEpoch,verifyEpoch} from './dmSessionEpoch';
+import {ReceiveFailure,protocolEnvelope,receiveFingerprint,acceptanceKey,enqueuePending,removePending,pendingEntries,MAX_PENDING,MAX_ENVELOPE_BYTES,type ReceiveResult,type ReceiveCommit} from './dmReceiveState';
+import { verifyAuthenticatedBundle, verifyContext, continuityChange, DMIdentityError, type IdentityState } from './dmIdentity';
 
 /** HTTP base URL of the relay-server (port 3001) — where signal bundles and chat APIs live. */
 function chatRelayBase(): string {
@@ -34,11 +39,10 @@ function chatRelayBase(): string {
 }
 import {
   SignalSession, SignalPublicBundle, SignalEnvelope,
-  SIGNAL_WIRE_VERSION, getOrCreateIdentityBundle,
+  SIGNAL_WIRE_VERSION, getOrCreateIdentityBundle, getOrCreateAuthenticatedIdentityBundle,
   getSafetyNumber,
   loadOrCreateOPKPool, generateOPKBatch,
   getOPKPoolSize, OPK_POOL_SIZE, OPK_POOL_LOW_WATER,
-  type OPKEntry,
 } from './signalProtocol';
 import { compareMessages } from '../utils/messageOrder';
 import type { StoredChatMessage, SyncStatus } from '../types/social';
@@ -65,6 +69,11 @@ export interface ChatMessage {
   sent:      boolean;
   status?:   SyncStatus;
   error?:    string;
+  mediaUrl?: string;
+  mediaType?: 'image' | 'video' | 'file';
+  fileName?: string;
+  fileSize?: number;
+  uploadProgress?: number;
 }
 
 export interface RecipientInfo {
@@ -72,9 +81,6 @@ export interface RecipientInfo {
   name?:     string;
   avatar?:   string;
 }
-
-// Wire version for new outgoing messages
-const WIRE_VERSION = SIGNAL_WIRE_VERSION; // 3
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const PRESENCE_HB_MS        = 30_000;
@@ -97,7 +103,7 @@ function seenIds(userId: string): BoundedSet<string> {
   return _seenIds.get(userId)!;
 }
 
-function toChatMessage(row: StoredChatMessage): ChatMessage {
+async function toChatMessage(row: StoredChatMessage): Promise<ChatMessage> {
   let mediaUrl: string|undefined, mediaType: 'image'|'video'|'file'|undefined;
   let fileName: string|undefined, fileSize: number|undefined;
   // Default display text — overwritten below if we successfully parse a _file payload.
@@ -106,7 +112,12 @@ function toChatMessage(row: StoredChatMessage): ChatMessage {
   try {
     if (row.text?.startsWith('{"_file":true')) {
       const f = JSON.parse(row.text);
-      if (f._url && f.url) {
+      if (f._encryptedMedia === 1) {
+        displayText = f.media.mediaName;
+        fileName = f.media.mediaName; fileSize = f.media.mediaSize;
+        mediaType = f.media.mediaType?.startsWith('video') ? 'video' : f.media.mediaType?.startsWith('image') ? 'image' : 'file';
+        mediaUrl = await fetchAndDecrypt(f.media, row.outgoing ? row.senderId : row.recipientId || '');
+      } else if (f._url && f.url) {
         // Large file: relay-hosted persistent URL
         mediaUrl  = f.url;
         mediaType = f.mime?.startsWith('video') ? 'video' : f.mime?.startsWith('image') ? 'image' : 'file';
@@ -137,9 +148,9 @@ function toChatMessage(row: StoredChatMessage): ChatMessage {
     to:        row.recipientId || '',
     message:   displayText,
     timestamp: row.timestamp,
-    read:      !!row.readAt,
+    read:      !row.outgoing && !!row.readAt,
     sent:      row.outgoing,
-    status:    row.outgoing ? row.syncStatus : undefined,
+    status:    row.outgoing ? (row.deliveryEvidence ? 'confirmed' : 'pending') : undefined,
     error:     row.error,
     mediaUrl, mediaType, fileName, fileSize,
   };
@@ -186,11 +197,9 @@ class ChatService {
   private readReceiptUnsubs   = new Map<string, () => void>();
   private watchedRooms        = new Map<string, string>(); // roomId → recipientId
   private _visibilityHandler: (() => void) | null = null;  // fires markAsRead on tab-focus
-  // Per-sender decrypt queue: serialises mergeRemote calls so concurrent
-  // WS + Gun deliveries don't race on loadSession/saveSession and corrupt
-  // the ratchet state (e.g. message 2 loading nr=0 while message 1's
-  // saveSession(nr=1) is still in flight).
-  private decryptQueue        = new Map<string, Promise<void>>(); // senderId → tail of chain
+  // Bound concurrent observations; durable CAS owns all receive state.
+  private receiving = 0;
+  private retryingReceive = false; // senderId → tail of chain
   private clearedRooms        = new Set<string>();                // rooms user cleared
 
   // ── Presence ──────────────────────────────────────────────────────────────
@@ -206,6 +215,7 @@ class ChatService {
   public onDelivered:          ((d: { messageId: string; recipientId: string }) => void) | null = null;
   public onReadReceipt:        ((d: { from: string; at: number }) => void) | null = null;
   public onConnectionChange:   ((connected: boolean) => void) | null = null;
+  public onIdentityState: ((d: { userId: string; state: IdentityState }) => void) | null = null;
   public onRecipientKeyChange: ((d: { userId: string; available: boolean }) => void) | null = null;
   public onPeerPresence:       ((d: { userId: string; online: boolean; ts: number }) => void) | null = null;
   // WebRTC signaling via chat relay WS
@@ -229,26 +239,9 @@ class ChatService {
   async init(): Promise<string> {
     this.shuttingDown = false;
 
-    // One-time migration: clear broken Signal sessions from protocol v1
-    // (initSessionAsReceiver set ckR="" causing OperationError on decrypt).
-    const SIGNAL_MIGRATION_KEY = `signal-protocol-version:${this.userId}`;
-    try {
-      const ver = await StorageService.getMetadata(SIGNAL_MIGRATION_KEY).catch(() => null);
-      if (ver !== 3) {
-        // v3: session keys are now directional (myId:theirId) not sorted.
-        // Clear all signal-session keys so X3DH re-runs cleanly with the fixed protocol.
-        const prefix = "signal-session:";
-        const allKeys: string[] = (await (StorageService as any).getAllMetadataKeys?.() ?? []);
-        await Promise.all(
-          allKeys.filter(k => k.startsWith(prefix))
-            .map(k => StorageService.setMetadata(k, null))
-        );
-        await StorageService.setMetadata(SIGNAL_MIGRATION_KEY, 3);
-      }
-    } catch { /* migration is best-effort; sessions re-establish via X3DH on next send */ }
-
-    // Generate or load Signal identity bundle
-    this.myBundle = await getOrCreateIdentityBundle(this.userId);
+    // No implicit legacy-session migration or trust promotion. Read exact local
+    // account records and require its actual signing authority.
+    this.myBundle = await getOrCreateAuthenticatedIdentityBundle(this.userId);
     this.seq      = await this.loadSeq();
 
     // Publish our Signal public bundle to Gun immediately (no auth needed).
@@ -270,6 +263,7 @@ class ChatService {
     // No-op if already published — init() of old ChatService handled this.
 
     this.ready = true;
+    void this.retryPendingReceives().catch(()=>{});
     this.startConnectionTracking();
     this.startOutboxLoop();
     this.startPresence();
@@ -295,15 +289,16 @@ class ChatService {
 
   // ── Signal bundle lookup ──────────────────────────────────────────────────
 
-  private async fetchTheirBundle(recipientId: string): Promise<SignalPublicBundle | null> {
+  private async fetchTheirBundle(recipientId: string, persist = true): Promise<SignalPublicBundle | null> {
     // 0. IDB cache: survives page reloads, never hits the rate limiter
     const idbKey = 'signal-bundle-cache:' + recipientId;
     try {
       const cached = await StorageService.getMetadata(idbKey);
       if (cached?.ik && cached?.spk) {
         if (Date.now() - (cached._cachedAt ?? 0) < 3_600_000) { // 1h TTL
-          // verifySpkSignature handles missing spkSig gracefully (warn only),
-          // so serve the cached bundle regardless of whether spkSig is present.
+          // Cached discovery data must establish the same authority as a network candidate.
+          await verifyAuthenticatedBundle(cached,recipientId);
+          await continuityChange(this.userId,cached);
           return cached as unknown as SignalPublicBundle;
         }
       }
@@ -319,14 +314,15 @@ class ChatService {
           const bundle = await res.json() as SignalPublicBundle;
           if (bundle.ik && bundle.spk) {
             try {
-              const { verifySpkSignature } = await import('./signalProtocol');
-              await verifySpkSignature(bundle);
+              const verified = await verifyAuthenticatedBundle(bundle,recipientId);
+              await continuityChange(this.userId,verified);
             } catch (e) {
+              this.onIdentityState?.({userId:recipientId,state:e instanceof DMIdentityError?e.state:'UNKNOWN'});
               console.error('[ChatService] SPK signature invalid for', recipientId, '— refusing bundle:', e);
               this.onRecipientKeyChange?.({ userId: recipientId, available: false });
-              return null;
+              break; // Try independently authenticated Gun data; never use this candidate.
             }
-            void StorageService.setMetadata(idbKey, { ...bundle, _cachedAt: Date.now() }).catch(() => {});
+            if (persist) void StorageService.setMetadata(idbKey, { ...bundle, _cachedAt: Date.now() }).catch(() => {});
             return bundle;
           }
         }
@@ -342,13 +338,14 @@ class ChatService {
       if (raw) {
         const bundle = JSON.parse(raw) as SignalPublicBundle;
         try {
-          const { verifySpkSignature } = await import('./signalProtocol');
-          await verifySpkSignature(bundle);
+          const verified = await verifyAuthenticatedBundle(bundle,recipientId);
+          await continuityChange(this.userId,verified);
         } catch (e) {
+          this.onIdentityState?.({userId:recipientId,state:e instanceof DMIdentityError?e.state:'UNKNOWN'});
           console.error('[ChatService] Gun bundle SPK signature invalid for', recipientId, '— refusing:', e);
           return null;
         }
-        void StorageService.setMetadata(idbKey, { ...bundle, _cachedAt: Date.now() }).catch(() => {});
+        if (persist) void StorageService.setMetadata(idbKey, { ...bundle, _cachedAt: Date.now() }).catch(() => {});
         return bundle;
       }
     } catch { }
@@ -362,7 +359,16 @@ class ChatService {
 
   private async getTheirBundle(recipientId: string): Promise<SignalPublicBundle | null> {
     const cached = this.theirBundles.get(recipientId);
-    if (cached) return cached;
+    if (cached) {
+      try {
+        const verified = await verifyAuthenticatedBundle(cached,recipientId);
+        await continuityChange(this.userId,verified);
+        return verified;
+      } catch (error) {
+        this.onIdentityState?.({userId:recipientId,state:error instanceof DMIdentityError?error.state:'UNKNOWN'});
+        throw error;
+      }
+    }
 
     // Cooldown: never fetch the same userId more than once per 30s.
     // Gun re-delivers old messages constantly; without this each delivery triggers a fetch.
@@ -404,7 +410,7 @@ class ChatService {
 
   // ── Encryption ────────────────────────────────────────────────────────────
 
-  private async encryptFor(recipientId: string, plaintext: string): Promise<SignalEnvelope> {
+  private async encryptFor(recipientId: string, plaintext: string, messageId?: string): Promise<SignalEnvelope> {
     if (!this.myBundle) throw new Error('Not initialized');
 
     // FIX A: removed duplicate stale-session deletion that was here.
@@ -416,7 +422,7 @@ class ChatService {
 
     const bundle   = await this.getTheirBundle(recipientId);
     if (!bundle) throw new Error('Recipient has no Signal key bundle yet');
-    const envelope = await this.getSession(recipientId).encrypt(plaintext, this.myBundle, bundle);
+    const envelope = await this.getSession(recipientId).encrypt(plaintext, this.myBundle, bundle, messageId);
     // If this was a new X3DH session (eph present), the relay consumed one OPK.
     // Replenish in the background so the pool stays healthy.
     if (envelope.eph) void this.ensureOPKPool();
@@ -425,25 +431,14 @@ class ChatService {
 
   private async decryptFrom(
     senderId: string, envelope: SignalEnvelope,
+    acceptedRow?: (plaintext: string) => StoredChatMessage,
+    receiveCommit?: ReceiveCommit,
   ): Promise<string> {
-    if (!this.myBundle) throw new Error('Not initialized');
-
-    // Bundle may not have arrived yet — retry up to 3× with backoff before giving up.
-    // This covers the race where a message arrives via WS before the sender's
-    // bundle has synced (REST hit is <20ms, so retries are cheap).
-    let theirBundle = await this.getTheirBundle(senderId);
-    if (!theirBundle) {
-      for (const delayMs of [500, 1500, 3000]) {
-        await new Promise(r => setTimeout(r, delayMs));
-        // Force re-fetch by clearing cache and trying again
-        this.theirBundles.delete(senderId);
-        this.missingBundles.delete(senderId);
-        theirBundle = await this.getTheirBundle(senderId);
-        if (theirBundle) break;
-      }
-    }
-    if (!theirBundle) throw new Error(`Bundle unavailable for sender ${senderId.slice(0, 16)}`);
-    return this.getSession(senderId).decrypt(envelope, this.myBundle, theirBundle.ik, this.userId);
+    if (!this.myBundle) throw new ReceiveFailure('retryable','Local identity unavailable');
+    const theirBundle = this.theirBundles.get(senderId) ?? await this.fetchTheirBundle(senderId, false);
+    if (!theirBundle) throw new ReceiveFailure('retryable','Sender bundle unavailable');
+    try {await verifyAuthenticatedBundle(theirBundle,senderId);} catch {throw new ReceiveFailure('rejected-auth','Invalid sender bundle');}
+    return this.getSession(senderId).decrypt(envelope, this.myBundle, theirBundle.ik, this.userId, acceptedRow,receiveCommit);
   }
 
   // ── Gun paths ─────────────────────────────────────────────────────────────
@@ -474,193 +469,103 @@ class ChatService {
     await StorageService.saveChatMessage(row);
   }
 
-  private async patchRow(id: string, patch: Partial<StoredChatMessage>) {
-    const ex = await StorageService.getChatMessage(id);
-    if (ex) await StorageService.saveChatMessage({ ...ex, ...patch });
-  }
 
   /**
    * Merge a raw Gun/WS record into local storage.
    * Handles v3 (Signal), v2 (AES-GCM+RSA wrap), and v1 (RSA only).
    */
-  private mergeRemote(raw: any, roomId: string): Promise<StoredChatMessage | null> {
-    const id          = typeof raw?.id === 'string'          ? raw.id          : null;
-    const senderId    = typeof raw?.senderId === 'string'    ? raw.senderId    : null;
-    const recipientId = typeof raw?.recipientId === 'string' ? raw.recipientId : undefined;
-    if (!id || !senderId) return Promise.resolve(null);
-    if (senderId !== this.userId && recipientId !== this.userId) return Promise.resolve(null);
-
-    // Serialise per-sender: await the previous decrypt for this sender
-    // before starting a new one, so loadSession always sees the latest
-    // saveSession result and the ratchet counter is never double-read.
-    const queueKey = senderId === this.userId ? recipientId ?? senderId : senderId;
-    const prev     = this.decryptQueue.get(queueKey) ?? Promise.resolve();
-    let resolveSlot!: () => void;
-    const slot = new Promise<void>(r => { resolveSlot = r; });
-    this.decryptQueue.set(queueKey, slot);
-    return prev.then(() => this._mergeRemoteImpl(id, senderId, recipientId, raw, roomId))
-               .finally(resolveSlot);
+  private async mergeRemote(raw:any,roomId:string):Promise<StoredChatMessage|null>{
+    const result=await this.receiveRemote(raw,roomId);
+    return result.status==='accepted'?result.row!:null;
   }
-
-  private async _mergeRemoteImpl(
-    id: string, senderId: string, recipientId: string | undefined,
-    raw: any, roomId: string,
-  ): Promise<StoredChatMessage | null> {
-
-    const existing = await StorageService.getChatMessage(id);
-    if (existing?.text) return existing;              // already decrypted and stored
-    if (this.clearedRooms.has(roomId)) return null;   // user cleared this room
-
-    const v = Number(raw?.v) || 1;
-
-    // FIX 1: declare text in scope so it's available when building the row below
-    let text = '';
-
-    try {
-      if (v === SIGNAL_WIRE_VERSION) {
-        // v3: Signal double-ratchet
-        const envelope: SignalEnvelope = {
-          v:     SIGNAL_WIRE_VERSION,
-          eph:   raw.eph,
-          opkId: raw.opkId,
-          dh:    raw.dh,
-          n:     Number(raw.n)  || 0,
-          pn:    Number(raw.pn) || 0,
-          ct:    raw.ct,
-        };
-        // Our own outgoing message replayed from Gun — already stored on send, skip
-        if (senderId === this.userId) return null;
-        try {
-          text = await this.decryptFrom(senderId, envelope);
-        } catch (decryptErr) {
-          // Decrypt failed — wipe the local session so the next message triggers
-          // a clean X3DH instead of retrying with corrupted ratchet state forever.
-          // Common causes: IK rotation (fresh install), OPK mismatch, ratchet desync.
-          console.warn(`[ChatService] Decrypt failed for ${senderId.slice(0,8)}, clearing session:`, (decryptErr as Error).message);
-          await this.getSession(senderId).clearSession();
-          // Also drop the cached bundle — a decrypt failure is commonly caused by
-          // the sender having rotated their identity keys (fresh install/cleared
-          // storage). The in-memory theirBundles.delete() below only clears this
-          // tab's session cache; the persistent IDB bundle cache (1h TTL) would
-          // otherwise keep serving the same stale, now-wrong bundle on every
-          // re-key attempt, so decrypt fails forever and the safety number never
-          // matches the peer's real current key.
-          this.theirBundles.delete(senderId);
-          this.bundleFetchTs.delete(senderId);
-          void StorageService.setMetadata('signal-bundle-cache:' + senderId, null).catch(() => {});
-          throw decryptErr; // re-throw so the tombstone path handles it below
-        }
-      } else {
-        // v1/v2 not supported: tombstone silently so Gun never retries
-        const alreadyMarked = await StorageService.getChatMessage(id);
-        if (!alreadyMarked) {
-          const tombstone: StoredChatMessage = {
-            id, roomId, kind: 'dm', senderId, recipientId,
-            text: '', timestamp: Number(raw?.timestamp) || Date.now(),
-            seq: Number(raw?.seq) || 0, outgoing: false,
-            syncStatus: 'corrupted' as unknown as SyncStatus, syncAttempts: 0,
-          };
-          void this.storeRow(tombstone).catch(() => {});
-        }
-        return null;
+  async receiveRemote(raw:any,roomId:string):Promise<ReceiveResult>{
+    if(this.receiving>=MAX_PENDING)return {status:'retryable',persisted:false,reason:'Receive admission limit'};
+    this.receiving++;
+    try{return await this.receiveImpl(raw,roomId);}catch{return {status:'retryable',persisted:false,reason:'Receive storage unavailable'};}finally{this.receiving--;}
+  }
+  private async receiveImpl(raw:any,roomId:string):Promise<ReceiveResult>{
+    const id=raw?.id,senderId=raw?.senderId,recipientId=raw?.recipientId;
+    if(typeof id!=='string'||!id||id.length>256||typeof senderId!=='string'||!/^[0-9a-f]{64}$/.test(senderId)||
+      senderId===this.userId||recipientId!==this.userId||roomId!==this.getRoomId(senderId,this.userId))
+      return {status:'rejected-auth',reason:'Invalid receive routing'};
+    let envelope:SignalEnvelope,fingerprint:string;
+    try{envelope=protocolEnvelope(raw);fingerprint=await receiveFingerprint(senderId,this.userId,envelope);}
+    catch{return {status:'rejected-auth',reason:'Malformed or oversized envelope'};}
+    const candidate={...envelope,id,senderId,recipientId,timestamp:Number(raw.timestamp)||0,seq:Number(raw.seq)||0};
+    if(new TextEncoder().encode(JSON.stringify(candidate)).length>MAX_ENVELOPE_BYTES+1024)return {status:'rejected-auth',reason:'Oversized candidate'};
+    let row:StoredChatMessage|undefined;
+    let commit:ReceiveCommit|undefined;
+    try{
+      if(this.clearedRooms.has(roomId))throw new ReceiveFailure('rejected-stale','Room cleared locally');
+      if(!this.myBundle)throw new ReceiveFailure('retryable','Local identity unavailable');
+      let info;
+      try{const own=await verifyAuthenticatedBundle(this.myBundle.bundle,this.userId);await verifyContext(envelope.auth!,this.userId,senderId,own);info=await verifyEpoch(envelope.epoch!,envelope.auth!);}
+      catch{throw new ReceiveFailure('rejected-auth','Invalid authenticated receive context');}
+      const history=await readEpoch(this.userId,senderId);
+      if(history&&info.generation<history.generation)throw new ReceiveFailure('rejected-stale','Retired epoch');
+      commit={key:acceptanceKey(this.userId,senderId,info.id,envelope.dh,envelope.n),fingerprint,rowId:id,local:this.userId};
+      const accepted=await StorageService.getMetadata(commit.key);
+      if(accepted){
+        if(accepted.fingerprint!==fingerprint)throw new ReceiveFailure('rejected-auth','Different ciphertext at accepted position');
+        row=await StorageService.getChatMessage(accepted.rowId);throw new ReceiveFailure('duplicate','Already accepted');
       }
-    } catch (e) {
-      // Session re-key: only clear session + request fresh X3DH when:
-      //   1. This is a v3 message (Signal ratchet, not legacy RSA)
-      //   2. The envelope has eph (it IS a fresh X3DH init we failed to process)
-      //   3. OR we have no session at all and get "No session" error
-      //
-      // Critically: OperationError on a non-eph v3 message means Gun re-delivered
-      // something the ratchet already consumed — tombstone it, do NOT wipe the session.
-         // Only v3 reaches here (v1/v2 returns early without throwing)
-      const hasEph      = !!raw?.eph;
-      const isNoSession = e instanceof Error && e.message.includes('No session');
-
-      // Only wipe session for a LEGITIMATE new X3DH: no existing session, or
-      // envelope.dh matches our stored dhRecv (sender re-inited with same key).
-      // Stale Gun re-deliveries of old X3DH inits have a dh that no longer
-      // matches dhRecv -- wiping the session on those breaks the live conversation.
-      let shouldReKey = isNoSession;
-      if (hasEph && !isNoSession) {
-        try {
-          const { StorageService: SS } = await import('./storageService');
-          const sk  = `signal-session:${this.userId}:${senderId}`;
-          const cur = await SS.getMetadata(sk);
-          if (!cur) shouldReKey = true;                   // no session at all
-          else if (cur.dhRecv === raw?.dh) shouldReKey = true; // same dh: legit re-init
-          // else: dh mismatch = stale re-delivery, leave shouldReKey false
-        } catch { shouldReKey = true; }
+      const existing=await StorageService.getChatMessage(id);
+      if(existing){
+        if(existing.senderId===senderId&&existing.recipientId===this.userId&&existing.encryptedEnvelope&&
+          await receiveFingerprint(senderId,this.userId,protocolEnvelope(JSON.parse(existing.encryptedEnvelope)))===fingerprint){row=existing;throw new ReceiveFailure('duplicate','Existing accepted envelope');}
+        throw new ReceiveFailure('rejected-auth','Outer ID conflicts with stored row');
       }
-
-      if (shouldReKey) {
-        try {
-          const { StorageService: SS } = await import('./storageService');
-          const sessionKey = `signal-session:${this.userId}:${senderId}`;
-          const db = await SS.getDB();
-          await db.delete('metadata', sessionKey);
-          this.sessions.delete(senderId);
-          this.theirBundles.delete(senderId);
-          this.bundleFetchTs.delete(senderId);
-          void StorageService.setMetadata('signal-bundle-cache:' + senderId, null).catch(() => {});
-          const reKeyTs = (this as any)._reKeyTs ?? {};
-          (this as any)._reKeyTs = reKeyTs;
-          const now = Date.now();
-          if (!reKeyTs[senderId] || now - reKeyTs[senderId] > 5000) {
-            reKeyTs[senderId] = now;
-            if (this.ws?.readyState === WebSocket.OPEN) {
-              this.ws.send(JSON.stringify({ type: 'chat-start', recipientId: senderId }));
-            }
-          }
-        } catch { }
-        return null;
+      await this.decryptFrom(senderId,envelope,text=>{
+        row={id,roomId,kind:'dm',senderId,recipientId,text,timestamp:Number(raw.timestamp)||Date.now(),seq:Number(raw.seq)||0,
+          outgoing:false,syncStatus:'confirmed',syncAttempts:0,encryptedEnvelope:JSON.stringify(envelope),
+          control:text.startsWith(RECEIPT_PREFIX)?'delivery-receipt-v1':undefined};return row;
+      },commit);
+      if(envelope.opkId)void this.ensureOPKPool().catch(()=>{});
+      await this.processAccepted(row!).catch(()=>{});
+      if(!this.retryingReceive)void this.retryPendingReceives().catch(()=>{});
+      return {status:'accepted',row};
+    }catch(error){
+      let status:ReceiveResult['status']='retryable';
+      if(error instanceof ReceiveFailure)status=error.status;
+      else if(error instanceof DMEpochError)status=error.state==='RESET_PENDING'?'retryable':'rejected-stale';
+      else if(error instanceof DMIdentityError){status=error.state==='STALE_PREKEY'?'rejected-stale':'rejected-auth';this.onIdentityState?.({userId:senderId,state:error.state});}
+      else if(error instanceof DOMException&&['OperationError','DataError','InvalidCharacterError'].includes(error.name))status='rejected-auth';
+      if(status==='duplicate'){
+        if(!row&&commit){const prior=await StorageService.getMetadata(commit.key);if(prior)row=await StorageService.getChatMessage(prior.rowId);}
+        await removePending(this.userId,fingerprint).catch(()=>{});
+        if(row)await this.processAccepted(row).catch(()=>{});
+        return {status,row};
       }
-      // All other failures: permanently undecryptable — tombstone so we never retry.
-      // Never downgrade a confirmed row (FIX 2): Gun re-delivers after WS already
-      // succeeded, a second decrypt fails and would overwrite the good confirmed row.
-      const alreadyConfirmed = await StorageService.getChatMessage(id);
-      if (alreadyConfirmed?.syncStatus === 'confirmed') return null;
-      const tombstone: StoredChatMessage = {
-        id, roomId, kind: 'dm', senderId, recipientId,
-        text:         '',
-        timestamp:    Number(raw?.timestamp) || Date.now(),
-        seq:          Number(raw?.seq) || 0,
-        outgoing:     false,
-        syncStatus:   'corrupted' as unknown as SyncStatus,
-        syncAttempts: 0,
-      };
-      void this.storeRow(tombstone).catch(() => {});
-      return null;
+      if(status==='retryable'){
+        let persisted=false;try{persisted=await enqueuePending(this.userId,{fingerprint,raw:candidate,roomId,observedAt:Date.now()});}catch{}
+        return {status,persisted,reason:error instanceof Error?error.message:'Receive temporarily unavailable'};
+      }
+      await removePending(this.userId,fingerprint).catch(()=>{});
+      return {status,reason:error instanceof Error?error.message:'Rejected'};
     }
-
-    const row: StoredChatMessage = {
-      id, roomId, kind: 'dm', senderId,
-      senderName:   typeof raw?.senderName === 'string' ? raw.senderName : undefined,
-      recipientId,  text,
-      timestamp:    Number(raw?.timestamp) || Date.now(),
-      seq:          Number(raw?.seq) || 0,
-      outgoing:     senderId === this.userId,
-      syncStatus:   'confirmed',
-      syncAttempts: existing?.syncAttempts ?? 0,
-      readAt:       Number(raw?.readAt) || existing?.readAt,
-    };
-    await this.storeRow(row);
-    return row;
+  }
+  async retryPendingReceives():Promise<void>{
+    if(this.retryingReceive||this.shuttingDown)return;
+    this.retryingReceive=true;
+    try{
+      for(const entry of await pendingEntries(this.userId)){
+        const result=await this.receiveRemote(entry.raw,entry.roomId);
+        if(result.status==='accepted'&&result.row?.text&&!result.row.control)this.onMessage?.(await toChatMessage(result.row));
+      }
+    }finally{this.retryingReceive=false;}
   }
 
   // ── Core message handler ──────────────────────────────────────────────────
 
   private handleRoomRecord(roomId: string, raw: any): void {
     if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string') return;
-    if (seenIds(this.userId).has(raw.id)) return;
-    // Mark as seen immediately — before decrypt — so Gun re-deliveries
-    // don't retry a failed decrypt and corrupt the ratchet state.
-    seenIds(this.userId).add(raw.id);
 
     void (async () => {
       const row = await this.mergeRemote(raw, roomId);
       // Skip tombstones (corrupted/undecryptable) and empty rows
-      if (!row || !row.text || row.syncStatus === 'corrupted' || this.shuttingDown) return;
-      this.onMessage?.(toChatMessage(row));
+      if (!row || !row.text || row.control || row.syncStatus === 'corrupted' || this.shuttingDown) return;
+      seenIds(this.userId).add(raw.id);
+      this.onMessage?.(await toChatMessage(row));
     })();
   }
 
@@ -761,24 +666,16 @@ class ChatService {
     });
   }
 
-  private async markLocalReadUpTo(roomId: string, at: number) {
-    const rows = await StorageService.getChatMessagesByRoom(roomId);
-    // Mark outgoing messages as read-by-recipient (for sender's double tick in IDB)
-    const unread = rows.filter(r => r.outgoing && !r.readAt && r.timestamp <= at);
-    if (unread.length)
-      await StorageService.saveChatMessages(unread.map(r => ({ ...r, readAt: at })));
-    return unread.length > 0;
-  }
 
   // ── History ───────────────────────────────────────────────────────────────
 
   async getLocalHistory(recipientId: string): Promise<ChatMessage[]> {
     const roomId = this.getRoomId(this.userId, recipientId);
     const rows   = await StorageService.getChatMessagesByRoom(roomId);
-    return rows
-      .filter(r => r.syncStatus !== 'corrupted' && r.text)
+    return Promise.all(rows
+      .filter(r => r.syncStatus !== 'corrupted' && r.text && !r.control)
       .sort(compareMessages)
-      .map(toChatMessage);
+      .map(toChatMessage));
   }
 
   async loadHistory(recipientId: string): Promise<ChatMessage[]> {
@@ -794,10 +691,10 @@ class ChatService {
       const m = await this.mergeRemote(value, roomId);
       if (m) byId.set(m.id, m);
     }
-    return [...byId.values()]
-      .filter(r => r.syncStatus !== 'corrupted' && r.text)
+    return Promise.all([...byId.values()]
+      .filter(r => r.syncStatus !== 'corrupted' && r.text && !r.control)
       .sort(compareMessages)
-      .map(toChatMessage);
+      .map(toChatMessage));
   }
 
   // ── Sending ───────────────────────────────────────────────────────────────
@@ -832,118 +729,77 @@ class ChatService {
   }
 
   private async deliver(row: StoredChatMessage): Promise<StoredChatMessage> {
+    row = await StorageService.getChatMessage(row.id) ?? row;
     const recipientId = row.recipientId;
-    if (!recipientId) return row;
-
+    if (!recipientId || !row.text || row.deliveryEvidence) return row;
     const attempts = row.syncAttempts + 1;
-    const expired  = Date.now() - row.timestamp > OUTBOX_TTL_MS;
-
-    const fail = async (error: string): Promise<StoredChatMessage> => {
-      const status: SyncStatus = attempts >= MAX_SEND_ATTEMPTS || expired ? 'failed' : 'pending';
-      const patch = { syncStatus: status, syncAttempts: attempts, error };
-      await this.patchRow(row.id, patch);
-      return { ...row, ...patch };
-    };
-
-    // Encrypt with Signal protocol — but ONLY on the first attempt.
-    // On retries, reuse the stored envelope so the ratchet counter (n) stays
-    // the same across all delivery attempts. Re-encrypting on retry advances ns
-    // in the saved session: the receiver would get n=1, n=2, … but never n=0,
-    // causing skipMessageKeys to derive wrong keys → AES-GCM decrypt fails.
-    let envelope: SignalEnvelope;
-    if (row.encryptedEnvelope) {
-      // Retry path: reuse the envelope we already encrypted (idempotent)
-      try {
-        envelope = JSON.parse(row.encryptedEnvelope) as SignalEnvelope;
-      } catch {
-        // Stored envelope is corrupt — clear it and re-encrypt (last resort)
-        row = { ...row, encryptedEnvelope: undefined };
-        try {
-          envelope = await this.encryptFor(recipientId, row.text);
-        } catch (e) {
-          return fail(e instanceof Error ? e.message : 'Encryption failed');
-        }
+    let error = 'No authenticated recipient receipt';
+    try {
+      const key = `signal-envelope:${this.userId}:${recipientId}:${row.id}`;
+      let journal = await StorageService.getMetadata(key);
+      // Adopt a legacy pending envelope without ever re-encrypting it.
+      if (!journal && row.encryptedEnvelope) {
+        const cached = JSON.parse(row.encryptedEnvelope) as SignalEnvelope;
+        if (cached.v !== SIGNAL_WIRE_VERSION || typeof cached.ct !== 'string' || typeof cached.dh !== 'string')
+          throw new Error('Invalid persisted envelope; refusing to re-encrypt');
+        await StorageService.compareAndSwapMetadata([{ key, before: null, after: { plaintext: row.text, envelope: cached } }]);
+        journal = await StorageService.getMetadata(key);
       }
-    } else {
-      // First attempt: encrypt and persist the envelope immediately
-      try {
-        envelope = await this.encryptFor(recipientId, row.text);
-      } catch (e) {
-        return fail(e instanceof Error ? e.message : 'Encryption failed');
+      if (journal && journal.plaintext !== row.text) throw new Error('Logical message content changed');
+      const envelope: SignalEnvelope = journal?.envelope ?? await this.encryptFor(recipientId, row.text, row.id);
+      if (envelope.v !== SIGNAL_WIRE_VERSION) throw new DMIdentityError('LEGACY_UNAUTHENTICATED','Legacy envelope retained; authenticated mode cannot retransmit it');
+      if (envelope.v === SIGNAL_WIRE_VERSION) {
+        const own = await verifyAuthenticatedBundle(this.myBundle!.bundle,this.userId);
+        const {peer} = await verifyContext(envelope.auth!,this.userId,recipientId,own);
+        await continuityChange(this.userId,peer);
       }
-      // Persist the envelope so retries are idempotent
-      const encryptedEnvelope = JSON.stringify(envelope);
-      await this.patchRow(row.id, { encryptedEnvelope });
-      row = { ...row, encryptedEnvelope };
-    }
-
-    // Flatten Signal envelope + metadata into a Gun-safe record (no nested objects)
-    const record = toGunRecord({
-      id:          row.id,
-      v:           WIRE_VERSION,
-      senderId:    row.senderId,
-      recipientId,
-      // Signal envelope fields (all primitives)
-      eph:         envelope.eph,
-      opkId:       envelope.opkId,  // OPK pool id — receiver must consumeOPK() on first message
-      dh:          envelope.dh,
-      n:           envelope.n,
-      pn:          envelope.pn,
-      ct:          envelope.ct,
-      timestamp:   row.timestamp,
-      seq:         row.seq,
-    });
-
-    // Push live delivery frame via WS FIRST — recipient gets this immediately.
-    // The relay echoes back a 'chat-delivered' frame when it has forwarded the
-    // message (or stored it for offline delivery). We wait up to 5s for that ack
-    // before marking confirmed — if it doesn't arrive, we stay 'pending' so the
-    // outbox retries rather than silently losing the message.
-    const wsOpen = this.ws?.readyState === WebSocket.OPEN;
-    const deliveredPromise = wsOpen
-      ? new Promise<void>(resolve => {
-          const timeout = setTimeout(() => {
-            this.pendingDeliveryAcks.delete(row.id);
-            resolve();  // timeout — stays pending, outbox will retry
-          }, 5_000);
-          this.pendingDeliveryAcks.set(row.id, () => {
-            clearTimeout(timeout);
-            resolve();
-          });
-        })
-      : Promise.resolve();
-
-    this.pushLiveFrame(recipientId, row.id, envelope, row.timestamp);
-
-    // Fire-and-forget Gun write (persistence/fallback). Do NOT await.
-    void gunPut(this.roomNode(row.roomId).get(row.id), record).then(ack => {
+      row = await StorageService.patchDMDelivery(row.id, { encryptedEnvelope: JSON.stringify(envelope) }) ?? row;
+      const record = toGunRecord({ id: row.id, senderId: row.senderId, recipientId,
+        ...envelope, timestamp: row.timestamp, seq: row.seq });
+      this.pushLiveFrame(recipientId, row.id, envelope, row.timestamp);
+      const ack = await gunPut(this.roomNode(row.roomId).get(row.id), record);
       if (ack.ok) {
         this.indexRoom(row.roomId, this.userId, recipientId);
-        this.roomLastFired.set(row.roomId, Date.now());
+        error = 'Gun local acceptance; recipient receipt pending';
       }
-    });
-
-    if (wsOpen) {
-      // Wait for relay ack before confirming
-      await deliveredPromise;
-      // Check if the ack actually came (vs timeout)
-      if (this.pendingDeliveryAcks.has(row.id)) {
-        // Timeout fired — relay didn't ack. Stay pending for outbox retry.
-        this.pendingDeliveryAcks.delete(row.id);
-        return fail('Relay did not acknowledge delivery');
-      }
-      // Ack received — confirm and clear stored envelope
-      const ackPatch = { syncStatus: 'confirmed' as SyncStatus, syncAttempts: attempts,
-                         error: undefined, encryptedEnvelope: undefined };
-      await this.patchRow(row.id, ackPatch);
-      return { ...row, ...ackPatch };
+    } catch (e) {
+      if (e instanceof DMIdentityError) this.onIdentityState?.({userId:recipientId,state:e.state});
+      error = e instanceof Error ? e.message : 'Delivery failed';
     }
-    // WS was closed — Gun fallback handled it, mark confirmed optimistically
-    // Clear encryptedEnvelope on confirm — no longer needed for retries
-    const patch = { syncStatus: 'confirmed' as SyncStatus, syncAttempts: attempts, 
-                    error: undefined, encryptedEnvelope: undefined };
-    await this.patchRow(row.id, patch);
-    return { ...row, ...patch };
+    // Neither local Gun ACK nor relay forwarding establishes recipient delivery.
+    return await StorageService.patchDMDelivery(row.id, {
+      syncStatus: 'pending', syncAttempts: attempts, error,
+    }) ?? row;
+  }
+
+  private async processAccepted(row: StoredChatMessage): Promise<void> {
+    if (row.control === 'delivery-receipt-v1') {
+      let receipt: { id: string; digest: string };
+      try { receipt = JSON.parse(row.text.slice(RECEIPT_PREFIX.length)); } catch { return; }
+      const outgoing = await StorageService.getChatMessage(receipt.id);
+      if (!outgoing?.outgoing || outgoing.senderId !== this.userId || outgoing.recipientId !== row.senderId
+        || !outgoing.encryptedEnvelope || outgoing.deliveryEvidence) return;
+      const digest = await envelopeDigest(outgoing.id, this.userId, row.senderId, JSON.parse(outgoing.encryptedEnvelope));
+      if (digest !== receipt.digest) return;
+      await StorageService.patchDMDelivery(outgoing.id, {
+        syncStatus: 'confirmed', error: undefined,
+        deliveryEvidence: { kind: 'peer-receipt-v1', peer: row.senderId, digest },
+      });
+      this.onDelivered?.({ messageId: outgoing.id, recipientId: row.senderId });
+      this.onMessageStatus?.({ id: outgoing.id, status: 'confirmed' });
+      return;
+    }
+    if (row.outgoing || !row.encryptedEnvelope) return;
+    const digest = await envelopeDigest(row.id, row.senderId, this.userId, JSON.parse(row.encryptedEnvelope));
+    const id = `dm-receipt-v1:${digest}`;
+    let receipt = await StorageService.getChatMessage(id);
+    if (!receipt) {
+      receipt = { id, roomId: row.roomId, kind: 'dm', senderId: this.userId, recipientId: row.senderId,
+        text: RECEIPT_PREFIX + JSON.stringify({ id: row.id, digest }), control: 'delivery-receipt-v1',
+        timestamp: row.timestamp, seq: 0, outgoing: true, syncStatus: 'pending', syncAttempts: 0 };
+      await this.storeRow(receipt);
+    }
+    await this.deliver(receipt);
   }
 
   /**
@@ -958,8 +814,10 @@ class ChatService {
     const frame = JSON.stringify({
       type: 'chat-message', recipientId, messageId,
       from: this.userId,
-      v:    WIRE_VERSION,
+      v:    envelope.v,
       // Signal envelope fields
+      auth:  envelope.auth,
+      epoch: envelope.epoch,
       eph:   envelope.eph,
       opkId: envelope.opkId,  // OPK pool id — must be forwarded so receiver can consumeOPK()
       dh:    envelope.dh,
@@ -981,10 +839,13 @@ class ChatService {
   // ── Outbox ────────────────────────────────────────────────────────────────
 
   async flushOutbox(): Promise<void> {
+    await this.retryPendingReceives().catch(()=>{});
     if (flushInFlight.has(this.userId) || !this.ready) return;
     flushInFlight.add(this.userId);
     try {
       const all  = await StorageService.getAllChatMessages();
+      for (const receipt of all.filter(r => !r.outgoing && r.recipientId === this.userId && r.control))
+        await this.processAccepted(receipt);
       const now  = Date.now();
       const pending = all.filter(r =>
         r.kind === 'dm' && r.outgoing && r.senderId === this.userId
@@ -1383,8 +1244,7 @@ class ChatService {
 
       case 'chat-message': {
         const messageId = typeof data.messageId === 'string' ? data.messageId : null;
-        if (!messageId || seenIds(this.userId).has(messageId)) return;
-        seenIds(this.userId).add(messageId);
+        if (!messageId) return;
 
         const v       = Number(data.v) || 1;
         const roomId  = this.getRoomId(this.userId, data.from);
@@ -1397,6 +1257,8 @@ class ChatService {
             v,
             senderId:    data.from,
             recipientId: this.userId,
+            auth:        data.auth,
+            epoch:       data.epoch,
             eph:         data.eph,
             opkId:       data.opkId,   // needed for OPK consumption in decrypt()
             dh:          data.dh,
@@ -1412,12 +1274,13 @@ class ChatService {
 
         try {
           const row = await this.mergeRemote(raw, roomId);
-          if (row && row.text && row.syncStatus !== 'corrupted') this.onMessage?.(toChatMessage(row));
+          if (row && row.text && !row.control) {
+            seenIds(this.userId).add(messageId);
+            this.onMessage?.(await toChatMessage(row));
+          }
         } catch (e) {
-          // mergeRemote threw (decrypt failed). clearSession() already ran inside mergeRemote.
-          // Ask the relay to re-send this message after a short delay — by then the session
-          // is cleared and fresh X3DH will run on the next attempt, recovering without
-          // requiring the user to manually refresh.
+          // Rejected input retains the authenticated session and epoch history.
+          // A resend requests the original envelope; no replacement authority is inferred.
           const failedId = messageId;
           const failedFrom = data.from;
           console.warn('[ChatService] Decrypt failed for WS message', failedId, '— scheduling resend request');
@@ -1438,63 +1301,15 @@ class ChatService {
         if (data.from && data.payload) this.onRtcSignal?.({ from: data.from, payload: data.payload });
         break;
 
-      case 'chat-delivered': {
-        const ackFn = this.pendingDeliveryAcks.get(data.messageId);
-        if (ackFn) {
-          this.pendingDeliveryAcks.delete(data.messageId);
-          ackFn(); // resolves the deliveredPromise in deliver()
-        }
-        this.onDelivered?.({ messageId: data.messageId, recipientId: data.recipientId });
+      case 'chat-delivered':
+      case 'chat-read-receipt':
+        // Unauthenticated relay metadata is neither a peer delivery nor read receipt.
         break;
-      }
 
-      case 'chat-read-receipt': {
-        // Use Number.MAX_SAFE_INTEGER as the fallback so a missing or zero `at`
-        // marks ALL outgoing messages as read rather than only those with
-        // timestamp ≤ Date.now(). This avoids clock-skew issues where the
-        // sender's messages have timestamps slightly ahead of the receiver's
-        // clock and would otherwise remain stuck on a single tick.
-        const at = (Number(data.at) > 0) ? Number(data.at) : Number.MAX_SAFE_INTEGER;
-        const rrRoomId = this.getRoomId(this.userId, data.from);
-        void this.markLocalReadUpTo(rrRoomId, at);
-        this.onReadReceipt?.({ from: data.from, at });
+      case 'chat-start':
+      case 'chat-invite':
+        // Discovery/control frames carry no authenticated session replacement authority.
         break;
-      }
-
-      case 'chat-start': {
-        // Recipient's session failed — clear our session so next message
-        // triggers fresh X3DH re-initiation automatically.
-        const reKeyTarget = data.from || data.recipientId;
-        if (reKeyTarget) {
-          try {
-            const { StorageService: SS } = await import('./storageService');
-            const sessionKey = `signal-session:${this.userId}:${reKeyTarget}`;
-            const db = await SS.getDB();
-            await db.delete('metadata', sessionKey);
-            this.sessions.delete(reKeyTarget);
-            this.theirBundles.delete(reKeyTarget);
-          } catch { }
-        }
-        break;
-      }
-
-      case 'chat-invite': {
-        // Recipient's session failed — clear ours so next send triggers fresh X3DH.
-        const inviteFrom = data.from;
-        if (inviteFrom) {
-          try {
-            const { StorageService: SS } = await import('./storageService');
-            const sessionKey = `signal-session:${this.userId}:${inviteFrom}`;
-            const db = await SS.getDB();
-            await db.delete('metadata', sessionKey);
-            this.sessions.delete(inviteFrom);
-            this.theirBundles.delete(inviteFrom);
-            // Flush outbox so pending messages re-encrypt with fresh X3DH
-            void this.flushOutbox();
-          } catch { }
-        }
-        break;
-      }
 
       case 'pong-peer': break;
     }
@@ -1531,62 +1346,14 @@ class ChatService {
       this.ws.send(JSON.stringify({ type: 'chat-start', recipientId: recipient.userId }));
   }
 
-  static readonly MAX_INLINE_FILE_BYTES = 400 * 1024;       // 400 KB — inline base64
   static readonly MAX_FILE_BYTES        = 100 * 1024 * 1024; // 100 MB — relay upload
 
   async sendFile(recipientId: string, file: File): Promise<ChatMessage> {
     if (file.size > ChatService.MAX_FILE_BYTES)
       throw new Error('File too large (max 100 MB).');
 
-    const mime = file.type || 'application/octet-stream';
-
-    if (file.size <= ChatService.MAX_INLINE_FILE_BYTES) {
-      // Small file: encode inline as base64 and send encrypted through Signal.
-      // IMPORTANT: chunk size must be divisible by 3 so each chunk encodes to
-      // valid non-padded base64 and concatenation produces a correct result.
-      // 8192 % 3 == 2 (broken) → use 8190 (8190 % 3 == 0).
-      const arr = new Uint8Array(await file.arrayBuffer());
-      // Chunk size divisible by 3 → no mid-stream padding issues.
-      // Apply is used instead of spread to avoid call-stack overflow on large arrays.
-      const CHUNK = 8190;
-      let b64 = '';
-      for (let i = 0; i < arr.length; i += CHUNK)
-        b64 += btoa(String.fromCharCode.apply(null, arr.subarray(i, i + CHUNK) as any));
-      return this.sendMessage(recipientId,
-        JSON.stringify({ _file: true, name: file.name, mime, size: file.size, data: b64 }));
-    }
-
-    // Large file: upload to relay, send URL as the encrypted message payload.
-    // The file bytes themselves never pass through Signal encryption.
-    const senderPub = this.userId;
-    const formData  = new FormData();
-    formData.append('file', file, file.name);
-    formData.append('mimeType', mime);
-
-    const uploadController = new AbortController();
-    const uploadTimeout = setTimeout(() => uploadController.abort(), 2 * 60 * 1000);
-    let uploadRes: Response;
-    try {
-      uploadRes = await fetch(`${chatRelayBase()}/api/chat-media`, {
-        method:  'POST',
-        headers: { Authorization: `Bearer ${senderPub}` },
-        body:    formData,
-        signal:  uploadController.signal,
-      });
-    } catch (e: any) {
-      clearTimeout(uploadTimeout);
-      throw new Error(e?.name === 'AbortError' ? 'Upload timed out (> 2 min)' : 'Upload failed — check connection');
-    }
-    clearTimeout(uploadTimeout);
-    if (!uploadRes.ok) {
-      const err = await uploadRes.json().catch(() => ({ error: 'Upload failed' }));
-      throw new Error(err.error || `Upload failed (${uploadRes.status})`);
-    }
-    const { mediaId } = await uploadRes.json();
-    const url = `${chatRelayBase()}/api/chat-media/${mediaId}`;
-
-    return this.sendMessage(recipientId,
-      JSON.stringify({ _file: true, _url: true, name: file.name, mime, size: file.size, url }));
+    const media = await encryptAndUpload(file, this.userId);
+    return this.sendMessage(recipientId, JSON.stringify({ _file: true, _encryptedMedia: 1, media }));
   }
 
   sendTyping(recipientId: string, isTyping: boolean): void {
@@ -1614,7 +1381,6 @@ class ChatService {
   }
 
   private _markReadDebounce      = new Map<string, ReturnType<typeof setTimeout>>();
-  private pendingDeliveryAcks    = new Map<string, () => void>(); // messageId → resolve fn
 
   markAsRead(recipientId: string): void {
     // Debounce rapid calls (e.g. onConnectionChange + initializeChat firing together)
@@ -1722,26 +1488,10 @@ class ChatService {
   private async ensureOPKPool(): Promise<void> {
     if (!this.myBundle) return;
     const size = await getOPKPoolSize(this.userId);
-    if (size > OPK_POOL_LOW_WATER) return; // pool is healthy
-    // Generate enough to bring us back to OPK_POOL_SIZE
-    const needed = OPK_POOL_SIZE - size;
-    const pool   = await generateOPKBatch(needed, this.userId);
-    await this.publishOPKBatch(pool.slice(0, needed));
-  }
-
-  private async publishOPKBatch(entries: OPKEntry[]): Promise<void> {
-    if (!entries.length) return;
-    try {
-      const res = await fetch(`${chatRelayBase()}/api/opk-pool`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          userId: this.userId,
-          opks:   entries.map(e => ({ id: e.id, pub: e.pubB64 })),
-        }),
-      });
-      if (!res.ok) console.warn('[ChatService] OPK pool publish failed:', res.status);
-    } catch (e) { console.warn('[ChatService] OPK pool publish error:', e); }
+    if (size <= OPK_POOL_LOW_WATER) await generateOPKBatch(OPK_POOL_SIZE-size,this.userId);
+    this.myBundle = await getOrCreateAuthenticatedIdentityBundle(this.userId);
+    await gunPut(GunService.getGun().get('users').get(this.userId),{signalBundle:JSON.stringify(this.myBundle.bundle)});
+    await this.publishBundleToRelay();
   }
 
   disconnect(): void {
