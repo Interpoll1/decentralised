@@ -75,6 +75,10 @@ export type ChatKind = 'dm' | 'room';
  * offline history. Clearing site data removes both together.
  */
 export interface StoredChatMessage {
+  /** DM-only encrypted control payload; excluded from conversation rendering. */
+  control?: 'delivery-receipt-v1';
+  /** Confirmed DM means a decrypted receipt from this session peer, for this digest. */
+  deliveryEvidence?: { kind: 'peer-receipt-v1'; peer: string; digest: string };
   id: string;
   /** Sorted `a:b` pair for DMs, room id for group rooms. */
   roomId: string;
