@@ -22,6 +22,7 @@ import {
   getEnabledVersions,
   setEnabledVersions,
   isVersionEnabled,
+  reconcileVersions,
 } from '../src/utils/dataVersionSettings';
 
 describe('dataVersionSettings', () => {
@@ -57,6 +58,27 @@ describe('dataVersionSettings', () => {
     });
   });
 
+  describe('reconcileVersions', () => {
+    // GUN_NAMESPACE is mocked to 'v2' for this suite.
+    it('keeps legacy opt-in roots below the current namespace', () => {
+      expect(reconcileVersions(['v1', 'v2'])).toEqual(['v1', 'v2']);
+    });
+
+    it('drops a stale namespace the client has moved past', () => {
+      // v3 is >= 3 and not the active namespace — a leftover from an upgrade.
+      expect(reconcileVersions(['v3'])).toEqual(['v2']);
+      expect(reconcileVersions(['v1', 'v3'])).toEqual(['v1', 'v2']);
+    });
+
+    it('always includes the active namespace', () => {
+      expect(reconcileVersions(['v1'])).toContain('v2');
+    });
+
+    it('discards unparseable entries', () => {
+      expect(reconcileVersions(['garbage', 'v1'])).toEqual(['v1', 'v2']);
+    });
+  });
+
   describe('isVersionEnabled', () => {
     it('returns true for enabled version', () => {
       setEnabledVersions(['v1', 'v2']);
@@ -66,6 +88,11 @@ describe('dataVersionSettings', () => {
     it('returns false for disabled version', () => {
       setEnabledVersions(['v2']);
       expect(isVersionEnabled('v1')).toBe(false);
+    });
+
+    it('returns false for a stale namespace even if it was stored', () => {
+      setEnabledVersions(['v2', 'v3']);
+      expect(isVersionEnabled('v3')).toBe(false);
     });
   });
 });

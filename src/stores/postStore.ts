@@ -598,8 +598,11 @@ export const usePostStore = defineStore('post', () => {
   async function purgeLegacyPosts(): Promise<number> {
     const removed: string[] = [];
     for (const [id, post] of postsMap.value) {
-      const v = post.dataVersion || null;
-      if (v !== GUN_NAMESPACE) removed.push(id);
+      // Only purge posts that explicitly claim a foreign namespace. An absent
+      // dataVersion means relay-sourced (the relay never stores the field), and
+      // matchesVersion renders those, so purging them here would delete valid
+      // current-namespace posts on every warmup.
+      if (post.dataVersion && post.dataVersion !== GUN_NAMESPACE) removed.push(id);
     }
     if (removed.length === 0) return 0;
 
