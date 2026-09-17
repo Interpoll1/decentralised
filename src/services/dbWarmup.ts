@@ -74,6 +74,15 @@ export async function warmupFromDB(): Promise<void> {
       warmupLog('Purge legacy posts failed', { err: String(err) });
     }
 
+    try {
+      if (getNamespaceVersion(GUN_NAMESPACE) >= 3 && typeof pollStore.purgeLegacyPolls === 'function') {
+        const removed = await pollStore.purgeLegacyPolls();
+        if (removed > 0) warmupLog('Purged legacy polls', { removed });
+      }
+    } catch (err) {
+      warmupLog('Purge legacy polls failed', { err: String(err) });
+    }
+
     // Warm active namespace feed data; per-row version checks below still reject mismatches.
     const shouldWarmApiFeeds = getNamespaceVersion(GUN_NAMESPACE) <= 3
     const shouldWarmApiCommunities = shouldWarmApiFeeds
@@ -81,10 +90,10 @@ export async function warmupFromDB(): Promise<void> {
     // ── Fetch everything in parallel — no sequential blocking ────────────────
     const [postsResult, pollsResult, communitiesResult] = await Promise.allSettled([
       shouldWarmApiFeeds
-        ? apiFetch(`/api/posts?limit=${WARMUP_POST_LIMIT}`)
+        ? apiFetch(`/api/posts?limit=${WARMUP_POST_LIMIT}&dataVersion=${GUN_NAMESPACE}`)
         : Promise.resolve({ posts: [] }),
       shouldWarmApiFeeds
-        ? apiFetch(`/api/polls?limit=${WARMUP_POLL_LIMIT}`)
+        ? apiFetch(`/api/polls?limit=${WARMUP_POLL_LIMIT}&dataVersion=${GUN_NAMESPACE}`)
         : Promise.resolve({ polls: [] }),
       shouldWarmApiCommunities
         ? apiFetch('/api/communities')
@@ -185,6 +194,12 @@ export async function warmupFromDB(): Promise<void> {
       let n = 0
       for (const p of polls || []) {
         if (!p?.id || !p?.question) continue
+        // Skip polls that explicitly declare a different namespace version.
+        // Mirrors the posts block above; polls without dataVersion are assumed
+        // to belong to the current namespace (relay never stores the field).
+        const pollDataVersion = typeof p.dataVersion === 'string' ? p.dataVersion : null
+        if (pollDataVersion && pollDataVersion !== GUN_NAMESPACE) continue
+
         // Always inject — never skip based on existing entry
         pollStore.injectPoll({
           id:                    p.id,
@@ -202,6 +217,7 @@ export async function warmupFromDB(): Promise<void> {
           isPrivate:             !!p.isPrivate,
           totalVotes:            p.totalVotes     || 0,
           isExpired:             !!p.isExpired,
+          dataVersion:           GUN_NAMESPACE,
           // View count — passed through from relay's search_index enrichment
           ...(p.viewCount     ? { viewCount:     p.viewCount }     : {}),
           ...(p.uniqueViewers ? { uniqueViewers: p.uniqueViewers } : {}),

@@ -66,6 +66,12 @@ export interface Poll {
   viewCount?: number;
   /** Relay-derived unique viewer count — hydrated from post_views, not stored in Gun. */
   uniqueViewers?: number;
+  /**
+   * Gun namespace this poll belongs to (e.g. 'v4'). Client-side only — the relay
+   * does not store it, so an absent value means "assume current namespace".
+   * Mirrors `Post.dataVersion`; see pollStore.matchesVersion.
+   */
+  dataVersion?: string;
 }
 
 export interface VoteTrustPolicy {

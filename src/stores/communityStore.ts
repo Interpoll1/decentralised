@@ -300,7 +300,7 @@ export const useCommunityStore = defineStore('community', () => {
   async function loadPostsFromApiFallback(): Promise<number> {
     const apiBaseUrl = getApiBaseUrl();
     const json = await fetchJsonWithTimeout<{ posts?: Array<Record<string, unknown>> }>(
-      `${apiBaseUrl}/api/posts?limit=500`,
+      `${apiBaseUrl}/api/posts?limit=500&dataVersion=${encodeURIComponent(GUN_NAMESPACE)}`,
       FALLBACK_POST_SEARCH_TIMEOUT_MS,
     );
     if (!json?.posts?.length) return 0;

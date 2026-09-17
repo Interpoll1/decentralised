@@ -7,7 +7,7 @@ import { UserService } from '../services/userService';
 import { EventService } from '../services/eventService';
 import { BroadcastService } from '../services/broadcastService';
 import { WebSocketService } from '../services/websocketService';
-import { GunService } from '../services/gunService';
+import { GunService, GUN_NAMESPACE } from '../services/gunService';
 import { generatePseudonym } from '../utils/pseudonym';
 import { fetchVoteTallies } from '../services/relayFeedService';
 
@@ -254,8 +254,19 @@ export const usePollStore = defineStore('poll', () => {
 
   const _sortedPollsCache = shallowRef<Poll[]>([]);
 
+  /**
+   * Mirror of postStore.matchesVersion. From v3 onward the active namespace is
+   * a clean slate, so a poll that explicitly claims a different namespace never
+   * renders. An absent dataVersion means relay-sourced and is treated as
+   * current, matching how injectPoll admits it.
+   */
+  function matchesVersion(p: Poll): boolean {
+    return !p.dataVersion || p.dataVersion === GUN_NAMESPACE;
+  }
+
   function rebuildSortedPolls() {
     _sortedPollsCache.value = Array.from(pollsMap.value.values())
+      .filter(matchesVersion)
       .sort((a, b) => b.createdAt - a.createdAt);
   }
 
@@ -327,6 +338,9 @@ export const usePollStore = defineStore('poll', () => {
   }
 
   function injectPoll(poll: Poll) {
+    // Reject polls that explicitly claim a foreign namespace (e.g. v3 into v4).
+    // Absent dataVersion = relay-sourced, treated as current namespace.
+    if (poll.dataVersion && poll.dataVersion !== GUN_NAMESPACE) return;
     const existing = pollsMap.value.get(poll.id);
     // Relay-only fields (never stored in Gun) — carry forward from existing entry
     // so Gun snapshot overwrites never silently clear them.
@@ -748,13 +762,43 @@ export const usePollStore = defineStore('poll', () => {
     if (changed) triggerRef(pollsMap);
   }
 
+  /**
+   * Drop polls that do not belong to the current active namespace (eradicate v3
+   * when running v4). Counterpart to postStore.purgeLegacyPosts; kept in step
+   * with matchesVersion, so an untagged (relay-sourced) poll is NOT purged.
+   */
+  async function purgeLegacyPolls(): Promise<number> {
+    const removed: string[] = [];
+    for (const [id, poll] of pollsMap.value) {
+      if (poll.dataVersion && poll.dataVersion !== GUN_NAMESPACE) removed.push(id);
+    }
+    if (removed.length === 0) return 0;
+
+    for (const id of removed) pollsMap.value.delete(id);
+    triggerRef(pollsMap);
+
+    // Best-effort local Gun cache clear, same as the post purge.
+    try {
+      const gun = GunService?.getGun?.();
+      if (gun && typeof gun.get === 'function') {
+        for (const id of removed) {
+          try {
+            gun.get('polls').get(id).put(null);
+          } catch { /* best-effort */ }
+        }
+      }
+    } catch { /* ignore */ }
+
+    return removed.length;
+  }
+
   return {
     polls, pollsMap, currentPoll, isLoading,
     sortedPolls, activePolls,
     visiblePolls, hasMorePolls, visibleCount,
     newPollCount, pendingNewPolls,
     loadPollsForCommunity, loadMorePolls, resetVisibleCount, trimPollsToVisible,
-    flushNewPolls, injectPoll, saveSeenNow,
+    flushNewPolls, injectPoll, saveSeenNow, purgeLegacyPolls,
     createPoll, voteOnPoll, selectPoll,
     voteOnPollContent, upvotePoll, downvotePoll,
     myPollContentVote, togglePollContentVote, patchPollTally, patchViewCounts,

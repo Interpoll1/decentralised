@@ -228,6 +228,18 @@ export class SnapshotService {
       throw new Error(`Unsupported snapshot version: ${snapshot.version}`);
     }
 
+    // A snapshot exported under an older namespace (e.g. v3) would otherwise be
+    // written straight into the current namespace's souls, reintroducing exactly
+    // the legacy content the namespace bump was meant to leave behind. Snapshots
+    // predating the meta field carry no namespace and are still accepted.
+    const snapshotNamespace = snapshot.meta?.gunNamespace;
+    if (snapshotNamespace && snapshotNamespace !== GUN_NAMESPACE) {
+      throw new Error(
+        `Snapshot belongs to namespace ${snapshotNamespace}, but this client runs ${GUN_NAMESPACE}. ` +
+        `Importing it would reintroduce legacy data.`,
+      );
+    }
+
     const result: ImportResult = {
       imported: { blocks: 0, posts: 0, communities: 0, comments: 0, users: 0, events: 0 },
     };
