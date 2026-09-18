@@ -3,7 +3,16 @@
 import Gun from '../lib/gun-shim';
 import config, { getPeerPreferences } from '../config';
 
-export const GUN_NAMESPACE = 'v4';
+// Namespace policy lives in utils/namespace.ts — no Gun dependency, so it stays
+// unit-testable without a DOM. Re-exported here because most call sites already
+// import GUN_NAMESPACE from this module.
+export {
+  GUN_NAMESPACE,
+  NAMESPACE_EPOCH_MS,
+  idTimestamp,
+  belongsToNamespace,
+} from '../utils/namespace';
+import { GUN_NAMESPACE } from '../utils/namespace';
 
 // Roots that get namespaced under GUN_NAMESPACE — Gun is now live-updates only,
 // not the initial load source. These namespaced paths are still written to on

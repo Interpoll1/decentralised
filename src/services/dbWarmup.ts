@@ -10,7 +10,7 @@
 //   - communities API warmup is enabled; rows are still validated before hydration
 
 import { isVersionEnabled } from '../utils/dataVersionSettings'
-import { GUN_NAMESPACE } from './gunService'
+import { GUN_NAMESPACE, belongsToNamespace } from './gunService'
 import config from '../config'
 
 const WARMUP_POST_LIMIT = 50
@@ -83,8 +83,13 @@ export async function warmupFromDB(): Promise<void> {
       warmupLog('Purge legacy polls failed', { err: String(err) });
     }
 
-    // Warm active namespace feed data; per-row version checks below still reject mismatches.
-    const shouldWarmApiFeeds = getNamespaceVersion(GUN_NAMESPACE) <= 3
+    // Clean-slate namespaces are Gun-only: there is no legacy REST corpus worth
+    // warming from, and warming from one is exactly how v3 content reached v4.
+    // This was previously `<= 3`, a literal written during the v3 era that
+    // happened to do the right thing at the v4 bump. Deriving it keeps the next
+    // bump from depending on someone having guessed correctly.
+    const CLEAN_SLATE_FROM = 4
+    const shouldWarmApiFeeds = getNamespaceVersion(GUN_NAMESPACE) < CLEAN_SLATE_FROM
     const shouldWarmApiCommunities = shouldWarmApiFeeds
 
     // ── Fetch everything in parallel — no sequential blocking ────────────────
@@ -144,10 +149,10 @@ export async function warmupFromDB(): Promise<void> {
       for (const d of posts || []) {
         if (!d?.id || !d?.title || !d?.communityId) continue
         // Skip posts that explicitly declare a different namespace version.
-        // Posts without dataVersion are assumed to belong to the current namespace
-        // (the field is client-side only and never stored on the relay).
-        const postDataVersion = typeof d.dataVersion === 'string' ? d.dataVersion : null
-        if (postDataVersion && postDataVersion !== GUN_NAMESPACE) continue
+        // Default-deny, and never fabricate the tag below: stamping
+        // `dataVersion: GUN_NAMESPACE` onto an arbitrary relay row is precisely
+        // how foreign records acquired a current-namespace identity.
+        if (!belongsToNamespace(d)) continue
 
         // Always inject — overwrite stale if present
         postStore.injectPost({
@@ -195,10 +200,8 @@ export async function warmupFromDB(): Promise<void> {
       for (const p of polls || []) {
         if (!p?.id || !p?.question) continue
         // Skip polls that explicitly declare a different namespace version.
-        // Mirrors the posts block above; polls without dataVersion are assumed
-        // to belong to the current namespace (relay never stores the field).
-        const pollDataVersion = typeof p.dataVersion === 'string' ? p.dataVersion : null
-        if (pollDataVersion && pollDataVersion !== GUN_NAMESPACE) continue
+        // Mirrors the posts block above.
+        if (!belongsToNamespace(p)) continue
 
         // Always inject — never skip based on existing entry
         pollStore.injectPoll({

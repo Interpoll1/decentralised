@@ -84,6 +84,10 @@ export class CommunityService {
       createdAt: community.createdAt, memberCount: community.memberCount,
       postCount: community.postCount,
       category: community.category || null, nsfw: !!community.nsfw, isPrivate: !!community.isPrivate,
+      // Community ids are human slugs with no embedded timestamp, so the
+      // namespace tag is the only thing separating a v5 community from a
+      // legacy one with the same name.
+      dataVersion: GUN_NAMESPACE,
     };
 
     // Sign community creation for anti-sabotage verification

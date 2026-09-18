@@ -3,7 +3,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import config from '@/config';
 import { Community, CommunityService } from '../services/communityService';
-import { GUN_NAMESPACE } from '../services/gunService';
+import { GUN_NAMESPACE, belongsToNamespace } from '../services/gunService';
 import { KeyVaultService } from '../services/keyVaultService';
 import { useChainStore } from './chainStore';
 
@@ -239,13 +239,18 @@ export const useCommunityStore = defineStore('community', () => {
   async function loadCommunitiesFromApiFallback(): Promise<number> {
     const apiBaseUrl = getApiBaseUrl();
     const json = await fetchJsonWithTimeout<{ communities?: Array<Record<string, unknown>> }>(
-      `${apiBaseUrl}/api/communities`,
+      `${apiBaseUrl}/api/communities?dataVersion=${encodeURIComponent(GUN_NAMESPACE)}`,
       FALLBACK_COMMUNITY_SEARCH_TIMEOUT_MS,
     );
     if (!json?.communities?.length) return 0;
 
     let added = 0;
     for (const row of json.communities) {
+      // This path had no version check of any kind, which is how v3 communities
+      // kept arriving in v4 on every page load long after the namespace bump.
+      // The relay filter above is belt; this is braces — an older relay that
+      // ignores the query parameter still cannot get a foreign record past here.
+      if (!belongsToNamespace(row)) continue;
       const community = toCommunityRecord(row);
       if (!community) continue;
       const previousCount = communities.value.length;
@@ -310,11 +315,7 @@ export const useCommunityStore = defineStore('community', () => {
     for (const d of json.posts) {
       const postId = asString(d.id);
       if (!postId || !asString(d.title)) continue;
-      // Avoid hydrating posts from a different dataVersion (e.g., v3 into v4)
-      const postDataVersion = typeof d.dataVersion === 'string' ? d.dataVersion : null;
-      const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;
-      if (postDataVersion && postDataVersion !== GUN_NAMESPACE) continue;
-      if (!postDataVersion && namespaceVersion >= 3) continue;
+      if (!belongsToNamespace(d)) continue;
 
       if (!await shouldHydrateFallbackPost(gun, d)) continue;
       gun.get('posts').get(postId).put(d);
@@ -354,11 +355,7 @@ export const useCommunityStore = defineStore('community', () => {
         const postId = asString(d.id);
         if (!postId || !asString(d.title)) continue; // only full post nodes
 
-        // Avoid hydrating posts from a different dataVersion (e.g., v3 into v4)
-        const postDataVersion = typeof d.dataVersion === 'string' ? d.dataVersion : null;
-        const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;
-        if (postDataVersion && postDataVersion !== GUN_NAMESPACE) continue;
-        if (!postDataVersion && namespaceVersion >= 3) continue;
+        if (!belongsToNamespace(d)) continue;
 
         if (!await shouldHydrateFallbackPost(gun, d)) continue;
         gun.get('posts').get(postId).put(d);

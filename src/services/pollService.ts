@@ -1202,6 +1202,8 @@ export class PollService {
       authorPubkey: poll.authorPubkey,
       contentSignature: poll.contentSignature,
       voteTrustPolicy: poll.voteTrustPolicy ? JSON.stringify(poll.voteTrustPolicy) : undefined,
+      // Namespace tag written into the Gun node — see belongsToNamespace().
+      dataVersion: GUN_NAMESPACE,
     };
 
     await this.registerPollPolicyBestEffort(poll.id, poll.requireLogin);

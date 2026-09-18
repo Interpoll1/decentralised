@@ -261,6 +261,7 @@ export class PostService {
       downvotes: 0,
       score: 0,
       commentCount: 0,
+      dataVersion: GUN_NAMESPACE,
       // Optional metadata fields — passed through from the create form
       ...(post.category     ? { category: post.category }          : {}),
       ...(post.tags?.length ? { tags: post.tags }                   : {}),
@@ -287,6 +288,10 @@ export class PostService {
       downvotes: newPost.downvotes,
       score: newPost.score,
       commentCount: newPost.commentCount,
+      // Written into the Gun node itself, not just the in-memory object. This is
+      // what makes default-deny possible downstream: every legitimate v5 record
+      // carries the tag from birth, so an absent tag reliably means pre-cutover.
+      dataVersion: GUN_NAMESPACE,
     };
 
     // Gun can't store arrays — serialise tags as a comma string
@@ -461,7 +466,7 @@ export class PostService {
         (postData) => {
           if (postData.id && !initialSeenIds.has(postData.id)) {
             initialSeenIds.add(postData.id);
-            collectedPosts.push({ ...normalizeGunPost(postData), dataVersion: (postData && postData.dataVersion) ? postData.dataVersion : GUN_NAMESPACE });
+            collectedPosts.push({ ...normalizeGunPost(postData), dataVersion: postData?.dataVersion });
           }
         },
         40,
@@ -489,7 +494,7 @@ export class PostService {
         void onceWithTimeout(gun.get('posts').get(postId)).then((postData) => {
           if (postData && postData.id) {
             initialSeenIds.add(postData.id);
-            onPost({ ...normalizeGunPost(postData), dataVersion: (postData && postData.dataVersion) ? postData.dataVersion : GUN_NAMESPACE });
+            onPost({ ...normalizeGunPost(postData), dataVersion: postData?.dataVersion });
           }
         }).finally(() => {
           inFlightIds.delete(postId);
@@ -505,7 +510,7 @@ export class PostService {
           inFlightIds.add(postId);
           void onceWithTimeout(gun.get('posts').get(postId)).then((postData) => {
             if (postData && postData.id) {
-              onPost({ ...normalizeGunPost(postData), dataVersion: postData.dataVersion || GUN_NAMESPACE });
+              onPost({ ...normalizeGunPost(postData), dataVersion: postData.dataVersion });
             }
           }).finally(() => inFlightIds.delete(postId));
         }
@@ -565,7 +570,7 @@ export class PostService {
         (postData) => {
           if (postData.id && !initialSeenIds.has(postData.id)) {
             initialSeenIds.add(postData.id);
-            collectedPosts.push({ ...normalizeGunPost(postData), dataVersion: (postData && postData.dataVersion) ? postData.dataVersion : GUN_NAMESPACE });
+            collectedPosts.push({ ...normalizeGunPost(postData), dataVersion: postData?.dataVersion });
           }
         },
         50,
@@ -595,7 +600,7 @@ export class PostService {
         void onceWithTimeout(gun.get('posts').get(postId)).then((postData) => {
           if (postData && postData.id) {
             initialSeenIds.add(postData.id);
-            onPost({ ...normalizeGunPost(postData), dataVersion: (postData && postData.dataVersion) ? postData.dataVersion : GUN_NAMESPACE });
+            onPost({ ...normalizeGunPost(postData), dataVersion: postData?.dataVersion });
           }
         }).finally(() => {
           inFlightIds.delete(postId);
@@ -628,7 +633,7 @@ export class PostService {
           inFlightIds.add(postId);
           void onceWithTimeout(gun.get('posts').get(postId)).then((postData) => {
             if (postData && postData.id) {
-              onPost({ ...normalizeGunPost(postData), dataVersion: postData.dataVersion || GUN_NAMESPACE });
+              onPost({ ...normalizeGunPost(postData), dataVersion: postData.dataVersion });
             }
           }).finally(() => inFlightIds.delete(postId));
         }
@@ -710,7 +715,7 @@ export class PostService {
           if (res.ok) {
             const data = await res.json();
             if (data?.id) {
-              const post = { ...normalizeGunPost(data), dataVersion: (data && data.dataVersion) ? data.dataVersion : GUN_NAMESPACE };
+              const post = { ...normalizeGunPost(data), dataVersion: data?.dataVersion };
               postMemoryCache.set(postId, post);
               missingPostCache.delete(postId);
               return post;
@@ -726,7 +731,7 @@ export class PostService {
     const gun = GunService.getGun();
     const postData = await onceWithTimeout(gun.get('posts').get(postId));
     if (postData && postData.id) {
-      const post = { ...normalizeGunPost(postData), dataVersion: (postData && postData.dataVersion) ? postData.dataVersion : GUN_NAMESPACE };
+      const post = { ...normalizeGunPost(postData), dataVersion: postData?.dataVersion };
       postMemoryCache.set(postId, post);
       missingPostCache.delete(postId);
       return post;
@@ -796,7 +801,7 @@ export class PostService {
     // Try the posts path first (works for actual posts)
     const live = await onceWithTimeout(gun.get('posts').get(postId));
     if (live && live.id) {
-      return { ...normalizeGunPost(live), dataVersion: live.dataVersion || GUN_NAMESPACE } as Post;
+      return { ...normalizeGunPost(live), dataVersion: live.dataVersion } as Post;
     }
     // For poll IDs: the posts path only has category metadata, not the full poll.
     // Try the polls path to get the actual data for counter updates.
@@ -815,7 +820,9 @@ export class PostService {
           downvotes: pollData.downvotes || 0,
           score: (pollData.upvotes || 0) - (pollData.downvotes || 0),
           commentCount: 0,
-          dataVersion: GUN_NAMESPACE,
+          // Carry the poll's own tag through rather than asserting the current
+          // namespace onto a record we merely read.
+          dataVersion: pollData.dataVersion,
         } as Post;
       }
     }

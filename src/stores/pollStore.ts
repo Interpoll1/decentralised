@@ -7,7 +7,7 @@ import { UserService } from '../services/userService';
 import { EventService } from '../services/eventService';
 import { BroadcastService } from '../services/broadcastService';
 import { WebSocketService } from '../services/websocketService';
-import { GunService, GUN_NAMESPACE } from '../services/gunService';
+import { GunService, belongsToNamespace } from '../services/gunService';
 import { generatePseudonym } from '../utils/pseudonym';
 import { fetchVoteTallies } from '../services/relayFeedService';
 
@@ -254,14 +254,9 @@ export const usePollStore = defineStore('poll', () => {
 
   const _sortedPollsCache = shallowRef<Poll[]>([]);
 
-  /**
-   * Mirror of postStore.matchesVersion. From v3 onward the active namespace is
-   * a clean slate, so a poll that explicitly claims a different namespace never
-   * renders. An absent dataVersion means relay-sourced and is treated as
-   * current, matching how injectPoll admits it.
-   */
+  /** Mirror of postStore.matchesVersion — both defer to the same authority. */
   function matchesVersion(p: Poll): boolean {
-    return !p.dataVersion || p.dataVersion === GUN_NAMESPACE;
+    return belongsToNamespace(p);
   }
 
   function rebuildSortedPolls() {
@@ -338,9 +333,8 @@ export const usePollStore = defineStore('poll', () => {
   }
 
   function injectPoll(poll: Poll) {
-    // Reject polls that explicitly claim a foreign namespace (e.g. v3 into v4).
-    // Absent dataVersion = relay-sourced, treated as current namespace.
-    if (poll.dataVersion && poll.dataVersion !== GUN_NAMESPACE) return;
+    // Default-deny: only polls explicitly tagged for this namespace.
+    if (!belongsToNamespace(poll)) return;
     const existing = pollsMap.value.get(poll.id);
     // Relay-only fields (never stored in Gun) — carry forward from existing entry
     // so Gun snapshot overwrites never silently clear them.
@@ -782,7 +776,7 @@ export const usePollStore = defineStore('poll', () => {
   async function purgeLegacyPolls(): Promise<number> {
     const removed: string[] = [];
     for (const [id, poll] of pollsMap.value) {
-      if (poll.dataVersion && poll.dataVersion !== GUN_NAMESPACE) removed.push(id);
+      if (!belongsToNamespace(poll)) removed.push(id);
     }
     if (removed.length === 0) return 0;
 

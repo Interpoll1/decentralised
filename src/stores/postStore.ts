@@ -9,8 +9,7 @@ import { BroadcastService } from '../services/broadcastService';
 import { WebSocketService } from '../services/websocketService';
 import { useChainStore } from './chainStore';
 import { generatePseudonym } from '../utils/pseudonym';
-import { enabledVersions, type DataVersion } from '../utils/dataVersionSettings';
-import { GUN_NAMESPACE } from '../services/gunService';
+import { belongsToNamespace } from '../services/gunService';
 import { BoundedMap } from '../utils/boundedMap';
 import { fetchCommentCounts, fetchVoteTallies } from '../services/relayFeedService';
 
@@ -292,15 +291,14 @@ export const usePostStore = defineStore('post', () => {
     // are synthetic objects built in postService with dataVersion already injected —
     // but for safety we also allow them through if the post already exists in store
     // (it's an update to a post we already accepted, not a new foreign-namespace post).
-    const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;
-    const postDataVersion = (post as any).dataVersion || null;
     const isCategoryPatch = !!(post as any).category && !(post as any).title;
     const alreadyInStore  = postsMap.value.has(post.id);
     // Allow through if: correct namespace, OR it's a category patch for a known post
     if (!isCategoryPatch || !alreadyInStore) {
-      // Only reject posts that explicitly claim a different namespace.
-      // No dataVersion = relay-sourced post, treat as current namespace.
-      if (postDataVersion && postDataVersion !== GUN_NAMESPACE) return;
+      // Default-deny: the post must explicitly declare this namespace. The old
+      // rule ("reject only if it claims another") let every untagged legacy
+      // record through, which is how v3 content rendered as v4.
+      if (!belongsToNamespace(post)) return;
     }
 
     // Always update existing posts in-place (vote counts, edits, category patches)
@@ -435,15 +433,9 @@ export const usePostStore = defineStore('post', () => {
   const posts = computed(() => Array.from(postsMap.value.values()));
 
   function matchesVersion(p: Post): boolean {
-    const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;
-    if (namespaceVersion >= 3) {
-      // injectPost already rejects foreign-namespace entries, so anything that
-      // made it into postsMap without a dataVersion tag is safe to treat as
-      // belonging to the current namespace rather than silently dropping it.
-      return !p.dataVersion || p.dataVersion === GUN_NAMESPACE;
-    }
-    const v = p.dataVersion || GUN_NAMESPACE;
-    return enabledVersions.value.includes(v as DataVersion);
+    // Render filter and the ingest guard must agree, or a record that slipped
+    // past one gets displayed by the other. Both now defer to the same rule.
+    return belongsToNamespace(p);
   }
 
   // Maintained sorted array — rebuilt only when postsMap changes (triggerRef).
@@ -543,11 +535,8 @@ export const usePostStore = defineStore('post', () => {
   }
 
   function injectPost(post: Post) {
-    // Prevent injecting posts from other namespace versions.
-    // Posts without dataVersion are assumed to belong to the current namespace
-    // (dataVersion is client-side only and not stored on the relay).
-    const postDataVersion = (post as any).dataVersion || null;
-    if (postDataVersion && postDataVersion !== GUN_NAMESPACE) return;
+    // Default-deny: only records explicitly tagged for this namespace.
+    if (!belongsToNamespace(post)) return;
 
     if (!postsMap.value.has(post.id)) {
       postsMap.value.set(post.id, post);
@@ -593,16 +582,17 @@ export const usePostStore = defineStore('post', () => {
 
   /**
    * Purge any posts from the store and local Gun cache that do not match
-   * the current active namespace (eradicate v3 when running v4).
+   * the current active namespace (eradicate v3/v4 when running v5).
+   *
+   * This purges untagged posts too, which the v4 attempt deliberately stopped
+   * doing because the relay never stored `dataVersion` and the purge was eating
+   * legitimate content. From v5 every genuine record is tagged at creation, so
+   * untagged once again means legacy and is safe — and necessary — to drop.
    */
   async function purgeLegacyPosts(): Promise<number> {
     const removed: string[] = [];
     for (const [id, post] of postsMap.value) {
-      // Only purge posts that explicitly claim a foreign namespace. An absent
-      // dataVersion means relay-sourced (the relay never stores the field), and
-      // matchesVersion renders those, so purging them here would delete valid
-      // current-namespace posts on every warmup.
-      if (post.dataVersion && post.dataVersion !== GUN_NAMESPACE) removed.push(id);
+      if (!belongsToNamespace(post)) removed.push(id);
     }
     if (removed.length === 0) return 0;
 
@@ -1028,18 +1018,16 @@ export const usePostStore = defineStore('post', () => {
     await loadPostsForCommunity(currentCommunityId.value);
   }
 
-  // Run immediate purge on initialization for v4 clients to ensure no legacy posts persist
+  // Run immediate purge on initialization so no legacy posts survive in a
+  // client that was upgraded in place rather than starting from empty storage.
   (async () => {
     try {
-      const namespaceVersion = Number.parseInt(GUN_NAMESPACE.replace(/^v/i, ''), 10) || 0;
-      if (namespaceVersion >= 3) {
-        const removed = await purgeLegacyPosts();
-        if (removed > 0) {
-          saveSeenIds(new Set());
-          // clear seen-post-ids to avoid restoring old IDs
-          try { localStorage.removeItem(SEEN_POSTS_KEY); } catch {}
-          if (POST_DEBUG) postDebug('purged-legacy-posts', { removed });
-        }
+      const removed = await purgeLegacyPosts();
+      if (removed > 0) {
+        saveSeenIds(new Set());
+        // clear seen-post-ids to avoid restoring old IDs
+        try { localStorage.removeItem(SEEN_POSTS_KEY); } catch {}
+        if (POST_DEBUG) postDebug('purged-legacy-posts', { removed });
       }
     } catch (err) { /* ignore */ }
   })();
