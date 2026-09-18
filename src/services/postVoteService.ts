@@ -244,11 +244,36 @@ export class PostVoteService {
         // so we return it directly without folding again.
         if (t && typeof t.upvotes === 'number') {
           const tally: PostTally = { upvotes: t.upvotes, downvotes: t.downvotes, score: t.score };
+          // Freeze a zero baseline if none exists yet. Without this the post
+          // node is left with no `voteBaselineAt` while `upvotes` is overwritten
+          // by the tallyHint below — so the next readBaseline()/subscribeTally()
+          // treats the already-counted votes as legacy counters and folds the
+          // vote nodes on top of them again, turning one click into +2.
+          // The relay tally is derived purely from the vote rows, so the
+          // matching local baseline is 0.
+          const frozeZeroBaseline = !post?.voteBaselineAt;
+          if (frozeZeroBaseline) {
+            void gunPut(postNode(postId), {
+              voteBaselineUp: 0, voteBaselineDown: 0, voteBaselineAt: Date.now(),
+            }).catch(() => {});
+          }
           const tallyHint = { upvotes: tally.upvotes, downvotes: tally.downvotes, score: tally.score };
           void gunPut(postNode(postId), tallyHint).catch(() => {});
           if (postId.startsWith('poll-')) void gunPut(gun().get('polls').get(postId), tallyHint).catch(() => {});
           if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('interpoll:vote-tally', { detail: { postId, tally: tallyHint } }));
+            // Live subscribers opened before this freeze still hold the *legacy*
+            // baseline in memory. The relay tally counts the vote nodes directly,
+            // so those same nodes would then be folded on top of counters that
+            // already include them — a downvote click makes the sibling upvote
+            // rows stream in and the upvote count jumps with no user action.
+            // Hand subscribers the new baseline so they reset to it.
+            window.dispatchEvent(new CustomEvent('interpoll:vote-tally', {
+              detail: {
+                postId,
+                tally: tallyHint,
+                ...(frozeZeroBaseline ? { baseline: { up: 0, down: 0 } } : {}),
+              },
+            }));
           }
           return { tally, myVote: next === 'none' ? null : next };
         }
@@ -328,11 +353,26 @@ export class PostVoteService {
       callback(foldVotes(baseline, votes.values()));
     };
 
+    // Once a writer freezes a baseline we adopt it verbatim and stop trusting
+    // the legacy counters we may have read before that happened.
+    let baselineAdopted = false;
+
     void PostVoteService.readBaseline(postId).then((value) => {
-      if (!active) return;
+      if (!active || baselineAdopted) return;
       baseline = value;
       emit();
     });
+
+    const onTallyEvent = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (!active || detail?.postId !== postId || !detail?.baseline) return;
+      baselineAdopted = true;
+      baseline = { up: Number(detail.baseline.up) || 0, down: Number(detail.baseline.down) || 0 };
+      emit();
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('interpoll:vote-tally', onTallyEvent);
+    }
 
     let chain: any = null;
     const attach = () => {
@@ -359,6 +399,9 @@ export class PostVoteService {
     return () => {
       active = false;
       offReconnect();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('interpoll:vote-tally', onTallyEvent);
+      }
       detach();
     };
   }

@@ -63,7 +63,16 @@
         <!-- List -->
         <div class="ct-list">
           <div v-if="filteredCommunities.length === 0" class="ct-list-empty">
-            <p>No communities match "{{ searchQuery }}"</p>
+            <p v-if="searchQuery">No communities match "{{ searchQuery }}"</p>
+            <template v-else>
+              <p>No communities available yet.</p>
+              <button
+                class="ct-empty-btn"
+                @click="pickerMode === 'poll' ? $router.push('/create-poll') : $router.push('/communities')"
+              >
+                {{ pickerMode === 'poll' ? 'Create a poll anyway' : 'Browse Communities' }}
+              </button>
+            </template>
           </div>
           <button
             v-for="c in filteredCommunities"
@@ -235,6 +244,13 @@ const filteredCommunities = computed(() => {
 });
 
 function openPicker(mode: 'post' | 'poll') {
+  // With no communities loaded the picker has nothing to render, which reads as
+  // a blank content pane. Polls have a standalone route with their own in-page
+  // community picker — go straight there instead of showing an empty list.
+  if (communityStore.communities.length === 0) {
+    router.push(mode === 'poll' ? '/create-poll' : '/communities');
+    return;
+  }
   pickerMode.value  = mode;
   searchQuery.value = '';
   pickerOpen.value  = true;

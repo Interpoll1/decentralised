@@ -24,6 +24,15 @@ const PENDING_INVITE_FINALIZATIONS_KEY = 'interpoll_pending_invite_finalizations
 const LOCAL_POLLS_META_KEY = 'interpoll-local-polls-v1';
 const LOCAL_POLLS_TOMBSTONES_META_KEY = 'interpoll-local-polls-tombstones-v1';
 const LOCAL_POLL_BACKUP_TTL_MS = 30 * 60 * 1000;
+// Scalar metadata that a partially-replicated root poll node may be missing.
+// `options` is deliberately excluded — it is a Gun reference resolved separately.
+const PARTIAL_HEAL_FIELDS = [
+  'question', 'description', 'communityId', 'authorId', 'authorName',
+  'authorShowRealName', 'authorPubkey', 'contentSignature',
+  'createdAt', 'expiresAt', 'isExpired', 'isPrivate',
+  'allowMultipleChoices', 'showResultsBeforeVoting', 'requireLogin',
+  'isEncrypted', 'encryptedContent', 'authTag', 'voteTrustPolicy',
+] as const;
 
 type PendingInviteFinalization = {
   pollId: string;
@@ -323,6 +332,9 @@ export class PollService {
     return {
       id: pollData.id, communityId: pollData.communityId || '',
       authorId: pollData.authorId || '', authorName: pollData.authorName || 'Anonymous',
+      // Must be carried through on read: PollCard falls back to a pseudonym
+      // whenever this is falsy, so dropping it here hides real usernames.
+      authorShowRealName: pollData.authorShowRealName === true || pollData.authorShowRealName === 'true',
       question: pollData.question || '', description: pollData.description || '',
       options, createdAt: pollData.createdAt || Date.now(),
       expiresAt: pollData.expiresAt || 0,
@@ -721,7 +733,17 @@ export class PollService {
       options = apiFallback.options;
     }
 
-    const builtPoll = this.buildPollRecord(pollData, options);
+    // The root node can replicate partially: a browser's local graph may hold a
+    // v3/polls/<id> node carrying only some of the keys written at creation
+    // (observed truncated right after `id`), so `question` and the other
+    // display metadata are simply absent even though the relay's copy is whole.
+    // buildPollRecord would then coerce question to '' and the poll renders as
+    // "Untitled Poll" with no heading. Heal from the community-scoped copy
+    // (authoritative — written with the same payload at creation), then from
+    // the API shell, instead of publishing a question-less record.
+    const healed = await this.healPartialPollData(pollId, pollData, allowApiOptionFallback);
+
+    const builtPoll = this.buildPollRecord(healed, options);
     if (builtPoll) {
       void this.saveLocalPollBackup(builtPoll);
       return builtPoll;
@@ -730,6 +752,42 @@ export class PollService {
       return this.getLocalPollBackup(pollId);
     }
     return null;
+  }
+
+  /**
+   * Fill in scalar metadata missing from a partially-replicated root poll node.
+   * Only absent keys are copied in — anything the root node already carries
+   * wins, so this never overwrites fresher root state (e.g. totalVotes).
+   */
+  private static async healPartialPollData(
+    pollId: string,
+    pollData: any,
+    allowApiFallback: boolean,
+  ): Promise<any> {
+    if (pollData?.question) return pollData;
+
+    const merge = (source: any) => {
+      if (!source || typeof source !== 'object') return;
+      for (const key of PARTIAL_HEAL_FIELDS) {
+        if (pollData[key] === undefined && source[key] !== undefined) {
+          pollData = { ...pollData, [key]: source[key] };
+        }
+      }
+    };
+
+    if (pollData?.communityId) {
+      const communityData = await this.onceNode<any>(
+        this.getCommunityPollPath(pollData.communityId, pollId), 500,
+      );
+      if (communityData?.id) merge(communityData);
+    }
+
+    if (!pollData?.question && allowApiFallback) {
+      const { pollData: apiData } = await this.loadPollFromAPI(pollId);
+      merge(apiData);
+    }
+
+    return pollData;
   }
 
   private static async loadPollFromCommunityPath(

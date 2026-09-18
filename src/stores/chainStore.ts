@@ -487,6 +487,32 @@ export const useChainStore = defineStore('chain', () => {
     await loadBlocks();
   }
 
+  /**
+   * Look up a stored receipt by its 12-word verification phrase (or by a
+   * vote-hash / chain-head-hash prefix). Receipts live in their own IndexedDB
+   * store — they are never embedded in chain blocks — so the lookup has to go
+   * through StorageService rather than scanning `blocks`.
+   */
+  async function findReceipt(input: string): Promise<Receipt | null> {
+    const normalise = (raw: string) => raw.trim().toLowerCase().replace(/\s+/g, ' ');
+    const query = normalise(input);
+    if (!query) return null;
+
+    // Exact phrase hit on the keyPath.
+    const direct = await StorageService.getReceipt(query);
+    if (direct) return direct;
+
+    const compact = query.replace(/\s+/g, '');
+    const all = await StorageService.getAllReceipts();
+    for (const r of all) {
+      const code = normalise(r.verificationCode || r.mnemonic || '');
+      if (code && code === query) return r;
+      if (compact && r.voteHash && r.voteHash.toLowerCase().startsWith(compact)) return r;
+      if (compact && r.chainHeadHash && r.chainHeadHash.toLowerCase().startsWith(compact)) return r;
+    }
+    return null;
+  }
+
   async function resetChain() {
     await ChainService.resetChain();
     await loadBlocks();
@@ -508,6 +534,7 @@ export const useChainStore = defineStore('chain', () => {
     validateChain,
     checkForDowngrade,
     syncBlocks,
+    findReceipt,
     resetChain,
   };
 });

@@ -12,6 +12,8 @@ export class KeyVaultService {
 
   /** Retrieve a stored encryption key by id (communityId or roomId) */
   static async getKey(id: string): Promise<StoredEncryptionKey | undefined> {
+    // IndexedDB throws DataError on non-string/empty keys; treat those as "no key".
+    if (typeof id !== 'string' || id.length === 0) return undefined;
     const db = await StorageService.getDB();
     return db.get(this.STORE_NAME, id);
   }

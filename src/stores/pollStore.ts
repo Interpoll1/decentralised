@@ -344,9 +344,15 @@ export const usePollStore = defineStore('poll', () => {
     const existing = pollsMap.value.get(poll.id);
     // Relay-only fields (never stored in Gun) — carry forward from existing entry
     // so Gun snapshot overwrites never silently clear them.
+    // authorShowRealName/authorName are Gun-only: the relay REST feed
+    // (/api/polls, consumed by dbWarmup) does not carry them, so a REST
+    // snapshot must never clear what Gun already supplied — otherwise the
+    // home feed falls back to a pseudonym for a poll whose author opted in.
     const relayFields = existing ? {
       viewCount:     poll.viewCount     ?? existing.viewCount,
       uniqueViewers: poll.uniqueViewers ?? existing.uniqueViewers,
+      authorShowRealName: poll.authorShowRealName ?? existing.authorShowRealName,
+      authorName:    poll.authorName    || existing.authorName,
     } : {
       viewCount:     poll.viewCount,
       uniqueViewers: poll.uniqueViewers,
@@ -438,15 +444,21 @@ export const usePollStore = defineStore('poll', () => {
     inviteCodeCount?: number;
     voteTrustPolicy?: import('../types/poll').VoteTrustPolicy;
   }) {
-    const user = await UserService.getCurrentUser();
+    // Force refresh so we always get the latest customUsername, not a stale cache
+    const user = await UserService.getCurrentUser(true);
     const showReal = user.showRealName === true;
     const pollId = `poll-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-    const authorName = showReal
-      ? (user.customUsername || user.displayName || user.username)
-      : generatePseudonym(pollId, user.id);
+    // Mirrors postStore.createPost: a customUsername IS the user's identity, so
+    // always use it; only fall back to a pseudonym for users who never set one.
+    const authorName = user.customUsername
+      ? user.customUsername
+      : (showReal
+          ? (user.displayName || user.username)
+          : generatePseudonym(pollId, user.id));
+    const showRealName = showReal || !!user.customUsername;
 
     const poll = await PollService.createPoll({
-      ...data, authorId: user.id, authorName, authorShowRealName: showReal,
+      ...data, authorId: user.id, authorName, authorShowRealName: showRealName,
     }, pollId);
 
     pollsMap.value.set(poll.id, poll);

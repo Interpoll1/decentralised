@@ -60,6 +60,9 @@ const routes: Array<RouteRecordRaw> = [
   },
   { path: '/profile', name: 'Profile', component: () => import('../views/ProfilePage.vue') },
   { path: '/user/:userId', name: 'UserProfile', component: () => import('../views/UserProfileView.vue'), props: true },
+  // Public profile by username — this is the shape author links use ("u/<name>").
+  // Without it the catch-all below silently redirected /u/<name> to /home.
+  { path: '/u/:username', name: 'UserProfileByUsername', component: () => import('../views/UserProfileView.vue'), props: true },
   { path: '/settings', name: 'Settings', component: () => import('../views/SettingsPage.vue') },
   // ── NEW: promoted Network page ───────────────────────────────────────────────
   { path: '/network', name: 'Network', component: () => import('../views/NetworkPage.vue') },

@@ -65,7 +65,7 @@
         v-for="cat in (catsExpanded ? categories : categories.slice(0, 5))"
         :key="cat.id"
         class="asn-category"
-        :class="{ active: activeCategory === cat.id }"
+        :class="{ active: effectiveCategory === cat.id }"
         @click="selectCat(cat.id)"
       >
         <ion-icon :icon="cat.icon" :class="'tone-' + cat.id"></ion-icon>
@@ -196,9 +196,25 @@ function go(tab: string) {
   }
 }
 
+// Highlight source: HomePage drives it via the prop; on subpages (DesktopPageShell,
+// which passes no props and listens to no events) it is derived from the URL.
+const effectiveCategory = computed(() => {
+  if (props.activeCategory !== undefined) return props.activeCategory;
+  const raw   = route.query.category;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return typeof value === 'string' ? value : 'all';
+});
+
 function selectCat(id: string) {
+  if (props.activeTab !== undefined) {
+    // HomePage mode — parent owns the category state
+    emit('select-category', id);
+    emit('update:activeTab', 'home');
+    return;
+  }
+  // Subpage mode — no parent listener exists, so navigate to the filtered feed
   emit('select-category', id);
-  if (props.activeTab !== undefined) emit('update:activeTab', 'home');
+  void router.push({ path: '/home', query: id === 'all' ? {} : { category: id } });
 }
 </script>
 

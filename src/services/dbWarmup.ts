@@ -205,7 +205,13 @@ export async function warmupFromDB(): Promise<void> {
           id:                    p.id,
           communityId:           p.communityId,
           authorId:              p.authorId      || '',
-          authorName:            p.authorName    || 'Anonymous',
+          // Empty (not 'Anonymous') so injectPoll's carry-forward keeps a name
+          // already supplied by Gun; the REST feed has no authorShowRealName,
+          // so only pass it through when the relay actually sends it.
+          authorName:            p.authorName    || '',
+          ...(typeof p.authorShowRealName === 'boolean'
+            ? { authorShowRealName: p.authorShowRealName }
+            : {}),
           question:              p.question,
           description:           p.description   || '',
           options:               p.options        || [],
