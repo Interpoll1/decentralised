@@ -244,6 +244,8 @@ function toGunComment(comment: Comment): Record<string, string | number | boolea
     isEncrypted: c.isEncrypted ? true : undefined,
     encryptedContent: c.encryptedContent,
     authTag: c.authTag,
+    // Namespace tag written into the Gun node — see belongsToNamespace().
+    dataVersion: GUN_NAMESPACE,
   });
 }
 
