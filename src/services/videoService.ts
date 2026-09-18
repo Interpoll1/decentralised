@@ -86,24 +86,68 @@ export function validateVideoFile(file: File): string | null {
   return null;
 }
 
+/** How long to wait for a <video> element to report metadata before giving up */
+const METADATA_TIMEOUT_MS = 10_000;
+
+/**
+ * Keeps offscreen <video> elements reachable while a load/seek is pending.
+ * Without this the element is only referenced by its own event handlers
+ * (a self-contained cycle), so the browser is free to collect it mid-load —
+ * the events then never fire and the promise never settles.
+ */
+const _pendingVideoEls = new Set<HTMLVideoElement>();
+
 /** Get video duration and basic metadata without loading the full file */
 export function getVideoDuration(file: File): Promise<number> {
   return new Promise((resolve, reject) => {
-    const url    = URL.createObjectURL(file);
-    const video  = document.createElement('video');
+    const url   = URL.createObjectURL(file);
+    const video = document.createElement('video');
     video.preload = 'metadata';
-    const cleanup = () => URL.revokeObjectURL(url);
+    video.muted   = true;
+    _pendingVideoEls.add(video);
+
+    let settled = false;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      _pendingVideoEls.delete(video);
+      video.onloadedmetadata = null;
+      video.onerror = null;
+      try { video.removeAttribute('src'); video.load(); } catch { /* ignore */ }
+      URL.revokeObjectURL(url);
+      fn();
+    };
+
+    const timer = setTimeout(() => {
+      console.warn('[VideoService] Timed out reading video metadata after', METADATA_TIMEOUT_MS, 'ms');
+      finish(() => reject(new Error('Could not read video metadata (timed out). The file may be corrupt or in an unsupported codec.')));
+    }, METADATA_TIMEOUT_MS);
+
     video.onloadedmetadata = () => {
       const dur = video.duration;
-      cleanup();
+      if (!Number.isFinite(dur) || dur <= 0) {
+        // Fragmented / streamed MP4s report Infinity or NaN — not fatal, the
+        // duration is only used for metadata, so fall back to 0.
+        console.warn('[VideoService] Video reported non-finite duration:', dur, '— continuing with 0');
+        finish(() => resolve(0));
+        return;
+      }
       if (dur > VIDEO_MAX_DURATION_S) {
-        reject(new Error(`Video is ${Math.round(dur / 60)} minutes. Maximum is ${VIDEO_MAX_DURATION_S / 60} minutes.`));
+        finish(() => reject(new Error(`Video is ${Math.round(dur / 60)} minutes. Maximum is ${VIDEO_MAX_DURATION_S / 60} minutes.`)));
       } else {
-        resolve(dur);
+        finish(() => resolve(dur));
       }
     };
-    video.onerror = () => { cleanup(); reject(new Error('Could not read video metadata.')); };
+    video.onerror = () => {
+      const code = video.error?.code;
+      console.warn('[VideoService] <video> load error while reading metadata, code:', code, video.error?.message);
+      finish(() => reject(new Error('Could not read video metadata. The file may be corrupt or in an unsupported codec.')));
+    };
+
     video.src = url;
+    // Explicitly kick off the load — some browsers defer it for detached elements.
+    try { video.load(); } catch { /* ignore */ }
   });
 }
 
@@ -123,27 +167,73 @@ export async function extractVideoThumbnail(
     const video  = document.createElement('video');
     const canvas = document.createElement('canvas');
     const ctx    = canvas.getContext('2d')!;
-    const cleanup = () => URL.revokeObjectURL(url);
+    _pendingVideoEls.add(video);
 
-    video.preload    = 'metadata';
+    video.preload     = 'metadata';
     video.crossOrigin = 'anonymous';
     video.muted       = true;
+    video.playsInline = true;
 
-    video.onloadedmetadata = () => {
-      video.currentTime = Math.min(atSeconds, video.duration * 0.1);
+    let settled = false;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      _pendingVideoEls.delete(video);
+      video.onloadedmetadata = null;
+      video.onseeked = null;
+      video.onerror = null;
+      try { video.removeAttribute('src'); video.load(); } catch { /* ignore */ }
+      URL.revokeObjectURL(url);
+      fn();
     };
 
-    video.onseeked = () => {
+    const timer = setTimeout(() => {
+      console.warn('[VideoService] Thumbnail extraction timed out after', METADATA_TIMEOUT_MS, 'ms');
+      finish(() => reject(new Error('Thumbnail extraction timed out.')));
+    }, METADATA_TIMEOUT_MS);
+
+    const draw = () => {
+      if (!video.videoWidth || !video.videoHeight) {
+        finish(() => reject(new Error('Thumbnail extraction failed: video has no visual dimensions.')));
+        return;
+      }
       const aspect  = video.videoHeight / video.videoWidth;
       canvas.width  = Math.min(video.videoWidth, maxWidth);
-      canvas.height = Math.round(canvas.width * aspect);
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      cleanup();
-      resolve(canvas.toDataURL('image/jpeg', 0.8));
+      canvas.height = Math.max(1, Math.round(canvas.width * aspect));
+      try {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        finish(() => resolve(dataUrl));
+      } catch (err) {
+        finish(() => reject(err instanceof Error ? err : new Error('Thumbnail extraction failed.')));
+      }
     };
 
-    video.onerror = () => { cleanup(); reject(new Error('Thumbnail extraction failed.')); };
+    video.onloadedmetadata = () => {
+      const dur    = video.duration;
+      const target = Number.isFinite(dur) && dur > 0
+        ? Math.min(atSeconds, dur * 0.1)
+        : 0;
+      // Seeking to the current position fires no `seeked` event — draw the
+      // first frame directly instead of waiting forever. Short/synthetic clips
+      // hit this constantly.
+      if (!(target > 0) || Math.abs(video.currentTime - target) < 0.001) {
+        draw();
+        return;
+      }
+      video.currentTime = target;
+    };
+
+    video.onseeked = () => draw();
+
+    video.onerror = () => {
+      console.warn('[VideoService] <video> load error during thumbnail extraction, code:', video.error?.code);
+      finish(() => reject(new Error('Thumbnail extraction failed.')));
+    };
+
     video.src = url;
+    try { video.load(); } catch { /* ignore */ }
   });
 }
 
@@ -333,6 +423,7 @@ export async function uploadVideo(
   };
 
   // 1. Validate raw file
+  console.info(`[VideoService] Starting upload: ${file.name} (${formatFileSize(file.size)}, ${file.type})`);
   report('validating', 0, 'Checking file…');
   const rawValidation = validateVideoFile(file);
   if (rawValidation) throw new Error(rawValidation);

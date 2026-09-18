@@ -99,6 +99,21 @@ export const useCommentStore = defineStore('comment', () => {
     if (changed) reindex();
   }
 
+  /**
+   * Push the live thread length into postStore so comment-count badges match
+   * the "Comments (n)" tab. Imported lazily — postStore and commentStore would
+   * otherwise form an import cycle.
+   */
+  async function syncCommentCountToPostStore(postId: string): Promise<void> {
+    try {
+      const count = comments.value.filter((c) => c.postId === postId && !c.deleted).length;
+      const { usePostStore } = await import('./postStore');
+      usePostStore().setCommentCount(postId, count);
+    } catch {
+      // Badge stays stale; the thread itself is unaffected.
+    }
+  }
+
   function teardown(): void {
     if (unsubscribe) {
       unsubscribe();
@@ -225,6 +240,10 @@ export const useCommentStore = defineStore('comment', () => {
     });
 
     upsert([comment]);
+    // Keep the speech-bubble badge on the card/detail header in step with the
+    // thread. Without this it stays at whatever the relay index last reported
+    // (usually 0) until a full reload.
+    void syncCommentCountToPostStore(data.postId);
     syncStatus.value[comment.id] = 'pending';
     void trackSync(comment.id);
     return comment;

@@ -524,8 +524,9 @@ async function createPoll() {
   try {
     isSubmitting.value = true;
     // Auto-join community if user selected from fallback list (not yet joined)
-    if (selectedCommunity.value && !communityStore.isJoined(selectedCommunity.value)) {
-      await communityStore.joinCommunity(selectedCommunity.value);
+    const selectedCommunityId = selectedCommunity.value?.id;
+    if (selectedCommunityId && !communityStore.isJoined(selectedCommunityId)) {
+      await communityStore.joinCommunity(selectedCommunityId);
     }
 
     // Spam check — question
@@ -667,8 +668,8 @@ async function createPoll() {
     console.error('Error creating poll:', error);
     
     const toast = await toastController.create({
-      message: 'Failed to create poll',
-      duration: 2000,
+      message: `Failed to create poll: ${error instanceof Error ? error.message : String(error)}`,
+      duration: 4000,
       color: 'danger'
     });
     await toast.present();

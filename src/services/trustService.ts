@@ -446,6 +446,23 @@ export class TrustService {
   }
 
   /**
+   * Resolve the public key that owns a claimed username, or null if the
+   * username has never been claimed. Used to render /u/:username profiles.
+   */
+  static async resolveUsernameOwner(username: string): Promise<string | null> {
+    if (!username) return null;
+    const gun = GunService.getGun();
+    const record = await new Promise<any>((resolve) => {
+      let done = false;
+      gun.get(GUN_USERNAMES_ROOT).get(username).once((d: any) => {
+        if (!done) { done = true; resolve(d); }
+      });
+      setTimeout(() => { if (!done) { done = true; resolve(null); } }, 3000);
+    });
+    return record?.pubkey || null;
+  }
+
+  /**
    * Look up the trust level for any username stored in GunDB.
    * Also resolves the issuer and verifies the certificate if present.
    */

@@ -169,30 +169,20 @@ async function doLookup() {
     // Ensure chain is loaded
     if (!chainStore.blocks.length) await chainStore.initialize();
 
-    let found: Receipt | null = null;
-
-    // Search strategy 1: match mnemonic / verificationCode field
-    for (const block of chainStore.blocks) {
-      const r = block.receipt as Receipt | undefined;
-      if (!r) continue;
-
-      const code = normaliseInput(r.verificationCode || r.mnemonic || '');
-      if (code && code === raw) { found = r; break; }
-
-      // Also match hex vote hash prefix
-      if (r.voteHash && r.voteHash.toLowerCase().startsWith(raw.replace(/\s/g, ''))) {
-        found = r; break;
-      }
-    }
+    // Search strategy 1: the local receipt store (receipts are kept in their
+    // own IndexedDB store, not embedded in chain blocks).
+    let found: Receipt | null = await chainStore.findReceipt(raw);
 
     // Search strategy 2: Gun lookup by verificationCode if not found locally
     if (!found) {
+      const { GunService } = await import('../services/gunService');
       found = await new Promise<Receipt | null>((resolve) => {
         const timeout = setTimeout(() => resolve(null), 5000);
         try {
-          const GunService = require('../services/gunService').GunService;
-          GunService.gun
-            ?.get('v4/receipts')
+          const gun = GunService.getGun();
+          if (!gun) { clearTimeout(timeout); resolve(null); return; }
+          gun
+            .get('receipts')
             .get(raw.replace(/\s/g, '-'))
             .once((data: any) => {
               clearTimeout(timeout);

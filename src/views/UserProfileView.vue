@@ -11,6 +11,16 @@
 
     <ion-content>
       <DesktopPageShell>
+      <div v-if="loadingProfile" class="loading">
+        <ion-spinner></ion-spinner>
+      </div>
+
+      <!-- Unknown user: report it here instead of bouncing to the feed -->
+      <div v-else-if="notFound" class="empty-state">
+        <p>User not found.</p>
+      </div>
+
+      <template v-else>
       <!-- Profile Header -->
       <div class="profile-header">
         <div class="avatar-placeholder">
@@ -95,6 +105,7 @@
           />
         </div>
       </div>
+      </template>
       </DesktopPageShell>
     </ion-content>
   </ion-page>
@@ -113,13 +124,21 @@ import { personCircleOutline, chatbubbleOutline } from 'ionicons/icons';
 import PostCard from '../components/PostCard.vue';
 import CommentCard from '../components/CommentCard.vue';
 import { useChat } from '../composables/useChat';
+import { UserService } from '../services/userService';
+import { TrustService } from '../services/trustService';
 import config from '@/config';
 
 const router = useRouter();
 const route = useRoute();
 
-const userId = route.params.userId as string;
-const currentUserId = ref('current-user-id'); // Get from auth store
+// This view serves two routes: /user/:userId (keyed by public key) and
+// /u/:username (the shape author links use). Either param resolves to the
+// same public profile.
+const routeUserId = (route.params.userId as string) || '';
+const routeUsername = (route.params.username as string) || '';
+const userId = ref(routeUserId);
+const currentUserId = ref('current-user-id'); // chat composable identity (unchanged)
+const ownUserId = ref('');
 
 const WS_URL = config.relay.websocket;
 
@@ -133,27 +152,45 @@ const userComments = ref<any[]>([]);
 const loadingPosts = ref(false);
 const loadingComments = ref(false);
 
-const isOwnProfile = computed(() => userId === currentUserId.value);
+const isOwnProfile = computed(() => !!ownUserId.value && userId.value === ownUserId.value);
+const loadingProfile = ref(true);
+const notFound = ref(false);
 
 onMounted(async () => {
+  try {
+    ownUserId.value = (await UserService.getCurrentUser()).id;
+  } catch { /* anonymous visitor — public profiles are still viewable */ }
   await loadUserProfile();
   await loadUserPosts();
   await loadUserComments();
 });
 
 const loadUserProfile = async () => {
-  // TODO: Fetch user profile from your backend/Gun
-  // For now, mock data
-  userProfile.value = {
-    id: userId,
-    username: 'user123',
-    displayName: 'John Doe',
-    bio: 'Love decentralized tech and community building!',
-    karma: 1250,
-    postCount: 42,
-    commentCount: 156,
-    publicKey: 'mock-public-key', // This should come from backend
-  };
+  loadingProfile.value = true;
+  notFound.value = false;
+  try {
+    // /u/:username → resolve the username registry to its owning pubkey first
+    if (!userId.value && routeUsername) {
+      const owner = await TrustService.resolveUsernameOwner(routeUsername);
+      if (owner) userId.value = owner;
+    }
+
+    const profile = userId.value ? await UserService.getUserByPubkey(userId.value) : null;
+    if (profile) {
+      userProfile.value = profile;
+    } else if (routeUsername) {
+      // Username is claimed/linked but no signed profile is replicated to us yet:
+      // show what we do know rather than redirecting the visitor away.
+      userProfile.value = { id: userId.value, username: routeUsername };
+    } else {
+      notFound.value = true;
+    }
+  } catch (err) {
+    console.warn('[UserProfileView] failed to load profile:', err);
+    notFound.value = true;
+  } finally {
+    loadingProfile.value = false;
+  }
 };
 
 const loadUserPosts = async () => {
@@ -183,7 +220,7 @@ const startChat = async () => {
 
   router.push({
     name: 'Chat',
-    params: { userId: userId },
+    params: { userId: userId.value },
     query: {
       name: userProfile.value.displayName || userProfile.value.username,
       publicKey: userProfile.value.publicKey,

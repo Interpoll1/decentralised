@@ -92,7 +92,17 @@ const isNativeBuild = process.env.CAP_BUILD === '1';
 export default defineConfig({
   base: '/',
   plugins: [
-    vue(),
+    vue({
+      template: {
+        compilerOptions: {
+          // ion-icon is a genuine native custom element from the ionicons
+          // package; every other <ion-*> tag (ion-modal, ion-button, ion-page,
+          // …) is a real Vue component registered by @ionic/vue and must stay
+          // resolvable — excluding the whole ion- prefix breaks all of Ionic.
+          isCustomElement: (tag) => tag === 'ion-icon',
+        },
+      },
+    }),
     spaRouteFallbackPlugin(),
     swRegisterInlinePlugin(),
     ...(isNativeBuild ? [] : [

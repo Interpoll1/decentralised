@@ -125,42 +125,49 @@ export class StorageService {
     const hasIndexedDB = typeof indexedDB !== 'undefined' && indexedDB !== null;
     if (hasIndexedDB) {
       try {
-        const open = openDB('interpoll-db', 4, {
-          upgrade(db, oldVersion) {
-            if (oldVersion < 1) {
+        // NOTE: keep DB_VERSION >= any version ever shipped. A lower requested
+        // version makes `openDB` reject with a VersionError and silently drop
+        // the app into the volatile in-memory fallback ("data will not
+        // persist"). The upgrade handler below is idempotent — it only creates
+        // stores that are missing — so bumping this is always safe.
+        const open = openDB('interpoll-db', 5, {
+          upgrade(db) {
+            const has = (name: string) => db.objectStoreNames.contains(name as never);
+            if (!has('blocks')) {
               // Blocks store
               const blockStore = db.createObjectStore('blocks', { keyPath: 'index' });
               blockStore.createIndex('by-hash', 'currentHash');
-
+            }
+            if (!has('votes')) {
               // Votes store
               const voteStore = db.createObjectStore('votes', { keyPath: 'timestamp' });
               voteStore.createIndex('by-poll', 'pollId');
-
+            }
+            if (!has('receipts')) {
               // Receipts store
               const receiptStore = db.createObjectStore('receipts', { keyPath: 'mnemonic' });
               receiptStore.createIndex('by-block', 'blockIndex');
-
-              // Polls store
-              db.createObjectStore('polls', { keyPath: 'id' });
-
-              // Metadata store
-              db.createObjectStore('metadata');
             }
-            if (oldVersion < 2) {
+            // Polls store
+            if (!has('polls')) db.createObjectStore('polls', { keyPath: 'id' });
+            // Metadata store
+            if (!has('metadata')) db.createObjectStore('metadata');
+            if (!has('encryption-keys')) {
               db.createObjectStore('encryption-keys', { keyPath: 'id' });
             }
-            if (oldVersion < 3) {
+            if (!has('comments')) {
               // Durable mirrors for the social layer. Gun runs with
               // `localStorage:false, radisk:false`, so without these a comment
               // or message exists only in a volatile in-memory graph that the
               // memory watchdog is free to evict.
               const commentStore = db.createObjectStore('comments', { keyPath: 'id' });
               commentStore.createIndex('by-post', 'postId');
-
+            }
+            if (!has('chat-messages')) {
               const chatStore = db.createObjectStore('chat-messages', { keyPath: 'id' });
               chatStore.createIndex('by-room', 'roomId');
             }
-            if (oldVersion < 4) {
+            if (!has('vote-index')) {
               // O(1) duplicate-vote index — compound key [pollId, deviceId].
               // One entry per (poll, device) pair so hasVoted() is a single IDB
               // key lookup instead of a full chain scan.

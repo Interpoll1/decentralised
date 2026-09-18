@@ -115,11 +115,14 @@ export class UserService {
   ): Pick<UserProfile, 'identityUsername' | 'identityIssuer' | 'identityTrustLevel'> {
     const raw = (profileLike.customUsername || profileLike.username || '').trim();
     const trust = parseIdentityTrust(raw);
+    // Never emit an explicit `undefined`: Gun rejects the whole node with
+    // "Invalid data: undefined" when any field is undefined, which is how
+    // profiles end up written without their signature fields.
     return {
       identityUsername: trust.identityUsername,
-      identityIssuer: trust.issuer || undefined,
       identityTrustLevel: trust.trustLevel,
-    };
+      ...(trust.issuer ? { identityIssuer: trust.issuer } : {}),
+    } as Pick<UserProfile, 'identityUsername' | 'identityIssuer' | 'identityTrustLevel'>;
   }
 
   static async getCurrentUser(forceRefresh = false): Promise<UserProfile> {
