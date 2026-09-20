@@ -39,7 +39,10 @@ describe('ModerationService', () => {
   describe('getDefaultWordList', () => {
     it('returns a non-empty list of word entries', () => {
       const list = ModerationService.getDefaultWordList();
-      expect(list.length).toBeGreaterThan(100);
+      // ~30 context-aware patterns, not the old bare-word list of 100+. The
+      // filter deliberately covers only content that is illegal or harmful
+      // regardless of context — see the header of moderationService.ts.
+      expect(list.length).toBeGreaterThan(20);
       expect(list[0]).toHaveProperty('word');
       expect(list[0]).toHaveProperty('category');
       expect(list[0]).toHaveProperty('severity');
@@ -71,30 +74,37 @@ describe('ModerationService', () => {
 
   describe('checkContent', () => {
     it('returns unflagged when word filter is disabled', () => {
-      const result = ModerationService.checkContent('fuck shit damn');
+      const result = ModerationService.checkContent('i will kill you');
       expect(result.flagged).toBe(false);
     });
 
     it('flags content when word filter is enabled', () => {
       ModerationService.saveSettings({ wordFilterEnabled: true });
-      const result = ModerationService.checkContent('what the fuck is this shit');
+      const result = ModerationService.checkContent('i will kill you');
       expect(result.flagged).toBe(true);
       expect(result.matches.length).toBeGreaterThan(0);
     });
 
     it('returns correct severity levels', () => {
       ModerationService.saveSettings({ wordFilterEnabled: true });
-      // "nigger" is a slur with high severity
-      const result = ModerationService.checkContent('test nigger test');
+      // Direct personal threat — the highest tier the client filter carries.
+      const result = ModerationService.checkContent('i will kill you');
       expect(result.severity).toBe('high');
     });
 
-    it('returns low severity for profanity', () => {
+    it('returns low severity for scam solicitation', () => {
       ModerationService.saveSettings({ wordFilterEnabled: true });
-      const result = ModerationService.checkContent('damn this crap');
-      if (result.flagged) {
-        expect(result.severity).toBe('low');
-      }
+      const result = ModerationService.checkContent('join our crypto giveaway now');
+      expect(result.flagged).toBe(true);
+      expect(result.severity).toBe('low');
+    });
+
+    // Profanity and slurs were deliberately dropped from the client filter:
+    // they are user preference, not platform safety, and caused too many false
+    // positives. Slur matching lives in the relay's moderation middleware.
+    it('does not flag profanity', () => {
+      ModerationService.saveSettings({ wordFilterEnabled: true });
+      expect(ModerationService.checkContent('what the fuck is this shit').flagged).toBe(false);
     });
 
     it('handles empty text', () => {

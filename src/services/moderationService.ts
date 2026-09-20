@@ -277,14 +277,9 @@ export class ModerationService {
    * Returns the built-in pattern list in the legacy WordEntry shape so existing
    * UI components (word list tables, category toggles) don't break.
    *
-   * NOTE: The test suite expects list.length > 100.
-   * The DEFAULT_PATTERNS list has ~30 context-aware patterns, but this method
-   * returns them expanded: each pattern's label appears once per severity tier
-   * it could logically map to, producing a larger display list.
-   * If the test expectation is a hard requirement, either:
-   *   a) increase DEFAULT_PATTERNS to 100+ entries, or
-   *   b) relax the test to expect > 20.
-   * The current 30-entry list represents the actual filter coverage.
+   * One entry per pattern — ~30 of them, which is the filter's actual coverage.
+   * The old bare-word list ran to 100+ entries; that breadth came from
+   * profanity and slurs, which this filter deliberately no longer carries.
    */
   static getDefaultWordList(): WordEntry[] {
     return DEFAULT_PATTERNS.map(p => ({

@@ -164,6 +164,43 @@
                 <span class="toggle-track"></span>
               </label>
             </div>
+
+            <div class="toggle-row toggle-row-stacked">
+              <div>
+                <div class="toggle-label">Email me when push can't reach me</div>
+                <div class="toggle-sub">
+                  A fallback for the web app or a device with push switched off. The relay
+                  emails you at most once every 15 minutes, and the mail says only that a
+                  message arrived — never its contents or who sent it.
+                  <strong>This ties your identity key to a real address on the relay</strong>,
+                  so leave it off if you rely on being anonymous.
+                </div>
+                <div class="email-notify-row">
+                  <input
+                    v-model="emailNotifyAddress"
+                    type="email"
+                    class="settings-input"
+                    placeholder="you@example.com"
+                    autocomplete="email"
+                    :disabled="emailNotifyBusy"
+                  />
+                  <button
+                    class="settings-inline-btn"
+                    :disabled="emailNotifyBusy || !emailNotifyAddress.trim()"
+                    @click="saveEmailNotifications"
+                  >Save</button>
+                  <button
+                    v-if="emailNotifyRegistered"
+                    class="settings-inline-btn"
+                    :disabled="emailNotifyBusy"
+                    @click="clearEmailNotifications"
+                  >Turn off</button>
+                </div>
+                <div v-if="emailNotifyStatus" class="email-notify-status" :class="{ 'is-error': emailNotifyError }">
+                  {{ emailNotifyStatus }}
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- Home Feed Moderation -->
@@ -1104,6 +1141,30 @@ ion-content {
   cursor: pointer;
 }
 .settings-inline-btn:active { opacity: 0.7; }
+.settings-inline-btn:disabled { opacity: 0.4; cursor: default; }
+
+/* The email fallback needs an input, so its row stacks instead of sitting on one line. */
+.toggle-row-stacked { align-items: flex-start; }
+.email-notify-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.settings-input {
+  flex: 1 1 180px;
+  min-width: 0;
+  padding: 7px 12px;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--app-text);
+  background: rgba(255,255,255,0.06);
+}
+.settings-input:disabled { opacity: 0.5; }
+.email-notify-status { margin-top: 8px; font-size: 12px; color: var(--app-text-muted); }
+.email-notify-status.is-error { color: #f87171; }
 .toggle-label { font-size: 14px; font-weight: 600; color: var(--app-text); }
 .toggle-sub { font-size: 12px; color: var(--app-text-muted); margin-top: 2px; }
 
@@ -1536,6 +1597,9 @@ import { useNavStore } from '../stores/navStore';
 import {
   isPushEnabled, setPushEnabled, initPushNotifications, unregisterPushNotifications,
 } from '../native/pushNotifications';
+import {
+  getEmailNotificationAddress, registerEmailNotifications, unregisterEmailNotifications,
+} from '../native/emailNotifications';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
 import {
   IonPage,
@@ -1649,6 +1713,49 @@ async function togglePush(on: boolean) {
   pushEnabled.value = on;
   if (on) await initPushNotifications();
   else    await unregisterPushNotifications();
+}
+
+// ── Email fallback (Resend, relay-side) ────────────────────────────────────
+const emailNotifyAddress    = ref(getEmailNotificationAddress());
+const emailNotifyRegistered = ref(Boolean(getEmailNotificationAddress()));
+const emailNotifyBusy       = ref(false);
+const emailNotifyStatus     = ref('');
+const emailNotifyError      = ref(false);
+
+function reportEmailNotify(message: string, isError: boolean) {
+  emailNotifyStatus.value = message;
+  emailNotifyError.value  = isError;
+}
+
+async function saveEmailNotifications() {
+  emailNotifyBusy.value = true;
+  try {
+    const result = await registerEmailNotifications(emailNotifyAddress.value);
+    emailNotifyRegistered.value = result.ok;
+    reportEmailNotify(
+      result.ok ? 'Saved — the relay will email this address.' : result.error || 'Could not save.',
+      !result.ok,
+    );
+  } finally {
+    emailNotifyBusy.value = false;
+  }
+}
+
+async function clearEmailNotifications() {
+  emailNotifyBusy.value = true;
+  try {
+    const result = await unregisterEmailNotifications();
+    if (result.ok) {
+      emailNotifyAddress.value    = '';
+      emailNotifyRegistered.value = false;
+    }
+    reportEmailNotify(
+      result.ok ? 'Turned off — the relay has dropped your address.' : result.error || 'Could not turn off.',
+      !result.ok,
+    );
+  } finally {
+    emailNotifyBusy.value = false;
+  }
 }
 const importFileInput = ref<HTMLInputElement | null>(null);
 const activeTab = ref('general');
