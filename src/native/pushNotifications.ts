@@ -2,6 +2,7 @@ import { Capacitor } from '@capacitor/core';
 import config from '../config';
 import router from '../router';
 import { notifyChatMessage } from '../services/notificationService';
+import { currentUserId, signForRelay } from './relayIdentity';
 
 /**
  * Native remote push (Capacitor + FCM).
@@ -48,17 +49,6 @@ function deviceId(): string {
     return id;
   } catch {
     return 'ephemeral';
-  }
-}
-
-/** The user the relay should target — empty if the profile isn't ready yet. */
-async function currentUserId(): Promise<string> {
-  try {
-    const { UserService } = await import('../services/userService');
-    const user = await UserService.getCurrentUser();
-    return user?.id || '';
-  } catch {
-    return '';
   }
 }
 
@@ -122,24 +112,6 @@ function registerMessage(userId: string, deviceId: string, token: string, ts: nu
 }
 function unregisterMessage(userId: string, deviceId: string, ts: number): string {
   return `interpoll-push-unregister-1:${userId}:${deviceId}:${ts}`;
-}
-
-/**
- * Sign a payload with the identity key.
- *
- * The relay has no accounts to authenticate against, and `userId` IS the
- * x-only Schnorr public key — so signing with the matching private key both
- * proves who we are and proves we own the id we are claiming. Without this,
- * anyone could bind their own FCM token to someone else's id and learn who is
- * messaging them, or unregister a device to silence it.
- */
-async function signForRelay(message: string): Promise<string> {
-  const [{ KeyService }, { CryptoService }] = await Promise.all([
-    import('../services/keyService'),
-    import('../services/cryptoService'),
-  ]);
-  const privateKey = await KeyService.getPrivateKeyHex();
-  return CryptoService.sign(message, privateKey);
 }
 
 /** Send the FCM token to the relay so it can target this device. */

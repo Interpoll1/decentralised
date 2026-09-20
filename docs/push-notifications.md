@@ -1,16 +1,20 @@
 # Chat notifications
 
-Two layers, shipped together.
+Three layers, shipped together.
 
 | Layer | Works when | Needs |
 |-------|-----------|-------|
 | **Local** — `src/services/notificationService.ts` | App process alive (foreground, or backgrounded but not swiped away) | Nothing. Already on. |
 | **Remote push (FCM)** — `src/native/pushNotifications.ts` + `relay-push/push-notifications.js` | Always, including app killed | Firebase project + relay wiring, below |
+| **Email fallback (Resend)** — `src/native/emailNotifications.ts` + `relay-push/email-notifications.js` | Push could not reach the user at all — web build, push switched off, or a dead FCM token | `RESEND_API_KEY` on the relay + the user opting in |
 
-Both deep-link through the same `data.path`, so a tap lands on `/chat/<peerId>` either way.
+The first two deep-link through the same `data.path`, so a tap lands on
+`/chat/<peerId>` either way.
 
-**Resend is not involved.** Resend sends email; it cannot deliver an Android
-notification. No API key needed from you for this.
+**Resend does not replace FCM.** Resend sends email; it cannot deliver an
+Android notification, and an inbox is not a tray notification. It is a
+fallback for reach FCM does not have, and it fires only when the FCM path
+delivered nothing.
 
 ---
 
@@ -129,7 +133,68 @@ the relay is explicitly untrusted. So registration is self-authenticating:
 Unregister is signed the same way (`interpoll-push-unregister-1:…`) and only
 removes a device whose stored `userId` matches the signer.
 
-### 4. Turn it on in the app
+### 4. Email fallback (Resend)
+
+Optional, and independent of the Firebase setup above — it works even with no
+FCM at all, which is what makes the web build reachable.
+
+```bash
+scp relay-push/email-notifications.js <vps>:/path/to/relay-server/
+```
+
+`attachPush` picks it up automatically; the only required setting is the key:
+
+```bash
+# relay environment
+RESEND_API_KEY=re_...
+RESEND_FROM='InterPoll <notifications@endless.sbs>'   # must be a Resend-verified domain
+APP_PUBLIC_URL=https://endless.sbs                    # "open the app" link
+SERVER_ORIGIN=https://relay.endless.sbs               # where the unsubscribe link points
+EMAIL_STORE=./push-emails.json                        # optional, this is the default
+EMAIL_COOLDOWN_MS=900000                              # optional, 15 min default
+```
+
+With no `RESEND_API_KEY` the module logs `[Email] No RESEND_API_KEY — email
+fallback disabled` and everything else carries on unchanged. To disable it
+even when a key is present, pass `email: false` to `attachPush`.
+
+It adds three routes:
+
+| Route | Purpose |
+|-------|---------|
+| `POST /api/push/email/register` | Bind an address to an identity (signed, as below) |
+| `POST /api/push/email/unregister` | Unbind it |
+| `GET /api/push/email/unsubscribe?token=…` | One-click opt-out for the *recipient* of an unwanted mail — no identity key needed, the HMAC'd token in the link is the authority |
+
+Registration is authenticated exactly like the FCM endpoints: the client signs
+`interpoll-email-register-1:<userId>:<email>:<ts>` with the identity key, and
+the relay verifies it against `userId`. Same 5-minute freshness window, same
+replay guard, same per-IP limiter.
+
+**When it fires.** `push.notifyChatMessage` mails the recipient only if the
+user is not online *and* the FCM path delivered nothing — no tokens on file,
+or every token came back dead. At most one mail per recipient per cooldown
+window however many messages arrive.
+
+**What the mail contains.** "You have a new message on InterPoll", a link to
+the app, and the unsubscribe link. Not the message text (the relay cannot read
+it), and not the sender's name — that would hand the social graph to Resend.
+
+#### Privacy cost, stated plainly
+
+This is the one feature that ties an InterPoll identity to a real-world
+handle. The relay keeps the address in a plaintext JSON file (mode 0600)
+keyed by public key, so a relay operator — or anyone who takes the box — can
+deanonymise every user who opted in. That is why it is off by default, opt-in
+per user, and labelled as such in Settings.
+
+Addresses are **not** verified on registration. An attacker can only point
+their own identity at someone else's inbox, and the cooldown caps that at a
+few mails an hour, but every mail carries a signed one-click unsubscribe link
+so the victim can cut it off without an account. Add a confirm-link flow if
+that ceiling is too high for your deployment.
+
+### 5. Turn it on in the app
 
 The client path is behind a flag so a device with no Firebase config never
 crashes on startup:
@@ -139,6 +204,10 @@ localStorage.setItem('interpoll_push_enabled', 'true');
 ```
 
 or call `setPushEnabled(true)` from `src/native/pushNotifications.ts`.
+
+The email fallback has its own control in **Settings → Navigation &
+notifications**: enter an address and hit Save. It is not behind the push flag
+and needs no native platform, so the web build can use it on its own.
 
 ---
 
@@ -157,3 +226,13 @@ handing plaintext to the relay.
    registration.
 3. Swipe the app away, send yourself a DM from another account, confirm the
    tray notification and that tapping it opens the right chat.
+
+For the email fallback, with no FCM token registered for the recipient:
+
+1. Save an address in Settings; the relay should log nothing (registration is
+   quiet) and `push-emails.json` should gain an entry keyed by your public key.
+2. Send that identity a DM while it has no live socket. Resend's dashboard
+   should show the send, and the relay logs `[Email] Resend send failed: …` if
+   it did not.
+3. Send a second DM inside the cooldown window and confirm *no* second mail.
+4. Click the unsubscribe link and confirm the entry disappears from the store.
