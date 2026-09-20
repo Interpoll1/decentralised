@@ -13,6 +13,7 @@ import { StorageService } from '../services/storageService';
 import { ChatInviteService } from '../services/chatInviteService';
 import config from '../config';
 import ChatService from '../services/chatService';
+import { initNotifications, notifyChatMessage, clearChatNotification } from '../services/notificationService';
 
 export interface ChatEntry {
   userId: string;
@@ -175,25 +176,23 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
   // ─── Background chat ───────────────────────────────────────────────────────
 
   async function requestNotificationPermission() {
-    if (!('Notification' in window)) return;
-    if (Notification.permission === 'default') await Notification.requestPermission();
+    // Delegates to the notification service: Capacitor LocalNotifications on a
+    // native build (real Android notifications, tap-to-open), Notification API
+    // on the web. Also registers the deep-link handler for notification taps.
+    await initNotifications((path) => { void router.push(path); });
   }
 
   async function showIncomingMessageNotification(
     fromUserId: string, senderName: string, preview: string, isInThisChat: boolean,
   ) {
     if (isInThisChat) return;
-    if ('Notification' in window && Notification.permission === 'granted') {
-      const n = new Notification(`💬 ${senderName}`, {
-        body: preview, icon: '/favicon.ico', tag: `chat-${fromUserId}`, renotify: true,
-      });
-      n.onclick = () => {
-        window.focus();
-        void router.push({ name: 'Chat', params: { userId: fromUserId }, query: { name: senderName } });
-        n.close();
-      };
-    }
-    // In-app toast suppressed — native Notification (above) handles foreground alerts.
+    await notifyChatMessage({
+      fromUserId,
+      senderName,
+      preview,
+      path: `/chat/${encodeURIComponent(fromUserId)}?name=${encodeURIComponent(senderName)}`,
+    });
+    // In-app toast suppressed — the platform notification handles foreground alerts.
     // The raw HTML message with <strong> tags was leaking into the UI as escaped markup.
   }
 
@@ -319,6 +318,7 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
   function openChat(chat: ChatEntry) {
     const entry = chatList.value.find(c => c.userId === chat.userId);
     if (entry) entry.unreadCount = 0;
+    void clearChatNotification(chat.userId);
     totalUnread.value = chatList.value.reduce((s, c) => s + c.unreadCount, 0);
     router.push({ name: 'Chat', params: { userId: chat.userId }, query: { name: chat.name, publicKey: chat.publicKey } });
   }

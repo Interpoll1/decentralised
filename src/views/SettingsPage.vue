@@ -131,6 +131,41 @@
             </div>
           </div>
 
+          <!-- Navigation & notifications -->
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-teal">
+                <ion-icon :icon="notificationsOutline"></ion-icon>
+              </div>
+              <div><h3>Navigation &amp; notifications</h3></div>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <div class="toggle-label">Bottom bar</div>
+                <div class="toggle-sub">
+                  Reorder, add or remove items, and pick the tab the app opens on.
+                  You can also long-press the bar itself.
+                </div>
+              </div>
+              <button class="settings-inline-btn" @click="openNavCustomiser">Customise</button>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <div class="toggle-label">Background push</div>
+                <div class="toggle-sub">
+                  Get message notifications when the app is closed. Needs the relay's
+                  Firebase setup — see docs/push-notifications.md.
+                </div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" :checked="pushEnabled" @change="togglePush(($event.target as HTMLInputElement).checked)" />
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+          </div>
+
           <!-- Home Feed Moderation -->
           <div class="settings-card">
             <div class="card-heading">
@@ -1056,6 +1091,19 @@ ion-content {
   border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 .toggle-row:last-child { border-bottom: none; }
+
+.settings-inline-btn {
+  flex-shrink: 0;
+  padding: 7px 14px;
+  border: none;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+}
+.settings-inline-btn:active { opacity: 0.7; }
 .toggle-label { font-size: 14px; font-weight: 600; color: var(--app-text); }
 .toggle-sub { font-size: 12px; color: var(--app-text-muted); margin-top: 2px; }
 
@@ -1484,6 +1532,10 @@ code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { useNavStore } from '../stores/navStore';
+import {
+  isPushEnabled, setPushEnabled, initPushNotifications, unregisterPushNotifications,
+} from '../native/pushNotifications';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
 import {
   IonPage,
@@ -1550,7 +1602,8 @@ import {
   optionsOutline,
   informationCircleOutline,
   chatbubbleOutline,
-  personOutline} from 'ionicons/icons';
+  personOutline,
+  notificationsOutline} from 'ionicons/icons';
 import { PinningService } from '../services/pinningService';
 import { StorageManager } from '../services/storageManager';
 import { UserService } from '../services/userService';
@@ -1579,6 +1632,24 @@ import { GUN_RELAY_PRESETS, isValidGunUrl, labelForGunUrl, DEFAULT_GUN_PEERS } f
 const chainStore = useChainStore();
 const communityStore = useCommunityStore();
 const router = useRouter();
+
+// ── Bottom nav + notifications ─────────────────────────────────────────────
+const navStore    = useNavStore();
+const pushEnabled = ref(isPushEnabled());
+
+/** Jump to the home feed with the bottom bar in edit mode. */
+function openNavCustomiser() {
+  // Set the flag after the route settles: BottomNav clears `editing` when it
+  // unmounts, which would otherwise race the navigation away from Settings.
+  void router.push('/home').then(() => navStore.setEditing(true));
+}
+
+async function togglePush(on: boolean) {
+  setPushEnabled(on);
+  pushEnabled.value = on;
+  if (on) await initPushNotifications();
+  else    await unregisterPushNotifications();
+}
 const importFileInput = ref<HTMLInputElement | null>(null);
 const activeTab = ref('general');
 
