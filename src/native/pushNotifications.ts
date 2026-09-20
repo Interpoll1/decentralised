@@ -1,20 +1,26 @@
 import { Capacitor } from '@capacitor/core';
+import config from '../config';
+import router from '../router';
+import { notifyChatMessage } from '../services/notificationService';
 
 /**
- * Native push notifications (Capacitor + FCM). SCAFFOLD — disabled by default.
+ * Native remote push (Capacitor + FCM).
  *
- * Enabling push requires backend + Firebase work that is not yet in place:
- *   1. A Firebase project; drop `google-services.json` into
- *      `android/app/` and apply the Google Services Gradle plugin.
- *   2. Relay (relay-server/relay-server-enhanced.js, gitignored) endpoints to
- *      store device tokens (POST /api/push/register) and emit FCM messages on
- *      relevant events (new vote/comment on your polls, replies, invites).
- *   3. Flip the flag: localStorage `interpoll_push_enabled = 'true'`
- *      (or wire a real config value).
+ * This is the "app is closed and you still get pinged" path. It complements
+ * `src/services/notificationService.ts`, which covers everything while the app
+ * process is alive and needs no backend at all.
  *
- * Until then `initPushNotifications` is a no-op so it can be called
- * unconditionally from app startup without crashing on devices that have no
- * FCM config.
+ * Enabling it needs three things outside this file:
+ *   1. A Firebase project: drop `google-services.json` into `android/app/` and
+ *      apply the Google Services Gradle plugin (see docs/push-notifications.md).
+ *   2. Relay endpoints `POST /api/push/register` and `POST /api/push/unregister`,
+ *      plus an FCM sender that fires when a chat frame is relayed to a user who
+ *      has no live socket. A drop-in implementation lives in
+ *      `relay-push/push-notifications.js`.
+ *   3. The flag: localStorage `interpoll_push_enabled = 'true'`.
+ *
+ * Until the flag is set, `initPushNotifications` is a no-op, so it stays safe
+ * to call unconditionally from app startup on devices with no FCM config.
  */
 export function isPushEnabled(): boolean {
   try {
@@ -23,6 +29,40 @@ export function isPushEnabled(): boolean {
     return false;
   }
 }
+
+export function setPushEnabled(on: boolean): void {
+  try {
+    localStorage.setItem('interpoll_push_enabled', on ? 'true' : 'false');
+  } catch { /* private mode — the flag just won't stick */ }
+}
+
+/** Device id the relay keys tokens by, so re-registering replaces rather than duplicates. */
+function deviceId(): string {
+  const KEY = 'interpoll_push_device_id';
+  try {
+    let id = localStorage.getItem(KEY);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(KEY, id);
+    }
+    return id;
+  } catch {
+    return 'ephemeral';
+  }
+}
+
+/** The user the relay should target — empty if the profile isn't ready yet. */
+async function currentUserId(): Promise<string> {
+  try {
+    const { UserService } = await import('../services/userService');
+    const user = await UserService.getCurrentUser();
+    return user?.id || '';
+  } catch {
+    return '';
+  }
+}
+
+let registeredToken = '';
 
 export async function initPushNotifications(): Promise<void> {
   if (!Capacitor.isNativePlatform() || !isPushEnabled()) return;
@@ -39,36 +79,112 @@ export async function initPushNotifications(): Promise<void> {
     return;
   }
 
-  PushNotifications.addListener('registration', (token) => {
-    // TODO (M5): POST token.value to the relay so it can target this device.
-    console.info('[Push] Device token acquired');
+  await PushNotifications.addListener('registration', (token) => {
+    registeredToken = token.value;
     void registerTokenWithRelay(token.value);
   });
 
-  PushNotifications.addListener('registrationError', (err) => {
+  await PushNotifications.addListener('registrationError', (err) => {
     console.warn('[Push] Registration error', err);
   });
 
-  PushNotifications.addListener('pushNotificationReceived', (notification) => {
-    // Foreground receipt — surface an in-app toast/badge as desired.
-    console.info('[Push] Received', notification.title);
+  await PushNotifications.addListener('pushNotificationReceived', (notification) => {
+    // Foreground receipt. Android does not draw a tray notification for a
+    // foreground push, so re-present it through the local path — same look,
+    // same tap target, and it collapses with the in-app notifications.
+    const data = (notification.data ?? {}) as Record<string, string>;
+    const fromUserId = data.fromUserId || '';
+    if (!fromUserId) return;
+    void notifyChatMessage({
+      fromUserId,
+      senderName: notification.title || data.senderName || 'New message',
+      preview: notification.body || 'You have a new message',
+      path: data.path || `/chat/${encodeURIComponent(fromUserId)}`,
+    });
   });
 
-  PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
-    // User tapped the notification — deep-link into the relevant screen using
-    // action.notification.data (e.g. { path: '/community/.../poll/...' }).
-    console.info('[Push] Tapped', action.notification.data);
+  await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+    const data = (action.notification?.data ?? {}) as Record<string, string>;
+    if (typeof data.path === 'string' && data.path.startsWith('/')) {
+      void router.push(data.path);
+    }
   });
 
   await PushNotifications.register();
 }
 
-/** TODO (M5 — blocked on relay endpoint): send the FCM token to the relay. */
-async function registerTokenWithRelay(_token: string): Promise<void> {
-  // const res = await fetch(`${config.relay.api}/api/push/register`, {
-  //   method: 'POST',
-  //   headers: { 'Content-Type': 'application/json' },
-  //   body: JSON.stringify({ token: _token, platform: 'android' }),
-  // });
-  // Placeholder until the endpoint exists.
+/**
+ * Canonical strings signed for the relay's push endpoints.
+ * Keep in sync with `relay-push/push-notifications.js`.
+ */
+function registerMessage(userId: string, deviceId: string, token: string, ts: number): string {
+  return `interpoll-push-register-1:${userId}:${deviceId}:${token}:${ts}`;
+}
+function unregisterMessage(userId: string, deviceId: string, ts: number): string {
+  return `interpoll-push-unregister-1:${userId}:${deviceId}:${ts}`;
+}
+
+/**
+ * Sign a payload with the identity key.
+ *
+ * The relay has no accounts to authenticate against, and `userId` IS the
+ * x-only Schnorr public key — so signing with the matching private key both
+ * proves who we are and proves we own the id we are claiming. Without this,
+ * anyone could bind their own FCM token to someone else's id and learn who is
+ * messaging them, or unregister a device to silence it.
+ */
+async function signForRelay(message: string): Promise<string> {
+  const [{ KeyService }, { CryptoService }] = await Promise.all([
+    import('../services/keyService'),
+    import('../services/cryptoService'),
+  ]);
+  const privateKey = await KeyService.getPrivateKeyHex();
+  return CryptoService.sign(message, privateKey);
+}
+
+/** Send the FCM token to the relay so it can target this device. */
+async function registerTokenWithRelay(token: string): Promise<void> {
+  const userId = await currentUserId();
+  if (!userId) {
+    // Profile not ready yet — `refreshPushRegistration` picks this up later.
+    return;
+  }
+  try {
+    const device = deviceId();
+    const ts     = Date.now();
+    const sig    = await signForRelay(registerMessage(userId, device, token, ts));
+
+    await fetch(`${config.relay.api}/api/push/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, token, deviceId: device, platform: 'android', ts, sig }),
+    });
+  } catch (err) {
+    console.warn('[Push] Token registration failed', err);
+  }
+}
+
+/** Re-send the current token, e.g. after sign-in or a relay URL change. */
+export async function refreshPushRegistration(): Promise<void> {
+  if (!registeredToken) return;
+  await registerTokenWithRelay(registeredToken);
+}
+
+/** Stop this device receiving pushes — call on sign-out. */
+export async function unregisterPushNotifications(): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    const userId = await currentUserId();
+    if (!userId) return;
+    const device = deviceId();
+    const ts     = Date.now();
+    const sig    = await signForRelay(unregisterMessage(userId, device, ts));
+
+    await fetch(`${config.relay.api}/api/push/unregister`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, deviceId: device, ts, sig }),
+    });
+  } catch { /* best effort — the relay prunes dead tokens on send failure too */ }
+  registeredToken = '';
 }

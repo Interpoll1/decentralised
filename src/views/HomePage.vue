@@ -389,77 +389,13 @@
     <!-- Relay sheet (slide-up) -->
     <RelaySheet v-model="relaySheetOpen" />
 
-    <!-- Bottom Nav (mobile only) -->
-    <ion-footer class="bottom-nav-footer" :class="{ 'footer-hidden': isTabBarHidden }">
-      <div class="bottom-nav">
-
-        <!-- Feed -->
-        <button class="nav-item" :class="{ active: activeTab === 'home' }" @click="activeTab = 'home'">
-          <span class="nav-icon-wrap">
-            <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"
-                :fill="activeTab==='home' ? 'currentColor' : 'none'"
-                :fill-opacity="activeTab==='home' ? '0.18' : '1'"/>
-              <path d="M9 22V12h6v10"/>
-            </svg>
-          </span>
-          <span class="nav-label">Feed</span>
-        </button>
-
-        <!-- Spaces -->
-        <button class="nav-item" :class="{ active: activeTab === 'communities' }" @click="activeTab = 'communities'">
-          <span class="nav-icon-wrap">
-            <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round">
-              <circle :fill="activeTab==='communities' ? 'currentColor' : 'none'" cx="9" cy="8" r="3.5"/>
-              <path d="M3 21v-.5A5.5 5.5 0 018.5 15h1A5.5 5.5 0 0115 20.5v.5"/>
-              <path d="M16 4a3.5 3.5 0 010 7"/>
-              <path d="M21 21v-.5a5.5 5.5 0 00-4-5.32"/>
-            </svg>
-          </span>
-          <span class="nav-label">Spaces</span>
-        </button>
-
-        <!-- Messages -->
-        <button class="nav-item" :class="{ active: activeTab === 'chat' }" @click="activeTab = 'chat'">
-          <span class="nav-icon-wrap">
-            <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-              <path :fill="activeTab==='chat' ? 'currentColor' : 'none'"
-                d="M20 2H4a2 2 0 00-2 2v14l4-4h14a2 2 0 002-2V4a2 2 0 00-2-2z"/>
-            </svg>
-            <span v-if="totalUnread > 0" class="nav-badge nav-badge--mobile">{{ totalUnread > 99 ? "99+" : totalUnread }}</span>
-          </span>
-          <span class="nav-label">Messages</span>
-        </button>
-
-        <!-- Publish -->
-        <button class="nav-item" :class="{ active: activeTab === 'create' }" @click="activeTab = 'create'">
-          <span class="nav-icon-wrap">
-            <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"
-                :fill="activeTab==='create' ? 'currentColor' : 'none'"
-                :stroke="activeTab==='create' ? 'none' : 'currentColor'"
-                stroke-width="1.75"/>
-              <line x1="12" y1="8" x2="12" y2="16"
-                :stroke="activeTab==='create' ? 'white' : 'currentColor'"
-                stroke-width="2" stroke-linecap="round"/>
-              <line x1="8" y1="12" x2="16" y2="12"
-                :stroke="activeTab==='create' ? 'white' : 'currentColor'"
-                stroke-width="2" stroke-linecap="round"/>
-            </svg>
-          </span>
-          <span class="nav-label">Publish</span>
-        </button>
-
-        <!-- Network -->
-        <button class="nav-item" @click="$router.push('/network')">
-          <span class="nav-icon-wrap">
-            <RelayIndicator :compact="true" />
-          </span>
-          <span class="nav-label">Network</span>
-        </button>
-
-      </div>
-    </ion-footer>
+    <!-- Bottom Nav (mobile only) — user-customisable, see stores/navStore.ts -->
+    <BottomNav
+      :active-tab="activeTab"
+      :total-unread="totalUnread"
+      :hidden="isTabBarHidden"
+      @update:active-tab="activeTab = $event"
+    />
 
   </ion-page>
 </template>
@@ -468,7 +404,7 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick, defineAsyncComponent } from 'vue';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonBadge,
-  IonButtons, IonButton, IonIcon, IonFooter, IonModal, IonSpinner,
+  IonButtons, IonButton, IonIcon, IonModal, IonSpinner,
   IonInfiniteScroll, IonInfiniteScrollContent,
   actionSheetController, toastController,
 } from '@ionic/vue';
@@ -502,11 +438,12 @@ const ChatTab          = defineAsyncComponent(() => import('../components/ChatTa
 const PostCard         = defineAsyncComponent(() => import('../components/PostCard.vue'));
 const PollCard         = defineAsyncComponent(() => import('../components/PollCard.vue'));
 // Heavy sidebar/overlay components — loaded async so they don't block initial paint
-const RelayIndicator   = defineAsyncComponent(() => import('../components/RelayIndicator.vue'));
 const AppSideNav       = defineAsyncComponent(() => import('../components/AppSideNav.vue'));
 const BurstOverlay     = defineAsyncComponent(() => import('../components/BurstOverlay.vue'));
 const AppRightSidebar  = defineAsyncComponent(() => import('../components/AppRightSidebar.vue'));
 const RelaySheet       = defineAsyncComponent(() => import('../components/RelaySheet.vue'));
+import BottomNav from '../components/BottomNav.vue';
+import { useNavStore } from '../stores/navStore';
 
 // ── New components ─────────────────────────────────────────────────────────
 import { Post } from '../services/postService';
@@ -528,6 +465,7 @@ const route  = useRoute();
 const { isSupported: canScanQr, scan: scanQr } = useQrScan();
 const chainStore     = useChainStore();
 const communityStore = useCommunityStore();
+const navStore       = useNavStore();
 const postStore      = usePostStore();
 const pollStore      = usePollStore();
 
@@ -543,7 +481,16 @@ function tabFromRoute(): HomeTab {
   return HOME_TABS.includes(value as HomeTab) ? (value as HomeTab) : 'home';
 }
 
-const activeTab          = ref<string>(tabFromRoute());
+/** Tab to land on when the URL carries no explicit ?tab= (nav customiser setting). */
+function initialTab(): HomeTab {
+  const raw   = route.query.tab;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (HOME_TABS.includes(value as HomeTab)) return value as HomeTab;
+  const preferred = navStore.defaultTab;
+  return HOME_TABS.includes(preferred as HomeTab) ? (preferred as HomeTab) : 'home';
+}
+
+const activeTab          = ref<string>(initialTab());
 const communityFilter    = ref('all');
 const isLoadingPosts     = ref(false);
 const voteVersion        = ref(0);
