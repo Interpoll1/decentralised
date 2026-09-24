@@ -261,14 +261,14 @@
                 </template>
               </p>
               <div class="empty-state__actions">
-                <ion-button @click="activeTab = 'communities'">
-                  <ion-icon slot="start" :icon="peopleOutline"></ion-icon>
+                <button class="empty-state-btn empty-state-btn--primary" @click="activeTab = 'communities'">
+                  <ion-icon :icon="peopleOutline"></ion-icon>
                   Browse Spaces
-                </ion-button>
-                <ion-button fill="outline" @click="activeTab = 'create'">
-                  <ion-icon slot="start" :icon="addCircleOutline"></ion-icon>
+                </button>
+                <button class="empty-state-btn empty-state-btn--ghost" @click="activeTab = 'create'">
+                  <ion-icon :icon="addCircleOutline"></ion-icon>
                   Create the first poll
-                </ion-button>
+                </button>
               </div>
             </div>
           </div>
