@@ -176,6 +176,7 @@
                 @keydown.enter.ctrl="submitComment"
                 @keydown.enter.meta="submitComment"
               />
+              <HoneypotField v-model="gateHoneypot" />
               <button
                 class="comment-send-btn"
                 :disabled="!newCommentText.trim()"
@@ -279,7 +280,7 @@ import {
   IonButtons, IonBackButton, IonButton, IonIcon,
   IonChip,
   IonLabel, IonSpinner, IonTextarea, IonBadge,
-  toastController, actionSheetController
+  toastController
 } from '@ionic/vue';
 import {
   peopleOutline, heart, heartOutline, thumbsDownOutline, thumbsDown,
@@ -292,6 +293,9 @@ import { useCommentStore } from '../stores/commentStore';
 import { useCommunityStore } from '../stores/communityStore';
 import { useUserStore } from '../stores/userStore';
 import CommentCard from '../components/CommentCard.vue';
+import HoneypotField from '../components/HoneypotField.vue';
+import { useHumanGate } from '../composables/useHumanGate';
+import { HumanGateError } from '../services/humanGateService';
 import { Post } from '../services/postService';
 import { generatePseudonym } from '../utils/pseudonym';
 import { ModerationService, moderationVersion } from '../services/moderationService';
@@ -299,6 +303,7 @@ import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 
 import { IPFSService } from '../services/ipfsService';
 import { checkContent } from '../utils/contentGuard';
+import { shareLink } from '../composables/useShare';
 
 const route = useRoute();
 const router = useRouter();
@@ -681,8 +686,16 @@ async function handleDownvote() {
   await handlePostVote('down');
 }
 
+const { honeypot: gateHoneypot, check: gateCheck, reset: gateReset } = useHumanGate('comment');
+
 async function submitComment() {
   if (!post.value || !newCommentText.value.trim()) return;
+  const verdict = gateCheck();
+  if (verdict === 'silent') { newCommentText.value = ''; return; } // honeypot: give a bot no signal
+  if (verdict) {
+    (await toastController.create({ message: verdict, duration: 2500, color: 'warning' })).present();
+    return;
+  }
   const guard = checkContent(newCommentText.value.trim(), 'comment');
   if (!guard.ok) {
     (await toastController.create({ message: guard.reason!, duration: 2500, color: 'warning' })).present();
@@ -695,12 +708,14 @@ async function submitComment() {
       content: newCommentText.value.trim()
     });
     newCommentText.value = '';
+    gateReset();
     (await toastController.create({ message: 'Comment posted', duration: 2000 })).present();
     // No reload: the store already holds the comment and the live subscription
     // delivers the graph's copy. The old reload restarted the thread load and
     // cancelled the in-flight one, so a fresh comment could vanish on screen.
-  } catch {
-    (await toastController.create({ message: 'Failed to post comment', duration: 2000 })).present();
+  } catch (err) {
+    const message = err instanceof HumanGateError ? err.message : 'Failed to post comment';
+    (await toastController.create({ message, duration: 2500 })).present();
   }
 }
 
@@ -728,35 +743,11 @@ async function handleCommentDownvote(comment: any) {
   } catch { /* silent */ }
 }
 
-async function sharePost() {
+function sharePost() {
   if (!post.value) return;
-  const actionSheet = await actionSheetController.create({
-    header: 'Share Post',
-    buttons: [
-      {
-        text: 'Copy Link',
-        icon: 'link-outline',
-        handler: () => {
-          navigator.clipboard.writeText(window.location.href);
-          toastController.create({ message: 'Link copied to clipboard', duration: 2000 })
-            .then(t => t.present());
-        }
-      },
-      {
-        text: 'Share via...',
-        icon: 'share-social-outline',
-        handler: () => {
-          navigator.share?.({
-            title: post.value!.title,
-            text: post.value!.content,
-            url: window.location.href
-          });
-        }
-      },
-      { text: 'Cancel', role: 'cancel' }
-    ]
-  });
-  await actionSheet.present();
+  // Canonical path, not window.location.href: in the native shell that is
+  // https://localhost, and in the browser it may carry transient query state.
+  void shareLink(`/post/${encodeURIComponent(post.value.id)}`, post.value.title || 'InterPoll post', 'Read this post on InterPoll');
 }
 
 async function loadPost() {

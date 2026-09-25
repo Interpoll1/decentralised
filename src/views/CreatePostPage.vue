@@ -13,6 +13,7 @@
             <div v-if="isSubmitting" class="btn-spinner"></div>
             {{ isSubmitting ? 'Posting…' : 'Post' }}
           </button>
+          <HoneypotField v-model="gateHoneypot" />
         </ion-buttons>
       </ion-toolbar>
     </ion-header>
@@ -278,6 +279,9 @@ import { imageOutline, closeCircle, informationCircle, videocamOutline, chevronD
 import { defineAsyncComponent } from 'vue';
 const VideoUploader = defineAsyncComponent(() => import('../components/VideoUploader.vue'));
 import CommunityPickerModal from '../components/CommunityPickerModal.vue';
+import HoneypotField from '../components/HoneypotField.vue';
+import { useHumanGate } from '../composables/useHumanGate';
+import { HumanGateError } from '../services/humanGateService';
 import type { VideoMeta } from '../services/videoService';
 import { useCommunityStore } from '../stores/communityStore';
 import { usePostStore } from '../stores/postStore';
@@ -422,8 +426,16 @@ const removeImage = () => {
   }
 };
 
+const { honeypot: gateHoneypot, check: gateCheck, reset: gateReset } = useHumanGate('post');
+
 const submitPost = async () => {
   if (!canSubmit.value) return;
+  const verdict = gateCheck();
+  if (verdict === 'silent') { router.push('/home'); return; } // honeypot: give a bot no signal
+  if (verdict) {
+    (await toastController.create({ message: verdict, duration: 2500, color: 'warning' })).present();
+    return;
+  }
   // Auto-join the community if user selected from fallback list (not yet joined)
   if (!communityStore.isJoined(selectedCommunity.value)) {
     await communityStore.joinCommunity(selectedCommunity.value);
@@ -470,6 +482,7 @@ const submitPost = async () => {
 
     // Reset form
     title.value = '';
+    gateReset();
     content.value = '';
     removeImage();
     onVideoCleared();
@@ -479,9 +492,11 @@ const submitPost = async () => {
     router.push(`/community/${selectedCommunity.value}`);
   } catch (error) {
     console.error('Error creating post:', error);
-    const message = error instanceof Error && error.message === 'COMMUNITY_JOIN_REQUIRED'
-      ? 'Join the selected community before posting'
-      : 'Failed to create post';
+    const message = error instanceof HumanGateError
+      ? error.message
+      : error instanceof Error && error.message === 'COMMUNITY_JOIN_REQUIRED'
+        ? 'Join the selected community before posting'
+        : 'Failed to create post';
     
     const toast = await toastController.create({
       message,
