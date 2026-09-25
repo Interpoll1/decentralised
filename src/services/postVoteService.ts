@@ -1,3 +1,4 @@
+import { createPublicAction, publishReaction, readReaction } from './publicEngagementService';
 /**
  * Post upvote/downvote tallies, derived from per-user vote nodes.
  *
@@ -71,10 +72,8 @@ function postVotesNode(postId: string) {
   return gun().get('postVotes').get(postId);
 }
 
-function parseVote(raw: unknown): VoteValue | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const type = (raw as VoteNode).type;
-  return type === 'up' || type === 'down' || type === 'none' ? type : null;
+function parseVote(raw: unknown, actor: string, postId: string): VoteValue | null {
+  return readReaction(raw, actor, 'post', postId);
 }
 
 function parseBaselineType(raw: unknown): VoteType | null {
@@ -153,7 +152,7 @@ export class PostVoteService {
   static async getMyVote(postId: string, userId: string): Promise<VoteType | null> {
     if (!userId) return null;
     const raw = await gunOnce(postVotesNode(postId).get(userId), READ_TIMEOUT_MS);
-    const vote = parseVote(raw);
+    const vote = parseVote(raw, userId, postId);
     if (vote) return vote === 'none' ? null : vote;
     return PostVoteService.readLegacyVote(postId, userId);
   }
@@ -172,7 +171,7 @@ export class PostVoteService {
     ]);
     return foldVotes(
       baseline,
-      children.map(({ value }) => ({ vote: parseVote(value), baselineType: parseBaselineType(value) })),
+      children.map(({ value, key }) => ({ vote: parseVote(value, key, postId), baselineType: parseBaselineType(value) })),
     );
   }
 
@@ -197,25 +196,8 @@ export class PostVoteService {
   }
 
   private static async writeVote(postId: string, userId: string, next: VoteValue): Promise<PostVoteResult> {
-    const minimalRecord: Record<string, string | number> = {
-      type: next, userId, postId, at: Date.now(),
-    };
-
-    // ── Write via HTTP POST directly to relay MySQL — fast path ──────────────
-    // Gun WebSocket writes take 1+ minutes when the WS round-trip is slow.
-    // A direct HTTP POST to /api/content-vote writes straight to gun_nodes
-    // (<100ms) so /api/vote-tally reflects the vote immediately on refresh.
-    // Gun write runs in parallel as a fallback for peer sync.
-    const httpWritePromise = fetch(`${config.relay.api}/api/content-vote`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(minimalRecord),
-    }).then(r => r.ok).catch(() => false);
-
-    // Gun write in parallel — keeps peer-to-peer sync working
-    gunPut(postVotesNode(postId).get(userId), minimalRecord)
-      .then(ack => { if (!ack.ok && ack.err !== 'timeout') console.warn('[vote] gun write error:', ack.err); })
-      .catch(() => {});
+    const action = await createPublicAction(userId, 'reaction', 'post', postId, next);
+    const httpWritePromise = publishReaction(action).then(() => true);
 
     // ── Read baseline and existing vote in parallel (capped at 1s) ───────────
     const FAST_READ_MS = 1_000;
@@ -301,7 +283,7 @@ export class PostVoteService {
     }
 
     // ── Baseline correction ───────────────────────────────────────────────────
-    const knownVote = parseVote(existingVote);
+    const knownVote = parseVote(existingVote, userId, postId);
     let baselineType: 'up' | 'down' | null = null;
     if (knownVote) {
       baselineType = parseBaselineType(existingVote);
@@ -312,10 +294,7 @@ export class PostVoteService {
       ]);
     }
 
-    // Patch baselineType onto record non-blocking if we found one
-    if (baselineType) {
-      void gunPut(postVotesNode(postId).get(userId), { ...minimalRecord, baselineType }).catch(() => {});
-    }
+    // Legacy baseline corrections remain display-only; never append unsigned fields to v1.
 
     // ── Tally ─────────────────────────────────────────────────────────────────
     const tally = foldVotes(baseline, [{ vote: next, baselineType }]);
@@ -379,7 +358,7 @@ export class PostVoteService {
       if (!active) return;
       chain = postVotesNode(postId).map().on((value: any, key: string) => {
         if (!active || typeof key !== 'string') return;
-        votes.set(key, { vote: parseVote(value), baselineType: parseBaselineType(value) });
+        votes.set(key, { vote: parseVote(value, key, postId), baselineType: parseBaselineType(value) });
         emit();
       });
     };

@@ -1,3 +1,4 @@
+import { createPublicAction, publishReaction, readReaction } from './publicEngagementService';
 /**
  * Comments — local-first, relay-verified.
  *
@@ -749,10 +750,8 @@ export async function getCommentCount(postId: string): Promise<number> {
 
 type VoteValue = 'up' | 'down' | 'none';
 
-function parseVote(raw: any): VoteValue | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const type = raw.type;
-  return type === 'up' || type === 'down' || type === 'none' ? type : null;
+function parseVote(raw: any, actor: string, commentId: string): VoteValue | null {
+  return readReaction(raw, actor, 'comment', commentId);
 }
 
 /**
@@ -767,8 +766,8 @@ export async function getCommentTally(commentId: string, fallback?: Comment): Pr
   let upvotes = 0;
   let downvotes = 0;
   let counted = 0;
-  for (const { value } of children) {
-    const vote = parseVote(value);
+  for (const { value, key } of children) {
+    const vote = parseVote(value, key, commentId);
     if (!vote) continue;
     counted++;
     if (vote === 'up') upvotes++;
@@ -785,7 +784,7 @@ export async function getCommentTally(commentId: string, fallback?: Comment): Pr
 
 export async function getUserVote(commentId: string, userId: string): Promise<'up' | 'down' | null> {
   const raw = await gunOnce(commentVotesNode(commentId).get(userId), 3_000);
-  const vote = parseVote(raw);
+  const vote = parseVote(raw, userId, commentId);
   return vote === 'up' || vote === 'down' ? vote : null;
 }
 
@@ -808,13 +807,8 @@ export async function voteOnComment(
   const current = await getUserVote(commentId, userId);
   const next: VoteValue = current === voteType ? 'none' : voteType;
 
-  const ack = await gunPut(commentVotesNode(commentId).get(userId), {
-    type: next,
-    userId,
-    commentId,
-    at: Date.now(),
-  });
-  if (!ack.ok) throw new Error(ack.err || 'Vote could not be recorded');
+  const action = await createPublicAction(userId, 'reaction', 'comment', commentId, next);
+  await publishReaction(action);
 
   const local = await StorageService.getComment(commentId);
   const tally = await getCommentTally(commentId, local ?? undefined);
@@ -854,7 +848,7 @@ export function subscribeToCommentVotes(
 
   const chain = commentVotesNode(commentId).map().on((value: any, key: string) => {
     if (!active || typeof key !== 'string') return;
-    const vote = parseVote(value);
+    const vote = parseVote(value, key, commentId);
     if (!vote) return;
     votes.set(key, vote);
     emit();
