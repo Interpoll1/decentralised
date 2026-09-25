@@ -464,12 +464,20 @@ import { VoteTrackerService } from '../services/voteTrackerService';
 import { IPFSService } from '../services/ipfsService';
 import { useCommunityStore } from '../stores/communityStore';
 import { formatTrustedIdentityLabel } from '../utils/identityTrust';
+import { Capacitor } from '@capacitor/core';
+import { shareLink } from '../composables/useShare';
 import config from '../config';
 
 const communityStore = useCommunityStore();
 const router = useRouter();
 
 // ── Chat link ────────────────────────────────────────────────────────────────
+// The id is the user's Schnorr public key — put it in the URL fragment (after
+// `#`), never the path or query string. Fragments are stripped by browsers
+// before the request leaves the client, so the key never reaches server logs
+// or Referer headers, and a plain path/query copy wouldn't get that
+// protection. See ChatView's `recipientId`/`recipientName` fallback, which
+// reads this same `#id=...&name=...` format.
 const chatLink = computed(() => {
   const id = userProfile.value?.id;
   if (!id) return '';
@@ -479,14 +487,15 @@ const chatLink = computed(() => {
     userProfile.value?.username ||
     'User'
   );
-  const base = ((config as any)?.app?.url || window.location.origin).replace(/\/$/, '');
-  return `${base}/chat/${encodeURIComponent(id)}?name=${name}`;
+  const isNative = Capacitor.isNativePlatform();
+  const base = (isNative ? config.web.origin : ((config as any)?.app?.url || window.location.origin)).replace(/\/$/, '');
+  return `${base}/chat#id=${encodeURIComponent(id)}&name=${name}`;
 });
 const chatLinkDisplay = computed(() => {
   if (!chatLink.value) return 'Loading…';
-  try { const u = new URL(chatLink.value); return u.host + u.pathname; } catch { return chatLink.value; }
+  try { const u = new URL(chatLink.value); return u.host + '/chat'; } catch { return chatLink.value; }
 });
-const canShare = computed(() => !!navigator.share);
+const canShare = computed(() => Capacitor.isNativePlatform() || !!navigator.share);
 async function copyChatLink() {
   if (!chatLink.value) return;
   try {
@@ -499,9 +508,9 @@ async function copyChatLink() {
   }
 }
 async function shareChatLink() {
-  if (!chatLink.value || !navigator.share) return;
+  if (!chatLink.value) return;
   const name = userProfile.value?.customUsername || userProfile.value?.displayName || 'me';
-  try { await navigator.share({ title: `Chat with ${name} on Interpoll`, url: chatLink.value }); } catch { /* cancelled */ }
+  await shareLink(chatLink.value, `Chat with ${name} on Interpoll`);
 }
 
 const userProfile = ref<UserProfile | null>(null);
