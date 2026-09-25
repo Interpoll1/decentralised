@@ -72,6 +72,11 @@ const routes: Array<RouteRecordRaw> = [
   { path: '/receipt/:verificationCode?', name: 'Receipt', component: () => import('../views/ReceiptPage.vue') },
   { path: '/search', name: 'Search', component: () => import('../views/SearchView.vue') },
   { path: '/chat/:userId', name: 'Chat', component: () => import('../views/ChatView.vue'), props: true },
+  // Fragment-based entry point: shared/copied chat links put the recipient's
+  // pubkey after '#' instead of in the path, so it never lands in browser
+  // history, Referer headers, or server access logs. See ChatView's
+  // `recipientId` fallback and ProfilePage's `chatLink`.
+  { path: '/chat', name: 'ChatFromLink', component: () => import('../views/ChatView.vue') },
   { path: '/resilience', name: 'Resilience', component: () => import('../views/ResiliencePage.vue') },
   { path: '/chatroom/:roomId', name: 'ChatRoom', component: () => import('../views/ChatRoomPage.vue'), props: true },
   { path: '/chatrooms', name: 'ChatRoomList', component: () => import('../views/ChatRoomListPage.vue') },
