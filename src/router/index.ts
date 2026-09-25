@@ -80,7 +80,9 @@ const routes: Array<RouteRecordRaw> = [
   { path: '/resilience', name: 'Resilience', component: () => import('../views/ResiliencePage.vue') },
   { path: '/chatroom/:roomId', name: 'ChatRoom', component: () => import('../views/ChatRoomPage.vue'), props: true },
   { path: '/chatrooms', name: 'ChatRoomList', component: () => import('../views/ChatRoomListPage.vue') },
-  { path: '/join/:type/:id', name: 'JoinPrivate', component: () => import('../views/JoinPrivatePage.vue') },
+  // :id is optional so rendezvous links can carry the seed in the fragment
+  // (/join/rendezvous#<seed>) instead of the path.
+  { path: '/join/:type/:id?', name: 'JoinPrivate', component: () => import('../views/JoinPrivatePage.vue') },
   {
     path: '/claim-username',
     name: 'ClaimUsername',

@@ -387,7 +387,7 @@ function skip() {
 onMounted(async () => {
   try {
     const { KeyService } = await import('../services/keyService');
-    const pubkey = await KeyService.getPublicKey?.();
+    const pubkey = await KeyService.getPublicKeyHex();
     if (pubkey) shortPubkey.value = pubkey.slice(0, 8) + '…' + pubkey.slice(-6);
   } catch { /* non-fatal */ }
 });

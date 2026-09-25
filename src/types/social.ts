@@ -40,6 +40,8 @@ export interface Comment {
   contentSignature?: string;
   /** Canonicalization used for `contentSignature`. Absent = legacy v1. */
   canonVersion?: number;
+  /** Proof-of-work nonce bound to (id, createdAt, authorId) — see contentPowService. */
+  powNonce?: number;
   isEncrypted?: boolean;
   /** AES-GCM ciphertext of the comment body, for encrypted communities. */
   encryptedContent?: string;

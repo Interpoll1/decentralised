@@ -12,6 +12,7 @@ import { GunService } from '../services/gunService';
 import { StorageService } from '../services/storageService';
 import { ChatInviteService } from '../services/chatInviteService';
 import config from '../config';
+import { chatPath, resolveChatUserId } from '../utils/privateRoute';
 import ChatService from '../services/chatService';
 import { initNotifications, notifyChatMessage, clearChatNotification } from '../services/notificationService';
 
@@ -190,7 +191,7 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
       fromUserId,
       senderName,
       preview,
-      path: `/chat/${encodeURIComponent(fromUserId)}?name=${encodeURIComponent(senderName)}`,
+      path: chatPath(fromUserId, senderName),
     });
     // In-app toast suppressed — the platform notification handles foreground alerts.
     // The raw HTML message with <strong> tags was leaking into the UI as escaped markup.
@@ -212,7 +213,7 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
       if (msg.sent) return;
       const preview      = msg.message.length > 80 ? `${msg.message.slice(0, 79)}…` : msg.message;
       const currentRoute = router.currentRoute.value;
-      const isInThisChat = currentRoute.name === 'Chat' && currentRoute.params.userId === msg.from;
+      const isInThisChat = currentRoute.name === 'Chat' && resolveChatUserId(currentRoute.params.userId) === msg.from;
       const entry        = chatList.value.find(c => c.userId === msg.from);
 
       if (entry) {
@@ -252,7 +253,7 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
     // and recalculates totalUnread from IDB truth — no stale UI state.
     const stopRouteWatch = router.afterEach((to) => {
       if (to.name !== 'Chat') return;
-      const otherUserId = String(to.params.userId || '');
+      const otherUserId = resolveChatUserId(to.params.userId);
       if (!otherUserId) return;
       const entry = chatList.value.find(c => c.userId === otherUserId);
       if (entry && entry.unreadCount > 0) {
@@ -320,11 +321,11 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
     if (entry) entry.unreadCount = 0;
     void clearChatNotification(chat.userId);
     totalUnread.value = chatList.value.reduce((s, c) => s + c.unreadCount, 0);
-    router.push({ name: 'Chat', params: { userId: chat.userId }, query: { name: chat.name, publicKey: chat.publicKey } });
+    router.push(chatPath(chat.userId, chat.name));
   }
 
   function startChatWithUser(user: UserSearchResult) {
-    router.push({ name: 'Chat', params: { userId: user.id }, query: { name: user.name, publicKey: user.publicKey } });
+    router.push(chatPath(user.id, user.name));
   }
 
   function clearUserSearch() {

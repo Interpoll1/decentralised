@@ -40,6 +40,8 @@ import { KeyVaultService } from './keyVaultService';
 import { StorageService } from './storageService';
 import { gunPut, gunOnce, gunReadChildren, verifySoulOnRelay, toGunRecord } from '../utils/gunAsync';
 import { canonicalJSON } from '../../shared-validation/canonical.js';
+import { ContentPowService } from './contentPowService';
+import { HumanGateService } from './humanGateService';
 import type { Comment, StoredComment, SyncStatus } from '../types/social';
 
 export type { Comment, StoredComment, SyncStatus } from '../types/social';
@@ -241,6 +243,7 @@ function toGunComment(comment: Comment): Record<string, string | number | boolea
     authorPubkey: c.authorPubkey,
     contentSignature: c.contentSignature,
     canonVersion: c.canonVersion,
+    powNonce: c.powNonce,
     isEncrypted: c.isEncrypted ? true : undefined,
     encryptedContent: c.encryptedContent,
     authTag: c.authTag,
@@ -290,6 +293,7 @@ function fromGunComment(raw: any, fallbackPostId?: string): Comment | null {
     authorPubkey: typeof raw.authorPubkey === 'string' ? raw.authorPubkey : undefined,
     contentSignature: typeof raw.contentSignature === 'string' ? raw.contentSignature : undefined,
     canonVersion: Number(raw.canonVersion) || undefined,
+    powNonce: Number.isSafeInteger(Number(raw.powNonce)) && raw.powNonce !== null && raw.powNonce !== '' ? Number(raw.powNonce) : undefined,
     isEncrypted: raw.isEncrypted === true,
     encryptedContent: typeof raw.encryptedContent === 'string' ? raw.encryptedContent : undefined,
     authTag: typeof raw.authTag === 'string' ? raw.authTag : undefined,
@@ -458,6 +462,7 @@ export function startCommentRepublishLoop(): void {
 export async function createComment(data: CreateCommentData): Promise<Comment> {
   if (!data.postId) throw new Error('postId is required');
   if (!data.content?.trim()) throw new Error('content is required');
+  HumanGateService.assertRateLimit('comment');
 
   const createdAt = Date.now();
   const comment: Comment = {
@@ -475,6 +480,13 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
     score: 0,
     edited: false,
   };
+
+  // Per-comment proof-of-work; relays reject new comments without it.
+  comment.powNonce = await ContentPowService.stamp(
+    { kind: 'comment', id: comment.id, createdAt, authorId: comment.authorId },
+    HumanGateService.requiredBits('comment'),
+  );
+  HumanGateService.recordCreation('comment');
 
   await signComment(comment);
   await encryptForCommunity(comment);

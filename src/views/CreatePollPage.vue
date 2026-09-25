@@ -13,6 +13,7 @@
             <div v-if="isSubmitting" class="btn-spinner"></div>
             {{ isSubmitting ? 'Posting…' : 'Post' }}
           </button>
+          <HoneypotField v-model="gateHoneypot" />
         </ion-buttons>
       </ion-toolbar>
     </ion-header>
@@ -356,6 +357,8 @@ import {
   toastController
 } from '@ionic/vue';
 import CommunityPickerModal from '../components/CommunityPickerModal.vue';
+import HoneypotField from '../components/HoneypotField.vue';
+import { useHumanGate } from '../composables/useHumanGate';
 import { chevronDownOutline, addCircleOutline, closeCircleOutline, timeOutline, listOutline, settingsOutline, shieldCheckmarkOutline, lockClosedOutline, informationCircleOutline } from 'ionicons/icons';
 import { useCommunityStore } from '../stores/communityStore';
 import { usePollStore } from '../stores/pollStore';
@@ -487,6 +490,7 @@ function addOption() {
 }
 
 function resetForm() {
+  gateReset();
   question.value = '';
   options.value = [createOptionDraft(), createOptionDraft()];
   duration.value = '7';
@@ -503,9 +507,17 @@ function removeOption(index: number) {
   }
 }
 
+const { honeypot: gateHoneypot, check: gateCheck, reset: gateReset } = useHumanGate('poll');
+
 async function createPoll() {
   const submitStartedAt = performance.now();
   if (isSubmitting.value) return;
+  const verdict = gateCheck();
+  if (verdict === 'silent') { await router.replace('/home'); return; } // honeypot: give a bot no signal
+  if (verdict) {
+    (await toastController.create({ message: verdict, duration: 2500, color: 'warning' })).present();
+    return;
+  }
   if (!isValid.value) {
     logPollDebug('ui', 'Submit blocked: invalid form', {
       hasCommunity: selectedCommunity.value !== null,

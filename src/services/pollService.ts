@@ -1,6 +1,8 @@
 import { GunService, GUN_NAMESPACE } from './gunService';
 import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
+import { ContentPowService } from './contentPowService';
+import { HumanGateService } from './humanGateService';
 import { StorageService } from './storageService';
 import config from '../config';
 import { AuditService } from './auditService';
@@ -1123,6 +1125,7 @@ export class PollService {
       hasDescription: Boolean(data.description?.trim()),
       inviteCodeCount: data.inviteCodeCount,
     });
+    HumanGateService.assertRateLimit('poll');
     const pollId   = preGeneratedId || `poll-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
     const now      = Date.now();
     const expiresAt = now + data.durationDays * 86400000;
@@ -1141,6 +1144,13 @@ export class PollService {
       totalVotes: 0, isExpired: false,
       voteTrustPolicy: data.voteTrustPolicy,
     };
+
+    // Per-poll proof-of-work; relays reject new polls without it.
+    poll.powNonce = await ContentPowService.stamp(
+      { kind: 'poll', id: pollId, createdAt: now, authorId: data.authorId },
+      HumanGateService.requiredBits('poll'),
+    );
+    HumanGateService.recordCreation('poll');
 
     try {
       const { KeyService }    = await import('./keyService');
@@ -1201,6 +1211,7 @@ export class PollService {
       authTag: poll.authTag,
       authorPubkey: poll.authorPubkey,
       contentSignature: poll.contentSignature,
+      powNonce: poll.powNonce,
       voteTrustPolicy: poll.voteTrustPolicy ? JSON.stringify(poll.voteTrustPolicy) : undefined,
       // Namespace tag written into the Gun node — see belongsToNamespace().
       dataVersion: GUN_NAMESPACE,

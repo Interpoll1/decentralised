@@ -8,7 +8,7 @@ module.exports = {
       exec_mode: "fork",
       env: {
         NODE_ENV: "production",
-        PORT: 3000,
+        PORT: 3010,
         // Prefer setting BOOTSTRAP_ADMIN_KEY in a real .env file (loaded via
         // dotenv at startup) or your secrets manager rather than here.
       },
