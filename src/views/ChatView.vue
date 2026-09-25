@@ -320,10 +320,21 @@ import { StorageService } from '../services/storageService';
 import config from '@/config';
 
 const route = useRoute();
-const props = defineProps<{ userId: string }>();
+const props = defineProps<{ userId?: string }>();
 
-const recipientId   = computed(() => props.userId || (route.params.userId as string) || '');
-const recipientName = computed(() => (route.query.name as string) || 'User');
+// Fragment-based link support: `/chat#<userId>&name=<name>` keeps the
+// recipient's pubkey out of the path, browser history entries, Referer
+// headers, and server access logs (unlike `/chat/:userId`, which older
+// links and in-app navigation may still use).
+const hashParams = computed(() => new URLSearchParams(
+  (route.hash || window.location.hash || '').replace(/^#/, '')
+));
+const recipientId = computed(() =>
+  props.userId || (route.params.userId as string) || hashParams.value.get('id') || ''
+);
+const recipientName = computed(() =>
+  (route.query.name as string) || hashParams.value.get('name') || 'User'
+);
 const WS_URL        = config.relay.websocket;
 
 // ── State ──────────────────────────────────────────────────────────────────────
