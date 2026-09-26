@@ -241,7 +241,9 @@ async function copySoul() {
 }
 
 async function copyJoinUrl() {
-  const url = `${window.location.origin}/join/rendezvous/${encodeURIComponent(seedPhrase.value)}`;
+  // Seed goes in the fragment: never sent to the server, so it stays out of
+  // access logs, Referer headers and CDN analytics.
+  const url = `${window.location.origin}/join/rendezvous#${encodeURIComponent(seedPhrase.value)}`;
   await navigator.clipboard.writeText(url).catch(() => {});
   const t = await toastController.create({ message: 'Join link copied', duration: 1800, position: 'bottom' });
   await t.present();

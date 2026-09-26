@@ -95,6 +95,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { chatPath } from '../utils/privateRoute';
 
 interface ChatEntry {
   userId: string;
@@ -139,6 +140,12 @@ function extractChatPath(raw: string): { userId: string; name: string } | null {
   try {
     // Try as full URL first
     const url = new URL(s.startsWith('http') ? s : `https://${s}`);
+    // Fragment format from ProfilePage: /chat#id=<userId>&name=<name>
+    if (url.pathname === '/chat' && url.hash) {
+      const frag = new URLSearchParams(url.hash.slice(1));
+      const id = frag.get('id');
+      if (id) return { userId: id, name: frag.get('name') || 'User' };
+    }
     const match = url.pathname.match(/^\/chat\/([^/?#]+)/);
     if (match) {
       return {
@@ -169,7 +176,7 @@ async function openFromLink() {
   }
   openingLink.value = true;
   try {
-    await router.push(`/chat/${encodeURIComponent(parsed.userId)}?name=${encodeURIComponent(parsed.name)}`);
+    await router.push(chatPath(parsed.userId, parsed.name));
     inviteLinkInput.value = '';
   } finally {
     openingLink.value = false;

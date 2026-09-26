@@ -42,6 +42,8 @@ export interface Poll {
   isExpired: boolean;
   authorPubkey?: string;
   contentSignature?: string;
+  /** Proof-of-work nonce bound to (id, createdAt, authorId) — see contentPowService. */
+  powNonce?: number;
   isEncrypted?: boolean;
   encryptedContent?: string;
   authTag?: string;

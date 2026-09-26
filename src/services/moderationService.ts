@@ -129,8 +129,13 @@ export interface ModerationSettings {
 const STORAGE_KEY = 'moderation_settings';
 const API_KEY_STORAGE_KEY = 'moderation_api_key';
 
-/** Default URL for the InterPoll-hosted moderation API */
-export const MODERATION_API_DEFAULT_BASE_URL = 'https://interpoll.endless.sbs';
+/**
+ * Default URL for the InterPoll-hosted moderation API — the prefix under which
+ * moderation-api's `/v1/*` routes are served (nginx maps `/moderation/v1/`).
+ */
+export const MODERATION_API_DEFAULT_BASE_URL = 'https://interpoll.endless.sbs/moderation';
+/** Pre-fix default (site root, no `/v1` there); migrated on load. */
+const LEGACY_MODERATION_API_BASE_URL = 'https://interpoll.endless.sbs';
 
 const DEFAULT_SETTINGS: ModerationSettings = {
   minUserKarma: -1000,
@@ -473,20 +478,21 @@ export class ModerationService {
     const baseUrl = s.moderationApiBaseUrl || MODERATION_API_DEFAULT_BASE_URL;
 
     try {
-      const res = await fetch(`${baseUrl}/api/moderation/auth`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey.trim()}`,
-        },
+      // moderation-api has no dedicated auth route; probe an authenticated one.
+      // 401 = unknown/revoked key; 403 = valid key without admin scope; 200 = admin.
+      const res = await fetch(`${baseUrl}/v1/api-keys`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${apiKey.trim()}` },
         signal: AbortSignal.timeout(8_000),
       });
 
-      if (res.ok) {
+      const authenticated = res.ok || (res.status === 403 && await isScopeError(res));
+      if (authenticated) {
         this.saveSettings({ moderationApiKey: apiKey.trim() });
         return { ok: true, message: 'API key authenticated successfully' };
       }
       if (res.status === 401) return { ok: false, message: 'Invalid API key' };
+      if (res.status === 404) return { ok: false, message: 'Moderation API not found at this URL' };
       return { ok: false, message: `Server error: ${res.status}` };
     } catch (err: any) {
       return { ok: false, message: err?.message ?? 'Network error — check your connection' };
@@ -512,6 +518,9 @@ export class ModerationService {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
+        if (parsed.moderationApiBaseUrl?.replace(/\/+$/, '') === LEGACY_MODERATION_API_BASE_URL) {
+          parsed.moderationApiBaseUrl = MODERATION_API_DEFAULT_BASE_URL;
+        }
         this.settings = { ...DEFAULT_SETTINGS, ...parsed };
       } else {
         const legacy = localStorage.getItem('minUserKarma');
@@ -524,5 +533,15 @@ export class ModerationService {
       this.settings = { ...DEFAULT_SETTINGS };
     }
     this._patterns = null;
+  }
+}
+
+/** True when a 403 is moderation-api's "valid key, insufficient scope" (not a proxy/WAF 403). */
+async function isScopeError(res: Response): Promise<boolean> {
+  try {
+    const body = await res.json();
+    return body?.error?.code === 'insufficient_scope';
+  } catch {
+    return false;
   }
 }

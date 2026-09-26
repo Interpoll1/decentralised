@@ -70,6 +70,7 @@ import { alertCircle } from 'ionicons/icons';
 import { usePollStore } from '../stores/pollStore';
 import VoteForm from '../components/VoteForm.vue';
 import { useChainStore } from '../stores/chainStore';
+import { receiptPath } from '../utils/privateRoute';
 
 const route = useRoute();
 const router = useRouter();
@@ -107,6 +108,6 @@ watch(
 );
 
 const handleVoteSubmitted = (verificationCode: string) => {
-  router.push(`/receipt/${verificationCode}`);
+  router.push(receiptPath(verificationCode));
 };
 </script>

@@ -10,6 +10,8 @@ import { KeyVaultService } from './keyVaultService';
 import config from '../config';
 import { BoundedMap, BoundedSet } from '../utils/boundedMap';
 import { canonicalJSON } from '../../shared-validation/canonical.js';
+import { ContentPowService } from './contentPowService';
+import { HumanGateService } from './humanGateService';
 
 const CURRENT_CANON_VERSION = 2;
 
@@ -51,6 +53,8 @@ export interface Post {
   contentSignature?: string;
   /** Which canonicalization algorithm contentSignature was produced with. Absent = legacy v1 (canonicalPostPayloadV1). */
   canonVersion?: number;
+  /** Proof-of-work nonce bound to (id, createdAt, authorId) — see contentPowService. */
+  powNonce?: number;
   /** Client-side only — which GunDB namespace this post came from */
   dataVersion?: string;
   /** Client-side only — whether the relay independently confirmed it holds this post (set on creation). */
@@ -238,6 +242,9 @@ export class PostService {
     imageFile?: File,
     preGeneratedId?: string
   ): Promise<Post> {
+    // Fail fast, before any upload work, if this device is posting too fast.
+    HumanGateService.assertRateLimit('post');
+
     let imageData;
     if (imageFile) {
       // Dynamic import: ipfs-core is large. Load it only when user attaches an
@@ -307,6 +314,14 @@ export class PostService {
     if (newPost.videoDuration)     cleanPost.videoDuration     = newPost.videoDuration;
     if (newPost.videoSize)         cleanPost.videoSize         = newPost.videoSize;
     if (newPost.videoMimeType)     cleanPost.videoMimeType     = newPost.videoMimeType;
+
+    // Per-post proof-of-work; relays reject new posts without it.
+    newPost.powNonce = await ContentPowService.stamp(
+      { kind: 'post', id: newPost.id, createdAt: newPost.createdAt, authorId: newPost.authorId },
+      HumanGateService.requiredBits('post'),
+    );
+    cleanPost.powNonce = newPost.powNonce;
+    HumanGateService.recordCreation('post');
 
     try {
       const keyPair = await KeyService.getKeyPair();
@@ -1024,6 +1039,7 @@ export class PostService {
     if (post.authorPubkey) rec.authorPubkey = post.authorPubkey;
     if (post.contentSignature) rec.contentSignature = post.contentSignature;
     if (post.canonVersion) rec.canonVersion = post.canonVersion;
+    if (post.powNonce !== undefined) rec.powNonce = post.powNonce;
     if (post.isEncrypted) {
       rec.isEncrypted = true;
       if (post.encryptedContent) rec.encryptedContent = post.encryptedContent;

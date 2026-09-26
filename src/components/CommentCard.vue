@@ -67,6 +67,7 @@
       <!-- Reply form -->
       <div v-if="showReplyForm" class="reply-form">
         <ion-textarea v-model="replyText" placeholder="Write a reply…" :auto-grow="true" :rows="2" class="reply-textarea"></ion-textarea>
+        <HoneypotField v-model="gateHoneypot" />
         <div class="reply-actions">
           <ion-button size="small" @click="submitReply" :disabled="!replyText.trim()">
             <ion-icon slot="start" :icon="sendOutline"></ion-icon>Reply
@@ -96,6 +97,9 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
+import HoneypotField from './HoneypotField.vue';
+import { useHumanGate } from '../composables/useHumanGate';
+import { HumanGateError } from '../services/humanGateService';
 import { IonIcon, IonTextarea, IonButton, toastController } from '@ionic/vue';
 import { sendOutline, warningOutline } from 'ionicons/icons';
 import { useCommentStore } from '../stores/commentStore';
@@ -191,7 +195,12 @@ const replies = computed(() =>
 );
 
 function checkReplyFlagged(content: string) { return ModerationService.checkContent(content || '').flagged; }
-function toggleReply() { showReplyForm.value = !showReplyForm.value; if (!showReplyForm.value) replyText.value = ''; }
+const { honeypot: gateHoneypot, check: gateCheck, reset: gateReset } = useHumanGate('comment');
+
+function toggleReply() {
+  showReplyForm.value = !showReplyForm.value;
+  if (showReplyForm.value) gateReset(); else replyText.value = '';
+}
 function cancelReply() { showReplyForm.value = false; replyText.value = ''; }
 
 async function sendInviteToCommentAuthor() {
@@ -208,6 +217,12 @@ async function sendInviteToCommentAuthor() {
 
 async function submitReply() {
   if (!replyText.value.trim()) return;
+  const verdict = gateCheck();
+  if (verdict === 'silent') { replyText.value = ''; showReplyForm.value = false; return; } // honeypot
+  if (verdict) {
+    const t = await toastController.create({ message: verdict, duration: 2500, color: 'warning' });
+    await t.present(); return;
+  }
   const guard = checkContent(replyText.value.trim(), 'comment');
   if (!guard.ok) {
     const t = await toastController.create({ message: guard.reason!, duration: 2500, color: 'warning' });
@@ -216,8 +231,9 @@ async function submitReply() {
   try {
     await commentStore.createComment({ postId: props.postId, communityId: props.communityId, content: replyText.value.trim(), parentId: props.comment.id });
     replyText.value = ''; showReplyForm.value = false;
-  } catch {
-    const t = await toastController.create({ message: 'Failed to post reply', duration: 2000, color: 'danger' });
+  } catch (err) {
+    const message = err instanceof HumanGateError ? err.message : 'Failed to post reply';
+    const t = await toastController.create({ message, duration: 2500, color: 'danger' });
     await t.present();
   }
 }
