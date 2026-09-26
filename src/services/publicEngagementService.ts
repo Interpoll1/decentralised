@@ -28,6 +28,11 @@ export function readReaction(raw: any, actor: string, targetType: 'post' | 'comm
   return ['up', 'down', 'none'].includes(raw.type) ? raw.type as 'up' | 'down' | 'none' : null;
 }
 
+export class ReactionPublishError extends Error {
+  terminal: boolean;
+  constructor(terminal: boolean) { super(terminal ? 'ENGAGEMENT_REJECTED' : 'ENGAGEMENT_STORAGE_UNAVAILABLE'); this.terminal = terminal; }
+}
+
 export async function publishReaction(action: PublicAction): Promise<void> {
   const body = JSON.stringify({ action });
   const node = GunService.getGun().get(action.targetType === 'comment' ? 'commentVotes' : 'postVotes')
@@ -40,12 +45,13 @@ export async function publishReaction(action: PublicAction): Promise<void> {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body,
         signal: AbortSignal.timeout(8000),
       });
+      if (!response.ok && response.status !== 429 && response.status < 500) throw new ReactionPublishError(true);
       const result = await response.json();
       if (response.ok && result.id === action.id && ['accepted', 'duplicate'].includes(result.status)) return;
-      if (response.status < 500) throw new Error('ENGAGEMENT_REJECTED');
+      if (response.ok) throw new ReactionPublishError(true);
     } catch (error) {
-      if ((error as Error).message === 'ENGAGEMENT_REJECTED' || attempt === 1) throw error;
+      if (error instanceof ReactionPublishError && error.terminal || attempt === 1) throw error;
     }
   }
-  throw new Error('ENGAGEMENT_STORAGE_UNAVAILABLE');
+  throw new ReactionPublishError(false);
 }

@@ -1,4 +1,5 @@
-import { createPublicAction, publishReaction } from './publicEngagementService';
+import { enqueueReaction } from './reactionOutboxService';
+import { createPublicAction } from './publicEngagementService';
 import { GunService, GUN_NAMESPACE } from './gunService';
 import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
@@ -1713,7 +1714,7 @@ export class PollService {
     userId: string,
     communityId?: string,
     knownCounts?: { upvotes: number; downvotes: number; previous: 'up' | 'down' | null },
-  ): Promise<{ upvotes: number; downvotes: number; score: number }> {
+  ): Promise<{ upvotes: number; downvotes: number; score: number; delivery?: import('./reactionOutboxService').ReactionDelivery }> {
     const gun = this.gun;
 
     // knownCounts is the pre-optimistic snapshot from the store — delta not yet
@@ -1748,7 +1749,7 @@ export class PollService {
 
     // Public reaction only; poll ballots retain their existing protocol.
     const action = await createPublicAction(userId, 'reaction', 'post', pollId, togglingOff ? 'none' : direction);
-    await publishReaction(action);
+    const publication = await enqueueReaction(action);
 
     const score = upvotes - downvotes;
     const patch = { upvotes, downvotes, score };
@@ -1765,7 +1766,7 @@ export class PollService {
       }).catch(() => {});
     }
 
-    return patch;
+    return { ...patch, delivery: publication.status };
   }
 
   static async getInviteCodes(pollId: string): Promise<{ code: string; used: boolean }[]> {
