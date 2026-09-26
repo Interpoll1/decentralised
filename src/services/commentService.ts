@@ -1,4 +1,5 @@
-import { createPublicAction, publishReaction, readReaction } from './publicEngagementService';
+import { enqueueReaction } from './reactionOutboxService';
+import { createPublicAction, readReaction } from './publicEngagementService';
 /**
  * Comments — local-first, relay-verified.
  *
@@ -55,6 +56,7 @@ const REPUBLISH_INTERVAL_MS = 90_000;
 const FETCH_CONCURRENCY = 8;
 
 export interface CommentTally {
+  delivery?: import('./reactionOutboxService').ReactionDelivery;
   upvotes: number;
   downvotes: number;
   score: number;
@@ -808,7 +810,7 @@ export async function voteOnComment(
   const next: VoteValue = current === voteType ? 'none' : voteType;
 
   const action = await createPublicAction(userId, 'reaction', 'comment', commentId, next);
-  await publishReaction(action);
+  const publication = await enqueueReaction(action);
 
   const local = await StorageService.getComment(commentId);
   const tally = await getCommentTally(commentId, local ?? undefined);
@@ -825,7 +827,7 @@ export async function voteOnComment(
     await StorageService.saveComment({ ...local, ...tally, updatedAt: Date.now() });
   }
 
-  return tally;
+  return { ...tally, delivery: publication.status };
 }
 
 /** Live tally updates for one comment. */

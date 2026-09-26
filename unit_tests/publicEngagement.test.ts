@@ -61,7 +61,7 @@ describe('public engagement client contract', () => {
   it.each(['postVoteService.ts', 'commentService.ts', 'pollService.ts'])('active reaction writer %s uses shared signing/publishing and contains no old HTTP body', file => {
     const source = readFileSync(new URL(`../src/services/${file}`, import.meta.url), 'utf8');
     expect(source).toContain('await createPublicAction(');
-    expect(source).toContain('publishReaction(action)');
+    expect(source).toContain('enqueueReaction(action)');
     expect(source).not.toContain('/api/content-vote');
   });
 });
