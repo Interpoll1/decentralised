@@ -1,12 +1,10 @@
 {
   "format": 1,
-  "archiveSHA256": "c2b34fa670c66f7b3644aed5ec3b2a3592c49b094eebc8ee51d625431de39955",
-  "reportedDirtyBase": "3961bd105d8f6d1c1088c1cd7b0ef4962c7b7526",
   "normalization": "UTF-8 text, CRLF to LF; trailing newline significant",
   "files": {
     "gun-relay/gun-relay-enhanced.js": {
-      "before": "6b4d752a4ff5013e26916fd8a22fa667d60241b6449f76ea5ec6e576c3306f73",
-      "after": "6a6c127b4d6de12f0f522e74903bc325081a7898d14e7da0ee95c1d0a73bff05"
+      "before": "9341090dc494b5eca72e4fea2f3b0234878f870a96b5b944ad6289acca710864",
+      "after": "7e4f2e3ac5d693698c9e9d25c96c54756ebd2b4cc2610c23b02c0c79b65965c0"
     },
     "relay-server/db.js": {
       "before": "7eb14e077b2b326aaeda5a4b1f199d7d3e963226d3ca59b2417d30fd5c1d1017",
@@ -45,5 +43,12 @@
       "after": "8427c8a90d509ce8bf981ff44c093a55d583353693e8450afb1b3b03ce793a3f"
     }
   },
-  "patchSHA256": "6f5c4f47f900f70ed01e9158f82d1915c2ea555ba4659463f2fb2567df59411a"
+  "patchSHA256": "2726a28b493394622b1b2fae4060f3cff5d0fc8f07bfa38953b88d9b2d5cb548",
+  "previousPin": {
+    "archiveSHA256": "c2b34fa670c66f7b3644aed5ec3b2a3592c49b094eebc8ee51d625431de39955",
+    "reportedDirtyBase": "3961bd105d8f6d1c1088c1cd7b0ef4962c7b7526",
+    "patchSHA256": "6f5c4f47f900f70ed01e9158f82d1915c2ea555ba4659463f2fb2567df59411a",
+    "note": "Original author package, pinned to the team-supplied archive. Superseded by the live-tree pin below."
+  },
+  "source": "Live /var/www/interpoll relay tree on the prod VPS, snapshotted 2026-09-26 (includes the 2026-09-25 content-firewall deploy). gun-relay-enhanced.js is a 3-way merge of the author patch with the content firewall."
 }

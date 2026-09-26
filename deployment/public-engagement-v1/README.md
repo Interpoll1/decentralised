@@ -3,6 +3,29 @@
 Status: review candidate, NOT deployment approval. This package belongs with the
 client branch and offline coordination prototype. Do not deploy the client alone.
 
+## Live-tree pin (2026-09-26, supersedes the archive pin below)
+
+`backend.patch` and `manifest.json` are now pinned to the live relay tree on the
+prod VPS (`/var/www/interpoll`), snapshotted 2026-09-26. Three relay-server files
+matched the original preimage byte-for-byte. `gun-relay/gun-relay-enhanced.js`
+did not: the 2026-09-25 content-firewall deploy changed it. The pre-firewall
+backup matched the original preimage, so the gun-relay hunk is a 3-way merge of
+the author patch with the content firewall (one adjacency conflict: both setup
+blocks kept, firewall first). The original pin is kept under `previousPin`.
+
+Staging evidence (local, not prod): VPS dependency lockfiles (`@noble/curves`
+2.2.0, `@noble/hashes` 2.2.0 in `shared-validation/`), Node 22.16 and 24.0.0
+(the VPS version), MySQL 8.0 with the prod schema (no data):
+
+- `tests/engagement.test.mjs`: 38/38. Needs `typescript@5` (7.x breaks the
+  route extraction) and `NODE_PATH=<backend>/gun-relay/node_modules` so the test
+  finds Gun.
+- `client-relay.integration.test.mjs`: 4/4.
+- `staging-e2e.mjs` (real HTTP + Gun WS against both patched relays + MySQL):
+  27/28, also after restarting both processes. The one miss: a signed Gun put
+  commits but the writer never receives an ack. The client does not wait for
+  that ack (`void gunPut`), so it is advisory only.
+
 ## Source and scope
 
 `backend.patch` contains ten changed/new paths: HTTP content-vote/views routes,
