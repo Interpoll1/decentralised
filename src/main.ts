@@ -142,6 +142,11 @@ router.isReady().then(() => {
     initPushNotifications().catch(e => console.warn('[Init] Push init failed:', e));
   }).catch(() => { /* not in native shell */ });
 
+  import('./services/reactionOutboxService').then(({ resumeReactions }) => {
+    resumeReactions();
+    window.addEventListener('online', resumeReactions);
+  }).catch(() => {});
+
   // Defer after first paint
   setTimeout(() => {
     // Init view tracking — use UserService identity (RSA public key hex), not Gun auth
