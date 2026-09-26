@@ -1,3 +1,5 @@
+import { enqueueReaction } from './reactionOutboxService';
+import { createPublicAction } from './publicEngagementService';
 import { GunService, GUN_NAMESPACE } from './gunService';
 import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
@@ -1723,7 +1725,7 @@ export class PollService {
     userId: string,
     communityId?: string,
     knownCounts?: { upvotes: number; downvotes: number; previous: 'up' | 'down' | null },
-  ): Promise<{ upvotes: number; downvotes: number; score: number }> {
+  ): Promise<{ upvotes: number; downvotes: number; score: number; delivery?: import('./reactionOutboxService').ReactionDelivery }> {
     const gun = this.gun;
 
     // knownCounts is the pre-optimistic snapshot from the store — delta not yet
@@ -1756,21 +1758,9 @@ export class PollService {
       if (direction === 'up') upvotes += 1; else downvotes += 1;
     }
 
-    // ── Write vote via HTTP POST (fast) + Gun (peer sync fallback) ──────────
-    const voteRecord = { userId, pollId, postId: pollId, at: Date.now(), type: togglingOff ? 'none' : direction };
-    // HTTP write — direct to MySQL via relay, <100ms
-    void fetch(`${(await import('../config')).default.relay.api}/api/content-vote`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(voteRecord),
-    }).catch(() => {});
-    // Gun write — parallel, for peer sync
-    void new Promise<void>((resolve) => {
-      gun.get('postVotes').get(pollId).get(userId).put(
-        this.sanitizeForGun(voteRecord), () => resolve(),
-      );
-      setTimeout(resolve, 3_000);
-    }).catch(() => {});
+    // Public reaction only; poll ballots retain their existing protocol.
+    const action = await createPublicAction(userId, 'reaction', 'post', pollId, togglingOff ? 'none' : direction);
+    const publication = await enqueueReaction(action);
 
     const score = upvotes - downvotes;
     const patch = { upvotes, downvotes, score };
@@ -1787,7 +1777,7 @@ export class PollService {
       }).catch(() => {});
     }
 
-    return patch;
+    return { ...patch, delivery: publication.status };
   }
 
   static async getInviteCodes(pollId: string): Promise<{ code: string; used: boolean }[]> {

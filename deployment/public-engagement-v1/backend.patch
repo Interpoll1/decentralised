@@ -1,0 +1,826 @@
+diff --git a/gun-relay/gun-relay-enhanced.js b/gun-relay/gun-relay-enhanced.js
+index da5cf21..9d2a5f5 100644
+--- a/gun-relay/gun-relay-enhanced.js
++++ b/gun-relay/gun-relay-enhanced.js
+@@ -1,3 +1,6 @@
++import { initEngagementStore, acceptGunAction } from '../shared-validation/engagement-store.js';
++import { protectedReactionSoul, reactionSoul } from '../shared-validation/engagement.js';
++import { installEngagementFirewall } from '../shared-validation/engagement-gun.js';
+ // gun-relay-enhanced.js
+ // Gun.js relay with MySQL persistence + Search indexing integration
+ // SECURITY: Auth on write endpoints, CORS whitelist, input validation, rate limiting
+@@ -233,6 +236,7 @@ async function initMySQL() {
+       UPDATE search_index SET nsfw = 'none' WHERE nsfw = '0' OR nsfw IS NULL
+     `).catch(() => {});
+ 
++    await initEngagementStore(db);
+     dbConnected = true;
+     console.log('✅ MySQL connected');
+ 
+@@ -565,6 +569,8 @@ function wireMySQL(gun) {
+     const soul  = put['#'];
+     const field = put['.'];
+     const value = put[':'];
++    // Signed leaf already committed by the shared transaction; never merge it again.
++    if (protectedReactionSoul(soul) && soul.split('/').length >= 4) return;
+ 
+     if (!soul || field === undefined || value === undefined || value === null) return;
+     if (soul.startsWith('~') || soul === 'undefined') return;
+@@ -603,7 +609,9 @@ function wireMySQL(gun) {
+       conn = await db.getConnection();
+       const [rows] = await conn.execute('SELECT data FROM gun_nodes WHERE soul = ?', [soul]);
+       if (rows.length === 0) return;
+-      gun._.root.on('in', { '@': msg['#'], put: { [soul]: JSON.parse(rows[0].data) } });
++      const data = JSON.parse(rows[0].data);
++      const node = protectedReactionSoul(soul) && soul.split('/').length === 4 ? { envelope: data.envelope } : data;
++      gun._.root.on('in', { '@': msg['#'], put: { [soul]: node } });
+     } catch (err) {
+       const isConnErr = err.message?.includes('Pool is closed')
+         || err.message?.includes('ECONNRESET')
+@@ -674,6 +682,12 @@ const contentFirewall = createContentFirewall({
+   log: (msg) => console.warn(sanitizeLogString(msg, 300)),
+ });
+ 
++async function acceptReactionForGun(action) {
++  const soul = reactionSoul(action, NAMESPACE);
++  if (await moderation.checkWrite(soul, 'envelope', JSON.stringify(action))) throw new Error('BLOCKED_REACTION');
++  return acceptGunAction(dbConnected ? db : null, action, NAMESPACE);
++}
++installEngagementFirewall(Gun, { namespace: NAMESPACE, accept: acceptReactionForGun });
+ const gun = Gun({
+   web:          server,
+   radisk:       true,
+@@ -710,7 +724,8 @@ setImmediate(() => {
+           if (!m) continue;
+ 
+           // Ack puts immediately — guaranteed ref to originating socket here.
+-          if (m['#'] && m.put && !m['@'] && ws.readyState === 1) {
++          if (m['#'] && m.put && !m['@'] && ws.readyState === 1
++            && !Object.keys(m.put).some(protectedReactionSoul)) {
+             try {
+               ws.send(JSON.stringify({ '@': m['#'], ok: 1, '#': Math.random().toString(36).slice(2, 11) }));
+             } catch { /* socket closed between check and send */ }
+@@ -799,6 +814,7 @@ app.post('/db/create-poll', async (req, res) => {
+   if (!requireSecret(req, res, 'API_WRITE_SECRET')) return;
+   const { soul, data } = req.body || {};
+   if (!soul || !data)         return res.status(400).json({ error: 'soul and data required' });
++  if (protectedReactionSoul(soul)) return res.status(422).json({ error: 'USE_SIGNED_ENGAGEMENT_API' });
+   if (!sanitizeSoul(soul))    return res.status(400).json({ error: 'invalid soul format' });
+   if (!dbConnected)           return res.status(503).json({ error: 'db not connected' });
+ 
+@@ -845,6 +861,7 @@ app.post('/db/create-post', async (req, res) => {
+   if (!requireSecret(req, res, 'API_WRITE_SECRET')) return;
+   const { soul, data } = req.body || {};
+   if (!soul || !data)         return res.status(400).json({ error: 'soul and data required' });
++  if (protectedReactionSoul(soul)) return res.status(422).json({ error: 'USE_SIGNED_ENGAGEMENT_API' });
+   if (!sanitizeSoul(soul))    return res.status(400).json({ error: 'invalid soul format' });
+   if (!dbConnected)           return res.status(503).json({ error: 'db not connected' });
+ 
+@@ -883,6 +900,7 @@ app.post('/db/create-community', async (req, res) => {
+   if (!requireSecret(req, res, 'API_WRITE_SECRET')) return;
+   const { soul, data } = req.body || {};
+   if (!soul || !data)         return res.status(400).json({ error: 'soul and data required' });
++  if (protectedReactionSoul(soul)) return res.status(422).json({ error: 'USE_SIGNED_ENGAGEMENT_API' });
+   if (!sanitizeSoul(soul))    return res.status(400).json({ error: 'invalid soul format' });
+ 
+   try {
+@@ -994,6 +1012,7 @@ app.post('/db/write', async (req, res) => {
+ 
+   const { soul, data } = req.body;
+   if (!soul || data === undefined) return res.status(400).json({ error: 'missing soul or data' });
++  if (protectedReactionSoul(soul)) return res.status(422).json({ error: 'USE_SIGNED_ENGAGEMENT_API' });
+   if (!sanitizeSoul(soul))         return res.status(400).json({ error: 'invalid soul format' });
+   if (!dbConnected)                return res.status(503).json({ error: 'db not connected' });
+ 
+@@ -1213,4 +1232,4 @@ process.on('SIGINT', async () => {
+ });
+ 
+ process.on('uncaughtException',  (err) => { console.error('❌', err); process.exit(1); });
+-process.on('unhandledRejection', (r)   => { console.error('❌', r);   process.exit(1); });
+\ No newline at end of file
++process.on('unhandledRejection', (r)   => { console.error('❌', r);   process.exit(1); });
+diff --git a/relay-server/db.js b/relay-server/db.js
+index a841d49..1c23ade 100644
+--- a/relay-server/db.js
++++ b/relay-server/db.js
+@@ -1,3 +1,4 @@
++import { initEngagementStore } from '../shared-validation/engagement-store.js';
+ // db.js — MySQL connection, schema bootstrap, and query helpers
+ import mysql from 'mysql2/promise';
+ 
+@@ -309,6 +310,7 @@ export async function initMySQL() {
+     // consumed_at was added after initial schema — add it if missing
+     await addColIfMissingOnTable2('opk_pool', 'consumed_at', 'BIGINT DEFAULT NULL');
+ 
++    await initEngagementStore(db);
+     console.log('✅ MySQL connected');
+   } catch (err) {
+     console.error('❌ MySQL failed:', err.message);
+diff --git a/relay-server/relay-server-enhanced.js b/relay-server/relay-server-enhanced.js
+index 4cda373..b9678c7 100644
+--- a/relay-server/relay-server-enhanced.js
++++ b/relay-server/relay-server-enhanced.js
+@@ -1,3 +1,4 @@
++import { pruneEngagementHistory } from '../shared-validation/engagement-store.js';
+ // index.js — Entry point: wires all modules together and starts the server
+ import { server, PORT, DOMAIN, clients, activeChatSessions, rateLimiter, botDetector, powChallenge, replayProtector, oauthStates, OAUTH_STATE_TTL_MS, PENDING_VOTE_CLEANUP_MS } from './config.js';
+ import { db, queryMySQL, initMySQL } from './db.js';
+@@ -17,6 +18,7 @@ import './websocket.js';
+ 
+ // ─── MySQL ────────────────────────────────────────────────────────────────────
+ await initMySQL();
++setInterval(() => pruneEngagementHistory(db).catch(() => {}), 60_000).unref();
+ 
+ // ─── OAuth state expiry ────────────────────────────────────────────────────────
+ setInterval(() => {
+diff --git a/relay-server/routes.js b/relay-server/routes.js
+index 23b44ff..b61d225 100644
+--- a/relay-server/routes.js
++++ b/relay-server/routes.js
+@@ -1,3 +1,5 @@
++import { displayedReaction } from '../shared-validation/engagement-tally.js';
++import { handleEngagement } from '../shared-validation/engagement-http.js';
+ // routes.js — All HTTP route handlers
+ import {
+   server, PORT, DOMAIN, FRONTEND_ORIGIN, clients, oauthStates, sessions, activeChatSessions,
+@@ -977,22 +979,7 @@ server.on('request', async (req, res) => {
+ 
+   // ── POST /api/content-vote ─────────────────────────────────────────────────
+   if (req.method === 'POST' && url.pathname === '/api/content-vote') {
+-    parseBodyWithLimit(req, res, 4096).then(async (data) => {
+-      if (!data) return;
+-      try {
+-        const postId = sanitizeId(String(data.postId || ''), 128);
+-        const userId = sanitizeId(String(data.userId || ''), 128);
+-        const type   = String(data.type || '');
+-        const at     = Number(data.at) || Date.now();
+-        if (!postId || !userId || !['up', 'down', 'none'].includes(type)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: false, reason: 'missing or invalid postId, userId, or type' })); return; }
+-        if (!db) { res.writeHead(503, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: false, reason: 'database unavailable' })); return; }
+-        const soul = `${NAMESPACE}/postVotes/${postId}/${userId}`;
+-        const record = JSON.stringify({ type, userId, postId, at });
+-        await db.execute(`INSERT INTO gun_nodes (soul, data) VALUES (?, ?) ON DUPLICATE KEY UPDATE data = ?, updated_at = NOW()`, [soul, record, record]);
+-        res.writeHead(200, { 'Content-Type': 'application/json' });
+-        res.end(JSON.stringify({ ok: true }));
+-      } catch (err) { sendError(res, 500, 'Content vote failed', err, '/api/content-vote'); }
+-    }); return;
++    await handleEngagement(req, res, { db, namespace: NAMESPACE }); return;
+   }
+ 
+   // ── GET /api/vote-tally ────────────────────────────────────────────────────
+@@ -1023,11 +1010,8 @@ server.on('request', async (req, res) => {
+           const parts = row.soul.split('/');
+           const postId = parts[2];
+           if (!postId || !votesByPost.has(postId)) continue;
+-          const d = JSON.parse(row.data);
+-          const type = d?.type;
+-          if (type !== 'up' && type !== 'down' && type !== 'none') continue;
+-          const baselineType = d?.baselineType === 'up' || d?.baselineType === 'down' ? d.baselineType : null;
+-          votesByPost.get(postId).push({ vote: type, baselineType });
++          const vote = displayedReaction(row, NAMESPACE);
++          if (vote) votesByPost.get(postId).push(vote);
+         } catch {}
+       }
+       const tallies = {};
+@@ -1041,7 +1025,7 @@ server.on('request', async (req, res) => {
+         tallies[id] = { upvotes: Math.max(0, up), downvotes: Math.max(0, down), score: Math.max(0, up) - Math.max(0, down) };
+       }
+       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+-      res.end(JSON.stringify({ tallies })); return;
++      res.end(JSON.stringify({ tallies, evidence: 'legacy-inclusive-unverified' })); return;
+     } catch (err) { sendError(res, 500, 'Internal error', err, '/api/vote-tally'); return; }
+   }
+ 
+@@ -1916,40 +1900,7 @@ server.on('request', async (req, res) => {
+ 
+   // ── POST /api/views — batch view ingestion ─────────────────────────────────
+   if (req.method === 'POST' && url.pathname === '/api/views') {
+-    if (!db) { res.writeHead(503, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'DB unavailable' })); return; }
+-    const rawPub = (req.headers.authorization || '').replace('Bearer ', '').trim();
+-    const viewerPub = (rawPub && rawPub !== 'undefined' && rawPub !== 'null' && rawPub.length >= 20) ? rawPub : 'anonymous';
+-    let body;
+-    try { body = await parseBodyWithLimit(req, 32768); } catch { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Bad request' })); return; }
+-    const { views } = body;
+-    if (!Array.isArray(views) || views.length === 0) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, accepted: 0 })); return; }
+-    const batch = views.slice(0, 50).filter(v => v?.id && typeof v.id === 'string');
+-    try {
+-      // INSERT IGNORE — unique key (content_id, viewer_pub) deduplicates per-user
+-      for (const v of batch) {
+-        await db.execute(
+-          `INSERT IGNORE INTO post_views (content_id, content_type, viewer_pub, viewed_at)
+-           VALUES (?, ?, ?, ?)`,
+-          [v.id.slice(0, 128), v.type === 'poll' ? 'poll' : 'post', viewerPub.slice(0, 128), v.ts || Date.now()]
+-        );
+-      }
+-      // Update view_count + unique_viewers async — don't make client wait
+-      setImmediate(async () => {
+-        const ids = [...new Set(batch.map(v => v.id))];
+-        for (const id of ids) {
+-          await db.execute(
+-            `UPDATE search_index
+-             SET view_count     = (SELECT COUNT(*)          FROM post_views WHERE content_id = ?),
+-                 unique_viewers = (SELECT COUNT(DISTINCT viewer_pub) FROM post_views WHERE content_id = ?)
+-             WHERE id = ?`,
+-            [id, id, id]
+-          ).catch(() => {});
+-        }
+-      });
+-      res.writeHead(200, { 'Content-Type': 'application/json' });
+-      res.end(JSON.stringify({ ok: true, accepted: batch.length }));
+-    } catch (err) { sendError(res, 500, 'View tracking failed', err, '/api/views'); }
+-    return;
++    await handleEngagement(req, res, { db, namespace: NAMESPACE, views: true }); return;
+   }
+ 
+   res.writeHead(404, { 'Content-Type': 'text/plain' });
+diff --git a/shared-validation/engagement-gun.js b/shared-validation/engagement-gun.js
+new file mode 100644
+index 0000000..087502b
+--- /dev/null
++++ b/shared-validation/engagement-gun.js
+@@ -0,0 +1,54 @@
++import { protectedReactionSoul, actionForSoul } from './engagement.js';
++
++export function isReactionIndexLink(put, namespace) {
++  const parts = String(put?.['#']).split('/');
++  if (parts[0] !== namespace || !['postVotes', 'commentVotes'].includes(parts[1])) return false;
++  const field = put['.'], value = put[':'];
++  const valid = parts.length === 2 ? /^[a-zA-Z0-9_.:-]{1,128}$/.test(field)
++    : parts.length === 3 && /^[a-zA-Z0-9_.:-]{1,128}$/.test(parts[2]) && /^[0-9a-f]{64}$/.test(field);
++  return valid && value && typeof value === 'object' && Object.keys(value).length === 1
++    && value['#'] === `${put['#']}/${field}`;
++}
++
++// Install before universe/HAM, not in the late storage hook. Validate the whole
++// graph first; a mutable Gun timestamp must never grant write authority.
++export function installEngagementFirewall(Gun, { namespace, accept }) {
++  Gun.on('opt', function(root) {
++    if (!root.engagementV1) {
++      root.engagementV1 = true;
++      const admitted = new WeakSet();
++      function gate(msg) {
++        const graph = msg?.put;
++        if (!graph || admitted.has(msg) || !Object.keys(graph).some(protectedReactionSoul)) { this.to.next(msg); return; }
++        const reject = () => root.on('in', { '@': msg['#'], err: 'AUTHENTICATED_REACTION_V1_REQUIRED' });
++        const actions = [];
++        let count = 0;
++        for (const [soul, node] of Object.entries(graph)) {
++          if (!protectedReactionSoul(soul)) continue;
++          if (++count > 64 || !node || typeof node !== 'object') { reject(); return; }
++          for (const [field, value] of Object.entries(node)) {
++            if (field === '_') continue;
++            if (++count > 128) { reject(); return; }
++            if (isReactionIndexLink({ '#': soul, '.': field, ':': value }, namespace)) continue;
++            const a = field === 'envelope' && actionForSoul(soul, value, namespace, { fresh: false });
++            if (!a || actions.length >= 32) { reject(); return; }
++            actions.push([a, soul]);
++          }
++        }
++        const next = this.to;
++        (async () => {
++          for (const [a, soul] of actions) {
++            const result = await accept(a);
++            if (!['accepted', 'duplicate'].includes(result.status)) throw new Error('REJECTED');
++            if (!Number.isFinite(result.gunState)) throw new Error('MISSING_DURABLE_GUN_STATE');
++            graph[soul]._ = { '#': soul, '>': { envelope: result.gunState } };
++          }
++          admitted.add(msg); next.next(msg);
++        })().catch(reject);
++      }
++      root.on('in', gate);
++      root.on('out', gate);
++    }
++    this.to.next(root);
++  });
++}
+diff --git a/shared-validation/engagement-http.js b/shared-validation/engagement-http.js
+new file mode 100644
+index 0000000..cd5e9e3
+--- /dev/null
++++ b/shared-validation/engagement-http.js
+@@ -0,0 +1,67 @@
++import { verifyAction } from './engagement.js';
++import { acceptAction } from './engagement-store.js';
++
++function reply(res, status, value) {
++  res.writeHead(status, { 'Content-Type': 'application/json' });
++  res.end(JSON.stringify(value));
++}
++
++// Byte-bounded, handles aborted streams and responds once. No production I/O.
++export function readActionBody(req, res, limit = 32768) {
++  return new Promise(resolve => {
++    let done = false, length = 0, chunks = [];
++    const fail = status => {
++      if (done) return;
++      done = true; chunks = [];
++      if (!res.headersSent && !res.destroyed) reply(res, status, { error: 'INVALID_BODY' });
++      resolve(null);
++    };
++    req.on('data', chunk => {
++      if (done) return;
++      const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
++      length += bytes.length;
++      if (length > limit) { fail(413); return; }
++      chunks.push(bytes);
++    });
++    req.on('error', () => fail(400));
++    req.on('aborted', () => fail(400));
++    req.on('end', () => {
++      if (done) return;
++      try {
++        const value = JSON.parse(Buffer.concat(chunks).toString('utf8'));
++        if (!value || typeof value !== 'object' || Array.isArray(value)) { fail(400); return; }
++        done = true; chunks = []; resolve(value);
++      } catch { fail(400); }
++    });
++  });
++}
++
++export async function handleEngagement(req, res, { db, namespace, views = false, now = Date.now(), accept = acceptAction }) {
++  const body = await readActionBody(req, res, views ? 32768 : 4096);
++  if (body === null) return;
++  const actions = views ? body?.actions : [body?.action];
++  if (!Array.isArray(actions) || !actions.length || actions.length > (views ? 32 : 1)
++    || actions.some(a => !verifyAction(a, { now, namespace }) || a.kind !== (views ? 'view' : 'reaction'))) {
++    reply(res, 422, { error: 'AUTHENTICATED_ENGAGEMENT_V1_REQUIRED' }); return;
++  }
++  if (!db) { reply(res, 503, { error: 'STORAGE_UNAVAILABLE' }); return; }
++  const results = [];
++  for (const action of actions) {
++    try {
++      const result = await accept(db, action, namespace, now);
++      results.push({ id: action.id, status: result.status });
++    } catch (error) {
++      // Earlier batch actions may have committed; exact retries are idempotent.
++      reply(res, error.message === 'STALE_ACTION' ? 409 : 503, { error: error.message === 'STALE_ACTION' ? 'STALE_ACTION' : 'STORAGE_UNAVAILABLE', results });
++      return;
++    }
++  }
++  if (views) {
++    // Advisory aggregate cache. Accepted-event authority is the SQL transaction.
++    for (const id of new Set(actions.map(a => a.targetId))) {
++      await db.execute(`UPDATE search_index SET view_count = (SELECT COUNT(*) FROM post_views WHERE content_id = ?),
++        unique_viewers = (SELECT COUNT(DISTINCT viewer_pub) FROM post_views WHERE content_id = ?) WHERE id = ?`, [id, id, id]).catch(() => {});
++    }
++  }
++  reply(res, 200, views ? { results } : results[0]);
++}
+diff --git a/shared-validation/engagement-store.js b/shared-validation/engagement-store.js
+new file mode 100644
+index 0000000..e78885f
+--- /dev/null
++++ b/shared-validation/engagement-store.js
+@@ -0,0 +1,77 @@
++import { verifyAction, readAction, reactionSoul, compareActions } from './engagement.js';
++
++export async function initEngagementStore(db) {
++  await db.execute(`CREATE TABLE IF NOT EXISTS engagement_actions_v1 (
++    id CHAR(64) PRIMARY KEY, actor CHAR(64) NOT NULL, kind VARCHAR(16) NOT NULL,
++    target_type VARCHAR(16) NOT NULL, target_id VARCHAR(128) NOT NULL,
++    received_at BIGINT NOT NULL, payload TEXT NOT NULL,
++    INDEX engagement_received_at (received_at)
++  ) ENGINE=InnoDB`);
++}
++
++// One shared transaction boundary for HTTP and Gun, including separate processes
++// sharing this database. No process-local mutex is treated as durable ownership.
++export async function acceptAction(db, action, namespace, now = Date.now()) {
++  if (!verifyAction(action, { now, namespace })) throw new Error('INVALID_OR_EXPIRED_ACTION');
++  if (!db) throw new Error('STORAGE_UNAVAILABLE');
++  const c = await db.getConnection();
++  try {
++    await c.beginTransaction();
++    let soul, current, old;
++    if (action.kind === 'reaction') {
++      soul = reactionSoul(action, namespace);
++      // Ensures a lockable row exists; rollback removes a newly inserted row.
++      await c.execute('INSERT IGNORE INTO gun_nodes (soul, data) VALUES (?, ?)', [soul, '{}']);
++      const [rows] = await c.execute('SELECT data FROM gun_nodes WHERE soul = ? FOR UPDATE', [soul]);
++      if (!rows.length) throw new Error('REACTION_LOCK_FAILED');
++      current = JSON.parse(rows[0].data);
++      old = readAction(current.envelope, { namespace, fresh: false, actor: action.actor, targetType: action.targetType, targetId: action.targetId });
++      if (old && compareActions(action, old) < 0) throw new Error('STALE_ACTION');
++      if (old?.id === action.id) { await c.commit(); return { status: 'duplicate', action, gunState: current.gunState }; }
++    }
++    const [insert] = await c.execute(
++      'INSERT IGNORE INTO engagement_actions_v1 (id, actor, kind, target_type, target_id, received_at, payload) VALUES (?, ?, ?, ?, ?, ?, ?)',
++      [action.id, action.actor, action.kind, action.targetType, action.targetId, now, JSON.stringify(action)],
++    );
++    if (!insert.affectedRows) { await c.commit(); return { status: 'duplicate', action }; }
++    let gunState;
++    if (action.kind === 'reaction') {
++      // Persist a relay-assigned monotonic Gun clock. Equal signed timestamps
++      // still have a SQL ordering, independent of Gun's lexical conflict rule.
++      const previousClock = old && Number.isFinite(current.gunState) ? current.gunState : 0;
++      gunState = Math.max(now, previousClock + 0.01);
++      // Replace legacy material, never authenticate it by merging signatures.
++      const record = { envelope: JSON.stringify(action), gunState, type: action.value, userId: action.actor, at: action.createdAt,
++        [action.targetType === 'post' ? 'postId' : 'commentId']: action.targetId };
++      await c.execute('UPDATE gun_nodes SET data = ?, updated_at = NOW() WHERE soul = ?', [JSON.stringify(record), soul]);
++    } else {
++      const [view] = await c.execute('INSERT IGNORE INTO post_views (content_id, content_type, viewer_pub, viewed_at) VALUES (?, ?, ?, ?)',
++        [action.targetId, action.targetType, action.actor, now]);
++      if (!view.affectedRows) {
++        // A new signature cannot create another observation of the same view.
++        await c.rollback(); return { status: 'duplicate', action };
++      }
++    }
++    await c.commit();
++    return { status: 'accepted', action, receivedAt: now, gunState };
++  } catch (error) {
++    await c.rollback(); throw error;
++  } finally { c.release(); }
++}
++
++export async function pruneEngagementHistory(db, now = Date.now()) {
++  if (!db) return;
++  await db.execute('DELETE FROM engagement_actions_v1 WHERE received_at < ? LIMIT 5000', [now - 600_000]);
++}
++
++// Expired reads may repeat only the exact current record, without a new event.
++// Peer-supplied @/faith/read flags never grant authority.
++export async function acceptGunAction(db, action, namespace, now = Date.now()) {
++  if (verifyAction(action, { namespace, now })) return acceptAction(db, action, namespace, now);
++  if (!db || !verifyAction(action, { namespace, fresh: false }) || action.kind !== 'reaction') throw new Error('INVALID_ACTION');
++  const [rows] = await db.execute('SELECT data FROM gun_nodes WHERE soul = ?', [reactionSoul(action, namespace)]);
++  const current = rows[0] && JSON.parse(rows[0].data);
++  const old = current && readAction(current.envelope, { namespace, fresh: false });
++  if (old?.id !== action.id) throw new Error('STALE_ACTION');
++  return { status: 'duplicate', action, gunState: current.gunState };
++}
+diff --git a/shared-validation/engagement-tally.js b/shared-validation/engagement-tally.js
+new file mode 100644
+index 0000000..ddf6123
+--- /dev/null
++++ b/shared-validation/engagement-tally.js
+@@ -0,0 +1,19 @@
++import { readAction } from './engagement.js';
++
++// Display compatibility is explicitly unverified. Signed rows never fall back
++// to sibling raw fields; their actor/target must match the persisted soul.
++export function displayedReaction(row, namespace) {
++  try {
++    const parts = row.soul.split('/');
++    if (parts.length !== 4 || parts[0] !== namespace || parts[1] !== 'postVotes') return null;
++    const raw = JSON.parse(row.data);
++    if (!raw || typeof raw !== 'object') return null;
++    if ('envelope' in raw) {
++      const a = readAction(raw.envelope, { namespace, actor: parts[3], targetType: 'post', targetId: parts[2], fresh: false });
++      return a?.kind === 'reaction' ? { vote: a.value, baselineType: null, evidence: 'signed-action' } : null;
++    }
++    if (!['up', 'down', 'none'].includes(raw.type)) return null;
++    return { vote: raw.type, baselineType: ['up', 'down'].includes(raw.baselineType) ? raw.baselineType : null,
++      evidence: 'legacy-unverified' };
++  } catch { return null; }
++}
+diff --git a/shared-validation/engagement.js b/shared-validation/engagement.js
+new file mode 100644
+index 0000000..791b0b1
+--- /dev/null
++++ b/shared-validation/engagement.js
+@@ -0,0 +1,59 @@
++import { schnorr } from '@noble/curves/secp256k1.js';
++import { sha256 } from '@noble/hashes/sha2.js';
++import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
++
++export const ACTION_MAX_AGE_MS = 300_000;
++export const ACTION_FUTURE_SKEW_MS = 30_000;
++const fields = ['version', 'namespace', 'kind', 'actor', 'targetType', 'targetId', 'value', 'createdAt', 'nonce', 'id', 'signature'];
++const hex = (s, size) => typeof s === 'string' && new RegExp(`^[0-9a-f]{${size}}$`).test(s);
++// Existing MySQL identifiers compare case-insensitively. Fail closed on mixed
++// case rather than let two signed targets alias the same durable SQL row.
++const target = s => typeof s === 'string' && /^[a-z0-9_.:-]{1,128}$/.test(s);
++const digest = text => bytesToHex(sha256(new TextEncoder().encode(text)));
++
++export function actionBytes(a) {
++  return JSON.stringify(['interpoll.public-engagement.v1', 1, a.namespace, a.kind, a.actor, a.targetType, a.targetId, a.value, a.createdAt, a.nonce]);
++}
++function validPayload(a) {
++  return a && a.version === 1 && typeof a.namespace === 'string' && /^v[1-9][0-9]{0,3}$/.test(a.namespace) && hex(a.actor, 64) && target(a.targetId)
++    && Number.isSafeInteger(a.createdAt) && a.createdAt >= 0 && hex(a.nonce, 32)
++    && ((a.kind === 'reaction' && ['post', 'comment'].includes(a.targetType) && ['up', 'down', 'none'].includes(a.value))
++      || (a.kind === 'view' && ['post', 'poll'].includes(a.targetType) && a.value === 'view'));
++}
++export function signAction(payload, privateKey) {
++  const a = { version: 1, ...payload };
++  if (!validPayload(a) || bytesToHex(schnorr.getPublicKey(hexToBytes(privateKey))) !== a.actor) throw new Error('ACTION_IDENTITY_MISMATCH');
++  const id = digest(actionBytes(a));
++  const signed = { ...a, id, signature: bytesToHex(schnorr.sign(hexToBytes(id), hexToBytes(privateKey))) };
++  if (!verifyAction(signed, { fresh: false })) throw new Error('INVALID_ACTION');
++  return Object.freeze(signed);
++}
++export function verifyAction(a, { now = Date.now(), fresh = true, namespace, actor, targetType, targetId } = {}) {
++  try {
++    if (!a || typeof a !== 'object' || Array.isArray(a) || Object.keys(a).length !== fields.length
++      || !fields.every(f => Object.prototype.hasOwnProperty.call(a, f)) || !validPayload(a)
++      || !hex(a.id, 64) || !hex(a.signature, 128)) return false;
++    if ((namespace !== undefined && namespace !== a.namespace) || (actor !== undefined && actor !== a.actor) || (targetType !== undefined && targetType !== a.targetType)
++      || (targetId !== undefined && targetId !== a.targetId)) return false;
++    if (fresh && (!Number.isSafeInteger(now) || a.createdAt < now - ACTION_MAX_AGE_MS || a.createdAt > now + ACTION_FUTURE_SKEW_MS)) return false;
++    return digest(actionBytes(a)) === a.id && schnorr.verify(hexToBytes(a.signature), hexToBytes(a.id), hexToBytes(a.actor));
++  } catch { return false; }
++}
++export function readAction(envelope, expected = {}) {
++  if (typeof envelope !== 'string' || envelope.length > 2048) return null;
++  try { const a = JSON.parse(envelope); return verifyAction(a, expected) ? a : null; } catch { return null; }
++}
++export function reactionSoul(a, namespace) {
++  return `${namespace}/${a.targetType === 'post' ? 'postVotes' : 'commentVotes'}/${a.targetId}/${a.actor}`;
++}
++export function protectedReactionSoul(soul) {
++  // Includes legacy namespaces: they cannot launder unsigned writes into v1.
++  return typeof soul === 'string' && /(^|\/)(postVotes|commentVotes)(\/|$)/.test(soul);
++}
++export function actionForSoul(soul, envelope, namespace, options = {}) {
++  const a = readAction(envelope, { ...options, namespace });
++  return a?.kind === 'reaction' && reactionSoul(a, namespace) === soul ? a : null;
++}
++export function compareActions(a, b) {
++  return a.createdAt - b.createdAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
++}
+diff --git a/tests/engagement.test.mjs b/tests/engagement.test.mjs
+new file mode 100644
+index 0000000..1bd2544
+--- /dev/null
++++ b/tests/engagement.test.mjs
+@@ -0,0 +1,280 @@
++import { displayedReaction } from '../shared-validation/engagement-tally.js';
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { EventEmitter } from 'node:events';
++import { createRequire } from 'node:module';
++import { readFileSync } from 'node:fs';
++import vm from 'node:vm';
++import * as security from '../gun-relay/security-utils.js';
++import { schnorr } from '@noble/curves/secp256k1.js';
++import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
++import { signAction, verifyAction, reactionSoul, actionForSoul, compareActions } from '../shared-validation/engagement.js';
++import { acceptAction, acceptGunAction, pruneEngagementHistory } from '../shared-validation/engagement-store.js';
++import { handleEngagement, readActionBody } from '../shared-validation/engagement-http.js';
++import { installEngagementFirewall, isReactionIndexLink } from '../shared-validation/engagement-gun.js';
++
++const key = '01'.padStart(64, '0'); // Synthetic test fixture, never an account.
++const actor = bytesToHex(schnorr.getPublicKey(hexToBytes(key)));
++const now = 1800000000000;
++let nonce = 0;
++function action(extra = {}) {
++  return signAction({ namespace: 'v5', kind: 'reaction', actor, targetType: 'post', targetId: 'post-local',
++    value: 'up', createdAt: now, nonce: (++nonce).toString(16).padStart(32, '0'), ...extra }, key);
++}
++
++// Deterministic transaction double, not a claim about a deployed MySQL engine.
++// Serial lock models FOR UPDATE; snapshot rollback models InnoDB transactions.
++function database(snapshot) {
++  let state = snapshot || { nodes: new Map(), events: new Map(), views: new Map() };
++  let tail = Promise.resolve();
++  const db = {
++    fail: '', state: () => structuredClone(state),
++    async execute(sql, p) {
++      if (sql.startsWith('SELECT data')) return [[...(state.nodes.has(p[0]) ? [{ data: state.nodes.get(p[0]) }] : [])]];
++      if (sql.startsWith('DELETE FROM engagement')) { for (const [id, e] of state.events) if (e.at < p[0]) state.events.delete(id); return [{}]; }
++      if (sql.startsWith('UPDATE search_index')) return [{}];
++      throw new Error('Unexpected top-level SQL');
++    },
++    async getConnection() {
++      let release, work;
++      return {
++        async beginTransaction() {
++          const previous = tail; tail = new Promise(r => { release = r; });
++          await previous; work = structuredClone(state);
++        },
++        async execute(sql, p) {
++          if (db.fail && sql.startsWith(db.fail)) throw new Error('synthetic storage failure');
++          if (sql.startsWith('INSERT IGNORE INTO gun_nodes')) { if (!work.nodes.has(p[0])) work.nodes.set(p[0], p[1]); return [{}]; }
++          if (sql.startsWith('SELECT data')) return [[{ data: work.nodes.get(p[0]) }]];
++          if (sql.startsWith('INSERT IGNORE INTO engagement')) {
++            const exists = work.events.has(p[0]); if (!exists) work.events.set(p[0], { at: p[5], payload: p[6] });
++            return [{ affectedRows: exists ? 0 : 1 }];
++          }
++          if (sql.startsWith('UPDATE gun_nodes')) { work.nodes.set(p[1], p[0]); return [{}]; }
++          if (sql.startsWith('INSERT IGNORE INTO post_views')) {
++            const id = JSON.stringify([p[0], p[2]]); const exists = work.views.has(id);
++            if (!exists) work.views.set(id, p); return [{ affectedRows: exists ? 0 : 1 }];
++          }
++          throw new Error(`Unexpected SQL ${sql}`);
++        },
++        async commit() { if (db.fail === 'COMMIT') throw new Error('synthetic commit failure'); state = work; },
++        async rollback() {}, release() { release?.(); },
++      };
++    },
++  };
++  return db;
++}
++
++test('correct signature, subject, namespace, and historical verification', () => {
++  const a = action(); assert.equal(verifyAction(a, { now }), true);
++  assert.equal(verifyAction(a, { now, actor: '00'.repeat(32) }), false);
++  assert.equal(verifyAction(a, { now, namespace: 'v4' }), false);
++  assert.equal(verifyAction(a, { now: now + 300001 }), false);
++  assert.equal(verifyAction(a, { now: now - 30001 }), false);
++  assert.equal(verifyAction(a, { now: now + 300000 }), true);
++  assert.equal(verifyAction(a, { fresh: false }), true);
++});
++for (const field of ['version', 'namespace', 'kind', 'actor', 'targetType', 'targetId', 'value', 'createdAt', 'nonce', 'id', 'signature']) {
++  test(`tampering ${field} fails closed`, () => {
++    const a = action(); assert.equal(verifyAction({ ...a, [field]: typeof a[field] === 'number' ? a[field] + 1 : 'altered' }, { now }), false);
++    const missing = { ...a }; delete missing[field]; assert.equal(verifyAction(missing, { now }), false);
++  });
++}
++test('no extra fields, no unsigned or self-authorized alternate actor', () => {
++  const a = action(); assert.equal(verifyAction({ ...a, verified: true }, { now }), false);
++  assert.throws(() => action({ actor: '00'.repeat(32) }));
++  assert.equal(actionForSoul(reactionSoul(a, 'v4'), JSON.stringify(a), 'v5', { now }), null);
++  assert.equal(actionForSoul(reactionSoul(a, 'v5'), JSON.stringify(a), 'v5', { now }).id, a.id);
++});
++test('64 identical concurrent HTTP/Gun consumers: one committed observation', async () => {
++  const db = database(), a = action();
++  const r = await Promise.all(Array.from({ length: 64 }, (_, i) => (i % 2 ? acceptAction : acceptGunAction)(db, a, 'v5', now)));
++  assert.equal(r.filter(x => x.status === 'accepted').length, 1);
++  assert.equal(db.state().events.size, 1); assert.equal(db.state().nodes.size, 1);
++});
++test('competing actions converge to documented signed ordering; stale stays stale after reopen', async () => {
++  const db = database(), old = action(), newer = action({ createdAt: now + 1, value: 'down' });
++  await acceptAction(db, newer, 'v5', now);
++  const reopened = database(db.state());
++  await assert.rejects(acceptAction(reopened, old, 'v5', now), /STALE/);
++  assert.deepEqual(reopened.state(), db.state());
++  assert.ok(compareActions(newer, old) > 0);
++});
++for (const fail of ['UPDATE gun_nodes', 'INSERT IGNORE INTO engagement', 'COMMIT']) {
++  test(`failure at ${fail}: no reaction or detector event committed; retry succeeds`, async () => {
++    const db = database(), a = action(), before = db.state(); db.fail = fail;
++    await assert.rejects(acceptAction(db, a, 'v5', now)); assert.deepEqual(db.state(), before);
++    db.fail = ''; assert.equal((await acceptAction(db, a, 'v5', now)).status, 'accepted');
++  });
++}
++test('failed signature leaves storage byte-equivalent', async () => {
++  const db = database(), before = db.state(); await assert.rejects(acceptAction(db, { ...action(), signature: '00'.repeat(64) }, 'v5', now));
++  assert.deepEqual(db.state(), before);
++});
++test('unsigned legacy Gun clock does not inherit authority', async () => {
++  const a = action();
++  const db = database({ nodes: new Map([[reactionSoul(a, 'v5'), JSON.stringify({ type: 'up', gunState: now + 99999999 })]]), events: new Map(), views: new Map() });
++  assert.equal((await acceptAction(db, a, 'v5', now)).gunState, now);
++});
++test('view signatures cannot manufacture duplicate observations; server supplies observation time', async () => {
++  const db = database(), a = action({ kind: 'view', value: 'view', createdAt: now - 20 });
++  const b = action({ kind: 'view', value: 'view' });
++  assert.equal((await acceptAction(db, a, 'v5', now)).status, 'accepted');
++  assert.equal((await acceptAction(db, b, 'v5', now)).status, 'duplicate');
++  assert.equal(db.state().events.size, 1); assert.equal([...db.state().views.values()][0][3], now);
++});
++test('history cleanup does not reopen stale writes; expired current cache is read-only', async () => {
++  const db = database(), a = action(); await acceptAction(db, a, 'v5', now);
++  await pruneEngagementHistory(db, now + 600001); assert.equal(db.state().events.size, 0);
++  await assert.rejects(acceptAction(db, a, 'v5', now + 600001));
++  assert.equal((await acceptGunAction(db, a, 'v5', now + 600001)).status, 'duplicate');
++  assert.equal(db.state().events.size, 0);
++  await assert.rejects(acceptGunAction(db, action(), 'v5', now + 600001), /STALE/);
++});
++async function http(body, views = false, db = database()) {
++  const req = new EventEmitter(); req.headers = { authorization: 'Bearer arbitrary-client-text' };
++  const res = { headersSent: false, status: 0, body: '', writeHead(n) { this.status = n; this.headersSent = true; }, end(s) { this.body = JSON.parse(s); } };
++  const run = handleEngagement(req, res, { db, namespace: 'v5', now, views });
++  req.emit('data', Buffer.from(typeof body === 'string' ? body : JSON.stringify(body))); req.emit('end'); await run;
++  return { res, db };
++}
++test('old unsigned content-vote is rejected with no write', async () => {
++  const { res, db } = await http({ userId: 'somebody', postId: 'post-local', type: 'up' });
++  assert.equal(res.status, 422); assert.equal(db.state().nodes.size, 0);
++});
++test('old arbitrary Bearer views rejected; accepted signed reaction responds with exact evidence', async () => {
++  assert.equal((await http({ views: [{ id: 'post-local', type: 'post' }] }, true)).res.status, 422);
++  const a = action(), { res } = await http({ action: a });
++  assert.deepEqual(res.body, { id: a.id, status: 'accepted' });
++});
++test('views invalid JSON/oversize/multibyte bounds reject without callback throw', async () => {
++  assert.equal((await http('{', true)).res.status, 400);
++  assert.equal((await http('null', true)).res.status, 400);
++  assert.equal((await http(JSON.stringify({ padding: 'x'.repeat(34000) }), true)).res.status, 413);
++  assert.equal((await http(JSON.stringify({ padding: 'СЏ'.repeat(17000) }), true)).res.status, 413);
++});
++test('aborted parser resolves instead of hanging', async () => {
++  const req = new EventEmitter(), res = { writeHead() {}, end() {} };
++  const run = readActionBody(req, res); req.emit('aborted'); assert.equal(await run, null);
++});
++test('view batch rejects mixed invalid input before committing; retry uses same IDs', async () => {
++  const a = action({ kind: 'view', value: 'view' });
++  const bad = await http({ actions: [a, { ...a, signature: null }] }, true);
++  assert.equal(bad.res.status, 422); assert.equal(bad.db.state().events.size, 0);
++  const good = await http({ actions: [a] }, true);
++  const retry = await http({ actions: [a] }, true, good.db);
++  assert.deepEqual(retry.res.body.results, [{ id: a.id, status: 'duplicate' }]);
++});
++test('canonical directory links cannot redirect a reaction leaf', () => {
++  assert.ok(isReactionIndexLink({ '#': 'v5/postVotes', '.': 'post-local', ':': { '#': 'v5/postVotes/post-local' } }, 'v5'));
++  assert.equal(isReactionIndexLink({ '#': 'v5/postVotes', '.': 'post-local', ':': { '#': 'v5/postVotes/elsewhere' } }, 'v5'), false);
++});
++test('mixed-case target cannot alias a different signed context in case-insensitive MySQL', () => {
++  assert.throws(() => action({ targetId: 'Post-local' }), /IDENTITY_MISMATCH|INVALID/);
++});
++test('equal client timestamps use a durable increasing relay Gun clock', async () => {
++  const db = database(), pair = [action(), action()].sort(compareActions);
++  const a = await acceptAction(db, pair[0], 'v5', now);
++  const b = await acceptAction(db, pair[1], 'v5', now);
++  assert.ok(b.gunState > a.gunState);
++});
++
++// Execute the actual request callback without importing its server startup.
++const ts = createRequire(import.meta.url)('typescript');
++const routeSource = readFileSync(new URL('../relay-server/routes.js', import.meta.url), 'utf8');
++const tree = ts.createSourceFile('routes.js', routeSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
++const registration = tree.statements.find(n => ts.isExpressionStatement(n) && ts.isCallExpression(n.expression)
++  && n.expression.expression.getText(tree) === 'server.on' && n.expression.arguments[0]?.text === 'request');
++const callback = registration.expression.arguments[1].getText(tree).replaceAll('import.meta.url', '"file:///offline/routes.js"');
++async function realRoute(path, body) {
++  const db = database();
++  const route = vm.runInNewContext(`(${callback})`, { ...security, URL, PORT: 1, NAMESPACE: 'v5', db,
++    rateLimiter: { checkHttp: () => ({ allowed: true }) }, getHttpRateLimitContext: () => ({ bucketId: 'local', limit: 10 }),
++    handleEngagement: (req, res, options) => handleEngagement(req, res, { ...options, now }),
++  });
++  const req = Object.assign(new EventEmitter(), { method: 'POST', url: path, headers: { host: 'offline.invalid' }, socket: {} });
++  const res = { status: 0, body: '', setHeader() {}, writeHead(n) { this.status = n; }, end(s) { this.body = s; } };
++  const run = route(req, res);
++  req.emit('data', Buffer.from(typeof body === 'string' ? body : JSON.stringify(body))); req.emit('end'); await run;
++  return { res, db };
++}
++test('actual content-vote route: old unsigned payload rejected; signed payload committed', async () => {
++  const bad = await realRoute('/api/content-vote', { userId: actor, postId: 'post-local', type: 'up' });
++  assert.equal(bad.res.status, 422); assert.equal(bad.db.state().events.size, 0);
++  const good = await realRoute('/api/content-vote', { action: action() });
++  assert.equal(good.res.status, 200); assert.equal(good.db.state().events.size, 1);
++});
++test('actual views route: malformed and oversized body no longer throw; signed view accepted', async () => {
++  assert.equal((await realRoute('/api/views', '{')).res.status, 400);
++  assert.equal((await realRoute('/api/views', JSON.stringify({ padding: 'x'.repeat(34000) }))).res.status, 413);
++  assert.equal((await realRoute('/api/views', { actions: [action({ kind: 'view', value: 'view' })] })).res.status, 200);
++});
++test('production wiring closes raw ACK and admin-write bypass, installs firewall before Gun constructor', () => {
++  const s = readFileSync(new URL('../gun-relay/gun-relay-enhanced.js', import.meta.url), 'utf8');
++  assert.ok(s.indexOf('installEngagementFirewall(Gun,') < s.indexOf('const gun = Gun('));
++  assert.ok(s.includes('!Object.keys(m.put).some(protectedReactionSoul)'));
++  assert.ok(s.includes("if (protectedReactionSoul(soul)) return res.status(422)"));
++  assert.ok(s.includes("if (protectedReactionSoul(soul) && soul.split('/').length >= 4) return;"));
++});
++test('moving Gun admission earlier preserves its existing moderation veto before SQL', async () => {
++  const s = readFileSync(new URL('../gun-relay/gun-relay-enhanced.js', import.meta.url), 'utf8');
++  const sf = ts.createSourceFile('gun.js', s, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
++  const source = sf.statements.find(n => n.name?.text === 'acceptReactionForGun').getText(sf);
++  let writes = 0, blocked = true;
++  const accept = vm.runInNewContext(`(${source})`, { reactionSoul, NAMESPACE: 'v5', dbConnected: true, db: {},
++    moderation: { checkWrite: async () => blocked }, acceptGunAction: async () => { writes++; return { status: 'accepted' }; },
++  });
++  await assert.rejects(accept(action()), /BLOCKED/); assert.equal(writes, 0);
++  blocked = false; await accept(action()); assert.equal(writes, 1);
++});
++test('real Gun core: unsigned graph never stored/forwarded; valid write; stale cache and false timestamps', async () => {
++  const Gun = createRequire(import.meta.url)('gun/gun');
++  const db = database();
++  const liveNow = Date.now();
++  installEngagementFirewall(Gun, { namespace: 'v5', accept: a => acceptGunAction(db, a, 'v5', liveNow) });
++  const gun = Gun({ peers: [], localStorage: false, radisk: false }); const root = gun._.root;
++  const forwarded = [];
++  root.on('out', function(m) { if (m.put) forwarded.push(m); this.to.next(m); });
++  const a = action({ createdAt: liveNow - 1 }); const soul = reactionSoul(a, 'v5');
++  function send(id, fields) {
++    root.on('in', { '#': id, put: { [soul]: { _: { '#': soul, '>': Object.fromEntries(Object.keys(fields).map(f => [f, liveNow + 86400000])) }, ...fields } } });
++  }
++  try {
++    send('unsigned', { type: 'up' }); await new Promise(r => setTimeout(r, 30));
++    assert.equal(root.graph[soul], undefined); assert.equal(forwarded.length, 0);
++    send('valid', { envelope: JSON.stringify(a) }); await new Promise(r => setTimeout(r, 50));
++    assert.equal(root.graph[soul]?.envelope, JSON.stringify(a));
++    assert.equal(root.graph[soul]._['>'].envelope, liveNow);
++    assert.equal(db.state().events.size, 1);
++    const old = action({ createdAt: liveNow - 2 }); send('stale', { envelope: JSON.stringify(old) });
++    await new Promise(r => setTimeout(r, 40)); assert.equal(root.graph[soul].envelope, JSON.stringify(a));
++    const n = forwarded.length; send('bad-sibling', { envelope: JSON.stringify(a), type: 'down' });
++    await new Promise(r => setTimeout(r, 30)); assert.equal(forwarded.length, n);
++  } finally { clearTimeout(root.dup.to); gun.off(); }
++});
++
++
++test('display tally uses signed envelope, rejects sibling substitution and wrong persisted actor', () => {
++  const a = action(); const row = { soul: reactionSoul(a, 'v5'), data: JSON.stringify({ envelope: JSON.stringify(a), type: 'down' }) };
++  assert.equal(displayedReaction(row, 'v5').vote, 'up');
++  assert.equal(displayedReaction({ ...row, soul: row.soul + '0' }, 'v5'), null);
++  assert.equal(displayedReaction({ ...row, data: JSON.stringify({ envelope: '{}', type: 'up' }) }, 'v5'), null);
++});
++test('legacy display stays explicitly unverified and cannot authorize detector input', () => {
++  const a = action(); const raw = { type: 'up' };
++  const read = displayedReaction({ soul: reactionSoul(a, 'v5'), data: JSON.stringify(raw) }, 'v5');
++  assert.equal(read.evidence, 'legacy-unverified'); assert.equal(verifyAction(raw), false);
++});
++test('actual vote-tally route counts envelope-only upgraded rows and labels aggregate compatibility', async () => {
++  const a = action();
++  const route = vm.runInNewContext(`(${callback})`, { ...security, URL, PORT: 1, NAMESPACE: 'v5', db: {},
++    displayedReaction, queryMySQL: async sql => sql.includes('LIKE') ? [{ soul: reactionSoul(a, 'v5'), data: JSON.stringify({ envelope: JSON.stringify(a) }) }] : [],
++    rateLimiter: { checkHttp: () => ({ allowed: true }) }, getHttpRateLimitContext: () => ({ bucketId: 'local', limit: 10 }),
++  });
++  const req = { method: 'GET', url: '/api/vote-tally?ids=post-local', headers: { host: 'offline.invalid' }, socket: {} };
++  const res = { status: 0, body: '', setHeader() {}, writeHead(n) { this.status = n; }, end(s) { this.body = s; } };
++  await route(req, res); assert.equal(res.status, 200);
++  const result = JSON.parse(res.body);
++  assert.equal(result.tallies['post-local'].upvotes, 1);
++  assert.equal(result.evidence, 'legacy-inclusive-unverified');
++});

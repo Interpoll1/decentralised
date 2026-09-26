@@ -1,3 +1,5 @@
+import { createPublicAction } from './publicEngagementService';
+import { ACTION_MAX_AGE_MS, type PublicAction } from '../../shared-validation/engagement.js';
 /**
  * viewTrackingService.ts — Post and poll view counting
  *
@@ -14,10 +16,14 @@ const RELAY_BASE = (() => {
 
 const DWELL_MS  = 800;   // ms visible before counting — lower = catches faster scrollers
 const FLUSH_MS  = 10_000; // flush every 10s (was 30s — too slow for debugging)
-const MAX_BATCH = 50;
+const MAX_BATCH = 32;
+const MAX_PENDING = 256;
+const MAX_SENT = 4096;
 
 // Singletons — survive component unmount/remount
-const pendingViews = new Map<string, { type: 'post' | 'poll'; ts: number }>();
+type PendingView = { type: 'post' | 'poll'; ts: number; actor: string; action: Promise<PublicAction | null>; ready?: PublicAction };
+const pendingViews = new Map<string, PendingView>();
+let flushing = false;
 const activeObs    = new Map<string, IntersectionObserver>();
 // sentIds is session-scoped but we DON'T block re-observation — only block re-sending
 const sentIds      = new Set<string>();
@@ -87,7 +93,7 @@ export function observePost(el: Element, id: string, type: 'post' | 'poll') {
         if (!dwellTimer) {
           dwellTimer = setTimeout(() => {
             if (!sentIds.has(id)) {
-              pendingViews.set(id, { type, ts: Date.now() });
+              queueView(id, type);
               scheduleFlush();
               console.debug(`[views] tracked ${type} ${id.slice(0, 16)} (scroll)`);
               // Fire engagement hook — allows feed personalisation to learn from reads
@@ -119,7 +125,7 @@ export function trackDetailView(id: string, type: 'post' | 'poll') {
   // Remove from sentIds so the flush sends this event fresh.
   // The scroll-view dedup still applies to subsequent feed observations.
   sentIds.delete(id);
-  pendingViews.set(id, { type, ts: Date.now() });
+  queueView(id, type);
   scheduleFlush();
   console.debug(`[views] tracked ${type} ${id.slice(0, 16)} (detail)`);
 }
@@ -131,58 +137,52 @@ function scheduleFlush() {
   flushTimer = setTimeout(flush, FLUSH_MS);
 }
 
+function queueView(id: string, type: 'post' | 'poll') {
+  const actor = authTokenGetter?.();
+  if (!actor || pendingViews.has(id) || pendingViews.size >= MAX_PENDING) return;
+  const ts = Date.now();
+  const entry: PendingView = { type, ts, actor, action: Promise.resolve(null) };
+  entry.action = createPublicAction(actor, 'view', type, id, 'view', ts)
+    .then(a => { entry.ready = a; return a; }).catch(() => null);
+  pendingViews.set(id, entry);
+}
+
 async function flush() {
   flushTimer = null;
-  if (pendingViews.size === 0) return;
-
-  let token = authTokenGetter?.() ?? null;
-
-  // Self-resolve token if not ready yet
-  if (!token) {
-    try {
-      const { UserService } = await import('./userService');
-      const u = await Promise.race([
-        UserService.getCurrentUser(),
-        new Promise<null>(r => setTimeout(() => r(null), 3000)),
-      ]);
-      token = (u as any)?.id || (u as any)?.publicKey || null;
-      if (token) {
-        const resolved = token;
-        authTokenGetter = () => resolved;
-      }
-    } catch { /* silent */ }
-  }
-
-  if (!token) {
-    console.debug('[views] no token — rescheduling');
-    scheduleFlush();
-    return;
-  }
-
-  const batch = [...pendingViews.entries()].slice(0, MAX_BATCH);
-  // Mark sent BEFORE fetch to prevent duplicate sends on slow networks
-  batch.forEach(([id]) => { pendingViews.delete(id); sentIds.add(id); });
-
+  if (flushing || !pendingViews.size) return;
+  flushing = true;
   try {
+    for (const [id, meta] of Array.from(pendingViews)) {
+      if (meta.ts < Date.now() - ACTION_MAX_AGE_MS || meta.actor !== authTokenGetter?.()) pendingViews.delete(id);
+    }
+    const batch: Array<[string, PendingView, PublicAction]> = [];
+    for (const [id, meta] of Array.from(pendingViews).slice(0, MAX_BATCH)) {
+      const action = await meta.action;
+      if (!action) { pendingViews.delete(id); continue; }
+      if (pendingViews.get(id) === meta && meta.actor === authTokenGetter?.()) batch.push([id, meta, action]);
+    }
+    if (!batch.length) return;
     const res = await fetch(`${RELAY_BASE}/api/views`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body:    JSON.stringify({
-        views: batch.map(([id, { type, ts }]) => ({ id, type, ts })),
-      }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actions: batch.map(([, , action]) => action) }),
+      signal: AbortSignal.timeout(8000),
     });
-    console.debug('[views] flushed', batch.length, '→ status', res.status);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    // Refresh view counts in both stores so cards update immediately after flush
-    refreshViewCountsInStores(batch.map(([id]) => id));
-  } catch {
-    // Network failed — restore to pending
-    batch.forEach(([id, meta]) => { sentIds.delete(id); pendingViews.set(id, meta); });
-    scheduleFlush();
+    const result = await res.json();
+    const accepted = new Set<string>((Array.isArray(result.results) ? result.results : [])
+      .filter((r: any) => r && ['accepted', 'duplicate'].includes(r.status)).map((r: any) => r.id));
+    const ids: string[] = [];
+    for (const [id, meta, action] of batch) {
+      if (!accepted.has(action.id) || pendingViews.get(id) !== meta || meta.actor !== authTokenGetter?.()) continue;
+      pendingViews.delete(id); sentIds.add(id); ids.push(id);
+      if (sentIds.size > MAX_SENT) sentIds.delete(sentIds.values().next().value!);
+    }
+    void refreshViewCountsInStores(ids);
+  } catch { /* Pending entries retain the identical signed action for retry. */ }
+  finally {
+    flushing = false;
+    if (pendingViews.size) scheduleFlush();
   }
-
-  if (pendingViews.size > 0) scheduleFlush();
 }
 
 /** Pull fresh view counts from the relay and patch both stores reactively. */
@@ -205,17 +205,12 @@ async function refreshViewCountsInStores(ids: string[]) {
 }
 
 export function flushViewsSync() {
-  const token = authTokenGetter?.();
-  if (!token || pendingViews.size === 0) return;
-  const batch   = [...pendingViews.entries()].slice(0, MAX_BATCH);
-  const payload = JSON.stringify({
-    views: batch.map(([id, { type, ts }]) => ({ id, type, ts })),
-  });
-  navigator.sendBeacon(
-    `${RELAY_BASE}/api/views`,
-    new Blob([payload], { type: 'application/json' })
-  );
-  batch.forEach(([id]) => { pendingViews.delete(id); sentIds.add(id); });
+  const actions = Array.from(pendingViews.values())
+    .filter(m => m.actor === authTokenGetter?.() && m.ts >= Date.now() - ACTION_MAX_AGE_MS && m.ready)
+    .slice(0, MAX_BATCH).map(m => m.ready);
+  if (!actions.length) return;
+  navigator.sendBeacon(`${RELAY_BASE}/api/views`, new Blob([JSON.stringify({ actions })], { type: 'application/json' }));
+  // Beacon queueing is not server acceptance. Leave entries retryable.
 }
 
 export async function fetchPersonalisedFeed(
