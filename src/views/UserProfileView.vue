@@ -127,6 +127,7 @@ import { useChat } from '../composables/useChat';
 import { UserService } from '../services/userService';
 import { TrustService } from '../services/trustService';
 import config from '@/config';
+import { chatPath } from '../utils/privateRoute';
 
 const router = useRouter();
 const route = useRoute();
@@ -218,14 +219,7 @@ const startChat = async () => {
     return;
   }
 
-  router.push({
-    name: 'Chat',
-    params: { userId: userId.value },
-    query: {
-      name: userProfile.value.displayName || userProfile.value.username,
-      publicKey: userProfile.value.publicKey,
-    },
-  });
+  router.push(chatPath(userId.value, userProfile.value.displayName || userProfile.value.username));
 };
 </script>
 

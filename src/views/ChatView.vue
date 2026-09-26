@@ -318,12 +318,38 @@ import { UserService } from '../services/userService';
 import { GunService } from '../services/gunService';
 import { StorageService } from '../services/storageService';
 import config from '@/config';
+import { chatPath, isSealedToken, replaceAddressBar, unsealRoute } from '../utils/privateRoute';
 
 const route = useRoute();
-const props = defineProps<{ userId: string }>();
+const props = defineProps<{ userId?: string }>();
 
-const recipientId   = computed(() => props.userId || (route.params.userId as string) || '');
-const recipientName = computed(() => (route.query.name as string) || 'User');
+// Fragment-based link support: `/chat#<userId>&name=<name>` keeps the
+// recipient's pubkey out of the path, browser history entries, Referer
+// headers, and server access logs (unlike `/chat/:userId`, which older
+// links and in-app navigation may still use).
+const hashParams = computed(() => new URLSearchParams(
+  (route.hash || window.location.hash || '').replace(/^#/, '')
+));
+// In-app navigation uses opaque /chat/~token URLs (see utils/privateRoute);
+// the real id/name live on this device only.
+const routeParam = computed(() => props.userId || (route.params.userId as string) || '');
+const sealedChat = computed(() => unsealRoute('chat', routeParam.value));
+const recipientId = computed(() =>
+  sealedChat.value?.id
+  || (isSealedToken(routeParam.value) ? '' : routeParam.value)
+  || hashParams.value.get('id') || ''
+);
+const recipientName = computed(() =>
+  sealedChat.value?.name || (route.query.name as string) || hashParams.value.get('name') || 'User'
+);
+
+// Inbound links (old shares, notifications, #id= links) still carry the raw
+// id/name — seal them and scrub the address bar once resolved.
+function scrubChatUrl() {
+  if (!recipientId.value || sealedChat.value) return;
+  const name = recipientName.value !== 'User' ? recipientName.value : undefined;
+  replaceAddressBar(chatPath(recipientId.value, name));
+}
 const WS_URL        = config.relay.websocket;
 
 // ── State ──────────────────────────────────────────────────────────────────────
@@ -1278,6 +1304,11 @@ async function initializeChat() {
 
 watch(recipientId, async (n, o) => { if (n && n !== o) await initializeChat(); });
 onIonViewWillEnter(() => {
+  scrubChatUrl();
+  if (isSealedToken(routeParam.value) && !sealedChat.value) {
+    chatError.value = 'This chat link is private to the device that opened it. Open the chat from your chat list.';
+    return;
+  }
   if (!chatReady.value && recipientId.value) { void initializeChat(); return; }
   if (chatService) bindChatCallbacks(chatService);
   chatService?.markAsRead(recipientId.value);

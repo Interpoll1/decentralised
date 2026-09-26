@@ -374,6 +374,7 @@ import type { Vote } from '../types/chain';
 import { generatePseudonym } from '../utils/pseudonym';
 import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 import config from '../config';
+import { receiptPath } from '../utils/privateRoute';
 import { trackDetailView } from '../services/viewTrackingService';
 
 const route = useRoute();
@@ -696,7 +697,7 @@ async function submitVote() {
     })()
 
     await presentToast('Vote recorded. Network sync will continue in the background.')
-    void router.push(`/receipt/${receipt.verificationCode}`)
+    void router.push(receiptPath(receipt.verificationCode))
 
   } catch (error) {
     console.error('Vote error:', error);

@@ -225,6 +225,7 @@ import {
 import { useRouter, useRoute } from 'vue-router';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
+import { replaceAddressBar } from '../utils/privateRoute';
 import { GunService } from '../services/gunService';
 import { CommunityService } from '../services/communityService';
 import { useQrScan } from '../composables/useQrScan';
@@ -240,26 +241,37 @@ const mode = ref<Mode>('link');
 
 // Auto-switch to rendezvous mode if URL has seed param
 onMounted(() => {
-  const seedParam = route.query.seed as string | undefined;
-  if (seedParam) {
+  const type = route.params.type as string;
+  const id   = route.params.id   as string | undefined;
+
+  // Seed sources, newest first: /join/rendezvous#<seed> (fragment — never sent
+  // to the server), then legacy ?seed= and /join/rendezvous/<seed> forms.
+  const fragment = window.location.hash.replace(/^#/, '');
+  const seedRaw = type === 'rendezvous'
+    ? (fragment || id || (route.query.seed as string | undefined))
+    : (route.query.seed as string | undefined);
+  if (seedRaw) {
     mode.value = 'rendezvous';
-    const words = decodeURIComponent(seedParam).trim().split(/\s+/);
+    const words = safeDecode(seedRaw).trim().split(/\s+/);
     words.forEach((w, i) => { if (i < 8) seedWordInputs.value[i] = w; });
   }
 
-  // Handle /join/:type/:id route params (existing invite link flow)
-  const type = route.params.type as string;
-  const id   = route.params.id   as string;
   if (type === 'community' && id) {
     mode.value = 'link';
     void preloadCommunity(id);
   }
-  if (type === 'rendezvous' && id) {
-    mode.value = 'rendezvous';
-    const words = decodeURIComponent(id).trim().split(/\s+/);
-    words.forEach((w, i) => { if (i < 8) seedWordInputs.value[i] = w; });
-  }
+
+  // Secrets (seed phrase, invite key) must not stay in the address bar,
+  // history or screenshots once read.
+  const clean = type === 'rendezvous' || !type
+    ? '/join/rendezvous'
+    : `/join/${encodeURIComponent(type)}${id ? `/${encodeURIComponent(id)}` : ''}`;
+  if (seedRaw || fragment || route.query.seed) replaceAddressBar(clean);
 });
+
+function safeDecode(value: string): string {
+  try { return decodeURIComponent(value); } catch { return value; }
+}
 
 // ── Invite link flow ───────────────────────────────────────────────────────
 const inviteUrl         = ref('');

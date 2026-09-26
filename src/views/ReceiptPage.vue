@@ -132,6 +132,7 @@ import { useRoute } from 'vue-router';
 import ReceiptViewer from '../components/ReceiptViewer.vue';
 import { useChainStore } from '../stores/chainStore';
 import type { Receipt } from '../types/chain';
+import { isSealedToken, receiptPath, replaceAddressBar, unsealRoute } from '../utils/privateRoute';
 
 const route      = useRoute();
 const chainStore = useChainStore();
@@ -144,11 +145,17 @@ const receipt     = ref<Receipt | null>(null);
 
 // Auto-lookup if verification code is in URL: /receipt/:verificationCode
 onMounted(async () => {
-  const code = route.params.verificationCode as string | undefined;
-  if (code) {
-    lookupInput.value = decodeURIComponent(code);
-    await doLookup();
-  }
+  const param = route.params.verificationCode as string | undefined;
+  if (!param) return;
+  // /receipt/~token (in-app) or a raw code (shared "Verify at" link). A raw
+  // code is sealed and scrubbed from the address bar before lookup.
+  const code = isSealedToken(param)
+    ? unsealRoute('receipt', param)?.code
+    : decodeURIComponent(param);
+  if (!code) { lookupError.value = 'This receipt link only works on the device that created it. Paste your verification phrase instead.'; return; }
+  if (!isSealedToken(param)) replaceAddressBar(receiptPath(code));
+  lookupInput.value = code;
+  await doLookup();
 });
 
 function normaliseInput(raw: string): string {

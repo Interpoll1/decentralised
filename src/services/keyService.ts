@@ -8,6 +8,7 @@ import type { StoredKeyPair } from '../types/nostr';
 export class KeyService {
   private static readonly KEYPAIR_META_KEY = 'nostr-keypair';
   private static cachedKeyPair: StoredKeyPair | null = null;
+  private static pendingKeyPair: Promise<StoredKeyPair> | null = null;
 
   // Generate a new 32-byte random private key (hex)
   static generatePrivateKey(): string {
@@ -36,13 +37,30 @@ export class KeyService {
   static async getKeyPair(): Promise<StoredKeyPair> {
     if (this.cachedKeyPair) return this.cachedKeyPair;
 
-    const stored = await StorageService.getMetadata(this.KEYPAIR_META_KEY);
-    if (stored && stored.privateKey && stored.publicKey) {
-      this.cachedKeyPair = stored as StoredKeyPair;
-      return this.cachedKeyPair;
+    // Share one load-or-generate across concurrent callers: on first run several
+    // callers race here, and each would otherwise mint and store its own identity.
+    if (!this.pendingKeyPair) {
+      this.pendingKeyPair = this.loadOrGenerateKeyPair().finally(() => {
+        this.pendingKeyPair = null;
+      });
     }
+    return this.pendingKeyPair;
+  }
 
-    return this.generateAndStoreKeyPair();
+  private static async loadOrGenerateKeyPair(): Promise<StoredKeyPair> {
+    const run = async (): Promise<StoredKeyPair> => {
+      const stored = await StorageService.getMetadata(this.KEYPAIR_META_KEY);
+      if (stored && stored.privateKey && stored.publicKey) {
+        this.cachedKeyPair = stored as StoredKeyPair;
+        return this.cachedKeyPair;
+      }
+      return this.generateAndStoreKeyPair();
+    };
+
+    // Serialise across tabs too: a second tab re-reads storage inside the lock
+    // and picks up the first tab's key instead of overwriting it.
+    const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+    return locks ? locks.request('interpoll-keypair-init', run) : run();
   }
 
   // Get just the public key (safe to share)
