@@ -1,0 +1,2 @@
+# Unified patch context encodes blank lines as one required space.
+deployment/public-engagement-v1/backend.patch whitespace=-blank-at-eol

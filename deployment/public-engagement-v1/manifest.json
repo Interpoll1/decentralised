@@ -1,0 +1,49 @@
+{
+  "format": 1,
+  "archiveSHA256": "c2b34fa670c66f7b3644aed5ec3b2a3592c49b094eebc8ee51d625431de39955",
+  "reportedDirtyBase": "3961bd105d8f6d1c1088c1cd7b0ef4962c7b7526",
+  "normalization": "UTF-8 text, CRLF to LF; trailing newline significant",
+  "files": {
+    "gun-relay/gun-relay-enhanced.js": {
+      "before": "6b4d752a4ff5013e26916fd8a22fa667d60241b6449f76ea5ec6e576c3306f73",
+      "after": "6a6c127b4d6de12f0f522e74903bc325081a7898d14e7da0ee95c1d0a73bff05"
+    },
+    "relay-server/db.js": {
+      "before": "7eb14e077b2b326aaeda5a4b1f199d7d3e963226d3ca59b2417d30fd5c1d1017",
+      "after": "8244bfa91e189e01273e8d1698aa73a2a2856f53038f287a32af22a3edf1bd44"
+    },
+    "relay-server/relay-server-enhanced.js": {
+      "before": "dfe4289e6662232923c80cbd3aaf728bf72f3fa8391c0d959de90f337b3552ad",
+      "after": "8a3d3c11a3c97ae5c4046fdde56b3f0aad0570c33829c9c47976cd3a06cd7d3c"
+    },
+    "relay-server/routes.js": {
+      "before": "d9fc2cf442ff41dcd4041759b09c0b79bd421273b072fffaaa7b9c8f082998d6",
+      "after": "eebd4bceca21a06f6951a4c6e9add888f0e66f6a042c08f3ca9422b3cfbfcf93"
+    },
+    "shared-validation/engagement-gun.js": {
+      "before": null,
+      "after": "c10f4dc23da837131e265b3d88b5dfeb108c22e85db49cd516dcd979857f387c"
+    },
+    "shared-validation/engagement-http.js": {
+      "before": null,
+      "after": "3b061c3f9e760e18f5a7483f083f89c328d4ac393da6a74ed33cef927320f06e"
+    },
+    "shared-validation/engagement-store.js": {
+      "before": null,
+      "after": "8b2fd48430d9dafbedfa34116bd255bf22d07da838f0a3d5549ea7707b96824f"
+    },
+    "shared-validation/engagement-tally.js": {
+      "before": null,
+      "after": "7e1980dd67ddcd527ee28ec0eee32cb572e14b357772e20ed7757ca8b5a8d942"
+    },
+    "shared-validation/engagement.js": {
+      "before": null,
+      "after": "50f609b6408d81dfa12c3a454a6db7a2d98600e1ed81ac68131f0bbc81d6d5c3"
+    },
+    "tests/engagement.test.mjs": {
+      "before": null,
+      "after": "8427c8a90d509ce8bf981ff44c093a55d583353693e8450afb1b3b03ce793a3f"
+    }
+  },
+  "patchSHA256": "6f5c4f47f900f70ed01e9158f82d1915c2ea555ba4659463f2fb2567df59411a"
+}
