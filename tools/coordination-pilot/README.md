@@ -121,6 +121,8 @@ Agree the participants, approved public posts, schedule, independent case labels
 
 Run the synthetic scenarios and local tests before real volunteer staging. Then validate the real database behavior: accepted rows are committed and transactionally visible, uncommitted concurrent writes are excluded as expected, later commits and pruning have the documented limitations, the account cannot write, and connection/query/rollback failures produce no accepted partial artifact. These checks remain pending until performed against a real MySQL instance.
 
+`staging-check.mjs` automates the database-behavior checks above against a **throwaway** MySQL container with synthetic data (it drops and recreates its own database and user, so never point it at a relay database). It checks SELECT-only enforcement, the ten-minute window, consistent-snapshot exclusion of uncommitted writes, counter-only changes, privacy/relink/digest/expiry/backdating refusals, local-only connection config, mid-capture privilege loss and row overflow. Usage is in its header. It assumes `gun_nodes` has a `soul` key and a JSON text `data` column; it is not a substitute for checks on the real staging schema.
+
 ## Manual performance and accuracy gates
 
 For each bounded run, record the exact source revision, policy digest, relay/schema versions, input count, timing, result/reason and replay outcome. Compare server latency/CPU/memory and volunteer browser responsiveness against a baseline while the capture runs. The report's worker heap measurement is heap usage at the end of computation, not peak memory or total server load. Measure export SQL and the complete operation separately from worker timings.
