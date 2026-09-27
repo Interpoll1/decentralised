@@ -3,7 +3,7 @@ import { RouteRecordRaw } from 'vue-router';
 
 const ONBOARDING_KEY = 'interpoll_onboarding_complete';
 
-const routes: Array<RouteRecordRaw> = [
+export const routes: Array<RouteRecordRaw> = [
   {
     path: '/',
     redirect: () => {
@@ -20,7 +20,6 @@ const routes: Array<RouteRecordRaw> = [
   // Shareable aliases for the HomePage tabs (tab state lives in the ?tab query)
   { path: '/communities', redirect: { path: '/home', query: { tab: 'communities' } } },
   { path: '/spaces',      redirect: { path: '/home', query: { tab: 'communities' } } },
-  { path: '/chat',        redirect: { path: '/home', query: { tab: 'chat' } } },
   { path: '/create',      redirect: { path: '/home', query: { tab: 'create' } } },
   {
     path: '/community/:communityId',
@@ -76,7 +75,12 @@ const routes: Array<RouteRecordRaw> = [
   // pubkey after '#' instead of in the path, so it never lands in browser
   // history, Referer headers, or server access logs. See ChatView's
   // `recipientId` fallback and ProfilePage's `chatLink`.
-  { path: '/chat', name: 'ChatFromLink', component: () => import('../views/ChatView.vue') },
+  // Bare /chat (no #id=) keeps its old role as the HomePage chat-tab alias.
+  {
+    path: '/chat', name: 'ChatFromLink', component: () => import('../views/ChatView.vue'),
+    beforeEnter: (to) => new URLSearchParams(to.hash.replace(/^#/, '')).get('id')
+      ? true : { path: '/home', query: { tab: 'chat' } },
+  },
   { path: '/resilience', name: 'Resilience', component: () => import('../views/ResiliencePage.vue') },
   { path: '/chatroom/:roomId', name: 'ChatRoom', component: () => import('../views/ChatRoomPage.vue'), props: true },
   { path: '/chatrooms', name: 'ChatRoomList', component: () => import('../views/ChatRoomListPage.vue') },
