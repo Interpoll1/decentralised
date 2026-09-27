@@ -134,7 +134,7 @@ import {
 } from 'ionicons/icons';
 import RelayIndicator from './RelayIndicator.vue';
 
-defineProps<{
+const props = defineProps<{
   activeTab?:       string;
   selectedScope?:   string;
   selectedCategory?: string;
@@ -154,6 +154,7 @@ function goScope(scope: string) {
   router.push({ path: '/home', query: { tab: 'home', scope } });
 }
 function goCategory(id: string) {
+  if (props.selectedCategory === id) { router.push({ path: '/home', query: { tab: 'home' } }); return; }
   router.push({ path: '/home', query: { tab: 'home', category: id } });
 }
 
