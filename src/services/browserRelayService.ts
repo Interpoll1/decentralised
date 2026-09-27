@@ -1,47 +1,27 @@
 /**
  * browserRelayService.ts — In-browser Gun relay (no server needed)
  *
- * What this does:
- *   Turns the user's open browser tab into a Gun relay peer.
- *   Other users who add the relay URL can sync data through this tab.
+ * Turns the user's open tab into a Gun relay peer that anyone can connect to.
  *
- * How it works:
- *   1. The tab connects to a free WebSocket tunnel service (hosted-relay-bridge)
- *      that gives it a public wss:// URL. This is the "relay URL" shared with others.
- *   2. Gun in this tab relays data between incoming peers and the main Gun mesh.
- *   3. When the tab is closed, the relay URL stops working (peers fall back to others).
+ * A browser cannot accept inbound connections, so the tab registers with the
+ * tunnel bridge (community-relay/relay-bridge-server.js, served at
+ * `<api>/tunnel`). The bridge hands back a public URL
+ * (`wss://<api host>/tunnel/<id>/gun`); every Gun peer that connects to it is
+ * multiplexed over the tab's single socket, and this service plugs each one
+ * into the tab's Gun mesh as a virtual peer. Gun then relays between those
+ * peers and the tab's own upstream relays exactly as a server relay would.
  *
- * Limitations (important — shown in UI):
- *   - Only works while the tab is open (not a permanent relay)
- *   - Bandwidth limited by the user's upstream connection
- *   - The tunnel bridge service must be reachable (we use a self-hosted one or
- *     ntfy/localtunnel as fallback — see BRIDGE_URLS below)
- *   - Not suitable for > ~20 concurrent peers; use a VPS for larger communities
- *
- * Privacy:
- *   - The tunnel bridge sees your IP address (same as any WebSocket connection)
- *   - Gun data flowing through is public by design (encrypted communities stay encrypted)
- *   - The user's IP is NOT published to other peers; they only see the tunnel URL
- *
- * Alternative (no tunnel needed):
- *   Users on the same LAN can add each other's local IP directly:
- *   http://192.168.x.x:8765/gun — works without any bridge.
+ * Limits: only runs while the tab is open; the bridge caps a tab at 50 peers;
+ * bandwidth is the user's upstream. The bridge sees the tab's IP, remote peers
+ * do not. The public URL changes every time the relay (re)starts.
  */
 
 import { GunService } from './gunService';
+import config from '@/config';
 
-// ── Bridge URLs ───────────────────────────────────────────────────────────────
-// These are WebSocket tunnel services that give a public URL to a local port.
-// We try them in order; first one that responds wins.
-// REPLACE the first entry with your own bridge for production use.
-// Self-hosted bridge (cheapest, most reliable): https://github.com/localtunnel/server
-const BRIDGE_URLS = [
-  'wss://tunnel.interpoll.endless.sbs',  // your own bridge — replace this
-  'wss://relay-bridge.loca.lt',          // localtunnel fallback
-];
-
-const RELAY_PORT = 8765;
 const STORAGE_KEY = 'browser_relay_state';
+const PING_MS = 25_000;
+const RECONNECT_MS = 5_000;
 
 export interface BrowserRelayState {
   active: boolean;
@@ -53,6 +33,17 @@ export interface BrowserRelayState {
 
 type StateListener = (state: BrowserRelayState) => void;
 
+interface VirtualPeer {
+  id: string;
+  wire: any;
+  root: any;
+}
+
+function bridgeUrls(): string[] {
+  const toWs = (origin: string) => `${origin.replace(/\/+$/, '').replace(/^http/, 'ws')}/tunnel`;
+  return [...new Set([toWs(config.relay.api), toWs(config.auth.api)])];
+}
+
 export class BrowserRelayService {
   private static state: BrowserRelayState = {
     active: false,
@@ -63,8 +54,11 @@ export class BrowserRelayService {
   };
 
   private static listeners: Set<StateListener> = new Set();
-  private static peerCountTimer: ReturnType<typeof setInterval> | null = null;
   private static bridgeSocket: WebSocket | null = null;
+  private static peers = new Map<number, VirtualPeer>();
+  private static pingTimer: ReturnType<typeof setInterval> | null = null;
+  private static reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private static stopping = false;
 
   static getState(): BrowserRelayState {
     return { ...this.state };
@@ -72,7 +66,7 @@ export class BrowserRelayService {
 
   static onChange(cb: StateListener): () => void {
     this.listeners.add(cb);
-    cb({ ...this.state }); // immediately fire with current state
+    cb({ ...this.state });
     return () => this.listeners.delete(cb);
   }
 
@@ -81,62 +75,46 @@ export class BrowserRelayService {
     for (const cb of this.listeners) cb(snap);
   }
 
-  // ── Start / stop ──────────────────────────────────────────────────────────
-
-  static async start(): Promise<void> {
-    if (this.state.active) return;
-
-    this.state = { active: false, publicUrl: null, startedAt: null, peersServed: 0, error: null };
-    this.emit();
-
-    // Try each bridge in order
-    for (const bridgeUrl of BRIDGE_URLS) {
-      try {
-        const publicUrl = await this._connectBridge(bridgeUrl);
-        this.state = {
-          active: true,
-          publicUrl,
-          startedAt: Date.now(),
-          peersServed: 0,
-          error: null,
-        };
-        this._savePersisted();
-        this._startPeerCount();
-        this.emit();
-        return;
-      } catch {
-        // try next bridge
-      }
-    }
-
-    // No bridge worked — fall back to LAN-only mode
-    const lanUrl = await this._getLanUrl();
-    this.state = {
-      active: true,
-      publicUrl: lanUrl,
-      startedAt: Date.now(),
-      peersServed: 0,
-      error: 'No tunnel bridge reachable — LAN-only mode. Others on your local network can use this URL.',
-    };
-    this._savePersisted();
-    this._startPeerCount();
+  private static patch(p: Partial<BrowserRelayState>): void {
+    this.state = { ...this.state, ...p };
     this.emit();
   }
 
+  // ── Start / stop ──────────────────────────────────────────────────────────
+
+  static async start(): Promise<void> {
+    if (this.state.active || this.bridgeSocket) return;
+    this.stopping = false;
+    this.patch({ error: null });
+
+    let lastErr: unknown = null;
+    for (const url of bridgeUrls()) {
+      try {
+        const { ws, publicUrl } = await this.connectBridge(url);
+        this.attach(ws);
+        this.patch({
+          active: true,
+          publicUrl,
+          startedAt: this.state.startedAt ?? Date.now(),
+          peersServed: 0,
+          error: null,
+        });
+        this.savePersisted();
+        return;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    this.patch({ active: false, error: 'Could not reach the tunnel bridge. Check your connection and try again.' });
+    throw lastErr instanceof Error ? lastErr : new Error('Tunnel bridge unreachable');
+  }
+
   static stop(): void {
-    if (!this.state.active) return;
-
-    if (this.bridgeSocket) {
-      this.bridgeSocket.close();
-      this.bridgeSocket = null;
-    }
-    if (this.peerCountTimer) {
-      clearInterval(this.peerCountTimer);
-      this.peerCountTimer = null;
-    }
-
+    this.stopping = true;
+    if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+    this.teardown();
     this.state = { active: false, publicUrl: null, startedAt: null, peersServed: 0, error: null };
-    localStorage.removeItem(STORAGE_KEY);
+    try { localStorage.removeItem(STORAGE_KEY); } catch { /* storage unavailable */ }
     this.emit();
   }
 
@@ -146,101 +124,128 @@ export class BrowserRelayService {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return false;
       const { active, startedAt } = JSON.parse(raw);
-      // Only restore if it was started < 24h ago
       return active && Date.now() - startedAt < 86_400_000;
     } catch { return false; }
   }
 
   static async restoreIfNeeded(): Promise<void> {
-    if (this.wasActive()) await this.start();
+    if (this.state.active || this.bridgeSocket || !this.wasActive()) return;
+    try { await this.start(); } catch { /* error surfaced via state */ }
   }
 
-  // ── Internals ─────────────────────────────────────────────────────────────
+  // ── Bridge ────────────────────────────────────────────────────────────────
 
-  /**
-   * Connect to a tunnel bridge and get a public wss:// URL that forwards
-   * to Gun running in this tab.
-   *
-   * The bridge protocol is simple:
-   *   Client → { type: 'register', port: 8765 }
-   *   Bridge → { type: 'registered', url: 'wss://abc123.tunnel.example.com/gun' }
-   *
-   * If you don't have a bridge, replace this with a direct WebRTC relay
-   * or skip and use LAN mode only.
-   */
-  private static _connectBridge(bridgeUrl: string): Promise<string> {
+  private static connectBridge(url: string): Promise<{ ws: WebSocket; publicUrl: string }> {
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        ws.close();
-        reject(new Error('Bridge timeout'));
-      }, 8_000);
+      const ws = new WebSocket(url);
+      const timeout = setTimeout(() => { ws.close(); reject(new Error('Bridge timeout')); }, 8_000);
 
-      const ws = new WebSocket(bridgeUrl);
-      this.bridgeSocket = ws;
-
-      ws.onopen = () => {
-        ws.send(JSON.stringify({ type: 'register', port: RELAY_PORT, app: 'interpoll' }));
-      };
-
+      ws.onopen = () => ws.send(JSON.stringify({ type: 'register', app: 'interpoll' }));
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === 'registered' && msg.url) {
             clearTimeout(timeout);
-            resolve(msg.url);
+            ws.onmessage = null; ws.onerror = null; ws.onclose = null;
+            resolve({ ws, publicUrl: msg.url });
           }
-        } catch {
-          clearTimeout(timeout);
-          ws.close();
-          reject(new Error('Invalid bridge response'));
-        }
+        } catch { /* ignore non-JSON */ }
       };
-
-      ws.onerror = () => {
-        clearTimeout(timeout);
-        reject(new Error(`Bridge ${bridgeUrl} unreachable`));
-      };
+      ws.onerror = () => { clearTimeout(timeout); reject(new Error(`Bridge ${url} unreachable`)); };
+      ws.onclose = (e) => { clearTimeout(timeout); reject(new Error(e.reason || 'Bridge closed')); };
     });
   }
 
-  /** Get the LAN IP for same-network sharing */
-  private static async _getLanUrl(): Promise<string> {
-    // Use WebRTC ICE to discover local IP (doesn't make a network request)
-    return new Promise((resolve) => {
-      try {
-        const pc = new RTCPeerConnection({ iceServers: [] });
-        pc.createDataChannel('');
-        pc.createOffer().then(offer => pc.setLocalDescription(offer));
-        pc.onicecandidate = (e) => {
-          if (!e.candidate) return;
-          const match = e.candidate.candidate.match(/(\d+\.\d+\.\d+\.\d+)/);
-          if (match && !match[1].startsWith('127.')) {
-            pc.close();
-            resolve(`http://${match[1]}:${RELAY_PORT}/gun`);
-          }
-        };
-        // Fallback after 3s
-        setTimeout(() => resolve(`http://localhost:${RELAY_PORT}/gun`), 3_000);
-      } catch {
-        resolve(`http://localhost:${RELAY_PORT}/gun`);
+  private static attach(ws: WebSocket): void {
+    this.bridgeSocket = ws;
+    ws.onmessage = (event) => {
+      let msg: any;
+      try { msg = JSON.parse(event.data); } catch { return; }
+      switch (msg.type) {
+        case 'open': this.openPeer(msg.c); break;
+        case 'msg': this.deliver(msg.c, msg.d); break;
+        case 'close': this.closePeer(msg.c); break;
+        case 'peers': this.patch({ peersServed: Number(msg.n) || 0 }); break;
       }
-    });
+    };
+    ws.onclose = () => {
+      if (this.bridgeSocket !== ws) return;
+      this.teardown();
+      if (this.stopping) return;
+      // Bridge dropped (deploy, network blip) — re-register. The URL changes.
+      this.patch({ active: false, publicUrl: null, peersServed: 0, error: 'Tunnel lost — reconnecting…' });
+      this.reconnectTimer = setTimeout(() => {
+        this.reconnectTimer = null;
+        this.start().catch(() => {
+          if (!this.stopping) this.reconnectTimer = setTimeout(() => this.restoreIfNeeded(), RECONNECT_MS * 6);
+        });
+      }, RECONNECT_MS);
+    };
+    this.pingTimer = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) ws.send('{"type":"ping"}');
+    }, PING_MS);
   }
 
-  private static _startPeerCount(): void {
-    this.peerCountTimer = setInterval(() => {
-      // Approximate: count Gun's known peers minus our own upstream peers
-      const stats = GunService.getPeerStats();
-      // Every incoming peer adds to Gun's graph connectivity
-      this.state.peersServed = Math.max(0, stats.peerCount - 3); // subtract builtins
-      this.emit();
-    }, 15_000);
+  private static teardown(): void {
+    if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
+    for (const c of [...this.peers.keys()]) this.closePeer(c);
+    const ws = this.bridgeSocket;
+    this.bridgeSocket = null;
+    if (ws && ws.readyState <= WebSocket.OPEN) ws.close();
   }
 
-  private static _savePersisted(): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      active: true,
-      startedAt: this.state.startedAt,
-    }));
+  // ── Virtual Gun peers ─────────────────────────────────────────────────────
+
+  private static openPeer(c: number): void {
+    const root = GunService.getRawGun()?._;
+    const mesh = root?.opt?.mesh;
+    if (!mesh) return;
+    const send = (raw: string) => {
+      const ws = this.bridgeSocket;
+      if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'msg', c, d: raw }));
+    };
+    // Gun only calls wire.send(). readyState is reported as CLOSED on purpose so
+    // app code that scans opt.peers for an *upstream* socket (chat fallback,
+    // peer stats, RTC signalling) skips these served peers.
+    const wire = {
+      readyState: 3,
+      __tunnel: true,
+      send,
+      close: () => this.bridgeSocket?.send(JSON.stringify({ type: 'close', c })),
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    };
+    const peer: VirtualPeer = { id: `tunnel:${c}`, wire, root };
+    this.peers.set(c, peer);
+    mesh.hi(peer);
+  }
+
+  private static deliver(c: number, data: unknown): void {
+    const peer = this.peers.get(c);
+    if (!peer || typeof data !== 'string') return;
+    const root = GunService.getRawGun()?._;
+    if (!root?.opt?.mesh) return;
+    if (peer.root !== root) {
+      // GunService re-initialised (relay change); move the peer to the new instance.
+      peer.root = root;
+      root.opt.mesh.hi(peer);
+    }
+    root.opt.mesh.hear(data, peer);
+  }
+
+  private static closePeer(c: number): void {
+    const peer = this.peers.get(c);
+    if (!peer) return;
+    this.peers.delete(c);
+    try {
+      peer.root?.opt?.mesh?.bye(peer);
+      delete peer.root?.opt?.peers?.[peer.id];
+    } catch { /* instance already torn down */ }
+  }
+
+  private static savePersisted(): void {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ active: true, startedAt: this.state.startedAt }));
+    } catch { /* storage unavailable */ }
   }
 }

@@ -654,8 +654,25 @@
                   <span class="relay-difficulty easy">Easy</span>
                   <span class="relay-option-name">Browser Tab</span>
                 </div>
-                <p class="relay-option-desc">Runs a relay directly in this browser tab via a WebSocket bridge. Automatically receives a public <code>wss://tunnel.interpoll.endless.sbs</code> URL — no server or port-forwarding required.</p>
-                <button class="pill-btn accent">Enable Browser Relay</button>
+                <p class="relay-option-desc">Runs a relay directly in this browser tab via a WebSocket bridge. Automatically receives a public <code>wss://…/tunnel/…/gun</code> URL — no server or port-forwarding required. Stops when the tab closes.</p>
+                <template v-if="browserRelay.active">
+                  <div class="code-block-copy">
+                    <code class="code-text">{{ browserRelay.publicUrl }}</code>
+                    <button class="copy-btn" @click="copyText(browserRelay.publicUrl || '', 'tab')" :title="copied === 'tab' ? 'Copied!' : 'Copy'">
+                      {{ copied === 'tab' ? '✓' : '⎘' }}
+                    </button>
+                  </div>
+                  <p class="relay-option-desc" style="margin-top:6px;font-size:11.5px">
+                    Running · serving {{ browserRelay.peersServed }} peer{{ browserRelay.peersServed === 1 ? '' : 's' }}. Others can add this URL as a GunDB relay.
+                  </p>
+                  <button class="pill-btn" @click="stopBrowserRelay">Stop Browser Relay</button>
+                </template>
+                <template v-else>
+                  <button class="pill-btn accent" :disabled="browserRelayStarting" @click="startBrowserRelay">
+                    {{ browserRelayStarting ? 'Starting…' : 'Enable Browser Relay' }}
+                  </button>
+                </template>
+                <p v-if="browserRelay.error" class="relay-option-desc" style="margin-top:6px;font-size:11.5px;color:var(--app-danger, #ef4444)">{{ browserRelay.error }}</p>
               </div>
 
               <div class="relay-option">
@@ -1674,6 +1691,7 @@ import { UserService } from '../services/userService';
 import { VoteTrackerService } from '../services/voteTrackerService';
 import { WebSocketService, type KnownServer } from '../services/websocketService';
 import { GunService } from '../services/gunService';
+import { BrowserRelayService, type BrowserRelayState } from '../services/browserRelayService';
 import { StorageService } from '../services/storageService';
 import { KeyService } from '../services/keyService';
 import { RelayManager } from '../services/relayManager';
@@ -2225,21 +2243,36 @@ const editRelay = ref({
 // ── Relay setup OS selector ────────────────────────────────────────────────
 const homeOs  = ref('Linux / Pi');
 const vpsOs   = ref('Linux (bash)');
-const copied  = ref<'home' | 'vps' | null>(null);
+const copied  = ref<'home' | 'vps' | 'tab' | null>(null);
 
 const HOME_CMDS: Record<string, string> = {
   'Linux / Pi': 'curl -sSL https://interpoll.endless.sbs/install.sh | bash',
   'macOS':      'curl -sSL https://interpoll.endless.sbs/install.sh | bash',
   'Windows':    "irm https://interpoll.endless.sbs/install.ps1 | iex",
 };
+// vps.sh runs on the (Linux) server either way; the tab only reflects the shell you SSH from.
 const VPS_CMDS: Record<string, string> = {
-  'Linux (bash)': 'curl -sSL https://interpoll.endless.sbs/vps.sh | bash -s yourdomain.com',
-  'macOS (zsh)':  'curl -sSL https://interpoll.endless.sbs/vps.sh | bash -s yourdomain.com',
+  'Linux (bash)': 'curl -sSL https://interpoll.endless.sbs/vps.sh | sudo bash -s yourdomain.com',
+  'macOS (zsh)':  'curl -sSL https://interpoll.endless.sbs/vps.sh | sudo bash -s yourdomain.com',
 };
 const homeCmd = computed(() => HOME_CMDS[homeOs.value] ?? HOME_CMDS['Linux / Pi']);
 const vpsCmd  = computed(() => VPS_CMDS[vpsOs.value]  ?? VPS_CMDS['Linux (bash)']);
 
-function copyText(text: string, which: 'home' | 'vps') {
+// ── Browser-tab relay ──────────────────────────────────────────────────────
+const browserRelay = ref<BrowserRelayState>(BrowserRelayService.getState());
+const browserRelayStarting = ref(false);
+const unsubBrowserRelay = BrowserRelayService.onChange((s) => { browserRelay.value = s; });
+onUnmounted(unsubBrowserRelay);
+void BrowserRelayService.restoreIfNeeded();
+
+async function startBrowserRelay() {
+  browserRelayStarting.value = true;
+  try { await BrowserRelayService.start(); } catch { /* error shown from state */ }
+  finally { browserRelayStarting.value = false; }
+}
+function stopBrowserRelay() { BrowserRelayService.stop(); }
+
+function copyText(text: string, which: 'home' | 'vps' | 'tab') {
   navigator.clipboard.writeText(text).then(() => {
     copied.value = which;
     setTimeout(() => { copied.value = null; }, 1800);
