@@ -931,11 +931,11 @@ function navigateToPoll(poll: Poll) {
 
 async function handleModerationSubmit(post: Post) {
   if (!ModerationService.canSubmitHashesFromHome()) return;
-  await ModerationService.submitPostHash(post);
+  await ModerationService.submitPostBodyHash(getPostModerationText(post));
 }
 async function handleModerationSubmitPoll(poll: Poll) {
   if (!ModerationService.canSubmitHashesFromHome()) return;
-  await ModerationService.submitPollHash(poll);
+  await ModerationService.submitPostBodyHash(getPollModerationText(poll));
 }
 
 // ── Scroll / chrome hide-show ──────────────────────────────────────────────

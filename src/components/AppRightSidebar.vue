@@ -98,6 +98,7 @@ import { useCommunityStore } from '../stores/communityStore';
 import { usePostStore } from '../stores/postStore';
 import { usePollStore } from '../stores/pollStore';
 import { CATEGORY_MAP } from '../composables/useCategories';
+import { ModerationService, moderationVersion } from '../services/moderationService';
 import config from '../config';
 
 const router = useRouter();
@@ -134,13 +135,21 @@ const relayLoaded = ref(false);
 // Counts come from content this client actually holds, so they match what
 // the feed shows when a category is clicked. Relay aggregate is a fallback.
 const localTrending = computed<TrendRow[]>(() => {
+  // Mirror HomePage.combinedFeed: skip moderation-blocked items and only
+  // count selectable categories (exact-match, same as the feed filter).
+  moderationVersion.value;
   const counts = new Map<string, number>();
-  const bump = (c: unknown) => {
-    const id = typeof c === 'string' ? c : '';
-    if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
+  const bump = (c: unknown, text: string) => {
+    if (typeof c !== 'string' || !CATEGORY_MAP.has(c)) return;
+    if (ModerationService.isPostBodyBlocked(text)) return;
+    counts.set(c, (counts.get(c) ?? 0) + 1);
   };
-  for (const p of postStore.sortedPosts) bump((p as any).category);
-  for (const p of pollStore.sortedPolls) if (!(p as any).isPrivate) bump((p as any).category);
+  for (const p of postStore.sortedPosts as any[])
+    bump(p.category, [p.title, p.content].filter(Boolean).join(' '));
+  for (const p of pollStore.sortedPolls as any[]) {
+    if (p.isPrivate) continue;
+    bump(p.category, [p.question, p.description, ...(p.options || []).map((o: any) => o.text)].filter(Boolean).join(' '));
+  }
   return [...counts.entries()]
     .sort((x, y) => y[1] - x[1])
     .slice(0, 5)
