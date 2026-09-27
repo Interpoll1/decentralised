@@ -195,6 +195,12 @@
               <button class="active-tag-clear" @click="activeTagFilter = null">✕ Clear</button>
             </div>
 
+            <!-- Active category filter pill -->
+            <div v-if="selectedCategory && selectedCategory !== 'all'" class="active-tag-filter-row">
+              <span class="active-tag-label">{{ CATEGORY_MAP.get(selectedCategory)?.label ?? selectedCategory }}</span>
+              <button class="active-tag-clear" @click="selectCategory('all')">✕ Clear</button>
+            </div>
+
             <div v-if="isLoadingPosts" class="loading-container">
               <ion-spinner></ion-spinner>
               <p>Loading content…</p>

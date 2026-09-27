@@ -95,6 +95,8 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { IonIcon } from '@ionic/vue';
 import { useCommunityStore } from '../stores/communityStore';
+import { usePostStore } from '../stores/postStore';
+import { usePollStore } from '../stores/pollStore';
 import { CATEGORY_MAP } from '../composables/useCategories';
 import config from '../config';
 
@@ -122,52 +124,52 @@ function formatNumber(n: number | undefined | null): string {
   return v.toString();
 }
 
-const trendingLoaded = ref(false);
-const trendingCategories = ref<Array<{ id: string; label: string; posts: string; icon: any; tone: string }>>([]);
+const postStore = usePostStore();
+const pollStore = usePollStore();
+
+type TrendRow = { id: string; tag: string; label: string; posts: string; icon: any; tone: string; hot: boolean };
+const relayTrending = ref<TrendRow[]>([]);
+const relayLoaded = ref(false);
+
+// Counts come from content this client actually holds, so they match what
+// the feed shows when a category is clicked. Relay aggregate is a fallback.
+const localTrending = computed<TrendRow[]>(() => {
+  const counts = new Map<string, number>();
+  const bump = (c: unknown) => {
+    const id = typeof c === 'string' ? c : '';
+    if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
+  };
+  for (const p of postStore.sortedPosts) bump((p as any).category);
+  for (const p of pollStore.sortedPolls) if (!(p as any).isPrivate) bump((p as any).category);
+  return [...counts.entries()]
+    .sort((x, y) => y[1] - x[1])
+    .slice(0, 5)
+    .map(([id, n]) => {
+      const def = CATEGORY_MAP.get(id);
+      return { id, tag: '', label: def?.label || id, posts: String(n), icon: def?.icon,
+               tone: def?.tone || 'tone-default', hot: false };
+    });
+});
+
+const trendingCategories = computed(() =>
+  localTrending.value.length ? localTrending.value : relayTrending.value);
+const trendingLoaded = computed(() => localTrending.value.length > 0 || relayLoaded.value);
 
 onMounted(async () => {
   try {
-    // Fetch external global trends from the relay's search-engine data
-    const res = await fetch(`${config.relay.api}/api/trends/external`);
-    if (!res.ok) throw new Error('trends unavailable');
-    const data = await res.json();
-    const raw  = Array.isArray(data) ? data : (data.trends || []);
-
-    trendingCategories.value = raw
-      .sort((a: any, b: any) => (b.score ?? 0) - (a.score ?? 0))
-      .slice(0, 6)
-      .map((row: any) => {
-        const catId = row.category || '';
-        const def   = CATEGORY_MAP.get(catId);
-        const isHot = Array.isArray(row.sources) && row.sources.length >= 2;
-        return {
-          id:    catId,
-          tag:   row.tag || row.id || catId,
-          label: row.tag ? '#' + row.tag : (def?.label || catId),
-          posts: String(row.score ?? ''),
-          icon:  def?.icon,
-          tone:  def?.tone || 'tone-default',
-          hot:   isHot,
-          sources: row.sources || [],
-        };
+    const res = await fetch(`${config.relay.api}/api/trending-categories`);
+    if (res.ok) {
+      const data = await res.json();
+      const rows = Array.isArray(data) ? data : (data.categories || []);
+      relayTrending.value = rows.slice(0, 5).map((row: any) => {
+        const def = CATEGORY_MAP.get(row.id || row.category);
+        return { id: row.id || '', tag: '', label: def?.label || row.label || row.id || '',
+                 posts: String(row.posts || row.count || ''), icon: def?.icon,
+                 tone: def?.tone || 'tone-default', hot: false };
       });
-  } catch {
-    // Fallback to internal trending categories endpoint
-    try {
-      const res2 = await fetch(`${config.relay.api}/api/trending-categories`);
-      if (res2.ok) {
-        const data2 = await res2.json();
-        const cats  = Array.isArray(data2) ? data2 : (data2.categories || []);
-        trendingCategories.value = cats.slice(0, 5).map((row: any) => {
-          const def = CATEGORY_MAP.get(row.id || row.category);
-          return { id: row.id || '', tag: '', label: def?.label || row.label || row.id || '',
-                   posts: String(row.posts || row.count || ''), icon: def?.icon,
-                   tone: def?.tone || 'tone-default', hot: false, sources: [] };
-        });
-      }
-    } catch { /* silent */ }
-  } finally {
-    trendingLoaded.value = true;
+    }
+  } catch { /* silent */ } finally {
+    relayLoaded.value = true;
   }
 });
 </script>

@@ -206,6 +206,8 @@ const effectiveCategory = computed(() => {
 });
 
 function selectCat(id: string) {
+  // Clicking the active category again clears the filter
+  if (id !== 'all' && effectiveCategory.value === id) id = 'all';
   if (props.activeTab !== undefined) {
     // HomePage mode — parent owns the category state
     emit('select-category', id);
