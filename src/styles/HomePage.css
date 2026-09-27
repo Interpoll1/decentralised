@@ -567,7 +567,7 @@ ion-footer.bottom-nav-footer.footer-hidden {
   align-items: center; justify-content: center;
   padding: 16px; box-sizing: border-box; overflow-y: auto;
 }
-.moderation-onboarding-card { width: 100%; max-width: 520px; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 20px; overflow: hidden; display: flex; flex-direction: column; gap: 0; }
+.moderation-onboarding-card { width: 100%; max-width: 520px; background: var(--app-bg-elevated); box-shadow: var(--app-shadow-lg); border: 1px solid var(--app-border); border-radius: 20px; overflow: hidden; display: flex; flex-direction: column; gap: 0; }
 .moderation-onboarding-card__hero { display: flex; gap: 16px; align-items: flex-start; padding: 24px 24px 18px; border-bottom: 1px solid var(--app-border); }
 .moderation-onboarding-card__badge { width: 48px; height: 48px; border-radius: 14px; background: rgba(var(--app-accent-rgb),0.12); display: flex; align-items: center; justify-content: center; color: var(--app-accent-bright); flex-shrink: 0; }
 .moderation-onboarding-card__badge ion-icon { font-size: 24px; }

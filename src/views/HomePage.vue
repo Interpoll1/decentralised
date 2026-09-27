@@ -1081,7 +1081,14 @@ watch(activeTab, (tab) => {
 });
 
 onMounted(async () => {
-  maybeShowOnboarding();
+  // Don't stack the moderation modal on top of the quick tour — wait until
+  // the tour is finished or skipped.
+  if (!tutorialVisible.value) maybeShowOnboarding();
+  else {
+    const stop = watch(tutorialVisible, (visible) => {
+      if (!visible) { stop(); maybeShowOnboarding(); }
+    });
+  }
   void loadTrendingCategories();
   void loadTrendingTags();
 
