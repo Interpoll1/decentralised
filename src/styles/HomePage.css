@@ -65,6 +65,17 @@ ion-header ion-toolbar {
   padding-inline-start: max(12px, env(safe-area-inset-left));
   padding-inline-end:   max(12px, env(safe-area-inset-right));
 }
+/* Desktop: inset the header to the centred page column so the logo lines up
+   with the left nav rows and the utility icons with the right sidebar edge.
+   Gutter mirrors .ambient-page__content width + .hp-root padding-inline. */
+@media (min-width: 768px) {
+  ion-header ion-toolbar {
+    --hp-gutter: calc((100% - min(1320px, 100% - 32px)) / 2 + 4px);
+    --padding-start: 0; --padding-end: 0;
+    padding-inline-start: calc(var(--hp-gutter) + 16px);
+    padding-inline-end:   calc(var(--hp-gutter) + 1px);
+  }
+}
 
 .header-util-buttons { display: flex; }
 .header-util-buttons ion-button {
