@@ -65,11 +65,11 @@ function metadataRow(row, expectedSouls) {
     }
     communityId = row.communityId;
   }
-  if (![0, 1, false, true].includes(row.encrypted)) throw fail('MYSQL_METADATA_SHAPE');
+  if (![0, 1, '0', '1', false, true].includes(row.encrypted)) throw fail('MYSQL_METADATA_SHAPE');
   return {
     soul: row.soul, dataHash: row.dataHash, id: row.id, communityId,
     isPrivate: flag(row.isPrivate), isEncrypted: flag(row.isEncrypted),
-    deleted: flag(row.deleted), isDeleted: flag(row.isDeleted), encrypted: Boolean(row.encrypted),
+    deleted: flag(row.deleted), isDeleted: flag(row.isDeleted), encrypted: row.encrypted === true || Number(row.encrypted) === 1,
   };
 }
 

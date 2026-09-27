@@ -136,10 +136,18 @@ test('explicit privacy/deletion/encrypted markers survive for exporter rejection
   for (const name of ['isPrivate', 'isEncrypted', 'deleted', 'isDeleted', 'encrypted']) assert.equal(result.metadata[1][name], true);
 });
 
+test('JSON_CONTAINS_PATH as a bigNumberStrings string ("0"/"1") is accepted', async () => {
+  // mysql2 with bigNumberStrings returns this BIGINT as a string on a real server.
+  for (const [encrypted, expected] of [['0', false], ['1', true]]) {
+    const result = await readCapture(database({ metadata: [node('communities'), node('posts', { encrypted })] }), policy());
+    assert.equal(result.metadata[1].encrypted, expected);
+  }
+});
+
 test('malformed metadata types, invalid/oversized JSON and unknown roots reject', async () => {
   for (const change of [
     { isPrivate: 'INVALID' }, { isEncrypted: 0 }, { deleted: {} }, { isDeleted: undefined },
-    { encrypted: null }, { encrypted: '1' }, { documentType: null, dataHash: null },
+    { encrypted: null }, { encrypted: '2' }, { encrypted: 'true' }, { documentType: null, dataHash: null },
     { documentType: 'ARRAY' }, { idType: 'INTEGER' }, { id: null },
     { communityIdType: 'OBJECT', communityId: null }, { communityIdType: 'STRING', communityId: null },
     { soul: 'v5/posts/unapproved' },
