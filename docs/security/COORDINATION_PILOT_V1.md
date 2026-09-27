@@ -1,0 +1,41 @@
+# Coordination pilot v1
+
+Status: local preparation for a supervised pilot. Not deployed. This adds an opt-in, file-producing exporter and review runner; it does not change admission, voting, feeds, accounts or the frozen coordination-impact-experiment-v1 calculation.
+
+## Authority and privacy
+
+Only explicitly operator-reviewed PUBLIC PILOT POSTS are supported. Comments, poll ballots, views, private/group content and automatic target discovery are excluded. The separately approved policy pins a single relay identifier, namespace, observer public key, expiry and post/community review-projection digests. The caller supplies the policy digest independently. Never derive authority from the exported bundle or its embedded policy.
+
+Policy schema (exact fields): version:1, scope:"operator-reviewed-public-posts", relayId, namespace, observer, validFrom, validUntil, targets:[{id,communityId,postReviewHash,communityReviewHash}]. Maximum20 targets, policy validity at most24h. The operator must review public visibility and volunteer participation before approving this policy. Approval covers the exact public post IDs, community linkage and eligibility state described below, not the meaning or truth of post bodies. Existing community signatures do not authenticate privacy flags; a review digest does not independently prove public visibility.
+
+The exported helper reviewDigest(record) computes SHA-256 over the existing canonical encoding of ["interpoll.coordination-pilot-target-review.v1", projection], where projection has exactly {soul,id,communityId,isPrivate,isEncrypted,deleted,isDeleted,encrypted}. communityId is the approved community ID for a post and null for a community root. Null privacy/deletion flags normalize to false, matching the adapter's handling of missing/null JSON flags; malformed flag types are rejected. encrypted is a boolean recording the presence of encryptedMeta, encryptedContent or encryptedData, including a present null-valued field. The postReviewHash and communityReviewHash approve these separate projections. Old postHash/communityHash policy fields are not accepted.
+
+Read only the approved target/community graph rows in the same consistent MySQL read-only transaction as the accepted ledger. Project hashes and minimal linkage/privacy/deletion metadata, never post bodies. Reject missing/duplicate records, changed review projections, wrong IDs/community links, malformed metadata and explicit private/encrypted/deleted state. Missing privacy flags alone do NOT authorize a target: the approved policy is required. Root posts must link directly to the approved community. Do not join private spaces or collect unrelated targets.
+
+Content changes, vote/count hints, membership counters and Gun clock metadata are not policy material: this analyzer evaluates reactions, not text or body semantics. Such changes can alter the raw record dataHash without invalidating the approved review projection. The adapter still computes SHA2(data,256); each raw dataHash must be a valid64-hex value and remains in the signed manifest as an observation of the record read, not an approval pin. Re-review is required if target identity, community linkage, visibility, deletion or encryption state changes. Current-row checks cannot establish a history of visibility or detect an intervening change that was reverted before capture; the observer must not claim continuous public status from this projection.
+
+## Accepted observations and window
+
+Export ONLY rows currently committed and visible in the read transaction from engagement_actions_v1. Restrict SQL to reaction/post and approved target IDs; reverify namespace, exact actor signature, freshness at stored received_at and all duplicated row columns. Include up, down and none transitions. Do not reconstruct from gun_nodes reaction state or legacy counts.
+
+Database time defines one current inclusive10min window, [readAt-600000,readAt]. No arbitrary historical-window parameter. Existing ledger retention is only10min; late commits, pruning, relay clock skew and omitted initial state prevent a completeness guarantee. received_at is the relay admission-attempt receipt clock stored by a successful transaction, NOT commit time or globally first receipt. Report coverage:"retained-committed-sample", completeness:"not-established". No-pattern means only no qualifying relation in this sample.
+
+Single relay per bundle. No cross-relay reconciliation. At most1000 observations; fetch1001 to detect overflow and reject the whole export. Payload at most2048UTF-8 bytes; overlong payload must not be transferred in full. Approved graph records over64KiB or with malformed JSON fail closed; at most40 projected graph records are returned and no body is transferred. Snapshot at most1MiB; output bundle at most2MiB. SQL reads bounded and timed out; no backlog, cron, server route or browser import.
+
+## Binding and replay
+
+The unchanged v1 snapshot includes only exact accepted envelopes/receipt times and approved public target descriptors, signed by the policy observer. A separate signed pilot manifest binds policy digest, canonical snapshot digest, relay ID, readAt/window, observed raw record hashes, projected metadata and coverage semantics using domain interpoll.coordination-pilot-export.v1. The policy separately pins review projections; the raw record hashes are observations rather than approval pins. This is not retroactive v1 receipt semantics. Reject untrusted pins, stale policy, manifest/snapshot tampering and context mismatch. A signature attests what the observer read, not honest/comprehensive database contents.
+
+The runner verifies both policy authority and signed export, then executes the existing isolated worker and independently replays any receipt in a fresh worker. Store result/reason, witnesses, model rankings and timing. No result changes the actual feed. The ranking remains window-net-reactions-v1, not the personalized feed.
+
+## Operations and bounds
+
+Manual invocation only. Analysis and replay run sequentially in separate workers; each has the existing5s deadline/64MiB old-generation heap limit and existing analysis graph bounds. Export signature verification runs first in the CLI process; the complete operation has no combined5s/64MiB guarantee. Export connection is loopback/local socket using a separately provisioned SELECT-only account; no app pool import, schema migration or connection to production from this development session. The observer key comes from a private local file, never argv/env/committed examples. No automatic key generation for a real run or silent authority replacement. Output files are exclusive; partial output must not be treated as a completed bundle. Secret values and database errors are not printed.
+
+One explicit bounded export/report per run; no automatic persistent accumulation. Pilot operator retains sensitive pseudonymous evidence locally for at most24h and at most20 bundles and20 reports (manual review/deletion), with restrictive filesystem permissions; the tool refuses a21st file of either kind in its managed output directory. Filename time and modification time are both checked. The operator must provision and verify private filesystem access, especially Windows ACLs; this code does not harden pre-existing permissions. No claims of enforced retention outside that directory or deletion of copies. Do not publish raw participant records automatically.
+
+## Validation and rollout
+
+Synthetic cases: normal activity, coordinated actions, and legitimate campaign with identical observable coordination. The last two intentionally give the same arithmetic result: intent/bot identity remains undetermined. Test privacy/policy/row/tamper/overflow/time/rollback failures and real MySQL read-only behavior locally where available. Record unavailable environment checks honestly.
+
+Before a live pilot Viktor must review the package, approve exact public volunteer posts and observer/policy pins, provision read-only database access, verify both relay ledger/schema versions, and run controlled staging cases. Measure actual browser/server load and false positives with consented representative data. No launch readiness, bot prevention, production accuracy or Semantic ABI conformance claim.
