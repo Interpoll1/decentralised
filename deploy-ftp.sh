@@ -12,6 +12,15 @@
 #
 set -euo pipefail
 
+# Local, gitignored credentials (FTP_USER / FTP_PASS). Environment wins.
+_ENV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.env.deploy"
+if [ -f "$_ENV_FILE" ]; then
+  _U="${FTP_USER:-}"; _P="${FTP_PASS:-}"
+  # shellcheck disable=SC1090
+  . "$_ENV_FILE"
+  FTP_USER="${_U:-$FTP_USER}"; FTP_PASS="${_P:-$FTP_PASS}"
+fi
+
 FTP_HOST="${FTP_HOST:-185.232.14.177}"
 FTP_USER="${FTP_USER:?set FTP_USER}"
 FTP_PASS="${FTP_PASS:?set FTP_PASS}"

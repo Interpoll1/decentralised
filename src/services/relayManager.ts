@@ -317,17 +317,29 @@ export class RelayManager {
       const gunProbeUrl = probe.gun.includes('?')
         ? `${probe.gun}&relay_probe=1`
         : `${probe.gun}?relay_probe=1`;
-      const res = await fetch(gunProbeUrl, {
-        method: 'GET',
-        signal: controller.signal,
-        headers: { Accept: '*/*' },
-        mode: 'no-cors',
-        cache: 'no-store',
-      });
+      let res: Response;
+      try {
+        // Gun relays send Access-Control-Allow-Origin, so a CORS probe gives a
+        // real status. An always-opaque no-cors probe made healthy relays
+        // permanently show "degraded".
+        res = await fetch(gunProbeUrl, {
+          method: 'GET',
+          signal: controller.signal,
+          cache: 'no-store',
+        });
+      } catch (corsErr) {
+        if (controller.signal.aborted) throw corsErr;
+        // Relay without CORS headers: opaque response (status 0) proves
+        // reachability only — kept as reachable-but-unverified (degraded).
+        res = await fetch(gunProbeUrl, {
+          method: 'GET',
+          signal: controller.signal,
+          mode: 'no-cors',
+          cache: 'no-store',
+        });
+      }
       clearTimeout(timer);
       gunReachable = true;
-      // no-cors probes return opaque responses (status 0) in browsers.
-      // Keep those as reachable-but-unverified (degraded), not healthy.
       gunOk = res.ok || res.status === 404;
     } catch {
       // Gun endpoint unreachable
