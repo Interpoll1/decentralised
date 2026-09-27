@@ -349,7 +349,7 @@ function copyUrl() {
 const homeRelayUrl = ref('');
 const homeAdded = ref(false);
 const copiedInstall = ref(false);
-const installScriptUrl = `${config.relay.api}/install-relay.sh`;
+const installScriptUrl = `${config.relay.api}/install.sh`;
 
 function copyInstallScript() {
   navigator.clipboard.writeText(`curl -fsSL ${installScriptUrl} | bash`).then(() => {
@@ -370,7 +370,7 @@ const vpsRelayUrl = ref('');
 const vpsAdded = ref(false);
 const copiedVps = ref(false);
 
-const vpsInstallCmd = `curl -fsSL ${config.relay.api}/install-relay-vps.sh | bash -s relay.yourdomain.com`;
+const vpsInstallCmd = `curl -fsSL ${config.relay.api}/vps.sh | sudo bash -s relay.yourdomain.com`;
 
 function copyVpsCmd() {
   navigator.clipboard.writeText(vpsInstallCmd).then(() => {

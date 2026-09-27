@@ -1,0 +1,15 @@
+{
+  "name": "interpoll-community-relay",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "main": "relay.js",
+  "scripts": {
+    "start": "node relay.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "gun": "^0.2020.1241"
+  }
+}
