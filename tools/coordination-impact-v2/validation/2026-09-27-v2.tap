@@ -1,0 +1,232 @@
+TAP version 13
+# Subtest: five actors on three targets remain supported and receipt is explicitly v2
+ok 1 - five actors on three targets remain supported and receipt is explicitly v2
+  ---
+  duration_ms: 130.1654
+  type: 'test'
+  ...
+# Subtest: saved regression sweep-30x3-trial2: exact planted group without background accounts
+ok 2 - saved regression sweep-30x3-trial2: exact planted group without background accounts
+  ---
+  duration_ms: 925.4901
+  type: 'test'
+  ...
+# Subtest: saved regression sweep-40x3-trial1: exact planted group without background accounts
+ok 3 - saved regression sweep-40x3-trial1: exact planted group without background accounts
+  ---
+  duration_ms: 1092.6896
+  type: 'test'
+  ...
+# Subtest: saved regression sweep-56x5-trial1: exact planted group without background accounts
+ok 4 - saved regression sweep-56x5-trial1: exact planted group without background accounts
+  ---
+  duration_ms: 2692.2521
+  type: 'test'
+  ...
+# Subtest: three-member groups are detected with five repeats; weaker evidence requests context
+ok 5 - three-member groups are detected with five repeats; weaker evidence requests context
+  ---
+  duration_ms: 6602.0606
+  type: 'test'
+  ...
+# Subtest: a connecting path alone cannot turn sparse coincidences into a review group
+ok 6 - a connecting path alone cannot turn sparse coincidences into a review group
+  ---
+  duration_ms: 369.1645
+  type: 'test'
+  ...
+# Subtest: fixed 60-second edge boundary remains exact
+ok 7 - fixed 60-second edge boundary remains exact
+  ---
+  duration_ms: 978.9009
+  type: 'test'
+  ...
+# Subtest: unrelated activity no longer hides a repeated group
+ok 8 - unrelated activity no longer hides a repeated group
+  ---
+  duration_ms: 5466.705
+  type: 'test'
+  ...
+# Subtest: sample-wide organic burst requests context without naming a candidate group
+ok 9 - sample-wide organic burst requests context without naming a candidate group
+  ---
+  duration_ms: 377.6874
+  type: 'test'
+  ...
+# Subtest: extra shared activity in seven members cannot erase the eighth repeated participant
+ok 10 - extra shared activity in seven members cannot erase the eighth repeated participant
+  ---
+  duration_ms: 1458.2059
+  type: 'test'
+  ...
+# Subtest: observer authority, snapshot signature and action authentication remain necessary
+ok 11 - observer authority, snapshot signature and action authentication remain necessary
+  ---
+  duration_ms: 52.5978
+  type: 'test'
+  ...
+# Subtest: tampered support, witnesses, context, impact and v1 receipts are rejected
+ok 12 - tampered support, witnesses, context, impact and v1 receipts are rejected
+  ---
+  duration_ms: 813.3554
+  type: 'test'
+  ...
+# Subtest: reordered input and exact duplicate observations preserve results
+ok 13 - reordered input and exact duplicate observations preserve results
+  ---
+  duration_ms: 447.5517
+  type: 'test'
+  ...
+# Subtest: latest clears suppress support and counterfactual removal never revives old reactions
+ok 14 - latest clears suppress support and counterfactual removal never revives old reactions
+  ---
+  duration_ms: 255.6694
+  type: 'test'
+  ...
+# Subtest: opposite directions do not create qualifying edges
+ok 15 - opposite directions do not create qualifying edges
+  ---
+  duration_ms: 542.0169
+  type: 'test'
+  ...
+# Subtest: input, global actor and dense edge caps refuse without partial receipts
+ok 16 - input, global actor and dense edge caps refuse without partial receipts
+  ---
+  duration_ms: 8248.0768
+  type: 'test'
+  ...
+# Subtest: valid signed empty input has an explicit no-pattern receipt
+ok 17 - valid signed empty input has an explicit no-pattern receipt
+  ---
+  duration_ms: 14.1235
+  type: 'test'
+  ...
+# Subtest: fresh public fixtures reproduce exact signed input bytes from the same seed
+ok 18 - fresh public fixtures reproduce exact signed input bytes from the same seed
+  ---
+  duration_ms: 308.1423
+  type: 'test'
+  ...
+# Subtest: an isolated bridge no longer joins two dense groups
+ok 19 - an isolated bridge no longer joins two dense groups
+  ---
+  duration_ms: 502.4101
+  type: 'test'
+  ...
+# Subtest: too many independent supported cohorts fail closed
+ok 20 - too many independent supported cohorts fail closed
+  ---
+  duration_ms: 8413.0544
+  type: 'test'
+  ...
+# Subtest: a single verification partition is explicitly incomplete, never a trusted receipt
+ok 21 - a single verification partition is explicitly incomplete, never a trusted receipt
+  ---
+  duration_ms: 89.5175
+  type: 'test'
+  ...
+# Subtest: different extra targets in every subgroup cannot hide their larger shared cohort
+ok 22 - different extra targets in every subgroup cannot hide their larger shared cohort
+  ---
+  duration_ms: 991.8171
+  type: 'test'
+  ...
+# Subtest: a discarded overlap cannot suppress a separate supported cohort
+ok 23 - a discarded overlap cannot suppress a separate supported cohort
+  ---
+  duration_ms: 1080.8404
+  type: 'test'
+  ...
+# Subtest: isolated v2 worker reproduces pure API and freshly verifies receipts
+ok 24 - isolated v2 worker reproduces pure API and freshly verifies receipts
+  ---
+  duration_ms: 442.2959
+  type: 'test'
+  ...
+# Subtest: bad signatures in either partition prevent both analysis and receipt verification
+ok 25 - bad signatures in either partition prevent both analysis and receipt verification
+  ---
+  duration_ms: 902.9026
+  type: 'test'
+  ...
+# Subtest: caller mutation cannot change either partition input after dispatch
+ok 26 - caller mutation cannot change either partition input after dispatch
+  ---
+  duration_ms: 227.1821
+  type: 'test'
+  ...
+# Subtest: malformed, oversized and tampered worker payloads never produce a receipt
+ok 27 - malformed, oversized and tampered worker payloads never produce a receipt
+  ---
+  duration_ms: 263.4085
+  type: 'test'
+  ...
+# Subtest: busy, cancellation and deadline leave no queued job and allow recovery
+ok 28 - busy, cancellation and deadline leave no queued job and allow recovery
+  ---
+  duration_ms: 194.4373
+  type: 'test'
+  ...
+# Subtest: extended execution is explicit, bounded and recorded without changing the receipt
+ok 29 - extended execution is explicit, bounded and recorded without changing the receipt
+  ---
+  duration_ms: 229.6602
+  type: 'test'
+  ...
+# Subtest: snapshot file CLI analyzes and independently verifies, including paths with spaces
+ok 30 - snapshot file CLI analyzes and independently verifies, including paths with spaces
+  ---
+  duration_ms: 518.9189
+  type: 'test'
+  ...
+# Subtest: v2 pilot authenticates v1 exports and emits separately versioned freshly replayed results
+ok 31 - v2 pilot authenticates v1 exports and emits separately versioned freshly replayed results
+  ---
+  duration_ms: 1185.7845
+  type: 'test'
+  ...
+# Subtest: v2 pilot rejects wrong pins, changed manifests and expired authority before analysis
+ok 32 - v2 pilot rejects wrong pins, changed manifests and expired authority before analysis
+  ---
+  duration_ms: 1.3805
+  type: 'test'
+  ...
+# Subtest: v2 pilot has its own busy guard, cancellation/deadline and recovery
+ok 33 - v2 pilot has its own busy guard, cancellation/deadline and recovery
+  ---
+  duration_ms: 601.0051
+  type: 'test'
+  ...
+# Subtest: caller mutation during await cannot substitute the snapshot already authenticated
+ok 34 - caller mutation during await cannot substitute the snapshot already authenticated
+  ---
+  duration_ms: 408.559
+  type: 'test'
+  ...
+# Subtest: v2 pilot records explicit extended worker budgets and refuses invalid run options
+ok 35 - v2 pilot records explicit extended worker budgets and refuses invalid run options
+  ---
+  duration_ms: 485.6966
+  type: 'test'
+  ...
+# Subtest: broad response survives export and fresh replay as context-required without candidate accounts
+ok 36 - broad response survives export and fresh replay as context-required without candidate accounts
+  ---
+  duration_ms: 3456.8806
+  type: 'test'
+  ...
+# Subtest: file CLI honors its process clock; expired fixture is not auto-renewed
+ok 37 - file CLI honors its process clock; expired fixture is not auto-renewed
+  ---
+  duration_ms: 147.9513
+  type: 'test'
+  ...
+1..37
+# tests 37
+# suites 0
+# pass 37
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 52369.0323
