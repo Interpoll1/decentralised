@@ -17,6 +17,8 @@
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore",
     "test": "vitest run --config unit_tests/vitest.config.ts",
     "test:coordination": "node --test tools/coordination-impact/core.test.mjs",
+    "test:coordination-v2": "node --test --test-concurrency=1 tools/coordination-impact-v2/core.test.mjs tools/coordination-impact-v2/host.test.mjs tools/coordination-pilot/runner-v2.test.mjs",
+    "evaluate:coordination-v2": "node tools/coordination-impact-v2/evaluate.mjs",
     "test:coordination-pilot": "node --test --test-concurrency=1 tools/coordination-pilot/export.test.mjs tools/coordination-pilot/mysql-source.test.mjs tools/coordination-pilot/runner.test.mjs tools/coordination-pilot/io-cli.test.mjs",
     "test:watch": "vitest --config unit_tests/vitest.config.ts"
   },
