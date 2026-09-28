@@ -1,0 +1,802 @@
+TAP version 13
+# Subtest: candidate receipt exposes exact relationships and reproducible counterfactual
+ok 1 - candidate receipt exposes exact relationships and reproducible counterfactual
+  ---
+  duration_ms: 137.9799
+  type: 'test'
+  ...
+# Subtest: input permutation and repeat produce byte-identical receipt without mutating input
+ok 2 - input permutation and repeat produce byte-identical receipt without mutating input
+  ---
+  duration_ms: 204.0966
+  type: 'test'
+  ...
+# Subtest: receipt self-hash is insufficient: changing result, inputs, policy or evidence fails replay
+ok 3 - receipt self-hash is insufficient: changing result, inputs, policy or evidence fails replay
+  ---
+  duration_ms: 472.604
+  type: 'test'
+  ...
+# Subtest: a snapshot does not authorize its own observer key
+ok 4 - a snapshot does not authorize its own observer key
+  ---
+  duration_ms: 1.8519
+  type: 'test'
+  ...
+# Subtest: unsigned snapshot tamper or missing version rejects
+ok 5 - unsigned snapshot tamper or missing version rejects
+  ---
+  duration_ms: 0.6444
+  type: 'test'
+  ...
+# Subtest: unsigned snapshot tamper or missing namespace rejects
+ok 6 - unsigned snapshot tamper or missing namespace rejects
+  ---
+  duration_ms: 0.8352
+  type: 'test'
+  ...
+# Subtest: unsigned snapshot tamper or missing targetType rejects
+ok 7 - unsigned snapshot tamper or missing targetType rejects
+  ---
+  duration_ms: 0.533
+  type: 'test'
+  ...
+# Subtest: unsigned snapshot tamper or missing from rejects
+ok 8 - unsigned snapshot tamper or missing from rejects
+  ---
+  duration_ms: 0.5387
+  type: 'test'
+  ...
+# Subtest: unsigned snapshot tamper or missing to rejects
+ok 9 - unsigned snapshot tamper or missing to rejects
+  ---
+  duration_ms: 0.7724
+  type: 'test'
+  ...
+# Subtest: unsigned snapshot tamper or missing observer rejects
+ok 10 - unsigned snapshot tamper or missing observer rejects
+  ---
+  duration_ms: 0.8361
+  type: 'test'
+  ...
+# Subtest: unsigned snapshot tamper or missing targets rejects
+ok 11 - unsigned snapshot tamper or missing targets rejects
+  ---
+  duration_ms: 0.58
+  type: 'test'
+  ...
+# Subtest: unsigned snapshot tamper or missing observations rejects
+ok 12 - unsigned snapshot tamper or missing observations rejects
+  ---
+  duration_ms: 0.3235
+  type: 'test'
+  ...
+# Subtest: unsigned snapshot tamper or missing signature rejects
+ok 13 - unsigned snapshot tamper or missing signature rejects
+  ---
+  duration_ms: 0.5426
+  type: 'test'
+  ...
+# Subtest: observer signature does not excuse invalid actor signature or changed action context
+ok 14 - observer signature does not excuse invalid actor signature or changed action context
+  ---
+  duration_ms: 43.9287
+  type: 'test'
+  ...
+# Subtest: public visibility and declared target membership required, no private data fallback
+ok 15 - public visibility and declared target membership required, no private data fallback
+  ---
+  duration_ms: 66.4015
+  type: 'test'
+  ...
+# Subtest: freshness evaluated at receipt time, future receipt or stale action cannot be smuggled into snapshot
+ok 16 - freshness evaluated at receipt time, future receipt or stale action cannot be smuggled into snapshot
+  ---
+  duration_ms: 21.6668
+  type: 'test'
+  ...
+# Subtest: exact duplicate transport observation cannot increase impact
+ok 17 - exact duplicate transport observation cannot increase impact
+  ---
+  duration_ms: 212.7659
+  type: 'test'
+  ...
+# Subtest: same event ID with conflicting receipt time is not silently reconciled
+ok 18 - same event ID with conflicting receipt time is not silently reconciled
+  ---
+  duration_ms: 79.7335
+  type: 'test'
+  ...
+# Subtest: latest clear suppresses earlier votes; repeated actor toggles do not inflate cluster size
+ok 19 - latest clear suppresses earlier votes; repeated actor toggles do not inflate cluster size
+  ---
+  duration_ms: 313.3201
+  type: 'test'
+  ...
+# Subtest: removing coordinated downvotes increases scores; counterfactual does not restore earlier actions
+ok 20 - removing coordinated downvotes increases scores; counterfactual does not restore earlier actions
+  ---
+  duration_ms: 434.9078
+  type: 'test'
+  ...
+# Subtest: one shared target or opposite directions cannot establish the repeated relation
+ok 21 - one shared target or opposite directions cannot establish the repeated relation
+  ---
+  duration_ms: 69.6847
+  type: 'test'
+  ...
+# Subtest: time-gap boundary 60 seconds qualifies, 60 seconds plus one does not
+ok 22 - time-gap boundary 60 seconds qualifies, 60 seconds plus one does not
+  ---
+  duration_ms: 444.1605
+  type: 'test'
+  ...
+# Subtest: valid signed empty window gives no pattern, not an assertion that users are human
+ok 23 - valid signed empty window gives no pattern, not an assertion that users are human
+  ---
+  duration_ms: 9.8502
+  type: 'test'
+  ...
+# Subtest: legitimate synchronized campaign has same evidence: no malicious-intent classification
+ok 24 - legitimate synchronized campaign has same evidence: no malicious-intent classification
+  ---
+  duration_ms: 74.1681
+  type: 'test'
+  ...
+# Subtest: raw view events and invented verified flag rejected even under observer signature
+ok 25 - raw view events and invented verified flag rejected even under observer signature
+  ---
+  duration_ms: 12.4609
+  type: 'test'
+  ...
+# Subtest: event/target budgets refuse whole analysis with no partial accusation
+ok 26 - event/target budgets refuse whole analysis with no partial accusation
+  ---
+  duration_ms: 15.7098
+  type: 'test'
+  ...
+# Subtest: actor and edge budgets explicitly refuse instead of silently truncating
+ok 27 - actor and edge budgets explicitly refuse instead of silently truncating
+  ---
+  duration_ms: 1785.4418
+  type: 'test'
+  ...
+# Subtest: worker and direct recomputation agree; host only allows bounded buffers
+ok 28 - worker and direct recomputation agree; host only allows bounded buffers
+  ---
+  duration_ms: 343.1555
+  type: 'test'
+  ...
+# Subtest: worker rejects malformed input and re-verifies full receipts in isolation
+ok 29 - worker rejects malformed input and re-verifies full receipts in isolation
+  ---
+  duration_ms: 449.4721
+  type: 'test'
+  ...
+# Subtest: no queue growth: BUSY on concurrent request, explicit cancel/deadline then recovery
+ok 30 - no queue growth: BUSY on concurrent request, explicit cancel/deadline then recovery
+  ---
+  duration_ms: 285.4436
+  type: 'test'
+  ...
+# Subtest: prototype is not imported by production ranking
+ok 31 - prototype is not imported by production ranking
+  ---
+  duration_ms: 0.9979
+  type: 'test'
+  ...
+# Subtest: more than eight disjoint candidate components refuses the entire result
+ok 32 - more than eight disjoint candidate components refuses the entire result
+  ---
+  duration_ms: 2423.1426
+  type: 'test'
+  ...
+# Subtest: opposite signed directions do not form a coordination edge with each other
+ok 33 - opposite signed directions do not form a coordination edge with each other
+  ---
+  duration_ms: 557.7093
+  type: 'test'
+  ...
+# Subtest: approved committed sample exports without mutating input and replays under the external pin
+ok 34 - approved committed sample exports without mutating input and replays under the external pin
+  ---
+  duration_ms: 318.6761
+  type: 'test'
+  ...
+# Subtest: empty approved window remains a signed sample, without a completeness or humanity claim
+ok 35 - empty approved window remains a signed sample, without a completeness or humanity claim
+  ---
+  duration_ms: 29.5865
+  type: 'test'
+  ...
+# Subtest: up, down and none transitions survive export as exact signed envelopes
+ok 36 - up, down and none transitions survive export as exact signed envelopes
+  ---
+  duration_ms: 80.3889
+  type: 'test'
+  ...
+# Subtest: both window endpoints are included, but one millisecond outside either endpoint rejects
+ok 37 - both window endpoints are included, but one millisecond outside either endpoint rejects
+  ---
+  duration_ms: 66.3818
+  type: 'test'
+  ...
+# Subtest: freshness is evaluated at stored receipt time, not merely at readAt
+ok 38 - freshness is evaluated at stored receipt time, not merely at readAt
+  ---
+  duration_ms: 25.0199
+  type: 'test'
+  ...
+# Subtest: ledger id must equal its signed envelope
+ok 39 - ledger id must equal its signed envelope
+  ---
+  duration_ms: 2.648
+  type: 'test'
+  ...
+# Subtest: ledger actor must equal its signed envelope
+ok 40 - ledger actor must equal its signed envelope
+  ---
+  duration_ms: 1.8625
+  type: 'test'
+  ...
+# Subtest: ledger kind must equal its signed envelope
+ok 41 - ledger kind must equal its signed envelope
+  ---
+  duration_ms: 1.5637
+  type: 'test'
+  ...
+# Subtest: ledger target_type must equal its signed envelope
+ok 42 - ledger target_type must equal its signed envelope
+  ---
+  duration_ms: 1.9542
+  type: 'test'
+  ...
+# Subtest: ledger target_id must equal its signed envelope
+ok 43 - ledger target_id must equal its signed envelope
+  ---
+  duration_ms: 1.9104
+  type: 'test'
+  ...
+# Subtest: invalid actor signature is rejected even with matching row columns
+ok 44 - invalid actor signature is rejected even with matching row columns
+  ---
+  duration_ms: 2.2771
+  type: 'test'
+  ...
+# Subtest: valid actor signature cannot authorize unapproved post
+ok 45 - valid actor signature cannot authorize unapproved post
+  ---
+  duration_ms: 10.3027
+  type: 'test'
+  ...
+# Subtest: valid actor signature cannot authorize other namespace
+ok 46 - valid actor signature cannot authorize other namespace
+  ---
+  duration_ms: 11.2867
+  type: 'test'
+  ...
+# Subtest: valid actor signature cannot authorize view action
+ok 47 - valid actor signature cannot authorize view action
+  ---
+  duration_ms: 11.9361
+  type: 'test'
+  ...
+# Subtest: valid actor signature cannot authorize comment reaction
+ok 48 - valid actor signature cannot authorize comment reaction
+  ---
+  duration_ms: 9.9441
+  type: 'test'
+  ...
+# Subtest: duplicate ledger IDs, including exact duplicates, refuse the whole export
+ok 49 - duplicate ledger IDs, including exact duplicates, refuse the whole export
+  ---
+  duration_ms: 140.0586
+  type: 'test'
+  ...
+# Subtest: post explicit isPrivate state prevents export
+ok 50 - post explicit isPrivate state prevents export
+  ---
+  duration_ms: 1.6508
+  type: 'test'
+  ...
+# Subtest: post explicit isEncrypted state prevents export
+ok 51 - post explicit isEncrypted state prevents export
+  ---
+  duration_ms: 1.3618
+  type: 'test'
+  ...
+# Subtest: post explicit deleted state prevents export
+ok 52 - post explicit deleted state prevents export
+  ---
+  duration_ms: 1.3196
+  type: 'test'
+  ...
+# Subtest: post explicit isDeleted state prevents export
+ok 53 - post explicit isDeleted state prevents export
+  ---
+  duration_ms: 1.4094
+  type: 'test'
+  ...
+# Subtest: post explicit encrypted state prevents export
+ok 54 - post explicit encrypted state prevents export
+  ---
+  duration_ms: 1.3498
+  type: 'test'
+  ...
+# Subtest: post missing, duplicated or malformed observed record prevents export
+ok 55 - post missing, duplicated or malformed observed record prevents export
+  ---
+  duration_ms: 4.3949
+  type: 'test'
+  ...
+# Subtest: post metadata identity and namespace must match the approved root
+ok 56 - post metadata identity and namespace must match the approved root
+  ---
+  duration_ms: 2.8043
+  type: 'test'
+  ...
+# Subtest: community explicit isPrivate state prevents export
+ok 57 - community explicit isPrivate state prevents export
+  ---
+  duration_ms: 1.6897
+  type: 'test'
+  ...
+# Subtest: community explicit isEncrypted state prevents export
+ok 58 - community explicit isEncrypted state prevents export
+  ---
+  duration_ms: 1.4812
+  type: 'test'
+  ...
+# Subtest: community explicit deleted state prevents export
+ok 59 - community explicit deleted state prevents export
+  ---
+  duration_ms: 1.4762
+  type: 'test'
+  ...
+# Subtest: community explicit isDeleted state prevents export
+ok 60 - community explicit isDeleted state prevents export
+  ---
+  duration_ms: 1.7264
+  type: 'test'
+  ...
+# Subtest: community explicit encrypted state prevents export
+ok 61 - community explicit encrypted state prevents export
+  ---
+  duration_ms: 1.606
+  type: 'test'
+  ...
+# Subtest: community missing, duplicated or malformed observed record prevents export
+ok 62 - community missing, duplicated or malformed observed record prevents export
+  ---
+  duration_ms: 4.4377
+  type: 'test'
+  ...
+# Subtest: community metadata identity and namespace must match the approved root
+ok 63 - community metadata identity and namespace must match the approved root
+  ---
+  duration_ms: 2.8637
+  type: 'test'
+  ...
+# Subtest: null privacy flags are acceptable only under an independently pinned policy
+ok 64 - null privacy flags are acceptable only under an independently pinned policy
+  ---
+  duration_ms: 81.3514
+  type: 'test'
+  ...
+# Subtest: review pins bind reviewed identity/linkage/privacy, excluding mutable raw-data hashes
+ok 65 - review pins bind reviewed identity/linkage/privacy, excluding mutable raw-data hashes
+  ---
+  duration_ms: 147.0818
+  type: 'test'
+  ...
+# Subtest: an independently approved but different review pin cannot authorize the current metadata
+ok 66 - an independently approved but different review pin cannot authorize the current metadata
+  ---
+  duration_ms: 2.92
+  type: 'test'
+  ...
+# Subtest: encrypted projection requires explicit boolean false; missing/string/numeric flags fail closed
+ok 67 - encrypted projection requires explicit boolean false; missing/string/numeric flags fail closed
+  ---
+  duration_ms: 13.0191
+  type: 'test'
+  ...
+# Subtest: post-to-community linkage and community root must exactly match policy
+ok 68 - post-to-community linkage and community root must exactly match policy
+  ---
+  duration_ms: 3.7558
+  type: 'test'
+  ...
+# Subtest: unrelated metadata and unprojected content are rejected, not carried into a bundle
+ok 69 - unrelated metadata and unprojected content are rejected, not carried into a bundle
+  ---
+  duration_ms: 2.6727
+  type: 'test'
+  ...
+# Subtest: policy cannot omit version, even if its altered bytes are independently pinned
+ok 70 - policy cannot omit version, even if its altered bytes are independently pinned
+  ---
+  duration_ms: 1.1693
+  type: 'test'
+  ...
+# Subtest: policy cannot omit scope, even if its altered bytes are independently pinned
+ok 71 - policy cannot omit scope, even if its altered bytes are independently pinned
+  ---
+  duration_ms: 1.1185
+  type: 'test'
+  ...
+# Subtest: policy cannot omit relayId, even if its altered bytes are independently pinned
+ok 72 - policy cannot omit relayId, even if its altered bytes are independently pinned
+  ---
+  duration_ms: 1.2679
+  type: 'test'
+  ...
+# Subtest: policy cannot omit namespace, even if its altered bytes are independently pinned
+ok 73 - policy cannot omit namespace, even if its altered bytes are independently pinned
+  ---
+  duration_ms: 1.134
+  type: 'test'
+  ...
+# Subtest: policy cannot omit observer, even if its altered bytes are independently pinned
+ok 74 - policy cannot omit observer, even if its altered bytes are independently pinned
+  ---
+  duration_ms: 1.1168
+  type: 'test'
+  ...
+# Subtest: policy cannot omit validFrom, even if its altered bytes are independently pinned
+ok 75 - policy cannot omit validFrom, even if its altered bytes are independently pinned
+  ---
+  duration_ms: 1.1938
+  type: 'test'
+  ...
+# Subtest: policy cannot omit validUntil, even if its altered bytes are independently pinned
+ok 76 - policy cannot omit validUntil, even if its altered bytes are independently pinned
+  ---
+  duration_ms: 1.1155
+  type: 'test'
+  ...
+# Subtest: policy cannot omit targets, even if its altered bytes are independently pinned
+ok 77 - policy cannot omit targets, even if its altered bytes are independently pinned
+  ---
+  duration_ms: 1.1734
+  type: 'test'
+  ...
+# Subtest: policy exact schema, identifiers, scope and validity limits are enforced after pin verification
+ok 78 - policy exact schema, identifiers, scope and validity limits are enforced after pin verification
+  ---
+  duration_ms: 18.5598
+  type: 'test'
+  ...
+# Subtest: the complete inclusive sample window must fall within the approved policy interval
+ok 79 - the complete inclusive sample window must fall within the approved policy interval
+  ---
+  duration_ms: 1.5142
+  type: 'test'
+  ...
+# Subtest: policy requires one through twenty approved targets, including valid empty samples
+ok 80 - policy requires one through twenty approved targets, including valid empty samples
+  ---
+  duration_ms: 16.4238
+  type: 'test'
+  ...
+# Subtest: no embedded policy or observer key can replace external authority
+ok 81 - no embedded policy or observer key can replace external authority
+  ---
+  duration_ms: 544.7946
+  type: 'test'
+  ...
+# Subtest: unsafe BIGINTs and malformed receipt/read clocks cannot round into an accepted window
+ok 82 - unsafe BIGINTs and malformed receipt/read clocks cannot round into an accepted window
+  ---
+  duration_ms: 19.6524
+  type: 'test'
+  ...
+# Subtest: malformed, oversized or non-string ledger payloads are rejected as a whole
+ok 83 - malformed, oversized or non-string ledger payloads are rejected as a whole
+  ---
+  duration_ms: 83.3983
+  type: 'test'
+  ...
+# Subtest: 1000 valid unique actions are admitted; 1001 refuses instead of truncating the sample
+ok 84 - 1000 valid unique actions are admitted; 1001 refuses instead of truncating the sample
+  ---
+  duration_ms: 17253.766
+  type: 'test'
+  ...
+# Subtest: unsigned bundle, policy, manifest and snapshot modifications all reject
+ok 85 - unsigned bundle, policy, manifest and snapshot modifications all reject
+  ---
+  duration_ms: 135.9928
+  type: 'test'
+  ...
+# Subtest: a valid observer signature does not authorize misleading coverage or a different relay
+ok 86 - a valid observer signature does not authorize misleading coverage or a different relay
+  ---
+  duration_ms: 578.9084
+  type: 'test'
+  ...
+# Subtest: re-signed metadata still undergoes privacy, digest shape and community-link validation
+ok 87 - re-signed metadata still undergoes privacy, digest shape and community-link validation
+  ---
+  duration_ms: 641.4743
+  type: 'test'
+  ...
+# Subtest: otherwise valid empty snapshots cannot bypass pinned post, target or namespace context
+ok 88 - otherwise valid empty snapshots cannot bypass pinned post, target or namespace context
+  ---
+  duration_ms: 104.9114
+  type: 'test'
+  ...
+# Subtest: valid outer observer signature cannot hide an invalid actor envelope or conflicting receipt
+ok 89 - valid outer observer signature cannot hide an invalid actor envelope or conflicting receipt
+  ---
+  duration_ms: 332.5085
+  type: 'test'
+  ...
+# Subtest: a self-signed replacement snapshot observer is not the policy authority
+ok 90 - a self-signed replacement snapshot observer is not the policy authority
+  ---
+  duration_ms: 186.008
+  type: 'test'
+  ...
+# Subtest: bounded file reader accepts exact bytes and rejects directories, oversized files and invalid bounds
+ok 91 - bounded file reader accepts exact bytes and rejects directories, oversized files and invalid bounds
+  ---
+  duration_ms: 10.6668
+  type: 'test'
+  ...
+# Subtest: JSON report preserves fractional timings and writes only exclusive completed artifacts
+ok 92 - JSON report preserves fractional timings and writes only exclusive completed artifacts
+  ---
+  duration_ms: 29.0305
+  type: 'test'
+  ...
+# Subtest: managed output refuses excess, stale, touched stale-name, unmanaged and locked evidence
+ok 93 - managed output refuses excess, stale, touched stale-name, unmanaged and locked evidence
+  ---
+  duration_ms: 136.1923
+  type: 'test'
+  ...
+# Subtest: output rejects symlink/junction directory and input symlink when platform permits creation
+ok 94 - output rejects symlink/junction directory and input symlink when platform permits creation
+  ---
+  duration_ms: 5.8702
+  type: 'test'
+  ...
+# Subtest: concurrent publishers refuse busy output without replacement or partial artifact
+ok 95 - concurrent publishers refuse busy output without replacement or partial artifact
+  ---
+  duration_ms: 9.8811
+  type: 'test'
+  ...
+# Subtest: connection config permits only explicit loopback or socket and rejects driver extensions before connecting
+ok 96 - connection config permits only explicit loopback or socket and rejects driver extensions before connecting
+  ---
+  duration_ms: 0.9643
+  type: 'test'
+  ...
+# Subtest: SQL adapter projection composes with signed export and fresh-worker replay (injected DB double)
+ok 97 - SQL adapter projection composes with signed export and fresh-worker replay (injected DB double)
+  ---
+  duration_ms: 748.7828
+  type: 'test'
+  ...
+# Subtest: actual CLI scenarios persist three reports, preserve timings and disclose campaign ambiguity
+ok 98 - actual CLI scenarios persist three reports, preserve timings and disclose campaign ambiguity
+  ---
+  duration_ms: 1924.7626
+  type: 'test'
+  ...
+# Subtest: CLI errors suppress input details and invalid policy authority blocks export before DB/key files
+ok 99 - CLI errors suppress input details and invalid policy authority blocks export before DB/key files
+  ---
+  duration_ms: 386.644
+  type: 'test'
+  ...
+# Subtest: one repeatable-read, consistent, read-only transaction uses DB time and rolls back
+ok 100 - one repeatable-read, consistent, read-only transaction uses DB time and rolls back
+  ---
+  duration_ms: 3.434
+  type: 'test'
+  ...
+# Subtest: fixed inclusive ten-minute bounds and approved IDs are parameters, never SQL text
+ok 101 - fixed inclusive ten-minute bounds and approved IDs are parameters, never SQL text
+  ---
+  duration_ms: 0.7045
+  type: 'test'
+  ...
+# Subtest: both boundaries are accepted and decimal BIGINT strings preserve exact values
+ok 102 - both boundaries are accepted and decimal BIGINT strings preserve exact values
+  ---
+  duration_ms: 0.4313
+  type: 'test'
+  ...
+# Subtest: payload and graph projections guard byte size, JSON validity and body transfer
+ok 103 - payload and graph projections guard byte size, JSON validity and body transfer
+  ---
+  duration_ms: 0.5182
+  type: 'test'
+  ...
+# Subtest: 1001 rows reject the whole capture without reading metadata
+ok 104 - 1001 rows reject the whole capture without reading metadata
+  ---
+  duration_ms: 0.7441
+  type: 'test'
+  ...
+# Subtest: 1000 distinct bounded rows are accepted
+ok 105 - 1000 distinct bounded rows are accepted
+  ---
+  duration_ms: 3.4774
+  type: 'test'
+  ...
+# Subtest: oversized or withheld payload is rejected (null)
+ok 106 - oversized or withheld payload is rejected (null)
+  ---
+  duration_ms: 0.3479
+  type: 'test'
+  ...
+# Subtest: oversized or withheld payload is rejected (2049)
+ok 107 - oversized or withheld payload is rejected (2049)
+  ---
+  duration_ms: 0.1875
+  type: 'test'
+  ...
+# Subtest: oversized or withheld payload is rejected (2050)
+ok 108 - oversized or withheld payload is rejected (2050)
+  ---
+  duration_ms: 0.4153
+  type: 'test'
+  ...
+# Subtest: bad database clock fails closed (null)
+ok 109 - bad database clock fails closed (null)
+  ---
+  duration_ms: 0.4941
+  type: 'test'
+  ...
+# Subtest: bad database clock fails closed (-1)
+ok 110 - bad database clock fails closed (-1)
+  ---
+  duration_ms: 0.2134
+  type: 'test'
+  ...
+# Subtest: bad database clock fails closed (599999)
+ok 111 - bad database clock fails closed (599999)
+  ---
+  duration_ms: 0.1626
+  type: 'test'
+  ...
+# Subtest: bad database clock fails closed (1.5)
+ok 112 - bad database clock fails closed (1.5)
+  ---
+  duration_ms: 0.1259
+  type: 'test'
+  ...
+# Subtest: bad database clock fails closed (9007199254740992)
+ok 113 - bad database clock fails closed (9007199254740992)
+  ---
+  duration_ms: 0.1832
+  type: 'test'
+  ...
+# Subtest: bad database clock fails closed (9007199254740993)
+ok 114 - bad database clock fails closed (9007199254740993)
+  ---
+  duration_ms: 0.151
+  type: 'test'
+  ...
+# Subtest: bad database clock fails closed (1e12)
+ok 115 - bad database clock fails closed (1e12)
+  ---
+  duration_ms: 0.1377
+  type: 'test'
+  ...
+# Subtest: bad database clock fails closed (secret)
+ok 116 - bad database clock fails closed (secret)
+  ---
+  duration_ms: 0.13
+  type: 'test'
+  ...
+# Subtest: outside-window, wrong type/target and duplicate ledger rows reject
+ok 117 - outside-window, wrong type/target and duplicate ledger rows reject
+  ---
+  duration_ms: 0.9498
+  type: 'test'
+  ...
+# Subtest: explicit privacy/deletion/encrypted markers survive for exporter rejection
+ok 118 - explicit privacy/deletion/encrypted markers survive for exporter rejection
+  ---
+  duration_ms: 0.394
+  type: 'test'
+  ...
+# Subtest: JSON_CONTAINS_PATH as a bigNumberStrings string ("0"/"1") is accepted
+ok 119 - JSON_CONTAINS_PATH as a bigNumberStrings string ("0"/"1") is accepted
+  ---
+  duration_ms: 0.5506
+  type: 'test'
+  ...
+# Subtest: malformed metadata types, invalid/oversized JSON and unknown roots reject
+ok 120 - malformed metadata types, invalid/oversized JSON and unknown roots reject
+  ---
+  duration_ms: 2.6347
+  type: 'test'
+  ...
+# Subtest: metadata missing, duplicated or over 40 rows rejects
+ok 121 - metadata missing, duplicated or over 40 rows rejects
+  ---
+  duration_ms: 0.5188
+  type: 'test'
+  ...
+# Subtest: duplicate community is queried once for multiple approved posts
+ok 122 - duplicate community is queried once for multiple approved posts
+  ---
+  duration_ms: 0.2725
+  type: 'test'
+  ...
+# Subtest: malformed policy fails before any SQL
+ok 123 - malformed policy fails before any SQL
+  ---
+  duration_ms: 0.653
+  type: 'test'
+  ...
+# Subtest: setup/query errors always attempt rollback and hide DB details
+ok 124 - setup/query errors always attempt rollback and hide DB details
+  ---
+  duration_ms: 0.7011
+  type: 'test'
+  ...
+# Subtest: driver timeout attempts rollback; even a database error with a known code is sanitized
+ok 125 - driver timeout attempts rollback; even a database error with a known code is sanitized
+  ---
+  duration_ms: 0.3835
+  type: 'test'
+  ...
+# Subtest: failed rollback never returns a successful capture or raw database message
+ok 126 - failed rollback never returns a successful capture or raw database message
+  ---
+  duration_ms: 0.2811
+  type: 'test'
+  ...
+# Subtest: controlled normal, coordinated and legitimate cases all replay against the frozen analyzer
+ok 127 - controlled normal, coordinated and legitimate cases all replay against the frozen analyzer
+  ---
+  duration_ms: 1524.7338
+  type: 'test'
+  ...
+# Subtest: untrusted policy pin, changed export and expired authority cannot produce a receipt
+ok 128 - untrusted policy pin, changed export and expired authority cannot produce a receipt
+  ---
+  duration_ms: 1.8173
+  type: 'test'
+  ...
+# Subtest: dense valid evidence hitting frozen graph bounds remains cannot-establish, not no-pattern
+ok 129 - dense valid evidence hitting frozen graph bounds remains cannot-establish, not no-pattern
+  ---
+  duration_ms: 806.8296
+  type: 'test'
+  ...
+# Subtest: one active pilot, explicit cancellation and deadline preserve recovery without queued jobs
+ok 130 - one active pilot, explicit cancellation and deadline preserve recovery without queued jobs
+  ---
+  duration_ms: 714.3187
+  type: 'test'
+  ...
+# Subtest: pre-cancelled or invalid worker options return bounded failures
+ok 131 - pre-cancelled or invalid worker options return bounded failures
+  ---
+  duration_ms: 0.6846
+  type: 'test'
+  ...
+# Subtest: synthetic ledger actions are deterministic and scenario intent never enters snapshot fields
+ok 132 - synthetic ledger actions are deterministic and scenario intent never enters snapshot fields
+  ---
+  duration_ms: 1122.0883
+  type: 'test'
+  ...
+1..132
+# tests 132
+# suites 0
+# pass 132
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 38603.4375
