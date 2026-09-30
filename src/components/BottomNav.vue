@@ -220,6 +220,97 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* Base bar styles live here (not in HomePage.css) — scoped parent styles
+   don't reach into this component's elements. */
+.bottom-nav-footer { --background: transparent; --border: none; }
+ion-footer.bottom-nav-footer {
+  max-height: 200px;
+  overflow: hidden;
+  transition: max-height 240ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+ion-footer.bottom-nav-footer.footer-hidden { max-height: 0; }
+@media (min-width: 768px) {
+  .bottom-nav-footer { display: none !important; }
+}
+
+.bottom-nav {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-around;
+  background: rgba(8, 8, 18, 0.72);
+  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0 0 env(safe-area-inset-bottom);
+  pointer-events: all;
+}
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+  padding: 11px 4px 9px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+  transition: color 140ms;
+  color: rgba(255, 255, 255, 0.45);
+  font: inherit;
+}
+.nav-item:hover { color: rgba(255, 255, 255, 0.75); background: rgba(255, 255, 255, 0.04); }
+.nav-item:active { opacity: 0.6; background: transparent; }
+.nav-item.active { color: #a78bfa; }
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 32px; height: 2.5px;
+  border-radius: 0 0 3px 3px;
+  background: linear-gradient(90deg, #818cf8, #a78bfa);
+}
+.nav-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.nav-icon-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px; height: 24px;
+}
+.nav-icon-wrap :deep(svg),
+.nav-icon-wrap :deep(.nav-svg) {
+  width: 24px; height: 24px;
+  display: block;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+.nav-badge {
+  position: absolute;
+  top: -4px; right: -10px;
+  background: #f59e0b;
+  color: #1a1200;
+  font-size: 9px; font-weight: 900;
+  min-width: 16px; height: 16px;
+  border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 4px;
+  border: 2px solid var(--app-bg-elevated, #0e0e1a);
+  pointer-events: none;
+}
 .nav-edit-hint {
   display: flex;
   align-items: center;
