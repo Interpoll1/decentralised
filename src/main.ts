@@ -1,6 +1,7 @@
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import { IonicVue } from '@ionic/vue';
+import { installToastDefaults } from './utils/toastDefaults';
 import '@ionic/vue/css/core.css';
 import '@ionic/vue/css/normalize.css';
 import '@ionic/vue/css/structure.css';
@@ -98,6 +99,8 @@ if (!localStorage.getItem('interpoll_migration_v2')) {
   localStorage.removeItem('seen-poll-ids');
   localStorage.setItem('interpoll_migration_v2', '1');
 }
+
+installToastDefaults();
 
 const app = createApp(App)
   .use(IonicVue)
