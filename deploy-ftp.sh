@@ -82,6 +82,8 @@ set net:reconnect-interval-base 5
 set ftp:ssl-force false
 set mirror:parallel-transfer-count 4
 set xfer:clobber on
+set cmd:fail-exit yes
+set ftp:ssl-allow yes
 
 lcd "$DIST"
 cd "$REMOTE_DIR"
