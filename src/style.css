@@ -795,7 +795,6 @@ ion-menu ion-content {
   background: transparent !important;
 }
 
-ion-toast::part(container),
 ion-alert .alert-wrapper,
 ion-action-sheet .action-sheet-wrapper {
   background: var(--app-surface-strong);
@@ -959,3 +958,41 @@ p {
     box-shadow: none !important;
   }
 }
+/* ── Toasts ─────────────────────────────────────────────────────────────── */
+ion-toast.app-toast {
+  --background: var(--app-surface-strong, #1c1a2e);
+  --color: var(--app-text, #ececf1);
+  --border-radius: 12px;
+  --box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
+  --min-width: 0;
+  --width: auto;
+  --max-width: min(420px, calc(100vw - 32px));
+  --start: 0;
+  --end: 0;
+  --button-color: var(--ion-color-primary, #818cf8);
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+}
+ion-toast.app-toast::part(container) {
+  padding: 2px 6px 2px 12px;
+  min-height: 44px;
+  border: 1px solid var(--glass-border-top, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+}
+ion-toast.app-toast::part(message) {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  padding: 10px 8px 10px 0;
+}
+ion-toast.app-toast::part(icon) { font-size: 18px; margin-inline-end: 8px; }
+ion-toast.app-toast::part(button) { font-size: 13px; font-weight: 600; text-transform: none; }
+ion-toast.app-toast--success::part(icon) { color: #22c55e; }
+ion-toast.app-toast--warning::part(icon) { color: #f59e0b; }
+ion-toast.app-toast--danger::part(icon)  { color: #ef4444; }
+ion-toast.app-toast--primary::part(icon),
+ion-toast.app-toast--medium::part(icon)  { color: var(--ion-color-primary, #818cf8); }
