@@ -399,7 +399,6 @@
     <BottomNav
       :active-tab="activeTab"
       :total-unread="totalUnread"
-      :hidden="isTabBarHidden"
       @update:active-tab="activeTab = $event"
     />
 
@@ -501,7 +500,6 @@ const communityFilter    = ref('all');
 const isLoadingPosts     = ref(false);
 const voteVersion        = ref(0);
 const isHeaderHidden     = ref(false);
-const isTabBarHidden     = ref(false);
 const warmupComplete     = ref(false);
 const showMoreCategories = ref(false);
 const relaySheetOpen     = ref(false);
@@ -954,12 +952,10 @@ function handleScroll(event: CustomEvent) {
   if (scrollTop > lastScrollTop && scrollTop > scrollThreshold) {
     if (!isHeaderHidden.value) {
       isHeaderHidden.value = true;
-      isTabBarHidden.value = true;
     }
   } else if (scrollTop < lastScrollTop) {
     if (isHeaderHidden.value) {
       isHeaderHidden.value = false;
-      isTabBarHidden.value = false;
     }
   }
   lastScrollTop = scrollTop;
