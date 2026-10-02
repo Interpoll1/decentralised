@@ -58,9 +58,29 @@
          page is blank. Inline-styled because no CSS has loaded yet. -->
     <div id="app">
       <div id="boot-splash" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#141420;color:#c8c8d8;font:15px system-ui,-apple-system,sans-serif;text-align:center;padding:16px">
-        <style>@keyframes boot-spin{to{transform:rotate(360deg)}}html:not(.dark) #boot-splash{background:#f6f6fa!important;color:#44445a!important}</style>
-        <div style="width:28px;height:28px;border:3px solid rgba(128,128,160,.3);border-top-color:#6366f1;border-radius:50%;animation:boot-spin .8s linear infinite"></div>
-        <div>Loading InterPoll…</div>
+        <style>
+          html:not(.dark) #boot-splash{background:#f6f6fa!important;color:#44445a!important}
+          #boot-splash .bs-logo{font:400 56px/1 "Grand Hotel",cursive,system-ui;background:linear-gradient(160deg,#fff,#a5a0ff);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+          html:not(.dark) #boot-splash .bs-logo{background:linear-gradient(160deg,#4f46e5,#7c3aed);-webkit-background-clip:text;background-clip:text}
+          #boot-splash .bs-net line{stroke:#6366f1;stroke-opacity:.25;stroke-width:1}
+          #boot-splash .bs-net circle{fill:#818cf8;animation:bs-pulse 2.4s ease-in-out infinite}
+          #boot-splash .bs-net circle:nth-of-type(2){animation-delay:.3s}#boot-splash .bs-net circle:nth-of-type(3){animation-delay:.6s}
+          #boot-splash .bs-net circle:nth-of-type(4){animation-delay:.9s}#boot-splash .bs-net circle:nth-of-type(5){animation-delay:1.2s}
+          #boot-splash .bs-net circle:nth-of-type(6){animation-delay:1.5s}
+          @keyframes bs-pulse{0%,100%{opacity:.25;transform:scale(.7)}50%{opacity:1;transform:scale(1.25)}}
+          #boot-splash .bs-net circle{transform-box:fill-box;transform-origin:center}
+          @media (prefers-reduced-motion:reduce){#boot-splash .bs-net circle{animation:none;opacity:.7}}
+        </style>
+        <div class="bs-logo">Interpoll</div>
+        <svg class="bs-net" width="220" height="70" viewBox="0 0 220 70" aria-hidden="true">
+          <line x1="20" y1="35" x2="70" y2="15"/><line x1="20" y1="35" x2="70" y2="55"/>
+          <line x1="70" y1="15" x2="125" y2="35"/><line x1="70" y1="55" x2="125" y2="35"/>
+          <line x1="125" y1="35" x2="175" y2="15"/><line x1="125" y1="35" x2="175" y2="55"/>
+          <line x1="175" y1="15" x2="200" y2="35"/><line x1="175" y1="55" x2="200" y2="35"/>
+          <circle cx="20" cy="35" r="5"/><circle cx="70" cy="15" r="5"/><circle cx="70" cy="55" r="5"/>
+          <circle cx="125" cy="35" r="6"/><circle cx="175" cy="15" r="5"/><circle cx="175" cy="55" r="5"/>
+        </svg>
+        <div style="opacity:.75">Connecting to peers…</div>
         <div id="boot-slow" style="display:none;max-width:320px;font-size:13px;opacity:.8">
           This is taking longer than usual.
           <a href="" onclick="location.reload();return false" style="color:#818cf8">Reload</a>

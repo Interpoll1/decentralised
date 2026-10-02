@@ -41,6 +41,8 @@ export interface Post {
   content: string;
   imageIPFS?: string;
   imageThumbnail?: string;
+  /** Comma-separated cids of ALL attached images (first == imageIPFS). Absent for single-image/legacy posts. */
+  imageCids?: string;
   createdAt: number;
   upvotes: number;
   downvotes: number;
@@ -184,6 +186,9 @@ async function loadPostIdsInBatches(
 // so every call returned 401 into a swallowed warning — and it paid for a
 // proof-of-work seal on the publish path to do it.
 
+/** Max images attachable to one post. */
+export const MAX_POST_IMAGES = 8;
+
 export class PostService {
   /**
    * Release cached post data under memory pressure. Called by the memory watchdog;
@@ -239,18 +244,22 @@ export class PostService {
 
   static async createPost(
     post: Omit<Post, 'id' | 'createdAt' | 'upvotes' | 'downvotes' | 'score' | 'commentCount'>,
-    imageFile?: File,
+    imageFiles?: File | File[],
     preGeneratedId?: string
   ): Promise<Post> {
     // Fail fast, before any upload work, if this device is posting too fast.
     HumanGateService.assertRateLimit('post');
 
+    const files = (Array.isArray(imageFiles) ? imageFiles : imageFiles ? [imageFiles] : []).slice(0, MAX_POST_IMAGES);
     let imageData;
-    if (imageFile) {
+    let extraCids = '';
+    if (files.length) {
       // Dynamic import: ipfs-core is large. Load it only when user attaches an
       // image so vendor-ipfs.js stays out of the critical bundle entirely.
       const { IPFSService } = await import('./ipfsService');
-      imageData = await IPFSService.uploadImage(imageFile);
+      const uploaded = await Promise.all(files.map(f => IPFSService.uploadImage(f)));
+      imageData = uploaded[0];
+      if (uploaded.length > 1) extraCids = uploaded.map(u => u.cid).join(',');
     }
 
     const newPost: Post = {
@@ -263,6 +272,7 @@ export class PostService {
       content: post.content || '',
       imageIPFS: imageData?.cid || '',
       imageThumbnail: imageData?.thumbnail || '',
+      ...(extraCids ? { imageCids: extraCids } : {}),
       createdAt: Date.now(),
       upvotes: 0,
       downvotes: 0,
@@ -304,6 +314,7 @@ export class PostService {
     // Gun can't store arrays — serialise tags as a comma string
     if (newPost.imageIPFS)        cleanPost.imageIPFS        = newPost.imageIPFS;
     if (newPost.imageThumbnail)   cleanPost.imageThumbnail   = newPost.imageThumbnail;
+    if (newPost.imageCids)        cleanPost.imageCids        = newPost.imageCids;
     if (newPost.category)         cleanPost.category         = newPost.category;
     if (newPost.tags?.length)     cleanPost.tags             = newPost.tags.join(',');
     if (newPost.sentiment)        cleanPost.sentiment        = newPost.sentiment;
@@ -352,6 +363,7 @@ export class PostService {
           contentSignature: newPost.contentSignature,
           imageIPFS: newPost.imageIPFS,
           imageThumbnail: newPost.imageThumbnail,
+          imageCids: newPost.imageCids || '',
         };
         const encryptedContent = await EncryptionService.encrypt(JSON.stringify(encryptableData), aesKey);
         const authTag = await EncryptionService.generateAuthTag(aesKey, newPost.id, String(newPost.createdAt), newPost.authorId);
@@ -368,6 +380,7 @@ export class PostService {
         cleanPost.contentSignature = '';
         cleanPost.imageIPFS = '';
         cleanPost.imageThumbnail = '';
+        delete cleanPost.imageCids;
 
         newPost.isEncrypted = true;
         newPost.encryptedContent = encryptedContent;
@@ -381,6 +394,7 @@ export class PostService {
         newPost.contentSignature = '';
         newPost.imageIPFS = '';
         newPost.imageThumbnail = '';
+        newPost.imageCids = '';
       } catch (err) {
         throw new Error(`Failed to encrypt post for community ${post.communityId}: ${err}`);
       }
@@ -952,6 +966,7 @@ export class PostService {
         contentSignature:   typeof raw.contentSignature   === 'string'  ? raw.contentSignature   : post.contentSignature,
         imageIPFS:          typeof raw.imageIPFS          === 'string'  ? raw.imageIPFS          : '',
         imageThumbnail:     typeof raw.imageThumbnail     === 'string'  ? raw.imageThumbnail     : '',
+        imageCids:          typeof raw.imageCids          === 'string'  ? raw.imageCids          : '',
       };
       if (post.authTag) {
         const valid = await EncryptionService.verifyAuthTag(aesKey, post.authTag, post.id, String(post.createdAt), decrypted.authorId);
@@ -1036,6 +1051,7 @@ export class PostService {
     };
     if (post.imageIPFS) rec.imageIPFS = post.imageIPFS;
     if (post.imageThumbnail) rec.imageThumbnail = post.imageThumbnail;
+    if (post.imageCids) rec.imageCids = post.imageCids;
     if (post.authorPubkey) rec.authorPubkey = post.authorPubkey;
     if (post.contentSignature) rec.contentSignature = post.contentSignature;
     if (post.canonVersion) rec.canonVersion = post.canonVersion;

@@ -142,13 +142,24 @@
 
             <div class="toggle-row">
               <div>
-                <div class="toggle-label">Bottom bar</div>
+                <div class="toggle-label">Show bottom bar</div>
+                <div class="toggle-sub">Mobile only. Turn off to hide the tab bar on the home feed.</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" :checked="navStore.enabled" @change="navStore.setEnabled(($event.target as HTMLInputElement).checked)" />
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+
+            <div class="toggle-row">
+              <div>
+                <div class="toggle-label">Bottom bar items</div>
                 <div class="toggle-sub">
                   Reorder, add or remove items, and pick the tab the app opens on.
                   You can also long-press the bar itself.
                 </div>
               </div>
-              <button class="settings-inline-btn" @click="openNavCustomiser">Customise</button>
+              <button class="settings-inline-btn" :disabled="!navStore.enabled" @click="openNavCustomiser">Customise</button>
             </div>
 
             <div class="toggle-row">

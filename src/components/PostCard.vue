@@ -62,8 +62,14 @@
 
       <!-- Media preview -->
       <div v-if="post.imageIPFS || post.imageThumbnail || post.videoCID" class="post-media">
+        <PostImageGallery
+          v-if="postCids.length > 1"
+          :cids="postCids"
+          :primary-src="post.imageThumbnail"
+          :alt="post.title"
+        />
         <img
-          v-if="post.imageThumbnail || post.imageIPFS"
+          v-else-if="post.imageThumbnail || post.imageIPFS"
           :src="post.imageThumbnail || `https://ipfs.filebase.io/ipfs/${post.imageIPFS}`"
           :alt="post.title"
           class="post-media-img"
@@ -193,6 +199,7 @@ import { peopleOutline, warningOutline, shieldCheckmarkOutline, heart, heartOutl
 import { defineAsyncComponent } from 'vue';
 import type { Post } from '../services/postService';
 import type { FilterAction } from '../services/moderationService';
+import PostImageGallery from './PostImageGallery.vue';
 import { generatePseudonym } from '../utils/pseudonym';
 import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 import { useUserStore } from '../stores/userStore';
@@ -222,6 +229,7 @@ defineEmits(['click', 'upvote', 'downvote', 'comments', 'moderation-submit', 'ta
 // ── State ──────────────────────────────────────────────────────────────────
 const revealed     = ref(false);
 const truncated    = ref(true);
+const postCids     = computed(() => (props.post.imageCids || '').split(',').filter(Boolean));
 const nostrCopied  = ref(false);
 
 const userStore     = useUserStore();

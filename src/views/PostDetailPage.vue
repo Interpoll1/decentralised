@@ -64,7 +64,10 @@
             <div v-if="post.content" class="post-content" v-html="autoLink(post.content)"></div>
 
             <!-- Post Image -->
-            <div v-if="post.imageThumbnail || post.imageIPFS" class="post-image">
+            <div v-if="postCids.length > 1" class="post-image">
+              <PostImageGallery :cids="postCids" :primary-src="post.imageThumbnail" :alt="post.title" full />
+            </div>
+            <div v-else-if="post.imageThumbnail || post.imageIPFS" class="post-image">
               <img
                 :src="fullImageSrc || post.imageThumbnail || getIPFSUrl(post.imageIPFS)"
                 :alt="post.title"
@@ -302,6 +305,7 @@ import { ModerationService, moderationVersion } from '../services/moderationServ
 import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 
 import { IPFSService } from '../services/ipfsService';
+import PostImageGallery from '../components/PostImageGallery.vue';
 import { checkContent } from '../utils/contentGuard';
 import { shareLink } from '../composables/useShare';
 
@@ -317,6 +321,7 @@ const userStore = useUserStore();
 // `currentPost` on every vote reconciliation and graph update, and a one-time
 // copy left this page showing counts frozen at load time.
 const post = computed<Post | null>(() => postStore.currentPost);
+const postCids = computed(() => (post.value?.imageCids || '').split(',').filter(Boolean));
 const isLoading = ref(true);
 const newCommentText = ref('');
 const voteVersion = ref(0);

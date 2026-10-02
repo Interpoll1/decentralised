@@ -397,6 +397,7 @@
 
     <!-- Bottom Nav (mobile only) — user-customisable, see stores/navStore.ts -->
     <BottomNav
+      v-if="navStore.enabled"
       :active-tab="activeTab"
       :total-unread="totalUnread"
       @update:active-tab="activeTab = $event"

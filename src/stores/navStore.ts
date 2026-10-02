@@ -44,6 +44,7 @@ const MIN_VISIBLE = 3;
 
 const ORDER_KEY   = 'interpoll_nav_order';
 const DEFAULT_KEY = 'interpoll_nav_default_tab';
+const ENABLED_KEY = 'interpoll_nav_enabled';
 
 function readOrder(): string[] {
   try {
@@ -70,12 +71,22 @@ function readDefaultTab(): string {
   }
 }
 
+function readEnabled(): boolean {
+  try {
+    return localStorage.getItem(ENABLED_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
+
 export const useNavStore = defineStore('nav', {
   state: () => ({
     /** Ordered ids of the visible bottom-nav items. */
     order: readOrder() as string[],
     /** Which tab HomePage opens on when no ?tab= is present. */
     defaultTab: readDefaultTab() as string,
+    /** Whether the bar is shown at all (user toggle in Settings). */
+    enabled: readEnabled(),
     /** True while the user is rearranging the nav. */
     editing: false,
   }),
@@ -104,11 +115,18 @@ export const useNavStore = defineStore('nav', {
       try {
         localStorage.setItem(ORDER_KEY, JSON.stringify(this.order));
         localStorage.setItem(DEFAULT_KEY, this.defaultTab);
+        localStorage.setItem(ENABLED_KEY, this.enabled ? '1' : '0');
       } catch { /* private mode / quota — preference is best-effort */ }
     },
 
     setEditing(on: boolean) {
       this.editing = on;
+    },
+
+    setEnabled(on: boolean) {
+      this.enabled = on;
+      if (!on) this.editing = false;
+      this.persist();
     },
 
     /** Move the item at `from` to index `to`, clamped to the visible range. */
@@ -148,6 +166,7 @@ export const useNavStore = defineStore('nav', {
     reset() {
       this.order      = [...DEFAULT_NAV_ORDER];
       this.defaultTab = 'home';
+      this.enabled    = true;
       this.persist();
     },
   },

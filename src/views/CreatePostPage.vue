@@ -83,22 +83,23 @@
               <div class="media-header-left">
                 <div class="media-icon-wrap img-icon"><ion-icon :icon="imageOutline"></ion-icon></div>
                 <div>
-                  <p class="media-title">Image <span class="optional">optional</span></p>
-                  <p class="media-sub">Uploaded at full original quality — no compression</p>
+                  <p class="media-title">Images <span class="optional">optional · up to {{ MAX_IMAGES }}</span></p>
+                  <p class="media-sub">Originals stay at full quality on your device</p>
                 </div>
               </div>
-              <button v-if="!imagePreview" class="pill-btn accent-sm" @click="selectImage">
-                <ion-icon :icon="imageOutline"></ion-icon> Add Image
+              <button v-if="images.length < MAX_IMAGES" class="pill-btn accent-sm" @click="selectImage">
+                <ion-icon :icon="imageOutline"></ion-icon> {{ images.length ? `Add more (${images.length}/${MAX_IMAGES})` : 'Add Images' }}
               </button>
             </div>
-            <div v-if="imagePreview" class="preview-wrap">
-              <img :src="imagePreview" class="image-preview" :alt="title" />
-              <button class="remove-btn" @click="removeImage" title="Remove">
-                <ion-icon :icon="closeCircle"></ion-icon>
-              </button>
-              <div class="image-badges">
-                <span class="img-badge">{{ imageSize }}</span>
-                <span v-if="isCompressing" class="img-badge compressing">Loading…</span>
+            <div v-if="images.length" class="preview-grid">
+              <div v-for="(img, i) in images" :key="img.preview" class="preview-wrap">
+                <img :src="img.preview" class="image-preview" :alt="title" />
+                <button class="remove-btn" @click="removeImage(i)" title="Remove">
+                  <ion-icon :icon="closeCircle"></ion-icon>
+                </button>
+                <div class="image-badges">
+                  <span class="img-badge">{{ sizeLabel(img.file) }}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -127,15 +128,15 @@
           </div>
 
           <!-- Image info -->
-          <div v-if="imageFile" class="info-box">
+          <div v-if="images.length" class="info-box">
             <ion-icon :icon="informationCircle"></ion-icon>
-            <p>Image is kept at its original resolution and quality on your device. A small preview thumbnail (~40 KB) is synced over GunDB so other peers can see it in the feed.</p>
+            <p>Image is kept at its original resolution and quality on your device. A sharp preview (up to 900 px) is synced over GunDB so other peers can see it in the feed.</p>
           </div>
 
         </div>
       </div>
 
-      <input ref="fileInput" type="file" accept="image/*" class="hidden-input" @change="handleImageSelect" />
+      <input ref="fileInput" type="file" accept="image/*" multiple class="hidden-input" @change="handleImageSelect" />
     </ion-content>
   </ion-page>
 </template>
@@ -229,7 +230,11 @@ ion-content { --background: transparent; }
 .media-sub { font-size: 12px; color: var(--app-text-muted); margin: 0; line-height: 1.4; }
 
 .preview-wrap { position: relative; margin: 0 14px 14px; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,.08); }
+.preview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; padding: 0 14px 14px; }
 .image-preview { width: 100%; max-height: 320px; object-fit: cover; display: block; }
+.preview-grid .preview-wrap { margin: 0; }
+.preview-grid .image-preview { height: 140px; max-height: none; border-radius: 10px; }
+.preview-grid .image-badges { margin: 6px; position: absolute; left: 0; bottom: 0; }
 .remove-btn { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; border-radius: 50%; border: none; background: rgba(0,0,0,.55); backdrop-filter: blur(6px); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; transition: background 160ms; }
 .remove-btn:hover { background: rgba(239,68,68,.7); }
 .image-badges { display: flex; gap: 6px; margin: 8px 14px 14px; }
@@ -285,6 +290,7 @@ import { HumanGateError } from '../services/humanGateService';
 import type { VideoMeta } from '../services/videoService';
 import { useCommunityStore } from '../stores/communityStore';
 import { usePostStore } from '../stores/postStore';
+import { MAX_POST_IMAGES } from '../services/postService';
 import { checkContent } from '../utils/contentGuard';
 
 const route = useRoute();
@@ -304,8 +310,8 @@ function avatarTone(id: string) {
 }
 const title = ref('');
 const content = ref('');
-const imageFile = ref<File | null>(null);
-const imagePreview = ref<string | null>(null);
+const MAX_IMAGES = MAX_POST_IMAGES;
+const images = ref<{ file: File; preview: string }[]>([]);
 const isSubmitting = ref(false);
 const isSubmittingSlow = ref(false);
 let submitSlowTimer: ReturnType<typeof setTimeout> | null = null;
@@ -322,7 +328,6 @@ watch(isSubmitting, (submitting) => {
     }, 3000);
   }
 });
-const isCompressing = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
 
 // ── Video attachment state ──────────────────────────────────────────────────
@@ -366,12 +371,10 @@ onMounted(async () => {
   }
 });
 
-const imageSize = computed(() => {
-  if (!imageFile.value) return '';
-  const kb = imageFile.value.size / 1024;
-  if (kb < 1024) return `${kb.toFixed(0)} KB`;
-  return `${(kb / 1024).toFixed(1)} MB`;
-});
+function sizeLabel(file: File) {
+  const kb = file.size / 1024;
+  return kb < 1024 ? `${kb.toFixed(0)} KB` : `${(kb / 1024).toFixed(1)} MB`;
+}
 
 const joinedCommunities = computed(() => {
   const joined = communityStore.communities.filter(c => communityStore.isJoined(c.id));
@@ -389,41 +392,39 @@ const selectImage = () => {
   fileInput.value?.click();
 };
 
-const handleImageSelect = async (event: Event) => {
-  const target = event.target as HTMLInputElement;
-  const file = target.files?.[0];
-  
-  if (!file) return;
-
-  // Check file size — images are stored uncompressed, so cap the raw file
-  if (file.size > 10 * 1024 * 1024) {
-    const toast = await toastController.create({
-      message: 'Image too large! Maximum 10 MB',
-      duration: 3000,
-      color: 'danger'
-    });
-    await toast.present();
-    return;
-  }
-
-  isCompressing.value = true;
-  imageFile.value = file;
-
-  // Create preview
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    imagePreview.value = e.target?.result as string;
-    isCompressing.value = false;
-  };
-  reader.readAsDataURL(file);
+const toastWarn = async (message: string) => {
+  const toast = await toastController.create({ message, duration: 3000, color: 'danger' });
+  await toast.present();
 };
 
-const removeImage = () => {
-  imageFile.value = null;
-  imagePreview.value = null;
-  if (fileInput.value) {
-    fileInput.value.value = '';
+const handleImageSelect = async (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  const picked = Array.from(target.files || []);
+  target.value = '';
+  if (!picked.length) return;
+
+  const room = MAX_IMAGES - images.value.length;
+  if (picked.length > room) await toastWarn(`Max ${MAX_IMAGES} images — extra ones skipped`);
+
+  for (const file of picked.slice(0, Math.max(room, 0))) {
+    // Images are stored uncompressed, so cap the raw file
+    if (file.size > 10 * 1024 * 1024) {
+      await toastWarn(`${file.name}: too large (max 10 MB)`);
+      continue;
+    }
+    const preview = await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target?.result as string);
+      reader.readAsDataURL(file);
+    });
+    images.value.push({ file, preview });
   }
+};
+
+const removeImage = (index?: number) => {
+  if (index === undefined) images.value = [];
+  else images.value.splice(index, 1);
+  if (fileInput.value) fileInput.value.value = '';
 };
 
 const { honeypot: gateHoneypot, check: gateCheck, reset: gateReset } = useHumanGate('post');
@@ -463,7 +464,7 @@ const submitPost = async () => {
       communityId: selectedCommunity.value,
       title:       title.value.trim(),
       content:     content.value.trim(),
-      imageFile:   imageFile.value || undefined,
+      imageFiles:  images.value.map(i => i.file),
       ...(videoCID.value ? {
         videoCID:          videoCID.value,
         videoThumbnailCID: videoThumbnailCID.value || undefined,

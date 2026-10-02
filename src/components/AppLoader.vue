@@ -5,6 +5,7 @@
       <div class="ip-logo">Interpoll</div>
       <div class="ip-tag">peer-to-peer · decentralized</div>
       <div class="ip-bar-wrap"><div class="ip-bar" /></div>
+      <div class="ip-tip" :key="tipIdx">{{ TIPS[tipIdx] }}</div>
       <div class="ip-status-wrap">
         <div class="ip-dot" />
         <div class="ip-status">
@@ -19,6 +20,18 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+
+// Rotating facts so a slow load is worth watching, not just waiting on.
+const TIPS = [
+  'No ads. No tracking. No algorithm deciding what you see.',
+  'Every vote is signed on your device and can’t be forged by a relay.',
+  'Polls and posts live across peers — no single company owns them.',
+  'Your identity is a key you hold. Back it up in Settings.',
+  'Anyone can run a relay. Add yours under Network.',
+  'Verify any vote yourself with its receipt code in the Chain Explorer.',
+]
+const tipIdx = ref(Math.floor(Math.random() * TIPS.length))
+let tipTimer: ReturnType<typeof setInterval>
 
 const COUNTS = [5, 7, 8, 7, 5]
 const NR = 8
@@ -133,10 +146,12 @@ onMounted(() => {
   window.addEventListener('resize', resize)
   removeResize = () => window.removeEventListener('resize', resize)
   draw(ctx, canvas.width, canvas.height)
+  tipTimer = setInterval(() => { tipIdx.value = (tipIdx.value + 1) % TIPS.length }, 3500)
 })
 
 onUnmounted(() => {
   cancelAnimationFrame(raf)
+  clearInterval(tipTimer)
   removeResize?.()
 })
 </script>
@@ -255,4 +270,17 @@ onUnmounted(() => {
   0%, 80%, 100% { opacity: 0.15; }
   40%           { opacity: 0.8; }
 }
+
+.ip-tip {
+  margin-top: 26px;
+  max-width: 320px;
+  text-align: center;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 18px;
+  font-style: italic;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.45);
+  animation: tipIn 0.6s ease both;
+}
+@keyframes tipIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 </style>

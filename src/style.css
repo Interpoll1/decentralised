@@ -914,9 +914,9 @@ p {
 
 @media (max-width: 767px) {
   .ambient-page__content {
-    width: min(100%, calc(100% - 24px));
-    padding-top: 16px;
-    padding-bottom: 112px;
+    width: 100%;
+    padding-top: 8px;
+    padding-bottom: calc(76px + env(safe-area-inset-bottom));
   }
 }
 
@@ -951,6 +951,7 @@ p {
     border-bottom: 1px solid var(--app-border) !important;
     box-shadow: none !important;
     margin: 0 !important;
+    padding-inline: 8px !important;
   }
   .poll-card:hover,
   .post-card:hover {

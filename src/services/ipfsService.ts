@@ -45,23 +45,23 @@ export class IPFSService {
     const original = file;
 
     // Thumbnail for Gun sync — this is a preview, not the image. It must stay
-    // small enough to fit in a single Gun WS message (the ws library's default
-    // maxPayload is 64 KB), so it is still downscaled. The full-resolution
+    // small enough to sync over Gun without bloating the graph, so it is still
+    // downscaled (900px / ~110 KB). The full-resolution
     // original is always preferred by downloadImage().
     const thumbnailBlob = await imageCompression(file, {
-      maxSizeMB: 0.03,
-      maxWidthOrHeight: 400,
+      maxSizeMB: 0.11,
+      maxWidthOrHeight: 900,
       useWebWorker: true,
     });
 
-    // Hard clamp: if the thumbnail is still larger than 40 KB (can happen with
-    // PNGs), shrink it further rather than risk a silent WS drop on a vanilla relay.
+    // Hard clamp: if the thumbnail is still larger than 120 KB (can happen with
+    // PNGs), shrink it further rather than risk a silent WS drop.
     let finalThumbnailBlob = thumbnailBlob;
-    if (thumbnailBlob.size > 40 * 1024) {
+    if (thumbnailBlob.size > 120 * 1024) {
       try {
         finalThumbnailBlob = await imageCompression(thumbnailBlob, {
-          maxSizeMB: 0.02,
-          maxWidthOrHeight: 300,
+          maxSizeMB: 0.06,
+          maxWidthOrHeight: 600,
           useWebWorker: true,
         });
       } catch {
