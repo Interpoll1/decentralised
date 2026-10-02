@@ -27,6 +27,19 @@ const relaySheetOpen = ref(false);
 .dps-root { display: block; width: 100%; }
 .dps-main { width: 100%; min-width: 0; }
 
+/* Phones: no card chrome — the curved, bordered panel wastes width and leaves
+   visible edges against the page background. */
+@media (max-width: 767px) {
+  .dps-main {
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
 @media (min-width: 768px) {
   .dps-root {
     display: flex;

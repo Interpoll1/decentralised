@@ -75,7 +75,7 @@
           class="post-media-img"
           loading="lazy"
           @error="(e: any) => { if (post.imageIPFS && e.target.src !== `https://ipfs.filebase.io/ipfs/${post.imageIPFS}`) e.target.src = `https://ipfs.filebase.io/ipfs/${post.imageIPFS}`; }"
-          @click.stop
+          @click.stop="lightboxOpen = true"
         />
         <!-- Video: use IPFS CID path with skeleton while async component loads -->
         <template v-else-if="post.videoCID">
@@ -99,6 +99,14 @@
           </Suspense>
         </template>
       </div>
+
+      <ImageLightbox
+        v-if="postCids.length <= 1"
+        :open="lightboxOpen"
+        :srcs="[post.imageThumbnail || `https://ipfs.filebase.io/ipfs/${post.imageIPFS}`]"
+        :alt="post.title"
+        @close="lightboxOpen = false"
+      />
 
       <!-- ── Nostr event ID strip ─────────────────── -->
       <div v-if="nostrEventId" class="post-nostr-strip" @click.stop>
@@ -200,6 +208,7 @@ import { defineAsyncComponent } from 'vue';
 import type { Post } from '../services/postService';
 import type { FilterAction } from '../services/moderationService';
 import PostImageGallery from './PostImageGallery.vue';
+import ImageLightbox from './ImageLightbox.vue';
 import { generatePseudonym } from '../utils/pseudonym';
 import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 import { useUserStore } from '../stores/userStore';
@@ -229,6 +238,7 @@ defineEmits(['click', 'upvote', 'downvote', 'comments', 'moderation-submit', 'ta
 // ── State ──────────────────────────────────────────────────────────────────
 const revealed     = ref(false);
 const truncated    = ref(true);
+const lightboxOpen = ref(false);
 const postCids     = computed(() => (props.post.imageCids || '').split(',').filter(Boolean));
 const nostrCopied  = ref(false);
 
@@ -424,6 +434,7 @@ function formatViewCount(n: number): string {
   object-position: center;
   display: block;
   background: rgba(0,0,0,0.18);
+  cursor: zoom-in;
 }
 @media (min-width: 768px) {
   .post-media-img { max-height: 600px; }

@@ -1,7 +1,7 @@
 <template>
   <div class="pig" :class="[`pig--n${shown.length}`, { 'pig--full': full }]">
     <template v-for="(cid, i) in shown" :key="cid">
-      <div class="pig-cell" @click.stop>
+      <div class="pig-cell" @click.stop="openAt(i)">
         <img
           v-if="srcs[i]"
           :src="srcs[i]"
@@ -13,11 +13,13 @@
         <span v-if="!full && i === shown.length - 1 && extra > 0" class="pig-more">+{{ extra }}</span>
       </div>
     </template>
+    <ImageLightbox :open="lbOpen" :srcs="lbSrcs" :start="lbStart" :alt="alt" @close="lbOpen = false" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import ImageLightbox from './ImageLightbox.vue';
 
 const props = defineProps<{
   /** Ordered image cids; the first one may be pre-resolved via `primarySrc`. */
@@ -33,6 +35,16 @@ const FEED_TILES = 4;
 const shown = computed(() => (props.full ? props.cids : props.cids.slice(0, FEED_TILES)));
 const extra = computed(() => props.cids.length - FEED_TILES);
 const srcs = ref<(string | null)[]>([]);
+
+const lbOpen = ref(false);
+const lbStart = ref(0);
+// Only images that have loaded; map the tapped tile onto its slot in that list.
+const lbSrcs = computed(() => srcs.value.filter((s): s is string => !!s));
+function openAt(i: number) {
+  if (!srcs.value[i]) return;
+  lbStart.value = srcs.value.slice(0, i).filter(Boolean).length;
+  lbOpen.value = true;
+}
 
 async function load() {
   const list = shown.value;
@@ -62,7 +74,7 @@ watch(() => [props.cids.join(','), props.full], load, { immediate: true });
 @media (min-width: 640px) {
   .pig--full.pig--n5, .pig--full.pig--n6, .pig--full.pig--n7, .pig--full.pig--n8 { grid-template-columns: repeat(3, 1fr); }
 }
-.pig-cell { position: relative; background: rgba(255, 255, 255, 0.04); min-height: 0; }
+.pig-cell { position: relative; background: rgba(255, 255, 255, 0.04); min-height: 0; cursor: zoom-in; }
 .pig:not(.pig--n1) .pig-cell { aspect-ratio: 1; }
 .pig--n3 .pig-cell:first-child { aspect-ratio: auto; }
 .pig-img { width: 100%; height: 100%; display: block; object-fit: cover; }

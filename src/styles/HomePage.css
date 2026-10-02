@@ -9,7 +9,7 @@
    Collapse to one thin gutter so feed content uses the screen width. */
 @media (max-width: 767px) {
   .hp-root.page-layout { padding-inline: 0; }
-  .hp-root .main-content { padding: 12px 6px 16px; }
+  .hp-root .main-content { padding: 12px 0 16px; }
 }
 
 .logo-title {
