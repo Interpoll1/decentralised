@@ -28,6 +28,7 @@ export interface FeedPost {
   content: string;
   imageIPFS: string;
   imageThumbnail: string;
+  imageCids?: string;
   createdAt: number;
   upvotes: number;
   downvotes: number;

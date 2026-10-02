@@ -335,6 +335,7 @@ export const usePostStore = defineStore('post', () => {
           // || treats '' as absent and correctly falls back to the existing value.
           imageIPFS:         updated.imageIPFS      || existing.imageIPFS,
           imageThumbnail:    updated.imageThumbnail || existing.imageThumbnail,
+          imageCids:         updated.imageCids      || existing.imageCids,
         };
         merged = { ...merged, score: (merged.upvotes ?? 0) - (merged.downvotes ?? 0) };
       }
@@ -563,13 +564,15 @@ export const usePostStore = defineStore('post', () => {
       // real base64 thumbnail already in the store.
       const imageIPFS      = post.imageIPFS      || existing.imageIPFS;
       const imageThumbnail = post.imageThumbnail || existing.imageThumbnail;
+      const imageCids      = post.imageCids      || existing.imageCids;
       const changed =
+        imageCids     !== existing.imageCids     ||
         viewCount     !== existing.viewCount     ||
         uniqueViewers !== existing.uniqueViewers ||
         imageIPFS     !== existing.imageIPFS     ||
         imageThumbnail !== existing.imageThumbnail;
       if (changed) {
-        postsMap.value.set(post.id, { ...existing, viewCount, uniqueViewers, imageIPFS, imageThumbnail });
+        postsMap.value.set(post.id, { ...existing, viewCount, uniqueViewers, imageIPFS, imageThumbnail, imageCids });
         triggerRef(postsMap);
       }
     }
@@ -678,7 +681,7 @@ export const usePostStore = defineStore('post', () => {
     communityId: string;
     title: string;
     content: string;
-    imageFile?: File;
+    imageFiles?: File[];
     videoCID?: string;
     videoThumbnailCID?: string;
     videoDuration?: number;
@@ -719,7 +722,7 @@ export const usePostStore = defineStore('post', () => {
         ...(data.videoDuration     ? { videoDuration:     data.videoDuration }     : {}),
         ...(data.videoSize         ? { videoSize:         data.videoSize }         : {}),
         ...(data.videoMimeType     ? { videoMimeType:     data.videoMimeType }     : {}),
-      }, data.imageFile, postId);
+      }, data.imageFiles, postId);
 
       await UserService.incrementPostCount();
       const chainStore = useChainStore();
