@@ -69,9 +69,12 @@
             </div>
             <div v-else-if="post.imageThumbnail || post.imageIPFS" class="post-image">
               <img
-                :src="fullImageSrc || post.imageThumbnail || getIPFSUrl(post.imageIPFS)"
+                :src="singleImageSrc"
                 :alt="post.title"
+                class="post-image-zoomable"
+                @click="lightboxOpen = true"
               />
+              <ImageLightbox :open="lightboxOpen" :srcs="[singleImageSrc]" :alt="post.title" @close="lightboxOpen = false" />
             </div>
 
             <!-- Post Video -->
@@ -162,6 +165,14 @@
           >
             Related ({{ relatedPosts.length }})
           </button>
+          <button
+            v-if="recentPosts.length > 0"
+            class="section-tab"
+            :class="{ active: activeSection === 'recent' }"
+            @click="activeSection = 'recent'"
+          >
+            Recent
+          </button>
         </div>
 
         <!-- Comments Section -->
@@ -243,6 +254,23 @@
             </template>
           </div>
         </div>
+
+        <!-- Recent posts -->
+        <div v-else-if="activeSection === 'recent'" class="related-section">
+          <div class="related-cards">
+            <PostCard
+              v-for="p in recentPosts"
+              :key="p.id"
+              :post="p"
+              :has-upvoted="postStore.myVote(p.id) === 'up'"
+              :has-downvoted="postStore.myVote(p.id) === 'down'"
+              @click="$router.push(`/post/${p.id}`)"
+              @upvote="postStore.toggleVote(p.id, 'up')"
+              @downvote="postStore.toggleVote(p.id, 'down')"
+              @comments="$router.push(`/post/${p.id}`)"
+            />
+          </div>
+        </div>
       </div>
       </DesktopPageShell>
     </ion-content>
@@ -306,6 +334,7 @@ import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 
 import { IPFSService } from '../services/ipfsService';
 import PostImageGallery from '../components/PostImageGallery.vue';
+import ImageLightbox from '../components/ImageLightbox.vue';
 import { checkContent } from '../utils/contentGuard';
 import { shareLink } from '../composables/useShare';
 
@@ -326,6 +355,9 @@ const isLoading = ref(true);
 const newCommentText = ref('');
 const voteVersion = ref(0);
 const fullImageSrc = ref<string | null>(null);
+const lightboxOpen = ref(false);
+const singleImageSrc = computed(() =>
+  fullImageSrc.value || post.value?.imageThumbnail || getIPFSUrl(post.value?.imageIPFS));
 const postAuthorTrustLevel = ref<'trusted-issuer' | 'unverified'>('unverified');
 let postAuthorTrustRequestId = 0;
 let fullImageLoadPromise: Promise<string | null> | null = null;
@@ -540,7 +572,14 @@ function commenterAvatarTone(authorId: string): string {
 }
 
 // Related posts — overlapping tags only (community too broad, category way too broad)
-const activeSection = ref<'comments' | 'related'>('comments');
+const activeSection = ref<'comments' | 'related' | 'recent'>('comments');
+
+// Newest posts site-wide, excluding the one being read.
+const recentPosts = computed(() =>
+  [...postStore.sortedPosts]
+    .filter(p => p.id !== post.value?.id)
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 10));
 
 const relatedItems = computed<Array<{ type: 'post' | 'poll'; data: any }>>(() => {
   if (!post.value) return [];
@@ -873,6 +912,7 @@ onUnmounted(() => {
   height: auto;
   display: block;
 }
+.post-image img.post-image-zoomable { cursor: zoom-in; }
 
 .actions-bar {
   display: flex;
@@ -1170,11 +1210,13 @@ html.dark .section-separator {
 
 ion-content {
   --background:
-    radial-gradient(ellipse at 15% 0%,   rgba(139, 92, 246, 0.30) 0%%, transparent 50%%),
-    radial-gradient(ellipse at 85% 10%%,  rgba(99, 102, 241, 0.20) 0%%, transparent 45%%),
-    radial-gradient(ellipse at 50%% 100%%, rgba(79,  70, 229, 0.20) 0%%, transparent 55%%),
+    radial-gradient(ellipse at 15% 0%,   rgba(139, 92, 246, 0.30) 0%, transparent 50%),
+    radial-gradient(ellipse at 85% 10%,  rgba(99, 102, 241, 0.20) 0%, transparent 45%),
+    radial-gradient(ellipse at 50% 100%, rgba(79,  70, 229, 0.20) 0%, transparent 55%),
     #0d0e1c;
 }
+/* Header/back area matches the page background instead of a separate shade. */
+ion-header ion-toolbar { --background: #0d0e1c; --border-width: 0; }
 
 /* ── Commenter chips ── */
 .commenter-chip {
