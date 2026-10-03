@@ -15,6 +15,7 @@ import config from '../config';
 import { chatPath, resolveChatUserId } from '../utils/privateRoute';
 import ChatService from '../services/chatService';
 import { initNotifications, notifyChatMessage, clearChatNotification } from '../services/notificationService';
+import { summarizeRoom } from '../utils/chatPreview';
 
 export interface ChatEntry {
   userId: string;
@@ -61,15 +62,18 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
       void (async () => {
         const rows = await StorageService.getChatMessagesByRoom(roomId);
         if (rows.length === 0) return;
-        const unread = rows.filter(row => !row.outgoing && !row.readAt).length;
-        const latest = rows.reduce((n, r) => (r.timestamp > n.timestamp ? r : n));
-        const body   = latest.text.length > 80 ? `${latest.text.slice(0, 79)}…` : latest.text;
-        const entry  = chatList.value.find(c => c.userId === otherUserId);
+        const entry = chatList.value.find(c => c.userId === otherUserId);
         if (!entry) return;
-        entry.unreadCount = unread;
-        if (latest.timestamp >= entry.lastMessageTime) {
-          entry.lastMessageTime = latest.timestamp;
-          entry.lastMessage     = latest.outgoing ? `You: ${body}` : body;
+        const summary = summarizeRoom(rows);
+        if (!summary) {
+          // Conversation was cleared: drop the stale preview.
+          entry.unreadCount = 0; entry.lastMessage = ''; entry.lastMessageTime = 0;
+        } else {
+          entry.unreadCount = summary.unread;
+          if (summary.lastMessageTime >= entry.lastMessageTime) {
+            entry.lastMessageTime = summary.lastMessageTime;
+            entry.lastMessage     = summary.lastMessage;
+          }
         }
         chatList.value = [...chatList.value].sort((a, b) => b.lastMessageTime - a.lastMessageTime);
         totalUnread.value = chatList.value.reduce((s, c) => s + c.unreadCount, 0);
