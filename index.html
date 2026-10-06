@@ -2,9 +2,23 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/svg+xml" href="/pwa-icon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Web fonts: loaded without blocking first paint. The stylesheet is fetched
+         as a preload and flipped to rel=stylesheet once it arrives; display=swap
+         shows the fallback font until the real one is ready. (An @import inside
+         the bundled CSS used to sit in the render-blocking path.) -->
+    <link
+      rel="preload"
+      as="style"
+      href="https://fonts.googleapis.com/css2?family=Grand+Hotel&family=Cormorant+Garamond:ital@1&display=swap"
+      onload="this.onload=null;this.rel='stylesheet'"
+    />
+    <noscript>
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Grand+Hotel&family=Cormorant+Garamond:ital@1&display=swap" />
+    </noscript>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
@@ -29,17 +43,23 @@
     <meta property="og:site_name" content="InterPoll" />
     <meta property="og:title" content="InterPoll — decentralized polls, no company in control" />
     <meta property="og:description" content="Create polls and discussions that live across peers, not one company's servers. Every vote is cryptographically signed and tamper-evident." />
-    <meta property="og:image" content="/og-preview.svg" />
+    <meta property="og:image" content="https://endless.sbs/og-preview.webp" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/webp" />
+    <meta property="og:image:alt" content="InterPoll — decentralized polls" />
     <meta property="og:url" content="https://endless.sbs/" />
     <meta property="og:locale" content="en_US" />
 
     <!-- Twitter card -->
+    <meta name="twitter:image:alt" content="InterPoll — decentralized polls" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="InterPoll — decentralized polls, no company in control" />
     <meta name="twitter:description" content="Create polls and discussions that live across peers, not one company's servers. Every vote is cryptographically signed and tamper-evident." />
-    <meta name="twitter:image" content="/og-preview.svg" />
+    <meta name="twitter:image" content="https://endless.sbs/og-preview.webp" />
+    <script type="application/ld+json">
+      {"@context":"https://schema.org","@type":"WebApplication","name":"InterPoll","url":"https://endless.sbs/","applicationCategory":"SocialNetworkingApplication","operatingSystem":"Any","description":"Decentralized social and polling app for communities, posts, chat, and verifiable voting.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}
+    </script>
     <script>
       // Apply dark mode class ASAP to prevent flash of light theme.
       // Only target <html> here since <body> doesn't exist yet in <head>.
@@ -57,6 +77,7 @@
          Bundles can take many seconds on a cold CDN edge; without this the
          page is blank. Inline-styled because no CSS has loaded yet. -->
     <div id="app">
+      <noscript><h1>InterPoll</h1><p>Decentralized polls and discussions with cryptographically signed, verifiable votes. Enable JavaScript to use the app.</p></noscript>
       <div id="boot-splash" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#141420;color:#c8c8d8;font:15px system-ui,-apple-system,sans-serif;text-align:center;padding:16px">
         <style>
           html:not(.dark) #boot-splash{background:#f6f6fa!important;color:#44445a!important}
