@@ -91,7 +91,7 @@ function bip39EnglishOnlyPlugin() {
     },
   };
 }
-
+// yep, this is a hack. Vite's dev server doesn't support SPA fallback out of the box 
 function spaRouteFallbackPlugin() {
   const blockedPrefixes = ['/src/', '/node_modules/', '/@vite/', '/@fs/', '/assets', '/public/'];
   return {
