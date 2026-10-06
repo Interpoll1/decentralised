@@ -13,8 +13,10 @@ vi.mock('vue', () => ({
   ref: (val: any) => ({ value: val }),
 }));
 
-// Mock gunService
-vi.mock('../src/services/gunService', () => ({
+// Mock the namespace module (dataVersionSettings reads GUN_NAMESPACE from here,
+// not from gunService, so it doesn't pull Gun into the entry bundle)
+vi.mock('../src/utils/namespace', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/utils/namespace')>()),
   GUN_NAMESPACE: 'v2',
 }));
 
