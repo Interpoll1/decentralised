@@ -61,6 +61,37 @@ function swRegisterInlinePlugin() {
   };
 }
 
+/**
+ * bip39 ships ten wordlists (czech, chinese, korean, french, italian, spanish,
+ * japanese, portuguese, english…) via a CommonJS `_wordlists` module, so none of
+ * them can be tree-shaken. The app only ever uses the default (English) list —
+ * cryptoService/mnemonicHelper never pass a wordlist or call setDefaultWordlist —
+ * so the other nine were dead weight in the crypto chunk.
+ *
+ * bip39's own source documents this pattern ("Bundles may remove wordlists they
+ * don't need"; the default is whichever is present, English being last). The
+ * replacement exposes the identical shape with English only, so mnemonics,
+ * validation and seed derivation are bit-for-bit unchanged.
+ *
+ * If you ever need another language, delete this plugin.
+ */
+function bip39EnglishOnlyPlugin() {
+  return {
+    name: 'bip39-english-only',
+    enforce: 'pre' as const,
+    load(id: string) {
+      if (!/node_modules[\\/]bip39[\\/]src[\\/]_wordlists\.js$/.test(id)) return null;
+      return [
+        '"use strict";',
+        'Object.defineProperty(exports, "__esModule", { value: true });',
+        'const english = require("./wordlists/english.json");',
+        'exports.wordlists = { english, EN: english };',
+        'exports._default = english;',
+      ].join('\n');
+    },
+  };
+}
+
 function spaRouteFallbackPlugin() {
   const blockedPrefixes = ['/src/', '/node_modules/', '/@vite/', '/@fs/', '/assets', '/public/'];
   return {
@@ -105,6 +136,7 @@ export default defineConfig({
     }),
     spaRouteFallbackPlugin(),
     swRegisterInlinePlugin(),
+    bip39EnglishOnlyPlugin(),
     ...(isNativeBuild ? [] : [
       VitePWA({
         registerType: 'autoUpdate',
@@ -120,11 +152,14 @@ export default defineConfig({
           display: 'standalone',
           start_url: '/',
           icons: [
-            { src: '/pwa-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' },
+            { src: '/pwa-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+            { src: '/pwa-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+            { src: '/pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+            { src: '/pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
           ],
         },
         workbox: {
-          globPatterns: ['**/*.{js,css,html,svg,woff2}'],
+          globPatterns: ['**/*.{js,css,html,svg,woff2,png}'],
           navigateFallback: '/index.html',
           navigateFallbackDenylist: [/^\/gun/, /^\/api/, /^\/oauth/, /^\/db/],
           cleanupOutdatedCaches: true,
@@ -240,9 +275,11 @@ export default defineConfig({
             id.includes('node_modules/@unhead')
           ) return 'vendor-vue';
 
-          // Signal Protocol — chat-only, must be lazy
-          // Verify it's never eagerly imported: grep -r "signalProtocol" src --include="*.ts" | grep -v "dynamic\|import()"
-          if (id.includes('signalProtocol')) return 'vendor-signal';
+          // NOTE: there used to be a `signalProtocol` rule here. Forcing that file
+          // into a manual chunk also dragged its dependencies (CryptoService,
+          // StorageService, …) into "vendor-signal", which the entry bundle and
+          // nearly every service then imported — so the chunk named "lazy" was
+          // on the critical path of every page. Let Rollup split it naturally.
 
           if (id.includes('node_modules')) return 'vendor-misc';
         },
