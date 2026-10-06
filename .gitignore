@@ -120,3 +120,6 @@ HANDOFF*.md
 # Archives
 *.zip
 *.tar.gz
+
+# Root-level notes/handoffs (README.md stays)
+/CHANGES.md
