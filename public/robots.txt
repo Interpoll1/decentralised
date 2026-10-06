@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Disallow: /settings
+Disallow: /profile
+Disallow: /chat
+Disallow: /chatroom
+Disallow: /chatrooms
+Disallow: /auth/
+Disallow: /join/
+Disallow: /claim-username
+Disallow: /vote/
+Disallow: /onboarding
+
+Sitemap: https://endless.sbs/sitemap.xml
