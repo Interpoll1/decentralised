@@ -23,6 +23,12 @@ vi.mock('../src/services/keyVaultService', () => ({
 }));
 
 const { puts, gun } = makeSilentGun();
+// communityService reads GUN_NAMESPACE from utils/namespace (not gunService), so
+// the namespace override has to be mocked there. Keep the real helpers.
+vi.mock('../src/utils/namespace', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/utils/namespace')>()),
+  GUN_NAMESPACE: 'v4',
+}));
 vi.mock('../src/services/gunService', () => ({
   GUN_NAMESPACE: 'v4',
   GunService: { getGun: () => gun, getRawGun: () => gun },
