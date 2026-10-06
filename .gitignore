@@ -55,8 +55,67 @@ android/.idea/
 *.aab
 *.keystore
 
+# Capacitor generated (copied from dist/ by `cap sync`)
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json
+android/app/src/main/res/xml/config.xml
+android/capacitor-cordova-android-plugins/
+android/.gradle/
+android/**/build/
+ios/App/App/public/
+ios/App/Pods/
+*.iml
+
+# Other build output / caches
+build/
+out/
+coverage/
+.vite/
+.cache/
+.parcel-cache/
+.turbo/
+.eslintcache
+*.tsbuildinfo
+*.map
+__pycache__/
+*.pyc
+target/
+
 # Tauri generated schemas
 src-tauri/gen/
+
+# Claude Code files
+CLAUDE.md
+**/CLAUDE.md
+CLAUDE.local.md
+.claude/
+
+# Other AI assistant / agent files
+AGENTS.md
+**/AGENTS.md
+GEMINI.md
+**/GEMINI.md
+copilot-*.md
+**/copilot-*.md
+.github/copilot-instructions.md
+.cursor/
+.cursorrules
+.windsurf/
+.windsurfrules
+.aider*
+.codex/
+.gemini/
+.continue/
+.clinerules
+.roo/
+.kiro/
+.opencode/
+.superpowers/
+.nodeterm/
+.devb/
+HANDOFF*.md
+**/HANDOFF*.md
 
 # Archives
 *.zip
