@@ -16,10 +16,15 @@ import { chatPath, resolveChatUserId } from '../utils/privateRoute';
 import ChatService from '../services/chatService';
 import { initNotifications, notifyChatMessage, clearChatNotification } from '../services/notificationService';
 import { summarizeRoom } from '../utils/chatPreview';
+import { loadNicknames, saveNickname, cleanNickname } from '../utils/chatNicknames';
+import type { StoredChatMessage } from '../types/social';
 
 export interface ChatEntry {
   userId: string;
+  /** The name the network resolved for this user (or their id until it does). Never edited locally. */
   name: string;
+  /** What YOU call them. Local only; always wins over `name`. */
+  nickname?: string;
   lastMessage: string;
   lastMessageTime: number;
   unreadCount: number;
@@ -40,6 +45,112 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
   const searchingUsers     = ref(false);
 
   const totalUnread = ref(0);
+
+  /** True once the list has been painted from the local snapshot / IndexedDB (UI can drop its skeleton). */
+  const chatListHydrated = ref(false);
+  /** Your custom names, by user id. Loaded from storage during hydration. */
+  const nicknames = new Map<string, string>();
+  const CACHE_KEY = `chat-list-cache:${currentUserId}`;
+  let persistTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastChatListLoad = 0;
+
+  /**
+   * Snapshot the conversation list (names, previews, unread) so the next visit paints instantly
+   * instead of waiting for Gun lookups. Previews are the same plaintext already kept in the
+   * chat-messages store; this adds no new exposure. IndexedDB is re-read afterwards as the truth.
+   */
+  function schedulePersist() {
+    if (!currentUserId) return;
+    if (persistTimer) clearTimeout(persistTimer);
+    persistTimer = setTimeout(() => {
+      persistTimer = null;
+      const entries = chatList.value.slice(0, 200).map(c => ({
+        userId: c.userId, name: c.name, nickname: c.nickname, publicKey: c.publicKey,
+        lastMessage: c.lastMessage, lastMessageTime: c.lastMessageTime, unreadCount: c.unreadCount,
+      }));
+      void StorageService.setMetadata(CACHE_KEY, { v: 1, savedAt: Date.now(), entries }).catch(() => {});
+    }, 800);
+  }
+
+  function recount() {
+    totalUnread.value = chatList.value.reduce((n, c) => n + c.unreadCount, 0);
+  }
+
+  /**
+   * Paint the conversation list without touching the network.
+   *  1) instantly from the saved snapshot (one small metadata read);
+   *  2) then reconcile against IndexedDB, which is the source of truth for unread counts. This is
+   *     what makes the badge correct on launch for messages that arrived while the app was closed
+   *     (those used to be counted only if a live event happened to hit an installed handler).
+   * Merges into whatever live events already added; never replaces them.
+   */
+  async function hydrateChatList(): Promise<void> {
+    if (!currentUserId) return;
+    try {
+      nicknames.clear();
+      for (const [id, n] of Object.entries(await loadNicknames(currentUserId))) nicknames.set(id, n);
+    } catch { /* nicknames are best-effort here; they re-apply on the next hydrate */ }
+    try {
+      const snap = await StorageService.getMetadata(CACHE_KEY);
+      if (snap?.v === 1 && Array.isArray(snap.entries) && chatList.value.length === 0) {
+        const painted: ChatEntry[] = snap.entries
+          .filter((e: any) => e && typeof e.userId === 'string' && e.userId !== currentUserId)
+          .map((e: any) => ({
+            userId: e.userId, name: typeof e.name === 'string' && e.name ? e.name : e.userId,
+            nickname: nicknames.get(e.userId),
+            lastMessage: typeof e.lastMessage === 'string' ? e.lastMessage : '',
+            lastMessageTime: Number(e.lastMessageTime) || 0,
+            unreadCount: Number(e.unreadCount) || 0,
+            publicKey: typeof e.publicKey === 'string' ? e.publicKey : '',
+          }));
+        if (painted.length) {
+          chatList.value = painted.sort((a, b) => b.lastMessageTime - a.lastMessageTime);
+          recount();
+        }
+      }
+    } catch { /* cache is best-effort */ }
+    chatListHydrated.value = true;   // snapshot (or nothing) is on screen: drop the skeleton now
+
+    try {
+      const rows: StoredChatMessage[] = await StorageService.getAllChatMessages();
+      const byPeer = new Map<string, StoredChatMessage[]>();
+      for (const r of rows) {
+        if (r.kind !== 'dm') continue;
+        const other = r.roomId.split(':').find(id => id !== currentUserId);
+        if (!other) continue;
+        const bucket = byPeer.get(other);
+        if (bucket) bucket.push(r); else byPeer.set(other, [r]);
+      }
+      const next = new Map(chatList.value.map(c => [c.userId, c]));
+      for (const [peer, list] of byPeer) {
+        const sum = summarizeRoom(list);
+        const cur = next.get(peer);
+        if (cur) {
+          if (sum) {
+            cur.unreadCount = sum.unread;
+            if (sum.lastMessageTime >= cur.lastMessageTime) {
+              cur.lastMessageTime = sum.lastMessageTime;
+              cur.lastMessage     = sum.lastMessage;
+            }
+          } else { cur.unreadCount = 0; }
+        } else if (sum) {
+          next.set(peer, {
+            userId: peer, name: peer, nickname: nicknames.get(peer), publicKey: '',
+            lastMessage: sum.lastMessage, lastMessageTime: sum.lastMessageTime, unreadCount: sum.unread,
+          });
+        }
+      }
+      for (const entry of next.values()) {                       // entries created by live events before we got here
+        const nick = nicknames.get(entry.userId);
+        if (nick) entry.nickname = nick; else delete entry.nickname;
+      }
+      chatList.value = [...next.values()].sort((a, b) => b.lastMessageTime - a.lastMessageTime);
+      recount();
+      schedulePersist();
+    } catch (err) {
+      console.warn('[useChat] hydrate from IndexedDB failed:', err);
+    }
+  }
 
   const unreadDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const subscribedChatRooms  = new Set<string>();
@@ -77,6 +188,7 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
         }
         chatList.value = [...chatList.value].sort((a, b) => b.lastMessageTime - a.lastMessageTime);
         totalUnread.value = chatList.value.reduce((s, c) => s + c.unreadCount, 0);
+        schedulePersist();
       })();
     }, 500));
   }
@@ -87,7 +199,7 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
     if (subscribedChatRooms.has(roomId)) return;
     if (!chatList.value.find(c => c.userId === otherUserId)) {
       chatList.value = [...chatList.value, {
-        userId: otherUserId, name: otherName,
+        userId: otherUserId, name: otherName, nickname: nicknames.get(otherUserId),
         lastMessage: '', lastMessageTime: 0,
         unreadCount: 0, publicKey: otherPublicKey,
       }];
@@ -127,12 +239,15 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
         if (other) peers.add(other);
       }
       for (const otherUserId of peers) {
-        subscribeToRoom(otherUserId, otherUserId, '');
+        const known = chatList.value.find(c => c.userId === otherUserId);
+        subscribeToRoom(otherUserId, known?.name || otherUserId, known?.publicKey || '');
         gun.get('users').get(otherUserId).once((userData: any) => {
           const entry = chatList.value.find(c => c.userId === otherUserId);
           if (entry && userData) {
             entry.name      = userData.displayName || userData.username || otherUserId;
             entry.publicKey = userData.publicKey || '';
+            chatList.value  = [...chatList.value];
+            schedulePersist();
           }
         });
       }
@@ -206,13 +321,10 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
     bgChatService = new ChatService(WS_URL, currentUserId);
     bgChatService.onConnectionChange = () => {};
 
-    // CRITICAL: opens WebSocket, registers with relay, publishes chat public key
-    // to Gun so senders can encrypt to Y. Without this call the service is inert.
-    try { await bgChatService.init(); }
-    catch (err) { console.warn('[useChat] bgChatService.init() failed:', err); }
-
-    await requestNotificationPermission();
-
+    // Handlers are installed BEFORE init(). The relay replays everything that arrived while we
+    // were away the moment we register, and init() used to be followed by an awaited
+    // notification-permission prompt, so those replayed messages were accepted into IndexedDB
+    // while no onMessage existed yet: the unread badge and list never counted them.
     bgChatService.onMessage = (msg) => {
       if (msg.sent) return;
       const preview      = msg.message.length > 80 ? `${msg.message.slice(0, 79)}…` : msg.message;
@@ -221,7 +333,8 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
       const entry        = chatList.value.find(c => c.userId === msg.from);
 
       if (entry) {
-        const senderName = entry.name || msg.from;
+        // Notifications must never show a raw 64-char id: custom name, else resolved name, else a short fallback.
+        const senderName = entry.nickname || (entry.name && entry.name !== msg.from ? entry.name : `User ${msg.from.slice(0, 6)}`);
         entry.lastMessage     = preview;
         entry.lastMessageTime = msg.timestamp;
         if (!isInThisChat) entry.unreadCount++;
@@ -229,16 +342,23 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
         totalUnread.value = chatList.value.reduce((s, c) => s + c.unreadCount, 0);
         void showIncomingMessageNotification(msg.from, senderName, preview, isInThisChat);
       } else {
+        const nick = nicknames.get(msg.from);
         chatList.value = [{
-          userId: msg.from, name: msg.from,
+          userId: msg.from, name: msg.from, nickname: nick,
           lastMessage: preview, lastMessageTime: msg.timestamp,
           unreadCount: isInThisChat ? 0 : 1, publicKey: '',
         }, ...chatList.value];
         if (!isInThisChat) totalUnread.value++;
         subscribeToRoom(msg.from, msg.from, '');
         gun_lookupUser(msg.from);
-        void showIncomingMessageNotification(msg.from, msg.from, preview, isInThisChat);
+        void showIncomingMessageNotification(msg.from, nick || `User ${msg.from.slice(0, 6)}`, preview, isInThisChat);
       }
+      // Reconcile with IndexedDB (debounced). At startup hydrateChatList() and the relay's offline
+      // replay can both see the same message, so the in-memory ++ above could double count it; the
+      // stored rows are the truth and this converges the badge to them either way. Skipped inside the
+      // open chat, where the view is marking messages read itself.
+      if (!isInThisChat) refreshRoomSummary(getRoomId(currentUserId, msg.from), msg.from);
+      schedulePersist();
     };
 
     // When the remote peer reads our messages, ChatService fires onReadReceipt.
@@ -272,6 +392,14 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
     // Store cleanup for teardown
     _stopRouteWatch = stopRouteWatch;
 
+    // CRITICAL: opens WebSocket, registers with relay, publishes chat public key
+    // to Gun so senders can encrypt to Y. Without this call the service is inert.
+    try { await bgChatService.init(); }
+    catch (err) { console.warn('[useChat] bgChatService.init() failed:', err); }
+
+    // Never block chat on the browser's permission prompt (it can wait indefinitely).
+    void requestNotificationPermission().catch(() => {});
+
     bgChatInitialised = true;
   }
 
@@ -282,6 +410,8 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
       if (entry && userData) {
         entry.name      = userData.displayName || userData.username || userId;
         entry.publicKey = userData.publicKey || '';
+        chatList.value  = [...chatList.value];
+        schedulePersist();
       }
     });
   }
@@ -297,6 +427,10 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
   function ensureChatInitialized(activeTabRef: { value: string }): Promise<void> {
     return ensureBackgroundChatInitialized(activeTabRef).then(async () => {
       ensureChatRoomDiscoverySubscription();
+      // Tab re-selections used to redo the whole Gun scan each time; live events keep the list
+      // current, so only rescan if it has been a while.
+      if (Date.now() - lastChatListLoad < 30_000) return;
+      lastChatListLoad = Date.now();
       await loadChatList();
     });
   }
@@ -318,6 +452,23 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
     }
   }
 
+  /**
+   * Rename a chat locally. An empty (or all-whitespace) name removes the custom name and the list
+   * goes back to the resolved name / "User xxxxxx". Persisted before it returns; never sent anywhere.
+   */
+  async function setNickname(userId: string, raw: string): Promise<void> {
+    const nick = cleanNickname(raw);
+    if (nick) nicknames.set(userId, nick); else nicknames.delete(userId);
+    const entry = chatList.value.find(c => c.userId === userId);
+    if (entry) {
+      if (nick) entry.nickname = nick; else delete entry.nickname;
+      chatList.value = [...chatList.value];
+      schedulePersist();
+    }
+    try { await saveNickname(currentUserId, userId, nick); }
+    catch (err) { console.warn('[useChat] could not save the chat name:', err); }
+  }
+
   // ─── Navigation ───────────────────────────────────────────────────────────
 
   function openChat(chat: ChatEntry) {
@@ -325,7 +476,8 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
     if (entry) entry.unreadCount = 0;
     void clearChatNotification(chat.userId);
     totalUnread.value = chatList.value.reduce((s, c) => s + c.unreadCount, 0);
-    router.push(chatPath(chat.userId, chat.name));
+    schedulePersist();
+    router.push(chatPath(chat.userId, nicknames.get(chat.userId) || chat.nickname || chat.name));
   }
 
   function startChatWithUser(user: UserSearchResult) {
@@ -379,6 +531,7 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
   // ─── Cleanup ───────────────────────────────────────────────────────────────
 
   function teardown() {
+    if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; }
     bgChatService?.disconnect?.();
     bgChatService = null;
     bgChatInitialised = false;
@@ -387,7 +540,7 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
   }
 
   return {
-    chatList, totalUnread,
+    chatList, totalUnread, chatListHydrated, hydrateChatList, setNickname,
     userSearchQuery, userSearchResults, searchingUsers,
     loadChatList, ensureChatInitialized,
     processPendingChatInvites,

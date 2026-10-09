@@ -3,7 +3,7 @@
     <ion-header :class="{ 'header-hidden': isHeaderHidden }">
       <ion-toolbar>
         <ion-buttons slot="start">
-          <div class="logo-title">Interpoll</div>
+          <div class="logo-title" role="button" tabindex="0" style="cursor:pointer" @click="activeTab = 'home'" @keydown.enter="activeTab = 'home'">Interpoll</div>
         </ion-buttons>
         <ion-buttons slot="end" class="header-util-buttons">
           <ion-button v-if="canScanQr" @click="scanQr()" aria-label="Scan QR code">
@@ -300,10 +300,12 @@
             :totalUnread="totalUnread"
             :userSearchResults="userSearchResults"
             :searchingUsers="searchingUsers"
+            :loading="!chatListHydrated"
             @searchUsers="handleUserSearch"
             @clearUserSearch="clearUserSearch"
             @startChat="startChatWithUser"
             @openChat="openChat"
+            @rename="renameChat"
           />
 
         </main>
@@ -590,6 +592,7 @@ let chatComposable: ReturnType<typeof useChat> | null = null;
 
 const chatList          = ref<any[]>([]);
 const totalUnread       = ref(0);
+const chatListHydrated  = ref(false);
 const userSearchResults = ref<any[]>([]);
 const searchingUsers    = ref(false);
 const userSearchQuery   = ref('');
@@ -599,19 +602,42 @@ function ensureChat() {
     chatComposable = useChat(currentUserId, gunListeners);
     watch(chatComposable.chatList,          v => { chatList.value    = v; });
     watch(chatComposable.totalUnread,       v => { totalUnread.value = v; });
+    watch(chatComposable.chatListHydrated,  v => { chatListHydrated.value = v; });
     watch(chatComposable.userSearchResults, v => { userSearchResults.value = v; });
     watch(chatComposable.searchingUsers,    v => { searchingUsers.value    = v; });
   }
   return chatComposable;
 }
 async function ensureChatInitialized()           { const c = ensureChat(); if (c) await c.ensureChatInitialized(activeTab); }
-async function ensureBackgroundChatInitialized() { const c = ensureChat(); if (c) await c.ensureChatInitialized(activeTab); }
 function openChat(chat: any)          { ensureChat()?.openChat(chat); }
 function startChatWithUser(user: any) { ensureChat()?.startChatWithUser(user); }
 function clearUserSearch()            { ensureChat()?.clearUserSearch(); userSearchQuery.value = ''; }
 async function handleUserSearch()     { await ensureChat()?.handleUserSearch(); }
 async function loadChatList()         { await ensureChat()?.loadChatList(); }
+function renameChat(p: { userId: string; nickname: string }) { void ensureChat()?.setNickname(p.userId, p.nickname); }
 async function processPendingChatInvites(userId: string) { await ensureChat()?.processPendingChatInvites(userId); }
+
+/**
+ * Chat starts FIRST and in parallel with the feed. It used to sit at the very end of onMounted,
+ * behind the trending-tags fetch, warmupFromDB and `await loadCommunities()` (network), so the
+ * Messages list and the background chat service only came alive after the whole feed had loaded.
+ * It also only ran its list load when the Messages tab happened to be open, so on any other tab the
+ * unread badge started at zero and stayed wrong until you visited Messages.
+ */
+async function bootstrapChat() {
+  try {
+    const currentUser = await UserService.getCurrentUser();
+    currentUserId = currentUser.id;
+    const chat = ensureChat();
+    if (!chat) return;
+    await chat.hydrateChatList();                       // instant: local snapshot + IndexedDB, no network
+    const invites = processPendingChatInvites(currentUserId).catch(() => {});
+    await ensureChatInitialized();                      // WS service + Gun discovery, whatever tab is open
+    await invites;
+  } catch (err) {
+    console.warn('Chat bootstrap error (non-critical):', err);
+  }
+}
 
 // ── Feed mode & categories ─────────────────────────────────────────────────
 const feedMode = ref<'for-you' | 'latest'>('for-you');
@@ -1078,6 +1104,8 @@ watch(activeTab, (tab) => {
 });
 
 onMounted(async () => {
+  void bootstrapChat();
+
   // Don't stack the moderation modal on top of the quick tour — wait until
   // the tour is finished or skipped.
   if (!tutorialVisible.value) maybeShowOnboarding();
@@ -1154,14 +1182,8 @@ onMounted(async () => {
   // Heavy user-dependent init — runs in background, non-blocking
   void (async () => {
     try {
-      const currentUser = await UserService.getCurrentUser();
-      currentUserId = currentUser.id;
-      await processPendingChatInvites(currentUserId);
-      await Promise.allSettled([
-        chainStore.initialize(),
-        ensureBackgroundChatInitialized(),
-      ]);
-      if (activeTab.value === 'chat') await ensureChatInitialized();
+      await UserService.getCurrentUser();
+      await chainStore.initialize();
     } catch (err) {
       console.warn('Heavy init error (non-critical):', err);
     }

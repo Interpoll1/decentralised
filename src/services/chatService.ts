@@ -47,14 +47,27 @@ import {
 import { compareMessages } from '../utils/messageOrder';
 import type { StoredChatMessage, SyncStatus } from '../types/social';
 
-function getGunWire(gun: any): WebSocket | undefined {
+/**
+ * First open Gun wire. With ownOnly=true only OUR relay's wire qualifies: presence/chat control
+ * frames (register-presence, ping-peer, chat-message) are meaningless to a third-party public
+ * Gun peer (e.g. relay.peer.ooo), and sending them there both fails to register us and leaks
+ * who we are / who we talk to. Previously "first open wire" was whichever peer connected first.
+ */
+function getGunWire(gun: any, ownOnly = false): WebSocket | undefined {
   try {
     const peers = gun?._.opt?.peers;
     if (!peers) return undefined;
+    let ownHost = '';
+    try { ownHost = new URL(config.relay.gun).host; } catch { }
+    let fallback: WebSocket | undefined;
     for (const k of Object.keys(peers)) {
       const w = peers[k]?.wire;
-      if (w?.readyState === WebSocket.OPEN) return w as WebSocket;
+      if (w?.readyState !== WebSocket.OPEN) continue;
+      const url = String(peers[k]?.url ?? k);
+      if (ownHost && url.includes(ownHost)) return w as WebSocket;
+      if (!fallback) fallback = w as WebSocket;
     }
+    return ownOnly && ownHost ? undefined : fallback;
   } catch { }
   return undefined;
 }
@@ -88,13 +101,44 @@ const PRESENCE_STALE_MS     = 180_000; // 3min (was 95s)
 const PRESENCE_PING_MS      = 3_000;
 const PRESENCE_POLL_MS      = 15_000;
 const OUTBOX_TTL_MS         = 7 * 24 * 60 * 60 * 1000;
-const MAX_SEND_ATTEMPTS     = 12;
+const MAX_SEND_ATTEMPTS     = 40;     // was 12; resends are now paced by backoff (see resendDue)
 const FLUSH_INTERVAL_MS     = 15_000; // retry pending messages every 15s (was 60s)
 const CONNECTION_POLL_MS    = 3_000;
 const PRUNE_EVERY_N_FLUSHES = 60;
 const GUN_CHAIN_HEALTH_MS   = 20_000;
 
 const flushInFlight = new Set<string>();
+const flushQueued   = new Set<string>();   // a forced flush was requested while one was running
+
+// Every ChatService for one user shares a single IndexedDB. Whichever instance accepts a
+// message / delivery receipt first persists it; the others then see a 'duplicate' and stay
+// silent by design. The ChatView instance and the always-on background instance therefore
+// raced, and the loser's UI never heard about the message or the receipt (=> "new messages
+// only after refresh", and outgoing bubbles stuck on the pending mark). fanOut() delivers
+// each event to every live instance of the same user.
+const liveInstances = new Map<string, Set<ChatService>>();
+
+// Lifecycle trace. Receive failures used to be completely silent (receiveImpl returns a reason
+// that mergeRemote discarded), so a message the recipient rejected simply never appeared and the
+// sender sat on the pending mark with no clue why. Read it from the console with:
+//     copy(__chatTrace())          // or: console.log(__chatTrace())
+// and filter the console on "[chat-trace]" to watch it live. No message content is logged.
+const chatTraceBuf: string[] = [];
+function chatTrace(kind: string, detail = ''): void {
+  const line = `${new Date().toISOString().slice(11, 23)} ${kind}${detail ? ' ' + detail : ''}`;
+  chatTraceBuf.push(line);
+  if (chatTraceBuf.length > 400) chatTraceBuf.shift();
+  console.info('[chat-trace]', line);
+}
+const sid = (v: unknown): string => String(v ?? '').slice(0, 8);
+if (typeof window !== 'undefined') (window as any).__chatTrace = () => chatTraceBuf.join('\n');
+
+// Backoff for resending an unconfirmed message: 15s, 30s, 60s, 2m, 4m, then 5m.
+function resendDue(attempts: number, lastTry: number | undefined, now: number): boolean {
+  if (!lastTry || attempts <= 0) return true;
+  return now - lastTry >= Math.min(FLUSH_INTERVAL_MS * 2 ** (attempts - 1), 5 * 60_000);
+}
+const lastTryAt = new Map<string, number>();
 
 const _seenIds = new Map<string, BoundedSet<string>>();
 function seenIds(userId: string): BoundedSet<string> {
@@ -150,7 +194,12 @@ async function toChatMessage(row: StoredChatMessage): Promise<ChatMessage> {
     timestamp: row.timestamp,
     read:      !row.outgoing && !!row.readAt,
     sent:      row.outgoing,
-    status:    row.outgoing ? (row.deliveryEvidence ? 'confirmed' : 'pending') : undefined,
+    status:    row.outgoing
+      ? (row.deliveryEvidence ? 'confirmed'
+        : row.syncStatus === 'published' ? 'published'
+        : row.syncStatus === 'failed'    ? 'failed'
+        : 'pending')
+      : undefined,
     error:     row.error,
     mediaUrl, mediaType, fileName, fileSize,
   };
@@ -182,6 +231,8 @@ class ChatService {
   private pendingReadRecipients = new Set<string>(); // markAsRead calls before registered
 
   private reconnectTimer:   number | null = null;
+  private hbTimer:          number | null = null;   // app-level WS heartbeat
+  private lastRx            = 0;                    // last frame received on the relay WS
   private connectionPoll:   number | null = null;
   private flushTimer:       number | null = null;
   private flushCount        = 0;
@@ -234,10 +285,22 @@ class ChatService {
     this.peerId = `peer-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
   }
 
+  private fanOut(key: 'onMessage' | 'onMessageStatus' | 'onDelivered', payload: any): void {
+    const set = liveInstances.get(this.userId);
+    const targets = set && set.size ? [...set] : [this];
+    for (const inst of targets) {
+      if (inst.shuttingDown) continue;
+      try { (inst[key] as ((p: any) => void) | null)?.(payload); } catch { }
+    }
+  }
+
   // ── Init ──────────────────────────────────────────────────────────────────
 
   async init(): Promise<string> {
     this.shuttingDown = false;
+    let inst = liveInstances.get(this.userId);
+    if (!inst) liveInstances.set(this.userId, inst = new Set());
+    inst.add(this);
 
     // No implicit legacy-session migration or trust promotion. Read exact local
     // account records and require its actual signing authority.
@@ -476,6 +539,9 @@ class ChatService {
    */
   private async mergeRemote(raw:any,roomId:string):Promise<StoredChatMessage|null>{
     const result=await this.receiveRemote(raw,roomId);
+    chatTrace(`rx-${result.status}`, `id=${sid(raw?.id)} from=${sid(raw?.senderId)}${(result as any).reason ? ' reason="' + (result as any).reason + '"' : ''}`);
+    if (result.status === 'rejected-auth' || result.status === 'rejected-stale')
+      console.warn(`[ChatService] dropped incoming message ${sid(raw?.id)} (${result.status}): ${(result as any).reason ?? ''}`);
     return result.status==='accepted'?result.row!:null;
   }
   async receiveRemote(raw:any,roomId:string):Promise<ReceiveResult>{
@@ -550,7 +616,7 @@ class ChatService {
     try{
       for(const entry of await pendingEntries(this.userId)){
         const result=await this.receiveRemote(entry.raw,entry.roomId);
-        if(result.status==='accepted'&&result.row?.text&&!result.row.control)this.onMessage?.(await toChatMessage(result.row));
+        if(result.status==='accepted'&&result.row?.text&&!result.row.control)this.fanOut('onMessage', await toChatMessage(result.row));
       }
     }finally{this.retryingReceive=false;}
   }
@@ -565,7 +631,7 @@ class ChatService {
       // Skip tombstones (corrupted/undecryptable) and empty rows
       if (!row || !row.text || row.control || row.syncStatus === 'corrupted' || this.shuttingDown) return;
       seenIds(this.userId).add(raw.id);
-      this.onMessage?.(await toChatMessage(row));
+      this.fanOut('onMessage', await toChatMessage(row));
     })();
   }
 
@@ -723,7 +789,7 @@ class ChatService {
     GunService.getGun().get('chat-deleted').get(row.roomId).get(this.userId).put(null as any);
 
     void this.deliver(row).then(d => {
-      this.onMessageStatus?.({ id: d.id, status: d.syncStatus, error: d.error });
+      this.fanOut('onMessageStatus', { id: d.id, status: d.syncStatus, error: d.error });
     });
     return toChatMessage(row);
   }
@@ -756,19 +822,23 @@ class ChatService {
       row = await StorageService.patchDMDelivery(row.id, { encryptedEnvelope: JSON.stringify(envelope) }) ?? row;
       const record = toGunRecord({ id: row.id, senderId: row.senderId, recipientId,
         ...envelope, timestamp: row.timestamp, seq: row.seq });
+      chatTrace('tx', `id=${sid(row.id)} to=${sid(recipientId)} attempt=${attempts} bytes=${JSON.stringify(envelope).length} (auth=${envelope.auth?.length ?? 0} epoch=${envelope.epoch?.length ?? 0} ct=${envelope.ct.length}) ${this.ws?.readyState === WebSocket.OPEN ? (this.wsRegistered ? 'ws-ok' : 'ws-unregistered(Gun only)') : 'ws-down(Gun only)'}`);
       this.pushLiveFrame(recipientId, row.id, envelope, row.timestamp);
-      const ack = await gunPut(this.roomNode(row.roomId).get(row.id), record);
-      if (ack.ok) {
-        this.indexRoom(row.roomId, this.userId, recipientId);
-        error = 'Gun local acceptance; recipient receipt pending';
-      }
+      // Gun is the offline/persistence fallback only. Never make the status update (or the
+      // next outbox row) wait up to 8s for a Gun ack that the live WS path doesn't need.
+      void gunPut(this.roomNode(row.roomId).get(row.id), record).then(ack => {
+        if (ack.ok) this.indexRoom(row.roomId, this.userId, recipientId);
+      });
+      error = 'Sent; awaiting recipient receipt';
     } catch (e) {
       if (e instanceof DMIdentityError) this.onIdentityState?.({userId:recipientId,state:e.state});
       error = e instanceof Error ? e.message : 'Delivery failed';
+      chatTrace('tx-FAILED', `id=${sid(row.id)} to=${sid(recipientId)} attempt=${attempts} error="${error}"`);
     }
+    lastTryAt.set(row.id, Date.now());
     // Neither local Gun ACK nor relay forwarding establishes recipient delivery.
     return await StorageService.patchDMDelivery(row.id, {
-      syncStatus: 'pending', syncAttempts: attempts, error,
+      syncStatus: row.syncStatus === 'published' ? 'published' : 'pending', syncAttempts: attempts, error,
     }) ?? row;
   }
 
@@ -785,8 +855,9 @@ class ChatService {
         syncStatus: 'confirmed', error: undefined,
         deliveryEvidence: { kind: 'peer-receipt-v1', peer: row.senderId, digest },
       });
-      this.onDelivered?.({ messageId: outgoing.id, recipientId: row.senderId });
-      this.onMessageStatus?.({ id: outgoing.id, status: 'confirmed' });
+      this.fanOut('onDelivered', { messageId: outgoing.id, recipientId: row.senderId });
+      chatTrace('receipt-confirmed', `id=${sid(outgoing.id)}`);
+      this.fanOut('onMessageStatus', { id: outgoing.id, status: 'confirmed' });
       return;
     }
     if (row.outgoing || !row.encryptedEnvelope) return;
@@ -827,10 +898,12 @@ class ChatService {
       timestamp,
     });
     // Try dedicated chat WS first, then Gun's own WS as fallback
-    if (this.ws?.readyState === WebSocket.OPEN) {
+    // Before 'registered' the relay rejects chat frames (AUTH_REQUIRED); the outbox flush that
+    // runs on 'registered' re-sends them immediately, so skip the doomed send here.
+    if (this.ws?.readyState === WebSocket.OPEN && this.wsRegistered) {
       try { this.ws.send(frame); return; } catch { }
     }
-    const gunWire = getGunWire(GunService.getGun());
+    const gunWire = getGunWire(GunService.getGun(), true);
     if (gunWire?.readyState === WebSocket.OPEN) {
       try { gunWire.send(frame); } catch { }
     }
@@ -838,26 +911,42 @@ class ChatService {
 
   // ── Outbox ────────────────────────────────────────────────────────────────
 
-  async flushOutbox(): Promise<void> {
+  async flushOutbox(force = false): Promise<void> {
     await this.retryPendingReceives().catch(()=>{});
-    if (flushInFlight.has(this.userId) || !this.ready) return;
+    if (!this.ready) return;
+    if (flushInFlight.has(this.userId)) { if (force) flushQueued.add(this.userId); return; }
     flushInFlight.add(this.userId);
     try {
       const all  = await StorageService.getAllChatMessages();
       for (const receipt of all.filter(r => !r.outgoing && r.recipientId === this.userId && r.control))
         await this.processAccepted(receipt);
       const now  = Date.now();
+      // Messages we've stopped retrying (attempts spent or past the outbox TTL) and that never got
+      // a peer receipt used to show the pending mark forever (e.g. a month-old message). Mark them
+      // 'failed' so the UI says so. A late peer receipt still upgrades them to 'confirmed'.
+      for (const r of all) {
+        if (r.kind !== 'dm' || !r.outgoing || r.control || r.senderId !== this.userId) continue;
+        if (r.deliveryEvidence || r.syncStatus === 'confirmed' || r.syncStatus === 'failed') continue;
+        if (r.syncAttempts >= MAX_SEND_ATTEMPTS || now - r.timestamp >= OUTBOX_TTL_MS) {
+          const p = await StorageService.patchDMDelivery(r.id, { syncStatus: 'failed', error: 'Not confirmed by recipient' }).catch(() => undefined);
+          if (p) this.fanOut('onMessageStatus', { id: p.id, status: p.syncStatus, error: p.error });
+        }
+      }
       const pending = all.filter(r =>
         r.kind === 'dm' && r.outgoing && r.senderId === this.userId
-        && r.syncStatus !== 'confirmed'
+        && r.syncStatus !== 'confirmed' && r.syncStatus !== 'failed'
         && r.syncAttempts < MAX_SEND_ATTEMPTS
-        && now - r.timestamp < OUTBOX_TTL_MS);
+        && now - r.timestamp < OUTBOX_TTL_MS
+        && (force || resendDue(r.syncAttempts, lastTryAt.get(r.id), now)));
       for (const row of pending) {
         const result = await this.deliver(row);
-        this.onMessageStatus?.({ id: result.id, status: result.syncStatus, error: result.error });
+        this.fanOut('onMessageStatus', { id: result.id, status: result.syncStatus, error: result.error });
       }
     } catch (e) { console.warn('[ChatService] outbox flush failed:', e); }
-    finally { flushInFlight.delete(this.userId); }
+    finally {
+      flushInFlight.delete(this.userId);
+      if (flushQueued.delete(this.userId) && !this.shuttingDown) void this.flushOutbox(true);
+    }
   }
 
   private startOutboxLoop(): void {
@@ -877,7 +966,8 @@ class ChatService {
         });
     };
     this.flushTimer = window.setTimeout(tick, 5_000);
-    this.onlineHandler = () => { void this.flushOutbox(); };
+    // A network change often leaves the old socket "open" but dead: rebuild it, then flush.
+    this.onlineHandler = () => { this.forceReconnect(); void this.flushOutbox(true); };
     window.addEventListener('online', this.onlineHandler);
   }
 
@@ -896,7 +986,7 @@ class ChatService {
     if (next === this.connected) return;
     this.connected = next;
     this.onConnectionChange?.(next);
-    if (next) void this.flushOutbox();
+    if (next) void this.flushOutbox(true);
   }
 
   private startConnectionTracking(): void {
@@ -1118,15 +1208,17 @@ class ChatService {
 
   unwatchPeerPresence(peerId: string) { this.presenceSubs.get(peerId)?.(); }
 
-  private relayPing(peerId: string): Promise<boolean> {
+  /** Set once the main relay has failed to answer ping-peer twice in a row (older/stricter relay). */
+  private wsPingUnsupported = false;
+  private wsPingMisses      = 0;
+
+  private pingOver(wire: WebSocket, peerId: string, timeoutMs: number): Promise<boolean> {
     return new Promise((resolve, reject) => {
-      const wire = getGunWire(GunService.getGun());
-      if (!wire || wire.readyState !== WebSocket.OPEN) { reject(new Error('no wire')); return; }
       const id    = `pp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const timer = setTimeout(() => {
         wire.removeEventListener('message', handler);
         reject(new Error('timeout'));
-      }, PRESENCE_PING_MS);
+      }, timeoutMs);
       const handler = (e: MessageEvent) => {
         try {
           const d = JSON.parse(e.data);
@@ -1138,8 +1230,29 @@ class ChatService {
         } catch { }
       };
       wire.addEventListener('message', handler);
-      wire.send(JSON.stringify({ type: 'ping-peer', peerId, id }));
+      try { wire.send(JSON.stringify({ type: 'ping-peer', peerId, id })); }
+      catch (e) { clearTimeout(timer); wire.removeEventListener('message', handler); reject(e as Error); }
     });
+  }
+
+  /**
+   * Presence ping. The main relay owns the live socket table so it is authoritative; try it first.
+   * If it doesn't answer (older relay, or a validator that doesn't know the frame) fall back to
+   * OUR Gun relay's own ping-peer handler. Never a third-party public Gun peer.
+   */
+  private async relayPing(peerId: string): Promise<boolean> {
+    if (!this.wsPingUnsupported && this.ws?.readyState === WebSocket.OPEN && this.wsRegistered) {
+      try {
+        const online = await this.pingOver(this.ws, peerId, 3_000);
+        this.wsPingMisses = 0;
+        return online;
+      } catch {
+        if (++this.wsPingMisses >= 2) this.wsPingUnsupported = true;
+      }
+    }
+    const wire = getGunWire(GunService.getGun(), true);
+    if (!wire || wire.readyState !== WebSocket.OPEN) throw new Error('no wire');
+    return this.pingOver(wire, peerId, PRESENCE_PING_MS);
   }
 
   async isPeerOnline(peerId: string, opts: { skipRelayPing?: boolean } = {}): Promise<boolean> {
@@ -1154,7 +1267,7 @@ class ChatService {
 
   registerPresenceOnRelay(): void {
     const frame = JSON.stringify({ type: 'register-presence', userId: this.userId });
-    const wire = getGunWire(GunService.getGun());
+    const wire = getGunWire(GunService.getGun(), true);
     if (wire?.readyState === WebSocket.OPEN) { try { wire.send(frame); } catch { } }
     if (this.ws?.readyState === WebSocket.OPEN) { try { this.ws.send(frame); } catch { } }
   }
@@ -1167,18 +1280,25 @@ class ChatService {
     this.wsRegistered = false; // reset — must wait for 'registered' ack again
 
     this.ws.onopen = () => {
+      chatTrace('ws-open', `peer=${sid(this.peerId)}`);
+      this.wsPingUnsupported = false; this.wsPingMisses = 0;
+      this.lastRx = Date.now();
+      this.startHeartbeat();
       this.ws?.send(JSON.stringify({ type: 'register', peerId: this.peerId, userId: this.userId }));
       this.registerPresenceOnRelay();
       this.refreshConnected();
     };
 
     this.ws.onmessage = async (e) => {
+      this.lastRx = Date.now();
       try { await this.handleWsMessage(JSON.parse(e.data)); } catch { }
     };
 
     this.ws.onerror = () => {};
 
     this.ws.onclose = () => {
+      chatTrace('ws-close');
+      this.stopHeartbeat();
       this.wsRegistered = false;
       // Re-queue all watched recipients as pending reads so the next 'registered'
       // ack (or the onConnectionChange flush) will re-send receipts that may have
@@ -1193,6 +1313,44 @@ class ChatService {
   }
 
   /**
+   * App-level heartbeat. Browsers/WebViews don't surface protocol pings and a mobile network
+   * switch leaves a socket readyState===OPEN for a minute or more while nothing flows. Ping
+   * every 10s; if the relay has said nothing for 30s, tear the socket down and reconnect now.
+   */
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    this.hbTimer = window.setInterval(() => {
+      const ws = this.ws;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      if (Date.now() - this.lastRx > 30_000) { this.forceReconnect(); return; }
+      try { ws.send('{"type":"ping"}'); } catch { }
+    }, 10_000);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.hbTimer) { clearInterval(this.hbTimer); this.hbTimer = null; }
+  }
+
+  /** Drop the current socket without waiting for a (possibly never-arriving) close event. */
+  private forceReconnect(): void {
+    if (this.shuttingDown || !this.wsUrl) return;
+    this.stopHeartbeat();
+    if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+    const old = this.ws;
+    if (old) {
+      old.onopen = old.onmessage = old.onerror = old.onclose = null;
+      try { old.close(); } catch { }
+    }
+    this.ws = null;
+    this.wsRegistered = false;
+    for (const recipientId of this.watchedRooms.values()) this.pendingReadRecipients.add(recipientId);
+    this.refreshConnected();
+    this.connect();
+  }
+
+  private lastRelayErr = new Map<string, number>();
+
+  /**
    * Handle incoming WS frames.
    * 'chat-message' is the PRIMARY real-time delivery path (fast, no Gun latency).
    */
@@ -1201,6 +1359,7 @@ class ChatService {
       case 'registered': {
         // Relay confirmed our register frame is fully processed — safe to send chat-read now
         this.wsRegistered = true;
+        chatTrace('ws-registered');
 
         // Publish our Signal bundle to the relay's MySQL now that our WS session
         // is confirmed live. The liveClient ownership check in routes.js looks up
@@ -1216,7 +1375,7 @@ class ChatService {
         // Immediately flush the outbox — any messages that failed to send because
         // the bundle wasn't published yet (the common case on first load) will be
         // retried right now rather than waiting up to FLUSH_INTERVAL_MS.
-        void this.flushOutbox();
+        void this.flushOutbox(true);
 
         // Flush explicitly pending reads first
         for (const recipientId of this.pendingReadRecipients) {
@@ -1237,14 +1396,28 @@ class ChatService {
         break;
       }
 
-      case 'error':
-        if (data.code === 'AUTH_REQUIRED')
-          console.info('[ChatService] Relay WS auth required — Gun fallback active');
+      case 'pow-required':
+        // Sent by the relay instead of processing a frame; used to be ignored without a trace.
+        chatTrace('relay-pow-required', String(data.reason ?? ''));
+        console.warn('[ChatService] relay asked for proof-of-work and dropped a frame:', data.reason);
         break;
+
+      case 'error': {
+        // These were silently swallowed before, which hid relay-side rejections of chat frames.
+        const code = String(data.code ?? 'UNKNOWN');
+        const nowTs = Date.now();
+        if (nowTs - (this.lastRelayErr.get(code) ?? 0) > 30_000) {
+          this.lastRelayErr.set(code, nowTs);
+          console.warn(`[ChatService] relay WS error ${code}: ${data.reason ?? ''}`);
+          chatTrace('relay-error', `${code} ${data.reason ?? ''}`);
+        }
+        break;
+      }
 
       case 'chat-message': {
         const messageId = typeof data.messageId === 'string' ? data.messageId : null;
         if (!messageId) return;
+        chatTrace('ws-rx', `id=${sid(messageId)} from=${sid(data.from)}`);
 
         const v       = Number(data.v) || 1;
         const roomId  = this.getRoomId(this.userId, data.from);
@@ -1276,7 +1449,7 @@ class ChatService {
           const row = await this.mergeRemote(raw, roomId);
           if (row && row.text && !row.control) {
             seenIds(this.userId).add(messageId);
-            this.onMessage?.(await toChatMessage(row));
+            this.fanOut('onMessage', await toChatMessage(row));
           }
         } catch (e) {
           // Rejected input retains the authenticated session and epoch history.
@@ -1301,9 +1474,19 @@ class ChatService {
         if (data.from && data.payload) this.onRtcSignal?.({ from: data.from, payload: data.payload });
         break;
 
-      case 'chat-delivered':
+      case 'chat-delivered': {
+        // The relay's ack means only "stored and will be forwarded". It is NOT proof the recipient
+        // has it (that stays the authenticated peer receipt), so it maps to 'published' (one tick),
+        // never 'confirmed'. It also proves the relay accepted the frame, which is the easiest way
+        // to tell a rejected/dropped live path (stuck on the pending mark) from a slow recipient.
+        const id = typeof data.messageId === 'string' ? data.messageId : null;
+        chatTrace('relay-ack', `id=${sid(id)}`);
+        if (id) void this.markRelayAccepted(id, typeof data.recipientId === 'string' ? data.recipientId : '');
+        break;
+      }
+
       case 'chat-read-receipt':
-        // Unauthenticated relay metadata is neither a peer delivery nor read receipt.
+        // Unauthenticated relay metadata is not a peer read receipt.
         break;
 
       case 'chat-start':
@@ -1313,6 +1496,17 @@ class ChatService {
 
       case 'pong-peer': break;
     }
+  }
+
+  private async markRelayAccepted(id: string, recipientId: string): Promise<void> {
+    try {
+      const row = await StorageService.getChatMessage(id);
+      if (!row || !row.outgoing || row.senderId !== this.userId || row.control) return;
+      if (recipientId && row.recipientId !== recipientId) return;
+      if (row.deliveryEvidence || row.syncStatus === 'confirmed' || row.syncStatus === 'published') return;
+      const p = await StorageService.patchDMDelivery(id, { syncStatus: 'published', error: undefined });
+      if (p) this.fanOut('onMessageStatus', { id, status: p.syncStatus });
+    } catch { /* best-effort */ }
   }
 
   // ── Public API ────────────────────────────────────────────────────────────
@@ -1496,6 +1690,8 @@ class ChatService {
 
   disconnect(): void {
     this.shuttingDown = true;
+    liveInstances.get(this.userId)?.delete(this);
+    this.stopHeartbeat();
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer);  this.reconnectTimer = null; }
     if (this.connectionPoll) { clearInterval(this.connectionPoll); this.connectionPoll = null; }
     if (this.flushTimer)     { clearTimeout(this.flushTimer);      this.flushTimer = null; }
@@ -1517,3 +1713,20 @@ class ChatService {
 }
 
 export default ChatService;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

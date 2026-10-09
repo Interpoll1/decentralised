@@ -132,7 +132,7 @@
 
               <div class="message-meta">
                 <span class="message-time">{{ formatTime(msg.timestamp) }}</span>
-                <span v-if="msg.sent" class="message-status" :class="{ stalled: msg.status === 'failed' }">
+                <span v-if="msg.sent" class="message-status" :class="{ stalled: msg.status === 'failed' }" :title="deliveryTitle(msg)">
                   {{ deliveryMark(msg) }}
                 </span>
               </div>
@@ -313,6 +313,8 @@ import {
   IonButtons, onIonViewWillEnter, alertController, toastController,
 } from '@ionic/vue';
 import ChatService, { type ChatMessage } from '../services/chatService';
+import { mergeStatus } from '../utils/messageStatus';
+import { getNickname } from '../utils/chatNicknames';
 import { getSafetyNumber } from '../services/signalProtocol';
 import { UserService } from '../services/userService';
 import { GunService } from '../services/gunService';
@@ -339,8 +341,10 @@ const recipientId = computed(() =>
   || (isSealedToken(routeParam.value) ? '' : routeParam.value)
   || hashParams.value.get('id') || ''
 );
+// The name YOU gave this person (set from the chat list) outranks whatever the link or network says.
+const customName = ref('');
 const recipientName = computed(() =>
-  sealedChat.value?.name || (route.query.name as string) || hashParams.value.get('name') || 'User'
+  customName.value || sealedChat.value?.name || (route.query.name as string) || hashParams.value.get('name') || 'User'
 );
 
 // Inbound links (old shares, notifications, #id= links) still carry the raw
@@ -1109,10 +1113,22 @@ const statusLabel = computed(() => {
   return connected.value ? 'Connected' : 'Offline';
 });
 
+// ⋯ not yet accepted by the relay · ✓ sent (relay has it, recipient hasn't confirmed)
+// ✓✓ delivered (authenticated receipt from the recipient) · ! not confirmed, no longer retrying
 function deliveryMark(msg: ChatMessage): string {
-  if (msg.status === 'failed')  return '!';
-  if (msg.status === 'pending') return '⋯';
-  return msg.read ? '✓✓' : '✓';
+  if (msg.status === 'failed')    return '!';
+  if (msg.status === 'pending')   return '⋯';
+  if (msg.status === 'published') return '✓';
+  return '✓✓';
+}
+function deliveryTitle(msg: ChatMessage): string {
+  switch (msg.status) {
+    case 'failed':    return 'Not confirmed by the recipient';
+    case 'pending':   return msg.error && !/awaiting|No authenticated/i.test(msg.error)
+                        ? `Not sent yet — ${msg.error}` : 'Sending…';
+    case 'published': return 'Sent — waiting for the recipient';
+    default:          return msg.read ? 'Read' : 'Delivered';
+  }
 }
 
 function upsertMessage(msg: ChatMessage) {
@@ -1199,7 +1215,9 @@ function bindChatCallbacks(service: ChatService) {
     const at = messages.value.findIndex(m => m.id === id);
     if (at !== -1) {
       const updated = [...messages.value];
-      updated[at] = { ...updated[at], status, error };
+      // Events arrive in no guaranteed order (send routine, relay ack, peer receipt, retries):
+      // a tick may only move forward, never back to the pending mark.
+      updated[at] = { ...updated[at], status: mergeStatus(updated[at].status as any, status as any) as any, error };
       messages.value = updated;
     }
   };
@@ -1242,7 +1260,32 @@ function resetChatState() {
   netState.value = 'offline'; reconnectAttempts = 0;
 }
 
-function disconnectChat() { chatService?.disconnect(); chatService = null; }
+// Safety net: re-read IndexedDB every 4s so a message or delivery receipt that was accepted by
+// another ChatService instance (or while a callback was unbound) can never leave the UI stale.
+let reconcileTimer: number | null = null;
+function stopReconcile() { if (reconcileTimer) { clearInterval(reconcileTimer); reconcileTimer = null; } }
+function startReconcile(service: ChatService, targetUserId: string, gen: number) {
+  stopReconcile();
+  reconcileTimer = window.setInterval(async () => {
+    if (gen !== initGeneration || document.hidden) return;
+    try {
+      const fresh = await service.getLocalHistory(targetUserId);
+      const known = new Map<string, ChatMessage>(messages.value.map((m: ChatMessage): [string, ChatMessage] => [m.id, m]));
+      let gotNewIncoming = false;
+      for (const m of fresh) {
+        const cur = known.get(m.id);
+        if (!cur) { upsertMessage(m); if (!m.sent) gotNewIncoming = true; }
+        else {
+          const merged = mergeStatus(cur.status as any, m.status as any) as any;
+          if (merged !== cur.status) upsertMessage({ ...m, status: merged });
+        }
+      }
+      if (gotNewIncoming) { messages.value = [...messages.value].sort((a, b) => a.timestamp - b.timestamp); nextTick(() => scrollToBottom()); service.markAsRead(targetUserId); }
+    } catch { /* next tick */ }
+  }, 4000);
+}
+
+function disconnectChat() { stopReconcile(); chatService?.disconnect(); chatService = null; }
 
 async function initializeChat() {
   const targetUserId = recipientId.value;
@@ -1269,6 +1312,8 @@ async function initializeChat() {
   }
   if (gen !== initGeneration) return;
   myUserId = resolvedUserId;
+  try { customName.value = await getNickname(resolvedUserId, targetUserId); } catch { customName.value = ''; }
+  if (gen !== initGeneration) return;
 
   const service = new ChatService(WS_URL, resolvedUserId);
   bindChatCallbacks(service);
@@ -1295,6 +1340,7 @@ async function initializeChat() {
     if (gen !== initGeneration) { service.disconnect(); return; }
     history.forEach(upsertMessage);
     messages.value = [...messages.value].sort((a, b) => a.timestamp - b.timestamp);
+    startReconcile(service, targetUserId, gen);
   } catch (err) {
     chatError.value = err instanceof Error ? err.message : 'Could not start encrypted chat.';
   }

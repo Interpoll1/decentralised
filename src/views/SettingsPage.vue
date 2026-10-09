@@ -155,8 +155,8 @@
               <div>
                 <div class="toggle-label">Bottom bar items</div>
                 <div class="toggle-sub">
-                  Reorder, add or remove items, and pick the tab the app opens on.
-                  You can also long-press the bar itself.
+                  Hold any tab and drag it onto another to swap their places. The first tab is
+                  where the app opens (put Messages first to start there). Works on the bar itself too.
                 </div>
               </div>
               <button class="settings-inline-btn" :disabled="!navStore.enabled" @click="openNavCustomiser">Customise</button>
