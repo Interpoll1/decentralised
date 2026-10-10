@@ -24,19 +24,19 @@
   },
   "dependencies": {
     "@capacitor-mlkit/barcode-scanning": "^6.2.0",
-    "@capacitor/android": "^6.2.1",
+    "@capacitor/android": "^6.2.2",
     "@capacitor/app": "^6.0.3",
     "@capacitor/browser": "^6.0.6",
     "@capacitor/clipboard": "^6.0.3",
-    "@capacitor/core": "^6.2.1",
+    "@capacitor/core": "^6.2.2",
     "@capacitor/local-notifications": "^6.1.3",
     "@capacitor/push-notifications": "^6.0.5",
     "@capacitor/share": "^6.0.4",
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
-    "@ionic/vue": "^8.0.0",
-    "@ionic/vue-router": "^8.0.0",
-    "@noble/curves": "^2.0.1",
+    "@ionic/vue": "^8.8.19",
+    "@ionic/vue-router": "^8.8.19",
+    "@noble/curves": "^2.4.0",
     "@noble/hashes": "^1.3.3",
     "@unhead/vue": "^2.1.4",
     "@wxperia/liquid-glass-vue": "^1.0.9",
@@ -46,7 +46,7 @@
     "flexsearch": "^0.7.43",
     "gu": "^0.6.2",
     "gun": "^0.2020.1241",
-    "idb": "^8.0.0",
+    "idb": "^8.0.4",
     "ionicons": "^7.2.1",
     "naughty-words": "^1.2.0",
     "os-browserify": "^0.3.0",
@@ -54,23 +54,34 @@
     "pinia": "^2.1.7",
     "simple-peer": "^9.11.1",
     "stream-browserify": "^3.0.0",
-    "vue": "^3.4.0",
+    "vue": "^3.5.43",
     "vue-router": "^4.2.5",
-    "ws": "^8.19.0"
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
-    "@capacitor/cli": "^6.2.1",
+    "@capacitor/cli": "^6.2.2",
     "@types/node": "^20.10.0",
-    "@vitejs/plugin-vue": "^5.0.0",
-    "autoprefixer": "^10.4.16",
+    "@vitejs/plugin-vue": "^6.0.0",
+    "autoprefixer": "^10.6.1",
     "fake-indexeddb": "6.2.5",
-    "postcss": "^8.4.32",
+    "postcss": "^8.5.29",
     "tailwindcss": "^3.4.0",
     "typescript": "^5.9.3",
-    "vite": "^5.0.0",
+    "vite": "^7.3.0",
     "vite-plugin-pwa": "^1.3.0",
-    "vitest": "^4.1.4",
-    "vue-tsc": "^3.2.4"
+    "vitest": "^4.1.11",
+    "vue-tsc": "^3.3.12"
+  },
+  "overrides": {
+    "tar": "^7.5.21",
+    "uuid": "^11.1.1",
+    "@xmldom/xmldom": "^0.9.12",
+    "minimatch": "^3.1.4"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "vue-demi@0.14.10": true,
+    "sharp@0.32.6": true
   }
 }
