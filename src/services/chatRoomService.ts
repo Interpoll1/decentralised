@@ -1,5 +1,6 @@
 /** Authenticated epoch rooms. Legacy shared-key rooms are read-only archives. */
 import { GunService } from './gunService';
+import config, { PRIVATE_PEERS, PUBLIC_PEERS } from '../config';
 import { KeyVaultService } from './keyVaultService';
 import { InviteLinkService } from './inviteLinkService';
 import { StorageService } from './storageService';
@@ -199,15 +200,18 @@ export class ChatRoomService {
   }
   /**
    * Connect to relays other members use, so members on different relays still
-   * share at least one path. Session-only and capped: a member can steer us to a
-   * relay, but it only ever sees ciphertext and cannot drop our existing ones.
+   * share at least one path. Only relays from this app's own directory are
+   * eligible: an arbitrary member-supplied URL would let any member learn every
+   * other member's IP address. Session-only and capped.
    */
   static adoptRelays(urls:string[]):string[]{
-    const known=new Set(GunService.peerUrls().map(u=>u.replace(/\/$/,'')));
+    const strip=(u:string)=>u.replace(/\/$/,'');
+    const directory=new Set([...PRIVATE_PEERS,...PUBLIC_PEERS,...config.getGunPeers()].map(strip));
+    const known=new Set(GunService.peerUrls().map(strip));
     const added:string[]=[];
     for(const url of urls.filter(validRelay)){
-      const clean=url.replace(/\/$/,'');
-      if(known.has(clean) || adoptedRelays.size>=MAX_ADOPTED_RELAYS)continue;
+      const clean=strip(url);
+      if(!directory.has(clean) || known.has(clean) || adoptedRelays.size>=MAX_ADOPTED_RELAYS)continue;
       adoptedRelays.add(clean);known.add(clean);GunService.addPeerDynamic(clean);added.push(clean);
     }
     return added;

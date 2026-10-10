@@ -11,6 +11,8 @@ const requestBytes=(r:Request)=>JSON.stringify(['interpoll/group/request',1,r.id
 export type JoinRequest = { version:1; room:string; id:string; binding:DeviceBinding; name:string; ts:number; password?:string };
 const passKey=(account:string,room:string)=>`group-pass-v1:${account}:${room}`;
 const MAX_PASSWORD_ATTEMPTS=5;
+/** Room-wide budget: device ids are free to mint, so a per-id cap alone does not stop guessing. */
+const ROOM_CHECKS_PER_WINDOW=10, ROOM_CHECK_WINDOW_MS=10*60_000;
 const b64=(x:ArrayBuffer|Uint8Array)=>{let s='';for(const b of new Uint8Array(x))s+=String.fromCharCode(b);return btoa(s);};
 async function pbkdf2(password:string,salt:string){
   const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveBits']);
@@ -24,6 +26,12 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}
 export class GroupRoomTransport {
   private static listeners=new Map<string,()=>void>();
   private static passwordFailures=new Map<string,number>();
+  private static roomChecks=new Map<string,number[]>();
+  private static takeRoomCheck(room:string){
+    const now=Date.now(),recent=(this.roomChecks.get(room)??[]).filter(t=>now-t<ROOM_CHECK_WINDOW_MS);
+    if(recent.length>=ROOM_CHECKS_PER_WINDOW){this.roomChecks.set(room,recent);return false;}
+    recent.push(now);this.roomChecks.set(room,recent);return true;
+  }
   private static active=0;
   private static requests=0;
   static node(room:string){return GunService.getGun().get('chatrooms').get(room);}
@@ -233,6 +241,8 @@ export class GroupRoomTransport {
     if(state.epoch.members.some(b=>memberId(b)===memberId(request.binding)))return;
     const failures=this.passwordFailures.get(id)??0;
     if(failures>=MAX_PASSWORD_ATTEMPTS)return;
+    // Over budget: leave it pending for manual approval rather than burning CPU on guesses.
+    if(!this.takeRoomCheck(room))return;
     if(!await this.checkPassword(security,room,request.password)){this.passwordFailures.set(id,failures+1);return;}
     const epoch=await security.change(room,{add:request.binding});
     await this.publishEpoch(epoch);

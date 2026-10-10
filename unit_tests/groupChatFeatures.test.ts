@@ -108,6 +108,14 @@ describe('relay sharing',()=>{
  });
 });
 
+describe('relay adoption',()=>{
+ it('only adopts relays from the app directory',async()=>{
+  const {ChatRoomService}=await import('../src/services/chatRoomService');
+  (GunService as any).peerUrls=()=>[];(GunService as any).addPeerDynamic=vi.fn();
+  expect(ChatRoomService.adoptRelays(['https://evil.example/gun','https://relay.peer.ooo/gun'])).toEqual(['https://relay.peer.ooo/gun']);
+ });
+});
+
 describe('join requests',()=>{
  it('joiner seals a request only the owner can open, bound to the joiner identity',async()=>{
   const [a,d]=await Promise.all([identity(1),identity(4)]);
@@ -147,6 +155,15 @@ describe('password rooms',()=>{
   const spy=vi.spyOn(GroupRoomTransport,'checkPassword');
   for(let i=0;i<8;i++){await GroupRoomTransport.requestJoin(e,roomId,'Eve',`guess${i}`);await (GroupRoomTransport as any).autoAdmit(a,roomId,id,lastSealed());}
   expect(spy).toHaveBeenCalledTimes(5);
+ });
+ it('caps password checks room-wide even across fresh device ids',async()=>{
+  const {a,roomId}=await room();(GroupRoomTransport as any).roomChecks.clear();
+  const spy=vi.spyOn(GroupRoomTransport,'checkPassword');
+  for(let i=0;i<14;i++){
+   const x=await identity(100+i);await GroupRoomTransport.requestJoin(x,roomId,'Bot',`guess${i}`);
+   await (GroupRoomTransport as any).autoAdmit(a,roomId,CryptoService.hash(memberId(x.binding)),lastSealed());
+  }
+  expect(spy).toHaveBeenCalledTimes(10);
  });
  it('the public node only advertises the mode, never the password',async()=>{
   await room();
