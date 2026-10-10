@@ -16,7 +16,7 @@ export const POW_DIFFICULTY = {
 
 export const POW_EXEMPT = new Set([
   'ping', 'pong', 'register', 'join-room',
-  'chat-typing', 'chat-read', 'chat-delivered', 'chat-read-receipt',
+  'chat-start', 'chat-message', 'chat-typing', 'chat-read', 'chat-delivered', 'chat-read-receipt', 'register-presence', 'rtc-signal',
   'rtc-offer', 'rtc-answer', 'rtc-ice',
   'snapshot-accept', 'snapshot-cancel',
 ]);

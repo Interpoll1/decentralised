@@ -51,6 +51,8 @@ function adjustDifficulty(base, { botScore = 0, spamPenalty = 0 } = {}) {
 }
 
 export class PowChallenge {
+  get activeChallenges() { return this._pending; }
+
   constructor() {
     this._serverSecret = crypto.randomBytes(32);
     this._secretCreatedAt = Date.now();

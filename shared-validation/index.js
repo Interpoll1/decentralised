@@ -9,7 +9,7 @@ export const KNOWN_WS_TYPES = new Set([
   'broadcast', 'direct',
   'new-poll', 'new-block', 'new-event',
   'request-sync', 'sync-response',
-  'chat-start', 'chat-message', 'chat-typing', 'chat-read',
+  'chat-start', 'chat-message', 'chat-typing', 'chat-read', 'rtc-signal',
   'chat-delivered', 'chat-read-receipt', 'chatroom-message',
   'rtc-offer', 'rtc-answer', 'rtc-ice',
   'snapshot-offer', 'snapshot-accept', 'snapshot-chunk',

@@ -20,7 +20,9 @@ const ALLOWED_MESSAGE_TYPES = new Set([
   'new-poll', 'new-block', 'request-sync', 'sync-response', 'new-event',
   'chatroom-message', 'request-pow',
   // Enhanced relay types
-  'chat-start', 'chat-message', 'chat-typing', 'chat-read', 'new-post',
+  'chat-start', 'chat-message', 'chat-typing', 'chat-read', 'new-post', 'register-presence', 'rtc-signal',
+  // Presence query answered by websocket.js from the live socket table (needs a registered socket).
+  'ping-peer',
 ]);
 
 /**
@@ -247,4 +249,19 @@ const TYPE_VALIDATORS = {
   ping() {
     return { valid: true };
   },
+
+  'ping-peer'(data) {
+    if (typeof data.peerId !== 'string' || !data.peerId) return { valid: false, reason: 'Missing peerId' };
+    const peerId = sanitizeId(data.peerId, 128);
+    if (!peerId) return { valid: false, reason: 'Invalid peerId format' };
+    if (typeof data.id !== 'string' || !data.id || data.id.length > 64) return { valid: false, reason: 'Missing or oversized ping id' };
+    data.peerId = peerId;
+    return { valid: true };
+  },
+  'rtc-signal'(data) {
+    if (!data.to || typeof data.to !== 'string') return { valid: false, reason: 'Missing to' };
+    if (!data.payload || typeof data.payload !== 'object') return { valid: false, reason: 'Missing payload' };
+    return { valid: true };
+  },
+
 };

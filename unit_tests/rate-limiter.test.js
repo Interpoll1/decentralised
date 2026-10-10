@@ -63,7 +63,7 @@ describe('RateLimiter', () => {
       vi.advanceTimersByTime(3000);
       for (let i = 0; i < 6; i++) limiter.checkHttp('bad-ip');
       const second = limiter.checkHttp('bad-ip');
-      expect(second.retryAfter).toBe(8); // PENALTY_SCHEDULE[1]
+      expect(second.retryAfter).toBe(5); // PENALTY_SCHEDULE[1]
     });
   });
 

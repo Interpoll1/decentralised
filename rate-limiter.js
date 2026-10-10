@@ -1,4 +1,11 @@
-const PENALTY_SCHEDULE = [2, 8, 30, 120, 300]; // seconds
+const PENALTY_SCHEDULE = [2, 5, 15, 45, 120]; // seconds
+
+// Defaults are per-peer, per-minute. They must clear what a single healthy client
+// does while syncing a feed — the old 30 http / 60 ws pair was below that, so
+// ordinary users were cooled down mid-sync and propagation stalled. Override per
+// deployment with RATE_LIMIT_HTTP / RATE_LIMIT_WS.
+const DEFAULT_HTTP_LIMIT = Number(process.env.RATE_LIMIT_HTTP) || 120;
+const DEFAULT_WS_LIMIT   = Number(process.env.RATE_LIMIT_WS)   || 300;
 
 // Maximum number of peers to track in memory.
 // When exceeded, the oldest (by last activity) entries are evicted.
@@ -7,10 +14,10 @@ const MAX_PEERS = 50_000;
 
 export class RateLimiter {
   constructor(options = {}) {
-    this.httpLimit = options.httpLimit ?? 30;
-    this.wsLimit = options.wsLimit ?? 60;
+    this.httpLimit = options.httpLimit ?? DEFAULT_HTTP_LIMIT;
+    this.wsLimit = options.wsLimit ?? DEFAULT_WS_LIMIT;
     this.windowMs = options.windowMs ?? 60_000;
-    this.decayMs = 5 * 60_000; // 5 minutes of good behavior to decay 1 violation
+    this.decayMs = 2 * 60_000; // 2 minutes of good behavior to decay 1 violation
     this.peers = new Map();
     this._cleanupTimer = setInterval(() => this.cleanup(), 60_000);
     if (this._cleanupTimer.unref) this._cleanupTimer.unref();
@@ -87,7 +94,7 @@ export class RateLimiter {
       const penaltySec = PENALTY_SCHEDULE[penaltyIndex];
       entry.cooldownUntil = now + penaltySec * 1000;
 
-      if (penaltySec >= 300) {
+      if (penaltySec >= PENALTY_SCHEDULE[PENALTY_SCHEDULE.length - 1]) {
         console.log(`🚫 Rate limit: ${id} banned for ${penaltySec}s`);
       } else {
         console.log(`⚠️ Rate limit: ${id} violation #${entry.violations} — cooldown ${penaltySec}s`);
