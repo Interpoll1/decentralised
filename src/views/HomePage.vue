@@ -301,6 +301,8 @@
             :userSearchResults="userSearchResults"
             :searchingUsers="searchingUsers"
             :loading="!chatListHydrated"
+            :messageSearch="chatMessageSearch"
+            @search="onChatSearch"
             @searchUsers="handleUserSearch"
             @clearUserSearch="clearUserSearch"
             @startChat="startChatWithUser"
@@ -593,6 +595,8 @@ let chatComposable: ReturnType<typeof useChat> | null = null;
 const chatList          = ref<any[]>([]);
 const totalUnread       = ref(0);
 const chatListHydrated  = ref(false);
+const chatMessageSearch = ref<{ query: string; hits: Record<string, any> } | null>(null);
+let chatSearchSeq = 0;
 const userSearchResults = ref<any[]>([]);
 const searchingUsers    = ref(false);
 const userSearchQuery   = ref('');
@@ -614,6 +618,14 @@ function startChatWithUser(user: any) { ensureChat()?.startChatWithUser(user); }
 function clearUserSearch()            { ensureChat()?.clearUserSearch(); userSearchQuery.value = ''; }
 async function handleUserSearch()     { await ensureChat()?.handleUserSearch(); }
 async function loadChatList()         { await ensureChat()?.loadChatList(); }
+/** Message search for the chat list. Answers can arrive out of order, so only the newest request may set the result. */
+async function onChatSearch(query: string) {
+  const seq = ++chatSearchSeq;
+  const q = query.trim();
+  if (!q) { chatMessageSearch.value = null; return; }
+  const hits = await (ensureChat()?.searchMessages(q) ?? Promise.resolve({}));
+  if (seq === chatSearchSeq) chatMessageSearch.value = { query: q, hits };
+}
 function renameChat(p: { userId: string; nickname: string }) { void ensureChat()?.setNickname(p.userId, p.nickname); }
 async function processPendingChatInvites(userId: string) { await ensureChat()?.processPendingChatInvites(userId); }
 

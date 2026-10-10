@@ -3,13 +3,35 @@
 
     <!-- Header: title, unread pill, and a compact "New chat" action (replaces the big card) -->
     <header class="ct-head">
-      <div class="ct-head__text">
-        <h2 class="ct-head__title">Chats</h2>
-        <span v-if="totalUnread > 0" class="ct-head__unread">{{ totalUnread > 99 ? '99+' : totalUnread }} unread</span>
+      <div class="ct-search" role="search">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <input
+          v-model="query"
+          class="ct-search__input"
+          placeholder="Search by message or name"
+          aria-label="Search by message or name"
+          enterkeyhint="search"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+        />
+        <button v-if="query" class="link-clear" aria-label="Clear search" @click="query = ''">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
       </div>
-      <button class="ct-new" :class="{ 'ct-new--open': composerOpen }" :aria-expanded="composerOpen" @click="toggleComposer">
-        <svg class="ct-new__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
-        <span>New chat</span>
+      <button
+        class="ct-new"
+        :class="{ 'ct-new--open': composerOpen }"
+        :aria-expanded="composerOpen"
+        :aria-label="composerOpen ? 'Close new chat' : 'New chat'"
+        @click="toggleComposer"
+      >
+        <svg v-if="!composerOpen" class="ct-new__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M20.5 11.6a8.1 8.1 0 01-.9 3.7 8.2 8.2 0 01-7.3 4.5 8.1 8.1 0 01-3.7-.9L3.5 20.5l1.6-4.9a8.1 8.1 0 01-.9-3.7A8.2 8.2 0 018.7 4.6a8.1 8.1 0 013.6-.9h.5a8.2 8.2 0 017.7 7.7v.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M12 8.6v6M9 11.6h6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+        </svg>
+        <svg v-else class="ct-new__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        <span class="ct-new__label">{{ composerOpen ? 'Close' : 'New' }}</span>
       </button>
     </header>
 
@@ -50,15 +72,6 @@
       </section>
     </Transition>
 
-    <!-- Search: only worth the space once the list is long -->
-    <div v-if="chatList.length >= 6" class="ct-search">
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-      <input v-model="query" class="ct-search__input" placeholder="Search chats" aria-label="Search chats" autocomplete="off" spellcheck="false" />
-      <button v-if="query" class="link-clear" aria-label="Clear search" @click="query = ''">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-      </button>
-    </div>
-
     <!-- The list: ONE continuous surface, rows separated by hairlines (WhatsApp-style) -->
     <ul v-if="filteredChats.length" class="ct-list">
       <li
@@ -98,7 +111,7 @@
               </button>
             </div>
             <template v-else>
-              <span class="ct-row__name">{{ displayName(chat) }}</span>
+              <span class="ct-row__name"><template v-for="(p, i) in nameParts(chat)" :key="i"><mark v-if="p.hit" class="ct-hit">{{ p.t }}</mark><template v-else>{{ p.t }}</template></template></span>
               <button
                 type="button"
                 class="ct-row__edit"
@@ -113,16 +126,17 @@
             </template>
           </div>
           <div class="ct-row__bottom">
-            <span class="ct-row__preview" :class="{ 'ct-row__preview--empty': !previewText(chat) }">
-              <span v-if="isMine(chat)" class="ct-row__you">You:</span>{{ previewText(chat) || 'No messages yet' }}
+            <span class="ct-row__preview" :class="{ 'ct-row__preview--empty': !previewShown(chat) }">
+              <span v-if="previewMine(chat)" class="ct-row__you">You:</span><template v-for="(p, i) in previewParts(chat)" :key="i"><mark v-if="p.hit" class="ct-hit">{{ p.t }}</mark><template v-else>{{ p.t }}</template></template><template v-if="!previewShown(chat)">No messages yet</template>
             </span>
+            <span v-if="matchCount(chat) > 1" class="ct-row__matches">{{ matchCount(chat) > 99 ? '99+' : matchCount(chat) }} matches</span>
             <span v-if="chat.unreadCount > 0" class="ct-row__badge">{{ chat.unreadCount > 99 ? '99+' : chat.unreadCount }}</span>
           </div>
         </div>
       </li>
     </ul>
 
-    <p v-else-if="chatList.length && query" class="ct-nomatch">No chats match “{{ query }}”.</p>
+    <p v-else-if="trimmed && chatList.length" class="ct-nomatch">{{ searchPending ? 'Searching messages…' : `No chats or messages match “${trimmed}”.` }}</p>
 
     <!-- Loading: skeleton in the same surface so the layout doesn't jump -->
     <div v-else-if="loading" class="ct-list ct-skel" aria-hidden="true">
@@ -146,10 +160,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue';
+import { ref, computed, nextTick, watch, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { chatPath } from '../utils/privateRoute';
 import { cleanNickname, MAX_NICKNAME } from '../utils/nicknameText';
+import { findMatch, splitHighlight, MIN_MESSAGE_QUERY, type MessageHit } from '../utils/chatSearch';
 
 interface ChatEntry {
   userId: string;
@@ -175,11 +190,15 @@ const props = defineProps<{
   userSearchResults: UserResult[];
   searchingUsers: boolean;
   loading?: boolean;
+  /** Result of the message search the parent ran for `query` (ignored if it is for an older query). */
+  messageSearch?: { query: string; hits: Record<string, MessageHit> } | null;
 }>();
 
 const emit = defineEmits<{
   (e: 'openChat', chat: ChatEntry): void;
   (e: 'rename', payload: { userId: string; nickname: string }): void;
+  /** The (debounced) search text; the parent looks through stored messages and answers via `messageSearch`. */
+  (e: 'search', query: string): void;
   (e: 'openFromLink', url: string): void;
   // keep legacy emits so HomePage doesn't break
   (e: 'searchUsers', query: string): void;
@@ -253,13 +272,49 @@ function toggleComposer(force?: boolean | Event) {
 }
 
 const query = ref('');
-const filteredChats = computed(() => {
-  const q = query.value.trim().toLowerCase();
-  if (!q) return props.chatList;
-  return props.chatList.filter(c =>
-    displayName(c).toLowerCase().includes(q) || baseName(c).toLowerCase().includes(q)
-    || (c.lastMessage || '').toLowerCase().includes(q));
+const trimmed = computed(() => query.value.trim());
+
+// Tell the parent what to look for (debounced), so it can search the stored messages.
+let searchTimer: ReturnType<typeof setTimeout> | null = null;
+watch(query, (v) => {
+  if (searchTimer) { clearTimeout(searchTimer); searchTimer = null; }
+  const q = v.trim();
+  if (!q) { emit('search', ''); return; }
+  searchTimer = setTimeout(() => { searchTimer = null; emit('search', q); }, 180);
 });
+onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer); });
+
+/** Message hits, but only if they answer the CURRENT text (never show results for an older query). */
+const hits = computed<Record<string, MessageHit>>(() =>
+  props.messageSearch && props.messageSearch.query === trimmed.value ? props.messageSearch.hits : {});
+const searchPending = computed(() =>
+  Array.from(trimmed.value).length >= MIN_MESSAGE_QUERY && props.messageSearch?.query !== trimmed.value);
+
+function nameMatches(c: ChatEntry): boolean {
+  return !!findMatch(displayName(c), trimmed.value) || !!findMatch(baseName(c), trimmed.value);
+}
+const filteredChats = computed(() => {
+  const q = trimmed.value;
+  if (!q) return props.chatList;
+  return props.chatList.filter(c => nameMatches(c) || !!hits.value[c.userId] || !!findMatch(c.lastMessage || '', q));
+});
+
+// What each row shows while searching. When not searching these collapse to the normal name / preview.
+function nameParts(c: ChatEntry) {
+  const n = displayName(c);
+  if (!trimmed.value) return [{ t: n, hit: false }];
+  if (findMatch(n, trimmed.value)) return splitHighlight(n, trimmed.value);
+  return [{ t: n, hit: false }];
+}
+function matchCount(c: ChatEntry): number { return hits.value[c.userId]?.count ?? 0; }
+function previewMine(c: ChatEntry): boolean { const h = hits.value[c.userId]; return h ? h.mine : isMine(c); }
+function previewParts(c: ChatEntry): { t: string; hit: boolean }[] {
+  const h = hits.value[c.userId];
+  if (h) return [{ t: h.before, hit: false }, { t: h.hit, hit: true }, { t: h.after, hit: false }].filter(p => p.t);
+  const text = previewText(c);
+  return trimmed.value ? splitHighlight(text, trimmed.value) : (text ? [{ t: text, hit: false }] : []);
+}
+function previewShown(c: ChatEntry): boolean { return previewParts(c).length > 0; }
 
 function extractChatPath(raw: string): { userId: string; name: string } | null {
   const s = raw.trim();
@@ -346,29 +401,38 @@ function formatChatTime(timestamp: number): string {
   --ct-tint:   rgba(var(--app-accent-rgb), 0.14);
 }
 
-/* ── Header ─────────────────────────────────────────────────────────── */
-.ct-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 4px 0; }
-.ct-head__text { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.ct-head__title { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; color: var(--app-text); }
-.ct-head__unread {
-  font-size: 12px; font-weight: 700; color: var(--app-accent-bright); white-space: nowrap;
-  background: var(--ct-tint); border-radius: 999px; padding: 3px 10px;
-}
+/* ── Header: pill search + "New chat" button ───────────────────────── */
+/* A little inset so the search doesn't sit flush against the screen edge. */
+.ct-head { display: flex; align-items: center; gap: 8px; padding: 2px 0 0; margin: 0 6px; }
 .ct-new {
-  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
-  padding: 8px 15px 8px 11px; border: none; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex-shrink: 0;
+  height: 46px; padding: 0 14px 0 11px; border: none; border-radius: 999px; white-space: nowrap;
   background: linear-gradient(135deg, var(--app-accent-bright), #8b5cf6); color: #fff;
-  font: inherit; font-size: 13.5px; font-weight: 700; cursor: pointer;
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
-  transition: transform 140ms, box-shadow 140ms, opacity 140ms;
-  -webkit-tap-highlight-color: transparent;
+  font: inherit; font-size: 13px; font-weight: 700; letter-spacing: -0.005em; line-height: 1;
+  cursor: pointer; box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+  transition: transform 140ms, box-shadow 140ms; -webkit-tap-highlight-color: transparent;
 }
 .ct-new:active { transform: scale(0.96); }
-.ct-new__icon { width: 16px; height: 16px; transition: transform 200ms; }
-.ct-new--open .ct-new__icon { transform: rotate(45deg); }
+.ct-new__icon { width: 19px; height: 19px; flex-shrink: 0; }
+.ct-new--open { background: rgba(var(--app-accent-rgb), 0.18); color: var(--app-text); box-shadow: none; }
+/* Phones: the label would squeeze the placeholder ("Search by message or name") off the pill, so the
+   icon sits ABOVE a small caption in a compact tile. The label stays visible at every width. */
+@media (max-width: 399px) {
+  .ct-new { flex-direction: column; gap: 3px; width: 58px; padding: 0; border-radius: 16px; font-size: 10.5px; }
+}
+/* The very smallest phones (320px): trim a little more so the placeholder still fits. */
+@media (max-width: 339px) {
+  .ct .ct-new { width: 52px; }
+  .ct .ct-search__input { font-size: 13px; }   /* .ct prefix: this block comes before the base rule, so it needs the extra specificity */
+}
+/* Larger screens: a little breathing room above the search. */
+@media (min-width: 768px) {
+  .ct { padding-top: 18px; }
+}
 
 /* ── New-chat panel ─────────────────────────────────────────────────── */
 .ct-composer {
+  margin: 0 6px;
   display: flex; flex-direction: column; gap: 10px; padding: 14px;
   background: rgba(var(--app-accent-rgb), 0.07); border: 1px solid rgba(var(--app-accent-rgb), 0.18); border-radius: 18px;
 }
@@ -457,15 +521,26 @@ function formatChatTime(timestamp: number): string {
 .open-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .open-btn svg { width: 16px; height: 16px; }
 
-/* ── Search ─────────────────────────────────────────────────────────── */
+/* ── Search (pill) ──────────────────────────────────────────────────── */
 .ct-search {
-  display: flex; align-items: center; gap: 8px; padding: 9px 13px; border-radius: 14px;
-  background: rgba(var(--app-accent-rgb), 0.07); border: 1px solid rgba(var(--app-accent-rgb), 0.18); color: var(--app-text-subtle);
+  flex: 1; min-width: 0; height: 46px; box-sizing: border-box; padding: 0 6px 0 14px;
+  display: flex; align-items: center; gap: 8px; border-radius: 999px;
+  background: rgba(var(--app-accent-rgb), 0.08); border: 1px solid rgba(var(--app-accent-rgb), 0.2);
+  color: var(--app-text-subtle); transition: border-color 140ms, box-shadow 140ms, background 140ms;
 }
-.ct-search svg { width: 16px; height: 16px; flex-shrink: 0; }
-.ct-search__input { flex: 1; min-width: 0; background: transparent; border: none; outline: none; font: inherit; font-size: 14px; color: var(--app-text); }
-.ct-search__input::placeholder { color: var(--app-text-subtle); }
-.ct-nomatch { text-align: center; color: var(--app-text-muted); font-size: 13.5px; margin: 18px 0; }
+.ct-search:focus-within {
+  border-color: rgba(var(--app-accent-rgb), 0.55); background: rgba(var(--app-accent-rgb), 0.12);
+  box-shadow: 0 0 0 3px rgba(var(--app-accent-rgb), 0.14);
+}
+.ct-search > svg { width: 17px; height: 17px; flex-shrink: 0; }
+.ct-search__input { flex: 1; min-width: 0; height: 100%; background: transparent; border: none; outline: none; font: inherit; font-size: 14px; color: var(--app-text); }
+.ct-search__input::placeholder { color: var(--app-text-subtle); text-overflow: ellipsis; }
+.ct-nomatch { text-align: center; color: var(--app-text-muted); font-size: 13.5px; margin: 22px 0; }
+.ct-hit { background: rgba(var(--app-accent-rgb), 0.3); color: inherit; border-radius: 4px; padding: 0 1px; }
+.ct-row__matches {
+  flex-shrink: 0; font-size: 11px; font-weight: 700; color: var(--app-accent-bright);
+  background: rgba(var(--app-accent-rgb), 0.14); border-radius: 999px; padding: 2px 8px; white-space: nowrap;
+}
 
 /* ── Avatars ────────────────────────────────────────────────────────── */
 .avatar {
@@ -590,6 +665,6 @@ function formatChatTime(timestamp: number): string {
 
 @media (prefers-reduced-motion: reduce) {
   .ct-skel__avatar, .ct-skel__lines span, .mini-spinner { animation: none; }
-  .ct-new, .ct-new__icon, .ct-row, .ct-slide-enter-active, .ct-slide-leave-active { transition: none; }
+  .ct-new, .ct-row, .ct-slide-enter-active, .ct-slide-leave-active { transition: none; }
 }
 </style>

@@ -17,6 +17,7 @@ import ChatService from '../services/chatService';
 import { initNotifications, notifyChatMessage, clearChatNotification } from '../services/notificationService';
 import { summarizeRoom } from '../utils/chatPreview';
 import { loadNicknames, saveNickname, cleanNickname } from '../utils/chatNicknames';
+import { searchMessages as searchStoredMessages, MIN_MESSAGE_QUERY, type MessageHit } from '../utils/chatSearch';
 import type { StoredChatMessage } from '../types/social';
 
 export interface ChatEntry {
@@ -469,6 +470,25 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
     catch (err) { console.warn('[useChat] could not save the chat name:', err); }
   }
 
+  /**
+   * Look through the messages stored on this device for `query`, grouped by conversation.
+   * Purely local. The stored rows are re-read at most every few seconds so typing stays cheap
+   * while a message that just arrived still becomes findable almost immediately.
+   */
+  let searchRows: { at: number; rows: StoredChatMessage[] } | null = null;
+  async function searchMessages(query: string): Promise<Record<string, MessageHit>> {
+    const q = query.trim();
+    if (!currentUserId || Array.from(q).length < MIN_MESSAGE_QUERY) return {};
+    try {
+      const now = Date.now();
+      if (!searchRows || now - searchRows.at > 3_000) searchRows = { at: now, rows: await StorageService.getAllChatMessages() };
+      return searchStoredMessages(searchRows.rows, currentUserId, q);
+    } catch (err) {
+      console.warn('[useChat] message search failed:', err);
+      return {};
+    }
+  }
+
   // ─── Navigation ───────────────────────────────────────────────────────────
 
   function openChat(chat: ChatEntry) {
@@ -540,7 +560,7 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
   }
 
   return {
-    chatList, totalUnread, chatListHydrated, hydrateChatList, setNickname,
+    chatList, totalUnread, chatListHydrated, hydrateChatList, setNickname, searchMessages,
     userSearchQuery, userSearchResults, searchingUsers,
     loadChatList, ensureChatInitialized,
     processPendingChatInvites,
