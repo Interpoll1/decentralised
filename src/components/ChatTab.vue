@@ -45,6 +45,10 @@
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
           <span><strong>Open a link</strong><small>Someone's chat link or a group invite</small></span>
         </button>
+        <button class="ct-menu__item" role="menuitem" @click="newMenuOpen = false; copyMyLink()">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 15V3M8 7l4-4 4 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span><strong>Copy my invite link</strong><small>Anyone with it can message you</small></span>
+        </button>
       </div>
     </header>
     <GroupCreateSheet :open="createOpen" @close="createOpen = false" />
@@ -391,6 +395,20 @@ const rows = computed<Row[]>(() => {
   // While searching, keep the parent's ranking for people; otherwise newest first.
   return q ? [...groups, ...dms] : [...groups, ...dms].sort((a, b) => b.time - a.time);
 });
+/** Your personal chat link, same format as the profile page shares. */
+async function copyMyLink() {
+  const user = await UserService.getCurrentUser().catch(() => null);
+  if (!user) return;
+  const name = encodeURIComponent((user as any).customUsername || user.displayName || user.username || 'User');
+  const link = `${window.location.origin}/chat#id=${encodeURIComponent(user.id)}&name=${name}`;
+  const shared = 'share' in navigator && matchMedia('(pointer: coarse)').matches
+    ? await navigator.share({ title: 'Message me on InterPoll', url: link }).then(() => true, () => false)
+    : false;
+  if (!shared) await navigator.clipboard.writeText(link).catch(() => {});
+  const { toastController } = await import('@ionic/vue');
+  const t = await toastController.create({ message: shared ? 'Link shared' : 'Your invite link is copied', duration: 1800, position: 'top' });
+  await t.present();
+}
 function openGroup(id: string) { void router.push(`/chatroom/${encodeURIComponent(id)}`); }
 
 function extractChatPath(raw: string): { userId: string; name: string } | null {
@@ -486,10 +504,10 @@ function formatChatTime(timestamp: number): string {
 }
 
 /* ── "New" menu ───────────────────────────────────────────────────── */
-.ct-head { position: relative; }
-.ct-menu-backdrop { position: fixed; inset: 0; z-index: 40; }
+.ct-head { position: relative; z-index: 20; }
+.ct-menu-backdrop { position: fixed; inset: 0; z-index: 9998; }
 .ct-menu {
-  position: absolute; right: 0; top: calc(100% + 6px); z-index: 41; min-width: 250px; padding: 6px;
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 9999; min-width: 250px; padding: 6px;
   border-radius: 14px; background: var(--app-bg-elevated); border: 1px solid var(--app-border-strong, var(--app-border));
   box-shadow: var(--app-shadow-lg, 0 16px 40px rgba(0,0,0,.25));
 }

@@ -18,17 +18,19 @@
               <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.9"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
             </button>
             <div class="overflow">
-              <button class="icon-btn" aria-label="More options" aria-haspopup="menu" :aria-expanded="overflowOpen" @click="overflowOpen = !overflowOpen">
+              <button class="icon-btn" aria-label="More options" aria-haspopup="menu" :aria-expanded="overflowOpen" @click="toggleOverflow($event)">
                 <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5.5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="18.5" r="1.8"/></svg>
                 <span v-if="chatRoomStore.pendingJoins.length" class="dot-badge"></span>
               </button>
+              <Teleport to="body">
               <div v-if="overflowOpen" class="pop-backdrop" @click="overflowOpen = false"></div>
-              <div v-if="overflowOpen" class="pop pop--right" role="menu">
+              <div v-if="overflowOpen" class="pop" :style="popStyle" role="menu">
                 <button class="pop-item" role="menuitem" @click="openInfo">Group info<span v-if="chatRoomStore.pendingJoins.length" class="pop-count">{{ chatRoomStore.pendingJoins.length }}</span></button>
                 <button class="pop-item" role="menuitem" @click="overflowOpen = false; copyInvite()">Copy invite link</button>
                 <button v-if="chatRoomStore.pinnedMessages.length" class="pop-item" role="menuitem" @click="openInfo">Pinned messages</button>
                 <button class="pop-item pop-item--danger" role="menuitem" @click="overflowOpen = false; confirmLeave()">{{ chatRoomStore.isOwner ? 'Close group' : 'Leave group' }}</button>
               </div>
+              </Teleport>
             </div>
           </template>
         </div>
@@ -201,11 +203,12 @@
           </template>
           <template v-else>
             <div class="attach">
-              <button class="icon-btn" :class="{ 'icon-btn--on': attachOpen }" aria-label="Attach" aria-haspopup="menu" :aria-expanded="attachOpen" :disabled="!!editing" @click="attachOpen = !attachOpen; emojiOpen = false">
+              <button class="icon-btn" :class="{ 'icon-btn--on': attachOpen }" aria-label="Attach" aria-haspopup="menu" :aria-expanded="attachOpen" :disabled="!!editing" @click="toggleAttach($event)">
                 <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
               </button>
+              <Teleport to="body">
               <div v-if="attachOpen" class="pop-backdrop" @click="attachOpen = false"></div>
-              <div v-if="attachOpen" class="pop pop--up" role="menu">
+              <div v-if="attachOpen" class="pop" :style="popStyle" role="menu">
                 <button class="pop-item pop-item--icon" role="menuitem" @click="pickFile('media')">
                   <span class="pop-ico pop-ico--media"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="10" r="1.6" fill="currentColor"/><path d="M4 17l5-4.5 4 3.5 3-2.5 4 3.5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
                   Photo or video
@@ -219,6 +222,7 @@
                   Poll
                 </button>
               </div>
+              </Teleport>
             </div>
             <input ref="fileInput" type="file" hidden @change="onFilePicked" />
             <div class="field-wrap">
@@ -424,6 +428,19 @@ function pickFile(kind: 'media' | 'file') {
   fileInput.value.accept = kind === 'media' ? 'image/*,video/*' : '';
   fileInput.value.click();
 }
+/**
+ * Menus render at <body> level: ion-header/ion-footer clip their contents,
+ * which hid these menus behind the toolbar.
+ */
+const popStyle = ref<Record<string, string>>({});
+function placePop(ev: Event, above: boolean) {
+  const r = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+  popStyle.value = above
+    ? { left: `${Math.max(8, r.left)}px`, bottom: `${window.innerHeight - r.top + 8}px` }
+    : { right: `${Math.max(8, window.innerWidth - r.right)}px`, top: `${r.bottom + 4}px` };
+}
+function toggleOverflow(ev: Event) { attachOpen.value = false; if (!overflowOpen.value) placePop(ev, false); overflowOpen.value = !overflowOpen.value; }
+function toggleAttach(ev: Event) { overflowOpen.value = false; emojiOpen.value = false; if (!attachOpen.value) placePop(ev, true); attachOpen.value = !attachOpen.value; }
 function openInfo() { overflowOpen.value = false; showMembers.value = true; }
 const typingText = computed(() => {
   const n = chatRoomStore.typingNames;
@@ -1020,10 +1037,8 @@ ion-toolbar { --border-width: 0 !important; --background: var(--app-bg-elevated)
 .dot-badge { position: absolute; top: 8px; right: 8px; width: 9px; height: 9px; border-radius: 50%; background: var(--app-warning, #f59e0b); border: 2px solid var(--app-bg-elevated); }
 
 .overflow, .attach { position: relative; }
-.pop-backdrop { position: fixed; inset: 0; z-index: 50; }
-.pop { position: absolute; z-index: 51; min-width: 210px; padding: 6px; border-radius: 14px; background: var(--app-bg-elevated); border: 1px solid var(--app-border-strong, var(--app-border)); box-shadow: var(--app-shadow-lg, 0 16px 40px rgba(0,0,0,.28)); }
-.pop--right { right: 0; top: calc(100% + 4px); }
-.pop--up { left: 0; bottom: calc(100% + 8px); }
+.pop-backdrop { position: fixed; inset: 0; z-index: 9998; }
+.pop { position: fixed; z-index: 9999; min-width: 210px; padding: 6px; border-radius: 14px; background: var(--app-bg-elevated); border: 1px solid var(--app-border-strong, var(--app-border)); box-shadow: var(--app-shadow-lg, 0 16px 40px rgba(0,0,0,.28)); }
 .pop-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 12px; border: none; border-radius: 10px; background: none; color: var(--app-text); font: inherit; font-size: 14.5px; text-align: left; cursor: pointer; }
 .pop-item:hover, .pop-item:focus-visible { background: rgba(var(--app-accent-rgb), 0.09); outline: none; }
 .pop-item--danger { color: var(--app-danger); }
