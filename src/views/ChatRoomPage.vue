@@ -1,315 +1,370 @@
 <template>
-  <ion-page>
-    <ion-header>
+  <ion-page class="room">
+    <ion-header class="room-header">
       <ion-toolbar>
-        <ion-buttons slot="start">
-          <button class="back-btn" @click="$router.back()">
+        <div class="bar">
+          <button class="icon-btn" aria-label="Back" @click="$router.back()">
             <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
-        </ion-buttons>
-        <ion-title>
-          <button class="title-btn" :disabled="!ready" @click="showMembers = true">
-            <span class="title-name">{{ roomTitle }}</span>
-            <span v-if="ready" class="title-sub" :class="{ typing: chatRoomStore.typingNames.length }">{{ subtitle }}</span>
+          <button class="bar-identity" :disabled="!ready" aria-label="Group info" @click="openInfo">
+            <ChatAvatar :name="roomTitle" :seed="roomId" group size="lg" />
+            <span class="bar-text">
+              <span class="bar-name">{{ roomTitle }}</span>
+              <span v-if="ready" class="bar-sub" :class="{ 'bar-sub--typing': chatRoomStore.typingNames.length }">{{ subtitle }}</span>
+            </span>
           </button>
-        </ion-title>
-        <ion-buttons slot="end">
-          <button v-if="ready" class="header-action-btn" :class="{ active: searchOpen }" title="Search messages" @click="toggleSearch">
-            <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          </button>
-          <button v-if="ready" class="header-action-btn" title="Members" @click="showMembers = true">
-            <svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.5" stroke="currentColor" stroke-width="1.8"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5M16 4.8a3.4 3.4 0 010 6.4M18 14.8c1.9.7 3.1 2.4 3.5 5.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-            <span v-if="chatRoomStore.pendingJoins.length" class="hdr-badge">{{ chatRoomStore.pendingJoins.length }}</span>
-          </button>
-          <button class="header-action-btn" @click="shareInvite" :disabled="!hasAccess" title="Copy invite link">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path d="M21 12l-7-7v4C7 10 4 15 3 21c2.5-3.5 6-5.1 11-5.1V20l7-8z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
-            </svg>
-          </button>
-        </ion-buttons>
+          <template v-if="ready">
+            <button class="icon-btn" :class="{ 'icon-btn--on': searchOpen }" aria-label="Search messages" title="Search messages" @click="toggleSearch">
+              <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.9"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+            </button>
+            <div class="overflow">
+              <button class="icon-btn" aria-label="More options" aria-haspopup="menu" :aria-expanded="overflowOpen" @click="overflowOpen = !overflowOpen">
+                <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5.5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="18.5" r="1.8"/></svg>
+                <span v-if="chatRoomStore.pendingJoins.length" class="dot-badge"></span>
+              </button>
+              <div v-if="overflowOpen" class="pop-backdrop" @click="overflowOpen = false"></div>
+              <div v-if="overflowOpen" class="pop pop--right" role="menu">
+                <button class="pop-item" role="menuitem" @click="openInfo">Group info<span v-if="chatRoomStore.pendingJoins.length" class="pop-count">{{ chatRoomStore.pendingJoins.length }}</span></button>
+                <button class="pop-item" role="menuitem" @click="overflowOpen = false; copyInvite()">Copy invite link</button>
+                <button v-if="chatRoomStore.pinnedMessages.length" class="pop-item" role="menuitem" @click="openInfo">Pinned messages</button>
+                <button class="pop-item pop-item--danger" role="menuitem" @click="overflowOpen = false; confirmLeave()">{{ chatRoomStore.isOwner ? 'Close group' : 'Leave group' }}</button>
+              </div>
+            </div>
+          </template>
+        </div>
       </ion-toolbar>
-      <div v-if="ready && searchOpen" class="search-bar">
-        <input ref="searchInput" v-model="searchQuery" class="search-input" placeholder="Search this chat…" @keydown.esc="toggleSearch" />
-        <span class="search-count">{{ searchQuery.trim() ? `${searchResults.length} found` : '' }}</span>
+
+      <div v-if="ready && searchOpen" class="strip">
+        <input ref="searchInput" v-model="searchQuery" class="strip-input" placeholder="Search messages" aria-label="Search messages" @keydown.esc="toggleSearch" />
+        <span class="strip-meta">{{ searchQuery.trim() ? `${searchResults.length} found` : '' }}</span>
+        <button class="strip-close" @click="toggleSearch">Done</button>
       </div>
-      <button v-if="ready && !searchOpen && chatRoomStore.pinnedMessages.length" class="pinned-bar" @click="cyclePinned">
-        <span class="pinned-icon">📌</span>
-        <span class="pinned-body">
-          <span class="pinned-label">Pinned{{ chatRoomStore.pinnedMessages.length > 1 ? ` · ${pinnedIndex + 1}/${chatRoomStore.pinnedMessages.length}` : '' }}</span>
-          <span class="pinned-text">{{ previewText(currentPinned!) }}</span>
+      <button v-else-if="ready && chatRoomStore.isOwner && chatRoomStore.pendingJoins.length" class="strip strip--action" @click="openInfo">
+        <span class="strip-text">
+          <strong>{{ chatRoomStore.pendingJoins[0].name || 'Someone' }}</strong>
+          {{ chatRoomStore.pendingJoins.length > 1 ? `and ${chatRoomStore.pendingJoins.length - 1} more want` : 'wants' }} to join
         </span>
+        <span class="strip-cta">Review</span>
+      </button>
+      <button v-else-if="ready && currentPinned" class="strip strip--pin" @click="cyclePinned">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5zM12 14v6" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/></svg>
+        <span class="strip-text"><span class="strip-label">Pinned{{ chatRoomStore.pinnedMessages.length > 1 ? ` ${pinnedIndex + 1} of ${chatRoomStore.pinnedMessages.length}` : '' }}</span>{{ previewText(currentPinned) }}</span>
       </button>
     </ion-header>
 
-    <ion-content :scroll-y="false">
-      <!-- Loading -->
-      <div v-if="initialLoading" class="state-container">
+    <ion-content :scroll-y="false" class="room-content">
+      <div v-if="initialLoading" class="state">
         <div class="spinner"></div>
-        <p class="state-sub">Decrypting room…</p>
+        <p class="state-sub">Opening the group…</p>
       </div>
 
-      <!-- Error -->
-      <div v-else-if="chatRoomStore.error" class="state-container">
-        <div class="state-icon error-icon">
-          <ion-icon :icon="alertCircleOutline"></ion-icon>
-        </div>
-        <p class="state-title">Something went wrong</p>
+      <div v-else-if="chatRoomStore.error" class="state">
+        <p class="state-title">This group couldn't be opened</p>
         <p class="state-sub">{{ chatRoomStore.error }}</p>
-        <button class="pill-btn outline" @click="initRoom">Retry</button>
+        <button class="btn btn--ghost" @click="initRoom">Try again</button>
       </div>
 
-      <!-- Not a member yet: ask the creator's device for admission -->
-      <div v-else-if="!hasAccess" class="state-container">
-        <div class="state-icon lock-icon">
-          <ion-icon :icon="lockClosedOutline"></ion-icon>
-        </div>
+      <!-- Not a member yet -->
+      <div v-else-if="!hasAccess" class="state">
+        <ChatAvatar :name="''" :seed="roomId" group size="xl" />
         <template v-if="joinState === 'requested'">
-          <p class="state-title">{{ joinPassword ? 'Checking password…' : 'Request sent' }}</p>
+          <p class="state-title">{{ joinPassword ? 'Checking the password' : 'Request sent' }}</p>
           <p class="state-sub">
             {{ joinPassword
-              ? 'The creator\'s device admits you automatically once it confirms the password. If it is wrong, the creator can still approve you by hand.'
-              : 'Waiting for the group creator to approve you.' }}
-            This page opens the chat automatically once you're in.
+              ? 'You\'ll be let in as soon as the group creator\'s device confirms it. If the password is wrong, they can still accept you.'
+              : 'The group creator will see your request. This screen opens the chat once you\'re accepted.' }}
           </p>
           <div class="spinner small"></div>
-          <button v-if="accessMode === 'password'" class="pill-btn outline" @click="joinState = 'idle'">Try another password</button>
+          <button v-if="accessMode === 'password'" class="btn btn--ghost" @click="joinState = 'idle'">Try another password</button>
         </template>
         <template v-else>
-          <p class="state-title">Join this group</p>
+          <p class="state-title">You've been invited to a group</p>
           <p class="state-sub">
-            Group chats are end-to-end encrypted.
-            {{ accessMode === 'password' ? 'Enter the group password to join.' : 'The creator\'s device must approve new members.' }}
+            {{ accessMode === 'password' ? 'Enter the group password to join.' : 'Ask to join and the group creator will accept you.' }}
           </p>
-          <input v-if="accessMode === 'password'" v-model="joinPassword" type="password" class="field-input join-password"
+          <input v-if="accessMode === 'password'" v-model="joinPassword" type="password" class="field join-field"
             placeholder="Group password" autocomplete="off" @keydown.enter="requestJoin" />
-          <button v-else class="link-btn" @click="accessMode = 'password'">I have a password</button>
-          <button class="pill-btn accent" :disabled="joinState === 'sending' || (accessMode === 'password' && !joinPassword)" @click="requestJoin">
-            {{ joinState === 'sending' ? 'Sending…' : accessMode === 'password' ? 'Join' : 'Request to join' }}
+          <button class="btn btn--primary" :disabled="joinState === 'sending' || (accessMode === 'password' && !joinPassword)" @click="requestJoin">
+            {{ joinState === 'sending' ? 'Sending…' : accessMode === 'password' ? 'Join group' : 'Ask to join' }}
           </button>
-          <p v-if="joinError" class="state-sub error-text">{{ joinError }}</p>
+          <button v-if="accessMode !== 'password'" class="btn btn--link" @click="accessMode = 'password'">I have a password</button>
+          <p v-if="joinError" class="state-sub state-error">{{ joinError }}</p>
         </template>
       </div>
 
       <!-- Search results -->
-      <div v-else-if="searchOpen && searchQuery.trim()" class="search-results">
-        <p v-if="!searchResults.length" class="state-sub" style="text-align:center;padding:24px">No messages match.</p>
-        <button v-for="m in searchResults" :key="m.id" class="search-hit" @click="jumpTo(m.messageId, true)">
-          <span class="search-hit-head">
-            <strong :style="{ color: senderColor(m.senderId) }">{{ m.senderId === currentUserId ? 'You' : m.senderName }}</strong>
-            <span>{{ formatDay(m.timestamp) }} {{ formatClock(m.timestamp) }}</span>
+      <div v-else-if="searchOpen && searchQuery.trim()" class="results">
+        <p v-if="!searchResults.length" class="state-sub results-empty">No messages match “{{ searchQuery.trim() }}”.</p>
+        <button v-for="m in searchResults" :key="m.id" class="result" @click="jumpTo(m.messageId, true)">
+          <ChatAvatar :name="m.senderName" :seed="m.senderId" size="sm" />
+          <span class="result-body">
+            <span class="result-head"><strong>{{ m.senderId === currentUserId ? 'You' : m.senderName }}</strong><span>{{ formatDay(m.timestamp) }}, {{ formatClock(m.timestamp) }}</span></span>
+            <span class="result-text">{{ previewText(m) }}</span>
           </span>
-          <span class="search-hit-text">{{ previewText(m) }}</span>
         </button>
       </div>
 
-      <!-- Messages -->
-      <div v-else class="chat-container" @dragover.prevent="dragOver = true" @dragleave.self="dragOver = false" @drop.prevent="onDrop">
-        <div v-if="dragOver" class="drop-overlay">Drop to send</div>
-        <div ref="messagesContainer" class="messages-area" @scroll="onScroll">
-          <div v-if="chatRoomStore.timeline.length === 0" class="empty-chat">
-            <div class="empty-icon"><ion-icon :icon="chatbubblesOutline"></ion-icon></div>
-            <p>No messages yet — say hello!</p>
+      <!-- Conversation -->
+      <div v-else class="convo" @dragover.prevent="dragOver = true" @dragleave.self="dragOver = false" @drop.prevent="onDrop">
+        <div v-if="dragOver" class="drop">Drop to attach</div>
+        <div ref="messagesContainer" class="scroller" @scroll="onScroll">
+          <div class="column">
+            <div v-if="accountCount <= 1" class="intro">
+              <ChatAvatar :name="roomTitle" :seed="roomId" group size="xl" />
+              <p class="intro-title">{{ roomTitle }}</p>
+              <p class="intro-sub">You're the only one here. Send the invite link to bring people in.</p>
+              <div class="intro-actions">
+                <button class="btn btn--primary" @click="copyInvite">Copy invite link</button>
+                <button v-if="canShare" class="btn btn--ghost" @click="shareInviteNative">Share…</button>
+              </div>
+            </div>
+            <p v-else-if="chatRoomStore.timeline.length === 0" class="intro-sub intro-sub--quiet">No messages yet. Say hello 👋</p>
+
+            <template v-for="(item, i) in chatRoomStore.timeline" :key="item.id">
+              <div v-if="dayChanged(i)" class="day"><span>{{ formatDay(item.timestamp) }}</span></div>
+              <div v-if="item.id === unreadDividerId" class="unread"><span>Unread messages</span></div>
+              <div class="line" :class="{ 'line--mine': item.senderId === currentUserId, 'line--cont': isGrouped(i) }">
+                <span v-if="item.senderId !== currentUserId" class="line-avatar">
+                  <ChatAvatar v-if="showAvatar(i)" :name="item.senderName" :seed="item.senderId" size="sm" />
+                </span>
+                <GroupMessageBubble
+                  :item="item"
+                  :mine="item.senderId === currentUserId"
+                  :grouped="isGrouped(i)"
+                  :flash="flashId === item.messageId"
+                  :mention-names="mentionNamesFor(item)"
+                  :read-count="item.senderId === currentUserId ? chatRoomStore.readBy(item).length : 0"
+                  :other-count="chatRoomStore.otherAccounts.length"
+                  @reply="startReply(item)"
+                  @react="emoji => react(item, emoji)"
+                  @react-picker="ev => openMenu(item, ev, true)"
+                  @menu="ev => openMenu(item, ev)"
+                  @jump="id => jumpTo(id)"
+                  @vote="choices => vote(item, choices)"
+                  @open-media="url => (lightbox = url)"
+                />
+              </div>
+            </template>
           </div>
-          <template v-for="(item, i) in chatRoomStore.timeline" :key="item.id">
-            <div v-if="dayChanged(i)" class="day-sep"><span>{{ formatDay(item.timestamp) }}</span></div>
-            <div v-if="item.id === unreadDividerId" class="unread-sep"><span>New messages</span></div>
-            <GroupMessageBubble
-              :item="item"
-              :mine="item.senderId === currentUserId"
-              :grouped="isGrouped(i)"
-              :flash="flashId === item.messageId"
-              :mention-names="mentionNamesFor(item)"
-              :read-count="item.senderId === currentUserId ? chatRoomStore.readBy(item).length : 0"
-              :other-count="chatRoomStore.otherAccounts.length"
-              @reply="startReply(item)"
-              @react="emoji => react(item, emoji)"
-              @react-picker="ev => openMenu(item, ev, true)"
-              @menu="ev => openMenu(item, ev)"
-              @jump="id => jumpTo(id)"
-              @vote="choices => vote(item, choices)"
-              @open-media="url => (lightbox = url)"
-            />
-          </template>
         </div>
-        <button v-if="!atBottom" class="scroll-down" @click="scrollToBottom(true)">
+        <button v-if="!atBottom" class="to-bottom" aria-label="Scroll to latest" @click="scrollToBottom(true)">
           <svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span v-if="newWhileAway" class="scroll-badge">{{ newWhileAway }}</span>
+          <span v-if="newWhileAway" class="to-bottom-count">{{ newWhileAway }}</span>
         </button>
       </div>
     </ion-content>
 
-    <ion-footer v-if="ready" class="input-footer">
-      <div v-if="chatRoomStore.typingNames.length" class="typing-row">
-        <span class="typing-dots"><span></span><span></span><span></span></span>
-        {{ typingText }}
-      </div>
-
-      <div v-if="replyTo || editing" class="compose-banner">
-        <div class="compose-banner-body">
-          <span class="compose-banner-title">{{ editing ? 'Editing message' : `Replying to ${replyTo!.senderId === currentUserId ? 'yourself' : replyTo!.senderName}` }}</span>
-          <span class="compose-banner-text">{{ previewText((editing || replyTo)!) }}</span>
+    <ion-footer v-if="ready" class="room-footer">
+      <div class="dock">
+        <div v-if="chatRoomStore.typingNames.length" class="typing">
+          <span class="typing-dots"><span></span><span></span><span></span></span>{{ typingText }}
         </div>
-        <button class="icon-btn" title="Cancel" @click="cancelCompose">✕</button>
-      </div>
 
-      <div v-if="pendingFile" class="compose-banner">
-        <img v-if="pendingPreview" :src="pendingPreview" class="compose-thumb" alt="" />
-        <div class="compose-banner-body">
-          <span class="compose-banner-title">{{ pendingFile.name || 'Attachment' }}</span>
-          <span class="compose-banner-text">{{ formatSize(pendingFile.size) }} · add a caption or press send</span>
+        <div v-if="replyTo || editing" class="context">
+          <span class="context-bar"></span>
+          <span class="context-body">
+            <span class="context-title">{{ editing ? 'Edit message' : `Reply to ${replyTo!.senderId === currentUserId ? 'yourself' : replyTo!.senderName}` }}</span>
+            <span class="context-text">{{ previewText((editing || replyTo)!) }}</span>
+          </span>
+          <button class="icon-btn icon-btn--sm" aria-label="Cancel" @click="cancelCompose"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
         </div>
-        <button class="icon-btn" title="Remove attachment" @click="clearPendingFile">✕</button>
-      </div>
 
-      <div v-if="mentionMatches.length" class="mention-list">
-        <button v-for="(m, idx) in mentionMatches" :key="m.accountId" class="mention-item" :class="{ active: idx === mentionIndex }" @mousedown.prevent="applyMention(m)">
-          <span class="mention-dot" :style="{ background: senderColor(m.accountId) }"></span>{{ m.name }}
-        </button>
-      </div>
+        <div v-if="pendingFile" class="context">
+          <img v-if="pendingPreview" :src="pendingPreview" class="context-thumb" alt="" />
+          <span v-else class="context-file">📄</span>
+          <span class="context-body">
+            <span class="context-title">{{ pendingFile.name || 'Attachment' }}</span>
+            <span class="context-text">{{ formatSize(pendingFile.size) }} · add a caption or just send</span>
+          </span>
+          <button class="icon-btn icon-btn--sm" aria-label="Remove attachment" @click="clearPendingFile"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+        </div>
 
-      <div v-if="emojiOpen" class="emoji-grid">
-        <button v-for="e in EMOJI_PICKER" :key="e" class="emoji-cell" @click="insertEmoji(e)">{{ e }}</button>
-      </div>
+        <div v-if="mentionMatches.length" class="suggest" role="listbox">
+          <button v-for="(m, idx) in mentionMatches" :key="m.accountId" class="suggest-item" :class="{ on: idx === mentionIndex }" role="option" :aria-selected="idx === mentionIndex" @mousedown.prevent="applyMention(m)">
+            <ChatAvatar :name="m.name" :seed="m.accountId" size="sm" />{{ m.name }}
+          </button>
+        </div>
 
-      <div class="input-area" :class="{ recording }">
-        <template v-if="recording">
-          <span class="rec-dot"></span>
-          <span class="rec-time">{{ recordClock }}</span>
-          <span class="rec-hint">Recording voice message…</span>
-          <button class="icon-btn" title="Cancel recording" @click="stopRecording(false)">🗑</button>
-          <button class="send-button" title="Send voice message" @click="stopRecording(true)">
-            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z" /></svg>
-          </button>
-        </template>
-        <template v-else>
-          <button class="icon-btn" title="Emoji" @click="emojiOpen = !emojiOpen">😊</button>
-          <button class="icon-btn" title="Attach file" @click="fileInput?.click()" :disabled="!!editing">
-            <svg viewBox="0 0 24 24" fill="none"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 01-7.8-7.8l9-9a3.7 3.7 0 015.2 5.2l-9 9a1.8 1.8 0 01-2.6-2.6l8.3-8.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
-          <button class="icon-btn" title="Create poll" @click="openPollComposer" :disabled="!!editing">📊</button>
-          <input ref="fileInput" type="file" hidden @change="onFilePicked" />
-          <textarea
-            ref="inputEl"
-            v-model="messageInput"
-            @keydown="onKeydown"
-            @input="onInput"
-            @paste="onPaste"
-            @blur="chatRoomStore.stopTyping()"
-            :placeholder="editing ? 'Edit message…' : 'Message…'"
-            :disabled="!chatRoomStore.currentRoom"
-            class="message-input"
-            rows="1"
-          />
-          <button v-if="canSend" @click="handleSend" :disabled="isSending" class="send-button" title="Send">
-            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z" /></svg>
-          </button>
-          <button v-else class="send-button" title="Record voice message" :disabled="!canRecord" @click="startRecording">
-            <svg viewBox="0 0 24 24" fill="none" class="w-5 h-5"><rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" stroke-width="2"/><path d="M5 11a7 7 0 0014 0M12 18v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          </button>
-        </template>
+        <div v-if="emojiOpen" class="emoji-grid">
+          <button v-for="e in EMOJI_PICKER" :key="e" class="emoji-cell" @click="insertEmoji(e)">{{ e }}</button>
+        </div>
+
+        <div class="composer" :class="{ 'composer--rec': recording }">
+          <template v-if="recording">
+            <button class="icon-btn" aria-label="Discard recording" @click="stopRecording(false)">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M5 7h14M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <span class="rec"><span class="rec-dot"></span>{{ recordClock }}<span class="rec-hint">Recording</span></span>
+            <button class="send" aria-label="Send voice message" @click="stopRecording(true)">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.4 20.4l17.4-7.5c.8-.4.8-1.5 0-1.8L3.4 3.6c-.7-.3-1.4.3-1.2 1l1.6 6.2c.1.4.4.6.8.7L12 12l-7.4.5c-.4.1-.7.3-.8.7l-1.6 6.2c-.2.7.5 1.3 1.2 1z"/></svg>
+            </button>
+          </template>
+          <template v-else>
+            <div class="attach">
+              <button class="icon-btn" :class="{ 'icon-btn--on': attachOpen }" aria-label="Attach" aria-haspopup="menu" :aria-expanded="attachOpen" :disabled="!!editing" @click="attachOpen = !attachOpen; emojiOpen = false">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              </button>
+              <div v-if="attachOpen" class="pop-backdrop" @click="attachOpen = false"></div>
+              <div v-if="attachOpen" class="pop pop--up" role="menu">
+                <button class="pop-item pop-item--icon" role="menuitem" @click="pickFile('media')">
+                  <span class="pop-ico pop-ico--media"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="10" r="1.6" fill="currentColor"/><path d="M4 17l5-4.5 4 3.5 3-2.5 4 3.5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
+                  Photo or video
+                </button>
+                <button class="pop-item pop-item--icon" role="menuitem" @click="pickFile('file')">
+                  <span class="pop-ico pop-ico--file"><svg viewBox="0 0 24 24" fill="none"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8l-5-5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 3v5h5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
+                  Document
+                </button>
+                <button class="pop-item pop-item--icon" role="menuitem" @click="attachOpen = false; openPollComposer()">
+                  <span class="pop-ico pop-ico--poll"><svg viewBox="0 0 24 24" fill="none"><path d="M5 20V11M12 20V4M19 20v-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></span>
+                  Poll
+                </button>
+              </div>
+            </div>
+            <input ref="fileInput" type="file" hidden @change="onFilePicked" />
+            <div class="field-wrap">
+              <textarea
+                ref="inputEl"
+                v-model="messageInput"
+                data-test="composer"
+                @keydown="onKeydown"
+                @input="onInput"
+                @paste="onPaste"
+                @blur="chatRoomStore.stopTyping()"
+                :placeholder="editing ? 'Edit your message' : 'Message'"
+                :disabled="!chatRoomStore.currentRoom"
+                class="message-input"
+                rows="1"
+                aria-label="Message"
+              />
+              <button class="icon-btn icon-btn--sm" :class="{ 'icon-btn--on': emojiOpen }" aria-label="Emoji" @click="emojiOpen = !emojiOpen; attachOpen = false">
+                <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.8"/><path d="M8.5 14c.9 1.3 2.1 2 3.5 2s2.6-.7 3.5-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="9.3" cy="9.8" r="1.1" fill="currentColor"/><circle cx="14.7" cy="9.8" r="1.1" fill="currentColor"/></svg>
+              </button>
+            </div>
+            <button v-if="canSend" class="send" :disabled="isSending" :aria-label="editing ? 'Save edit' : 'Send'" @click="handleSend">
+              <svg v-if="editing" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg v-else viewBox="0 0 24 24" fill="currentColor"><path d="M3.4 20.4l17.4-7.5c.8-.4.8-1.5 0-1.8L3.4 3.6c-.7-.3-1.4.3-1.2 1l1.6 6.2c.1.4.4.6.8.7L12 12l-7.4.5c-.4.1-.7.3-.8.7l-1.6 6.2c-.2.7.5 1.3 1.2 1z"/></svg>
+            </button>
+            <button v-else class="send send--quiet" aria-label="Record voice message" :disabled="!canRecord" @click="startRecording">
+              <svg viewBox="0 0 24 24" fill="none"><rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" stroke-width="2"/><path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
+          </template>
+        </div>
       </div>
     </ion-footer>
 
-    <!-- Message context menu -->
+    <!-- Message actions -->
     <div v-if="menu" class="menu-backdrop" @click="closeMenu" @contextmenu.prevent="closeMenu">
-      <div class="menu" :style="menu.style" @click.stop>
+      <div class="menu" :style="menu.style" role="menu" @click.stop>
         <div class="menu-reacts">
-          <button v-for="e in QUICK_REACTIONS" :key="e" class="menu-react" :class="{ mine: myReaction(menu.item) === e }" @click="react(menu.item, myReaction(menu.item) === e ? '' : e); menu = null">{{ e }}</button>
-          <button class="menu-react more" title="More" @click="menu.moreEmoji = !menu.moreEmoji">＋</button>
+          <button v-for="e in QUICK_REACTIONS" :key="e" class="menu-react" :class="{ mine: myReaction(menu.item) === e }" :aria-label="`React ${e}`" @click="react(menu.item, myReaction(menu.item) === e ? '' : e); menu = null">{{ e }}</button>
+          <button class="menu-react menu-react--more" aria-label="More reactions" @click="menu.moreEmoji = !menu.moreEmoji">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 6v12M6 12h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
         </div>
-        <div v-if="menu.moreEmoji" class="menu-emoji-grid">
+        <div v-if="menu.moreEmoji" class="menu-emoji">
           <button v-for="e in EMOJI_PICKER" :key="e" class="emoji-cell" @click="react(menu.item, e); menu = null">{{ e }}</button>
         </div>
         <template v-if="!menu.reactOnly && !menu.item.deleted">
-          <button class="menu-item" @click="startReply(menu.item); menu = null">↩ Reply</button>
-          <button v-if="menu.item.text" class="menu-item" @click="copyText(menu.item); menu = null">⧉ Copy text</button>
-          <button class="menu-item" @click="openForward(menu.item); menu = null">↪ Forward</button>
-          <button class="menu-item" @click="togglePin(menu.item); menu = null">📌 {{ menu.item.pinned ? 'Unpin' : 'Pin' }}</button>
-          <button v-if="menu.item.senderId === currentUserId" class="menu-item" @click="infoFor = menu.item; menu = null">ⓘ Info</button>
-          <button v-if="menu.item.senderId === currentUserId && !menu.item.poll && menu.item.status !== 'failed'" class="menu-item" @click="startEdit(menu.item); menu = null">✎ Edit</button>
-          <button v-if="menu.item.senderId === currentUserId" class="menu-item danger" @click="confirmDelete(menu.item); menu = null">🗑 Delete for everyone</button>
+          <button class="menu-item" role="menuitem" @click="startReply(menu.item); menu = null">Reply</button>
+          <button v-if="menu.item.text" class="menu-item" role="menuitem" @click="copyText(menu.item); menu = null">Copy text</button>
+          <button class="menu-item" role="menuitem" @click="openForward(menu.item); menu = null">Forward</button>
+          <button class="menu-item" role="menuitem" @click="togglePin(menu.item); menu = null">{{ menu.item.pinned ? 'Unpin' : 'Pin to top' }}</button>
+          <button v-if="menu.item.senderId === currentUserId && !menu.item.poll && menu.item.status !== 'failed'" class="menu-item" role="menuitem" @click="startEdit(menu.item); menu = null">Edit</button>
+          <button v-if="menu.item.senderId === currentUserId" class="menu-item" role="menuitem" @click="infoFor = menu.item; menu = null">Seen by…</button>
+          <button v-if="menu.item.senderId === currentUserId" class="menu-item menu-item--danger" role="menuitem" @click="confirmDelete(menu.item); menu = null">Delete for everyone</button>
         </template>
       </div>
     </div>
 
     <!-- Poll composer -->
-    <ion-modal :is-open="pollOpen" @didDismiss="pollOpen = false">
-      <ion-header>
-        <ion-toolbar>
-          <ion-buttons slot="start"><button class="modal-text-btn" @click="pollOpen = false">Cancel</button></ion-buttons>
-          <ion-title>New poll</ion-title>
-          <ion-buttons slot="end"><button class="modal-text-btn primary" :disabled="!pollValid || isSending" @click="sendPoll">Send</button></ion-buttons>
-        </ion-toolbar>
-      </ion-header>
-      <ion-content>
-        <div class="modal-body">
-          <label class="field-label">Question</label>
-          <input v-model="pollQuestion" class="field-input" maxlength="300" placeholder="Ask something…" />
-          <label class="field-label">Options</label>
-          <div v-for="(_, i) in pollOptions" :key="i" class="poll-opt-row">
-            <input v-model="pollOptions[i]" class="field-input" maxlength="200" :placeholder="`Option ${i + 1}`" @input="growPollOptions" />
-            <button v-if="pollOptions.length > 2" class="icon-btn" @click="pollOptions.splice(i, 1)">✕</button>
-          </div>
-          <label class="check-row"><input type="checkbox" v-model="pollMulti" /> Allow multiple answers</label>
+    <ion-modal :is-open="pollOpen" class="sheet" @didDismiss="pollOpen = false">
+      <div class="sheet-body">
+        <h2 class="sheet-title">Create a poll</h2>
+        <label class="label" for="poll-q">Question</label>
+        <input id="poll-q" v-model="pollQuestion" class="field" maxlength="300" placeholder="Ask the group something" />
+        <label class="label">Options</label>
+        <div v-for="(_, i) in pollOptions" :key="i" class="poll-row">
+          <input v-model="pollOptions[i]" class="field" maxlength="200" :placeholder="i < 2 ? `Option ${i + 1}` : 'Add another option'" :aria-label="`Option ${i + 1}`" @input="growPollOptions" />
+          <button v-if="pollOptions.length > 2 && i < pollOptions.length - 1" class="icon-btn icon-btn--sm" :aria-label="`Remove option ${i + 1}`" @click="pollOptions.splice(i, 1)"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
         </div>
-      </ion-content>
+        <label class="check"><input type="checkbox" v-model="pollMulti" /> Let people pick more than one</label>
+        <div class="sheet-actions">
+          <button class="btn btn--ghost" @click="pollOpen = false">Cancel</button>
+          <button class="btn btn--primary" :disabled="!pollValid || isSending" @click="sendPoll">Send poll</button>
+        </div>
+      </div>
     </ion-modal>
 
-    <!-- Members -->
-    <ion-modal :is-open="showMembers" @didDismiss="showMembers = false">
-      <ion-header>
-        <ion-toolbar>
-          <ion-title>{{ roomTitle }}</ion-title>
-          <ion-buttons slot="end"><button class="modal-text-btn" @click="showMembers = false">Done</button></ion-buttons>
-        </ion-toolbar>
-      </ion-header>
-      <ion-content>
-        <p v-if="chatRoomStore.currentRoom?.description" class="room-description">{{ chatRoomStore.currentRoom.description }}</p>
-        <div v-if="chatRoomStore.pinnedMessages.length" class="pinned-list">
-          <h3 class="gp-h">📌 Pinned messages</h3>
-          <button v-for="p in chatRoomStore.pinnedMessages" :key="p.id" class="search-hit" @click="showMembers = false; jumpTo(p.messageId)">
-            <span class="search-hit-head"><strong>{{ p.senderName }}</strong><span>{{ formatDay(p.timestamp) }}</span></span>
-            <span class="search-hit-text">{{ previewText(p) }}</span>
+    <!-- Group info -->
+    <ion-modal :is-open="showMembers" class="sheet sheet--tall" @didDismiss="showMembers = false">
+      <div class="sheet-body info">
+        <button class="icon-btn info-close" aria-label="Close" @click="showMembers = false"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+        <div class="info-top">
+          <ChatAvatar :name="roomTitle" :seed="roomId" group size="xl" />
+          <h2 class="info-name">{{ roomTitle }}</h2>
+          <p class="info-meta">Group, {{ accountCount }} {{ accountCount === 1 ? 'member' : 'members' }}</p>
+          <p v-if="chatRoomStore.currentRoom?.description" class="info-desc">{{ chatRoomStore.currentRoom.description }}</p>
+        </div>
+        <div class="info-actions">
+          <button class="info-action" @click="copyInvite">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            Invite link
+          </button>
+          <button v-if="canShare" class="info-action" @click="shareInviteNative">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 15V3M8 7l4-4 4 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Share
+          </button>
+          <button class="info-action" @click="showMembers = false; toggleSearch()">
+            <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            Search
           </button>
         </div>
+
+        <section v-if="chatRoomStore.pinnedMessages.length" class="info-section">
+          <h3 class="info-h">Pinned</h3>
+          <button v-for="p in chatRoomStore.pinnedMessages" :key="p.id" class="result" @click="showMembers = false; jumpTo(p.messageId)">
+            <ChatAvatar :name="p.senderName" :seed="p.senderId" size="sm" />
+            <span class="result-body">
+              <span class="result-head"><strong>{{ p.senderId === currentUserId ? 'You' : p.senderName }}</strong><span>{{ formatDay(p.timestamp) }}</span></span>
+              <span class="result-text">{{ previewText(p) }}</span>
+            </span>
+          </button>
+        </section>
+
         <GroupMembersPanel />
-        <div class="leave-row">
-          <button class="pill-btn danger" @click="confirmLeave">{{ chatRoomStore.isOwner ? 'Close group' : 'Leave group' }}</button>
-        </div>
-      </ion-content>
+
+        <button class="leave" @click="confirmLeave">{{ chatRoomStore.isOwner ? 'Close group' : 'Leave group' }}</button>
+      </div>
     </ion-modal>
 
-    <!-- Message info (read receipts) -->
-    <ion-modal :is-open="!!infoFor" @didDismiss="infoFor = null" :initial-breakpoint="0.5" :breakpoints="[0, 0.5, 0.9]">
-      <ion-content v-if="infoFor">
-        <div class="modal-body">
-          <h3 class="gp-h">Message info</h3>
-          <p class="info-preview">{{ previewText(infoFor) }}</p>
-          <p class="info-line">Sent {{ new Date(infoFor.timestamp).toLocaleString() }}</p>
-          <h3 class="gp-h">Seen by</h3>
-          <p v-if="!infoReaders.length" class="state-sub">Nobody yet</p>
-          <div v-for="a in infoReaders" :key="a" class="info-reader"><span class="mention-dot" :style="{ background: senderColor(a) }"></span>{{ chatRoomStore.displayName(a) }}</div>
-          <h3 class="gp-h">Not seen yet</h3>
-          <p v-if="!infoUnread.length" class="state-sub">Everyone has seen it</p>
-          <div v-for="a in infoUnread" :key="a" class="info-reader muted"><span class="mention-dot" :style="{ background: senderColor(a) }"></span>{{ chatRoomStore.displayName(a) }}</div>
-        </div>
-      </ion-content>
+    <!-- Seen by -->
+    <ion-modal :is-open="!!infoFor" class="sheet" @didDismiss="infoFor = null">
+      <div v-if="infoFor" class="sheet-body">
+        <h2 class="sheet-title">Seen by</h2>
+        <p class="quote">{{ previewText(infoFor) }}</p>
+        <p v-if="!infoReaders.length" class="state-sub">Nobody has seen it yet.</p>
+        <div v-for="a in infoReaders" :key="a" class="person"><ChatAvatar :name="chatRoomStore.displayName(a)" :seed="a" size="sm" />{{ chatRoomStore.displayName(a) }}</div>
+        <template v-if="infoUnread.length">
+          <h3 class="info-h">Not yet</h3>
+          <div v-for="a in infoUnread" :key="a" class="person person--muted"><ChatAvatar :name="chatRoomStore.displayName(a)" :seed="a" size="sm" />{{ chatRoomStore.displayName(a) }}</div>
+        </template>
+        <p class="sheet-foot">Sent {{ new Date(infoFor.timestamp).toLocaleString() }}</p>
+      </div>
     </ion-modal>
 
     <!-- Forward -->
-    <ion-modal :is-open="!!forwarding" @didDismiss="forwarding = null" :initial-breakpoint="0.6" :breakpoints="[0, 0.6, 0.9]">
-      <ion-content>
-        <div class="modal-body">
-          <h3 class="gp-h">Forward to…</h3>
-          <p v-if="!forwardRooms.length" class="state-sub">No other groups joined.</p>
-          <button v-for="r in forwardRooms" :key="r.id" class="search-hit" @click="doForward(r.id)">
-            <span class="search-hit-head"><strong>{{ r.name }}</strong><span>{{ r.memberCount }} members</span></span>
-          </button>
-        </div>
-      </ion-content>
+    <ion-modal :is-open="!!forwarding" class="sheet" @didDismiss="forwarding = null">
+      <div class="sheet-body">
+        <h2 class="sheet-title">Forward to</h2>
+        <p v-if="!forwardRooms.length" class="state-sub">You're not in any other groups yet.</p>
+        <button v-for="r in forwardRooms" :key="r.id" class="result" @click="doForward(r.id)">
+          <ChatAvatar :name="r.name" :seed="r.id" group size="sm" />
+          <span class="result-body"><span class="result-head"><strong>{{ r.name }}</strong><span>{{ r.memberCount }} members</span></span></span>
+        </button>
+      </div>
     </ion-modal>
 
-    <div v-if="lightbox" class="lightbox" @click="lightbox = ''"><img :src="lightbox" alt="" /></div>
+    <div v-if="lightbox" class="lightbox" role="dialog" aria-label="Image" @click="lightbox = ''"><img :src="lightbox" alt="" /></div>
   </ion-page>
 </template>
 
@@ -317,10 +372,9 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonModal,
-  IonFooter, IonButtons, IonIcon, toastController, alertController,
+  IonPage, IonHeader, IonToolbar, IonContent, IonModal,
+  IonFooter, toastController, alertController,
 } from '@ionic/vue';
-import { lockClosedOutline, alertCircleOutline, chatbubblesOutline } from 'ionicons/icons';
 import { useRouter } from 'vue-router';
 import { useChatRoomStore } from '@/stores/chatRoomStore';
 import { ChatRoomService } from '@/services/chatRoomService';
@@ -330,8 +384,9 @@ import { InviteLinkService } from '@/services/inviteLinkService';
 import type { ChatRoom } from '@/services/chatRoomService';
 import GroupMessageBubble from '@/components/groupchat/GroupMessageBubble.vue';
 import GroupMembersPanel from '@/components/groupchat/GroupMembersPanel.vue';
+import ChatAvatar from '@/components/groupchat/ChatAvatar.vue';
 import { previewText, type TimelineItem } from '@/utils/groupTimeline';
-import { EMOJI_PICKER, QUICK_REACTIONS, senderColor } from '@/utils/chatFormat';
+import { EMOJI_PICKER, QUICK_REACTIONS } from '@/utils/chatFormat';
 
 const props = defineProps<{ roomId: string }>();
 
@@ -355,6 +410,21 @@ const roomId = computed(() => props.roomId || (route.params.roomId as string));
 const ready = computed(() => hasAccess.value && !initialLoading.value && !chatRoomStore.error);
 
 // ── Header ────────────────────────────────────────────────────────────────
+const overflowOpen = ref(false);
+const attachOpen = ref(false);
+const accountCount = computed(() => new Set(chatRoomStore.members.map(m => m.accountId)).size || chatRoomStore.currentRoom?.memberCount || 0);
+const inviteLink = computed(() => InviteLinkService.generateInviteLink(roomId.value, 'chatroom', 'epoch-v1'));
+const canShare = typeof navigator !== 'undefined' && 'share' in navigator;
+async function shareInviteNative() {
+  await navigator.share({ title: roomTitle.value, text: `Join "${roomTitle.value}" on InterPoll`, url: inviteLink.value }).catch(() => {});
+}
+function pickFile(kind: 'media' | 'file') {
+  attachOpen.value = false;
+  if (!fileInput.value) return;
+  fileInput.value.accept = kind === 'media' ? 'image/*,video/*' : '';
+  fileInput.value.click();
+}
+function openInfo() { overflowOpen.value = false; showMembers.value = true; }
 const typingText = computed(() => {
   const n = chatRoomStore.typingNames;
   if (n.length === 1) return `${n[0]} is typing…`;
@@ -363,9 +433,10 @@ const typingText = computed(() => {
 });
 const subtitle = computed(() => {
   if (chatRoomStore.typingNames.length) return typingText.value;
-  const accounts = new Set(chatRoomStore.members.map(m => m.accountId)).size || chatRoomStore.currentRoom?.memberCount || 0;
+  const accounts = accountCount.value;
   const online = chatRoomStore.onlineAccounts.size;
-  return `${accounts} ${accounts === 1 ? 'member' : 'members'}${online > 1 ? ` · ${online} online` : ''}`;
+  if (accounts <= 1) return 'Only you — tap to invite people';
+  return online > 1 ? `${accounts} members, ${online} online` : `${accounts} members`;
 });
 
 // ── Timeline helpers ──────────────────────────────────────────────────────
@@ -378,6 +449,11 @@ function isGrouped(i: number) {
   const t = chatRoomStore.timeline;
   if (i === 0 || dayChanged(i)) return false;
   return t[i].senderId === t[i - 1].senderId && t[i].timestamp - t[i - 1].timestamp < 5 * 60_000 && t[i].id !== unreadDividerId.value;
+}
+/** Discord/WhatsApp groups: the sender's avatar sits beside the first bubble of a run. */
+function showAvatar(i: number) {
+  const t = chatRoomStore.timeline;
+  return t[i].senderId !== currentUserId.value && !isGrouped(i);
 }
 function formatDay(ts: number) {
   const d = new Date(ts), now = new Date();
@@ -858,22 +934,6 @@ async function requestJoin() {
   }
 }
 
-async function shareInvite() {
-  try {
-    const link = InviteLinkService.generateInviteLink(roomId.value, 'chatroom', 'epoch-v1');
-    await navigator.clipboard.writeText(link);
-    const toast = await toastController.create({
-      message: 'Invite link copied — you\'ll approve each request in Members.',
-      duration: 2600,
-      position: 'top',
-      color: 'success',
-    });
-    await toast.present();
-  } catch (err) {
-    console.error('Failed to share invite:', err);
-    await toastError('Failed to copy invite link.');
-  }
-}
 
 async function confirmLeave() {
   const owner = chatRoomStore.isOwner;
@@ -895,6 +955,11 @@ async function confirmLeave() {
 }
 
 const showMembers = ref(false);
+async function copyInvite() {
+  await navigator.clipboard.writeText(inviteLink.value).catch(() => {});
+  const t = await toastController.create({ message: 'Invite link copied', duration: 1600, position: 'top' });
+  await t.present();
+}
 
 watch(roomId, () => {
   chatRoomStore.leaveCurrentRoom();
@@ -907,7 +972,7 @@ watch(roomId, () => {
 });
 
 function onGlobalKey(ev: KeyboardEvent) {
-  if (ev.key === 'Escape') { menu.value = null; lightbox.value = ''; }
+  if (ev.key === 'Escape') { menu.value = null; lightbox.value = ''; overflowOpen.value = false; attachOpen.value = false; }
   const typing = ev.target instanceof HTMLElement && ev.target.matches('input, textarea, select, [contenteditable]');
   if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'f' && ready.value && !typing) { ev.preventDefault(); if (!searchOpen.value) toggleSearch(); }
 }
@@ -929,178 +994,203 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* Everything derives from the app theme tokens so light and dark both work. */
+.room { --room-col: 760px; --room-pad: 14px; }
 ion-header::after { display: none !important; }
-ion-toolbar { --border-width: 0 !important; }
-ion-content { --background: transparent; }
+ion-toolbar { --border-width: 0 !important; --background: var(--app-bg-elevated); --padding-start: 4px; --padding-end: 4px; }
+.room-content { --background: var(--app-bg-base); }
 
-.back-btn, .header-action-btn {
-  position: relative;
-  display: flex; align-items: center; justify-content: center;
-  width: 36px; height: 36px; background: none; border: none;
-  border-radius: 50%; color: var(--app-text-muted); cursor: pointer;
-  transition: color 160ms ease, background 160ms ease;
-}
-.back-btn:hover, .header-action-btn:hover, .header-action-btn.active { color: var(--app-text); background: rgba(255,255,255,0.06); }
-.back-btn svg, .header-action-btn svg { width: 22px; height: 22px; }
-.header-action-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.hdr-badge { position: absolute; top: 2px; right: 2px; min-width: 16px; height: 16px; border-radius: 999px; background: #f59e0b; color: #111; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; padding: 0 4px; }
+/* ── Header ── */
+.bar { display: flex; align-items: center; gap: 2px; min-height: 56px; }
+.bar-identity { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 6px 8px; margin-left: -2px; border: none; border-radius: 12px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.bar-identity:hover:not(:disabled) { background: rgba(var(--app-accent-rgb), 0.07); }
+.bar-identity:focus-visible { outline: none; box-shadow: var(--app-focus-ring); }
+.bar-text { display: flex; flex-direction: column; min-width: 0; }
+.bar-name { font-size: 16px; font-weight: 650; letter-spacing: -0.01em; color: var(--app-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-sub { font-size: 12.5px; color: var(--app-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-sub--typing { color: var(--app-success); }
 
-.title-btn { display: flex; flex-direction: column; align-items: flex-start; background: none; border: none; color: inherit; cursor: pointer; padding: 0; max-width: 100%; font: inherit; }
-.title-name { font-size: 16px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-.title-sub { font-size: 11.5px; font-weight: 500; color: var(--app-text-subtle); }
-.title-sub.typing { color: #34d399; }
+.icon-btn { position: relative; flex-shrink: 0; width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 50%; background: none; color: var(--app-text-muted); cursor: pointer; }
+.icon-btn svg { width: 22px; height: 22px; }
+.icon-btn:hover:not(:disabled), .icon-btn--on { color: var(--app-text); background: rgba(var(--app-accent-rgb), 0.1); }
+.icon-btn:focus-visible { outline: none; box-shadow: var(--app-focus-ring); }
+.icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.icon-btn--sm { width: 34px; height: 34px; }
+.icon-btn--sm svg { width: 20px; height: 20px; }
+.dot-badge { position: absolute; top: 8px; right: 8px; width: 9px; height: 9px; border-radius: 50%; background: var(--app-warning, #f59e0b); border: 2px solid var(--app-bg-elevated); }
 
-.search-bar { display: flex; align-items: center; gap: 8px; padding: 6px 14px 8px; }
-.search-input { flex: 1; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); border-radius: 999px; padding: 7px 14px; color: var(--app-text); font: inherit; font-size: 14px; outline: none; }
-.search-input:focus { border-color: rgba(99,102,241,.6); }
-.search-count { font-size: 12px; color: var(--app-text-subtle); min-width: 60px; text-align: right; }
-.search-results { height: 100%; overflow-y: auto; padding: 8px 14px; }
-.search-hit { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; padding: 10px 12px; margin-bottom: 6px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); color: var(--app-text); cursor: pointer; font: inherit; }
-.search-hit:hover { background: rgba(255,255,255,.08); }
-.search-hit-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--app-text-subtle); }
-.search-hit-text { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.overflow, .attach { position: relative; }
+.pop-backdrop { position: fixed; inset: 0; z-index: 50; }
+.pop { position: absolute; z-index: 51; min-width: 210px; padding: 6px; border-radius: 14px; background: var(--app-bg-elevated); border: 1px solid var(--app-border-strong, var(--app-border)); box-shadow: var(--app-shadow-lg, 0 16px 40px rgba(0,0,0,.28)); }
+.pop--right { right: 0; top: calc(100% + 4px); }
+.pop--up { left: 0; bottom: calc(100% + 8px); }
+.pop-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 12px; border: none; border-radius: 10px; background: none; color: var(--app-text); font: inherit; font-size: 14.5px; text-align: left; cursor: pointer; }
+.pop-item:hover, .pop-item:focus-visible { background: rgba(var(--app-accent-rgb), 0.09); outline: none; }
+.pop-item--danger { color: var(--app-danger); }
+.pop-count { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--app-warning, #f59e0b); color: #111; font-size: 11.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.pop-ico { width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #fff; }
+.pop-ico svg { width: 19px; height: 19px; }
+.pop-ico--media { background: #3b82f6; }
+.pop-ico--file { background: #8b5cf6; }
+.pop-ico--poll { background: #10b981; }
 
-.pinned-bar { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 16px; background: rgba(99,102,241,.08); border: none; border-top: 1px solid rgba(255,255,255,.05); border-bottom: 1px solid rgba(255,255,255,.05); color: var(--app-text); cursor: pointer; text-align: left; font: inherit; }
-.pinned-body { display: flex; flex-direction: column; min-width: 0; }
-.pinned-label { font-size: 11px; font-weight: 700; color: #a5b4fc; }
-.pinned-text { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Strip under the header: search, join requests, or the pinned message — one at a time. */
+.strip { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 14px; border: none; border-top: 1px solid var(--app-border); border-bottom: 1px solid var(--app-border); background: var(--app-bg-elevated); color: var(--app-text); font: inherit; text-align: left; }
+.strip--action, .strip--pin { cursor: pointer; }
+.strip--action { background: rgba(var(--app-warning-rgb, 245, 158, 11), 0.1); }
+.strip--pin svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--app-accent-bright); }
+.strip-text { flex: 1; min-width: 0; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.strip-label { display: block; font-size: 12px; font-weight: 650; color: var(--app-accent-bright); }
+.strip-cta { font-size: 13.5px; font-weight: 650; color: var(--app-accent-bright); }
+.strip-input { flex: 1; min-width: 0; padding: 9px 14px; border-radius: 999px; border: 1px solid var(--app-border-strong, var(--app-border)); background: var(--app-bg-base); color: var(--app-text); font: inherit; font-size: 14.5px; outline: none; }
+.strip-input:focus { border-color: var(--app-accent); box-shadow: var(--app-focus-ring); }
+.strip-meta { font-size: 12.5px; color: var(--app-text-subtle); white-space: nowrap; }
+.strip-close { border: none; background: none; color: var(--app-accent-bright); font: inherit; font-size: 14px; font-weight: 650; cursor: pointer; }
 
-/* States */
-.state-container {
-  display: flex; flex-direction: column; align-items: center;
-  justify-content: center; height: 100%; padding: 32px 24px; text-align: center; gap: 12px;
-}
-.state-icon {
-  width: 64px; height: 64px; border-radius: 50%;
-  background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.2);
-  display: flex; align-items: center; justify-content: center; color: #818cf8; font-size: 30px;
-}
-.state-icon.error-icon { background: rgba(239,68,68,.1); border-color: rgba(239,68,68,.2); color: #ef4444; }
-.state-icon.lock-icon  { background: rgba(251,191,36,.1); border-color: rgba(251,191,36,.2); color: #fbbf24; }
-.state-title { font-size: 17px; font-weight: 700; color: var(--app-text); margin: 0; }
-.state-sub   { font-size: 13.5px; color: var(--app-text-muted); margin: 0; max-width: 380px; }
-.error-text { color: #f87171; }
-.join-password { max-width: 280px; text-align: center; }
-.link-btn { background: none; border: none; color: #a5b4fc; font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; }
-.spinner { width: 30px; height: 30px; border: 2.5px solid rgba(99,102,241,.2); border-top-color: #6366f1; border-radius: 50%; animation: spin .7s linear infinite; }
+/* ── States ── */
+.state { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 32px 24px; text-align: center; }
+.state-title { margin: 6px 0 0; font-size: 18px; font-weight: 650; color: var(--app-text); }
+.state-sub { margin: 0; max-width: 38ch; font-size: 14px; line-height: 1.5; color: var(--app-text-muted); }
+.state-error { color: var(--app-danger); }
+.join-field { max-width: 300px; text-align: center; }
+.spinner { width: 28px; height: 28px; border: 2.5px solid rgba(var(--app-accent-rgb), 0.2); border-top-color: var(--app-accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
 .spinner.small { width: 20px; height: 20px; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.pill-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; border-radius: 999px; border: none; font-size: 13.5px; font-weight: 700; cursor: pointer; transition: opacity 160ms, transform 160ms; }
-.pill-btn.accent { background: linear-gradient(135deg,#6366f1,#8b5cf6); color: #fff; box-shadow: 0 4px 14px rgba(99,102,241,.38); }
-.pill-btn.outline { background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); color: var(--app-text-muted); }
-.pill-btn.danger { background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.35); color: #f87171; }
-.pill-btn:disabled { opacity: .6; cursor: wait; }
-.pill-btn:hover { opacity: .88; transform: translateY(-1px); }
 
-/* Messages */
-.chat-container { position: relative; display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-.messages-area {
-  flex: 1; overflow-y: auto; padding: 16px 14px 8px;
-  display: flex; flex-direction: column; gap: 2px;
-  scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.08) transparent;
-}
-.drop-overlay { position: absolute; inset: 8px; z-index: 5; border: 2px dashed #818cf8; border-radius: 18px; background: rgba(15,15,30,.75); display: flex; align-items: center; justify-content: center; font-weight: 700; color: #c7d2fe; pointer-events: none; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 11px 20px; border: none; border-radius: 999px; font: inherit; font-size: 14.5px; font-weight: 650; cursor: pointer; }
+.btn:focus-visible { outline: none; box-shadow: var(--app-focus-ring); }
+.btn--primary { background: var(--app-accent); color: #fff; }
+.btn--primary:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn--ghost { background: rgba(var(--app-accent-rgb), 0.1); color: var(--app-text); }
+.btn--link { background: none; padding: 4px 8px; color: var(--app-accent-bright); font-weight: 600; font-size: 13.5px; }
 
-.empty-chat {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  flex: 1; gap: 12px; color: var(--app-text-muted);
-}
-.empty-icon { width: 52px; height: 52px; border-radius: 50%; background: rgba(99,102,241,.1); display: flex; align-items: center; justify-content: center; color: #818cf8; font-size: 26px; }
-.empty-chat p { font-size: 14px; margin: 0; }
+/* ── Conversation ── */
+.convo { position: relative; height: 100%; display: flex; flex-direction: column; }
+.scroller { flex: 1; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.column { max-width: var(--room-col); margin: 0 auto; padding: 12px var(--room-pad) 10px; display: flex; flex-direction: column; }
+.drop { position: absolute; inset: 10px; z-index: 5; display: flex; align-items: center; justify-content: center; border: 2px dashed var(--app-accent); border-radius: 18px; background: rgba(var(--app-accent-rgb), 0.12); color: var(--app-text); font-weight: 650; pointer-events: none; }
 
-.day-sep, .unread-sep { display: flex; justify-content: center; margin: 12px 0 8px; }
-.day-sep span { font-size: 11.5px; font-weight: 600; color: var(--app-text-muted); background: rgba(255,255,255,.06); padding: 3px 12px; border-radius: 999px; }
-.unread-sep { position: relative; }
-.unread-sep::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid rgba(248,113,113,.45); }
-.unread-sep span { position: relative; font-size: 11px; font-weight: 700; color: #f87171; background: var(--app-bg-base, #0b0b12); padding: 0 10px; text-transform: uppercase; letter-spacing: .05em; }
+.intro { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 28px auto 20px; padding: 24px 20px; max-width: 360px; text-align: center; border-radius: 20px; background: var(--app-bg-elevated); border: 1px solid var(--app-border); }
+.intro-title { margin: 6px 0 0; font-size: 18px; font-weight: 650; color: var(--app-text); }
+.intro-sub { margin: 0; font-size: 14px; line-height: 1.5; color: var(--app-text-muted); }
+.intro-sub--quiet { text-align: center; margin: 40px 0; }
+.intro-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; justify-content: center; }
 
-.scroll-down { position: absolute; right: 16px; bottom: 14px; width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(255,255,255,.12); background: var(--app-bg-elevated, #1f2030); color: var(--app-text); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,.35); }
-.scroll-down svg { width: 20px; height: 20px; }
-.scroll-badge { position: absolute; top: -6px; right: -4px; min-width: 18px; height: 18px; border-radius: 999px; background: #6366f1; color: #fff; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; padding: 0 5px; }
+.day, .unread { display: flex; justify-content: center; margin: 14px 0 10px; }
+.day span { font-size: 12px; font-weight: 600; color: var(--app-text-muted); background: var(--app-bg-elevated); border: 1px solid var(--app-border); padding: 4px 12px; border-radius: 999px; }
+.unread span { width: 100%; text-align: center; font-size: 12px; font-weight: 650; color: var(--app-accent-bright); background: rgba(var(--app-accent-rgb), 0.1); padding: 5px; border-radius: 8px; }
 
-/* Composer */
-.input-footer { background: transparent; --background: transparent; border-top: 1px solid rgba(255,255,255,.06); }
-.typing-row { display: flex; align-items: center; gap: 6px; padding: 6px 20px 0; font-size: 12px; color: #34d399; }
+.line { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; }
+.line--cont { margin-top: 2px; }
+.line--mine { justify-content: flex-end; }
+.line-avatar { width: 30px; flex-shrink: 0; padding-top: 18px; }
+.line--cont .line-avatar { padding-top: 0; }
+
+.to-bottom { position: absolute; right: 16px; bottom: 14px; width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--app-border-strong, var(--app-border)); background: var(--app-bg-elevated); color: var(--app-text); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: var(--app-shadow-md, 0 6px 18px rgba(0,0,0,.25)); }
+.to-bottom svg { width: 22px; height: 22px; }
+.to-bottom-count { position: absolute; top: -6px; right: -4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; background: var(--app-accent); color: #fff; font-size: 11.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+
+/* Search results / lists in sheets */
+.results { height: 100%; overflow-y: auto; padding: 8px var(--room-pad); max-width: var(--room-col); margin: 0 auto; }
+.results-empty { text-align: center; padding: 32px 0; margin: 0 auto; }
+.result { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px; border: none; border-radius: 12px; background: none; color: var(--app-text); font: inherit; text-align: left; cursor: pointer; }
+.result:hover, .result:focus-visible { background: rgba(var(--app-accent-rgb), 0.08); outline: none; }
+.result-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.result-head { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.result-head span { color: var(--app-text-subtle); white-space: nowrap; }
+.result-text { font-size: 14px; color: var(--app-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Composer dock ── */
+.room-footer { background: var(--app-bg-base); }
+.dock { max-width: var(--room-col); margin: 0 auto; padding: 4px var(--room-pad) calc(10px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 6px; }
+.typing { display: flex; align-items: center; gap: 6px; padding: 0 8px; font-size: 12.5px; color: var(--app-text-muted); }
 .typing-dots { display: inline-flex; gap: 3px; }
 .typing-dots span { width: 5px; height: 5px; border-radius: 50%; background: currentColor; animation: blink 1.2s infinite ease-in-out; }
-.typing-dots span:nth-child(2) { animation-delay: .2s; }
-.typing-dots span:nth-child(3) { animation-delay: .4s; }
-@keyframes blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes blink { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
 
-.compose-banner { display: flex; align-items: center; gap: 10px; margin: 8px 12px 0; padding: 8px 10px 8px 12px; border-radius: 14px; background: rgba(255,255,255,.05); border-left: 3px solid #818cf8; }
-.compose-banner-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.compose-banner-title { font-size: 12px; font-weight: 700; color: #a5b4fc; }
-.compose-banner-text { font-size: 13px; color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.compose-thumb { width: 42px; height: 42px; border-radius: 8px; object-fit: cover; }
+.context { display: flex; align-items: center; gap: 10px; padding: 8px 6px 8px 10px; border-radius: 14px; background: var(--app-bg-elevated); border: 1px solid var(--app-border); }
+.context-bar { align-self: stretch; width: 3px; border-radius: 2px; background: var(--app-accent); }
+.context-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.context-title { font-size: 13px; font-weight: 650; color: var(--app-accent-bright); }
+.context-text { font-size: 13.5px; color: var(--app-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.context-thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; }
+.context-file { font-size: 26px; }
 
-.mention-list { margin: 6px 12px 0; border-radius: 12px; overflow: hidden; background: var(--app-bg-elevated, #1f2030); border: 1px solid rgba(255,255,255,.1); }
-.mention-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; background: none; border: none; color: var(--app-text); font: inherit; font-size: 14px; cursor: pointer; text-align: left; }
-.mention-item.active, .mention-item:hover { background: rgba(99,102,241,.2); }
-.mention-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.suggest { border-radius: 14px; overflow: hidden; background: var(--app-bg-elevated); border: 1px solid var(--app-border-strong, var(--app-border)); }
+.suggest-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; border: none; background: none; color: var(--app-text); font: inherit; font-size: 14.5px; text-align: left; cursor: pointer; }
+.suggest-item.on, .suggest-item:hover { background: rgba(var(--app-accent-rgb), 0.12); }
 
-.emoji-grid, .menu-emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 2px; padding: 8px; }
-.emoji-grid { margin: 6px 12px 0; border-radius: 14px; background: var(--app-bg-elevated, #1f2030); border: 1px solid rgba(255,255,255,.1); max-height: 180px; overflow-y: auto; }
-.emoji-cell { font-size: 22px; height: 36px; background: none; border: none; border-radius: 8px; cursor: pointer; }
-.emoji-cell:hover { background: rgba(255,255,255,.08); }
+.emoji-grid, .menu-emoji { display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 2px; }
+.emoji-grid { padding: 8px; max-height: 200px; overflow-y: auto; border-radius: 14px; background: var(--app-bg-elevated); border: 1px solid var(--app-border); }
+.emoji-cell { height: 38px; border: none; border-radius: 8px; background: none; font-size: 22px; cursor: pointer; }
+.emoji-cell:hover, .emoji-cell:focus-visible { background: rgba(var(--app-accent-rgb), 0.1); outline: none; }
 
-.input-area {
-  display: flex; align-items: flex-end; gap: 4px;
-  padding: 6px 6px 6px 6px; margin: 8px 12px 12px; border-radius: 24px;
-  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
-  transition: border-color 180ms ease, box-shadow 180ms ease;
-}
-.input-area:focus-within { border-color: rgba(99,102,241,.5); box-shadow: 0 0 0 3px rgba(99,102,241,.1); }
-.input-area.recording { align-items: center; border-color: rgba(239,68,68,.5); }
-.icon-btn { flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; border: none; background: none; color: var(--app-text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 17px; }
-.icon-btn:hover:not(:disabled) { background: rgba(255,255,255,.08); color: var(--app-text); }
-.icon-btn:disabled { opacity: .35; cursor: not-allowed; }
-.icon-btn svg { width: 19px; height: 19px; }
-.message-input { flex: 1; align-self: center; background: transparent; border: none; outline: none; resize: none; font-size: 14.5px; line-height: 1.5; color: var(--ion-text-color); font-family: inherit; padding: 4px 4px 4px 6px; max-height: 140px; }
+.composer { display: flex; align-items: flex-end; gap: 6px; }
+.field-wrap { flex: 1; min-width: 0; display: flex; align-items: flex-end; gap: 2px; padding: 3px 3px 3px 14px; border-radius: 22px; background: var(--app-bg-elevated); border: 1px solid var(--app-border-strong, var(--app-border)); }
+.field-wrap:focus-within { border-color: var(--app-accent); box-shadow: var(--app-focus-ring); }
+.message-input { flex: 1; min-width: 0; align-self: center; padding: 8px 0; border: none; outline: none; resize: none; background: transparent; color: var(--app-text); font: inherit; font-size: 15px; line-height: 1.4; max-height: 140px; }
 .message-input::placeholder { color: var(--app-text-subtle); }
-.message-input:disabled { opacity: .45; cursor: not-allowed; }
-.send-button { flex-shrink: 0; width: 38px; height: 38px; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg,#6366f1,#8b5cf6); color: #fff; box-shadow: 0 4px 14px rgba(99,102,241,.4); transition: transform 160ms ease, box-shadow 160ms ease; }
-.send-button:hover:not(:disabled) { transform: translateY(-1px) scale(1.06); box-shadow: 0 6px 20px rgba(99,102,241,.5); }
-.send-button:active:not(:disabled) { transform: scale(0.94); }
-.send-button:disabled { background: rgba(255,255,255,.08); color: var(--app-text-subtle); box-shadow: none; cursor: not-allowed; }
-.w-5 { width: 20px; height: 20px; }
-.rec-dot { width: 10px; height: 10px; border-radius: 50%; background: #ef4444; margin-left: 10px; animation: blink 1s infinite; }
-.rec-time { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--app-text); }
-.rec-hint { flex: 1; font-size: 13px; color: var(--app-text-muted); }
+.send { flex-shrink: 0; width: 44px; height: 44px; border: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--app-accent); color: #fff; cursor: pointer; transition: transform 120ms ease; }
+.send svg { width: 21px; height: 21px; }
+.send:active:not(:disabled) { transform: scale(0.92); }
+.send:disabled { opacity: 0.45; cursor: not-allowed; }
+.send:focus-visible { outline: none; box-shadow: var(--app-focus-ring); }
+.send--quiet { background: rgba(var(--app-accent-rgb), 0.14); color: var(--app-accent-bright); }
+.composer--rec { align-items: center; }
+.rec { flex: 1; display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; font-weight: 650; color: var(--app-text); }
+.rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--app-danger); animation: blink 1s infinite; }
+.rec-hint { font-weight: 400; font-size: 13.5px; color: var(--app-text-muted); }
 
-/* Context menu */
-.menu-backdrop { position: fixed; inset: 0; z-index: 1000; }
-.menu { position: fixed; border-radius: 16px; background: var(--app-bg-elevated, #1f2030); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 16px 40px rgba(0,0,0,.45); padding: 6px; }
-.menu-reacts { display: flex; justify-content: space-between; padding: 2px 2px 6px; }
-.menu-react { font-size: 22px; width: 36px; height: 36px; border-radius: 50%; border: none; background: none; cursor: pointer; transition: transform .12s ease; }
-.menu-react:hover { transform: scale(1.2); background: rgba(255,255,255,.06); }
-.menu-react.mine { background: rgba(99,102,241,.3); }
-.menu-react.more { font-size: 18px; color: var(--app-text-muted); }
-.menu-emoji-grid { max-height: 160px; overflow-y: auto; border-top: 1px solid rgba(255,255,255,.08); }
-.menu-item { display: block; width: 100%; text-align: left; padding: 9px 12px; border: none; background: none; border-radius: 10px; color: var(--app-text); font: inherit; font-size: 14px; cursor: pointer; }
-.menu-item:hover { background: rgba(255,255,255,.07); }
-.menu-item.danger { color: #f87171; }
+/* ── Message actions menu ── */
+.menu-backdrop { position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, 0.15); }
+.menu { position: fixed; padding: 6px; border-radius: 16px; background: var(--app-bg-elevated); border: 1px solid var(--app-border-strong, var(--app-border)); box-shadow: var(--app-shadow-lg, 0 18px 44px rgba(0,0,0,.35)); }
+.menu-reacts { display: flex; justify-content: space-between; padding: 2px 2px 6px; border-bottom: 1px solid var(--app-border); margin-bottom: 4px; }
+.menu-react { width: 38px; height: 38px; border: none; border-radius: 50%; background: none; font-size: 23px; cursor: pointer; transition: transform 120ms ease; }
+.menu-react:hover, .menu-react:focus-visible { transform: scale(1.18); background: rgba(var(--app-accent-rgb), 0.08); outline: none; }
+.menu-react.mine { background: rgba(var(--app-accent-rgb), 0.22); }
+.menu-react--more { display: inline-flex; align-items: center; justify-content: center; color: var(--app-text-muted); background: rgba(var(--app-accent-rgb), 0.08); }
+.menu-react--more svg { width: 18px; height: 18px; }
+.menu-emoji { max-height: 170px; overflow-y: auto; padding: 4px 0; border-bottom: 1px solid var(--app-border); margin-bottom: 4px; }
+.menu-item { display: block; width: 100%; padding: 10px 12px; border: none; border-radius: 10px; background: none; color: var(--app-text); font: inherit; font-size: 14.5px; text-align: left; cursor: pointer; }
+.menu-item:hover, .menu-item:focus-visible { background: rgba(var(--app-accent-rgb), 0.09); outline: none; }
+.menu-item--danger { color: var(--app-danger); }
 
-/* Modals */
-.modal-text-btn { background: none; border: none; color: var(--app-text-muted); font: inherit; font-size: 15px; font-weight: 600; padding: 6px 12px; cursor: pointer; }
-.modal-text-btn.primary { color: #818cf8; }
-.modal-text-btn:disabled { opacity: .4; cursor: not-allowed; }
-.modal-body { padding: 16px; }
-.field-label { display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--app-text-muted); margin: 12px 0 6px; }
-.field-input { flex: 1; width: 100%; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); border-radius: 12px; padding: 10px 12px; color: var(--app-text); font: inherit; font-size: 14.5px; outline: none; }
-.field-input:focus { border-color: rgba(99,102,241,.6); }
-.poll-opt-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
-.check-row { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 14px; color: var(--app-text); }
-.room-description { padding: 12px 16px 0; margin: 0; font-size: 14px; color: var(--app-text-muted); }
-.pinned-list { padding: 0 16px; }
-.gp-h { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--app-text-muted); margin: 14px 0 8px; }
-.leave-row { display: flex; justify-content: center; padding: 8px 16px 32px; }
-.info-preview { font-size: 14px; color: var(--app-text); background: rgba(255,255,255,.05); border-radius: 12px; padding: 10px 12px; margin: 0 0 6px; }
-.info-line { font-size: 12.5px; color: var(--app-text-subtle); margin: 0; }
-.info-reader { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 14px; color: var(--app-text); }
-.info-reader.muted { color: var(--app-text-muted); }
+/* ── Sheets ── */
+.sheet { --height: auto; --max-width: 480px; --border-radius: 20px; }
+.sheet--tall { --height: min(88vh, 760px); }
+.sheet-body { position: relative; display: flex; flex-direction: column; padding: 22px 20px calc(20px + env(safe-area-inset-bottom)); max-height: 88vh; overflow-y: auto; background: var(--app-bg-elevated); color: var(--app-text); }
+.sheet--tall .sheet-body { height: 100%; }
+.sheet-title { margin: 0 0 10px; font-size: 19px; font-weight: 700; letter-spacing: -0.015em; }
+.sheet-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.sheet-foot { margin: 16px 0 0; font-size: 12.5px; color: var(--app-text-subtle); }
+.label { margin: 12px 2px 6px; font-size: 13px; font-weight: 600; color: var(--app-text-muted); }
+.field { width: 100%; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--app-border-strong, var(--app-border)); background: var(--app-bg-base); color: var(--app-text); font: inherit; font-size: 15px; outline: none; }
+.field:focus { border-color: var(--app-accent); box-shadow: var(--app-focus-ring); }
+.poll-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.check { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 14.5px; color: var(--app-text); }
+.check input { width: 18px; height: 18px; accent-color: var(--app-accent); }
+.quote { margin: 0 0 12px; padding: 10px 12px; border-radius: 12px; background: var(--app-bg-base); font-size: 14px; color: var(--app-text); }
+.person { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 14.5px; color: var(--app-text); }
+.person--muted { color: var(--app-text-muted); }
 
-.lightbox { position: fixed; inset: 0; z-index: 2000; background: rgba(0,0,0,.9); display: flex; align-items: center; justify-content: center; cursor: zoom-out; }
+.info-close { position: absolute; top: 10px; right: 10px; }
+.info-top { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 0 16px; text-align: center; }
+.info-name { margin: 8px 0 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+.info-meta { margin: 0; font-size: 14px; color: var(--app-text-muted); }
+.info-desc { margin: 6px 0 0; max-width: 40ch; font-size: 14.5px; line-height: 1.5; color: var(--app-text); }
+.info-actions { display: flex; justify-content: center; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--app-border); }
+.info-action { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 86px; padding: 12px 10px; border-radius: 14px; border: 1px solid var(--app-border); background: var(--app-bg-base); color: var(--app-accent-bright); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.info-action:hover, .info-action:focus-visible { background: rgba(var(--app-accent-rgb), 0.08); outline: none; }
+.info-action svg { width: 22px; height: 22px; }
+.info-section { padding-top: 6px; }
+.info-h { margin: 14px 2px 6px; font-size: 13px; font-weight: 650; color: var(--app-text-muted); }
+.leave { margin: 16px auto 4px; padding: 11px 20px; border: none; border-radius: 999px; background: rgba(var(--app-danger-rgb, 248, 113, 113), 0.12); color: var(--app-danger); font: inherit; font-size: 14.5px; font-weight: 650; cursor: pointer; }
+
+.lightbox { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.9); cursor: zoom-out; }
 .lightbox img { max-width: 95vw; max-height: 92vh; object-fit: contain; }
 
-@media (prefers-reduced-motion: reduce) { .send-button, .input-area, .menu-react { transition: none; } }
+@media (max-width: 520px) { .room { --room-pad: 10px; } }
+@media (prefers-reduced-motion: reduce) { .menu-react, .send { transition: none; } .typing-dots span, .rec-dot { animation: none; } }
 </style>

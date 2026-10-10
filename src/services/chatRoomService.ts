@@ -182,6 +182,7 @@ export class ChatRoomService {
     this.requireEpoch(roomId);const security=await GroupSecurity.local(),state=await security.state(roomId);if(!state)return [];
     return state.epoch.members.map(b=>({accountId:b.accountId,deviceId:b.deviceId,isOwner:memberId(b)===memberId(state.epoch.owner),isSelf:memberId(b)===memberId(security.binding)}));
   }
+  static onMembershipChange(cb:(roomId:string)=>void){return GroupRoomTransport.onEpochChange(cb);}
   static async isOwner(roomId:string){
     if(!isEpochRoom(roomId))return false;const security=await GroupSecurity.local(),state=await security.state(roomId);
     return !!state && memberId(state.epoch.owner)===memberId(security.binding);

@@ -35,7 +35,11 @@ export class GroupRoomTransport {
   private static active=0;
   private static requests=0;
   static node(room:string){return GunService.getGun().get('chatrooms').get(room);}
+  /** Local listeners for membership changes this device made (approve, auto-admit, remove). */
+  private static epochListeners=new Set<(room:string)=>void>();
+  static onEpochChange(cb:(room:string)=>void){this.epochListeners.add(cb);return ()=>{this.epochListeners.delete(cb);};}
   static async publishEpoch(epoch:Epoch){
+    for(const cb of this.epochListeners){try{cb(epoch.roomId);}catch{/* listener bug must not block publication */}}
     const ack=await gunPut(this.node(epoch.roomId),{epoch:JSON.stringify(epoch)});
     if(!ack.ok)throw new Error('Group epoch publication pending');
   }
@@ -184,7 +188,9 @@ export class GroupRoomTransport {
       });
     };
     attach();const reconnect=GunService.onReconnect(attach);
-    return ()=>{active=false;chain?.off?.();reconnect();};
+    // Someone admitted elsewhere (e.g. by password) must drop off the pending list.
+    const stopEpoch=this.onEpochChange(r=>{if(r===room)void emit();});
+    return ()=>{active=false;chain?.off?.();reconnect();stopEpoch();};
   }
   static async declineJoin(security:GroupSecurity,room:string,request:JoinRequest){
     const key=declinedKey(security.binding.accountId,room),declined=(await StorageService.getMetadata(key))??{};

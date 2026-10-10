@@ -21,10 +21,12 @@
       </div>
       <button
         class="ct-new"
-        :class="{ 'ct-new--open': composerOpen }"
-        :aria-expanded="composerOpen"
-        :aria-label="composerOpen ? 'Close new chat' : 'New chat'"
-        @click="toggleComposer"
+        data-test="new-menu"
+        :class="{ 'ct-new--open': composerOpen || newMenuOpen }"
+        :aria-expanded="composerOpen || newMenuOpen"
+        aria-haspopup="menu"
+        :aria-label="composerOpen ? 'Close' : 'New chat or group'"
+        @click="composerOpen ? toggleComposer(false) : (newMenuOpen = !newMenuOpen)"
       >
         <svg v-if="!composerOpen" class="ct-new__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M20.5 11.6a8.1 8.1 0 01-.9 3.7 8.2 8.2 0 01-7.3 4.5 8.1 8.1 0 01-3.7-.9L3.5 20.5l1.6-4.9a8.1 8.1 0 01-.9-3.7A8.2 8.2 0 018.7 4.6a8.1 8.1 0 013.6-.9h.5a8.2 8.2 0 017.7 7.7v.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -33,12 +35,24 @@
         <svg v-else class="ct-new__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
         <span class="ct-new__label">{{ composerOpen ? 'Close' : 'New' }}</span>
       </button>
+      <div v-if="newMenuOpen" class="ct-menu-backdrop" @click="newMenuOpen = false"></div>
+      <div v-if="newMenuOpen" class="ct-menu" role="menu">
+        <button class="ct-menu__item" role="menuitem" data-test="new-group" @click="newMenuOpen = false; createOpen = true">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="3.2" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 19c.7-3 2.9-4.6 5.5-4.6s4.8 1.6 5.5 4.6M18 8v6M15 11h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <span><strong>New group</strong><small>Chat with several people</small></span>
+        </button>
+        <button class="ct-menu__item" role="menuitem" @click="newMenuOpen = false; toggleComposer(true)">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <span><strong>Open a link</strong><small>Someone's chat link or a group invite</small></span>
+        </button>
+      </div>
     </header>
+    <GroupCreateSheet :open="createOpen" @close="createOpen = false" />
 
     <!-- New chat: paste a link someone shared, or share your own -->
     <Transition name="ct-slide">
       <section v-if="composerOpen" class="ct-composer">
-        <label class="ct-composer__label" for="ct-link">Paste a chat link someone shared with you</label>
+        <label class="ct-composer__label" for="ct-link">Paste a chat link or group invite someone shared with you</label>
         <div class="link-input-wrap" :class="{ focused: linkFocused, error: linkError }">
           <svg viewBox="0 0 24 24" fill="none" class="link-prefix-icon" aria-hidden="true"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
           <input
@@ -46,7 +60,7 @@
             ref="linkEl"
             v-model="inviteLinkInput"
             class="link-input"
-            placeholder="Paste chat link here…"
+            placeholder="Paste a link here…"
             autocomplete="off"
             spellcheck="false"
             @focus="linkFocused = true; linkError = ''"
@@ -73,9 +87,36 @@
     </Transition>
 
     <!-- The list: ONE continuous surface, rows separated by hairlines (WhatsApp-style) -->
-    <ul v-if="filteredChats.length" class="ct-list">
+    <ul v-if="rows.length" class="ct-list">
+      <template v-for="row in rows" :key="row.key">
       <li
-        v-for="chat in filteredChats"
+        v-if="row.kind === 'group'"
+        class="ct-row"
+        :class="{ 'ct-row--unread': row.unread > 0 }"
+        role="button"
+        tabindex="0"
+        @click="openGroup(row.id)"
+        @keydown.enter.prevent="openGroup(row.id)"
+        @keydown.space.prevent="openGroup(row.id)"
+      >
+        <ChatAvatar :name="row.name" :seed="row.id" group />
+        <div class="ct-row__main">
+          <div class="ct-row__top">
+            <span class="ct-row__name">{{ row.name }}</span>
+            <span class="ct-row__time">{{ formatChatTime(row.time) }}</span>
+          </div>
+          <div class="ct-row__bottom">
+            <span class="ct-row__preview" :class="{ 'ct-row__preview--empty': !row.preview }">
+              <template v-if="row.preview"><span class="ct-row__you">{{ row.sender }}:</span> {{ row.preview }}</template>
+              <template v-else>{{ row.memberCount === 1 ? 'Only you so far — invite people' : 'No messages yet' }}</template>
+            </span>
+            <span v-if="row.mentions" class="ct-row__badge ct-row__badge--mention" title="You were mentioned">@</span>
+            <span v-if="row.unread > 0" class="ct-row__badge">{{ row.unread > 99 ? '99+' : row.unread }}</span>
+          </div>
+        </div>
+      </li>
+      <template v-else><li
+        v-for="chat in [row.chat]"
         :key="chat.userId"
         class="ct-row"
         :class="{ 'ct-row--unread': chat.unreadCount > 0 }"
@@ -133,10 +174,11 @@
             <span v-if="chat.unreadCount > 0" class="ct-row__badge">{{ chat.unreadCount > 99 ? '99+' : chat.unreadCount }}</span>
           </div>
         </div>
-      </li>
+      </li></template>
+      </template>
     </ul>
 
-    <p v-else-if="trimmed && chatList.length" class="ct-nomatch">{{ searchPending ? 'Searching messages…' : `No chats or messages match “${trimmed}”.` }}</p>
+    <p v-else-if="trimmed && (chatList.length || groupRooms.length)" class="ct-nomatch">{{ searchPending ? 'Searching messages…' : `No chats or messages match “${trimmed}”.` }}</p>
 
     <!-- Loading: skeleton in the same surface so the layout doesn't jump -->
     <div v-else-if="loading" class="ct-list ct-skel" aria-hidden="true">
@@ -152,15 +194,22 @@
         <svg viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
       </div>
       <p class="ct-empty__title">No chats yet</p>
-      <p class="ct-empty__sub">Paste a chat link someone shared with you, or share yours so people can message you directly.</p>
-      <button class="open-btn ct-empty__cta" @click="toggleComposer(true)">Start a chat</button>
+      <p class="ct-empty__sub">Start a group, or paste a link someone shared with you. Share your own link so people can message you directly.</p>
+      <div class="ct-empty__ctas">
+        <button class="open-btn ct-empty__cta" @click="createOpen = true">New group</button>
+        <button class="ct-linkbtn" @click="toggleComposer(true)">Open a link</button>
+      </div>
     </div>
 
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, watch, onBeforeUnmount } from 'vue';
+import { ref, computed, nextTick, watch, onBeforeUnmount, onMounted } from 'vue';
+import ChatAvatar from './groupchat/ChatAvatar.vue';
+import GroupCreateSheet from './groupchat/GroupCreateSheet.vue';
+import { useChatRoomStore } from '../stores/chatRoomStore';
+import { UserService } from '../services/userService';
 import { useRouter } from 'vue-router';
 import { chatPath } from '../utils/privateRoute';
 import { cleanNickname, MAX_NICKNAME } from '../utils/nicknameText';
@@ -316,6 +365,34 @@ function previewParts(c: ChatEntry): { t: string; hit: boolean }[] {
 }
 function previewShown(c: ChatEntry): boolean { return previewParts(c).length > 0; }
 
+// ── Groups live in the same list as people (WhatsApp-style) ─────────────────
+const roomStore = useChatRoomStore();
+const createOpen = ref(false);
+const newMenuOpen = ref(false);
+onMounted(async () => {
+  const user = await UserService.getCurrentUser().catch(() => null);
+  if (user) roomStore.setIdentity(user.id, user.displayName || user.username || 'Anonymous');
+  await roomStore.loadRooms();
+});
+const groupRooms = computed(() => roomStore.rooms.filter(r => r.securityMode === 'EPOCH_GROUP_V1'));
+type Row =
+  | { kind: 'dm'; key: string; time: number; chat: ChatEntry }
+  | { kind: 'group'; key: string; time: number; id: string; name: string; unread: number; mentions: number; preview: string; sender: string; memberCount: number };
+const rows = computed<Row[]>(() => {
+  const q = trimmed.value.toLowerCase();
+  const groups: Row[] = groupRooms.value
+    .filter(r => !q || r.name.toLowerCase().includes(q))
+    .map(r => {
+      const s = roomStore.summaries[r.id];
+      return { kind: 'group', key: `g:${r.id}`, id: r.id, name: r.name, time: s?.last?.timestamp ?? r.createdAt,
+        unread: s?.unread ?? 0, mentions: s?.mentions ?? 0, preview: s?.last?.text ?? '', sender: s?.last?.senderName ?? '', memberCount: r.memberCount };
+    });
+  const dms: Row[] = filteredChats.value.map(c => ({ kind: 'dm', key: `d:${c.userId}`, time: c.lastMessageTime, chat: c }));
+  // While searching, keep the parent's ranking for people; otherwise newest first.
+  return q ? [...groups, ...dms] : [...groups, ...dms].sort((a, b) => b.time - a.time);
+});
+function openGroup(id: string) { void router.push(`/chatroom/${encodeURIComponent(id)}`); }
+
 function extractChatPath(raw: string): { userId: string; name: string } | null {
   const s = raw.trim();
   try {
@@ -350,6 +427,13 @@ async function openFromLink() {
   const raw = inviteLinkInput.value.trim();
   if (!raw) return;
   linkError.value = '';
+  const group = raw.match(/\/join\/chatroom\/([^/?#\s]+)/) || raw.match(/\/chatroom\/([^/?#\s]+)/);
+  if (group) {
+    inviteLinkInput.value = '';
+    composerOpen.value = false;
+    await router.push(`/chatroom/${group[1]}`);
+    return;
+  }
   const parsed = extractChatPath(raw);
   if (!parsed || !parsed.userId) {
     linkError.value = 'That doesn\'t look like a valid chat link.';
@@ -400,6 +484,26 @@ function formatChatTime(timestamp: number): string {
   --ct-press:  rgba(var(--app-accent-rgb), 0.14);
   --ct-tint:   rgba(var(--app-accent-rgb), 0.14);
 }
+
+/* ── "New" menu ───────────────────────────────────────────────────── */
+.ct-head { position: relative; }
+.ct-menu-backdrop { position: fixed; inset: 0; z-index: 40; }
+.ct-menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 41; min-width: 250px; padding: 6px;
+  border-radius: 14px; background: var(--app-bg-elevated); border: 1px solid var(--app-border-strong, var(--app-border));
+  box-shadow: var(--app-shadow-lg, 0 16px 40px rgba(0,0,0,.25));
+}
+.ct-menu__item {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border: none; border-radius: 10px;
+  background: none; color: var(--app-text); font: inherit; text-align: left; cursor: pointer;
+}
+.ct-menu__item:hover, .ct-menu__item:focus-visible { background: var(--ct-hover); outline: none; }
+.ct-menu__item svg { width: 22px; height: 22px; flex-shrink: 0; color: var(--app-accent-bright); }
+.ct-menu__item span { display: flex; flex-direction: column; gap: 1px; }
+.ct-menu__item strong { font-size: 14.5px; font-weight: 650; }
+.ct-menu__item small { font-size: 12.5px; color: var(--app-text-muted); }
+.ct-row__badge--mention { background: var(--app-warning, #f59e0b); }
+.ct-empty__ctas { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
 
 /* ── Header: pill search + "New chat" button ───────────────────────── */
 /* A little inset so the search doesn't sit flush against the screen edge. */

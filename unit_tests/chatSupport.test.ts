@@ -6,6 +6,7 @@ vi.mock('@/services/chatRoomService', () => ({ ChatRoomService: {
   subscribeToMessages: vi.fn(), sendMessage: vi.fn(), leaveRoom: vi.fn(), startOutboxLoop: vi.fn(), flushOutbox: vi.fn(),
   getReadMark: vi.fn(async () => 0), setReadMark: vi.fn(), getNames: vi.fn(async () => ({})), rememberNames: vi.fn(async () => {}),
   listMembers: vi.fn(async () => []), isOwner: vi.fn(async () => false), watchSignals: vi.fn(async () => () => {}),
+  onMembershipChange: vi.fn(() => () => {}),
   watchJoinRequests: vi.fn(async () => () => {}), sendSignal: vi.fn(async () => {}), summary: vi.fn(),
 }, isVisibleRow: (ext?: any) => !ext || ext.k === 'msg' || ext.k === 'poll' }));
 vi.mock('@/services/storageService', () => ({ StorageService: { getChatMessage: vi.fn() } }));

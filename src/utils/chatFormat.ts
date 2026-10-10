@@ -33,6 +33,13 @@ export function formatChatText(text: string, mentionNames: string[] = []): strin
   return out.replace(/\u0000(\d+)\u0000/g, (_, i) => blocks[Number(i)]).replace(/\n/g, '<br>');
 }
 
+/** Stable per-person hue, shared by avatars and sender names so they match. */
+export function senderHue(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return h % 360;
+}
+
 /** Stable per-user accent colour, as group chats tint sender names. */
 const PALETTE = ['#818cf8', '#34d399', '#f472b6', '#fbbf24', '#60a5fa', '#f87171', '#a78bfa', '#2dd4bf', '#fb923c', '#a3e635'];
 export function senderColor(id: string): string {

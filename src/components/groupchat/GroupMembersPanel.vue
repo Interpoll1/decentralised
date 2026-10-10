@@ -1,9 +1,9 @@
 <template>
   <div class="gp">
     <section v-if="store.isOwner && store.pendingJoins.length" class="gp-section">
-      <h3 class="gp-h">Join requests <span class="gp-count">{{ store.pendingJoins.length }}</span></h3>
+      <h3 class="gp-h">Waiting to join <span class="gp-count">{{ store.pendingJoins.length }}</span></h3>
       <div v-for="req in store.pendingJoins" :key="req.id" class="gp-row">
-        <div class="gp-avatar" :style="{ background: senderColor(req.binding.accountId) }">{{ initial(req.name) }}</div>
+        <ChatAvatar :name="req.name" :seed="req.binding.accountId" size="lg" />
         <div class="gp-info">
           <span class="gp-name">{{ req.name || 'Unnamed' }}</span>
           <span class="gp-sub">{{ req.binding.accountId.slice(0, 12) }}… · {{ ago(req.ts) }}</span>
@@ -16,17 +16,14 @@
     <section class="gp-section">
       <h3 class="gp-h">{{ accounts.length }} {{ accounts.length === 1 ? 'member' : 'members' }}</h3>
       <div v-for="m in accounts" :key="m.accountId" class="gp-row">
-        <div class="gp-avatar" :style="{ background: senderColor(m.accountId) }">
-          {{ initial(store.displayName(m.accountId)) }}
-          <span v-if="store.onlineAccounts.has(m.accountId)" class="gp-online"></span>
-        </div>
+        <ChatAvatar :name="store.displayName(m.accountId)" :seed="m.accountId" size="lg" :online="store.onlineAccounts.has(m.accountId)" />
         <div class="gp-info">
           <span class="gp-name">{{ m.isSelf ? `${store.me.name || 'You'} (you)` : store.displayName(m.accountId) }}</span>
           <span class="gp-sub">
             {{ store.onlineAccounts.has(m.accountId) ? 'online' : 'offline' }}<template v-if="m.devices > 1"> · {{ m.devices }} devices</template>
           </span>
         </div>
-        <span v-if="m.isOwner" class="gp-badge">Creator</span>
+        <span v-if="m.isOwner" class="gp-badge">Created the group</span>
         <button v-else-if="store.isOwner && !m.isSelf" class="gp-btn gp-btn--danger" :disabled="busy === m.accountId" @click="remove(m.accountId)">Remove</button>
       </div>
     </section>
@@ -40,7 +37,7 @@
 import { ref, computed } from 'vue';
 import { toastController } from '@ionic/vue';
 import { useChatRoomStore } from '@/stores/chatRoomStore';
-import { senderColor } from '@/utils/chatFormat';
+import ChatAvatar from './ChatAvatar.vue';
 
 const store = useChatRoomStore();
 const busy = ref('');
@@ -56,7 +53,6 @@ const accounts = computed(() => {
   return [...map.values()].sort((a, b) => Number(b.isOwner) - Number(a.isOwner) || store.displayName(a.accountId).localeCompare(store.displayName(b.accountId)));
 });
 
-const initial = (name: string) => (name || '?').trim().charAt(0).toUpperCase() || '?';
 function ago(ts: number) {
   const m = Math.floor((Date.now() - ts) / 60000);
   return m < 1 ? 'just now' : m < 60 ? `${m}m ago` : m < 1440 ? `${Math.floor(m / 60)}h ago` : `${Math.floor(m / 1440)}d ago`;
@@ -79,20 +75,19 @@ function remove(accountId: string) {
 </script>
 
 <style scoped>
-.gp { padding: 8px 16px 24px; }
-.gp-section { margin-bottom: 18px; }
-.gp-h { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--app-text-muted); margin: 10px 0 8px; display: flex; align-items: center; gap: 6px; }
-.gp-count { background: #f59e0b; color: #111; border-radius: 999px; padding: 0 7px; font-size: 11px; }
-.gp-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
-.gp-avatar { position: relative; width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #111; }
-.gp-online { position: absolute; right: -1px; bottom: -1px; width: 11px; height: 11px; border-radius: 50%; background: #22c55e; border: 2px solid var(--app-bg-base, #0b0b12); }
-.gp-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.gp-name { font-size: 14.5px; font-weight: 600; color: var(--app-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gp-sub { font-size: 12px; color: var(--app-text-subtle); }
-.gp-badge { font-size: 11px; font-weight: 700; color: #a5b4fc; border: 1px solid rgba(165,180,252,.4); border-radius: 999px; padding: 2px 8px; }
-.gp-btn { border: 1px solid rgba(255,255,255,.15); background: rgba(255,255,255,.05); color: var(--app-text); border-radius: 999px; padding: 5px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
-.gp-btn:disabled { opacity: .5; cursor: wait; }
-.gp-btn--ok { background: #6366f1; border-color: #6366f1; color: #fff; }
-.gp-btn--danger { color: #f87171; border-color: rgba(248,113,113,.4); }
-.gp-note { font-size: 12.5px; color: var(--app-text-subtle); line-height: 1.5; }
+.gp { padding: 4px 0 0; }
+.gp-section { padding-top: 6px; }
+.gp-h { display: flex; align-items: center; gap: 8px; margin: 14px 2px 6px; font-size: 13px; font-weight: 650; color: var(--app-text-muted); }
+.gp-count { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--app-warning, #f59e0b); color: #111; font-size: 11.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.gp-row { display: flex; align-items: center; gap: 12px; padding: 8px 2px; }
+.gp-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.gp-name { font-size: 15px; font-weight: 600; color: var(--app-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gp-sub { font-size: 12.5px; color: var(--app-text-subtle); }
+.gp-badge { font-size: 12px; color: var(--app-text-muted); }
+.gp-btn { flex-shrink: 0; padding: 7px 14px; border-radius: 999px; border: none; background: rgba(var(--app-accent-rgb), 0.1); color: var(--app-text); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.gp-btn:focus-visible { outline: none; box-shadow: var(--app-focus-ring); }
+.gp-btn:disabled { opacity: 0.5; cursor: wait; }
+.gp-btn--ok { background: var(--app-accent); color: #fff; }
+.gp-btn--danger { background: transparent; color: var(--app-danger); }
+.gp-note { margin: 14px 2px 0; font-size: 13px; line-height: 1.5; color: var(--app-text-subtle); }
 </style>

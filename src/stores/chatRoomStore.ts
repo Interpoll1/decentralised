@@ -245,6 +245,16 @@ export const useChatRoomStore = defineStore('chatRoom', () => {
       }
     });
     extraUnsubscribes.push(stopSignals);
+    extraUnsubscribes.push(ChatRoomService.onMembershipChange((roomId) => {
+      if (token !== generation || roomId !== room.id) return;
+      // Let the epoch commit land before re-reading it.
+      setTimeout(() => {
+        if (token !== generation) return;
+        void refreshMembers(room.id).then(() => {
+          if (currentRoom.value) currentRoom.value = { ...currentRoom.value, memberCount: members.value.length };
+        });
+      }, 300);
+    }));
     if (isOwner.value) {
       const stopJoins = await ChatRoomService.watchJoinRequests(room.id, (pending) => {
         if (token === generation) pendingJoins.value = pending;
