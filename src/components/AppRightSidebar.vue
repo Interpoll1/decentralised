@@ -170,7 +170,9 @@ onMounted(async () => {
     if (res.ok) {
       const data = await res.json();
       const rows = Array.isArray(data) ? data : (data.categories || []);
-      relayTrending.value = rows.slice(0, 5).map((row: any) => {
+      relayTrending.value = rows
+        .filter((row: any) => CATEGORY_MAP.has(row.id || row.category))
+        .slice(0, 5).map((row: any) => {
         const def = CATEGORY_MAP.get(row.id || row.category);
         return { id: row.id || '', tag: '', label: def?.label || row.label || row.id || '',
                  posts: String(row.posts || row.count || ''), icon: def?.icon,

@@ -28,6 +28,8 @@ import {
   saveVoteRegistrySync,
 } from './persistence.js';
 import { queueForCategorisation } from './auto-categorise.js';
+
+const TRENDING_CATEGORY_IDS = new Set(['politics','technology','science','finance','health','sports','environment','education','crypto','gaming','opinion','humour','movies-tv','music','celebrity','story','ask','discussion','news']);
 import { NAMESPACE, resolveNamespace, namespaceOfSoul, belongsToNamespace } from '../shared-validation/namespace.js';
 import fs from 'fs';
 
@@ -725,10 +727,23 @@ server.on('request', async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/api/trending-categories') {
     if (!db) { res.writeHead(503, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ categories: [] })); return; }
     try {
-      const [rows] = await db.execute(`SELECT category, COUNT(*) as total FROM search_index WHERE category IS NOT NULL AND category != '' GROUP BY category ORDER BY total DESC LIMIT 20`);
+      // "Trending" = recent activity, not all-time totals. Only count
+      // categories the client can select (mirrors ALL_CATEGORIES in
+      // src/composables/useCategories.ts) and skip moderator-removed items,
+      // so the numbers match what the feed shows when a row is clicked.
+      const windowDays = url.searchParams.get('window') === '24h' ? 1 : url.searchParams.get('window') === '30d' ? 30 : 7;
+      const cats = [...TRENDING_CATEGORY_IDS];
+      const [rows] = await db.execute(
+        `SELECT category, COUNT(*) as total FROM search_index
+         WHERE category IN (${cats.map(() => '?').join(',')})
+           AND (mod_status IS NULL OR mod_status != 'removed')
+           AND created_at > ?
+         GROUP BY category ORDER BY total DESC LIMIT 20`,
+        [...cats, Date.now() - windowDays * 24 * 60 * 60 * 1000]
+      );
       const categories = (rows || []).map(r => ({ id: r.category, label: r.category.charAt(0).toUpperCase() + r.category.slice(1).replace(/-/g, ' '), posts: r.total >= 1000 ? `${(r.total / 1000).toFixed(1)}k` : String(r.total), count: r.total }));
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60, stale-while-revalidate=120' });
-      res.end(JSON.stringify({ categories })); return;
+      res.end(JSON.stringify({ categories, window: `${windowDays}d` })); return;
     } catch { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ categories: [] })); return; }
   }
 
