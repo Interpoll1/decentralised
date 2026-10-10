@@ -337,6 +337,13 @@ export class GunService {
     }
   }
 
+  /** URLs of the relays this Gun instance is configured with. */
+  static peerUrls(): string[] {
+    try {
+      return Object.values(this.gun?._.opt?.peers || {}).map((p: any) => p?.url).filter((u: unknown): u is string => typeof u === 'string');
+    } catch { return []; }
+  }
+
   /** Dynamically add a peer to the running Gun instance without full reconnect */
   static addPeerDynamic(url: string): void {
     if (!this.gun) return;

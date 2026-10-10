@@ -244,6 +244,13 @@ onMounted(() => {
   const type = route.params.type as string;
   const id   = route.params.id   as string | undefined;
 
+  // Group chat invites carry no secret: the room page sends a join request
+  // that the owner device approves.
+  if (type === 'chatroom' && id) {
+    void router.replace(`/chatroom/${encodeURIComponent(id)}`);
+    return;
+  }
+
   // Seed sources, newest first: /join/rendezvous#<seed> (fragment — never sent
   // to the server), then legacy ?seed= and /join/rendezvous/<seed> forms.
   const fragment = window.location.hash.replace(/^#/, '');
@@ -293,6 +300,8 @@ async function joinViaLink() {
   try {
     const url = new URL(inviteUrl.value.trim());
     // Pattern: /join/community/:id
+    const room = url.pathname.match(/\/join\/chatroom\/([^/]+)/);
+    if (room) { void router.push(`/chatroom/${room[1]}`); return; }
     const match = url.pathname.match(/\/join\/community\/([^/]+)/);
     if (match) communityId = decodeURIComponent(match[1]);
   } catch {

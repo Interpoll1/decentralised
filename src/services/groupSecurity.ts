@@ -3,7 +3,7 @@ import { KeyService } from './keyService';
 import { StorageService } from './storageService';
 import { bindingBytes, verifyBinding, type DeviceBinding } from './dmIdentity';
 import { getOrCreateAuthenticatedIdentityBundle } from './signalProtocol';
-import type { StoredChatMessage } from '../types/social';
+import type { GroupExt, StoredChatMessage } from '../types/social';
 
 export const GROUP_LIMITS = { members: 64, keys: 8, outbox: 128, replay: 128, requests: 64, textBytes: 65536, recordBytes: 524288 } as const;
 const utf8 = new TextEncoder();
@@ -128,11 +128,57 @@ async function verifyEnvelope(e: GroupEnvelope, epoch: Epoch, requireReceipt: bo
   if(requireReceipt){if(!positive(e.publication))throw new Error('Missing publication');await verify(epoch.owner,receiptBytes(e),e.receipt);}
   else if(e.publication!==0 || e.receipt!=='')throw new Error('Candidate already has receipt');
 }
-function content(text: string) {
-  const c=JSON.parse(text);exact(c,['text','senderName']);
-  if(typeof c.text!=='string' || !c.text.trim() || utf8.encode(c.text).length>GROUP_LIMITS.textBytes || typeof c.senderName!=='string' || c.senderName.length>256)throw new Error('Invalid group content');
-  return c as {text:string;senderName:string};
+const str=(x:unknown,max:number,min=0)=>typeof x==='string' && x.length>=min && x.length<=max;
+const target=(x:unknown)=>typeof x==='string' && uuid.test(x);
+function media(m:any){
+  exact(m,['version','context','mediaId','mediaKey','mediaIV','mediaType','mediaSize','mediaName']);
+  if(m.version!==1 || !str(m.context,64,1) || !str(m.mediaId,64,1) || !/^[a-zA-Z0-9-]+$/.test(m.mediaId) || !str(m.mediaKey,64,1) || !str(m.mediaIV,32,1) ||
+    !str(m.mediaType,128,1) || !str(m.mediaName,256) || !Number.isSafeInteger(m.mediaSize) || m.mediaSize<0 || m.mediaSize>100*1024*1024)throw new Error('Invalid group media');
 }
+/** Every extension shape is closed: unknown kinds and fields fail like any other forgery. */
+export function checkExt(x:any):GroupExt{
+  if(!x || typeof x!=='object' || Array.isArray(x))throw new Error('Invalid group extension');
+  const optional=(keys:string[],extra:string[])=>exact(x,[...keys,...extra.filter(k=>k in x)]);
+  switch(x.k){
+    case 'msg':
+      optional(['k'],['replyTo','mentions','media','forwarded']);
+      if('replyTo'in x && !target(x.replyTo))throw new Error('Invalid reply');
+      if('mentions'in x && (!Array.isArray(x.mentions) || x.mentions.length>GROUP_LIMITS.members || x.mentions.some((m:unknown)=>typeof m!=='string' || !/^[0-9a-f]{64,130}$/.test(m))))throw new Error('Invalid mentions');
+      if('media'in x)media(x.media);
+      if('forwarded'in x && x.forwarded!==true)throw new Error('Invalid forward flag');
+      break;
+    case 'react': exact(x,['k','target','emoji']);if(!target(x.target) || !str(x.emoji,16))throw new Error('Invalid reaction');break;
+    case 'edit': case 'delete': case 'pin': case 'unpin': exact(x,['k','target']);if(!target(x.target))throw new Error('Invalid action target');break;
+    case 'poll':
+      exact(x,['k','question','options','multi']);
+      if(!str(x.question,300,1) || !Array.isArray(x.options) || x.options.length<2 || x.options.length>12 || x.options.some((o:unknown)=>!str(o,200,1)) || typeof x.multi!=='boolean')throw new Error('Invalid poll');
+      break;
+    case 'vote':
+      exact(x,['k','target','choices']);
+      if(!target(x.target) || !Array.isArray(x.choices) || x.choices.length>12 || new Set(x.choices).size!==x.choices.length || x.choices.some((c:unknown)=>!Number.isSafeInteger(c) || (c as number)<0 || (c as number)>=12))throw new Error('Invalid vote');
+      break;
+    default: throw new Error('Unknown group extension');
+  }
+  return x as GroupExt;
+}
+type Content = {text:string;senderName:string;x?:GroupExt};
+function content(text: string) {
+  const c=JSON.parse(text);exact(c,'x'in c?['text','senderName','x']:['text','senderName']);
+  if('x'in c)checkExt(c.x);
+  // Only plain/media messages and edits carry user text; other actions may be empty.
+  const needsText=!c.x || c.x.k==='edit' || (c.x.k==='msg' && !c.x.media);
+  if(typeof c.text!=='string' || (needsText && !c.text.trim()) || utf8.encode(c.text).length>GROUP_LIMITS.textBytes || typeof c.senderName!=='string' || c.senderName.length>256)throw new Error('Invalid group content');
+  return c as Content;
+}
+const signalContext=(room:string,epoch:string)=>json(['interpoll/group/signal',1,room,epoch]);
+export const joinContext=(room:string,id:string)=>json(['interpoll/group/join',1,room,id]);
+/** Ephemeral member state: typing, presence and read position. Never stored as history. */
+export interface GroupSignal { account:string; device:string; name:string; typing:number; read:number; ts:number; relays?:string[] }
+/** Only TLS Gun relays are shared between members. */
+export const validRelay=(u:unknown):u is string=>{
+  if(typeof u!=='string' || u.length>200)return false;
+  try{const url=new URL(u);return url.protocol==='https:' && url.pathname.replace(/\/$/,'').endsWith('/gun') && !url.username && !url.password;}catch{return false;}
+};
 const rowId = (room: string, message: string) => `group:${hash(room)}:${message}`;
 
 /** One authority DB, many IDB contexts. All authority-changing paths share this CAS. */
@@ -213,14 +259,15 @@ export class GroupSecurity {
       if(await this.commit(room,before,after))return epoch;
     }throw new Error('Group transition busy');
   }
-  async candidate(room: string, text: string, senderName: string) {
-    content(json({text,senderName}));
+  async candidate(room: string, text: string, senderName: string, x?: GroupExt) {
+    const body=x?{text,senderName,x}:{text,senderName};
+    content(json(body));
     for(let attempt=0;attempt<32;attempt++){
       const before=await this.state(room);if(!before)throw new Error('Group epoch unavailable');
       const header:GroupHeader={version:1,roomId:room,membershipEpoch:before.epoch.membershipEpoch,keyEpoch:before.epoch.keyEpoch,epochHash:epochHash(before.epoch),
         messageId:crypto.randomUUID(),senderAccount:this.binding.accountId,senderDevice:this.binding.deviceId,sequence:before.counter+1,timestamp:Date.now()};
       if(!positive(header.sequence))throw new Error('Sender sequence exhausted');
-      const envelope:GroupEnvelope={header,...await encrypt(await aes(this.key(before)),json({text,senderName}),headerBytes(header)),signature:'',publication:0,receipt:''};
+      const envelope:GroupEnvelope={header,...await encrypt(await aes(this.key(before)),json(body),headerBytes(header)),signature:'',publication:0,receipt:''};
       envelope.signature=await sign(this.identity,authorshipBytes(envelope));
       if(await this.commit(room,before,{...before,counter:header.sequence}))return envelope;
     }throw new Error('Group send busy');
@@ -244,9 +291,9 @@ export class GroupSecurity {
       if(await this.commit(room,before,after,this.row(envelope,plain)))return envelope;
     }throw new Error('Group publication busy');
   }
-  private row(e: GroupEnvelope, c: {text:string;senderName:string}): StoredChatMessage {
-    return {id:rowId(this.binding.accountId+e.header.roomId,e.header.messageId),roomId:e.header.roomId,kind:'room',senderId:e.header.senderAccount,senderName:c.senderName,text:c.text,timestamp:e.header.timestamp,
-      seq:e.publication,outgoing:e.header.senderAccount===this.binding.accountId,syncStatus:'pending',syncAttempts:0,encryptedEnvelope:json(e)};
+  private row(e: GroupEnvelope, c: Content): StoredChatMessage {
+    return {...(c.x?{ext:c.x}:{}),id:rowId(this.binding.accountId+e.header.roomId,e.header.messageId),roomId:e.header.roomId,kind:'room',senderId:e.header.senderAccount,senderName:c.senderName,text:c.text,timestamp:e.header.timestamp,
+      seq:e.publication||e.header.sequence,outgoing:e.header.senderAccount===this.binding.accountId,syncStatus:'pending',syncAttempts:0,encryptedEnvelope:json(e)};
   }
   async receive(room: string, envelope: GroupEnvelope): Promise<{status:'accepted'|'duplicate';row:StoredChatMessage}> {
     for(let attempt=0;attempt<32;attempt++){
@@ -254,18 +301,27 @@ export class GroupSecurity {
       bounded(envelope);
       const existing=await StorageService.getChatMessage(rowId(this.binding.accountId+room,envelope.header?.messageId));
       if(existing){if(existing.encryptedEnvelope===json(envelope))return {status:'duplicate',row:existing};throw new Error('Group message identity conflict');}
-      await verifyEnvelope(envelope,before.epoch,true);
-      if(envelope.publication<=before.highWater-GROUP_LIMITS.replay || before.received[String(envelope.publication)])throw new Error('Stale/reused group publication');
+      // Direct envelopes are signed by their sender alone; receipted ones went through the owner.
+      const direct=envelope.publication===0 && envelope.receipt==='';
+      await verifyEnvelope(envelope,before.epoch,!direct);
       const plain=content(await decrypt(await aes(this.key(before)),envelope,headerBytes(envelope.header)));
-      const highWater=Math.max(before.highWater,envelope.publication);const received:Record<string,string>={...before.received,[envelope.publication]:hash(receiptBytes(envelope))};
-      for(const n of Object.keys(received))if(Number(n)<=highWater-GROUP_LIMITS.replay)delete received[n];
       const row={...this.row(envelope,plain),syncStatus:'confirmed' as const};
-      if(await this.commit(room,before,{...before,highWater,received},row))return {status:'accepted',row};
+      let after:GroupState;
+      if(direct){
+        const senders=this.advanceSender(before,envelope);
+        after={...before,senders};
+      } else {
+        if(envelope.publication<=before.highWater-GROUP_LIMITS.replay || before.received[String(envelope.publication)])throw new Error('Stale/reused group publication');
+        const highWater=Math.max(before.highWater,envelope.publication);const received:Record<string,string>={...before.received,[envelope.publication]:hash(receiptBytes(envelope))};
+        for(const n of Object.keys(received))if(Number(n)<=highWater-GROUP_LIMITS.replay)delete received[n];
+        after={...before,highWater,received};
+      }
+      if(await this.commit(room,before,after,row))return {status:'accepted',row};
     }throw new Error('Group acceptance busy');
   }
   async published(room: string, envelope: GroupEnvelope) {
     for(let attempt=0;attempt<32;attempt++){
-      const before=await this.state(room);if(!before)return;this.owner(before);
+      const before=await this.state(room);if(!before)return;
       const after={...before,outbox:before.outbox.filter(e=>json(e)!==json(envelope))};
       if(await this.commit(room,before,after)){
         const row=await StorageService.getChatMessage(rowId(this.binding.accountId+room,envelope.header.messageId));
@@ -273,6 +329,56 @@ export class GroupSecurity {
         return;
       }
     }throw new Error('Group outbox busy');
+  }
+  /** Per-sender replay window shared by owner authorization and direct receipt. */
+  private advanceSender(before: GroupState, e: GroupEnvelope) {
+    const sender=`${e.header.senderAccount}:${e.header.senderDevice}`,window=before.senders[sender]??{high:0,seen:{}};
+    if(e.header.sequence<=window.high-GROUP_LIMITS.replay || window.seen[String(e.header.sequence)])throw new Error('Stale or replayed sender position');
+    const high=Math.max(window.high,e.header.sequence);const seen:Record<string,string>={...window.seen,[e.header.sequence]:hash(authorshipBytes(e))};
+    for(const n of Object.keys(seen))if(Number(n)<=high-GROUP_LIMITS.replay)delete seen[n];
+    return {...before.senders,[sender]:{high,seen}};
+  }
+  /**
+   * Owner-less send: the sender's signature is the authority. Every device orders by
+   * (timestamp, per-sender sequence, id), so all members converge without a sequencer.
+   * Stored locally and queued; `published()` confirms once a relay holds it.
+   */
+  async publishOwn(room: string, candidate: GroupEnvelope): Promise<StoredChatMessage> {
+    for(let attempt=0;attempt<32;attempt++){
+      const before=await this.state(room);if(!before)throw new Error('Group epoch unavailable');
+      if(candidate.header.senderAccount!==this.binding.accountId || candidate.header.senderDevice!==this.binding.deviceId)throw new Error('Not this device\'s message');
+      await verifyEnvelope(candidate,before.epoch,false);
+      const plain=content(await decrypt(await aes(this.key(before)),candidate,headerBytes(candidate.header)));
+      if(before.outbox.length>=GROUP_LIMITS.outbox)throw new Error('Group publication queue full');
+      const row=this.row(candidate,plain);
+      const after={...before,senders:this.advanceSender(before,candidate),outbox:[...before.outbox,candidate]};
+      if(await this.commit(room,before,after,row))return row;
+    }throw new Error('Group send busy');
+  }
+  /** Encrypt+sign this device's ephemeral state under the current epoch key. */
+  async sealSignal(room: string, body: {name:string;typing:number;read:number;relays?:string[]}) {
+    const s=await this.state(room);if(!s)throw new Error('Group epoch unavailable');
+    const e=epochHash(s.epoch);
+    const relays=(body.relays??[]).filter(validRelay).slice(0,8);
+    const payload=json({account:this.binding.accountId,device:this.binding.deviceId,name:body.name.slice(0,256),typing:body.typing,read:body.read,ts:Date.now(),...(relays.length?{relays}:{})});
+    const signature=await sign(this.identity,json([signalContext(room,e),payload]));
+    return json({e,...await encrypt(await aes(this.key(s)),json({payload,signature}),signalContext(room,e))});
+  }
+  /** Returns null for anything stale, foreign or forged; signals are best-effort. */
+  async openSignal(room: string, raw: string): Promise<GroupSignal|null> {
+    try{
+      if(typeof raw!=='string' || raw.length>8192)return null;
+      const s=await this.state(room);if(!s)return null;
+      const outer=JSON.parse(raw);exact(outer,['e','iv','ciphertext']);
+      const e=epochHash(s.epoch);if(outer.e!==e)return null;
+      const inner=JSON.parse(await decrypt(await aes(this.key(s)),outer,signalContext(room,e)));exact(inner,['payload','signature']);
+      const sig=JSON.parse(inner.payload) as GroupSignal;exact(sig,['account','device','name','typing','read','ts',...('relays'in sig?['relays']:[])]);
+      if('relays'in sig && (!Array.isArray(sig.relays) || sig.relays.length>8 || !sig.relays.every(validRelay)))return null;
+      if(!str(sig.name,256) || ![sig.typing,sig.read,sig.ts].every(n=>Number.isSafeInteger(n) && n>=0))return null;
+      const member=s.epoch.members.find(b=>b.accountId===sig.account && b.deviceId===sig.device);if(!member)return null;
+      await verify(member,json([signalContext(room,e),inner.payload]),inner.signature);
+      return sig;
+    }catch{return null;}
   }
   async signControl(value: string) { return sign(this.identity,value); }
   async verifyControl(binding: DeviceBinding,value: string,signature: string) { await verifyBinding(binding,binding.accountId,binding.deviceId);return verify(binding,value,signature); }

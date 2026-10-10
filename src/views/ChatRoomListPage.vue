@@ -55,7 +55,7 @@
       <!-- Room list -->
       <div v-else class="room-list">
         <div
-          v-for="room in chatRoomStore.rooms"
+          v-for="room in sortedRooms"
           :key="room.id"
           class="room-card"
           @click="openRoom(room.id)"
@@ -71,7 +71,10 @@
                 E2E
               </span>
             </div>
-            <p v-if="room.description" class="room-desc">{{ room.description }}</p>
+            <p v-if="summaryOf(room.id)?.last" class="room-desc" :class="{ 'room-desc--unread': summaryOf(room.id)!.unread }">
+              <strong>{{ summaryOf(room.id)!.last!.senderName }}:</strong> {{ summaryOf(room.id)!.last!.text }}
+            </p>
+            <p v-else-if="room.description" class="room-desc">{{ room.description }}</p>
             <div class="room-meta">
               <span class="meta-item">
                 <ion-icon :icon="peopleOutline"></ion-icon>
@@ -79,10 +82,12 @@
               </span>
               <span class="meta-item">
                 <ion-icon :icon="timeOutline"></ion-icon>
-                {{ formatDate(room.createdAt) }}
+                {{ formatDate(summaryOf(room.id)?.last?.timestamp ?? room.createdAt) }}
               </span>
             </div>
           </div>
+          <span v-if="summaryOf(room.id)?.mentions" class="unread-badge unread-badge--mention" title="You were mentioned">@</span>
+          <span v-if="summaryOf(room.id)?.unread" class="unread-badge">{{ summaryOf(room.id)!.unread > 99 ? '99+' : summaryOf(room.id)!.unread }}</span>
           <button class="leave-btn" @click.stop="confirmLeave(room)" title="Leave room">
             <ion-icon :icon="exitOutline"></ion-icon>
           </button>
@@ -137,7 +142,7 @@
           <div class="toggle-row">
             <div>
               <div class="toggle-label">Password protected</div>
-              <div class="toggle-sub">Members will need the password to join</div>
+              <div class="toggle-sub">Anyone with the invite link and password joins without waiting for approval</div>
             </div>
             <label class="toggle-switch">
               <input type="checkbox" v-model="usePassword" />
@@ -154,7 +159,7 @@
 
           <div class="hint-box">
             <ion-icon :icon="informationCircleOutline"></ion-icon>
-            <span>{{ usePassword ? 'Members will need this password to join the room.' : 'An invite link will be generated — share it with members.' }}</span>
+            <span>{{ usePassword ? 'Share the invite link and the password separately. Your device admits joiners automatically while it is online.' : 'An invite link will be generated. You approve each join request in Members.' }}</span>
           </div>
         </div>
       </ion-content>
@@ -163,7 +168,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRouter } from 'vue-router';
 import {
@@ -195,7 +200,16 @@ function roomTone(id: string) {
   return TONES[code % TONES.length];
 }
 
-onIonViewWillEnter(() => { chatRoomStore.loadRooms(); });
+const summaryOf = (id: string) => chatRoomStore.summaries[id];
+/** Most recent activity first, like any messenger inbox. */
+const sortedRooms = computed(() => [...chatRoomStore.rooms].sort((a, b) =>
+  (summaryOf(b.id)?.last?.timestamp ?? b.createdAt) - (summaryOf(a.id)?.last?.timestamp ?? a.createdAt)));
+
+onIonViewWillEnter(async () => {
+  const user = await UserService.getCurrentUser().catch(() => null);
+  if (user) chatRoomStore.setIdentity(user.id, user.displayName || user.username || 'Anonymous');
+  await chatRoomStore.loadRooms();
+});
 
 async function handleRefresh(event: CustomEvent) {
   await chatRoomStore.loadRooms();
@@ -324,6 +338,14 @@ ion-content { --background: transparent; }
 .enc-badge ion-icon { font-size: 10px; }
 
 .room-desc { font-size: 13px; color: var(--app-text-muted); margin: 3px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.room-desc--unread { color: var(--app-text); }
+.room-desc strong { font-weight: 600; }
+.unread-badge {
+  flex-shrink: 0; min-width: 22px; height: 22px; padding: 0 7px; border-radius: 999px;
+  background: #6366f1; color: #fff; font-size: 12px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.unread-badge--mention { background: #f59e0b; min-width: 22px; padding: 0; }
 .room-meta { display: flex; gap: 12px; margin-top: 6px; }
 .meta-item { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--app-text-subtle); }
 .meta-item ion-icon { font-size: 13px; }

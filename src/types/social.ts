@@ -76,7 +76,29 @@ export type ChatKind = 'dm' | 'room';
  * IndexedDB, so storing ciphertext here would protect nothing while costing
  * offline history. Clearing site data removes both together.
  */
+/** Encrypted media descriptor carried inside a group message (see chatMediaService). */
+export interface GroupMedia {
+  version: 1; context: string; mediaId: string; mediaKey: string; mediaIV: string;
+  mediaType: string; mediaSize: number; mediaName: string;
+}
+/**
+ * Group message extension, inside the encrypted and signed group payload.
+ * Actions name their target by the group header messageId. Who may perform an
+ * action (edit/delete: original author only) is enforced when folding the timeline.
+ */
+export type GroupExt =
+  | { k: 'msg'; replyTo?: string; mentions?: string[]; media?: GroupMedia; forwarded?: boolean }
+  | { k: 'react'; target: string; emoji: string }
+  | { k: 'edit'; target: string }
+  | { k: 'delete'; target: string }
+  | { k: 'pin'; target: string }
+  | { k: 'unpin'; target: string }
+  | { k: 'poll'; question: string; options: string[]; multi: boolean }
+  | { k: 'vote'; target: string; choices: number[] };
+
 export interface StoredChatMessage {
+  /** Group-only extension (reply, reaction, edit, poll, media…). */
+  ext?: GroupExt;
   /** DM-only encrypted control payload; excluded from conversation rendering. */
   control?: 'delivery-receipt-v1';
   /** Confirmed DM means a decrypted receipt from this session peer, for this digest. */

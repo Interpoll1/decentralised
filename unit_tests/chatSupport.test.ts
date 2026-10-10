@@ -4,7 +4,10 @@ vi.mock('../src/services/userService', () => ({ UserService: { getCurrentUser: v
 vi.mock('@/services/chatRoomService', () => ({ ChatRoomService: {
   listJoinedRooms: vi.fn(), createRoom: vi.fn(), joinRoom: vi.fn(), getLocalHistory: vi.fn(), loadHistory: vi.fn(),
   subscribeToMessages: vi.fn(), sendMessage: vi.fn(), leaveRoom: vi.fn(), startOutboxLoop: vi.fn(), flushOutbox: vi.fn(),
-} }));
+  getReadMark: vi.fn(async () => 0), setReadMark: vi.fn(), getNames: vi.fn(async () => ({})), rememberNames: vi.fn(async () => {}),
+  listMembers: vi.fn(async () => []), isOwner: vi.fn(async () => false), watchSignals: vi.fn(async () => () => {}),
+  watchJoinRequests: vi.fn(async () => () => {}), sendSignal: vi.fn(async () => {}), summary: vi.fn(),
+}, isVisibleRow: (ext?: any) => !ext || ext.k === 'msg' || ext.k === 'poll' }));
 vi.mock('@/services/storageService', () => ({ StorageService: { getChatMessage: vi.fn() } }));
 import { setActivePinia, createPinia } from 'pinia';
 import { GunService } from '../src/services/gunService';

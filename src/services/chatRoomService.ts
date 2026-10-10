@@ -6,9 +6,13 @@ import { StorageService } from './storageService';
 import { gunReadChildren } from '../utils/gunAsync';
 import { compareMessages } from '../utils/messageOrder';
 import { GroupSecurity, GROUP_LIMITS, isEpochRoom, memberId, type Epoch } from './groupSecurity';
-import { GroupRoomTransport } from './groupRoomTransport';
+import { GroupRoomTransport, type JoinRequest } from './groupRoomTransport';
 import { verifyBinding, type DeviceBinding } from './dmIdentity';
-import type { StoredChatMessage, SyncStatus } from '../types/social';
+import { encryptAndUpload, fetchAndDecrypt } from './chatMediaService';
+import { validRelay, type GroupSignal } from './groupSecurity';
+import type { GroupExt, GroupMedia, StoredChatMessage, SyncStatus } from '../types/social';
+export type { JoinRequest } from './groupRoomTransport';
+export type { GroupSignal } from './groupSecurity';
 
 export interface ChatRoom {
   id:string; name:string; description:string; creatorId:string; isEncrypted:boolean;
@@ -18,15 +22,26 @@ export interface ChatRoom {
 export interface DisplayMessage {
   id:string; roomId:string; text:string; senderId:string; senderName:string; timestamp:number;
   seq?:number; status?:SyncStatus; error?:string;
+  /** Group header messageId: what replies, reactions and edits point at. */
+  messageId:string; ext?:GroupExt;
 }
+export interface RoomMember { accountId:string; deviceId:string; isOwner:boolean; isSelf:boolean }
+export interface RoomSummary { unread:number; mentions:number; last?:{text:string;senderName:string;timestamp:number} }
+/** Only these rows appear as bubbles; everything else is an action on one. */
+export const isVisibleRow=(ext?:GroupExt)=>!ext || ext.k==='msg' || ext.k==='poll';
 function toDisplay(row:StoredChatMessage):DisplayMessage {
-  return {id:row.id,roomId:row.roomId,text:row.text,senderId:row.senderId,senderName:row.senderName||'Anonymous',timestamp:row.timestamp,seq:row.seq,status:row.outgoing?row.syncStatus:undefined,error:row.error};
+  return {id:row.id,roomId:row.roomId,text:row.text,senderId:row.senderId,senderName:row.senderName||'Anonymous',timestamp:row.timestamp,seq:row.seq,status:row.outgoing?row.syncStatus:undefined,error:row.error,
+    messageId:row.id.split(':').pop()!,...(row.ext?{ext:row.ext}:{})};
 }
+const readKey=(room:string)=>`group-read-v1:${room}`;
+const namesKey=(room:string)=>`group-names-v1:${room}`;
 function roomDisplay(e:Epoch,info:{name:string;description:string}):ChatRoom {
   return {id:e.roomId,name:info.name,description:info.description,creatorId:e.owner.accountId,isEncrypted:true,
     encryptionHint:'Account/device membership; creator must be online',createdAt:e.createdAt,memberCount:e.members.length,securityMode:'EPOCH_GROUP_V1'};
 }
 let outboxLoopStarted=false;
+const MAX_ADOPTED_RELAYS=4;
+const adoptedRelays=new Set<string>();
 let flushInFlight=false;
 
 export class ChatRoomService {
@@ -36,13 +51,13 @@ export class ChatRoomService {
     await KeyVaultService.storeKey({id:epoch.roomId,type:'chatroom',key:'epoch-v1',method:'invite',label:name,joinedAt:Date.now()});
   }
   static async createRoom(name:string,description:string,creatorId:string,password?:string):Promise<{room:ChatRoom;inviteLink:string}>{
-    if(password)throw new Error('Epoch rooms require explicit device approval; password membership is legacy');
     const security=await GroupSecurity.local();
     if(creatorId!==security.binding.accountId)throw new Error('Room creator account mismatch');
     const epoch=await security.create(name,description);
     await this.marker(epoch,name);
     await GroupRoomTransport.startOwner(security,epoch.roomId);
     await GroupRoomTransport.publishEpoch(epoch);
+    if(password)await GroupRoomTransport.setPassword(security,epoch.roomId,password);
     return {room:roomDisplay(epoch,{name,description}),inviteLink:InviteLinkService.generateInviteLink(epoch.roomId,'chatroom','epoch-v1')};
   }
   static async joinRoom(roomId:string,keyOrPassword:string,method:'invite'|'password'):Promise<ChatRoom>{
@@ -74,14 +89,16 @@ export class ChatRoomService {
     await Promise.all(rows.map(row=>StorageService.deleteChatMessage(row.id)));
     // Keep the epoch pin/replay high water so a stale invite cannot restore access.
   }
-  static async sendMessage(roomId:string,text:string,senderId:string,senderName:string):Promise<DisplayMessage>{
+  static async sendMessage(roomId:string,text:string,senderId:string,senderName:string,ext?:GroupExt):Promise<DisplayMessage>{
     this.requireEpoch(roomId);const security=await GroupSecurity.local();
     if(senderId!==security.binding.accountId)throw new Error('Group sender account mismatch');
     await GroupRoomTransport.refresh(security,roomId);await GroupRoomTransport.startOwner(security,roomId);
-    const candidate=await security.candidate(roomId,text.trim(),senderName);
-    const response=await GroupRoomTransport.submit(security,roomId,'send',candidate);
-    if(!response.envelope)throw new Error('Publication receipt missing');
-    const accepted=await security.receive(roomId,response.envelope);this.startOutboxLoop();return toDisplay(accepted.row);
+    const candidate=await security.candidate(roomId,text.trim(),senderName,ext);
+    // Signed by this device and published directly — no owner round-trip, so the
+    // group keeps working while the creator is offline.
+    const row=await security.publishOwn(roomId,candidate);
+    void GroupRoomTransport.flush(security,roomId).catch(()=>{});
+    this.startOutboxLoop();return toDisplay(row);
   }
   static async flushOutbox():Promise<void>{
     if(flushInFlight)return;flushInFlight=true;
@@ -141,5 +158,82 @@ export class ChatRoomService {
       rooms.push(roomDisplay(state.epoch,state.info));await GroupRoomTransport.startOwner(security,key.id);
     }
     return rooms.sort((a,b)=>b.createdAt-a.createdAt);
+  }
+
+  // ── Membership ─────────────────────────────────────────────────────────
+  static async requestJoin(roomId:string,name:string,password?:string):Promise<'member'|'requested'>{
+    this.requireEpoch(roomId);return GroupRoomTransport.requestJoin(await GroupSecurity.local(),roomId,name,password);
+  }
+  /** 'password' rooms admit automatically on the right password; others wait for the owner. */
+  static async accessMode(roomId:string){this.requireEpoch(roomId);return GroupRoomTransport.accessMode(roomId);}
+  static async watchJoinRequests(roomId:string,onChange:(pending:JoinRequest[])=>void):Promise<()=>void>{
+    this.requireEpoch(roomId);const security=await GroupSecurity.local(),state=await security.state(roomId);
+    if(!state || memberId(state.epoch.owner)!==memberId(security.binding))return ()=>{};
+    return GroupRoomTransport.watchJoins(security,roomId,onChange);
+  }
+  static async approveJoin(roomId:string,request:JoinRequest){
+    const room=await this.approveMember(roomId,request.binding.accountId,request.binding.deviceId,request.binding);
+    if(request.name)await this.rememberNames(roomId,{[request.binding.accountId]:request.name});
+    return room;
+  }
+  static async declineJoin(roomId:string,request:JoinRequest){await GroupRoomTransport.declineJoin(await GroupSecurity.local(),roomId,request);}
+  static async listMembers(roomId:string):Promise<RoomMember[]>{
+    this.requireEpoch(roomId);const security=await GroupSecurity.local(),state=await security.state(roomId);if(!state)return [];
+    return state.epoch.members.map(b=>({accountId:b.accountId,deviceId:b.deviceId,isOwner:memberId(b)===memberId(state.epoch.owner),isSelf:memberId(b)===memberId(security.binding)}));
+  }
+  static async isOwner(roomId:string){
+    if(!isEpochRoom(roomId))return false;const security=await GroupSecurity.local(),state=await security.state(roomId);
+    return !!state && memberId(state.epoch.owner)===memberId(security.binding);
+  }
+  /** Best-effort display names learned from join requests, messages and signals. */
+  static async getNames(roomId:string):Promise<Record<string,string>>{return (await StorageService.getMetadata(namesKey(roomId)))??{};}
+  static async rememberNames(roomId:string,names:Record<string,string>){
+    const before=await this.getNames(roomId);
+    if(Object.entries(names).every(([k,v])=>before[k]===v))return;
+    await StorageService.setMetadata(namesKey(roomId),{...before,...names});
+  }
+  // ── Ephemeral signals (typing / presence / read) ───────────────────────
+  static async sendSignal(roomId:string,body:{name:string;typing:number;read:number}){
+    if(!isEpochRoom(roomId))return;
+    await GroupRoomTransport.sendSignal(await GroupSecurity.local(),roomId,{...body,relays:GunService.peerUrls().filter(validRelay)});
+  }
+  /**
+   * Connect to relays other members use, so members on different relays still
+   * share at least one path. Session-only and capped: a member can steer us to a
+   * relay, but it only ever sees ciphertext and cannot drop our existing ones.
+   */
+  static adoptRelays(urls:string[]):string[]{
+    const known=new Set(GunService.peerUrls().map(u=>u.replace(/\/$/,'')));
+    const added:string[]=[];
+    for(const url of urls.filter(validRelay)){
+      const clean=url.replace(/\/$/,'');
+      if(known.has(clean) || adoptedRelays.size>=MAX_ADOPTED_RELAYS)continue;
+      adoptedRelays.add(clean);known.add(clean);GunService.addPeerDynamic(clean);added.push(clean);
+    }
+    return added;
+  }
+  static async watchSignals(roomId:string,onSignal:(signal:GroupSignal)=>void):Promise<()=>void>{
+    if(!isEpochRoom(roomId))return ()=>{};return GroupRoomTransport.watchSignals(await GroupSecurity.local(),roomId,onSignal);
+  }
+  // ── Media ──────────────────────────────────────────────────────────────
+  static async uploadMedia(file:File):Promise<GroupMedia>{
+    const security=await GroupSecurity.local();return encryptAndUpload(file,security.binding.accountId);
+  }
+  static async openMedia(media:GroupMedia):Promise<string>{
+    const security=await GroupSecurity.local();return fetchAndDecrypt(media,security.binding.accountId);
+  }
+  // ── Local read position ────────────────────────────────────────────────
+  static async getReadMark(roomId:string):Promise<number>{return (await StorageService.getMetadata(readKey(roomId)))??0;}
+  static async setReadMark(roomId:string,timestamp:number){
+    if(timestamp>await this.getReadMark(roomId))await StorageService.setMetadata(readKey(roomId),timestamp);
+  }
+  static async summary(roomId:string,myAccount:string):Promise<RoomSummary>{
+    const [rows,mark]=await Promise.all([StorageService.getChatMessagesByRoom(roomId),this.getReadMark(roomId)]);
+    const visible=rows.filter(r=>r.kind==='room' && isVisibleRow(r.ext)).sort(compareMessages);
+    const fresh=visible.filter(r=>!r.outgoing && r.senderId!==myAccount && r.timestamp>mark);
+    const last=visible.at(-1);
+    const preview=(r:StoredChatMessage)=>r.ext?.k==='poll'?`📊 ${r.ext.question}`:r.ext?.k==='msg' && r.ext.media?`📎 ${r.ext.media.mediaType.startsWith('image/')?'Photo':r.ext.media.mediaType.startsWith('audio/')?'Voice message':r.ext.media.mediaType.startsWith('video/')?'Video':r.ext.media.mediaName||'File'}`:r.text;
+    return {unread:fresh.length,mentions:fresh.filter(r=>r.ext?.k==='msg' && r.ext.mentions?.includes(myAccount)).length,
+      ...(last?{last:{text:preview(last),senderName:last.outgoing?'You':last.senderName||'Anonymous',timestamp:last.timestamp}}:{})};
   }
 }

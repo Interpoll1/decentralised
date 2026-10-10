@@ -148,7 +148,9 @@ it('voluntary leave is signed, epoch-bound and cannot remove a rejoined device b
 it('active ChatRoomService sends only versioned authenticated envelopes and rejects legacy/send spoofing',async()=>{
  const {a,room}=await setup();vi.spyOn(GroupSecurity,'local').mockResolvedValue(a);vi.spyOn(GroupRoomTransport,'startOwner').mockResolvedValue();vi.spyOn(GroupRoomTransport,'flush').mockResolvedValue();
  const msg=await ChatRoomService.sendMessage(room,'active path',a.binding.accountId,'Alice');expect(msg.text).toBe('active path');
- const state=(await a.state(room))!;expect(state.outbox).toHaveLength(1);expect(state.outbox[0].receipt).not.toBe('');
+ const state=(await a.state(room))!;expect(state.outbox).toHaveLength(1);
+ // Owner-less sending: the envelope is authenticated by the sender's signature alone.
+ expect(state.outbox[0]).toMatchObject({publication:0,receipt:''});expect(state.outbox[0].signature).not.toBe('');
  await expect(ChatRoomService.sendMessage(room,'spoof','mallory','Alice')).rejects.toThrow(/mismatch/);
  await expect(ChatRoomService.sendMessage('old-room','old',a.binding.accountId,'Alice')).rejects.toThrow(/migration/);
 });
