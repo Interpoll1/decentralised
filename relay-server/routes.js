@@ -32,6 +32,7 @@ import { queueForCategorisation } from './auto-categorise.js';
 const TRENDING_CATEGORY_IDS = new Set(['politics','technology','science','finance','health','sports','environment','education','crypto','gaming','opinion','humour','movies-tv','music','celebrity','story','ask','discussion','news']);
 import { NAMESPACE, resolveNamespace, namespaceOfSoul, belongsToNamespace } from '../shared-validation/namespace.js';
 import fs from 'fs';
+import { makeTurnCredentials, turnSubject } from './turn.js';
 
 
 // ─── Time-lock helper ──────────────────────────────────────────────────────────
@@ -170,6 +171,26 @@ server.on('request', async (req, res) => {
       timestamp: Date.now(),
     }));
     return;
+  }
+
+  // ── GET /api/turn-credentials — short-lived coturn creds for 1:1 calls ──────
+  if (req.method === 'GET' && url.pathname === '/api/turn-credentials') {
+    const secret = process.env.TURN_SECRET;
+    const urls = (process.env.TURN_URLS || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (!secret || urls.length === 0) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'TURN not configured' })); return;
+    }
+    const user = await getSecureSession(req).catch(() => null);
+    const subject = turnSubject(user?.sub ? `u:${user.sub}` : `ip:${clientIp}`);
+    const turnCheck = rateLimiter.checkHttp(`turn:${subject}`, 10);
+    if (!turnCheck.allowed) {
+      res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': String(Math.ceil(turnCheck.retryAfter / 1000)) });
+      res.end(JSON.stringify({ error: 'Too many requests' })); return;
+    }
+    const creds = makeTurnCredentials(secret, subject, Date.now(), 3600);
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ urls, ...creds })); return;
   }
 
   // ── Search API ────────────────────────────────────────────────────────────

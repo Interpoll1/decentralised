@@ -71,6 +71,9 @@ function loadAnonymityMode(): boolean {
 }
 let anonymityMode: boolean = loadAnonymityMode();
 
+/** Cached relay-issued TURN credentials (see getTurnServers). */
+let turnCache: { api: string; servers: RTCIceServer[]; expiresAt: number } | null = null;
+
 const RELAY_ATT_PUBKEY_STORAGE_KEY = 'interpoll_relay_attestation_pubkey';
 function loadRelayAttestationPubkey(): string {
   try { return localStorage.getItem(RELAY_ATT_PUBKEY_STORAGE_KEY) || ''; } catch { return ''; }
@@ -481,13 +484,20 @@ const config = {
    */
   async getTurnServers(): Promise<RTCIceServer[]> {
     if (anonymityMode) return [];
+    const base = api();
+    if (turnCache && turnCache.api === base && Date.now() < turnCache.expiresAt - 60_000) {
+      return turnCache.servers.map(s => ({ ...s }));
+    }
     try {
-      const res = await fetch(`${api()}/api/turn-credentials`, { credentials: 'include' });
+      const res = await fetch(`${base}/api/turn-credentials`, { credentials: 'include' });
       if (!res.ok) return [];
       const d = await res.json();
       const urls = Array.isArray(d?.urls) ? d.urls.filter((u: unknown) => typeof u === 'string' && /^turns?:/.test(u)) : [];
       if (!urls.length || typeof d.username !== 'string' || typeof d.credential !== 'string') return [];
-      return [{ urls, username: d.username, credential: d.credential }];
+      const servers: RTCIceServer[] = [{ urls, username: d.username, credential: d.credential }];
+      const ttl = Number(d.ttl) > 0 ? Number(d.ttl) : 0;
+      turnCache = { api: base, servers, expiresAt: Date.now() + ttl * 1000 };
+      return servers.map(s => ({ ...s }));
     } catch {
       return [];
     }
