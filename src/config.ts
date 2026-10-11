@@ -474,6 +474,25 @@ const config = {
     return [...DEFAULT_ICE_SERVERS];
   },
 
+  /**
+   * Short-lived TURN credentials from the relay (`GET /api/turn-credentials`),
+   * used only by 1:1 calls. Never in Anonymity Mode. Any failure → `[]`, so the
+   * call proceeds with STUN-only direct candidates.
+   */
+  async getTurnServers(): Promise<RTCIceServer[]> {
+    if (anonymityMode) return [];
+    try {
+      const res = await fetch(`${api()}/api/turn-credentials`, { credentials: 'include' });
+      if (!res.ok) return [];
+      const d = await res.json();
+      const urls = Array.isArray(d?.urls) ? d.urls.filter((u: unknown) => typeof u === 'string' && /^turns?:/.test(u)) : [];
+      if (!urls.length || typeof d.username !== 'string' || typeof d.credential !== 'string') return [];
+      return [{ urls, username: d.username, credential: d.credential }];
+    } catch {
+      return [];
+    }
+  },
+
   /** Override ICE servers (e.g. to add a TURN server). Empty/undefined resets to default. */
   setIceServers(servers: RTCIceServer[] | null | undefined) {
     if (!servers || servers.length === 0) {
