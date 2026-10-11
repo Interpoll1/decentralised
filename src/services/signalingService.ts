@@ -38,7 +38,25 @@ export interface SignalTarget {
   pubkey?: string;
 }
 
-export type SignalKind = 'offer' | 'answer' | 'ice';
+export type CallSignalKind =
+  | 'call-invite' | 'call-accept' | 'call-decline' | 'call-end'
+  | 'call-offer' | 'call-answer' | 'call-ice';
+export type SignalKind = 'offer' | 'answer' | 'ice' | CallSignalKind;
+
+const CALL_KINDS: readonly CallSignalKind[] = [
+  'call-invite', 'call-accept', 'call-decline', 'call-end', 'call-offer', 'call-answer', 'call-ice',
+];
+export const isCallKind = (k: string): k is CallSignalKind =>
+  (CALL_KINDS as readonly string[]).includes(k);
+
+/** Extra payload carried by call kinds (signed). */
+export interface SignalPayload {
+  sdp?: RTCSessionDescriptionInit;
+  candidate?: RTCIceCandidateInit;
+  callId?: string;
+  meta?: Record<string, unknown>;
+}
+const CALL_META_MAX = 512;
 
 /** Normalized inbound signal delivered to WebRTCService. */
 export interface InboundSignal {
@@ -50,6 +68,9 @@ export interface InboundSignal {
   remotePubkey?: string;
   sdp?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
+  /** Call kinds only: id binding the signal to one call. */
+  callId?: string;
+  meta?: Record<string, unknown>;
 }
 
 export type SignalTier = 'wss' | 'gun' | 'mesh' | 'none';
@@ -65,6 +86,8 @@ interface SignedSignal {
   msgId: string;
   sdp: string;       // JSON-encoded RTCSessionDescriptionInit, or ''
   candidate: string; // JSON-encoded RTCIceCandidateInit, or ''
+  callId?: string;   // call kinds only
+  meta?: string;     // call kinds only, JSON
   signature: string;
 }
 
@@ -78,6 +101,8 @@ interface ParsedSignal {
   msgId: string;
   sdp?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
+  callId?: string;
+  meta?: Record<string, unknown>;
 }
 
 const GUN_SIGNAL_ROOT = 'server-config';
@@ -94,6 +119,7 @@ export class SignalingService {
   private static myPubkey = '';
   private static myPrivkey = '';
   private static listeners = new Set<(sig: InboundSignal) => void>();
+  private static callListeners = new Set<(sig: InboundSignal) => void>();
   // Replay guard. Bounded with a TTL comfortably longer than any signal's useful
   // life; unbounded before, growing one entry per signal received forever.
   private static seen = new BoundedSet<string>({ maxSize: 5000, ttlMs: 10 * 60_000 });
@@ -114,6 +140,9 @@ export class SignalingService {
     WebSocketService.subscribe('rtc-offer', (d: any) => this.onWssSignal(d, myPeerId()));
     WebSocketService.subscribe('rtc-answer', (d: any) => this.onWssSignal(d, myPeerId()));
     WebSocketService.subscribe('rtc-ice', (d: any) => this.onWssSignal(d, myPeerId()));
+    for (const k of CALL_KINDS) {
+      WebSocketService.subscribe(`rtc-${k}`, (d: any) => this.onWssSignal(d, myPeerId()));
+    }
 
     // Tier 2: Gun inbox addressed to our pubkey.
     this.subscribeGunInbox();
@@ -137,6 +166,12 @@ export class SignalingService {
     return () => { this.listeners.delete(cb); };
   }
 
+  /** Register a handler for inbound call-* signals. Returns an unsubscribe fn. */
+  static onCallSignal(cb: (sig: InboundSignal) => void): () => void {
+    this.callListeners.add(cb);
+    return () => { this.callListeners.delete(cb); };
+  }
+
   /** Best signaling tier currently available for automatic connection setup. */
   static async currentTier(): Promise<SignalTier> {
     try {
@@ -156,10 +191,7 @@ export class SignalingService {
    * Returns false when no automatic channel is available (caller must fall back
    * to manual signaling).
    */
-  static async sendSignal(target: SignalTarget, kind: SignalKind, payload: {
-    sdp?: RTCSessionDescriptionInit;
-    candidate?: RTCIceCandidateInit;
-  }): Promise<boolean> {
+  static async sendSignal(target: SignalTarget, kind: SignalKind, payload: SignalPayload): Promise<boolean> {
     const { WebSocketService } = await import('@/services/websocketService');
 
     // Tier 1: WSS — addressable by relay peerId. Now sends a signed envelope.
@@ -174,6 +206,9 @@ export class SignalingService {
       await this.sendGunSignal(target.pubkey, kind, payload);
       return true;
     }
+
+    // Calls never use the mesh flood (latency + exposes call metadata to unrelated peers).
+    if (isCallKind(kind)) return false;
 
     // Tier 3: Mesh relay — flood a signed envelope over existing datachannels so
     // peers we're already connected to introduce us to the target. Zero servers.
@@ -197,12 +232,12 @@ export class SignalingService {
   private static buildEnvelope(
     target: SignalTarget,
     kind: SignalKind,
-    payload: { sdp?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit },
+    payload: SignalPayload,
     fromPeerId: string,
   ): SignedSignal {
     const ts = Date.now();
     const msgId = `${this.myPubkey.slice(0, 8)}-${ts}-${Math.random().toString(36).slice(2, 8)}`;
-    const body = {
+    const body: Omit<SignedSignal, 'signature'> = {
       kind,
       fromPubkey: this.myPubkey,
       fromPeerId,
@@ -213,6 +248,10 @@ export class SignalingService {
       sdp: payload.sdp ? JSON.stringify(payload.sdp) : '',
       candidate: payload.candidate ? JSON.stringify(payload.candidate) : '',
     };
+    if (isCallKind(kind)) {
+      body.callId = payload.callId ?? '';
+      body.meta = JSON.stringify(payload.meta ?? {});
+    }
     const signature = CryptoService.sign(this.signingMessage(body), this.myPrivkey);
     return { ...body, signature };
   }
@@ -226,7 +265,8 @@ export class SignalingService {
     if (!env || typeof env !== 'object') return null;
 
     const kind = String(env.kind || '');
-    if (kind !== 'offer' && kind !== 'answer' && kind !== 'ice') return null;
+    const isCall = isCallKind(kind);
+    if (kind !== 'offer' && kind !== 'answer' && kind !== 'ice' && !isCall) return null;
 
     const fromPubkey = String(env.fromPubkey || '');
     const signature = String(env.signature || '');
@@ -244,7 +284,19 @@ export class SignalingService {
       msgId: String(env.msgId || ''),
       sdp: String(env.sdp || ''),
       candidate: String(env.candidate || ''),
-    };
+    } as Omit<SignedSignal, 'signature'>;
+    let meta: Record<string, unknown> | undefined;
+    if (isCall) {
+      body.callId = String(env.callId || '');
+      body.meta = String(env.meta || '');
+      if (!/^[0-9a-f]{32}$/.test(body.callId)) return null;
+      if (body.meta.length > CALL_META_MAX) return null;
+      try {
+        const m = JSON.parse(body.meta);
+        if (!m || typeof m !== 'object' || Array.isArray(m)) return null;
+        meta = m;
+      } catch { return null; }
+    }
     if (!body.msgId) return null;
     if (!CryptoService.verify(this.signingMessage(body), signature, fromPubkey)) return null;
 
@@ -262,17 +314,22 @@ export class SignalingService {
       msgId: body.msgId,
       sdp,
       candidate,
+      ...(isCall ? { callId: body.callId, meta } : {}),
     };
   }
 
   private static signingMessage(body: {
     kind: string; fromPubkey: string; fromPeerId: string; targetPubkey: string;
     targetPeerId: string; ts: number; msgId: string; sdp: string; candidate: string;
+    callId?: string; meta?: string;
   }): string {
-    return JSON.stringify([
+    const parts: unknown[] = [
       body.kind, body.fromPubkey, body.fromPeerId, body.targetPubkey, body.targetPeerId,
       body.ts, body.msgId, body.sdp, body.candidate,
-    ]);
+    ];
+    // Legacy kinds keep the exact legacy byte format; call kinds also bind callId + meta.
+    if (isCallKind(body.kind)) parts.push(body.callId ?? '', body.meta ?? '');
+    return JSON.stringify(parts);
   }
 
   // ── WSS tier (private) ─────────────────────────────────────
@@ -290,6 +347,8 @@ export class SignalingService {
       remotePubkey: parsed.fromPubkey,
       sdp: parsed.sdp,
       candidate: parsed.candidate,
+      callId: parsed.callId,
+      meta: parsed.meta,
     });
   }
 
@@ -329,10 +388,7 @@ export class SignalingService {
     }
   }
 
-  private static async sendGunSignal(targetPubkey: string, kind: SignalKind, payload: {
-    sdp?: RTCSessionDescriptionInit;
-    candidate?: RTCIceCandidateInit;
-  }): Promise<void> {
+  private static async sendGunSignal(targetPubkey: string, kind: SignalKind, payload: SignalPayload): Promise<void> {
     const { WebSocketService } = await import('@/services/websocketService');
     const env = this.buildEnvelope({ pubkey: targetPubkey }, kind, payload, WebSocketService.getPeerId());
 
@@ -359,7 +415,7 @@ export class SignalingService {
    */
   static handleRelayEnvelope(env: Record<string, unknown>): void {
     const parsed = this.verifyEnvelope(env);
-    if (!parsed) return;
+    if (!parsed || isCallKind(parsed.kind)) return; // calls never travel the mesh flood
     if (this.seen.has(parsed.msgId)) return;    // already delivered/relayed → drop (loop guard)
     this.markSeen(parsed.msgId);
 
@@ -371,6 +427,8 @@ export class SignalingService {
         remotePubkey: parsed.fromPubkey,
         sdp: parsed.sdp,
         candidate: parsed.candidate,
+        callId: parsed.callId,
+        meta: parsed.meta,
       });
       return;
     }
@@ -391,7 +449,8 @@ export class SignalingService {
   }
 
   private static emit(sig: InboundSignal): void {
-    for (const cb of this.listeners) {
+    const targets = isCallKind(sig.kind) ? this.callListeners : this.listeners;
+    for (const cb of targets) {
       try { cb(sig); } catch { /* ignore listener errors */ }
     }
   }

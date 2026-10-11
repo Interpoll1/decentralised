@@ -11,7 +11,7 @@
  * descriptor so answers/ICE go back over a channel the peer can hear.
  */
 
-import { SignalingService, MESH_SIGNAL_TYPE, type SignalTarget, type InboundSignal } from '@/services/signalingService';
+import { SignalingService, MESH_SIGNAL_TYPE, isCallKind, type SignalTarget, type InboundSignal } from '@/services/signalingService';
 import config from '@/config';
 
 
@@ -217,6 +217,7 @@ export class WebRTCService {
   // ── signaling handler (private) ─────────────────────────────
 
   private static async handleSignal(sig: InboundSignal): Promise<void> {
+    if (isCallKind(sig.kind)) return; // call signals belong to CallService, never the mesh
     if (!this.enabled || typeof RTCPeerConnection === 'undefined') return;
     if (sig.kind === 'offer' && sig.sdp) return this.handleOffer(sig);
     if (sig.kind === 'answer' && sig.sdp) return this.handleAnswer(sig);
