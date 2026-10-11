@@ -155,6 +155,8 @@ export class CallService {
 
     if (sig.callId !== this.ctx.callId || peer !== this.ctx.peer) return;
     this.target = { ...this.target, ...sig.reply };
+    const callIdRef = this.ctx.callId;
+    let pcRef: RTCPeerConnection | null = this.pc;
 
     switch (sig.kind) {
       case 'call-accept':
@@ -164,24 +166,26 @@ export class CallService {
         this.armConnectTimer();
         await this.buildPeerConnection();
         if (!this.pc) return;
+        pcRef = this.pc;
         try {
           const offer = await this.pc.createOffer();
           await this.pc.setLocalDescription(offer);
           void this.send('call-offer', { sdp: offer });
-        } catch { this.failConnect(); }
+        } catch { if (this.isCurrent(pcRef, callIdRef)) this.failConnect(); }
         return;
 
       case 'call-offer':
         if (this.ctx.state !== 'connecting' || this.outgoing || !sig.sdp) return;
         await this.buildPeerConnection();
         if (!this.pc) return;
+        pcRef = this.pc;
         try {
           await this.pc.setRemoteDescription(sig.sdp);
           await this.flushIce();
           const answer = await this.pc.createAnswer();
           await this.pc.setLocalDescription(answer);
           void this.send('call-answer', { sdp: answer });
-        } catch { this.failConnect(); }
+        } catch { if (this.isCurrent(pcRef, callIdRef)) this.failConnect(); }
         return;
 
       case 'call-answer':
@@ -189,7 +193,7 @@ export class CallService {
         try {
           await this.pc.setRemoteDescription(sig.sdp);
           await this.flushIce();
-        } catch { this.failConnect(); }
+        } catch { if (this.isCurrent(pcRef, callIdRef)) this.failConnect(); }
         return;
 
       case 'call-ice':
@@ -314,6 +318,11 @@ export class CallService {
     }
   }
 
+  /** True while `pc`/`callId` still describe the live call (guards post-await work). */
+  private static isCurrent(pc: RTCPeerConnection | null, callId: string): boolean {
+    return this.pc === pc && this.ctx.callId === callId && this.ctx.state !== 'ended';
+  }
+
   private static async flushIce(): Promise<void> {
     const queued = this.pendingIce;
     this.pendingIce = [];
@@ -354,6 +363,9 @@ export class CallService {
   private static abortSilently(): void {
     this.teardown(false);
     this.ctx = INITIAL;
+    this.muted = false;
+    this.cameraOff = false;
+    this.remoteStream = null;
   }
 
   private static teardown(log: boolean): void {

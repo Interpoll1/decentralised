@@ -37,6 +37,8 @@ export const useCallStore = defineStore('call', () => {
 
   async function loadKnownPeers() {
     try {
+      // Signaling may not be up yet on a fresh load; our pubkey keys the cache.
+      await SignalingService.initialize?.();
       const me = SignalingService.getMyPubkey();
       const snap = me ? await StorageService.getMetadata(`chat-list-cache:${me}`) : null;
       for (const e of (snap?.entries ?? [])) {

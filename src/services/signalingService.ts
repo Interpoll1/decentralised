@@ -195,7 +195,9 @@ export class SignalingService {
     const { WebSocketService } = await import('@/services/websocketService');
 
     // Tier 1: WSS — addressable by relay peerId. Now sends a signed envelope.
-    if (WebSocketService.getConnectionStatus() && target.peerId) {
+    // Not for calls: the relay's generic broadcast either rejects rtc-call-* or fans
+    // it out to every client (SDP/ICE carry IPs), and either way we can't tell.
+    if (!isCallKind(kind) && WebSocketService.getConnectionStatus() && target.peerId) {
       const env = this.buildEnvelope(target, kind, payload, WebSocketService.getPeerId());
       WebSocketService.broadcast(`rtc-${kind}`, env);
       return true;
@@ -381,6 +383,8 @@ export class SignalingService {
           remotePubkey: parsed.fromPubkey,
           sdp: parsed.sdp,
           candidate: parsed.candidate,
+          callId: parsed.callId,
+          meta: parsed.meta,
         });
       });
     } catch {

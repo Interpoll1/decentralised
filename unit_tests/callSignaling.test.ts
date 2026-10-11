@@ -15,11 +15,13 @@ const { webrtc } = vi.hoisted(() => ({
   webrtc: { broadcastToAll: vi.fn(), getConnectedPeers: vi.fn(() => ['p1']) },
 }));
 vi.mock('@/services/webrtcService', () => ({ WebRTCService: webrtc, MESH_SIGNAL_TYPE: 'signal-relay' }));
+const ws = vi.hoisted(() => ({ up: false, broadcast: vi.fn() }));
 vi.mock('@/services/websocketService', () => ({
-  WebSocketService: { getConnectionStatus: () => false, getPeerId: () => 'me', broadcast: vi.fn(), subscribe: vi.fn() },
+  WebSocketService: { getConnectionStatus: () => ws.up, getPeerId: () => 'me', broadcast: ws.broadcast, subscribe: vi.fn() },
 }));
 
 import { SignalingService, isCallKind } from '@/services/signalingService';
+import { GunService } from '@/services/gunService';
 
 const CID = 'c'.repeat(32);
 
@@ -73,5 +75,32 @@ describe('call signaling', () => {
     await SignalingService.initialize();
     const ok = await SignalingService.sendSignal({ pubkey: 'a'.repeat(64) }, 'call-invite', { callId: CID });
     expect(ok).toBe(false); // test env: no WSS, no Gun
+  });
+
+  it('call kinds never use the WSS broadcast tier (relay fan-out would leak SDP/IPs)', async () => {
+    ws.up = true;
+    const ok = await SignalingService.sendSignal({ pubkey: 'a'.repeat(64), peerId: 'p1' }, 'call-offer', { callId: CID });
+    ws.up = false;
+    expect(ws.broadcast).not.toHaveBeenCalled();
+    expect(ok).toBe(false);
+  });
+
+  it('Gun inbox delivers callId and meta to call listeners', () => {
+    const S = SignalingService as any;
+    let onCb: any = null;
+    const node: any = { get: () => node, map: () => ({ on: (cb: any) => { onCb = cb; } }), put: vi.fn() };
+    (GunService.getGun as any).mockReturnValue(node);
+    S.gunSubscribed = false;
+    S.subscribeGunInbox();
+    // Envelope from someone else, addressed to us.
+    const me = { pub: S.myPubkey, priv: S.myPrivkey };
+    const priv = randomBytes(32);
+    S.myPrivkey = bytesToHex(priv); S.myPubkey = bytesToHex(schnorr.getPublicKey(priv));
+    const env = S.buildEnvelope({ pubkey: me.pub }, 'call-invite', { callId: CID, meta: { video: true } }, 'px');
+    S.myPubkey = me.pub; S.myPrivkey = me.priv;
+    const got = vi.fn();
+    SignalingService.onCallSignal(got);
+    onCb(env, env.msgId);
+    expect(got).toHaveBeenCalledWith(expect.objectContaining({ kind: 'call-invite', callId: CID, meta: { video: true } }));
   });
 });
