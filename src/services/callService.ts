@@ -58,6 +58,8 @@ export class CallService {
   private static unsub: (() => void) | null = null;
 
   static onCallLogged: ((entry: CallLogEntry) => void) | null = null;
+  /** Gate for incoming rings (e.g. existing DM contact). Unknown callers are dropped silently. */
+  static allowIncoming: (peerPubkey: string) => boolean = () => true;
 
   static init(): void {
     if (this.unsub) return;
@@ -214,10 +216,11 @@ export class CallService {
     this.inviteLog.set(peer, recent);
 
     const reply = sig.reply;
-    if (!this.isSupported()) {
-      void SignalingService.sendSignal(reply, 'call-decline', { callId, meta: { reason: 'unsupported' } });
-      return;
-    }
+    // Silent drop (no reply) when we can't take calls or don't know the caller:
+    // replying would confirm to an arbitrary sender that we're online — and, for
+    // Anonymity Mode, that we're in it.
+    if (!this.isSupported()) return;
+    try { if (!this.allowIncoming(peer)) return; } catch { return; }
 
     if (this.ctx.state !== 'idle') {
       const glare = this.ctx.state === 'outgoing-ringing' && this.ctx.peer === peer;
@@ -399,6 +402,7 @@ export class CallService {
     this.unsub?.();
     this.unsub = null;
     this.onCallLogged = null;
+    this.allowIncoming = () => true;
   }
 }
 

@@ -83,11 +83,19 @@ describe('CallService', () => {
     expect(CallService.getSnapshot().callId).toBe(before.callId);
   });
 
-  it('Anonymity Mode (no ICE servers) → decline unsupported, no ring', async () => {
+  it('Anonymity Mode (no ICE servers) → silent drop: no reply, no ring', async () => {
     h.ice = [];
     inbound('call-invite', P, 'e'.repeat(32));
     await vi.advanceTimersByTimeAsync(0);
-    expect(h.sent.find(s => s.k === 'call-decline')!.p.meta).toEqual({ reason: 'unsupported' });
+    expect(h.sent).toHaveLength(0);
+    expect(CallService.getSnapshot().state).toBe('idle');
+  });
+
+  it('unknown caller (allowIncoming false) → silent drop', async () => {
+    CallService.allowIncoming = (p) => p !== P;
+    inbound('call-invite', P, 'e'.repeat(32));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.sent).toHaveLength(0);
     expect(CallService.getSnapshot().state).toBe('idle');
   });
 
