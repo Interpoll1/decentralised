@@ -6,6 +6,7 @@
       <ion-router-outlet v-else :animated="true" :animation="pageTransition" />
     </AppErrorBoundary>
     <GlobalCommandPalette :is-open="globalPaletteOpen" @close="closeGlobalPalette" />
+    <CallOverlay />
   </ion-app>
 </template>
 
@@ -25,6 +26,7 @@ import { warmupFromDB } from './services/dbWarmup';
 import AppLoader from './components/AppLoader.vue';
 import AppErrorBoundary from './components/AppErrorBoundary.vue';
 import GlobalCommandPalette from './components/GlobalCommandPalette.vue';
+import CallOverlay from './components/CallOverlay.vue';
 import AuroraBackground from './components/AuroraBackground.vue';
 
 const chainStore = useChainStore();

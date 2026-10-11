@@ -26,6 +26,19 @@
           <span class="hdr-ws-status" :class="{ 'hdr-ws-status--ok': connected && !chatError }">
             {{ connected && !chatError ? 'Connected' : chatError ? 'Error' : 'Offline' }}
           </span>
+          <template v-if="canCall">
+            <button class="header-action-btn" data-testid="call-voice" :disabled="callStore.isActive" @click="callStore.start(recipientId, false)" title="Voice call">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M22 16.9v3a2 2 0 01-2.2 2 19.8 19.8 0 01-8.6-3.1 19.5 19.5 0 01-6-6A19.8 19.8 0 012.1 4.2 2 2 0 014.1 2h3a2 2 0 012 1.7c.1.9.4 1.8.7 2.7a2 2 0 01-.5 2.1L8 9.8a16 16 0 006 6l1.3-1.3a2 2 0 012.1-.4c.9.3 1.8.6 2.7.7a2 2 0 011.7 2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button class="header-action-btn" data-testid="call-video" :disabled="callStore.isActive" @click="callStore.start(recipientId, true)" title="Video call">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <rect x="2" y="6" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.8"/>
+                <path d="M16 10l6-4v12l-6-4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </template>
           <button class="header-action-btn sn-btn" @click="showSafetyNumber = true" title="Verify encryption">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -48,6 +61,13 @@
     <ion-content ref="content">
       <div class="chat-container">
         <div ref="messagesContainer" class="messages-area">
+
+          <!-- Local call log for this thread (never sent to the peer) -->
+          <div v-if="callLog.length" class="call-log" data-testid="call-log">
+            <div v-for="c in callLog" :key="c.at" class="call-log-item">
+              {{ callLogText(c) }} · {{ new Date(c.at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) }}
+            </div>
+          </div>
 
           <!-- Empty state -->
           <div v-if="currentMessages.length === 0 && chatReady" class="empty-chat">
@@ -320,6 +340,7 @@ import { UserService } from '../services/userService';
 import { GunService } from '../services/gunService';
 import { StorageService } from '../services/storageService';
 import config from '@/config';
+import { useCallStore, type CallHistoryEntry } from '@/stores/callStore';
 import { chatPath, isSealedToken, replaceAddressBar, unsealRoute } from '../utils/privateRoute';
 
 const route = useRoute();
@@ -341,6 +362,23 @@ const recipientId = computed(() =>
   || (isSealedToken(routeParam.value) ? '' : routeParam.value)
   || hashParams.value.get('id') || ''
 );
+// ── 1:1 calls ─────────────────────────────────────────────
+const callStore = useCallStore();
+// Calls address the peer's device signing pubkey; anonymous chat ids aren't one.
+const canCall = computed(() => callStore.supported && /^[0-9a-f]{64}$/i.test(recipientId.value));
+watch(recipientId, (id) => { if (id) callStore.markKnown(id); }, { immediate: true });
+const callLog = computed(() => callStore.historyFor(recipientId.value).slice(-5));
+function callLogText(c: CallHistoryEntry): string {
+  const kind = c.video ? 'Video call' : 'Call';
+  if (c.kind === 'completed') {
+    const s = Math.round(c.durationMs / 1000);
+    return `${kind} · ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
+  if (c.kind === 'missed') return c.outgoing ? `${kind} · no answer` : `Missed ${kind.toLowerCase()}`;
+  if (c.kind === 'declined') return `${kind} · declined`;
+  return `${kind} · failed`;
+}
+
 // The name YOU gave this person (set from the chat list) outranks whatever the link or network says.
 const customName = ref('');
 const recipientName = computed(() =>
@@ -1459,6 +1497,9 @@ ion-content { --background: transparent; }
 .back-btn:hover { background: rgba(255,255,255,0.06); color: var(--app-text); }
 .back-btn svg, .header-action-btn svg { width: 22px; height: 22px; }
 .header-action-btn.danger { color: #f87171; }
+.header-action-btn:disabled { opacity: .4; cursor: default; }
+.call-log { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; }
+.call-log-item { font-size: 12px; opacity: .7; padding: 4px 10px; border-radius: 999px; background: rgba(127,127,127,.12); }
 .header-action-btn.danger:hover { background: rgba(239,68,68,0.1); }
 
 .header-identity {
