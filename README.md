@@ -95,6 +95,7 @@ Your signing keys are generated and stored locally. Schnorr signatures (secp256k
 | **Fallback rendezvous** | When all relays are blocked, nodes derive a shared reconnection point and self-heal. |
 | **Optional login gates** | Poll creators can require Google or Microsoft sign-in for verified polls. |
 | **Invite-only polls** | Single-use invite codes — each one works exactly once. |
+| **Peer-to-peer calls** | 1:1 voice/video from a DM. Media goes directly between browsers, DTLS-SRTP encrypted. If NAT blocks a direct path, the relay's TURN server forwards the *encrypted* media. It sees both IPs and traffic volume, never content. Off in Anonymity Mode. |
 | **Censorship-resistant by design** | The relay can delay messages, but it cannot forge a signed action from your device key. |
 
 ---

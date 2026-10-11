@@ -71,8 +71,9 @@ STUN-only, which still works for most NATs.
 ## 5. Verify
 
 ```bash
-curl -s https://interpoll.endless.sbs/api/turn-credentials   # → {urls,username,credential,ttl}
+curl -s https://interpoll.endless.sbs/api/turn-credentials   # → 401 without auth (expected; needs session or ?pk&ts&sig)
+# Easiest real check: start a call in the app with DevTools open and inspect the 200 response.
 turnutils_uclient -u <username> -w <credential> turn.endless.sbs
 ```
 
-Credentials have a 1 h TTL. The username is `<expiry>:<sha256(user|ip)[:32]>`.
+Credentials have a 1 h TTL. The username is `<expiry>:<sha256(session user | device pubkey)[:32]>`.

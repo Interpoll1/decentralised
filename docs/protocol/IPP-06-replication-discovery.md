@@ -103,6 +103,19 @@ period:
 
 ---
 
+## 7. Call signaling (1:1 audio/video)
+
+Calls reuse the signed signaling envelope with kinds `call-invite`, `call-accept`,
+`call-decline`, `call-end`, `call-offer`, `call-answer`, `call-ice`. For these kinds,
+the signed array is the legacy one plus `callId` (32 lowercase hex, chosen by the
+caller) and `meta` (JSON object, ≤512 chars; e.g. `{"video":true}`,
+`{"reason":"busy"}`), so a signal cannot be replayed into another call or to another
+target. Call signals travel over the WSS relay (`rtc-call-*` frames) or the Gun inbox
+only; implementations MUST NOT flood them over the mesh and MUST drop call kinds that
+arrive by mesh relay. A receiver SHOULD silently ignore invites from unknown senders
+and while unable to take calls (no reply). Media is a dedicated WebRTC peer connection
+(DTLS-SRTP). Relays MAY issue coturn REST credentials at `GET /api/turn-credentials`.
+
 ## Conformance checklist
 
 - [ ] Tamper-evidence (chain) and availability (replication) are treated as separate guarantees.
