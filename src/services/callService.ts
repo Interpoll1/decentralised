@@ -32,7 +32,6 @@ const DISCONNECT_GRACE_MS = 5_000;
 const RESET_MS = 3_000;
 const INVITE_MAX = 3;
 const INVITE_WINDOW_MS = 60_000;
-const INVITE_GLOBAL_MAX = 10;
 
 type Timer = 'ring' | 'connect' | 'grace' | 'reset';
 
@@ -55,7 +54,6 @@ export class CallService {
   private static pendingIce: RTCIceCandidateInit[] = [];
   private static timers = new Map<Timer, ReturnType<typeof setTimeout>>();
   private static inviteLog = new Map<string, number[]>();
-  private static globalInvites: number[] = [];
   private static subs = new Set<(s: CallSnapshot) => void>();
   private static unsub: (() => void) | null = null;
 
@@ -66,6 +64,8 @@ export class CallService {
   static init(): void {
     if (this.unsub) return;
     this.unsub = SignalingService.onCallSignal((sig) => { void this.handleSignal(sig); });
+    // Signaling is normally brought up by the mesh; make sure calls work without it.
+    void SignalingService.initialize?.().catch(() => { /* retried by WebRTCService */ });
   }
 
   static subscribe(cb: (s: CallSnapshot) => void): () => void {
@@ -210,11 +210,16 @@ export class CallService {
   }
 
   private static handleInvite(sig: InboundSignal, peer: string, callId: string): void {
-    // Spam control: at most INVITE_MAX invites per sender per window; excess dropped silently.
-    // Plus a global cap: fresh keypairs are free, so per-sender limits alone don't bound a flood.
+    const reply = sig.reply;
+    // Silent drop (no reply) when we can't take calls or don't know the caller:
+    // replying would confirm to an arbitrary sender that we're online — and, for
+    // Anonymity Mode, that we're in it. Gating BEFORE any counting means strangers
+    // (whose keypairs are free) can't consume a known contact's ability to ring.
+    if (!this.isSupported()) return;
+    try { if (!this.allowIncoming(peer)) return; } catch { return; }
+
+    // Spam control: at most INVITE_MAX invites per known sender per window.
     const now = Date.now();
-    this.globalInvites = this.globalInvites.filter(t => now - t < INVITE_WINDOW_MS);
-    if (this.globalInvites.length >= INVITE_GLOBAL_MAX) return;
     for (const [k, ts] of this.inviteLog) {
       if (!ts.some(t => now - t < INVITE_WINDOW_MS)) this.inviteLog.delete(k);
     }
@@ -222,14 +227,6 @@ export class CallService {
     if (recent.length >= INVITE_MAX) return;
     recent.push(now);
     this.inviteLog.set(peer, recent);
-    this.globalInvites.push(now);
-
-    const reply = sig.reply;
-    // Silent drop (no reply) when we can't take calls or don't know the caller:
-    // replying would confirm to an arbitrary sender that we're online — and, for
-    // Anonymity Mode, that we're in it.
-    if (!this.isSupported()) return;
-    try { if (!this.allowIncoming(peer)) return; } catch { return; }
 
     if (this.ctx.state !== 'idle') {
       const glare = this.ctx.state === 'outgoing-ringing' && this.ctx.peer === peer;
@@ -422,7 +419,6 @@ export class CallService {
     this.outgoing = false;
     this.inviteSent = false;
     this.inviteLog.clear();
-    this.globalInvites = [];
     this.subs.clear();
     this.unsub?.();
     this.unsub = null;
