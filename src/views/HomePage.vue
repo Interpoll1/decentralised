@@ -648,6 +648,10 @@ async function bootstrapChat() {
     await invites;
   } catch (err) {
     console.warn('Chat bootstrap error (non-critical):', err);
+  } finally {
+    // hydrateChatList() is the only thing that clears the skeleton; if bootstrap threw before
+    // reaching it (profile/key/IndexedDB failure) the Messages pane would show it forever.
+    chatListHydrated.value = true;
   }
 }
 
