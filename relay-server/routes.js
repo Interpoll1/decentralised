@@ -32,7 +32,7 @@ import { queueForCategorisation } from './auto-categorise.js';
 const TRENDING_CATEGORY_IDS = new Set(['politics','technology','science','finance','health','sports','environment','education','crypto','gaming','opinion','humour','movies-tv','music','celebrity','story','ask','discussion','news']);
 import { NAMESPACE, resolveNamespace, namespaceOfSoul, belongsToNamespace } from '../shared-validation/namespace.js';
 import fs from 'fs';
-import { makeTurnCredentials, turnSubject } from './turn.js';
+import { makeTurnCredentials, turnSubject, verifyTurnRequest } from './turn.js';
 
 
 // ─── Time-lock helper ──────────────────────────────────────────────────────────
@@ -181,11 +181,23 @@ server.on('request', async (req, res) => {
       res.writeHead(503, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'TURN not configured' })); return;
     }
+    // Auth: OAuth session, or a fresh request signed by the caller's device key.
     const user = await getSecureSession(req).catch(() => null);
-    const subject = turnSubject(user?.sub ? `u:${user.sub}` : `ip:${clientIp}`);
+    const pk = url.searchParams.get('pk') || '';
+    let principal = user?.sub ? `u:${user.sub}` : '';
+    if (!principal && verifyTurnRequest(pk, url.searchParams.get('ts'), url.searchParams.get('sig'), Date.now())) {
+      principal = `k:${pk.toLowerCase()}`;
+    }
+    if (!principal) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized' })); return;
+    }
+    const subject = turnSubject(principal);
+    // Per-identity AND per-IP: fresh device keys are free, IPs are not.
     const turnCheck = rateLimiter.checkHttp(`turn:${subject}`, 10);
-    if (!turnCheck.allowed) {
-      res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': String(Math.ceil(turnCheck.retryAfter / 1000)) });
+    const turnIpCheck = turnCheck.allowed ? rateLimiter.checkHttp(`turn-ip:${clientIp}`, 20) : turnCheck;
+    if (!turnCheck.allowed || !turnIpCheck.allowed) {
+      res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '60' });
       res.end(JSON.stringify({ error: 'Too many requests' })); return;
     }
     const creds = makeTurnCredentials(secret, subject, Date.now(), 3600);

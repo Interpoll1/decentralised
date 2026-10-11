@@ -14,6 +14,8 @@ vi.mock('@/services/signalingService', () => ({
     getMyPubkey: () => 'm'.repeat(64),
   },
 }));
+vi.mock('@/services/keyService', () => ({ KeyService: { getKeyPair: async () => ({ publicKey: 'k', privateKey: 'p' }) } }));
+vi.mock('@/services/cryptoService', () => ({ CryptoService: { sign: () => 'sig' } }));
 vi.mock('@/config', () => ({ default: { getIceServers: () => h.ice, getTurnServers: async () => [] } }));
 
 import { CallService } from '@/services/callService';
@@ -111,6 +113,18 @@ describe('CallService', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(CallService.getSnapshot().state).toBe('idle');
     expect(h.sent).toHaveLength(0);
+  });
+
+  it('global cap: more than 10 invites/min from distinct senders are dropped', async () => {
+    for (let i = 0; i < 10; i++) {
+      inbound('call-invite', String(i).padStart(64, 'b'), String(i % 10).repeat(32));
+      await vi.advanceTimersByTimeAsync(0);
+      CallService.decline();
+      await vi.advanceTimersByTimeAsync(3_000);
+    }
+    inbound('call-invite', 'x'.repeat(64), 'e'.repeat(32));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(CallService.getSnapshot().state).toBe('idle');
   });
 
   it('glare: peer wins → abort ours and ring for theirs', async () => {

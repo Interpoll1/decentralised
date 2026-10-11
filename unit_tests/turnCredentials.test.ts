@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import crypto from 'node:crypto';
 // @ts-ignore JS helper
-import { makeTurnCredentials } from '../relay-server/turn.js';
+import { makeTurnCredentials, verifyTurnRequest } from '../relay-server/turn.js';
+import { schnorr } from '@noble/curves/secp256k1.js';
+import { CryptoService } from '@/services/cryptoService';
 
 describe('makeTurnCredentials', () => {
   it('username is expiry:subject and credential is base64 HMAC-SHA1', () => {
@@ -36,5 +38,20 @@ describe('config.getTurnServers', () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
     expect(await config.getTurnServers()).toEqual([]);
     vi.unstubAllGlobals();
+  });
+});
+
+describe('verifyTurnRequest', () => {
+  const priv = schnorr.utils.randomSecretKey ? schnorr.utils.randomSecretKey() : schnorr.utils.randomPrivateKey();
+  const privHex = Buffer.from(priv).toString('hex');
+  const pk = Buffer.from(schnorr.getPublicKey(priv)).toString('hex');
+  it('accepts a fresh client-signed request and rejects stale/forged ones', () => {
+    const ts = Date.now();
+    const sig = CryptoService.sign(`interpoll-turn:${pk}:${ts}`, privHex);
+    expect(verifyTurnRequest(pk, String(ts), sig, ts)).toBe(true);
+    expect(verifyTurnRequest(pk, String(ts), sig, ts + 120_000)).toBe(false);
+    expect(verifyTurnRequest(pk, String(ts + 1), sig, ts)).toBe(false);
+    expect(verifyTurnRequest('a'.repeat(64), String(ts), sig, ts)).toBe(false);
+    expect(verifyTurnRequest(pk, String(ts), null, ts)).toBe(false);
   });
 });

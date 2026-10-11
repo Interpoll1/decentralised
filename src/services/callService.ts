@@ -32,6 +32,7 @@ const DISCONNECT_GRACE_MS = 5_000;
 const RESET_MS = 3_000;
 const INVITE_MAX = 3;
 const INVITE_WINDOW_MS = 60_000;
+const INVITE_GLOBAL_MAX = 10;
 
 type Timer = 'ring' | 'connect' | 'grace' | 'reset';
 
@@ -54,6 +55,7 @@ export class CallService {
   private static pendingIce: RTCIceCandidateInit[] = [];
   private static timers = new Map<Timer, ReturnType<typeof setTimeout>>();
   private static inviteLog = new Map<string, number[]>();
+  private static globalInvites: number[] = [];
   private static subs = new Set<(s: CallSnapshot) => void>();
   private static unsub: (() => void) | null = null;
 
@@ -209,11 +211,18 @@ export class CallService {
 
   private static handleInvite(sig: InboundSignal, peer: string, callId: string): void {
     // Spam control: at most INVITE_MAX invites per sender per window; excess dropped silently.
+    // Plus a global cap: fresh keypairs are free, so per-sender limits alone don't bound a flood.
     const now = Date.now();
+    this.globalInvites = this.globalInvites.filter(t => now - t < INVITE_WINDOW_MS);
+    if (this.globalInvites.length >= INVITE_GLOBAL_MAX) return;
+    for (const [k, ts] of this.inviteLog) {
+      if (!ts.some(t => now - t < INVITE_WINDOW_MS)) this.inviteLog.delete(k);
+    }
     const recent = (this.inviteLog.get(peer) ?? []).filter(t => now - t < INVITE_WINDOW_MS);
     if (recent.length >= INVITE_MAX) return;
     recent.push(now);
     this.inviteLog.set(peer, recent);
+    this.globalInvites.push(now);
 
     const reply = sig.reply;
     // Silent drop (no reply) when we can't take calls or don't know the caller:
@@ -263,7 +272,7 @@ export class CallService {
 
   private static async buildPeerConnection(): Promise<void> {
     const callId = this.ctx.callId;
-    const turn = await config.getTurnServers();
+    const turn = await this.turnServers();
     if (this.ctx.callId !== callId || this.ctx.state === 'ended') return;
     const pc = new RTCPeerConnection({ iceServers: [...config.getIceServers(), ...turn] });
     this.pc = pc;
@@ -291,6 +300,21 @@ export class CallService {
         });
       }
     };
+  }
+
+  /** TURN creds from the relay, authenticated with a fresh device-key signature. */
+  private static async turnServers(): Promise<RTCIceServer[]> {
+    try {
+      const [{ KeyService }, { CryptoService }] = await Promise.all([
+        import('@/services/keyService'), import('@/services/cryptoService'),
+      ]);
+      const kp = await KeyService.getKeyPair();
+      const ts = Date.now();
+      const sig = CryptoService.sign(`interpoll-turn:${kp.publicKey}:${ts}`, kp.privateKey);
+      return await config.getTurnServers({ pk: kp.publicKey, ts, sig });
+    } catch {
+      return [];
+    }
   }
 
   private static async flushIce(): Promise<void> {
@@ -398,6 +422,7 @@ export class CallService {
     this.outgoing = false;
     this.inviteSent = false;
     this.inviteLog.clear();
+    this.globalInvites = [];
     this.subs.clear();
     this.unsub?.();
     this.unsub = null;

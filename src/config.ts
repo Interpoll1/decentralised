@@ -479,17 +479,20 @@ const config = {
 
   /**
    * Short-lived TURN credentials from the relay (`GET /api/turn-credentials`),
-   * used only by 1:1 calls. Never in Anonymity Mode. Any failure → `[]`, so the
+   * used only by 1:1 calls. `auth` is a device-key signature over
+   * `interpoll-turn:<pk>:<ts>` (needed unless an OAuth session cookie exists).
+   * Never in Anonymity Mode. Any failure → `[]`, so the
    * call proceeds with STUN-only direct candidates.
    */
-  async getTurnServers(): Promise<RTCIceServer[]> {
+  async getTurnServers(auth?: { pk: string; ts: number; sig: string }): Promise<RTCIceServer[]> {
     if (anonymityMode) return [];
     const base = api();
     if (turnCache && turnCache.api === base && Date.now() < turnCache.expiresAt - 60_000) {
       return turnCache.servers.map(s => ({ ...s }));
     }
     try {
-      const res = await fetch(`${base}/api/turn-credentials`, { credentials: 'include' });
+      const q = auth ? `?${new URLSearchParams({ pk: auth.pk, ts: String(auth.ts), sig: auth.sig })}` : '';
+      const res = await fetch(`${base}/api/turn-credentials${q}`, { credentials: 'include' });
       if (!res.ok) return [];
       const d = await res.json();
       const urls = Array.isArray(d?.urls) ? d.urls.filter((u: unknown) => typeof u === 'string' && /^turns?:/.test(u)) : [];
