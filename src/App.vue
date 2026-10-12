@@ -7,6 +7,7 @@
     </AppErrorBoundary>
     <GlobalCommandPalette :is-open="globalPaletteOpen" @close="closeGlobalPalette" />
     <CallOverlay />
+    <BitCoach v-if="appReady" />
   </ion-app>
 </template>
 
@@ -27,6 +28,7 @@ import AppLoader from './components/AppLoader.vue';
 import AppErrorBoundary from './components/AppErrorBoundary.vue';
 import GlobalCommandPalette from './components/GlobalCommandPalette.vue';
 import CallOverlay from './components/CallOverlay.vue';
+import BitCoach from './components/BitCoach.vue';
 import AuroraBackground from './components/AuroraBackground.vue';
 
 const chainStore = useChainStore();

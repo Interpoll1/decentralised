@@ -402,7 +402,7 @@ onMounted(() => {
   font-size: 12px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  color: var(--app-accent-bright, #a5b4fc);
+  color: var(--app-accent-bright, #e6e6e6);
   font-family: var(--font-mono, monospace);
 }
 
@@ -468,7 +468,7 @@ onMounted(() => {
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
-.rv-word--revealed { background: rgba(var(--app-accent-rgb, 94 106 210), 0.08); }
+.rv-word--revealed { background: rgba(var(--app-accent-rgb, 255 63 49), 0.08); }
 .rv-mnemonic-footer {
   display: flex;
   flex-direction: column;
@@ -573,7 +573,7 @@ onMounted(() => {
 .rv-nostr-link {
   font-size: 11px;
   font-weight: 600;
-  color: var(--app-accent-bright, #a5b4fc);
+  color: var(--app-accent-bright, #e6e6e6);
   text-decoration: none;
 }
 .rv-nostr-link:hover { text-decoration: underline; }
@@ -588,7 +588,7 @@ onMounted(() => {
   padding: 8px 10px;
 }
 .rv-nostr-icon {
-  color: var(--app-accent-bright, #a5b4fc);
+  color: var(--app-accent-bright, #e6e6e6);
   flex-shrink: 0;
 }
 .rv-nostr-id {
@@ -607,7 +607,7 @@ onMounted(() => {
   flex-shrink: 0;
   transition: color 0.15s;
 }
-.rv-copy-mini:hover { color: var(--app-accent-bright, #a5b4fc); }
+.rv-copy-mini:hover { color: var(--app-accent-bright, #e6e6e6); }
 .rv-nostr-sub {
   font-size: 11px;
   color: var(--app-text-subtle, #6b7280);
@@ -626,7 +626,7 @@ onMounted(() => {
 }
 .rv-tier-anonymous { background: rgba(107, 114, 128, 0.1); }
 .rv-tier-pow       { background: rgba(251, 191, 36, 0.08); border-color: rgba(251, 191, 36, 0.18); }
-.rv-tier-relay     { background: rgba(var(--app-accent-rgb, 94 106 210), 0.08); border-color: rgba(var(--app-accent-rgb, 94 106 210), 0.2); }
+.rv-tier-relay     { background: rgba(var(--app-accent-rgb, 255 63 49), 0.08); border-color: rgba(var(--app-accent-rgb, 255 63 49), 0.2); }
 .rv-tier-issuer    { background: rgba(52, 211, 153, 0.08); border-color: rgba(52, 211, 153, 0.18); }
 
 .rv-tier-icon {
@@ -640,7 +640,7 @@ onMounted(() => {
   background: rgba(255, 255, 255, 0.04);
 }
 .rv-tier-pow    .rv-tier-icon { color: #fbbf24; }
-.rv-tier-relay  .rv-tier-icon { color: var(--app-accent-bright, #a5b4fc); }
+.rv-tier-relay  .rv-tier-icon { color: var(--app-accent-bright, #e6e6e6); }
 .rv-tier-issuer .rv-tier-icon { color: var(--app-success, #34d399); }
 .rv-tier-anonymous .rv-tier-icon { color: var(--app-text-muted, #9ca3af); }
 
@@ -674,11 +674,11 @@ onMounted(() => {
 }
 .rv-btn--ghost:hover { background: rgba(255, 255, 255, 0.08); }
 .rv-btn--primary {
-  background: rgba(var(--app-accent-rgb, 94 106 210), 0.16);
-  border: 0.5px solid rgba(var(--app-accent-rgb, 94 106 210), 0.3);
-  color: var(--app-accent-bright, #a5b4fc);
+  background: rgba(var(--app-accent-rgb, 255 63 49), 0.16);
+  border: 0.5px solid rgba(var(--app-accent-rgb, 255 63 49), 0.3);
+  color: var(--app-accent-bright, #e6e6e6);
 }
-.rv-btn--primary:hover { background: rgba(var(--app-accent-rgb, 94 106 210), 0.26); }
+.rv-btn--primary:hover { background: rgba(var(--app-accent-rgb, 255 63 49), 0.26); }
 
 /* ── Verify banner ───────────────────────────────── */
 .rv-verify-banner {

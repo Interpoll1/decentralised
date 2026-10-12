@@ -7,7 +7,7 @@
         <svg v-if="burstType === 'heart'" class="burst-icon" viewBox="0 0 24 24">
           <path
             d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"
-            fill="#c4b5fd"
+            fill="#e6e6e6"
           />
         </svg>
 
@@ -24,7 +24,7 @@
           <span
             v-for="i in 8" :key="i"
             class="burst-dot"
-            :style="`--i:${i}; background:${burstType === 'heart' ? '#c4b5fd' : '#ef4444'}`"
+            :style="`--i:${i}; background:${burstType === 'heart' ? '#e6e6e6' : '#ef4444'}`"
           ></span>
         </div>
 
@@ -54,7 +54,7 @@ const { burstActive, burstType } = useBurst();
   width: 160px;
   height: 160px;
   animation: burst-pop 0.75s cubic-bezier(0.17, 0.89, 0.32, 1.28) forwards;
-  filter: drop-shadow(0 0 36px rgba(196, 181, 253, 0.85));
+  filter: drop-shadow(0 0 36px rgba(230, 230, 230, 0.85));
 }
 .burst-overlay-global.dislike .burst-icon {
   filter: drop-shadow(0 0 36px rgba(239, 68, 68, 0.85));

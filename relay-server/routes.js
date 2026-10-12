@@ -905,11 +905,14 @@ server.on('request', async (req, res) => {
           const ids = posts.map(p => p.id).filter(Boolean);
           const placeholders = ids.map(() => '?').join(',');
           const [viewRows] = await db.execute(
-            `SELECT id, view_count, unique_viewers FROM search_index WHERE id IN (${placeholders})`,
+            `SELECT id, view_count, unique_viewers, category, tags FROM search_index WHERE id IN (${placeholders})`,
             ids
           );
           const viewMap = new Map((viewRows || []).map(r => [r.id, r]));
           for (const p of posts) {
+            const m = viewMap.get(p.id);
+            if (m && !p.category && m.category) p.category = m.category;
+            if (m && (!p.tags || !p.tags.length) && m.tags) p.tags = m.tags.split(",").map(t => t.trim()).filter(Boolean);
             p.viewCount     = viewMap.get(p.id)?.view_count     ?? 0;
             p.uniqueViewers = viewMap.get(p.id)?.unique_viewers ?? 0;
           }
@@ -1019,12 +1022,15 @@ server.on('request', async (req, res) => {
           const ids = pageItems.map(i => i.data?.id).filter(Boolean);
           const placeholders = ids.map(() => '?').join(',');
           const [viewRows] = await db.execute(
-            `SELECT id, view_count, unique_viewers FROM search_index WHERE id IN (${placeholders})`,
+            `SELECT id, view_count, unique_viewers, category, tags FROM search_index WHERE id IN (${placeholders})`,
             ids
           );
           const viewMap = new Map((viewRows || []).map(r => [r.id, r]));
           for (const item of pageItems) {
             if (item.data?.id) {
+              const m = viewMap.get(item.data.id);
+              if (m && !item.data.category && m.category) item.data.category = m.category;
+              if (m && (!item.data.tags || !item.data.tags.length) && m.tags) item.data.tags = m.tags.split(",").map(t => t.trim()).filter(Boolean);
               item.data.viewCount     = viewMap.get(item.data.id)?.view_count     ?? 0;
               item.data.uniqueViewers = viewMap.get(item.data.id)?.unique_viewers ?? 0;
             }

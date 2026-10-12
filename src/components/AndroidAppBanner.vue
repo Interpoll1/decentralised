@@ -59,7 +59,7 @@ function dismiss() {
 .apk-card__download {
   padding: 8px 16px;
   border-radius: 999px;
-  background: var(--ion-color-primary, #6366f1);
+  background: var(--ion-color-primary, #e6e6e6);
   color: #fff;
   font-weight: 600;
   text-decoration: none;

@@ -104,8 +104,8 @@
                     <path
                       class="heart-path"
                       d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"
-                      :fill="hasUpvoted ? '#c4b5fd' : 'none'"
-                      :stroke="hasUpvoted ? '#c4b5fd' : 'currentColor'"
+                      :fill="hasUpvoted ? '#e6e6e6' : 'none'"
+                      :stroke="hasUpvoted ? '#e6e6e6' : 'currentColor'"
                       stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
                     />
                   </svg>
@@ -962,12 +962,12 @@ onUnmounted(() => {
 .vote-count { line-height: 1; }
 
 /* ── Heart (upvote) ── */
-.vote-button.heart { color: rgba(196,181,253,0.7); }
-.vote-button.heart:hover { color: #c4b5fd; background: rgba(167,139,250,0.08); }
+.vote-button.heart { color: rgba(230, 230, 230,0.7); }
+.vote-button.heart:hover { color: #e6e6e6; background: rgba(230, 230, 230,0.08); }
 .vote-button.heart.active {
-  background: rgba(167,139,250,0.15);
-  border-color: rgba(167,139,250,0.35);
-  color: #c4b5fd;
+  background: rgba(230, 230, 230,0.15);
+  border-color: rgba(230, 230, 230,0.35);
+  color: #e6e6e6;
 }
 
 /* ── Dislike (downvote) ── */
@@ -1016,7 +1016,7 @@ onUnmounted(() => {
   opacity: 0;
 }
 .pop-heart::after {
-  background: rgba(196,181,253,0.4);
+  background: rgba(230, 230, 230,0.4);
   animation: ripple 0.5s ease-out;
 }
 .pop-down::after {
@@ -1194,13 +1194,13 @@ html.dark .section-separator {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: rgba(99,102,241,0.12);
-  border: 1px solid rgba(99,102,241,0.22);
+  background: rgba(230, 230, 230,0.12);
+  border: 1px solid rgba(230, 230, 230,0.22);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 18px;
-  color: #818cf8;
+  color: #e6e6e6;
   animation: vl-pulse 1.6s ease-in-out infinite;
 }
 @keyframes vl-pulse {
@@ -1210,13 +1210,13 @@ html.dark .section-separator {
 
 ion-content {
   --background:
-    radial-gradient(ellipse at 15% 0%,   rgba(139, 92, 246, 0.30) 0%, transparent 50%),
-    radial-gradient(ellipse at 85% 10%,  rgba(99, 102, 241, 0.20) 0%, transparent 45%),
-    radial-gradient(ellipse at 50% 100%, rgba(79,  70, 229, 0.20) 0%, transparent 55%),
-    #0d0e1c;
+    radial-gradient(ellipse at 15% 0%,   rgba(230, 230, 230, 0.30) 0%, transparent 50%),
+    radial-gradient(ellipse at 85% 10%,  rgba(230, 230, 230, 0.20) 0%, transparent 45%),
+    radial-gradient(ellipse at 50% 100%, rgba(230, 230, 230, 0.20) 0%, transparent 55%),
+    #141414;
 }
 /* Header/back area matches the page background instead of a separate shade. */
-ion-header ion-toolbar { --background: #0d0e1c; --border-width: 0; }
+ion-header ion-toolbar { --background: #141414; --border-width: 0; }
 
 /* ── Commenter chips ── */
 .commenter-chip {
@@ -1235,12 +1235,12 @@ ion-header ion-toolbar { --background: #0d0e1c; --border-width: 0; }
   display: flex; align-items: center; justify-content: center;
   font-size: 10px; font-weight: 800; flex-shrink: 0;
 }
-.av-violet { background: rgba(99,102,241,0.25); color: #a5b4fc; }
+.av-violet { background: rgba(230, 230, 230,0.25); color: #e6e6e6; }
 .av-blue   { background: rgba(59,130,246,0.22);  color: #93c5fd; }
 .av-teal   { background: rgba(20,184,166,0.22);  color: #5eead4; }
 .av-amber  { background: rgba(245,158,11,0.22);  color: #fcd34d; }
 .av-rose   { background: rgba(236,72,153,0.22);  color: #f9a8d4; }
-.av-indigo { background: rgba(129,140,248,0.22); color: #c7d2fe; }
+.av-indigo { background: rgba(230, 230, 230,0.22); color: #e2e2e2; }
 
 .commenter-name  { font-weight: 700; color: var(--app-text); }
 .commenter-count {
@@ -1272,7 +1272,7 @@ ion-header ion-toolbar { --background: #0d0e1c; --border-width: 0; }
 .section-tab:hover { color: rgba(255,255,255,0.7); }
 .section-tab.active {
   color: var(--app-text);
-  border-bottom-color: #818cf8;
+  border-bottom-color: #e6e6e6;
 }
 
 /* ── Related posts ── */
@@ -1316,7 +1316,7 @@ ion-header ion-toolbar { --background: #0d0e1c; --border-width: 0; }
 .related-tags { display: flex; gap: 5px; flex-wrap: wrap; }
 .related-tag {
   font-size: 11px; font-weight: 600;
-  color: #818cf8; background: rgba(99,102,241,0.1);
+  color: #e6e6e6; background: rgba(230, 230, 230,0.1);
   padding: 1px 6px; border-radius: 999px;
 }
 
@@ -1335,12 +1335,12 @@ ion-header ion-toolbar { --background: #0d0e1c; --border-width: 0; }
   flex-shrink: 0;
 }
 /* reuse av- tone classes from commenter avatars */
-.av-violet { background: rgba(99,102,241,0.22);  color: #a5b4fc; }
+.av-violet { background: rgba(230, 230, 230,0.22);  color: #e6e6e6; }
 .av-blue   { background: rgba(59,130,246,0.22);   color: #93c5fd; }
 .av-teal   { background: rgba(20,184,166,0.22);   color: #5eead4; }
 .av-amber  { background: rgba(245,158,11,0.22);   color: #fcd34d; }
 .av-rose   { background: rgba(236,72,153,0.22);   color: #f9a8d4; }
-.av-indigo { background: rgba(129,140,248,0.22);  color: #c7d2fe; }
+.av-indigo { background: rgba(230, 230, 230,0.22);  color: #e2e2e2; }
 .av-green  { background: rgba(52,211,153,0.22);   color: #6ee7b7; }
 
 .post-author-info { display: flex; flex-direction: column; gap: 3px; }
@@ -1397,7 +1397,7 @@ ion-header ion-toolbar { --background: #0d0e1c; --border-width: 0; }
 .comment-send-btn {
   width: 32px; height: 32px;
   border-radius: 50%;
-  background: var(--app-accent, #6366f1);
+  background: var(--app-accent, #e6e6e6);
   border: none;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
@@ -1406,7 +1406,7 @@ ion-header ion-toolbar { --background: #0d0e1c; --border-width: 0; }
   transition: background 120ms, opacity 120ms;
 }
 .comment-send-btn:disabled { opacity: 0.35; cursor: default; }
-.comment-send-btn:not(:disabled):hover { background: #818cf8; }
+.comment-send-btn:not(:disabled):hover { background: #e6e6e6; }
 
 /* ══ Two-column comments + related ══════════════════════════════ */
 /* ── Related posts — full cards ── */
@@ -1450,7 +1450,7 @@ ion-header ion-toolbar { --background: #0d0e1c; --border-width: 0; }
 .burst-heart {
   width: 160px; height: 160px;
   animation: burst-scale 0.75s cubic-bezier(0.17, 0.89, 0.32, 1.28) forwards;
-  filter: drop-shadow(0 0 32px rgba(196,181,253,0.8));
+  filter: drop-shadow(0 0 32px rgba(230, 230, 230,0.8));
 }
 .burst-overlay.dislike .burst-heart {
   filter: drop-shadow(0 0 32px rgba(239,68,68,0.8));

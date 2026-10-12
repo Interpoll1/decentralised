@@ -535,6 +535,17 @@ export const usePostStore = defineStore('post', () => {
     pendingNewPosts.value = [];
   }
 
+  /** Pull specific posts into the store (e.g. filter matches older than the loaded window). */
+  async function ensurePostsLoaded(ids: string[]): Promise<void> {
+    const missing = ids.filter(id => !postsMap.value.has(id)).slice(0, 30);
+    await Promise.all(missing.map(async (id) => {
+      try {
+        const post = await PostService.getPost(id);
+        if (post) injectPost(post);
+      } catch { /* leave it out */ }
+    }));
+  }
+
   function injectPost(post: Post) {
     // Default-deny: only records explicitly tagged for this namespace.
     if (!belongsToNamespace(post)) return;
@@ -1040,7 +1051,7 @@ export const usePostStore = defineStore('post', () => {
     sortedPosts, communityPosts, visiblePosts, hasMorePosts, visibleCount,
     newPostCount, pendingNewPosts,
     loadPostsForCommunity, loadMorePosts, resetVisibleCount,
-    flushNewPosts, injectPost, saveSeenNow, purgeLegacyPosts, trimPostsToVisible,
+    flushNewPosts, injectPost, ensurePostsLoaded, saveSeenNow, purgeLegacyPosts, trimPostsToVisible,
     createPost, selectPost,
     toggleVote, clearVote, myVote, myVotes, refreshVoteState, subscribeToVotes,
     voteOnPost, upvotePost, downvotePost, removeUpvote, removeDownvote,

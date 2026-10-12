@@ -43,8 +43,8 @@
       <div class="comment-actions">
         <button class="ca-btn upvote" :class="{ active: hasUpvoted, 'pop-heart': heartPop }" @click="onUpvote">
           <svg class="ca-heart" viewBox="0 0 24 24" fill="none" width="13" height="13">
-            <path :fill="hasUpvoted ? '#c4b5fd' : 'none'"
-              :stroke="hasUpvoted ? '#c4b5fd' : 'currentColor'"
+            <path :fill="hasUpvoted ? '#e6e6e6' : 'none'"
+              :stroke="hasUpvoted ? '#e6e6e6' : 'currentColor'"
               stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
               d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
           </svg>
@@ -292,12 +292,12 @@ onMounted(async () => {
   font-size: 11px; font-weight: 800;
   flex-shrink: 0;
 }
-.av-violet { background: rgba(99,102,241,0.25); color: #a5b4fc; }
+.av-violet { background: rgba(230, 230, 230,0.25); color: #e6e6e6; }
 .av-blue   { background: rgba(59,130,246,0.22);  color: #93c5fd; }
 .av-teal   { background: rgba(20,184,166,0.22);  color: #5eead4; }
 .av-amber  { background: rgba(245,158,11,0.22);  color: #fcd34d; }
 .av-rose   { background: rgba(236,72,153,0.22);  color: #f9a8d4; }
-.av-indigo { background: rgba(129,140,248,0.22); color: #c7d2fe; }
+.av-indigo { background: rgba(230, 230, 230,0.22); color: #e2e2e2; }
 .av-green  { background: rgba(52,211,153,0.22);  color: #6ee7b7; }
 
 .cc-meta {
@@ -330,8 +330,8 @@ onMounted(async () => {
 
 .invite-btn {
   font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 999px;
-  border: 1px solid rgba(99,102,241,0.3); background: rgba(99,102,241,0.1);
-  color: #a5b4fc; cursor: pointer; opacity: 0; transition: opacity 120ms;
+  border: 1px solid rgba(230, 230, 230,0.3); background: rgba(230, 230, 230,0.1);
+  color: #e6e6e6; cursor: pointer; opacity: 0; transition: opacity 120ms;
 }
 .comment-header:hover .invite-btn { opacity: 1; }
 
@@ -363,8 +363,8 @@ onMounted(async () => {
   font-family: inherit;
 }
 .ca-btn:hover { background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.75); }
-.ca-btn.upvote .ca-heart { color: rgba(196,181,253,0.6); }
-.ca-btn.upvote.active .ca-heart { color: #c4b5fd; }
+.ca-btn.upvote .ca-heart { color: rgba(230, 230, 230,0.6); }
+.ca-btn.upvote.active .ca-heart { color: #e6e6e6; }
 .ca-btn.downvote .ca-thumb-down { color: rgba(255,255,255,0.35); }
 .ca-btn.downvote.active .ca-thumb-down { color: #ef4444; }
 .ca-score {
@@ -434,7 +434,7 @@ onMounted(async () => {
   opacity: 0;
 }
 .ca-btn.pop-heart::after {
-  background: rgba(196,181,253,0.5);
+  background: rgba(230, 230, 230,0.5);
   animation: cc-ripple 0.45s ease-out;
 }
 .ca-btn.pop-down::after {

@@ -540,7 +540,7 @@ onUnmounted(() => {
   box-shadow: 0 0 0 3px rgba(var(--app-accent-rgb), 0.35);
 }
 .np-toggle.active {
-  background: var(--app-accent, #5e6ad2);
+  background: var(--app-accent, #e6e6e6);
   border-color: transparent;
   box-shadow: 0 0 0 1px rgba(var(--app-accent-rgb), 0.4),
               0 4px 12px rgba(var(--app-accent-rgb), 0.3);

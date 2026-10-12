@@ -480,7 +480,7 @@ onUnmounted(() => {
 .btn-small { padding: 0.2rem 0.6rem; background: none; border: 1px solid var(--ion-color-primary, #3b82f6); color: var(--ion-color-primary, #3b82f6); border-radius: 5px; cursor: pointer; font-size: 0.76rem; }
 
 /* Info / warn boxes */
-.info-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 0.5rem 0.75rem; margin-top: 0.75rem; font-size: 0.82rem; color: #1e40af; }
+.info-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 0.5rem 0.75rem; margin-top: 0.75rem; font-size: 0.82rem; color: #e6e6e6; }
 .warn-box  { background: #fefce8; border: 1px solid #fde047; border-radius: 6px; padding: 0.5rem 0.75rem; margin-top: 0.75rem; font-size: 0.82rem; color: #713f12; }
 
 /* Stat grid */

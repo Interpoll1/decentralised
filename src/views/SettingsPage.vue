@@ -61,10 +61,22 @@
                 <span class="karma-badge">{{ userProfile?.karma || 0 }}</span>
               </div>
             </div>
+            <button class="block-btn outline mt-12" @click="showRestore = !showRestore">
+              {{ showRestore ? "Cancel restore" : "Restore identity from recovery phrase" }}
+            </button>
+            <div v-if="showRestore" class="mt-12"><RestoreKeyForm @restored="onIdentityRestored" /></div>
+            <button class="block-btn outline mt-12" @click="replayBitTour">
+              Replay Bit's tour
+            </button>
             <button class="block-btn outline mt-12" @click="$router.push('/profile')">
               <ion-icon :icon="personCircleOutline"></ion-icon>
               Edit Profile
             </button>
+          </div>
+
+          <!-- Name recovery (IPP-10) -->
+          <div class="settings-card">
+            <NameRecoveryCard />
           </div>
 
           <!-- Cryptographic identity -->
@@ -97,6 +109,7 @@
                   <button class="icon-btn" @click="copyPrivateKey" title="Copy"><ion-icon :icon="copyOutline"></ion-icon></button>
                 </div>
               </div>
+              <RecoveryPhrasePanel />
               <div v-if="showPrivateKey" class="alert-box warning">
                 <ion-icon :icon="warningOutline"></ion-icon>
                 Never share your private key. Anyone with it can sign events as you.
@@ -839,7 +852,7 @@
                 <svg viewBox="0 0 56 56">
                   <circle cx="28" cy="28" r="24" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="6"/>
                   <circle cx="28" cy="28" r="24" fill="none"
-                    :stroke="storagePercent > 95 ? '#ef4444' : storagePercent > 80 ? '#f59e0b' : '#6366f1'"
+                    :stroke="storagePercent > 95 ? '#ef4444' : storagePercent > 80 ? '#f59e0b' : '#e6e6e6'"
                     stroke-width="6" stroke-linecap="round"
                     :stroke-dasharray="`${storagePercent * 1.508} 150.8`"
                     stroke-dashoffset="37.7" transform="rotate(-90 28 28)"/>
@@ -992,11 +1005,11 @@ ion-toolbar { --border-width: 0 !important; }
 /* Settings content area — show the gradient through ion-content */
 ion-content {
   --background:
-    radial-gradient(ellipse at 15% 0%,   rgba(139, 92, 246, 0.35) 0%, transparent 50%),
+    radial-gradient(ellipse at 15% 0%,   rgba(230, 230, 230, 0.35) 0%, transparent 50%),
     radial-gradient(ellipse at 88% 8%,   rgba(236, 72, 153, 0.22) 0%, transparent 45%),
-    radial-gradient(ellipse at 50% 100%, rgba(99, 102, 241, 0.24) 0%, transparent 55%),
-    radial-gradient(ellipse at 0%  55%,  rgba(79,  70, 229, 0.15) 0%, transparent 40%),
-    #0d0e1c;
+    radial-gradient(ellipse at 50% 100%, rgba(230, 230, 230, 0.24) 0%, transparent 55%),
+    radial-gradient(ellipse at 0%  55%,  rgba(230, 230, 230, 0.15) 0%, transparent 40%),
+    #141414;
 }
 
 /* Kill DesktopPageShell's opaque surface-card so our gradient shows through */
@@ -1025,8 +1038,8 @@ ion-content {
   scrollbar-width: none;
   gap: 4px;
   padding: 10px 14px;
-  background: rgba(18, 12, 40, 0.55);
-  border-bottom: 1px solid rgba(139, 92, 246, 0.12);
+  background: rgba(26, 26, 26, 0.55);
+  border-bottom: 1px solid rgba(230, 230, 230, 0.12);
   justify-content: center;
 }
 @media (max-width: 700px) {
@@ -1058,9 +1071,9 @@ ion-content {
   background: rgba(255,255,255,0.06);
 }
 .settings-tab.active {
-  color: #e0e7ff;
-  background: rgba(99,102,241,0.18);
-  border-color: rgba(99,102,241,0.35);
+  color: #f0f0f0;
+  background: rgba(230, 230, 230,0.18);
+  border-color: rgba(230, 230, 230,0.35);
 }
 
 /* ── Body ───────────────────────────────────── */
@@ -1075,8 +1088,8 @@ ion-content {
 /* ── Cards ──────────────────────────────────── */
 .settings-card {
   border-radius: 18px;
-  background: rgba(15, 12, 32, 0.55);
-  border: 1px solid rgba(139, 92, 246, 0.15);
+  background: rgba(22, 22, 22, 0.55);
+  border: 1px solid rgba(230, 230, 230, 0.15);
   padding: 18px 20px;
   position: relative;
   overflow: hidden;
@@ -1088,8 +1101,8 @@ ion-content {
   background: rgba(30, 10, 20, 0.55);
 }
 .settings-card.decentralised-feature {
-  border-color: rgba(99,102,241,0.30);
-  background: linear-gradient(135deg, rgba(99,102,241,0.10), rgba(139,92,246,0.07));
+  border-color: rgba(230, 230, 230,0.30);
+  background: linear-gradient(135deg, rgba(230, 230, 230,0.10), rgba(230, 230, 230,0.07));
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
@@ -1122,8 +1135,8 @@ ion-content {
   display: flex; align-items: center; justify-content: center;
   font-size: 20px; color: #fff; flex-shrink: 0;
 }
-.accent-violet { background: linear-gradient(135deg, #6366f1, #8b5cf6); box-shadow: 0 4px 12px rgba(99,102,241,0.3); }
-.accent-blue   { background: linear-gradient(135deg, #3b82f6, #6366f1); box-shadow: 0 4px 12px rgba(59,130,246,0.3); }
+.accent-violet { background: var(--app-accent); box-shadow: 0 4px 12px rgba(230, 230, 230,0.3); }
+.accent-blue   { background: linear-gradient(135deg, #3b82f6, #e6e6e6); box-shadow: 0 4px 12px rgba(59,130,246,0.3); }
 .accent-teal   { background: linear-gradient(135deg, #14b8a6, #3b82f6); box-shadow: 0 4px 12px rgba(20,184,166,0.3); }
 .accent-amber  { background: linear-gradient(135deg, #f59e0b, #ef4444); box-shadow: 0 4px 12px rgba(245,158,11,0.3); }
 .accent-rose   { background: linear-gradient(135deg, #ec4899, #ef4444); box-shadow: 0 4px 12px rgba(236,72,153,0.3); }
@@ -1138,7 +1151,7 @@ ion-content {
   gap: 12px;
   padding: 10px 14px;
   background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(139,92,246,0.12);
+  border: 1px solid rgba(230, 230, 230,0.12);
   border-radius: 12px;
 }
 .info-key { font-size: 12.5px; color: var(--app-text-muted); font-weight: 600; }
@@ -1206,7 +1219,7 @@ ion-content {
   cursor: pointer;
   transition: background 200ms ease;
 }
-.toggle-switch input:checked + .toggle-track { background: #6366f1; border-color: #6366f1; }
+.toggle-switch input:checked + .toggle-track { background: #e6e6e6; border-color: #e6e6e6; }
 .toggle-track::after {
   content: ''; position: absolute; top: 3px; left: 3px;
   width: 18px; height: 18px; border-radius: 50%;
@@ -1250,8 +1263,8 @@ ion-content {
   transition: border-color 180ms ease, box-shadow 180ms ease;
 }
 .field-wrap:focus-within {
-  border-color: rgba(99,102,241,0.5);
-  box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+  border-color: rgba(230, 230, 230,0.5);
+  box-shadow: 0 0 0 3px rgba(230, 230, 230,0.1);
 }
 .field-native {
   width: 100%; background: transparent; border: none; outline: none;
@@ -1266,7 +1279,7 @@ select.field-native {
   padding-right: 36px;
   cursor: pointer;
 }
-select.field-native option { background: #1a1a2e; color: #fff; }
+select.field-native option { background: #242424; color: #fff; }
 
 /* ── Buttons ────────────────────────────────── */
 .block-btn {
@@ -1276,8 +1289,8 @@ select.field-native option { background: #1a1a2e; color: #fff; }
   transition: opacity 160ms ease, transform 160ms ease;
 }
 .block-btn.accent {
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  color: #fff; box-shadow: 0 6px 20px rgba(99,102,241,0.35);
+  background: var(--app-accent);
+  color: #111214; box-shadow: 0 6px 20px rgba(230, 230, 230,0.35);
 }
 .block-btn.outline {
   background: rgba(255,255,255,0.05);
@@ -1296,8 +1309,8 @@ select.field-native option { background: #1a1a2e; color: #fff; }
   white-space: nowrap;
 }
 .pill-btn.accent {
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  color: #fff; box-shadow: 0 4px 14px rgba(99,102,241,0.35);
+  background: var(--app-accent);
+  color: #111214; box-shadow: 0 4px 14px rgba(230, 230, 230,0.35);
 }
 .pill-btn.outline {
   background: rgba(255,255,255,0.05);
@@ -1341,8 +1354,8 @@ select.field-native option { background: #1a1a2e; color: #fff; }
 }
 .seg-pill:hover { color: var(--app-text); }
 .seg-pill.active {
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  color: #fff; box-shadow: 0 2px 10px rgba(99,102,241,0.35);
+  background: var(--app-accent);
+  color: #111214; box-shadow: 0 2px 10px rgba(230, 230, 230,0.35);
 }
 
 /* ── Keyword chips ──────────────────────────── */
@@ -1359,9 +1372,9 @@ select.field-native option { background: #1a1a2e; color: #fff; }
 /* ── Karma badge ────────────────────────────── */
 .karma-badge {
   padding: 4px 12px; border-radius: 999px;
-  background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(139,92,246,0.15));
-  border: 1px solid rgba(99,102,241,0.25);
-  color: #818cf8; font-weight: 700; font-size: 13px;
+  background: linear-gradient(135deg, rgba(230, 230, 230,0.15), rgba(230, 230, 230,0.15));
+  border: 1px solid rgba(230, 230, 230,0.25);
+  color: #e6e6e6; font-weight: 700; font-size: 13px;
 }
 
 /* ── Key block ──────────────────────────────── */
@@ -1390,16 +1403,16 @@ select.field-native option { background: #1a1a2e; color: #fff; }
 }
 .alert-box ion-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
 .alert-box.info {
-  background: rgba(99,102,241,0.08);
-  border: 1px solid rgba(99,102,241,0.2);
-  color: #a5b4fc;
+  background: rgba(230, 230, 230,0.08);
+  border: 1px solid rgba(230, 230, 230,0.2);
+  color: #e6e6e6;
 }
 .alert-box.warning {
   background: rgba(251,191,36,0.08);
   border: 1px solid rgba(251,191,36,0.2);
   color: #fbbf24;
 }
-.link { color: #818cf8; text-decoration: none; }
+.link { color: #e6e6e6; text-decoration: none; }
 .link:hover { text-decoration: underline; }
 
 /* ── Status pills / chips ───────────────────── */
@@ -1415,9 +1428,9 @@ select.field-native option { background: #1a1a2e; color: #fff; }
 
 .count-badge {
   padding: 4px 10px; border-radius: 999px;
-  background: rgba(99,102,241,0.12);
-  border: 1px solid rgba(99,102,241,0.2);
-  color: #818cf8; font-size: 12px; font-weight: 700;
+  background: rgba(230, 230, 230,0.12);
+  border: 1px solid rgba(230, 230, 230,0.2);
+  color: #e6e6e6; font-size: 12px; font-weight: 700;
   align-self: flex-start; flex-shrink: 0;
 }
 
@@ -1503,9 +1516,9 @@ code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0
 .decentral-badge {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 4px 10px; border-radius: 999px;
-  background: linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.2));
-  border: 1px solid rgba(99,102,241,0.3);
-  color: #a5b4fc; font-size: 9.5px; font-weight: 800;
+  background: linear-gradient(135deg, rgba(230, 230, 230,0.2), rgba(230, 230, 230,0.2));
+  border: 1px solid rgba(230, 230, 230,0.3);
+  color: #e6e6e6; font-size: 9.5px; font-weight: 800;
   letter-spacing: 0.1em; text-transform: uppercase;
   margin-bottom: 14px;
 }
@@ -1531,7 +1544,7 @@ code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0
 .code-block {
   font-family: monospace; font-size: 12px;
   background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
-  padding: 10px 14px; border-radius: 10px; color: #a5b4fc;
+  padding: 10px 14px; border-radius: 10px; color: #e6e6e6;
   word-break: break-all;
 }
 
@@ -1546,7 +1559,7 @@ code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0
   font-family: inherit;
 }
 .os-tab:hover { color: var(--app-text); background: rgba(255,255,255,0.07); }
-.os-tab.active { background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.4); color: #a5b4fc; }
+.os-tab.active { background: rgba(230, 230, 230,0.15); border-color: rgba(230, 230, 230,0.4); color: #e6e6e6; }
 
 .code-block-copy {
   display: flex; align-items: center; gap: 8px;
@@ -1555,7 +1568,7 @@ code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0
 }
 .code-text {
   flex: 1; font-family: monospace; font-size: 12px;
-  color: #a5b4fc; word-break: break-all;
+  color: #e6e6e6; word-break: break-all;
 }
 .copy-btn {
   flex-shrink: 0; background: rgba(255,255,255,0.06);
@@ -1563,7 +1576,7 @@ code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0
   color: rgba(255,255,255,0.55); font-size: 14px; cursor: pointer;
   padding: 3px 8px; transition: all 120ms; font-family: inherit;
 }
-.copy-btn:hover { background: rgba(99,102,241,0.15); color: #a5b4fc; }
+.copy-btn:hover { background: rgba(230, 230, 230,0.15); color: #e6e6e6; }
 
 /* ── Range rows ─────────────────────────────── */
 .range-row { padding: 6px 0; }
@@ -1587,7 +1600,7 @@ code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0
   font-size: 12px; font-weight: 600; cursor: pointer;
   transition: all 160ms ease;
 }
-.pref-btn.active { background: rgba(99,102,241,0.15); color: #818cf8; border-color: rgba(99,102,241,0.3); }
+.pref-btn.active { background: rgba(230, 230, 230,0.15); color: #e6e6e6; border-color: rgba(230, 230, 230,0.3); }
 .pref-btn.mute.active { background: rgba(255,255,255,0.08); color: var(--app-text); border-color: rgba(255,255,255,0.15); }
 
 /* ── Storage ring ───────────────────────────── */
@@ -1622,6 +1635,10 @@ code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useNavStore } from '../stores/navStore';
+import { useBitStore } from '../stores/bitStore';
+import RestoreKeyForm from '../components/RestoreKeyForm.vue';
+import RecoveryPhrasePanel from '../components/RecoveryPhrasePanel.vue';
+import NameRecoveryCard from '../components/NameRecoveryCard.vue';
 import {
   isPushEnabled, setPushEnabled, initPushNotifications, unregisterPushNotifications,
 } from '../native/pushNotifications';
@@ -1725,6 +1742,11 @@ import { GUN_RELAY_PRESETS, isValidGunUrl, labelForGunUrl, DEFAULT_GUN_PEERS } f
 const chainStore = useChainStore();
 const communityStore = useCommunityStore();
 const router = useRouter();
+const bitStore = useBitStore();
+const showRestore = ref(false);
+// The old identity is gone from storage; reload so no in-memory state keeps using it.
+function onIdentityRestored() { window.location.href = "/home"; }
+function replayBitTour() { void router.push('/home').then(() => bitStore.replayTour()); }
 
 // ── Bottom nav + notifications ─────────────────────────────────────────────
 const navStore    = useNavStore();
@@ -1875,6 +1897,12 @@ function onToggleVersion(ver: string, ev: CustomEvent) {
     ...versionToggles.value,
     [ver]: ev.detail.checked,
   };
+  syncDataVersions();
+}
+
+// Called by the plain checkbox in the template: flip this version's flag.
+function toggleVersion(ver: string) {
+  versionToggles.value = { ...versionToggles.value, [ver]: !versionToggles.value[ver] };
   syncDataVersions();
 }
 

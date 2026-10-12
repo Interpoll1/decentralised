@@ -37,11 +37,13 @@ export function formatChatText(text: string, mentionNames: string[] = []): strin
 export function senderHue(id: string): number {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return h % 360;
+  // Skip the blue-violet..purple band (225-322deg): the palette has no purple.
+  const v = h % 261;
+  return v > 224 ? v + 98 : v;
 }
 
 /** Stable per-user accent colour, as group chats tint sender names. */
-const PALETTE = ['#818cf8', '#34d399', '#f472b6', '#fbbf24', '#60a5fa', '#f87171', '#a78bfa', '#2dd4bf', '#fb923c', '#a3e635'];
+const PALETTE = ['#e6e6e6', '#34d399', '#f472b6', '#fbbf24', '#60a5fa', '#f87171', '#e6e6e6', '#2dd4bf', '#fb923c', '#a3e635'];
 export function senderColor(id: string): string {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;

@@ -61,7 +61,7 @@ onMounted(load);
 .gm-placeholder { display: flex; align-items: center; gap: 8px; padding: 18px 16px; border-radius: 12px; background: rgba(0,0,0,.18); font-size: 13px; color: var(--app-text-muted); min-width: 180px; }
 .gm-error { color: #fbbf24; }
 .gm-retry { margin-left: auto; background: none; border: 1px solid currentColor; color: inherit; border-radius: 999px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
-.gm-spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.2); border-top-color: #818cf8; border-radius: 50%; animation: gmspin .7s linear infinite; }
+.gm-spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.2); border-top-color: #e6e6e6; border-radius: 50%; animation: gmspin .7s linear infinite; }
 @keyframes gmspin { to { transform: rotate(360deg); } }
 .gm-img { display: block; max-width: min(320px, 100%); max-height: 360px; border-radius: 12px; cursor: zoom-in; object-fit: cover; }
 .gm-video { display: block; max-width: min(320px, 100%); max-height: 360px; border-radius: 12px; background: #000; }

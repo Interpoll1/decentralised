@@ -13,6 +13,7 @@ import '@ionic/vue/css/text-transformation.css';
 import '@ionic/vue/css/flex-utils.css';
 import '@ionic/vue/css/display.css';
 import './style.css';
+import './theme-raycast.css';
 import App from './App.vue';
 import router from './router';
 import { recordError, reportFatal } from './utils/errorReporting';
@@ -232,12 +233,12 @@ function renderStaticFatal(): void {
   const root = document.getElementById('app');
   if (!root) return;
   root.innerHTML = `
-    <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;background:#141420;color:#e6e6ef;font-family:system-ui,sans-serif;text-align:center">
+    <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;background:#1a1a1a;color:#ebebeb;font-family:system-ui,sans-serif;text-align:center">
       <div style="max-width:420px">
         <div style="font-size:40px">⚠️</div>
         <h1 style="font-size:20px;margin:12px 0 8px">Something went wrong</h1>
-        <p style="font-size:14px;color:#b7b7c8;line-height:1.5;margin:0 0 20px">The app couldn't start. Reloading usually fixes it.</p>
-        <button onclick="location.reload()" style="border:1px solid #5b5bff;background:#5b5bff;color:#fff;font-size:14px;padding:10px 18px;border-radius:10px;min-height:44px;cursor:pointer">Reload</button>
+        <p style="font-size:14px;color:#c0c0c0;line-height:1.5;margin:0 0 20px">The app couldn't start. Reloading usually fixes it.</p>
+        <button onclick="location.reload()" style="border:1px solid #e6e6e6;background:#e6e6e6;color: #111214;font-size:14px;padding:10px 18px;border-radius:10px;min-height:44px;cursor:pointer">Reload</button>
       </div>
     </div>`;
 }

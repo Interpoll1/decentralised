@@ -357,7 +357,7 @@ body {
    Font: Unbounded (display) + DM Sans (body)
    ═══════════════════════════════════════════════════════════════ */
 #design2 {
-  background: #050812;
+  background: #0c0c0c;
   padding: 0;
   position: relative;
   overflow: hidden;
@@ -374,7 +374,7 @@ body {
   position: absolute;
   width: 600px; height: 600px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(99,60,255,.18) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(255,73,60,.18) 0%, transparent 70%);
   top: -200px; left: -200px;
 }
 .cosmos-bg::after {
@@ -427,7 +427,7 @@ body {
   letter-spacing: -0.5px;
 }
 .cosmos-logo span {
-  background: linear-gradient(135deg, #6b3cff, #00ffa3);
+  background: linear-gradient(135deg, #ff493c, #00ffa3);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -442,7 +442,7 @@ body {
   backdrop-filter: blur(10px);
   transition: all .2s;
 }
-.cosmos-icon-btn:hover { background: rgba(107,60,255,.3); border-color: rgba(107,60,255,.5); }
+.cosmos-icon-btn:hover { background: rgba(255,73,60,.3); border-color: rgba(255,73,60,.5); }
 .cosmos-icon-btn svg { width: 16px; height: 16px; color: #aaa; }
 
 .cosmos-tabs {
@@ -465,9 +465,9 @@ body {
   transition: all .2s;
 }
 .cosmos-tab.active {
-  background: rgba(107,60,255,.25);
-  border-color: rgba(107,60,255,.6);
-  color: #c4b5ff;
+  background: rgba(255,73,60,.25);
+  border-color: rgba(255,73,60,.6);
+  color: #ff7a70;
 }
 
 .cosmos-feed { padding: 16px 16px 100px; display: flex; flex-direction: column; gap: 12px; }
@@ -490,13 +490,13 @@ body {
   position: absolute;
   inset: 0;
   border-radius: 16px;
-  background: linear-gradient(135deg, rgba(107,60,255,.05) 0%, transparent 60%);
+  background: linear-gradient(135deg, rgba(255,73,60,.05) 0%, transparent 60%);
   pointer-events: none;
 }
 .cosmos-post:hover {
-  border-color: rgba(107,60,255,.3);
+  border-color: rgba(255,73,60,.3);
   transform: translateY(-2px);
-  box-shadow: 0 12px 40px rgba(107,60,255,.15);
+  box-shadow: 0 12px 40px rgba(255,73,60,.15);
 }
 
 .cosmos-post-top {
@@ -508,11 +508,11 @@ body {
 .cosmos-community-pill {
   padding: 3px 10px;
   border-radius: 100px;
-  background: rgba(107,60,255,.2);
-  border: 1px solid rgba(107,60,255,.4);
+  background: rgba(255,73,60,.2);
+  border: 1px solid rgba(255,73,60,.4);
   font-size: 11px;
   font-weight: 500;
-  color: #c4b5ff;
+  color: #ff7a70;
 }
 .cosmos-dot { color: rgba(255,255,255,.2); font-size: 10px; }
 .cosmos-author { font-size: 12px; color: rgba(255,255,255,.4); }
@@ -656,7 +656,7 @@ body {
 .cosmos-option-fill {
   position: absolute;
   left: 0; top: 0; bottom: 0;
-  background: linear-gradient(90deg, rgba(0,255,163,.2), rgba(107,60,255,.1));
+  background: linear-gradient(90deg, rgba(0,255,163,.2), rgba(255,73,60,.1));
   border-radius: 7px;
   transition: width .7s cubic-bezier(.16,1,.3,1);
 }
@@ -686,7 +686,7 @@ body {
 .cosmos-poll-action {
   padding: 6px 14px;
   border-radius: 100px;
-  background: linear-gradient(135deg, rgba(0,255,163,.2), rgba(107,60,255,.2));
+  background: linear-gradient(135deg, rgba(0,255,163,.2), rgba(255,73,60,.2));
   border: 1px solid rgba(0,255,163,.3);
   color: #00ffa3;
   font-size: 11px;
@@ -695,7 +695,7 @@ body {
   transition: all .2s;
   letter-spacing: .5px;
 }
-.cosmos-poll-action:hover { background: linear-gradient(135deg, rgba(0,255,163,.35), rgba(107,60,255,.3)); }
+.cosmos-poll-action:hover { background: linear-gradient(135deg, rgba(0,255,163,.35), rgba(255,73,60,.3)); }
 .cosmos-poll-action.ended {
   color: rgba(255,255,255,.4);
   border-color: rgba(255,255,255,.1);
@@ -707,7 +707,7 @@ body {
   position: sticky;
   bottom: 0;
   display: flex;
-  background: rgba(5,8,18,.85);
+  background: rgba(12,12,12,.85);
   backdrop-filter: blur(30px);
   border-top: 1px solid rgba(255,255,255,.07);
   padding-bottom: env(safe-area-inset-bottom);
@@ -726,7 +726,7 @@ body {
   border: none;
   transition: all .2s;
 }
-.cosmos-nav-item.active { color: #c4b5ff; }
+.cosmos-nav-item.active { color: #ff7a70; }
 .cosmos-nav-item svg { width: 20px; height: 20px; }
 .cosmos-unread {
   width: 8px; height: 8px;
@@ -1477,7 +1477,7 @@ svg { display: inline-block; vertical-align: middle; }
 
         <!-- POLL 2 active -->
         <div class="cosmos-poll">
-          <div class="cosmos-poll-badge" style="color:#c4b5ff;background:rgba(107,60,255,.15);border-color:rgba(107,60,255,.35);">
+          <div class="cosmos-poll-badge" style="color:#ff7a70;background:rgba(255,73,60,.15);border-color:rgba(255,73,60,.35);">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
             Poll · 2 days left
           </div>

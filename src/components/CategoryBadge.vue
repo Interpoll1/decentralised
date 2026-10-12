@@ -45,7 +45,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   font-weight: 500;
   padding: 2px 8px;
   border-radius: 999px;
-  background: var(--ion-color-light, #f4f5f8);
+  background: var(--ion-color-light, #f6f6f6);
   color: var(--ion-color-medium, #92949c);
   margin-left: 0.4rem;
   white-space: nowrap;
@@ -69,15 +69,15 @@ const CATEGORY_LABELS: Record<string, string> = {
 .cat-finance       { background: #dcfce7; color: #166534; }
 .cat-health        { background: #fce7f3; color: #9d174d; }
 .cat-humour        { background: #fff7ed; color: #c2410c; }
-.cat-gaming        { background: #ede9fe; color: #5b21b6; }
+.cat-gaming        { background: #f3f3f3; color: #e6e6e6; }
 .cat-sports        { background: #e0f2fe; color: #0369a1; }
 .cat-entertainment { background: #fef3c7; color: #92400e; }
 .cat-environment   { background: #ecfdf5; color: #065f46; }
 .cat-education     { background: #f0fdf4; color: #166534; }
-.cat-world-news    { background: #e0e7ff; color: #3730a3; }
+.cat-world-news    { background: #f0f0f0; color: #e6e6e6; }
 .cat-local         { background: #f1f5f9; color: #334155; }
-.cat-opinion       { background: #fdf4ff; color: #7e22ce; }
-.cat-other         { background: var(--ion-color-light, #f4f5f8); color: var(--ion-color-medium, #92949c); }
+.cat-opinion       { background: #fafafa; color: #e6e6e6; }
+.cat-other         { background: var(--ion-color-light, #f6f6f6); color: var(--ion-color-medium, #92949c); }
 
 /* Dark-mode: desaturate the bright backgrounds slightly */
 @media (prefers-color-scheme: dark) {
@@ -88,12 +88,12 @@ const CATEGORY_LABELS: Record<string, string> = {
   .cat-finance       { background: #14532d; color: #86efac; }
   .cat-health        { background: #831843; color: #f9a8d4; }
   .cat-humour        { background: #7c2d12; color: #fdba74; }
-  .cat-gaming        { background: #3b0764; color: #d8b4fe; }
+  .cat-gaming        { background: #363636; color: #e6e6e6; }
   .cat-sports        { background: #0c4a6e; color: #7dd3fc; }
   .cat-entertainment { background: #78350f; color: #fcd34d; }
   .cat-environment   { background: #052e16; color: #4ade80; }
   .cat-education     { background: #052e16; color: #86efac; }
-  .cat-world-news    { background: #1e1b4b; color: #a5b4fc; }
-  .cat-opinion       { background: #3b0764; color: #e9d5ff; }
+  .cat-world-news    { background: #333333; color: #e6e6e6; }
+  .cat-opinion       { background: #363636; color: #eaeaea; }
 }
 </style>

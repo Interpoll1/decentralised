@@ -142,7 +142,7 @@ function formatNumber(n: number): string {
 .avatar-svg { width: 44px; height: 44px; display: block; }
 
 /* Per-tone tints — colour the avatar's glass */
-.tone-violet { background: rgba(99,102,241,0.18);  color: #a5b4fc; }
+.tone-violet { background: rgba(230, 230, 230,0.18);  color: #e6e6e6; }
 .tone-blue   { background: rgba(59,130,246,0.18);  color: #93c5fd; }
 .tone-teal   { background: rgba(20,184,166,0.16);  color: #5eead4; }
 .tone-amber  { background: rgba(245,158,11,0.16);  color: #fcd34d; }
@@ -176,9 +176,9 @@ function formatNumber(n: number): string {
   flex-shrink: 0;
 }
 .badge--cat {
-  background: rgba(99,102,241,0.1);
-  color: rgba(165,180,252,0.9);
-  border: 1px solid rgba(99,102,241,0.18);
+  background: rgba(230, 230, 230,0.1);
+  color: rgba(230, 230, 230,0.9);
+  border: 1px solid rgba(230, 230, 230,0.18);
 }
 .badge--private {
   background: rgba(245,158,11,0.08);

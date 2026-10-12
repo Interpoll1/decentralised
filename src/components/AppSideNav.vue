@@ -13,7 +13,7 @@
     </div>
 
     <!-- Primary nav -->
-    <button class="asn-item" :class="{ active: activeRoute === 'home' }" @click="go('home')">
+    <button class="asn-item" data-tour="home" :class="{ active: activeRoute === 'home' }" @click="go('home')">
       <svg class="asn-icon" viewBox="0 0 24 24" fill="none">
         <path v-if="activeRoute==='home'" d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H5a1 1 0 01-1-1V9.5z" fill="currentColor"/>
         <path v-else d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H5a1 1 0 01-1-1V9.5z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
@@ -22,7 +22,7 @@
       <span>Feed</span>
     </button>
 
-    <button class="asn-item" :class="{ active: activeRoute === 'spaces' }" @click="go('spaces')">
+    <button class="asn-item" data-tour="communities" :class="{ active: activeRoute === 'spaces' }" @click="go('spaces')">
       <svg class="asn-icon" viewBox="0 0 24 24" fill="none">
         <circle v-if="activeRoute==='spaces'" cx="9" cy="7" r="4" fill="currentColor"/>
         <circle v-else cx="9" cy="7" r="4" stroke="currentColor" stroke-width="1.7"/>
@@ -32,7 +32,7 @@
       <span>Spaces</span>
     </button>
 
-    <button class="asn-item" :class="{ active: activeRoute === 'chat' }" @click="go('chat')">
+    <button class="asn-item" data-tour="chat" :class="{ active: activeRoute === 'chat' }" @click="go('chat')">
       <svg class="asn-icon" viewBox="0 0 24 24" fill="none">
         <path v-if="activeRoute==='chat'" d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" fill="currentColor"/>
         <path v-else d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
@@ -41,7 +41,7 @@
       <span v-if="totalUnread > 0" class="asn-badge">{{ totalUnread > 99 ? '99+' : totalUnread }}</span>
     </button>
 
-    <button class="asn-item" :class="{ active: activeRoute === 'create' }" @click="go('create')">
+    <button class="asn-item" data-tour="create" :class="{ active: activeRoute === 'create' }" @click="go('create')">
       <svg class="asn-icon" viewBox="0 0 24 24" fill="none">
         <circle v-if="activeRoute==='create'" cx="12" cy="12" r="10" fill="currentColor"/>
         <circle v-else cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.7"/>
@@ -99,14 +99,14 @@
       </svg>
       <span>Search</span>
     </button>
-    <button class="asn-item asn-util" :class="{ active: activeRoute==='profile' }" @click="router.push('/profile')">
+    <button class="asn-item asn-util" data-tour="profile" :class="{ active: activeRoute==='profile' }" @click="router.push('/profile')">
       <svg class="asn-icon" viewBox="0 0 24 24" fill="none">
         <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.7"/>
         <path d="M4 20c0-4 3.58-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
       </svg>
       <span>Identity</span>
     </button>
-    <button class="asn-item asn-util" :class="{ active: activeRoute==='settings' }" @click="router.push('/settings')">
+    <button class="asn-item asn-util" data-tour="settings" :class="{ active: activeRoute==='settings' }" @click="router.push('/settings')">
       <svg class="asn-icon" viewBox="0 0 24 24" fill="none">
         <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/>
         <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" stroke-width="1.7"/>
@@ -260,7 +260,7 @@ function selectCat(id: string) {
   display: flex; align-items: center; justify-content: center;
   background: var(--app-accent);
   border-radius: 8px;
-  color: white;
+  color: #111214;
   flex-shrink: 0;
 }
 .asn-brand-name {
@@ -288,7 +288,7 @@ function selectCat(id: string) {
   color: var(--app-text);
 }
 .asn-item.active {
-  background: var(--app-accent-subtle, rgba(99,102,241,0.15));
+  background: var(--app-accent-subtle, rgba(230, 230, 230,0.15));
   color: var(--app-accent-bright);
 }
 .asn-icon {
@@ -302,7 +302,7 @@ function selectCat(id: string) {
 .asn-badge {
   margin-left: auto;
   background: var(--app-accent);
-  color: white;
+  color: #111214;
   font-size: 10px; font-weight: 700;
   padding: 1px 6px;
   border-radius: 999px;
@@ -343,7 +343,7 @@ function selectCat(id: string) {
   width: 100%; text-align: left;
 }
 .asn-category:hover { background: var(--app-surface-hover, rgba(255,255,255,0.05)); color: var(--app-text); }
-.asn-category.active { color: var(--app-accent-bright); background: var(--app-accent-subtle, rgba(99,102,241,0.12)); }
+.asn-category.active { color: var(--app-accent-bright); background: var(--app-accent-subtle, rgba(230, 230, 230,0.12)); }
 .asn-category ion-icon { font-size: 15px; flex-shrink: 0; }
 .asn-cats-more { opacity: 0.7; }
 </style>

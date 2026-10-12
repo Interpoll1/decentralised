@@ -348,7 +348,7 @@ function initial(c: any) {
 }
 .ct-search--focus {
   border-color: var(--app-border-accent);
-  box-shadow: 0 0 0 2px rgba(94,106,210,.18);
+  box-shadow: 0 0 0 2px rgba(230, 230, 230,.18);
 }
 .ct-search-ico { color: var(--app-text-subtle); flex-shrink: 0; }
 .ct-search-input {
@@ -451,8 +451,8 @@ function initial(c: any) {
 }
 .ct-action-ico svg { width: 20px; height: 20px; }
 .ct-action-ico--community {
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  box-shadow: 0 3px 12px rgba(99,102,241,.3);
+  background: var(--app-accent);
+  box-shadow: 0 3px 12px rgba(230, 230, 230,.3);
 }
 .ct-action-ico--post {
   background: linear-gradient(135deg, #f59e0b, #ef4444);
@@ -530,19 +530,19 @@ function initial(c: any) {
 .ct-empty-btn {
   font-size: 12.5px; font-weight: 600;
   color: var(--app-accent);
-  background: rgba(94,106,210,.1);
-  border: 1px solid rgba(94,106,210,.22);
+  background: rgba(230, 230, 230,.1);
+  border: 1px solid rgba(230, 230, 230,.22);
   border-radius: 8px; padding: 7px 14px;
   cursor: pointer; width: fit-content;
   transition: background 140ms;
 }
-.ct-empty-btn:hover { background: rgba(94,106,210,.18); }
+.ct-empty-btn:hover { background: rgba(230, 230, 230,.18); }
 
 /* ── Avatar tones ──────────────────────────────────────────────── */
-.av-violet { background: linear-gradient(135deg, #6366f1, #8b5cf6); }
-.av-blue   { background: linear-gradient(135deg, #3b82f6, #6366f1); }
+.av-violet { background: var(--app-accent); }
+.av-blue   { background: linear-gradient(135deg, #3b82f6, #e6e6e6); }
 .av-teal   { background: linear-gradient(135deg, #14b8a6, #3b82f6); }
 .av-amber  { background: linear-gradient(135deg, #f59e0b, #ef4444); }
-.av-rose   { background: linear-gradient(135deg, #ec4899, #8b5cf6); }
+.av-rose   { background: linear-gradient(135deg, #ec4899, #e6e6e6); }
 
 </style>

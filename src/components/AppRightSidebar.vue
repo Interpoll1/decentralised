@@ -67,23 +67,7 @@
           <p class="ars-about-title">Interpoll</p>
           <p class="ars-about-desc">A peer-to-peer network built on GunDB. Content syncs across all peers — no central server required.</p>
         </div>
-        <svg width="52" height="44" viewBox="0 0 56 48" fill="none" flex-shrink="0">
-          <circle cx="28" cy="24" r="7" fill="url(#ars-g)"/>
-          <circle cx="10" cy="12" r="4" fill="#7c8cff" opacity="0.85"/>
-          <circle cx="46" cy="14" r="4" fill="#a78bfa" opacity="0.85"/>
-          <circle cx="12" cy="38" r="3.5" fill="#7c8cff" opacity="0.7"/>
-          <circle cx="44" cy="36" r="3.5" fill="#a78bfa" opacity="0.7"/>
-          <line x1="28" y1="24" x2="10" y2="12" stroke="#7c8cff" stroke-width="1.2" opacity="0.5"/>
-          <line x1="28" y1="24" x2="46" y2="14" stroke="#a78bfa" stroke-width="1.2" opacity="0.5"/>
-          <line x1="28" y1="24" x2="12" y2="38" stroke="#7c8cff" stroke-width="1.2" opacity="0.4"/>
-          <line x1="28" y1="24" x2="44" y2="36" stroke="#a78bfa" stroke-width="1.2" opacity="0.4"/>
-          <defs>
-            <radialGradient id="ars-g" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(28 24) rotate(90) scale(7)">
-              <stop stop-color="#a78bfa"/>
-              <stop offset="1" stop-color="#5e6ad2"/>
-            </radialGradient>
-          </defs>
-        </svg>
+        <BitMascot :size="48" :mood="bitMood" :title="bit.hasUsername === false ? 'Claim a username' : ''" :style="bit.hasUsername === false ? 'cursor:pointer' : ''" @click="onBitClick" />
       </div>
     </div>
 
@@ -100,8 +84,14 @@ import { usePollStore } from '../stores/pollStore';
 import { CATEGORY_MAP } from '../composables/useCategories';
 import { ModerationService, moderationVersion } from '../services/moderationService';
 import config from '../config';
+import BitMascot from './BitMascot.vue';
+import { useBitStore } from '../stores/bitStore';
 
 const router = useRouter();
+const bit = useBitStore();
+// Bit perks up when you still need a username; clicking him takes you there.
+const bitMood = computed(() => (bit.hasUsername === false ? 'alert' : 'idle'));
+function onBitClick() { if (bit.hasUsername === false) void router.push('/claim-username'); }
 const communityStore = useCommunityStore();
 
 const communities = computed(() => communityStore.communities);
@@ -232,8 +222,8 @@ onMounted(async () => {
 .ars-create-cta {
   display: flex; align-items: center; justify-content: center; gap: 6px;
   width: 100%; padding: 9px 14px; border-radius: 10px; border: none;
-  background: linear-gradient(180deg, var(--app-accent-bright), var(--app-accent));
-  color: #fff; font-size: 13px; font-weight: 700; cursor: pointer;
+  background: var(--app-accent);
+  color: #111214; font-size: 13px; font-weight: 700; cursor: pointer;
   margin-bottom: 12px;
   transition: opacity 130ms;
 }
@@ -252,12 +242,12 @@ onMounted(async () => {
   display: flex; align-items: center; justify-content: center;
   font-size: 13px; font-weight: 800; flex-shrink: 0;
 }
-.tone-violet  { background: rgba(99,102,241,0.2);  color: #a5b4fc; }
+.tone-violet  { background: rgba(230, 230, 230,0.2);  color: #e6e6e6; }
 .tone-blue    { background: rgba(59,130,246,0.2);   color: #93c5fd; }
 .tone-teal    { background: rgba(20,184,166,0.2);   color: #5eead4; }
 .tone-amber   { background: rgba(245,158,11,0.2);   color: #fcd34d; }
 .tone-rose    { background: rgba(236,72,153,0.2);   color: #f9a8d4; }
-.tone-general { background: rgba(99,102,241,0.15);  color: #a5b4fc; }
+.tone-general { background: rgba(230, 230, 230,0.15);  color: #e6e6e6; }
 .tone-tech    { background: rgba(59,130,246,0.18);  color: #93c5fd; }
 .tone-politics{ background: rgba(239,68,68,0.15);   color: #fca5a5; }
 .tone-private { background: rgba(251,191,36,0.15);  color: #fcd34d; }

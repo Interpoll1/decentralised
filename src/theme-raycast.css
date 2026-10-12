@@ -1,0 +1,552 @@
+/*
+ * Raycast-style dark theme — remaps the existing --app-* / --ion-* variables.
+ * Scoped to the dark class so light mode is untouched. Remove the import in
+ * main.ts to revert. Style reference: near-black canvas, hairline borders,
+ * "key cap" inset shadows, no blur / aurora / glow, one coral accent.
+ */
+html.dark,
+body.dark {
+  --app-bg-deep: #040506;
+  --app-bg-base: #040506;
+  --app-bg-elevated: #07080a;
+  --app-surface: #07080a;
+  --app-surface-strong: #0b0c0e;
+  --app-surface-hover: #111214;
+  --app-border: #1b1c1e;
+  --app-border-strong: #363739;
+  --app-border-accent: rgba(255, 255, 255, 0.28);
+  --app-text: #ffffff;
+  --app-text-muted: #9c9c9d;
+  --app-text-subtle: #6a6b6c;
+  /* Interface accent is neutral (Mist); coral is reserved for the brand mark. */
+  --app-accent: #e6e6e6;
+  --app-accent-bright: #ffffff;
+  --app-accent-rgb: 230, 230, 230;
+  --app-brand: #ff6363;
+  --app-success: #59d499;
+  --app-success-rgb: 89, 212, 153;
+
+  --app-radius-lg: 16px;
+  --app-radius-md: 8px;
+  --app-radius-sm: 6px;
+
+  /* Elevation comes from the inset key-cap stack, not drop shadows. */
+  --app-shadow-sm: rgba(255, 255, 255, 0.05) 0 1px 0 0 inset, rgba(255, 255, 255, 0.18) 0 0 0 1px, rgba(0, 0, 0, 0.2) 0 -1px 0 0 inset;
+  --app-shadow-md: rgba(255, 255, 255, 0.05) 0 1px 0 0 inset, rgba(255, 255, 255, 0.2) 0 0 0 1px, rgba(0, 0, 0, 0.2) 0 -1px 0 0 inset;
+  --app-shadow-lg: rgba(255, 255, 255, 0.1) 0 1px 0 0 inset, rgba(255, 255, 255, 0.25) 0 0 0 1px, rgba(0, 0, 0, 0.4) 0 30px 50px 0;
+  --app-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --app-focus-ring: 0 0 0 2px rgba(255, 255, 255, 0.5);
+  --app-transition: 160ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  --app-grid-color: transparent;
+  --app-noise-opacity: 0;
+  --app-ambient-spot-1: transparent;
+  --app-ambient-spot-2: transparent;
+  --app-ambient-spot-3: transparent;
+  --app-ambient-spot-4: transparent;
+  --app-surface-tint-top: #07080a;
+  --app-surface-tint-bottom: #07080a;
+  --app-surface-tint-top-hover: #111214;
+  --app-surface-tint-bottom-hover: #111214;
+  --app-pill-surface: rgba(255, 255, 255, 0.05);
+  --app-item-surface: rgba(255, 255, 255, 0.05);
+  --app-search-surface: rgba(255, 255, 255, 0.05);
+  --app-heading-start: #ffffff;
+  --app-heading-end: #ffffff;
+
+  --glass-blur: 0px;
+  --glass-saturation: 1;
+  --glass-item-blur: 0px;
+  --glass-item-saturation: 1;
+  --toolbar-blur: 0px;
+  --glass-border: #1b1c1e;
+  --glass-border-top: rgba(255, 255, 255, 0.1);
+  --glass-border-bottom: rgba(0, 0, 0, 0.4);
+  --glass-shadow: var(--app-shadow-md);
+  --glass-inner-glow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+
+  --aurora-base-bg: #040506;
+  --aurora-orb1-opacity: 0;
+  --aurora-orb2-opacity: 0;
+  --aurora-orb3-opacity: 0;
+
+  --ion-background-color: #040506;
+  --ion-background-color-rgb: 4, 5, 6;
+  --ion-card-background: #07080a;
+  --ion-card-background-rgb: 7, 8, 10;
+  --ion-item-background: #07080a;
+  --ion-toolbar-background: #040506;
+  --ion-tab-bar-background: #040506;
+  --ion-color-primary: #e6e6e6;
+  --ion-color-primary-rgb: 230, 230, 230;
+  --ion-color-primary-contrast: #111214;
+  --ion-color-primary-contrast-rgb: 17, 18, 20;
+  --ion-color-primary-shade: #cacaca;
+  --ion-color-primary-tint: #ffffff;
+  --ion-color-secondary: #9c9c9d;
+  --ion-color-secondary-rgb: 156, 156, 157;
+  --ion-color-tertiary: #9c9c9d;
+  --ion-color-tertiary-rgb: 156, 156, 157;
+}
+
+/* ── Structure ───────────────────────────────────────────────────────
+ * Selectors are prefixed with html.dark so they out-rank scoped component
+ * styles (.x[data-v]) without needing to edit each component.
+ */
+
+/* Labels: sentence case, no tracked-out caps. */
+html.dark :is(div, span, p, label, h1, h2, h3, h4, h5, button, a, li, strong, small, th, legend, summary) {
+  text-transform: none !important;
+  letter-spacing: normal !important;
+}
+
+/* Headings: regular/medium weight, Raycast-style. */
+html.dark :is(h1, h2, h3, [class*="title"], [class*="question"], [class*="heading"]) {
+  font-weight: 500;
+  letter-spacing: 0.005em !important;
+}
+
+/* Cards and panels: opaque surface, hairline edge, key-cap inset. No glow. */
+html.dark :is(
+  .poll-card, .post-card, .comment-card, .community-card, .profile-card, .settings-card,
+  .form-card, .stat-card, .surface-card, .glass-card, .hero-card, .tutorial-card,
+  .join-card, .join-preview-card, .path-card, .code-card, .r-card, .chat-link-card,
+  .gun-relay-card, .relay-active-card, .relay-inactive-card, .sidebar-relay-card,
+  .rv-tier-card, .ob-identity-card, .p2p-progress-card, .rp-lookup-card, .apk-card,
+  .moderation-onboarding-card, .inset-panel, .relay-panel, .right-panel, .rsp-panel,
+  .app-right-sidebar, .feat-tile
+) {
+  background: var(--app-surface) !important;
+  border: 1px solid var(--app-border) !important;
+  border-radius: var(--app-radius-lg) !important;
+  box-shadow: var(--app-shadow-sm) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+html.dark :is(.surface-card--interactive, .poll-card, .post-card, .community-card):hover {
+  background: var(--app-surface-hover) !important;
+  border-color: var(--app-border-strong) !important;
+}
+
+/* Navigation and chrome: flat black, hairline divider, no blur. */
+html.dark :is(.app-side-nav, .side-nav, .left-sidebar, .bottom-nav, .cosmos-bottom-nav,
+  .zine-bottom-nav, .bulletin-bottom-nav, .feed-toolbar, .toolbar, .nav-tray,
+  .cosmos-header, .zine-header, .bulletin-header, .search-header) {
+  background: var(--app-bg-base) !important;
+  border-color: var(--app-border-strong) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+html.dark ion-toolbar, html.dark ion-header, html.dark ion-tab-bar {
+  --background: #040506;
+  --border-color: #1b1c1e;
+  backdrop-filter: none;
+}
+
+/* Badges and tags: 6px radius, quiet graphite fill, monospace. */
+html.dark :is([class*="badge"], [class*="-tag"], .sidebar-relay-pill):not([class*="avatar"]):not(.nav-badge) {
+  border-radius: 6px !important;
+  background: #1b1c1e;
+  color: #e6e6e6;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  box-shadow: none !important;
+}
+html.dark :is(.timestamp, [class*="timestamp"], [class*="-time"], .poll-view-count-row) {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* Inputs: recessed well. */
+html.dark :is(input:not([type="checkbox"]):not([type="radio"]), textarea, select) {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+/* Buttons: 8px radius, no glow. */
+html.dark :is(button, [class*="btn"], [class*="-cta"]) {
+  border-radius: 8px;
+  text-shadow: none;
+}
+html.dark :is([class*="btn--primary"], [class*="btn-primary"], [class*="primary-btn"],
+  .arm-connect-btn, .ars-create-cta, .create-btn, .cta-button, .send-button) {
+  box-shadow: rgba(255, 255, 255, 0.1) 0 1px 0 0 inset !important;
+}
+
+/* Poll result bars: flat, square-ish, the main visual. */
+html.dark .option-bar { border-radius: 4px; background: #111214; }
+html.dark .option-fill { border-radius: 4px; }
+
+html.dark {
+  --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* Brand mark: the one place coral appears. */
+html.dark :is(.asn-brand-mark, .side-nav-brand-mark) {
+  background: var(--app-brand) !important;
+  color: #fff !important;
+}
+
+/* Atmosphere off: flat black canvas. */
+html.dark .interpoll-aurora,
+body.dark .interpoll-aurora {
+  display: none;
+}
+
+/* Remove backdrop blur from frosted surfaces. */
+html.dark *,
+body.dark * {
+  --tw-backdrop-blur: blur(0);
+}
+html.dark [class*="glass"],
+html.dark .rs-backdrop,
+html.dark .arm-backdrop {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+html.dark .rs-backdrop,
+html.dark .arm-backdrop {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+/* ── Polish pass ─────────────────────────────────────────────────────
+ * Fixes: nested card-in-card borders in the feed, cramped mono tag strip,
+ * heavy media block, flat/unclear sidebar hierarchy.
+ */
+
+/* Feed column is a lane, not a card — only the posts inside are cards. */
+html.dark .hp-root .main-content.surface-card {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  border-radius: 0;
+  overflow: visible;
+}
+html.dark .hp-root .feed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+html.dark .hp-root .feed-list > * { margin: 0; }
+
+/* Rails: quieter edge than content cards. */
+html.dark :is(.app-side-nav, .app-right-sidebar) {
+  background: transparent !important;
+  border-color: var(--app-border) !important;
+  box-shadow: none !important;
+}
+html.dark .app-right-sidebar :is(.surface-card, [class*="card"], [class*="panel"]) {
+  background: var(--app-surface) !important;
+  border: 1px solid var(--app-border) !important;
+  box-shadow: none !important;
+  border-radius: 16px !important;
+}
+
+/* Toolbar: scope tabs + mode toggle as one calm segmented row. */
+html.dark .feed-toolbar--desktop { padding: 4px 0 8px; }
+html.dark :is(.feed-scope-tabs, .feed-mode-toggle) {
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  padding: 3px;
+}
+html.dark :is(.scope-tab, .mode-btn) {
+  border-radius: 7px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--app-text-muted);
+}
+html.dark :is(.scope-tab, .mode-btn):hover { color: var(--app-text); }
+html.dark :is(.scope-tab.active, .mode-btn.active) {
+  background: var(--app-surface-hover);
+  color: var(--app-text);
+  box-shadow: var(--app-shadow-sm);
+}
+
+/* Raycast type: Inter, regular/medium weights, slightly positive tracking. */
+html.dark body, html.dark :is(button, input, textarea, select) {
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-feature-settings: 'calt', 'kern', 'liga', 'ss03';
+}
+
+/* Tag strip: one scrolling line instead of a wrapped wall of chips. */
+html.dark .desktop-tag-strip {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding: 4px 0 12px;
+  gap: 6px;
+  mask-image: linear-gradient(90deg, #000 92%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, #000 92%, transparent);
+}
+html.dark :is(.tag-chip, .post-tag-chip) {
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 400;
+  background: #1b1c1e;
+  border: 0;
+  color: #fff;
+}
+html.dark :is(.tag-chip, .post-tag-chip):hover {
+  background: #2f3031;
+}
+html.dark :is(.tag-chip.active, .post-tag-chip--highlight, .tag-chip--history) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #fff;
+}
+html.dark .feed-cat-pill {
+  border-radius: 8px;
+  background: transparent;
+  border-color: var(--app-border-strong);
+}
+html.dark .feed-cat-pill.active { background: #fff; color: #040506; }
+
+/* Posts: clearer title hierarchy, outlined actions. */
+html.dark .post-title { font-size: 20px; line-height: 1.3; font-weight: 500; }
+html.dark .post-actions { gap: 6px; }
+html.dark .post-actions :is(button, a) {
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid var(--app-border-strong);
+  box-shadow: none;
+}
+html.dark .post-actions :is(button, a):hover { background: var(--app-surface-hover); }
+
+/* Media: contained, rounded, hairline edge instead of a black slab. */
+html.dark .post-card :is(video, .video-player, .video-wrap, .media-frame) {
+  border-radius: 10px;
+  border: 1px solid var(--app-border);
+  overflow: hidden;
+  background: #000;
+}
+
+/* ═══ Terminal pass: pure black / white / green, flat, faint artifacts ═══ */
+html.dark, body.dark {
+  --app-bg-deep: #000; --app-bg-base: #000; --app-bg-elevated: #000;
+  --app-surface: #000; --app-surface-strong: #030403; --app-surface-hover: #070a07;
+  --app-border: #161a16; --app-border-strong: #2a312a;
+  --app-text-muted: #b4bbb4; --app-text-subtle: #8c948c;
+  --app-accent: #3dff7a; --app-accent-bright: #3dff7a; --app-accent-rgb: 61, 255, 122;
+  --app-brand: #3dff7a;
+  --app-shadow-sm: none; --app-shadow-md: none; --app-shadow-lg: none;
+  --app-shadow-inset: none; --glass-shadow: none; --glass-inner-glow: none;
+  --app-focus-ring: 0 0 0 2px #3dff7a;
+  --app-radius-lg: 7px; --app-radius-md: 5px; --app-radius-sm: 4px;
+  --ion-background-color: #000; --ion-card-background: #000;
+  --ion-color-primary: #3dff7a; --ion-color-primary-rgb: 61, 255, 122;
+  --ion-color-primary-contrast: #000; --ion-color-primary-shade: #35e06b; --ion-color-primary-tint: #5cff8f;
+}
+html.dark body, html.dark ion-content, html.dark .ion-page { background: #000; }
+
+/* Sharp, flat everything. */
+html.dark :is(.poll-card, .post-card, .comment-card, .community-card, .surface-card,
+  .app-right-sidebar :is([class*="card"], [class*="panel"])) {
+  border-radius: 7px !important;
+  box-shadow: none !important;
+  background: #000 !important;
+}
+html.dark :is(button, [class*="btn"], [class*="-cta"], .scope-tab, .mode-btn,
+  .feed-cat-pill, .feed-scope-tabs, .feed-mode-toggle, input, textarea, select) {
+  box-shadow: none !important;
+  background-image: none !important;
+  border-radius: 5px !important;
+}
+html.dark :is(.scope-tab.active, .mode-btn.active, .feed-cat-pill.active) {
+  background: #3dff7a !important; color: #000 !important; border-color: #3dff7a !important;
+}
+html.dark :is([class*="btn--primary"], [class*="btn-primary"], .open-btn, .create-btn,
+  .cta-button, .send-button, .ars-create-cta, .arm-connect-btn) {
+  background: #3dff7a !important; color: #000 !important; border: 1px solid #3dff7a !important;
+}
+html.dark :is(button, [class*="btn"]):active { transform: translateY(1px); }
+html.dark .post-actions :is(button, a) { border-color: #2a312a; }
+html.dark .post-actions :is(button, a):hover { border-color: #3dff7a; color: #3dff7a; background: transparent; }
+
+/* Hashtags: plain green text, no chip. */
+html.dark .desktop-tag-strip {
+  flex-wrap: wrap; overflow: hidden; max-height: 64px;
+  gap: 6px 8px; padding: 4px 0 14px !important;
+  background: transparent !important; border: 0 !important; border-radius: 0 !important;
+  mask-image: none; -webkit-mask-image: none;
+}
+html.dark :is(.tag-chip, .post-tag-chip, .tag-chip--history, .post-tag-chip--highlight) {
+  background: transparent !important;
+  border: 1px solid #1d231d !important;
+  border-radius: 5px !important;
+  padding: 3px 9px !important;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #c9d1c9 !important;
+  opacity: 1;
+  text-decoration: none;
+}
+html.dark :is(.tag-chip, .post-tag-chip)::first-letter { color: #3dff7a; }
+html.dark :is(.tag-chip, .post-tag-chip):hover {
+  border-color: #3dff7a !important; color: #fff !important; background: transparent !important;
+}
+html.dark .tag-chip.active {
+  background: #3dff7a !important; border-color: #3dff7a !important; color: #000 !important;
+}
+html.dark .tag-chip.active::first-letter { color: #000; }
+
+/* Slight artifacts: faint scanlines + 1px RGB split on headings/brand. */
+/* Scanlines are painted as backgrounds on surfaces (not a fixed overlay),
+   so media — video, images — always sits above them, untouched. */
+html.dark :is(body, ion-content, .ion-page, .surface-card, .poll-card, .post-card,
+  .comment-card, .community-card, .app-side-nav, .app-right-sidebar,
+  [class*="side-nav"], [class*="sidebar"], .feed-toolbar, .feed-toolbar--desktop,
+  .desktop-tag-strip, .bottom-nav, .bottom-nav-footer, ion-header, ion-toolbar, ion-footer) {
+  background-image: repeating-linear-gradient(0deg, rgba(61, 255, 122, 0.035) 0 1px, transparent 1px 3px) !important;
+}
+html.dark :is(h1, h2, .post-title, .poll-title, .asn-brand-name) {
+  text-shadow: 1.5px 0 rgba(61,255,122,0.5), -1.5px 0 rgba(255,255,255,0.18);
+}
+/* Brief horizontal glitch slice on the brand mark and hovered titles. */
+@keyframes ip-glitch {
+  0%, 92%, 100% { transform: none; clip-path: none; }
+  93% { transform: translateX(-2px); clip-path: inset(10% 0 55% 0); }
+  95% { transform: translateX(2px); clip-path: inset(60% 0 8% 0); }
+  97% { transform: translateX(-1px); clip-path: inset(30% 0 30% 0); }
+}
+html.dark :is(.asn-brand-mark, .side-nav-brand-mark) { animation: ip-glitch 6s steps(1) infinite; }
+html.dark :is(.post-title, .poll-title):hover { animation: ip-glitch 1.2s steps(1) 1; }
+
+/* True black rails and chrome (some panels were still lifted grey). */
+html.dark :is([class*="side-nav"], [class*="sidebar"], ion-header, ion-toolbar, .app-side-nav) {
+  background: #000 !important;
+}
+html.dark :is([class*="side-nav"], [class*="sidebar"]) { border-radius: 7px; }
+html.dark :is(.asn-brand-mark, .side-nav-brand-mark) { color: #000 !important; border-radius: 5px !important; }
+html.dark :is(.nav-badge) { background: #3dff7a; color: #000; }
+html.dark .app-side-nav :is(.active, [aria-current="page"]) { color: #3dff7a; }
+
+/* Greys → palette. Letter tiles, badges, placeholders and active rows were still neutral grey. */
+html.dark {
+  --app-pill-surface: #000; --app-item-surface: #000; --app-search-surface: #000;
+  --app-surface-tint-top: #000; --app-surface-tint-bottom: #000;
+}
+html.dark :is(.ars-community-avatar, [class*="community-avatar"], .bs-card__avatar, .ct-empty__icon),
+html.dark :is(.ars-community-avatar, [class*="community-avatar"])[class*="tone-"] {
+  background: #000 !important;
+  border: 1px solid #1d3a28 !important;
+  color: #3dff7a !important;
+  box-shadow: none !important;
+  background-image: none !important;
+}
+html.dark .post-identity-badge, html.dark .post-identity-badge.unverified {
+  background: transparent !important;
+  border: 1px solid #1d231d !important;
+  color: #a3aaa3 !important;
+}
+html.dark .pig-skeleton { background: #000; border: 1px solid #161a16; }
+html.dark .pig-cell { background: #000; }
+html.dark :is(.asn-item.active, .asn-category.active) {
+  background: rgba(61, 255, 122, 0.08) !important;
+  color: #3dff7a !important;
+  box-shadow: inset 2px 0 0 #3dff7a !important;
+}
+html.dark :is(.asn-item.active, .asn-category.active) :is(svg, ion-icon, span) { color: #3dff7a; }
+html.dark :is(.ct-row:hover, .side-nav-item:hover, .asn-item:hover) { background: rgba(61, 255, 122, 0.05) !important; }
+
+/* Settings + cards: translucent-white greys and rainbow icon tiles → black/green. */
+html.dark :is(.settings-inline-btn, .icon-btn, .info-val.mono-sm, .key-val, .key-val.muted,
+  .block-btn, .block-btn.outline, .pill-btn, .settings-tab) {
+  background: #000 !important;
+  border: 1px solid #1d231d !important;
+  color: #e6e6e6;
+  box-shadow: none !important;
+}
+html.dark :is(.settings-inline-btn, .icon-btn, .block-btn, .pill-btn, .settings-tab):hover { border-color: #3dff7a !important; }
+html.dark :is(.settings-tab.active, .pill-btn.accent) {
+  background: #3dff7a !important; color: #000 !important; border-color: #3dff7a !important;
+}
+html.dark :is(.card-heading-icon, .card-head-icon)[class*="accent-"], html.dark :is(.card-heading-icon, .card-head-icon), html.dark .hero-icon-wrap {
+  background: #000 !important; background-image: none !important;
+  border: 1px solid #1d3a28 !important; color: #3dff7a !important; box-shadow: none !important;
+}
+html.dark :is(.card-heading-icon, .card-head-icon, .hero-icon-wrap) :is(svg, ion-icon, path, circle, rect) { color: #3dff7a !important; }
+html.dark :is(.card-heading-icon, .card-head-icon, .hero-icon-wrap) :is(svg) { stroke: currentColor; }
+html.dark :is(.identity-badge, .identity-badge.unverified, .badge-icon, .badge-username, .badge-label, .karma-badge) {
+  background: transparent !important; border-color: #1d231d !important; color: #a3aaa3 !important;
+}
+html.dark .toggle-track { background: #1d231d !important; }
+html.dark :is(input:checked + .toggle-track, .toggle-track.on, .toggle-track.active) { background: #3dff7a !important; }
+html.dark .toggle-thumb { background: #e6e6e6; }
+html.dark :is(.relay-dot.dot--online) { background: #3dff7a !important; }
+
+/* Space/community letter avatars in lists and cards. */
+html.dark :is(.avatar-wrap, .feat-avatar, .cc-avatar, .community-avatar, .cc-icon, .comm-avatar) {
+  background: #000 !important; background-image: none !important;
+  border: 1px solid #1d3a28 !important; color: #3dff7a !important; box-shadow: none !important;
+}
+
+/* Chrome that painted flat black over the scanline background looked like holes. */
+html.dark :is(.feed-toolbar, .feed-toolbar--desktop, .desktop-tag-strip) { background-color: transparent !important; }
+html.dark :is(ion-header, ion-toolbar, ion-footer) { --background: transparent; background-color: #000; }
+
+/* Right-rail cards are re-skinned with a higher-specificity shorthand; give them the scanlines too. */
+html.dark .app-right-sidebar :is(.surface-card, [class*="card"], [class*="panel"], .ars-section) {
+  background-image: repeating-linear-gradient(0deg, rgba(61, 255, 122, 0.035) 0 1px, transparent 1px 3px) !important;
+}
+
+/* Form fields: pure black wells with a hairline, no translucent grey. */
+html.dark :is(input:not([type="checkbox"]):not([type="radio"]), textarea, select) {
+  background: #000 !important;
+  border: 1px solid #1d231d;
+}
+html.dark :is(ion-item, ion-input, ion-textarea, ion-select, ion-searchbar) {
+  --background: #000; --ion-item-background: #000;
+  --placeholder-color: #8c948c; --placeholder-opacity: 1;
+}
+html.dark ion-item { --border-color: #161a16; }
+/* Stacked labels sit above the field so the field background never clips them. */
+html.dark ion-item ion-label { position: relative; z-index: 2; }
+html.dark ion-item :is(ion-input, ion-textarea, ion-select) { background: transparent !important; }
+html.dark ion-item.item-label-stacked :is(ion-input, ion-textarea, ion-select) { margin-top: 10px; }
+html.dark :is(ion-input, ion-textarea, ion-searchbar, ion-select) :is(input, textarea, .native-input, .native-textarea) {
+  background: transparent !important; border: 0 !important; box-shadow: none !important; border-radius: 0 !important;
+}
+html.dark :is(input, textarea)::placeholder { color: #8c948c; opacity: 1; }
+html.dark :is(input:focus, textarea:focus):not(.native-input):not(.native-textarea) { border-color: #3dff7a; }
+
+/* Inputs that live inside a styled wrapper (search pills, composers) must not get their own box. */
+html.dark :is([class*="search"], [class*="composer"], [class*="input-wrap"], [class*="message-bar"], [class*="chat-input"]) input:not([type="checkbox"]):not([type="radio"]),
+html.dark :is([class*="search"], [class*="composer"], [class*="input-wrap"], [class*="message-bar"], [class*="chat-input"]) textarea {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+html.dark .ct-search {
+  background: #000 !important;
+  border: 1px solid #1d231d !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+html.dark .ct-search:focus-within { border-color: #3dff7a !important; }
+
+html.dark .settings-tab-bar { background: #000 !important; border-color: #161a16 !important; box-shadow: none !important; }
+
+/* Contrast: anything on a green fill gets black text (white on #3dff7a is unreadable). */
+html.dark :is(.message.sent .message-content, .message.sent .message-content *,
+  .gmb.sent .gmb-bubble, .gmb.sent .gmb-bubble *, .send, .send *) {
+  color: #000 !important;
+}
+html.dark .message.sent .message-content a, html.dark .gmb.sent .gmb-bubble a { text-decoration: underline; }
+html.dark .message.sent .message-content::after { border-color: transparent transparent transparent #3dff7a !important; }
+html.dark .message .message-content { box-shadow: none !important; }
+
+/* Visible keyboard focus. */
+html.dark :is(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: var(--app-focus-ring);
+}
+@media (prefers-reduced-motion: reduce) {
+  html.dark * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}

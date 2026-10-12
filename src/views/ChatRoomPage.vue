@@ -1046,7 +1046,7 @@ ion-toolbar { --border-width: 0 !important; --background: var(--app-bg-elevated)
 .pop-ico { width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #fff; }
 .pop-ico svg { width: 19px; height: 19px; }
 .pop-ico--media { background: #3b82f6; }
-.pop-ico--file { background: #8b5cf6; }
+.pop-ico--file { background: #e6e6e6; }
 .pop-ico--poll { background: #10b981; }
 
 /* Strip under the header: search, join requests, or the pinned message — one at a time. */
@@ -1074,7 +1074,7 @@ ion-toolbar { --border-width: 0 !important; --background: var(--app-bg-elevated)
 
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 11px 20px; border: none; border-radius: 999px; font: inherit; font-size: 14.5px; font-weight: 650; cursor: pointer; }
 .btn:focus-visible { outline: none; box-shadow: var(--app-focus-ring); }
-.btn--primary { background: var(--app-accent); color: #fff; }
+.btn--primary { background: var(--app-accent); color: #111214; }
 .btn--primary:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn--ghost { background: rgba(var(--app-accent-rgb), 0.1); color: var(--app-text); }
 .btn--link { background: none; padding: 4px 8px; color: var(--app-accent-bright); font-weight: 600; font-size: 13.5px; }
@@ -1103,7 +1103,7 @@ ion-toolbar { --border-width: 0 !important; --background: var(--app-bg-elevated)
 
 .to-bottom { position: absolute; right: 16px; bottom: 14px; width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--app-border-strong, var(--app-border)); background: var(--app-bg-elevated); color: var(--app-text); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: var(--app-shadow-md, 0 6px 18px rgba(0,0,0,.25)); }
 .to-bottom svg { width: 22px; height: 22px; }
-.to-bottom-count { position: absolute; top: -6px; right: -4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; background: var(--app-accent); color: #fff; font-size: 11.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.to-bottom-count { position: absolute; top: -6px; right: -4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; background: var(--app-accent); color: #111214; font-size: 11.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
 
 /* Search results / lists in sheets */
 .results { height: 100%; overflow-y: auto; padding: 8px var(--room-pad); max-width: var(--room-col); margin: 0 auto; }
@@ -1147,7 +1147,7 @@ ion-toolbar { --border-width: 0 !important; --background: var(--app-bg-elevated)
 .field-wrap:focus-within { border-color: var(--app-accent); box-shadow: var(--app-focus-ring); }
 .message-input { flex: 1; min-width: 0; align-self: center; padding: 8px 0; border: none; outline: none; resize: none; background: transparent; color: var(--app-text); font: inherit; font-size: 15px; line-height: 1.4; max-height: 140px; }
 .message-input::placeholder { color: var(--app-text-subtle); }
-.send { flex-shrink: 0; width: 44px; height: 44px; border: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--app-accent); color: #fff; cursor: pointer; transition: transform 120ms ease; }
+.send { flex-shrink: 0; width: 44px; height: 44px; border: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--app-accent); color: #111214; cursor: pointer; transition: transform 120ms ease; }
 .send svg { width: 21px; height: 21px; }
 .send:active:not(:disabled) { transform: scale(0.92); }
 .send:disabled { opacity: 0.45; cursor: not-allowed; }

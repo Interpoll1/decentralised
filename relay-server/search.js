@@ -120,8 +120,7 @@ export async function searchContent(query, filters = {}) {
 
     if (q.length >= 3) {
       scoreExpr = `(
-        MATCH(title)   AGAINST(? IN NATURAL LANGUAGE MODE) * 3.0   +
-        MATCH(content) AGAINST(? IN NATURAL LANGUAGE MODE) * 1.0   +
+        MATCH(title, content) AGAINST(? IN NATURAL LANGUAGE MODE) * 2.0 +
         IF(LOWER(tags)     LIKE ?, 2.0, 0)                         +
         IF(LOWER(category) LIKE ?, 1.5, 0)                         +
         IF(LOWER(title)    LIKE ?, 1.0, 0)                         +
@@ -134,7 +133,7 @@ export async function searchContent(query, filters = {}) {
         OR LOWER(category)    LIKE ?
         OR LOWER(title)       LIKE ?
       )`;
-      selectParams = [q, q, like, like, like];
+      selectParams = [q, like, like, like];
       whereParams  = [q, like, like, like];
     } else {
       scoreExpr = `(

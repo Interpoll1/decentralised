@@ -329,7 +329,7 @@ watch(() => props.cid, () => {
   width: 100%;
   height: 100%;
   object-fit: contain;   /* never crop — letterbox if needed */
-  background: #0d0d18;
+  background: #121212;
 }
 .video-player--compact .video-player__video {
   max-height: clamp(260px, 40vw, 420px);
@@ -342,7 +342,7 @@ watch(() => props.cid, () => {
   width: 100%;
   border-radius: 12px;
   overflow: hidden;
-  background: #0d0d18;
+  background: #121212;
   position: relative;
   border: 1px solid rgba(255,255,255,0.07);
 }
@@ -352,7 +352,7 @@ watch(() => props.cid, () => {
   position: relative;
   cursor: pointer;
   aspect-ratio: 16 / 9;
-  background: #0d0d18;
+  background: #121212;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -372,7 +372,7 @@ watch(() => props.cid, () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #0f0f22 0%, #1a1a35 100%);
+  background: linear-gradient(135deg, #181818 0%, #282828 100%);
 }
 .video-player__thumbnail-placeholder ion-icon {
   font-size: 3rem;
@@ -406,7 +406,7 @@ watch(() => props.cid, () => {
   filter: drop-shadow(0 4px 16px rgba(0,0,0,0.7));
 }
 .video-player__poster:hover .play-icon-svg circle {
-  fill: rgba(99,102,241,0.75);
+  fill: rgba(230, 230, 230,0.75);
 }
 
 .video-player__duration {
@@ -473,8 +473,8 @@ watch(() => props.cid, () => {
 
 .vp-btn--outline {
   background: none;
-  border: 1px solid rgba(99,102,241,0.5);
-  color: #818cf8;
+  border: 1px solid rgba(230, 230, 230,0.5);
+  color: #e6e6e6;
   border-radius: 8px;
   padding: 6px 14px;
   font-size: 0.8rem;
@@ -483,13 +483,13 @@ watch(() => props.cid, () => {
   transition: background 0.15s, border-color 0.15s;
 }
 .vp-btn--outline:hover {
-  background: rgba(99,102,241,0.12);
-  border-color: #818cf8;
+  background: rgba(230, 230, 230,0.12);
+  border-color: #e6e6e6;
 }
 
 /* ── Custom controls ─────────────────────────────────────────────────────── */
 .vp-controls {
-  background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(8,8,20,0.97) 100%);
+  background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(14,14,14,0.97) 100%);
   padding: 4px 12px 10px;
 }
 
@@ -508,7 +508,7 @@ watch(() => props.cid, () => {
 }
 .vp-progress__fill {
   height: 100%;
-  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+  background: var(--app-accent);
   border-radius: 3px;
   transition: width 0.1s linear;
 }
@@ -519,8 +519,8 @@ watch(() => props.cid, () => {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #a78bfa;
-  box-shadow: 0 0 0 2px rgba(167,139,250,0.35);
+  background: #e6e6e6;
+  box-shadow: 0 0 0 2px rgba(230, 230, 230,0.35);
   transition: transform 0.15s;
 }
 .vp-progress:hover .vp-progress__thumb { transform: translate(-50%, -50%) scale(1); }
@@ -530,7 +530,7 @@ watch(() => props.cid, () => {
   position: absolute;
   bottom: calc(100% + 6px);
   transform: translateX(-50%);
-  background: rgba(15,15,30,0.95);
+  background: rgba(22,22,22,0.95);
   border: 1px solid rgba(255,255,255,0.1);
   color: #e2e8f0;
   font-size: 0.7rem;
@@ -601,14 +601,14 @@ watch(() => props.cid, () => {
   width: 11px;
   height: 11px;
   border-radius: 50%;
-  background: #a78bfa;
+  background: #e6e6e6;
   cursor: pointer;
 }
 .vp-volume-slider::-moz-range-thumb {
   width: 11px;
   height: 11px;
   border-radius: 50%;
-  background: #a78bfa;
+  background: #e6e6e6;
   border: none;
   cursor: pointer;
 }
@@ -627,7 +627,7 @@ watch(() => props.cid, () => {
 .vp-ipfs-link ion-icon { font-size: 0.85rem; }
 
 .vp-ipfs-link {
-  color: #818cf8;
+  color: #e6e6e6;
 }
-.vp-ipfs-link:hover { color: #a78bfa; background: rgba(99,102,241,0.1); }
+.vp-ipfs-link:hover { color: #e6e6e6; background: rgba(230, 230, 230,0.1); }
 </style>

@@ -2,6 +2,7 @@
   <div class="ip-loader">
     <canvas ref="canvasRef" class="ip-canvas" />
     <div class="ip-content">
+      <BitMascot :size="64" mood="wave" class="ip-bit" />
       <div class="ip-logo">Interpoll</div>
       <div class="ip-tag">peer-to-peer · decentralized</div>
       <div class="ip-bar-wrap"><div class="ip-bar" /></div>
@@ -18,6 +19,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import BitMascot from './BitMascot.vue'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 
@@ -85,7 +87,7 @@ function draw(ctx: CanvasRenderingContext2D, W: number, H: number) {
         const ea = (na.act + nb.act) / 2
 
         ctx.beginPath(); ctx.moveTo(na.x, na.y); ctx.lineTo(nb.x, nb.y)
-        ctx.strokeStyle = 'rgba(90,80,200,0.11)'
+        ctx.strokeStyle = 'rgba(230, 230, 230,0.11)'
         ctx.lineWidth = 0.55; ctx.stroke()
 
         if (ea > 0.04) {
@@ -106,15 +108,15 @@ function draw(ctx: CanvasRenderingContext2D, W: number, H: number) {
 
       if (a > 0.05) {
         const glow = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, NR * 5)
-        glow.addColorStop(0, `rgba(160,148,255,${a * 0.4})`)
-        glow.addColorStop(0.5, `rgba(100,88,230,${a * 0.15})`)
-        glow.addColorStop(1, 'rgba(60,50,200,0)')
+        glow.addColorStop(0, `rgba(230, 230, 230,${a * 0.4})`)
+        glow.addColorStop(0.5, `rgba(230, 230, 230,${a * 0.15})`)
+        glow.addColorStop(1, 'rgba(230, 230, 230,0)')
         ctx.beginPath(); ctx.arc(n.x, n.y, NR * 5, 0, Math.PI * 2)
         ctx.fillStyle = glow; ctx.fill()
       }
 
       ctx.beginPath(); ctx.arc(n.x, n.y, NR, 0, Math.PI * 2)
-      ctx.strokeStyle = `rgba(110,100,210,${0.3 + a * 0.6})`
+      ctx.strokeStyle = `rgba(230, 230, 230,${0.3 + a * 0.6})`
       ctx.lineWidth = 1.2; ctx.stroke()
 
       ctx.beginPath(); ctx.arc(n.x, n.y, NR, 0, Math.PI * 2)
@@ -123,7 +125,7 @@ function draw(ctx: CanvasRenderingContext2D, W: number, H: number) {
 
       if (a > 0.45) {
         ctx.beginPath(); ctx.arc(n.x, n.y, NR * 0.42, 0, Math.PI * 2)
-        ctx.fillStyle = `rgba(230,222,255,${(a - 0.45) * 1.8})`
+        ctx.fillStyle = `rgba(238,238,238,${(a - 0.45) * 1.8})`
         ctx.fill()
       }
     })
@@ -163,7 +165,7 @@ onUnmounted(() => {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: radial-gradient(ellipse at 50% 40%, #0c0d1a 0%, #06060e 55%, #020204 100%);
+  background: radial-gradient(ellipse at 50% 40%, #131313 0%, #0a0a0a 55%, #030303 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -177,6 +179,7 @@ onUnmounted(() => {
   z-index: 0;
 }
 
+.ip-bit { margin: 0 auto 14px; }
 .ip-content {
   position: relative;
   z-index: 2;
@@ -191,7 +194,7 @@ onUnmounted(() => {
   font-size: 80px;
   line-height: 1;
   margin-bottom: 6px;
-  background: linear-gradient(160deg, #fff 0%, rgba(200, 195, 255, 0.85) 60%, rgba(150, 138, 255, 0.7) 100%);
+  background: linear-gradient(160deg, #fff 0%, rgba(225, 225, 225, 0.85) 60%, rgba(230, 230, 230, 0.7) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -218,10 +221,10 @@ onUnmounted(() => {
 .ip-bar {
   height: 100%;
   width: 0;
-  background: linear-gradient(90deg, #6366f1, #a78bfa);
+  background: var(--app-accent);
   border-radius: 99px;
   animation: barFill 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  box-shadow: 0 0 10px rgba(139, 92, 246, 0.5);
+  box-shadow: 0 0 10px rgba(230, 230, 230, 0.5);
 }
 
 @keyframes barFill {
@@ -241,7 +244,7 @@ onUnmounted(() => {
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: #8b7ff5;
+  background: #e6e6e6;
   animation: ping 1.4s ease-in-out infinite;
   flex-shrink: 0;
 }

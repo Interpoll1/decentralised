@@ -3,20 +3,20 @@
   font-family: "Inter", "Geist Sans", system-ui, sans-serif;
 
   --app-bg-deep: #dde4f5;
-  --app-bg-base: #eef2ff;
-  --app-bg-elevated: #f8f9ff;
+  --app-bg-base: #f6f6f6;
+  --app-bg-elevated: #fcfcfc;
   --app-surface: rgba(255, 255, 255, 0.55);
   --app-surface-strong: rgba(255, 255, 255, 0.72);
   --app-surface-hover: rgba(255, 255, 255, 0.82);
   --app-border: rgba(15, 23, 42, 0.07);
   --app-border-strong: rgba(15, 23, 42, 0.13);
-  --app-border-accent: rgba(94, 106, 210, 0.32);
+  --app-border-accent: rgba(230, 230, 230, 0.32);
   --app-text: #111827;
   --app-text-muted: #5b6472;
   --app-text-subtle: rgba(17, 24, 39, 0.52);
-  --app-accent: #5e6ad2;
-  --app-accent-bright: #6872d9;
-  --app-accent-rgb: 94, 106, 210;
+  --app-accent: #e6e6e6;
+  --app-accent-bright: #e6e6e6;
+  --app-accent-rgb: 255, 63, 49;
   --app-success: #34d399;
   --app-success-rgb: 52, 211, 153;
   --app-warning: #fbbf24;
@@ -27,17 +27,17 @@
   --app-radius-md: 12px;
   --app-radius-sm: 10px;
   --app-shadow-sm: 0 0 0 1px rgba(15, 23, 42, 0.04), 0 12px 36px rgba(15, 23, 42, 0.07);
-  --app-shadow-md: 0 0 0 1px rgba(15, 23, 42, 0.05), 0 18px 42px rgba(15, 23, 42, 0.10), 0 0 72px rgba(94, 106, 210, 0.07);
-  --app-shadow-lg: 0 0 0 1px rgba(15, 23, 42, 0.07), 0 24px 60px rgba(15, 23, 42, 0.13), 0 0 90px rgba(94, 106, 210, 0.10);
+  --app-shadow-md: 0 0 0 1px rgba(15, 23, 42, 0.05), 0 18px 42px rgba(15, 23, 42, 0.10), 0 0 72px rgba(230, 230, 230, 0.07);
+  --app-shadow-lg: 0 0 0 1px rgba(15, 23, 42, 0.07), 0 24px 60px rgba(15, 23, 42, 0.13), 0 0 90px rgba(230, 230, 230, 0.10);
   --app-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.80);
-  --app-focus-ring: 0 0 0 2px rgba(94, 106, 210, 0.55);
+  --app-focus-ring: 0 0 0 2px rgba(230, 230, 230, 0.55);
   --app-transition: 240ms cubic-bezier(0.16, 1, 0.3, 1);
-  --app-grid-color: rgba(94, 106, 210, 0.035);
+  --app-grid-color: rgba(230, 230, 230, 0.035);
   --app-noise-opacity: 0.018;
-  --app-ambient-spot-1: rgba(94, 106, 210, 0.26);
-  --app-ambient-spot-2: rgba(140, 92, 246, 0.12);
-  --app-ambient-spot-3: rgba(99, 102, 241, 0.14);
-  --app-ambient-spot-4: rgba(94, 106, 210, 0.12);
+  --app-ambient-spot-1: rgba(230, 230, 230, 0.26);
+  --app-ambient-spot-2: rgba(230, 230, 230, 0.12);
+  --app-ambient-spot-3: rgba(230, 230, 230, 0.14);
+  --app-ambient-spot-4: rgba(230, 230, 230, 0.12);
   --app-surface-tint-top: rgba(255, 255, 255, 0.70);
   --app-surface-tint-bottom: rgba(255, 255, 255, 0.30);
   --app-surface-tint-top-hover: rgba(255, 255, 255, 0.82);
@@ -63,14 +63,14 @@
   --liquid-spring: transform var(--app-transition), box-shadow var(--app-transition), border-color var(--app-transition);
 
   /* light aurora */
-  --aurora-base-bg: #f2f3f9;
+  --aurora-base-bg: #f5f5f5;
   --aurora-blend: normal;
   --aurora-orb1-opacity: 0.14;
   --aurora-orb2-opacity: 0.11;
   --aurora-orb3-opacity: 0.09;
 
   --ion-background-color: var(--app-bg-base);
-  --ion-background-color-rgb: 238, 242, 255;
+  --ion-background-color-rgb: 246, 246, 246;
   --ion-card-background: var(--app-surface);
   --ion-card-background-rgb: 255, 255, 255;
   --ion-item-background: rgba(255, 255, 255, 0.55);
@@ -82,22 +82,22 @@
   --ion-color-primary-rgb: var(--app-accent-rgb);
   --ion-color-primary-contrast: #ffffff;
   --ion-color-primary-contrast-rgb: 255, 255, 255;
-  --ion-color-primary-shade: #535dbc;
+  --ion-color-primary-shade: #e6e6e6;
   --ion-color-primary-tint: var(--app-accent-bright);
 
-  --ion-color-secondary: #8b5cf6;
-  --ion-color-secondary-rgb: 139, 92, 246;
+  --ion-color-secondary: #e6e6e6;
+  --ion-color-secondary-rgb: 255, 94, 83;
   --ion-color-secondary-contrast: #ffffff;
   --ion-color-secondary-contrast-rgb: 255, 255, 255;
-  --ion-color-secondary-shade: #7a51d8;
-  --ion-color-secondary-tint: #976cf7;
+  --ion-color-secondary-shade: #e6e6e6;
+  --ion-color-secondary-tint: #e6e6e6;
 
-  --ion-color-tertiary: #7c8cff;
-  --ion-color-tertiary-rgb: 124, 140, 255;
+  --ion-color-tertiary: #e6e6e6;
+  --ion-color-tertiary-rgb: 255, 122, 112;
   --ion-color-tertiary-contrast: #ffffff;
   --ion-color-tertiary-contrast-rgb: 255, 255, 255;
-  --ion-color-tertiary-shade: #6d7be0;
-  --ion-color-tertiary-tint: #8a99ff;
+  --ion-color-tertiary-shade: #e6e6e6;
+  --ion-color-tertiary-tint: #e6e6e6;
 
   --ion-color-success: var(--app-success);
   --ion-color-success-rgb: var(--app-success-rgb);
@@ -165,12 +165,12 @@
 html.dark,
 body.dark {
   color-scheme: dark;
-  --app-bg-deep: #0c0d14;
-  --app-bg-base: #0e0f1a;
-  --app-bg-elevated: #13152a;
-  --app-surface: rgba(18, 19, 28, 0.38);
-  --app-surface-strong: rgba(30, 32, 40, 0.80);
-  --app-surface-hover: rgba(38, 41, 50, 0.86);
+  --app-bg-deep: #101010;
+  --app-bg-base: #141414;
+  --app-bg-elevated: #1e1e1e;
+  --app-surface: rgba(23, 23, 23, 0.38);
+  --app-surface-strong: rgba(35, 35, 35, 0.80);
+  --app-surface-hover: rgba(44, 44, 44, 0.86);
   --app-border: rgba(255, 255, 255, 0.08);
   --app-border-strong: rgba(255, 255, 255, 0.16);
   --app-text: #f5f5f6;
@@ -178,12 +178,12 @@ body.dark {
   --app-text-subtle: rgba(255, 255, 255, 0.44);
   --app-grid-color: rgba(255, 255, 255, 0.025);
   --app-noise-opacity: 0.02;
-  --app-ambient-spot-1: rgba(94, 106, 210, 0.22);
-  --app-ambient-spot-2: rgba(140, 92, 246, 0.14);
-  --app-ambient-spot-3: rgba(99, 102, 241, 0.16);
-  --app-ambient-spot-4: rgba(94, 106, 210, 0.12);
-  --app-surface-tint-top: rgba(120, 100, 255, 0.08);
-  --app-surface-tint-bottom: rgba(80, 60, 200, 0.02);
+  --app-ambient-spot-1: rgba(230, 230, 230, 0.22);
+  --app-ambient-spot-2: rgba(230, 230, 230, 0.14);
+  --app-ambient-spot-3: rgba(230, 230, 230, 0.16);
+  --app-ambient-spot-4: rgba(230, 230, 230, 0.12);
+  --app-surface-tint-top: rgba(230, 230, 230, 0.08);
+  --app-surface-tint-bottom: rgba(230, 230, 230, 0.02);
   --app-surface-tint-top-hover: rgba(255, 255, 255, 0.10);
   --app-surface-tint-bottom-hover: rgba(255, 255, 255, 0.02);
   --app-pill-surface: rgba(255, 255, 255, 0.06);
@@ -192,8 +192,8 @@ body.dark {
   --app-heading-start: #ffffff;
   --app-heading-end: rgba(255, 255, 255, 0.58);
   --app-shadow-sm: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 12px 36px rgba(0, 0, 0, 0.5);
-  --app-shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 18px 42px rgba(0, 0, 0, 0.55), 0 0 72px rgba(94, 106, 210, 0.08);
-  --app-shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 90px rgba(94, 106, 210, 0.12);
+  --app-shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 18px 42px rgba(0, 0, 0, 0.55), 0 0 72px rgba(230, 230, 230, 0.08);
+  --app-shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 90px rgba(230, 230, 230, 0.12);
   --app-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.07);
   --glass-blur: 18px;
   --glass-saturation: 1.1;
@@ -201,24 +201,24 @@ body.dark {
   --glass-item-saturation: 1.05;
   --toolbar-blur: 16px;
   --toolbar-saturation: 1.05;
-  --glass-border-top: rgba(140, 120, 255, 0.18);
+  --glass-border-top: rgba(230, 230, 230, 0.18);
   --glass-border-bottom: rgba(0, 0, 0, 0.3);
   --glass-inner-glow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 
   /* dark aurora */
-  --aurora-base-bg: #0c0d14;
+  --aurora-base-bg: #101010;
   --aurora-blend: normal;
   --aurora-orb1-opacity: 0.18;
   --aurora-orb2-opacity: 0.14;
   --aurora-orb3-opacity: 0.12;
 
-  --ion-background-color: #0e0f1a;
-  --ion-background-color-rgb: 14, 15, 26;
-  --ion-card-background-rgb: 22, 24, 30;
+  --ion-background-color: #141414;
+  --ion-background-color-rgb: 20, 20, 20;
+  --ion-card-background-rgb: 26, 26, 26;
   --ion-item-background: rgba(255, 255, 255, 0.04);
   --ion-text-color-rgb: 245, 245, 246;
-  --ion-toolbar-background: rgba(12, 13, 22, 0.80);
-  --ion-tab-bar-background: rgba(10, 11, 20, 0.92);
+  --ion-toolbar-background: rgba(17, 17, 17, 0.80);
+  --ion-tab-bar-background: rgba(15, 15, 15, 0.92);
   --ion-color-step-50: #050505;
   --ion-color-step-100: #0a0a0a;
   --ion-color-step-150: #111111;
@@ -369,8 +369,8 @@ body {
 /* light theme colors */
 :root .interpoll-aurora .aurora-orb-1 {
   background: radial-gradient(ellipse at center,
-    rgba(139, 92, 246, 1)   0%,
-    rgba(99,  55, 220, 0.7) 45%,
+    rgba(230, 230, 230, 1)   0%,
+    rgba(230, 230, 230, 0.7) 45%,
     transparent             75%
   );
 }
@@ -384,7 +384,7 @@ body {
 :root .interpoll-aurora .aurora-orb-3 {
   background: radial-gradient(ellipse at center,
     rgba(236, 72, 153, 0.9)  0%,
-    rgba(168, 85, 247, 0.55) 50%,
+    rgba(230, 230, 230, 0.55) 50%,
     transparent              75%
   );
 }
@@ -393,8 +393,8 @@ body {
 html.dark .interpoll-aurora .aurora-orb-1,
 body.dark  .interpoll-aurora .aurora-orb-1 {
   background: radial-gradient(ellipse at center,
-    rgba(99, 55, 220, 1)    0%,
-    rgba(60, 30, 140, 0.65) 45%,
+    rgba(230, 230, 230, 1)    0%,
+    rgba(230, 230, 230, 0.65) 45%,
     transparent             75%
   );
 }
@@ -409,8 +409,8 @@ body.dark  .interpoll-aurora .aurora-orb-2 {
 html.dark .interpoll-aurora .aurora-orb-3,
 body.dark  .interpoll-aurora .aurora-orb-3 {
   background: radial-gradient(ellipse at center,
-    rgba(170, 40, 220, 1)    0%,
-    rgba(100, 20, 180, 0.52) 50%,
+    rgba(230, 230, 230, 1)    0%,
+    rgba(230, 230, 230, 0.52) 50%,
     transparent              75%
   );
 }
@@ -692,10 +692,10 @@ ion-button:not([fill="clear"]):not([fill="outline"]) {
   --border-radius: 10px;
   --padding-start: 16px;
   --padding-end: 16px;
-  --box-shadow: 0 0 0 1px rgba(94, 106, 210, 0.30), 0 4px 14px rgba(94, 106, 210, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --box-shadow: 0 0 0 1px rgba(230, 230, 230, 0.30), 0 4px 14px rgba(230, 230, 230, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.14);
   --background: var(--app-accent);
   --background-hover: var(--app-accent-bright);
-  --background-activated: #545dbc;
+  --background-activated: #e6e6e6;
   --color: #ffffff;
 }
 
@@ -934,10 +934,10 @@ p {
   }
 }
 /* ── Incoming chat message toast ─────────────────────────────────────────── */
-.chat-incoming-toast { --background: #1e1b3a; --border-radius: 16px; --box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(99,102,241,0.25); --color: #e8e8f0; --min-width: 280px; --max-width: 420px; }
+.chat-incoming-toast { --background: #2a2a2a; --border-radius: 16px; --box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(230, 230, 230,0.25); --color: #ececec; --min-width: 280px; --max-width: 420px; }
 .chat-incoming-toast::part(message) { font-size: 14px; line-height: 1.4; }
-.chat-incoming-toast::part(button) { font-weight: 700; font-size: 13px; color: #818cf8; }
-.chat-incoming-toast::part(container) { border-left: 3px solid #6366f1; }
+.chat-incoming-toast::part(button) { font-weight: 700; font-size: 13px; color: #e6e6e6; }
+.chat-incoming-toast::part(container) { border-left: 3px solid #e6e6e6; }
 
 /* ── Mobile: strip card boxes on feed, flush divider rows ── */
 @media (max-width: 767px) {
@@ -961,8 +961,8 @@ p {
 }
 /* ── Toasts ─────────────────────────────────────────────────────────────── */
 ion-toast.app-toast {
-  --background: var(--app-surface-strong, #1c1a2e);
-  --color: var(--app-text, #ececf1);
+  --background: var(--app-surface-strong, #242424);
+  --color: var(--app-text, #eeeeee);
   --border-radius: 12px;
   --box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
   --min-width: 0;
@@ -970,7 +970,7 @@ ion-toast.app-toast {
   --max-width: min(420px, calc(100vw - 32px));
   --start: 0;
   --end: 0;
-  --button-color: var(--ion-color-primary, #818cf8);
+  --button-color: var(--ion-color-primary, #e6e6e6);
   left: 0;
   right: 0;
   margin: 0 auto;
@@ -996,4 +996,4 @@ ion-toast.app-toast--success::part(icon) { color: #22c55e; }
 ion-toast.app-toast--warning::part(icon) { color: #f59e0b; }
 ion-toast.app-toast--danger::part(icon)  { color: #ef4444; }
 ion-toast.app-toast--primary::part(icon),
-ion-toast.app-toast--medium::part(icon)  { color: var(--ion-color-primary, #818cf8); }
+ion-toast.app-toast--medium::part(icon)  { color: var(--ion-color-primary, #e6e6e6); }

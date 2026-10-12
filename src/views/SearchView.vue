@@ -337,8 +337,8 @@ ion-content { --background: transparent; }
 }
 .result-badge.post-badge {
   background: rgba(var(--app-accent-rgb,99,102,241), 0.12);
-  color: #818cf8;
-  border: 1px solid rgba(99,102,241,0.2);
+  color: #e6e6e6;
+  border: 1px solid rgba(230, 230, 230,0.2);
 }
 .result-badge.poll-badge {
   background: rgba(var(--ion-color-tertiary-rgb), 0.12);
@@ -352,7 +352,7 @@ ion-content { --background: transparent; }
   font-weight: 800;
   line-height: 1.25;
   letter-spacing: -0.025em;
-  background: linear-gradient(135deg, var(--app-text, #fff) 60%, rgba(167,139,250,0.85));
+  background: linear-gradient(135deg, var(--app-text, #fff) 60%, rgba(230, 230, 230,0.85));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -379,7 +379,7 @@ ion-content { --background: transparent; }
 }
 
 .result-author { font-weight: 600; color: var(--app-text-muted, rgba(255,255,255,0.55)); }
-.result-community { color: #818cf8; font-weight: 600; }
+.result-community { color: #e6e6e6; font-weight: 600; }
 .result-community::before { content: '·'; margin-right: 6px; color: rgba(255,255,255,0.2); }
 .result-date::before      { content: '·'; margin-right: 6px; color: rgba(255,255,255,0.2); }
 
@@ -427,15 +427,15 @@ ion-content { --background: transparent; }
   justify-content: center;
 }
 .page-btn:hover:not(.ellipsis) {
-  background: rgba(99,102,241,0.12);
-  color: #818cf8;
-  border-color: rgba(99,102,241,0.25);
+  background: rgba(230, 230, 230,0.12);
+  color: #e6e6e6;
+  border-color: rgba(230, 230, 230,0.25);
 }
 .page-btn.active {
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  background: var(--app-accent);
   border-color: transparent;
-  color: #fff;
-  box-shadow: 0 4px 14px rgba(99,102,241,0.35);
+  color: #111214;
+  box-shadow: 0 4px 14px rgba(230, 230, 230,0.35);
 }
 .page-btn.ellipsis {
   background: transparent;
@@ -452,10 +452,10 @@ ion-content { --background: transparent; }
 
 ion-content {
   --background:
-    radial-gradient(ellipse at 15% 0%,   rgba(139, 92, 246, 0.30) 0%%, transparent 50%%),
-    radial-gradient(ellipse at 85% 10%%,  rgba(99, 102, 241, 0.20) 0%%, transparent 45%%),
-    radial-gradient(ellipse at 50%% 100%%, rgba(79,  70, 229, 0.20) 0%%, transparent 55%%),
-    #0d0e1c;
+    radial-gradient(ellipse at 15% 0%,   rgba(230, 230, 230, 0.30) 0%%, transparent 50%%),
+    radial-gradient(ellipse at 85% 10%%,  rgba(230, 230, 230, 0.20) 0%%, transparent 45%%),
+    radial-gradient(ellipse at 50%% 100%%, rgba(230, 230, 230, 0.20) 0%%, transparent 55%%),
+    #141414;
 }
 /* ── Category pills ── */
 .category-pills {
@@ -486,8 +486,8 @@ ion-content {
 }
 .cat-pill:hover { background: rgba(255,255,255,0.06); color: var(--app-text); }
 .cat-pill.active {
-  background: var(--app-accent, #6366f1);
-  border-color: var(--app-accent, #6366f1);
+  background: var(--app-accent, #e6e6e6);
+  border-color: var(--app-accent, #e6e6e6);
   color: #fff;
 }
 

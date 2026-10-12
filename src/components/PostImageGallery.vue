@@ -9,7 +9,9 @@
           class="pig-img"
           loading="lazy"
         />
-        <div v-else class="pig-skeleton" />
+        <div v-else class="pig-skeleton" :class="{ 'pig-skeleton--failed': failed[i] }">
+          <span v-if="failed[i]" class="pig-retry">Tap to retry</span>
+        </div>
         <span v-if="!full && i === shown.length - 1 && extra > 0" class="pig-more">+{{ extra }}</span>
       </div>
     </template>
@@ -41,24 +43,43 @@ const lbStart = ref(0);
 // Only images that have loaded; map the tapped tile onto its slot in that list.
 const lbSrcs = computed(() => srcs.value.filter((s): s is string => !!s));
 function openAt(i: number) {
-  if (!srcs.value[i]) return;
+  if (!srcs.value[i]) {
+    if (failed.value[i]) void fetchTile(shown.value[i], i, generation);
+    return;
+  }
   lbStart.value = srcs.value.slice(0, i).filter(Boolean).length;
   lbOpen.value = true;
 }
 
-async function load() {
-  const list = shown.value;
-  srcs.value = list.map((_, i) => (i === 0 && props.primarySrc ? props.primarySrc : null));
+// A single Gun read often misses on first load (the node hasn't synced yet), so retry with
+// growing gaps before giving up; a failed tile can then be tapped to try again.
+const RETRY_GAPS_MS = [0, 2000, 5000, 10000];
+const failed = ref<boolean[]>([]);
+let generation = 0;
+
+async function fetchTile(cid: string, i: number, gen: number) {
   const { IPFSService } = await import('../services/ipfsService');
-  list.forEach(async (cid, i) => {
+  failed.value[i] = false;
+  for (const gap of RETRY_GAPS_MS) {
+    if (gap) await new Promise(r => setTimeout(r, gap));
+    if (gen !== generation || shown.value[i] !== cid || srcs.value[i]) return;
     try {
       // Detail view wants full-res (local IndexedDB first); feed only needs the synced thumbnail.
       const data = props.full
         ? await IPFSService.downloadImage(cid)
         : (i === 0 && props.primarySrc) || await IPFSService.getThumbnail(cid);
-      if (data && shown.value[i] === cid) srcs.value[i] = data;
-    } catch { /* leave skeleton */ }
-  });
+      if (data) { if (gen === generation && shown.value[i] === cid) srcs.value[i] = data; return; }
+    } catch { /* try again */ }
+  }
+  if (gen === generation) failed.value[i] = true;
+}
+
+function load() {
+  const list = shown.value;
+  generation++;
+  srcs.value = list.map((_, i) => (i === 0 && props.primarySrc ? props.primarySrc : null));
+  failed.value = list.map(() => false);
+  list.forEach((cid, i) => { if (!srcs.value[i]) void fetchTile(cid, i, generation); });
 }
 
 watch(() => [props.cids.join(','), props.full], load, { immediate: true });
@@ -79,6 +100,8 @@ watch(() => [props.cids.join(','), props.full], load, { immediate: true });
 .pig--n3 .pig-cell:first-child { aspect-ratio: auto; }
 .pig-img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .pig--n1 .pig-img { height: auto; max-height: 520px; object-fit: contain; }
+.pig-skeleton--failed { animation: none; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.pig-retry { font-size: 12.5px; color: #3dff7a; border: 1px solid #2a312a; border-radius: 5px; padding: 4px 10px; }
 .pig-skeleton { width: 100%; height: 100%; min-height: 120px; animation: pig-pulse 1.4s ease-in-out infinite; background: rgba(255, 255, 255, 0.05); }
 .pig-more {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
