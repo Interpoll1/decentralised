@@ -108,8 +108,8 @@ async function copyDetails() {
   padding: 24px;
   padding-top: calc(env(safe-area-inset-top, 0px) + 24px);
   padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
-  background: #141420;
-  color: #e6e6ef;
+  background: #1a1a1a;
+  color: #ebebeb;
   overflow-y: auto;
   z-index: 100000;
 }
@@ -138,7 +138,7 @@ async function copyDetails() {
 .app-error__body {
   font-size: 14px;
   line-height: 1.5;
-  color: #b7b7c8;
+  color: #c0c0c0;
   margin: 0 0 20px;
 }
 
@@ -168,9 +168,9 @@ async function copyDetails() {
 }
 
 .app-error__btn--primary {
-  background: #5b5bff;
-  border-color: #5b5bff;
-  color: #fff;
+  background: #e6e6e6;
+  border-color: #e6e6e6;
+  color: #111214;
 }
 
 .app-error__btn--ghost {
@@ -188,7 +188,7 @@ async function copyDetails() {
 .app-error__details summary {
   cursor: pointer;
   font-size: 13px;
-  color: #9a9ab0;
+  color: #a5a5a5;
 }
 
 .app-error__pre {
@@ -202,6 +202,6 @@ async function copyDetails() {
   background: rgba(0, 0, 0, 0.35);
   border-radius: 8px;
   padding: 10px;
-  color: #c8c8d8;
+  color: #d0d0d0;
 }
 </style>

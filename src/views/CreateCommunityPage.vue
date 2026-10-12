@@ -245,7 +245,7 @@ select.field-native {
   padding-right: 36px;
   cursor: pointer;
 }
-select.field-native option { background: #1a1a2e; color: #fff; }
+select.field-native option { background: #242424; color: #fff; }
 
 .helper-text {
   font-size: 12px;
@@ -294,7 +294,7 @@ select.field-native option { background: #1a1a2e; color: #fff; }
   cursor: pointer;
   transition: background 200ms ease;
 }
-.toggle-switch input:checked + .toggle-track { background: #6366f1; border-color: #6366f1; }
+.toggle-switch input:checked + .toggle-track { background: #e6e6e6; border-color: #e6e6e6; }
 .toggle-track::after {
   content: '';
   position: absolute;
@@ -345,7 +345,7 @@ select.field-native option { background: #1a1a2e; color: #fff; }
   height: 20px;
   border-radius: 50%;
   background: rgba(var(--app-accent-rgb,99,102,241),0.15);
-  color: #818cf8;
+  color: #e6e6e6;
   font-size: 11px;
   font-weight: 700;
   display: flex;
@@ -390,7 +390,7 @@ select.field-native option { background: #1a1a2e; color: #fff; }
   border-radius: 999px;
   border: 1px dashed rgba(var(--app-accent-rgb,99,102,241),0.35);
   background: rgba(var(--app-accent-rgb,99,102,241),0.06);
-  color: #818cf8;
+  color: #e6e6e6;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -416,7 +416,7 @@ select.field-native option { background: #1a1a2e; color: #fff; }
   height: 36px;
   border-radius: 10px;
   background: rgba(var(--app-accent-rgb,99,102,241),0.15);
-  color: #818cf8;
+  color: #e6e6e6;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -435,13 +435,13 @@ select.field-native option { background: #1a1a2e; color: #fff; }
   padding: 15px;
   border-radius: 14px;
   border: none;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  color: #fff;
+  background: var(--app-accent);
+  color: #111214;
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.01em;
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(99,102,241,0.35);
+  box-shadow: 0 8px 24px rgba(230, 230, 230,0.35);
   transition: opacity 160ms ease, transform 160ms ease;
   display: flex;
   align-items: center;

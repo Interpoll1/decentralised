@@ -233,12 +233,12 @@ function reset() {
   text-align: center;
   cursor: pointer;
   transition: border-color 0.2s, background 0.2s;
-  background: var(--interpoll-surface-1, #141420);
+  background: var(--interpoll-surface-1, #1a1a1a);
 }
 .video-uploader__dropzone:hover,
 .video-uploader__dropzone--dragover {
-  border-color: var(--ion-color-primary, #6c5ce7);
-  background: rgba(108, 92, 231, 0.06);
+  border-color: var(--ion-color-primary, #e6e6e6);
+  background: rgba(230, 230, 230, 0.06);
 }
 
 .video-uploader__icon {
@@ -255,7 +255,7 @@ function reset() {
   align-items: center;
   gap: 12px;
   padding: 12px;
-  background: var(--interpoll-surface-2, #1a1a2e);
+  background: var(--interpoll-surface-2, #242424);
   border-radius: 12px;
 }
 .video-uploader__preview-thumb {
@@ -279,7 +279,7 @@ function reset() {
 /* Progress */
 .video-uploader__progress {
   padding: 16px;
-  background: var(--interpoll-surface-2, #1a1a2e);
+  background: var(--interpoll-surface-2, #242424);
   border-radius: 12px;
 }
 .video-uploader__progress-track {
@@ -291,7 +291,7 @@ function reset() {
 }
 .video-uploader__progress-fill {
   height: 100%;
-  background: var(--ion-color-primary, #6c5ce7);
+  background: var(--ion-color-primary, #e6e6e6);
   border-radius: 3px;
   transition: width 0.3s ease;
 }
@@ -300,7 +300,7 @@ function reset() {
   animation: pulse 1.5s ease-in-out infinite;
 }
 .video-uploader__progress-fill--uploading {
-  background: var(--ion-color-primary, #6c5ce7);
+  background: var(--ion-color-primary, #e6e6e6);
 }
 @keyframes pulse {
   0%, 100% { opacity: 1; }

@@ -342,8 +342,8 @@ function formatViewCount(n: number): string {
 }
 .author-avatar-sm {
   width: 22px; height: 22px; border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  color: #fff; font-size: 10px; font-weight: 700;
+  background: var(--app-accent);
+  color: #111214; font-size: 10px; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
@@ -375,7 +375,7 @@ function formatViewCount(n: number): string {
 .poll-question {
   margin: 0 0 8px;
   font-size: 18px; font-weight: 800; line-height: 1.25; letter-spacing: -0.03em;
-  background: linear-gradient(135deg, var(--app-text) 60%, rgba(167,139,250,0.85));
+  background: linear-gradient(135deg, var(--app-text) 60%, rgba(230, 230, 230,0.85));
   -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
 }
 .poll-description { margin: 0 0 12px; font-size: 13.5px; line-height: 1.6; color: var(--app-text-muted); }
@@ -386,7 +386,7 @@ function formatViewCount(n: number): string {
 .option-votes { color: var(--app-text-subtle); font-size: 12px; font-variant-numeric: tabular-nums; }
 .more-options { font-size: 12.5px; color: var(--app-accent-bright); font-weight: 600; padding-left: 2px; }
 .option-bar   { height: 5px; background: rgba(255,255,255,0.05); border-radius: 999px; overflow: hidden; }
-.option-fill  { height: 100%; background: linear-gradient(90deg, var(--app-accent), var(--ion-color-tertiary)); border-radius: 999px; transition: width 0.5s cubic-bezier(0.16,1,0.3,1); }
+.option-fill  { height: 100%; background: var(--app-accent); border-radius: 999px; transition: width 0.5s cubic-bezier(0.16,1,0.3,1); }
 
 .poll-footer {
   display: flex; justify-content: space-between; align-items: center;
@@ -408,9 +408,9 @@ function formatViewCount(n: number): string {
 }
 .stat-icon-btn ion-icon { font-size: 15px; color: var(--app-text-subtle); }
 .stat-icon-btn.heart,
-.stat-icon-btn.heart ion-icon { color: #a78bfa; }
+.stat-icon-btn.heart ion-icon { color: #e6e6e6; }
 .stat-icon-btn.heart.active,
-.stat-icon-btn.heart.active ion-icon { color: #c4b5fd; }
+.stat-icon-btn.heart.active ion-icon { color: #e6e6e6; }
 .thumb-down-icon { width: 15px; height: 15px; transform: rotate(-20deg) scaleX(-1); flex-shrink: 0; color: var(--app-text-subtle); }
 .stat-icon-btn.downvote.active { color: #ef4444; border-color: rgba(239,68,68,0.3); }
 .stat-icon-btn.downvote.active .thumb-down-icon { color: #ef4444; }
@@ -445,8 +445,8 @@ function formatViewCount(n: number): string {
   transition: color 160ms, background 160ms;
 }
 .action-btn:hover { color: var(--app-accent-bright); background: rgba(var(--app-accent-rgb),0.08); }
-.action-btn--nostr { color: #a78bfa; }
-.action-btn--nostr:hover { color: #c4b5fd; background: rgba(167,139,250,0.1); }
+.action-btn--nostr { color: #e6e6e6; }
+.action-btn--nostr:hover { color: #e6e6e6; background: rgba(230, 230, 230,0.1); }
 .reddit-share-icon { width: 18px; height: 18px; }
 
 .vote-btn {

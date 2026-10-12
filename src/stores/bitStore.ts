@@ -1,0 +1,179 @@
+// src/stores/bitStore.ts
+// Bit the frog: first-boot tour state + "claim your username" reminders.
+// Device-local UI state only (localStorage) — never replicated.
+import { defineStore } from 'pinia';
+import { computed, ref } from 'vue';
+import { UserService } from '../services/userService';
+
+const TOUR_KEY   = 'interpoll_bit_tour_v1';
+const REMIND_KEY = 'interpoll_bit_remind_v1';
+const REMIND_RECOVERY_KEY = 'interpoll_bit_remind_recovery_v1';
+const PENDING_GAP_MS = 3 * 60 * 60 * 1000; // re-show a pending-recovery warning at most every 3 h
+
+/** Escalating quiet periods after each dismissal: 10m, 30m, 2h, 6h, then daily. */
+const BACKOFF_MS = [10, 30, 120, 360, 1440].map(m => m * 60_000);
+const FIRST_REMINDER_MS = 90_000;
+
+export interface TourStep {
+  id: string;
+  /** data-tour attribute of the element to spotlight; absent/hidden → centred bubble. */
+  target?: string;
+  title: string;
+  body: string;
+  /** When true the user must click the highlighted element (Next is still offered as a fallback). */
+  clickToAdvance?: boolean;
+  mood?: 'idle' | 'happy' | 'wave' | 'alert';
+}
+
+export const BASE_TOUR_STEPS: TourStep[] = [
+  { id: 'hi', title: 'Hi, I\'m Bit', mood: 'wave',
+    body: 'I\'ll show you around in under a minute. Nothing here is run by a company — your posts and votes live on peers, signed by a key only you hold.' },
+  { id: 'feed', target: 'home', title: 'This is your feed', mood: 'idle',
+    body: 'Polls and posts from every space show up here. Switch between For You and Latest at the top.' },
+  { id: 'spaces', target: 'communities', clickToAdvance: true, title: 'Spaces are communities', mood: 'happy',
+    body: 'Click Spaces. Join a few and their posts land in your feed.' },
+  { id: 'publish', target: 'create', clickToAdvance: true, title: 'Make something', mood: 'happy',
+    body: 'Click Publish to start a poll, post, or a new space. Every vote is signed on your device.' },
+  { id: 'chat', target: 'chat', clickToAdvance: true, title: 'Message people', mood: 'idle',
+    body: 'Click Messages. Chats are end-to-end encrypted — share your link or start a group.' },
+  { id: 'username', target: 'profile', title: 'Pick a username', mood: 'alert',
+    body: 'Until you do, people see a random name like "swift-bridge-vulture". Claiming one takes ten seconds.' },
+];
+
+const BACKUP_STEP: TourStep = {
+  id: 'backup', target: 'settings', title: 'Back up your key', mood: 'alert',
+  body: 'Your recovery phrase is the only way back into this identity. Open Settings → Cryptographic Identity → Recovery phrase and save it somewhere safe.',
+};
+const PHRASE_SAVED_KEY = 'interpoll_phrase_saved';
+export function phraseSaved(): boolean { try { return localStorage.getItem(PHRASE_SAVED_KEY) === 'true'; } catch { return false; } }
+/** Tour steps for this device: if the setup wizard never saved a phrase, nudge toward Settings before the username step. */
+export function buildTourSteps(): TourStep[] {
+  if (phraseSaved()) return BASE_TOUR_STEPS;
+  const steps = [...BASE_TOUR_STEPS];
+  steps.splice(steps.length - 1, 0, BACKUP_STEP);
+  return steps;
+}
+
+export type ReminderKind = 'username' | 'recovery' | 'pending';
+
+export const REMINDER_LINES = [
+  'Psst — you still don\'t have a username. Want to claim one?',
+  'People can\'t find you by name yet. Claim a username?',
+  'Your name is still a random one. Pick your own, it takes ten seconds.',
+  'Ribbit! A username makes your posts easier to recognise.',
+];
+
+interface RemindState { dismissals: number; lastShown: number; }
+
+function readJSON<T>(key: string, fallback: T): T {
+  try { const raw = localStorage.getItem(key); return raw ? { ...fallback, ...JSON.parse(raw) } : fallback; } catch { return fallback; }
+}
+
+export const useBitStore = defineStore('bit', () => {
+  const tourDone     = ref(localStorage.getItem(TOUR_KEY) === 'done');
+  const tourActive   = ref(false);
+  const tourStepIdx  = ref(0);
+  const hasUsername  = ref<boolean | null>(null);   // null = not checked yet
+  const reminderOpen = ref(false);
+  const reminderLine = ref(REMINDER_LINES[0]);
+  const remind       = ref<RemindState>(readJSON<RemindState>(REMIND_KEY, { dismissals: 0, lastShown: 0 }));
+  const sessionStart = Date.now();
+
+  // Name recovery (IPP-10): what the network says about this device's username.
+  const reminderKind = ref<ReminderKind>('username');
+  const nameInfo = ref<{ username: string; isHolder: boolean; hasRecovery: boolean; legacyUnsigned: boolean; pendingDays: number | null } | null>(null);
+  const remindRecovery = ref<RemindState>(readJSON<RemindState>(REMIND_RECOVERY_KEY, { dismissals: 0, lastShown: 0 }));
+  let pendingShownAt = 0;
+  function saveRecoveryRemind() { try { localStorage.setItem(REMIND_RECOVERY_KEY, JSON.stringify(remindRecovery.value)); } catch { /* private mode */ } }
+
+  const steps = ref<TourStep[]>(buildTourSteps());
+  const currentStep = computed(() => steps.value[tourStepIdx.value]);
+  const isLastStep  = computed(() => tourStepIdx.value === steps.value.length - 1);
+
+  function saveRemind() { try { localStorage.setItem(REMIND_KEY, JSON.stringify(remind.value)); } catch { /* private mode */ } }
+
+  async function refreshUsername(): Promise<boolean> {
+    try {
+      const me = await UserService.getCurrentUser();
+      hasUsername.value = !!(me && me.customUsername);
+    } catch { /* leave as-is; try again next tick */ }
+    return hasUsername.value === true;
+  }
+
+  function startTour() { steps.value = buildTourSteps(); tourStepIdx.value = 0; tourActive.value = true; reminderOpen.value = false; }
+  function finishTour() {
+    tourActive.value = false; tourDone.value = true;
+    try { localStorage.setItem(TOUR_KEY, 'done'); } catch { /* ignore */ }
+    // Give the user a breather before the first reminder.
+    remind.value.lastShown = Date.now(); saveRemind();
+  }
+  function nextStep() { if (isLastStep.value) finishTour(); else tourStepIdx.value++; }
+  function prevStep() { if (tourStepIdx.value > 0) tourStepIdx.value--; }
+  function replayTour() { try { localStorage.removeItem(TOUR_KEY); } catch { /* ignore */ } tourDone.value = false; startTour(); }
+
+  async function refreshNameInfo(): Promise<void> {
+    try {
+      const me = await UserService.getCurrentUser();
+      if (!me?.customUsername) { nameInfo.value = null; return; }
+      const { NameRecoveryService } = await import('../services/nameRecoveryService');
+      const st = await NameRecoveryService.status(me.customUsername);
+      nameInfo.value = {
+        username: st.username, isHolder: st.isHolder, hasRecovery: st.hasRecovery,
+        legacyUnsigned: st.legacyUnsigned, pendingDays: st.pendingAgainstMe ? st.pendingAgainstMe.days : null,
+      };
+    } catch { /* offline — keep the last known info */ }
+  }
+
+  function backoff(r: RemindState): number { return BACKOFF_MS[Math.min(r.dismissals, BACKOFF_MS.length - 1)]; }
+
+  /** Which reminder, if any, should pop up right now? Pure timing check; the caller adds route/UI guards. */
+  function dueKind(now = Date.now()): ReminderKind | null {
+    if (!tourDone.value || tourActive.value || reminderOpen.value) return null;
+    if (now - sessionStart < FIRST_REMINDER_MS) return null;
+    const n = nameInfo.value;
+    // 1. Someone is trying to move your name: most urgent, ignores the normal backoff.
+    if (n && n.isHolder && n.pendingDays !== null && now - pendingShownAt >= PENDING_GAP_MS) return 'pending';
+    // 2. No username yet.
+    if (hasUsername.value === false && now - remind.value.lastShown >= backoff(remind.value)) return 'username';
+    // 3. Has a username but no way back if the device is lost.
+    if (n && n.isHolder && !n.hasRecovery && !n.legacyUnsigned && now - remindRecovery.value.lastShown >= backoff(remindRecovery.value)) return 'recovery';
+    return null;
+  }
+  function reminderDue(now = Date.now()): boolean { return dueKind(now) !== null; }
+
+  function showReminder(kind: ReminderKind = 'username') {
+    reminderKind.value = kind;
+    const n = nameInfo.value;
+    if (kind === 'pending') {
+      const d = n?.pendingDays ?? 0;
+      reminderLine.value = `Heads up: someone started recovering "${n?.username}" onto another key. It moves in ${d} ${d === 1 ? 'day' : 'days'} unless you cancel. Is that you?`;
+      pendingShownAt = Date.now();
+    } else if (kind === 'recovery') {
+      reminderLine.value = `"${n?.username}" has no recovery key. If you lose this device, the name is gone for good. Set one up?`;
+      remindRecovery.value.lastShown = Date.now(); saveRecoveryRemind();
+    } else {
+      reminderLine.value = REMINDER_LINES[remind.value.dismissals % REMINDER_LINES.length];
+      remind.value.lastShown = Date.now(); saveRemind();
+    }
+    reminderOpen.value = true;
+  }
+  function snoozeReminder() {
+    reminderOpen.value = false;
+    if (reminderKind.value === 'recovery') { remindRecovery.value.dismissals++; remindRecovery.value.lastShown = Date.now(); saveRecoveryRemind(); }
+    else if (reminderKind.value === 'username') { remind.value.dismissals++; remind.value.lastShown = Date.now(); saveRemind(); }
+    else pendingShownAt = Date.now();
+  }
+  function acceptReminder() {
+    reminderOpen.value = false;
+    if (reminderKind.value === 'recovery') { remindRecovery.value.lastShown = Date.now(); saveRecoveryRemind(); }
+    else if (reminderKind.value === 'username') { remind.value.lastShown = Date.now(); saveRemind(); }
+    else pendingShownAt = Date.now();
+  }
+
+  return {
+    steps, tourDone, tourActive, tourStepIdx, currentStep, isLastStep,
+    hasUsername, reminderOpen, reminderLine, reminderKind, nameInfo,
+    refreshUsername, refreshNameInfo, startTour, finishTour, nextStep, prevStep, replayTour,
+    reminderDue, dueKind, showReminder, snoozeReminder, acceptReminder,
+  };
+});

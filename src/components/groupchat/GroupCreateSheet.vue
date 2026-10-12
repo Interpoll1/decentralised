@@ -153,7 +153,7 @@ function close() { emit('close'); }
 .gcs__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 .gcs__btn { border: none; border-radius: 999px; padding: 11px 20px; font: inherit; font-size: 14.5px; font-weight: 650; cursor: pointer; }
 .gcs__btn:focus-visible { outline: none; box-shadow: var(--app-focus-ring); }
-.gcs__btn--primary { background: var(--app-accent); color: #fff; }
+.gcs__btn--primary { background: var(--app-accent); color: #111214; }
 .gcs__btn--primary:disabled { opacity: 0.45; cursor: not-allowed; }
 .gcs__btn--ghost { background: transparent; color: var(--app-text-muted); }
 .gcs__btn--ghost:hover { color: var(--app-text); }

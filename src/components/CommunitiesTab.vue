@@ -336,9 +336,9 @@ function formatNumber(n: number): string {
 }
 .filter-pill:hover { color: var(--app-text); }
 .filter-pill.active {
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  color: #fff;
-  box-shadow: 0 1px 8px rgba(99,102,241,0.3);
+  background: var(--app-accent);
+  color: #111214;
+  box-shadow: 0 1px 8px rgba(230, 230, 230,0.3);
 }
 
 .new-btn {
@@ -357,9 +357,9 @@ function formatNumber(n: number): string {
   white-space: nowrap;
 }
 .new-btn:hover {
-  background: rgba(99,102,241,0.1);
-  border-color: rgba(99,102,241,0.3);
-  color: #a5b4fc;
+  background: rgba(230, 230, 230,0.1);
+  border-color: rgba(230, 230, 230,0.3);
+  color: #e6e6e6;
 }
 
 /* ── Search ── */
@@ -374,8 +374,8 @@ function formatNumber(n: number): string {
   transition: border-color 150ms, box-shadow 150ms;
 }
 .search-wrap:focus-within {
-  border-color: rgba(99,102,241,0.4);
-  box-shadow: 0 0 0 3px rgba(99,102,241,0.08);
+  border-color: rgba(230, 230, 230,0.4);
+  box-shadow: 0 0 0 3px rgba(230, 230, 230,0.08);
 }
 .search-icon { color: var(--app-text-subtle); flex-shrink: 0; }
 .search-input {
@@ -440,7 +440,7 @@ function formatNumber(n: number): string {
   border: 1px solid rgba(255,255,255,0.13);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 2px 6px rgba(0,0,0,0.15);
 }
-.feat-avatar.tone-violet { background: rgba(99,102,241,0.18); color: #a5b4fc; }
+.feat-avatar.tone-violet { background: rgba(230, 230, 230,0.18); color: #e6e6e6; }
 .feat-avatar.tone-blue   { background: rgba(59,130,246,0.18); color: #93c5fd; }
 .feat-avatar.tone-teal   { background: rgba(20,184,166,0.16); color: #5eead4; }
 .feat-avatar.tone-amber  { background: rgba(245,158,11,0.16); color: #fcd34d; }
@@ -487,8 +487,8 @@ function formatNumber(n: number): string {
 .sentinel-spinner {
   width: 20px;
   height: 20px;
-  border: 2px solid rgba(99,102,241,0.15);
-  border-top-color: #6366f1;
+  border: 2px solid rgba(230, 230, 230,0.15);
+  border-top-color: #e6e6e6;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
@@ -513,8 +513,8 @@ function formatNumber(n: number): string {
 .spinner {
   width: 24px;
   height: 24px;
-  border: 2px solid rgba(99,102,241,0.2);
-  border-top-color: #6366f1;
+  border: 2px solid rgba(230, 230, 230,0.2);
+  border-top-color: #e6e6e6;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
@@ -556,7 +556,7 @@ function formatNumber(n: number): string {
   background: none;
   border: none;
   padding: 0;
-  color: #818cf8;
+  color: #e6e6e6;
   font: inherit;
   cursor: pointer;
   text-decoration: underline;
@@ -566,12 +566,12 @@ function formatNumber(n: number): string {
   padding: 8px 20px;
   border-radius: 999px;
   border: none;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  color: #fff;
+  background: var(--app-accent);
+  color: #111214;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(99,102,241,0.28);
+  box-shadow: 0 4px 14px rgba(230, 230, 230,0.28);
   transition: opacity 130ms, transform 130ms;
 }
 .empty-cta:hover { opacity: 0.9; transform: translateY(-1px); }
@@ -594,12 +594,12 @@ function formatNumber(n: number): string {
   gap: 8px;
   padding: 11px 14px;
   border-radius: 10px;
-  background: rgba(99,102,241,0.06);
-  border: 1px solid rgba(99,102,241,0.14);
+  background: rgba(230, 230, 230,0.06);
+  border: 1px solid rgba(230, 230, 230,0.14);
   font-size: 12.5px;
   color: var(--app-text-muted);
   line-height: 1.5;
   margin-top: 4px;
 }
-.join-nudge svg { flex-shrink: 0; color: #818cf8; margin-top: 1px; }
+.join-nudge svg { flex-shrink: 0; color: #e6e6e6; margin-top: 1px; }
 </style>

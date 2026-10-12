@@ -87,7 +87,7 @@ function remove(accountId: string) {
 .gp-btn { flex-shrink: 0; padding: 7px 14px; border-radius: 999px; border: none; background: rgba(var(--app-accent-rgb), 0.1); color: var(--app-text); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
 .gp-btn:focus-visible { outline: none; box-shadow: var(--app-focus-ring); }
 .gp-btn:disabled { opacity: 0.5; cursor: wait; }
-.gp-btn--ok { background: var(--app-accent); color: #fff; }
+.gp-btn--ok { background: var(--app-accent); color: #111214; }
 .gp-btn--danger { background: transparent; color: var(--app-danger); }
 .gp-note { margin: 14px 2px 0; font-size: 13px; line-height: 1.5; color: var(--app-text-subtle); }
 </style>

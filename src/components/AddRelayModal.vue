@@ -1,9 +1,8 @@
 <template>
-  <teleport to="body">
-    <transition name="arm-backdrop">
-      <div v-if="modelValue" class="arm-backdrop" @click.self="close" role="dialog" aria-modal="true" aria-label="Add relay">
-        <transition name="arm-sheet">
-          <div v-if="modelValue" class="arm-sheet">
+  <DialogRoot :open="modelValue" @update:open="(v: boolean) => emit('update:modelValue', v)">
+    <DialogPortal>
+      <DialogOverlay class="arm-backdrop" />
+      <DialogContent class="arm-sheet" aria-describedby="arm-subtitle" @open-auto-focus.prevent="urlInputEl?.focus()">
 
             <!-- Handle (mobile) -->
             <div class="arm-handle" aria-hidden="true"></div>
@@ -19,15 +18,15 @@
                   </svg>
                 </div>
                 <div>
-                  <p class="arm-title">Add relay</p>
-                  <p class="arm-subtitle">Connect to another relay server or peer</p>
+                  <DialogTitle class="arm-title">Add relay</DialogTitle>
+                  <DialogDescription id="arm-subtitle" class="arm-subtitle">Connect to another relay server or peer</DialogDescription>
                 </div>
               </div>
-              <button class="arm-close" @click="close" aria-label="Close">
+              <DialogClose class="arm-close" aria-label="Close">
                 <svg viewBox="0 0 24 24" fill="none" width="18" height="18">
                   <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                 </svg>
-              </button>
+              </DialogClose>
             </div>
 
             <!-- URL input -->
@@ -155,16 +154,18 @@
               </div>
             </transition>
 
-          </div>
-        </transition>
-      </div>
-    </transition>
-  </teleport>
+      </DialogContent>
+    </DialogPortal>
+  </DialogRoot>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted } from 'vue';
 import { toastController } from '@ionic/vue';
+import {
+  DialogRoot, DialogPortal, DialogOverlay, DialogContent,
+  DialogTitle, DialogDescription, DialogClose,
+} from 'reka-ui';
 import { RelayManager, type RelayEndpoint } from '../services/relayManager';
 import { useQrScan } from '../composables/useQrScan';
 
@@ -340,16 +341,13 @@ async function connect() {
 .arm-backdrop {
   position: fixed; inset: 0; z-index: 9100;
   background: rgba(0,0,0,0.48);
-  display: flex; align-items: flex-end;
   backdrop-filter: blur(4px);
-}
-@media (min-width: 640px) {
-  .arm-backdrop { align-items: center; justify-content: center; }
 }
 
 /* ── Sheet ──── */
 .arm-sheet {
-  background: var(--app-bg-elevated, #15151f);
+  position: fixed; z-index: 9101; left: 0; right: 0; bottom: 0;
+  background: var(--app-bg-elevated, #1a1a1a);
   border: 1px solid rgba(255,255,255,0.08);
   border-top-left-radius: 20px;
   border-top-right-radius: 20px;
@@ -361,6 +359,7 @@ async function connect() {
 }
 @media (min-width: 640px) {
   .arm-sheet {
+    inset: 0; margin: auto; height: fit-content;
     border-radius: 20px;
     max-width: 480px;
     max-height: 88vh;
@@ -384,9 +383,9 @@ async function connect() {
 .arm-header-left { display: flex; align-items: center; gap: 12px; }
 .arm-header-icon {
   width: 36px; height: 36px; border-radius: 10px;
-  background: rgba(var(--app-accent-rgb, 94 106 210), 0.12);
-  color: var(--app-accent-bright, #a5b4fc);
-  border: 1px solid rgba(var(--app-accent-rgb, 94 106 210), 0.22);
+  background: rgba(var(--app-accent-rgb, 255 63 49), 0.12);
+  color: var(--app-accent-bright, #e6e6e6);
+  border: 1px solid rgba(var(--app-accent-rgb, 255 63 49), 0.22);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
@@ -421,7 +420,7 @@ async function connect() {
   font-family: inherit; outline: none;
   transition: border-color 0.15s;
 }
-.arm-input:focus { border-color: rgba(var(--app-accent-rgb, 94 106 210), 0.5); }
+.arm-input:focus { border-color: rgba(var(--app-accent-rgb, 255 63 49), 0.5); }
 .arm-input:disabled { opacity: 0.5; }
 .arm-input::placeholder { color: var(--app-text-subtle); }
 
@@ -433,8 +432,8 @@ async function connect() {
   transition: all 0.15s;
 }
 .arm-qr-btn:hover, .arm-paste-btn:hover {
-  border-color: rgba(var(--app-accent-rgb, 94 106 210), 0.35);
-  color: var(--app-accent-bright, #a5b4fc);
+  border-color: rgba(var(--app-accent-rgb, 255 63 49), 0.35);
+  color: var(--app-accent-bright, #e6e6e6);
 }
 .arm-qr-btn:disabled, .arm-paste-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -449,7 +448,7 @@ async function connect() {
 .arm-probe-spinner {
   width: 16px; height: 16px; border-radius: 50%;
   border: 2px solid rgba(255,255,255,0.1);
-  border-top-color: var(--app-accent-bright, #a5b4fc);
+  border-top-color: var(--app-accent-bright, #e6e6e6);
   animation: arm-spin 0.7s linear infinite; flex-shrink: 0;
 }
 @keyframes arm-spin { to { transform: rotate(360deg); } }
@@ -459,9 +458,9 @@ async function connect() {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   width: calc(100% - 36px); margin: 0 18px 4px;
   padding: 13px; border-radius: 12px; border: none;
-  background: linear-gradient(180deg, var(--app-accent-bright, #a5b4fc), var(--app-accent, #5e6ad2));
-  color: #fff; font-size: 15px; font-weight: 700; cursor: pointer;
-  box-shadow: 0 8px 20px rgba(var(--app-accent-rgb, 94 106 210), 0.28);
+  background: var(--app-accent);
+  color: #111214; font-size: 15px; font-weight: 700; cursor: pointer;
+  box-shadow: 0 8px 20px rgba(var(--app-accent-rgb, 255 63 49), 0.28);
   transition: opacity 0.15s;
 }
 .arm-connect-btn:hover:not(:disabled) { opacity: 0.9; }
@@ -484,8 +483,8 @@ async function connect() {
   gap: 10px; transition: all 0.15s;
 }
 .arm-preset:hover:not(:disabled) {
-  border-color: rgba(var(--app-accent-rgb, 94 106 210), 0.28);
-  background: rgba(var(--app-accent-rgb, 94 106 210), 0.06);
+  border-color: rgba(var(--app-accent-rgb, 255 63 49), 0.28);
+  background: rgba(var(--app-accent-rgb, 255 63 49), 0.06);
 }
 .arm-preset--active {
   border-color: rgba(52, 211, 153, 0.2);
@@ -508,8 +507,8 @@ async function connect() {
 .arm-preset-tag {
   font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
   padding: 3px 8px; border-radius: 6px; flex-shrink: 0;
-  background: rgba(var(--app-accent-rgb, 94 106 210), 0.12);
-  color: var(--app-accent-bright, #a5b4fc);
+  background: rgba(var(--app-accent-rgb, 255 63 49), 0.12);
+  color: var(--app-accent-bright, #e6e6e6);
 }
 .arm-preset-tag--connected { background: rgba(52,211,153,0.12); color: var(--app-success, #34d399); }
 .arm-preset-tag--disc      { background: rgba(251,191,36,0.1); color: #fbbf24; }
@@ -524,13 +523,21 @@ async function connect() {
 }
 
 /* ── Transitions ──── */
-.arm-backdrop-enter-active, .arm-backdrop-leave-active { transition: opacity 200ms ease; }
-.arm-backdrop-enter-from, .arm-backdrop-leave-to { opacity: 0; }
-.arm-sheet-enter-active { transition: transform 300ms cubic-bezier(0.16,1,0.3,1), opacity 200ms ease; }
-.arm-sheet-leave-active { transition: transform 200ms ease, opacity 160ms ease; }
-.arm-sheet-enter-from, .arm-sheet-leave-to { transform: translateY(100%); opacity: 0.8; }
+/* Reka Dialog drives these via data-state; Presence waits for the exit animation. */
+.arm-backdrop[data-state='open']  { animation: arm-fade-in 200ms ease; }
+.arm-backdrop[data-state='closed'] { animation: arm-fade-out 160ms ease forwards; }
+.arm-sheet[data-state='open']   { animation: arm-sheet-in 300ms cubic-bezier(0.16,1,0.3,1); }
+.arm-sheet[data-state='closed'] { animation: arm-sheet-out 200ms ease forwards; }
+@keyframes arm-fade-in  { from { opacity: 0; } }
+@keyframes arm-fade-out { to   { opacity: 0; } }
+@keyframes arm-sheet-in  { from { transform: translateY(100%); opacity: 0.8; } }
+@keyframes arm-sheet-out { to   { transform: translateY(100%); opacity: 0; } }
 @media (min-width: 640px) {
-  .arm-sheet-enter-from, .arm-sheet-leave-to { transform: scale(0.95) translateY(8px); }
+  @keyframes arm-sheet-in  { from { transform: scale(0.95) translateY(8px); opacity: 0; } }
+  @keyframes arm-sheet-out { to   { transform: scale(0.95) translateY(8px); opacity: 0; } }
+}
+@media (prefers-reduced-motion: reduce) {
+  .arm-backdrop, .arm-sheet { animation: none !important; }
 }
 .arm-banner-enter-active { transition: all 0.2s ease; }
 .arm-banner-leave-active { transition: all 0.15s ease; }

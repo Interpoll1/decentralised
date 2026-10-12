@@ -1,10 +1,8 @@
 <template>
-  <teleport to="body">
-    <transition name="sheet-backdrop">
-      <div v-if="modelValue" class="rs-backdrop" @click.self="close" aria-modal="true" role="dialog" aria-label="Relay settings">
-
-        <transition name="sheet-slide">
-          <div v-if="modelValue" class="rs-sheet">
+  <DialogRoot :open="modelValue" @update:open="(v: boolean) => emit('update:modelValue', v)">
+    <DialogPortal>
+      <DialogOverlay class="rs-backdrop" />
+      <DialogContent class="rs-sheet" aria-describedby="rs-subtitle">
 
             <!-- Handle bar (mobile) -->
             <div class="rs-handle" aria-hidden="true"></div>
@@ -20,15 +18,15 @@
                   </svg>
                 </div>
                 <div>
-                  <p class="rs-title">Network</p>
-                  <p class="rs-subtitle">{{ activeRelay?.label || 'No relay selected' }}</p>
+                  <DialogTitle class="rs-title">Network</DialogTitle>
+                  <DialogDescription id="rs-subtitle" class="rs-subtitle">{{ activeRelay?.label || 'No relay selected' }}</DialogDescription>
                 </div>
               </div>
-              <button class="rs-close" @click="close" aria-label="Close">
+              <DialogClose class="rs-close" aria-label="Close">
                 <svg viewBox="0 0 24 24" fill="none" width="18" height="18">
                   <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                 </svg>
-              </button>
+              </DialogClose>
             </div>
 
             <!-- Quick toggles -->
@@ -110,11 +108,9 @@
               Full network settings →
             </button>
 
-          </div>
-        </transition>
-      </div>
-    </transition>
-  </teleport>
+      </DialogContent>
+    </DialogPortal>
+  </DialogRoot>
 </template>
 
 <script setup lang="ts">
@@ -122,6 +118,10 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { RelayManager, type RelayEndpoint } from '../services/relayManager';
 import config from '../config';
+import {
+  DialogRoot, DialogPortal, DialogOverlay, DialogContent,
+  DialogTitle, DialogDescription, DialogClose,
+} from 'reka-ui';
 
 const props  = defineProps<{ modelValue: boolean }>();
 const emit   = defineEmits<{ 'update:modelValue': [boolean]; }>();
@@ -195,20 +195,17 @@ onUnmounted(() => {
   inset: 0;
   background: rgba(0, 0, 0, 0.45);
   z-index: 9000;
-  display: flex;
-  align-items: flex-end;
   backdrop-filter: blur(4px);
 }
 
-@media (min-width: 768px) {
-  .rs-backdrop {
-    align-items: center;
-    justify-content: center;
-  }
-}
-
 /* ── Sheet ─────────────────────────────────────────────────────────── */
+/* Overlay and Content are siblings in the portal, so the sheet positions itself. */
 .rs-sheet {
+  position: fixed;
+  z-index: 9001;
+  left: 0;
+  right: 0;
+  bottom: 0;
   background: var(--app-bg-elevated);
   border-top-left-radius: 20px;
   border-top-right-radius: 20px;
@@ -222,6 +219,9 @@ onUnmounted(() => {
 
 @media (min-width: 768px) {
   .rs-sheet {
+    inset: 0;
+    margin: auto;
+    height: fit-content;
     border-radius: 20px;
     max-width: 420px;
     max-height: 90vh;
@@ -429,16 +429,20 @@ onUnmounted(() => {
 .rs-full-settings:hover { background: rgba(var(--app-accent-rgb), 0.06); }
 
 /* ── Transitions ───────────────────────────────────────────────────── */
-.sheet-backdrop-enter-active, .sheet-backdrop-leave-active { transition: opacity 220ms ease; }
-.sheet-backdrop-enter-from, .sheet-backdrop-leave-to { opacity: 0; }
-
-.sheet-slide-enter-active { transition: transform 300ms cubic-bezier(0.16,1,0.3,1), opacity 220ms ease; }
-.sheet-slide-leave-active { transition: transform 220ms cubic-bezier(0.4,0,1,1), opacity 160ms ease; }
-.sheet-slide-enter-from   { transform: translateY(100%); opacity: 0.8; }
-.sheet-slide-leave-to     { transform: translateY(100%); opacity: 0; }
-
+/* Reka Dialog drives these via data-state; Presence waits for the exit animation. */
+.rs-backdrop[data-state='open']   { animation: rs-fade-in 220ms ease; }
+.rs-backdrop[data-state='closed'] { animation: rs-fade-out 160ms ease forwards; }
+.rs-sheet[data-state='open']   { animation: rs-sheet-in 300ms cubic-bezier(0.16,1,0.3,1); }
+.rs-sheet[data-state='closed'] { animation: rs-sheet-out 220ms cubic-bezier(0.4,0,1,1) forwards; }
+@keyframes rs-fade-in  { from { opacity: 0; } }
+@keyframes rs-fade-out { to   { opacity: 0; } }
+@keyframes rs-sheet-in  { from { transform: translateY(100%); opacity: 0.8; } }
+@keyframes rs-sheet-out { to   { transform: translateY(100%); opacity: 0; } }
 @media (min-width: 768px) {
-  .sheet-slide-enter-from { transform: scale(0.94) translateY(8px); }
-  .sheet-slide-leave-to   { transform: scale(0.94) translateY(8px); }
+  @keyframes rs-sheet-in  { from { transform: scale(0.94) translateY(8px); opacity: 0; } }
+  @keyframes rs-sheet-out { to   { transform: scale(0.94) translateY(8px); opacity: 0; } }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rs-backdrop, .rs-sheet { animation: none !important; }
 }
 </style>

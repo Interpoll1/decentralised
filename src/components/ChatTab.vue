@@ -194,9 +194,7 @@
 
     <!-- Empty -->
     <div v-else class="ct-empty">
-      <div class="ct-empty__icon">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
-      </div>
+      <BitMascot :size="72" mood="sleepy" class="ct-empty__bit" />
       <p class="ct-empty__title">No chats yet</p>
       <p class="ct-empty__sub">Start a group, or paste a link someone shared with you. Share your own link so people can message you directly.</p>
       <div class="ct-empty__ctas">
@@ -211,6 +209,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onBeforeUnmount, onMounted } from 'vue';
 import ChatAvatar from './groupchat/ChatAvatar.vue';
+import BitMascot from './BitMascot.vue';
 import GroupCreateSheet from './groupchat/GroupCreateSheet.vue';
 import { useChatRoomStore } from '../stores/chatRoomStore';
 import { UserService } from '../services/userService';
@@ -529,9 +528,9 @@ function formatChatTime(timestamp: number): string {
 .ct-new {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex-shrink: 0;
   height: 46px; padding: 0 14px 0 11px; border: none; border-radius: 999px; white-space: nowrap;
-  background: linear-gradient(135deg, var(--app-accent-bright), #8b5cf6); color: #fff;
+  background: var(--app-accent); color: #111214;
   font: inherit; font-size: 13px; font-weight: 700; letter-spacing: -0.005em; line-height: 1;
-  cursor: pointer; box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+  cursor: pointer; box-shadow: 0 4px 14px rgba(230, 230, 230, 0.35);
   transition: transform 140ms, box-shadow 140ms; -webkit-tap-highlight-color: transparent;
 }
 .ct-new:active { transform: scale(0.96); }
@@ -583,15 +582,15 @@ function formatChatTime(timestamp: number): string {
   transition: border-color 180ms, box-shadow 180ms;
 }
 .link-input-wrap.focused {
-  border-color: rgba(99,102,241,0.45);
-  box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+  border-color: rgba(230, 230, 230,0.45);
+  box-shadow: 0 0 0 3px rgba(230, 230, 230,0.1);
 }
 .link-input-wrap.error { border-color: rgba(239,68,68,0.5); }
 
 .link-prefix-icon {
   width: 15px; height: 15px;
   flex-shrink: 0;
-  color: #818cf8;
+  color: #e6e6e6;
   opacity: 0.7;
 }
 
@@ -630,9 +629,9 @@ function formatChatTime(timestamp: number): string {
   gap: 8px;
   padding: 11px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  background: var(--app-accent);
   border: none;
-  color: #fff;
+  color: #111214;
   font-size: 14px;
   font-weight: 700;
   font-family: inherit;
@@ -672,11 +671,11 @@ function formatChatTime(timestamp: number): string {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
 }
 .avatar__ghost { width: 60%; height: 60%; opacity: 0.92; }
-.tone-violet { background: linear-gradient(135deg,#6366f1,#8b5cf6); }
-.tone-blue   { background: linear-gradient(135deg,#3b82f6,#6366f1); }
+.tone-violet { background: var(--app-accent); }
+.tone-blue   { background: linear-gradient(135deg,#3b82f6,#e6e6e6); }
 .tone-teal   { background: linear-gradient(135deg,#14b8a6,#3b82f6); }
 .tone-amber  { background: linear-gradient(135deg,#f59e0b,#ef4444); }
-.tone-rose   { background: linear-gradient(135deg,#ec4899,#8b5cf6); }
+.tone-rose   { background: linear-gradient(135deg,#ec4899,#e6e6e6); }
 
 
 /* ── The list: one continuous surface ───────────────────────────────── */
@@ -732,7 +731,7 @@ function formatChatTime(timestamp: number): string {
   background: rgba(var(--app-accent-rgb), 0.14); color: var(--app-text-muted); -webkit-tap-highlight-color: transparent;
 }
 .ct-edit__btn svg { width: 16px; height: 16px; }
-.ct-edit__btn--ok { background: linear-gradient(135deg, var(--app-accent-bright), #8b5cf6); color: #fff; }
+.ct-edit__btn--ok { background: var(--app-accent); color: #111214; }
 .ct-edit__btn:active { transform: scale(0.94); }
 .ct-row__preview {
   font-size: 14px; color: var(--app-text-muted); min-width: 0;
@@ -743,7 +742,7 @@ function formatChatTime(timestamp: number): string {
 .ct-row__badge {
   flex-shrink: 0; min-width: 21px; height: 21px; padding: 0 6px; border-radius: 999px;
   display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, var(--app-accent-bright), #8b5cf6); color: #fff; font-size: 11.5px; font-weight: 800;
+  background: var(--app-accent); color: #111214; font-size: 11.5px; font-weight: 800;
 }
 /* unread: heavier name, bright accent time, brighter preview */
 .ct-row--unread { background: rgba(var(--app-accent-rgb), 0.07); }
@@ -764,7 +763,7 @@ function formatChatTime(timestamp: number): string {
 
 /* ── Skeleton (same surface as the list) ────────────────────────────── */
 .ct-skel__avatar, .ct-skel__lines span {
-  background: linear-gradient(90deg, rgba(var(--app-accent-rgb), .10), rgba(var(--app-accent-rgb), .24), rgba(var(--app-accent-rgb), .10));
+  background: var(--app-accent);
   background-size: 200% 100%; animation: ct-skel 1.2s ease-in-out infinite;
 }
 .ct-skel__avatar { width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0; }
@@ -778,7 +777,7 @@ function formatChatTime(timestamp: number): string {
 .ct-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 40px 24px; }
 .ct-empty__icon {
   width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.25); color: #818cf8;
+  background: rgba(230, 230, 230, 0.12); border: 1px solid rgba(230, 230, 230, 0.25); color: #e6e6e6;
 }
 .ct-empty__icon svg { width: 28px; height: 28px; }
 .ct-empty__title { margin: 6px 0 0; font-size: 17px; font-weight: 700; color: var(--app-text); }

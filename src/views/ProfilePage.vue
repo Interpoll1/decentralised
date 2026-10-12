@@ -223,11 +223,11 @@ ion-toolbar { --border-width: 0 !important; }
 
 ion-content {
   --background:
-    radial-gradient(ellipse at 15% 0%,   rgba(139, 92, 246, 0.35) 0%, transparent 50%),
+    radial-gradient(ellipse at 15% 0%,   rgba(230, 230, 230, 0.35) 0%, transparent 50%),
     radial-gradient(ellipse at 88% 8%,   rgba(236, 72, 153, 0.22) 0%, transparent 45%),
-    radial-gradient(ellipse at 50% 100%, rgba(99, 102, 241, 0.24) 0%, transparent 55%),
-    radial-gradient(ellipse at 0%  55%,  rgba(79,  70, 229, 0.15) 0%, transparent 40%),
-    #0d0e1c;
+    radial-gradient(ellipse at 50% 100%, rgba(230, 230, 230, 0.24) 0%, transparent 55%),
+    radial-gradient(ellipse at 0%  55%,  rgba(230, 230, 230, 0.15) 0%, transparent 40%),
+    #141414;
 }
 
 /* Only strip glass from the shell content area — leave sidebars intact */
@@ -263,8 +263,8 @@ ion-content {
   display: flex; flex-direction: column; align-items: center;
   padding: 32px 20px 24px; text-align: center;
   border-radius: 20px;
-  background: rgba(15, 12, 32, 0.55);
-  border: 1px solid rgba(139, 92, 246, 0.18);
+  background: rgba(22, 22, 22, 0.55);
+  border: 1px solid rgba(230, 230, 230, 0.18);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   margin-top: 16px;
@@ -279,29 +279,29 @@ ion-content {
 .avatar-img {
   width: 100%; height: 100%; border-radius: 50%;
   object-fit: cover;
-  border: 3px solid rgba(99,102,241,0.35);
-  box-shadow: 0 0 0 4px rgba(99,102,241,0.1);
+  border: 3px solid rgba(230, 230, 230,0.35);
+  box-shadow: 0 0 0 4px rgba(230, 230, 230,0.1);
 }
 .avatar-placeholder {
   width: 100%; height: 100%; border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  background: var(--app-accent);
   display: flex; align-items: center; justify-content: center;
   color: rgba(255,255,255,0.6); font-size: 48px;
-  border: 3px solid rgba(99,102,241,0.35);
+  border: 3px solid rgba(230, 230, 230,0.35);
 }
 .avatar-edit-ring {
   position: absolute; bottom: 2px; right: 2px;
   width: 26px; height: 26px; border-radius: 50%;
-  background: linear-gradient(135deg,#6366f1,#8b5cf6);
-  border: 2px solid var(--ion-background-color, #0e0f1a);
+  background: var(--app-accent);
+  border: 2px solid var(--ion-background-color, #141414);
   display: flex; align-items: center; justify-content: center;
-  color: #fff; font-size: 13px;
+  color: #111214; font-size: 13px;
 }
 
 .profile-name {
   font-size: 22px; font-weight: 800; letter-spacing: -0.03em;
   color: var(--app-text); margin: 0 0 4px;
-  background: linear-gradient(135deg, var(--app-text) 60%, rgba(167,139,250,0.85));
+  background: linear-gradient(135deg, var(--app-text) 60%, rgba(230, 230, 230,0.85));
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -321,7 +321,7 @@ ion-content {
   background: rgba(52,211,153,0.1); color: #34d399; border: 1px solid rgba(52,211,153,0.25);
 }
 .anon-pill.named {
-  background: rgba(99,102,241,0.1); color: #818cf8; border: 1px solid rgba(99,102,241,0.22);
+  background: rgba(230, 230, 230,0.1); color: #e6e6e6; border: 1px solid rgba(230, 230, 230,0.22);
 }
 .anon-pill.anon {
   background: rgba(255,255,255,0.05); color: var(--app-text-muted); border: 1px solid rgba(255,255,255,0.09);
@@ -345,8 +345,8 @@ ion-content {
 /* ── Cards ────────────────────────────────── */
 .profile-card {
   border-radius: 18px;
-  background: rgba(15, 12, 32, 0.55);
-  border: 1px solid rgba(139, 92, 246, 0.15);
+  background: rgba(22, 22, 22, 0.55);
+  border: 1px solid rgba(230, 230, 230, 0.15);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   padding: 18px 20px;
@@ -355,8 +355,8 @@ ion-content {
 
 /* Chat link card gets a slightly more vivid tint */
 .chat-link-card {
-  background: rgba(99, 102, 241, 0.1);
-  border-color: rgba(99, 102, 241, 0.25);
+  background: rgba(230, 230, 230, 0.1);
+  border-color: rgba(230, 230, 230, 0.25);
 }
 
 .card-label {
@@ -372,7 +372,7 @@ ion-content {
 .field-group { display: flex; flex-direction: column; gap: 6px; }
 .field-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--app-text-subtle); }
 .field-wrap { border-radius: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09); overflow: hidden; transition: border-color 180ms, box-shadow 180ms; }
-.field-wrap:focus-within { border-color: rgba(99,102,241,0.5); box-shadow: 0 0 0 3px rgba(99,102,241,0.1); }
+.field-wrap:focus-within { border-color: rgba(230, 230, 230,0.5); box-shadow: 0 0 0 3px rgba(230, 230, 230,0.1); }
 .field-native { width: 100%; background: transparent; border: none; outline: none; padding: 12px 14px; font-size: 14px; font-family: inherit; color: var(--ion-text-color); -webkit-appearance: none; appearance: none; resize: none; }
 .field-native::placeholder { color: var(--app-text-subtle); }
 
@@ -383,7 +383,7 @@ ion-content {
 .toggle-switch { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
 .toggle-switch input { opacity: 0; width: 0; height: 0; }
 .toggle-track { position: absolute; inset: 0; border-radius: 999px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.1); cursor: pointer; transition: background 200ms; }
-.toggle-switch input:checked + .toggle-track { background: #6366f1; border-color: #6366f1; }
+.toggle-switch input:checked + .toggle-track { background: #e6e6e6; border-color: #e6e6e6; }
 .toggle-track::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.3); transition: transform 200ms; }
 .toggle-switch input:checked + .toggle-track::after { transform: translateX(18px); }
 
@@ -391,9 +391,9 @@ ion-content {
 .save-btn {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   padding: 13px; border-radius: 14px; border: none;
-  background: linear-gradient(135deg,#6366f1,#8b5cf6); color: #fff;
+  background: var(--app-accent); color: #111214;
   font-size: 14px; font-weight: 700; cursor: pointer;
-  box-shadow: 0 6px 20px rgba(99,102,241,0.35);
+  box-shadow: 0 6px 20px rgba(230, 230, 230,0.35);
   transition: opacity 160ms, transform 160ms;
 }
 .save-btn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
@@ -407,7 +407,7 @@ ion-content {
 .info-key { font-size: 12.5px; color: var(--app-text-muted); font-weight: 600; }
 .info-val-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .info-val { font-size: 11.5px; font-family: monospace; color: var(--app-text); word-break: break-all; }
-.karma-badge { padding: 3px 10px; border-radius: 999px; background: rgba(99,102,241,0.12); color: #818cf8; border: 1px solid rgba(99,102,241,0.22); font-size: 12px; font-weight: 700; }
+.karma-badge { padding: 3px 10px; border-radius: 999px; background: rgba(230, 230, 230,0.12); color: #e6e6e6; border: 1px solid rgba(230, 230, 230,0.22); font-size: 12px; font-weight: 700; }
 .icon-btn { width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(255,255,255,0.06); color: var(--app-text-muted); display: flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer; flex-shrink: 0; transition: background 160ms; }
 .icon-btn:hover { background: rgba(255,255,255,0.12); color: var(--app-text); }
 
@@ -420,7 +420,7 @@ ion-content {
   text-align: center;
 }
 .activity-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #fff; }
-.activity-icon.violet { background: linear-gradient(135deg,#6366f1,#8b5cf6); box-shadow: 0 4px 12px rgba(99,102,241,0.3); }
+.activity-icon.violet { background: var(--app-accent); box-shadow: 0 4px 12px rgba(230, 230, 230,0.3); }
 .activity-icon.amber  { background: linear-gradient(135deg,#f59e0b,#ef4444); box-shadow: 0 4px 12px rgba(245,158,11,0.3); }
 .activity-icon.gold   { background: linear-gradient(135deg,#eab308,#f59e0b); box-shadow: 0 4px 12px rgba(234,179,8,0.3); }
 .activity-icon.teal   { background: linear-gradient(135deg,#14b8a6,#3b82f6); box-shadow: 0 4px 12px rgba(20,184,166,0.3); }
@@ -429,11 +429,11 @@ ion-content {
 
 /* ── Chat link ────────────────────────────── */
 .chat-link-box { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09); }
-.link-icon { width: 18px; height: 18px; color: #818cf8; flex-shrink: 0; }
+.link-icon { width: 18px; height: 18px; color: #e6e6e6; flex-shrink: 0; }
 .link-text { font-size: 13px; font-family: monospace; color: var(--app-text-muted); word-break: break-all; }
 .link-actions { display: flex; gap: 8px; }
 .pill-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; border-radius: 999px; border: none; font-size: 13.5px; font-weight: 700; cursor: pointer; transition: opacity 160ms, transform 160ms; }
-.pill-btn.accent { background: linear-gradient(135deg,#6366f1,#8b5cf6); color: #fff; box-shadow: 0 4px 14px rgba(99,102,241,0.38); }
+.pill-btn.accent { background: var(--app-accent); color: #111214; box-shadow: 0 4px 14px rgba(230, 230, 230,0.38); }
 .pill-btn.outline { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--app-text-muted); }
 .pill-btn:hover { opacity: 0.88; transform: translateY(-1px); }
 

@@ -110,9 +110,9 @@ const tierMeta = computed(() => META[props.tier] || META.anonymous);
   color: #fbbf24;
 }
 .ttb--relay {
-  background: rgba(var(--app-accent-rgb, 94 106 210), 0.12);
-  border-color: rgba(var(--app-accent-rgb, 94 106 210), 0.24);
-  color: var(--app-accent-bright, #a5b4fc);
+  background: rgba(var(--app-accent-rgb, 255 63 49), 0.12);
+  border-color: rgba(var(--app-accent-rgb, 255 63 49), 0.24);
+  color: var(--app-accent-bright, #e6e6e6);
 }
 .ttb--issuer {
   background: rgba(52, 211, 153, 0.1);
@@ -130,7 +130,7 @@ const tierMeta = computed(() => META[props.tier] || META.anonymous);
   left: 0;
   z-index: 200;
   min-width: 220px;
-  background: var(--app-bg-elevated, #1e1e32);
+  background: var(--app-bg-elevated, #282828);
   border: 0.5px solid rgba(255,255,255,0.12);
   border-radius: 10px;
   padding: 10px 12px;

@@ -160,7 +160,7 @@ function pressEnd() {
 .gmb.sent .gmb-row { flex-direction: row-reverse; }
 
 .gmb-bubble { position: relative; padding: 7px 12px 6px; border-radius: var(--gmb-radius); min-width: 72px; max-width: 100%; overflow-wrap: anywhere; transition: box-shadow 0.3s ease; }
-.gmb.sent .gmb-bubble { background: var(--app-accent); color: #fff; border-bottom-right-radius: 6px; }
+.gmb.sent .gmb-bubble { background: var(--app-accent); color: #111214; border-bottom-right-radius: 6px; }
 .gmb.received .gmb-bubble { background: var(--app-bg-elevated); color: var(--app-text); border: 1px solid var(--app-border); border-bottom-left-radius: 6px; }
 .gmb.grouped.sent .gmb-bubble { border-top-right-radius: 6px; }
 .gmb.grouped.received .gmb-bubble { border-top-left-radius: 6px; }

@@ -546,8 +546,8 @@ async function joinViaRendezvous() {
 }
 .join-preview-avatar {
   width: 36px; height: 36px; border-radius: 10px;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  color: #fff; font-size: 14px; font-weight: 800;
+  background: var(--app-accent);
+  color: #111214; font-size: 14px; font-weight: 800;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
@@ -608,7 +608,7 @@ async function joinViaRendezvous() {
 }
 .rz-epoch-tag {
   font-size: 10px; font-weight: 700;
-  color: var(--app-accent-bright, #a5b4fc);
+  color: var(--app-accent-bright, #e6e6e6);
   background: rgba(var(--app-accent-rgb),0.1);
   padding: 2px 7px; border-radius: 5px;
 }
@@ -648,8 +648,8 @@ async function joinViaRendezvous() {
   transition: all 0.15s;
 }
 .join-btn--primary {
-  background: linear-gradient(180deg, var(--app-accent-bright, #a5b4fc), var(--app-accent, #5e6ad2));
-  color: #fff;
+  background: var(--app-accent);
+  color: #111214;
   box-shadow: 0 8px 20px rgba(var(--app-accent-rgb),0.28);
 }
 .join-btn--primary:hover:not(:disabled) { opacity: 0.92; }

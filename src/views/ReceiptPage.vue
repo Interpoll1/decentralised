@@ -232,7 +232,7 @@ function resetLookup() {
   font-size: 17px; font-weight: 700;
 }
 .receipt-page-title-icon {
-  color: var(--app-accent-bright, #a5b4fc);
+  color: var(--app-accent-bright, #e6e6e6);
 }
 
 /* ── Shell ─────────────────────────────────────── */
@@ -300,7 +300,7 @@ function resetLookup() {
   transition: border-color 0.15s;
 }
 .rp-textarea:focus {
-  border-color: rgba(var(--app-accent-rgb, 94 106 210), 0.5);
+  border-color: rgba(var(--app-accent-rgb, 255 63 49), 0.5);
 }
 .rp-textarea::placeholder { color: var(--app-text-subtle); font-family: var(--font-sans, system-ui); font-size: 12.5px; }
 .rp-input-hint { margin: 0; font-size: 11px; color: var(--app-text-subtle); }
@@ -315,12 +315,12 @@ function resetLookup() {
   padding: 13px;
   border-radius: 12px;
   border: none;
-  background: linear-gradient(180deg, var(--app-accent-bright, #a5b4fc), var(--app-accent, #5e6ad2));
-  color: #fff;
+  background: var(--app-accent);
+  color: #111214;
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 8px 20px rgba(var(--app-accent-rgb, 94 106 210), 0.28);
+  box-shadow: 0 8px 20px rgba(var(--app-accent-rgb, 255 63 49), 0.28);
   transition: opacity 0.15s;
 }
 .rp-lookup-btn:hover:not(:disabled) { opacity: 0.9; }
@@ -346,7 +346,7 @@ function resetLookup() {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--app-accent-bright, #a5b4fc);
+  background: var(--app-accent-bright, #e6e6e6);
   animation: rp-dot-bounce 1.2s ease-in-out infinite;
 }
 .rp-loading-dots span:nth-child(2) { animation-delay: 0.18s; }

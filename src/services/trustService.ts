@@ -229,6 +229,9 @@ export class TrustService {
       claimedAt: Date.now(),
     });
 
+    // IPP-10: also publish a signed claim so the binding can be verified and later recovered.
+    void import('./nameRecoveryService').then(m => m.NameRecoveryService.publishClaim(username, 'none')).catch(() => { /* best effort */ });
+
     return true;
   }
 
@@ -429,6 +432,7 @@ export class TrustService {
       certificate: JSON.stringify(cert),
       claimedAt: Date.now(),
     });
+    void import('./nameRecoveryService').then(m => m.NameRecoveryService.publishClaim(username, 'issuer', cert)).catch(() => { /* best effort */ });
   }
 
   // ── Verification ───────────────────────────────────────────────────────────

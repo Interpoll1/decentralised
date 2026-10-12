@@ -14,7 +14,8 @@ export const routes: Array<RouteRecordRaw> = [
   {
     path: '/onboarding',
     name: 'Onboarding',
-    component: () => import('../views/OnboardingPage.vue'),
+    // Bit-led full-screen setup: spaces → private key → relay. (OnboardingPage.vue is the old flow.)
+    component: () => import('../views/BitSetupPage.vue'),
   },
   { path: '/home', name: 'Home', component: () => import('../views/HomePage.vue') },
   // Shareable aliases for the HomePage tabs (tab state lives in the ?tab query)
@@ -101,6 +102,16 @@ export const routes: Array<RouteRecordRaw> = [
 const router = createRouter({
   history: createWebHistory('/'),
   routes
+});
+
+// First run: the app shell (/home and its tab aliases) must not be reachable before Bit's setup.
+// Deep links to content (a shared poll, post or chat link) are left alone so they open directly.
+const SHELL_PATHS = ['/home', '/communities', '/spaces', '/create'];
+router.beforeEach((to) => {
+  let done = false;
+  try { done = localStorage.getItem(ONBOARDING_KEY) === 'true'; } catch { done = true; }
+  if (!done && SHELL_PATHS.includes(to.path)) return { path: '/onboarding', replace: true };
+  return true;
 });
 
 export default router;

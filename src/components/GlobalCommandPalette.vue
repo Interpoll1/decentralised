@@ -236,7 +236,7 @@ function handleKeydown(event: KeyboardEvent) {
 :global(html.dark) .global-command-palette {
   background: rgba(15, 23, 42, 0.92);
   border-color: rgba(148, 163, 184, 0.2);
-  box-shadow: 0 20px 80px rgba(2, 6, 23, 0.5);
+  box-shadow: 0 20px 80px rgba(12, 12, 12, 0.5);
 }
 
 .global-command-palette__header {

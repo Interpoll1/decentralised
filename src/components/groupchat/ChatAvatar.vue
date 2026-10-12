@@ -42,7 +42,7 @@ const hue = computed(() => senderHue(props.seed));
 }
 .cav svg { width: 58%; height: 58%; }
 .cav--person { border-radius: 50%; }
-.cav--group { border-radius: 30%; background: linear-gradient(150deg, hsl(var(--cav-hue) 60% 52%), hsl(calc(var(--cav-hue) + 40) 55% 40%)); }
+.cav--group { border-radius: 30%; background: linear-gradient(150deg, hsl(var(--cav-hue) 60% 52%), hsl(var(--cav-hue) 55% 38%)); }
 .cav--sm { width: 30px; height: 30px; font-size: 12px; }
 .cav--md { width: 46px; height: 46px; font-size: 17px; }
 .cav--lg { width: 40px; height: 40px; font-size: 15px; }

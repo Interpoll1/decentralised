@@ -183,6 +183,10 @@
           <UserIdentityBadge :username="username" :preloadedTrust="previewTrust" />
         </div>
 
+        <p class="step-desc hint">
+          Lose your device and this name is gone — unless you set up recovery.
+        </p>
+        <ion-button expand="block" fill="outline" @click="$router.replace('/settings#name-recovery')">Set up name recovery</ion-button>
         <ion-button expand="block" @click="$router.back()">Done</ion-button>
       </section>
 

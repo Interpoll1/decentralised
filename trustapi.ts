@@ -179,6 +179,11 @@ function normalizeHex(input: unknown): string {
   return typeof input === 'string' ? input.trim().toLowerCase() : '';
 }
 
+// Claims are keyed case-insensitively so "Alice" and "alice" can never both be issued.
+function usernameKey(username: string): string {
+  return username.toLowerCase();
+}
+
 function isValidUsername(username: string): boolean {
   return /^[a-zA-Z0-9_.-]{3,32}$/.test(username);
 }
@@ -266,7 +271,7 @@ function handleChallengeRequest(res: http.ServerResponse, body: any): void {
     return;
   }
 
-  const claim = claims.get(username);
+  const claim = claims.get(usernameKey(username));
   if (claim && claim.pubkey !== pubkey) {
     sendJson(res, 409, { error: 'Username already claimed by another pubkey' });
     return;
@@ -381,9 +386,19 @@ async function handleClaimRequest(res: http.ServerResponse, body: any, requireV2
     return;
   }
 
-  const existing = claims.get(username);
+  const existing = claims.get(usernameKey(username));
   if (existing && existing.pubkey !== pubkey) {
     sendJson(res, 409, { error: 'Username already claimed by another pubkey' });
+    return;
+  }
+  // Re-issuing an already-claimed username requires proof of the private key (v2 signed claim);
+  // the unsigned v1 flow only knows the pubkey, which is public.
+  if (existing && !requireV2Auth) {
+    sendJson(res, 409, { error: 'Username already claimed; re-issue requires signed claim-v2' });
+    return;
+  }
+  if (existing && existing.username !== username) {
+    sendJson(res, 409, { error: `Username already claimed as "${existing.username}"` });
     return;
   }
 
@@ -401,7 +416,7 @@ async function handleClaimRequest(res: http.ServerResponse, body: any, requireV2
   challenge.used = true;
   challenges.delete(challengeId);
 
-  claims.set(username, {
+  claims.set(usernameKey(username), {
     username,
     pubkey,
     issuedAt,
@@ -470,7 +485,14 @@ async function loadState(): Promise<void> {
       if (!isValidPubkey(claim.pubkey)) continue;
       if (typeof claim.issuedAt !== 'number' || typeof claim.expiresAt !== 'number') continue;
       if (typeof claim.signature !== 'string') continue;
-      claims.set(username, claim);
+      const key = usernameKey(username);
+      const prior = claims.get(key);
+      // Legacy state may hold case-variants of one name; keep the earliest claim.
+      if (prior && prior.issuedAt <= claim.issuedAt) {
+        console.warn(`[trustapi] dropping duplicate case-variant claim "${username}" (kept "${prior.username}")`);
+        continue;
+      }
+      claims.set(key, { ...claim, username: claim.username || username });
     }
     if (parsed.usedAuthNonces && typeof parsed.usedAuthNonces === 'object') {
       const now = Date.now();

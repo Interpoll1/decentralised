@@ -372,8 +372,8 @@ function formatViewCount(n: number): string {
 .post-header-meta { display: flex; align-items: flex-start; gap: 10px; flex: 1; min-width: 0; }
 .post-avatar {
   width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  color: #fff; font-size: 11px; font-weight: 700;
+  background: var(--app-accent);
+  color: #111214; font-size: 11px; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
 }
 .post-meta-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
@@ -461,12 +461,12 @@ function formatViewCount(n: number): string {
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  background: rgba(167, 139, 250, 0.06);
-  border: 0.5px solid rgba(167, 139, 250, 0.16);
+  background: rgba(230, 230, 230, 0.06);
+  border: 0.5px solid rgba(230, 230, 230, 0.16);
   border-radius: 8px;
   cursor: default;
 }
-.post-nostr-icon { color: #a78bfa; flex-shrink: 0; }
+.post-nostr-icon { color: #e6e6e6; flex-shrink: 0; }
 .post-nostr-id {
   flex: 1;
   font-family: var(--font-mono, monospace);
@@ -483,7 +483,7 @@ function formatViewCount(n: number): string {
   transition: color 0.15s;
   flex-shrink: 0;
 }
-.post-nostr-open:hover { color: #a78bfa; }
+.post-nostr-open:hover { color: #e6e6e6; }
 .post-nostr-copy:hover { color: var(--app-accent-bright); }
 
 /* ── Footer / actions ────────────────────────────── */
@@ -512,16 +512,16 @@ function formatViewCount(n: number): string {
   margin: 2px 0 4px;
   letter-spacing: 0.01em;
 }
-.post-action-btn--heart             { color: #a78bfa; }
-.post-action-btn--heart.active      { color: #c4b5fd; }
+.post-action-btn--heart             { color: #e6e6e6; }
+.post-action-btn--heart.active      { color: #e6e6e6; }
 .post-action-btn--down              { color: var(--app-text-muted); }
 .post-action-btn--down.active       { color: #ef4444; }
 .post-action-btn--down .thumb-down-icon { color: var(--app-text-subtle); transform: rotate(-20deg) scaleX(-1); }
 .post-action-btn--down.active { color: #ef4444; }
 .post-action-btn--down.active .thumb-down-icon { color: #ef4444; }
 .post-action-btn--down.active       { color: #f87171; }
-.post-action-btn--nostr             { color: #a78bfa; }
-.post-action-btn--nostr:hover       { color: #c4b5fd; background: rgba(167,139,250,0.08); }
+.post-action-btn--nostr             { color: #e6e6e6; }
+.post-action-btn--nostr:hover       { color: #e6e6e6; background: rgba(230, 230, 230,0.08); }
 
 .post-mod-btn { --color: var(--ion-color-warning); font-size: 12px; }
 

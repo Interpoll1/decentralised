@@ -521,12 +521,12 @@ onMounted(async () => {
   display: flex; align-items: center; justify-content: center;
   font-size: 12px; font-weight: 800; flex-shrink: 0;
 }
-.tone-tech      { background: rgba(167, 139, 250, 0.2); color: #a78bfa; }
+.tone-tech      { background: rgba(230, 230, 230, 0.2); color: #e6e6e6; }
 .tone-politics  { background: rgba(251, 113, 133, 0.2); color: #fb7185; }
 .tone-science   { background: rgba(56,  189, 248, 0.2); color: #38bdf8; }
 .tone-gaming    { background: rgba(74,  222, 128, 0.2); color: #4ade80; }
 .tone-sports    { background: rgba(45,  212, 191, 0.2); color: #2dd4bf; }
-.tone-music     { background: rgba(192, 132, 252, 0.2); color: #c084fc; }
+.tone-music     { background: rgba(230, 230, 230, 0.2); color: #e6e6e6; }
 .tone-general   { background: rgba(var(--app-accent-rgb), 0.15); color: var(--app-accent-bright); }
 
 .ob-community-count { font-size: 11px; color: var(--app-text-subtle); }
@@ -569,8 +569,8 @@ onMounted(async () => {
 .ob-nav-right { display: flex; align-items: center; gap: 10px; }
 .ob-btn-primary {
   padding: 12px 24px;
-  background: linear-gradient(180deg, var(--app-accent-bright), var(--app-accent));
-  color: #fff; border: none; border-radius: 12px;
+  background: var(--app-accent);
+  color: #111214; border: none; border-radius: 12px;
   font-size: 15px; font-weight: 700; cursor: pointer;
   transition: opacity 0.15s;
   box-shadow: 0 8px 20px rgba(var(--app-accent-rgb), 0.28);

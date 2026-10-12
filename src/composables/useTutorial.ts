@@ -49,7 +49,8 @@ const TUTORIAL_STEPS = [
 ];
 
 export function useTutorial() {
-  const tutorialVisible = ref(localStorage.getItem(TUTORIAL_STORAGE_KEY) !== 'true');
+  // The static card is retired: Bit's interactive tour (BitCoach / bitStore) replaces it.
+  const tutorialVisible = ref(false);
   const tutorialStep    = ref(0);
   const currentTutorialStep = computed(() => TUTORIAL_STEPS[tutorialStep.value]);
 

@@ -180,10 +180,10 @@ watch(() => props.modelValue, async (open) => {
   max-height: 82dvh;
   display: flex; flex-direction: column;
   background:
-    radial-gradient(ellipse at 20% 0%,  rgba(139,92,246,0.22) 0%, transparent 55%),
+    radial-gradient(ellipse at 20% 0%,  rgba(230, 230, 230,0.22) 0%, transparent 55%),
     radial-gradient(ellipse at 85% 5%,  rgba(236,72,153,0.14) 0%, transparent 45%),
-    #0e0f1c;
-  border: 1px solid rgba(139,92,246,0.2);
+    #151515;
+  border: 1px solid rgba(230, 230, 230,0.2);
   border-radius: 24px 24px 0 0;
   overflow: hidden;
   box-shadow: 0 -8px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04);
@@ -208,24 +208,24 @@ watch(() => props.modelValue, async (open) => {
 
 .cpm-title-icon {
   width: 38px; height: 38px; border-radius: 11px; flex-shrink: 0;
-  background: linear-gradient(135deg,#6366f1,#8b5cf6);
-  box-shadow: 0 4px 12px rgba(99,102,241,0.35);
+  background: var(--app-accent);
+  box-shadow: 0 4px 12px rgba(230, 230, 230,0.35);
   display: flex; align-items: center; justify-content: center;
-  color: #fff;
+  color: #111214;
 }
 .cpm-title-icon svg { width: 18px; height: 18px; }
 
 .cpm-title {
   font-size: 15px; font-weight: 800;
   letter-spacing: -0.025em;
-  color: var(--app-text, #e8e8f0);
+  color: var(--app-text, #ececec);
   margin: 0 0 1px;
-  background: linear-gradient(135deg, #fff 60%, rgba(167,139,250,0.9));
+  background: linear-gradient(135deg, #fff 60%, rgba(230, 230, 230,0.9));
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 .cpm-subtitle {
-  font-size: 11.5px; color: var(--app-text-subtle, #6060a0);
+  font-size: 11.5px; color: var(--app-text-subtle, #808080);
   margin: 0; font-weight: 500;
 }
 
@@ -234,7 +234,7 @@ watch(() => props.modelValue, async (open) => {
   background: rgba(255,255,255,0.07);
   border: 1px solid rgba(255,255,255,0.09);
   cursor: pointer; display: flex; align-items: center; justify-content: center;
-  color: var(--app-text-muted, #9090b0);
+  color: var(--app-text-muted, #a0a0a0);
   transition: background 150ms, color 150ms; flex-shrink: 0;
 }
 .cpm-close:hover { background: rgba(255,255,255,0.13); color: #fff; }
@@ -251,23 +251,23 @@ watch(() => props.modelValue, async (open) => {
   gap: 8px;
 }
 .cpm-search-wrap.focused {
-  border-color: rgba(99,102,241,0.5);
-  box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+  border-color: rgba(230, 230, 230,0.5);
+  box-shadow: 0 0 0 3px rgba(230, 230, 230,0.1);
 }
-.cpm-search-icon { width: 15px; height: 15px; color: var(--app-text-subtle,#6060a0); flex-shrink: 0; }
+.cpm-search-icon { width: 15px; height: 15px; color: var(--app-text-subtle,#808080); flex-shrink: 0; }
 .cpm-search {
   flex: 1; background: transparent; border: none; outline: none;
   padding: 10px 0; font-size: 13.5px; font-family: inherit;
-  color: var(--app-text,#e8e8f0); -webkit-appearance: none;
+  color: var(--app-text,#ececec); -webkit-appearance: none;
 }
-.cpm-search::placeholder { color: var(--app-text-subtle,#6060a0); }
+.cpm-search::placeholder { color: var(--app-text-subtle,#808080); }
 .cpm-search::-webkit-search-decoration,
 .cpm-search::-webkit-search-cancel-button { -webkit-appearance: none; }
 .cpm-search-clear {
   width: 20px; height: 20px; border-radius: 50%;
   background: rgba(255,255,255,0.09); border: none; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  color: var(--app-text-subtle,#6060a0); flex-shrink: 0;
+  color: var(--app-text-subtle,#808080); flex-shrink: 0;
   transition: background 150ms;
 }
 .cpm-search-clear:hover { background: rgba(255,255,255,0.16); }
@@ -279,11 +279,11 @@ watch(() => props.modelValue, async (open) => {
   padding: 10px 10px 20px;
   scroll-behavior: smooth;
   scrollbar-width: thin;
-  scrollbar-color: rgba(99,102,241,0.2) transparent;
+  scrollbar-color: rgba(230, 230, 230,0.2) transparent;
 }
 .cpm-list::-webkit-scrollbar { width: 4px; }
 .cpm-list::-webkit-scrollbar-track { background: transparent; }
-.cpm-list::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.2); border-radius: 4px; }
+.cpm-list::-webkit-scrollbar-thumb { background: rgba(230, 230, 230,0.2); border-radius: 4px; }
 
 /* ── Item ──────────────────────────────────── */
 .cpm-item {
@@ -302,11 +302,11 @@ watch(() => props.modelValue, async (open) => {
   transform: translateX(2px);
 }
 .cpm-item--selected {
-  background: rgba(99,102,241,0.12);
-  border-color: rgba(99,102,241,0.28);
+  background: rgba(230, 230, 230,0.12);
+  border-color: rgba(230, 230, 230,0.28);
 }
 .cpm-item--selected:hover {
-  background: rgba(99,102,241,0.16);
+  background: rgba(230, 230, 230,0.16);
   transform: translateX(2px);
 }
 
@@ -317,26 +317,26 @@ watch(() => props.modelValue, async (open) => {
   font-size: 16px; font-weight: 800; color: #fff; flex-shrink: 0;
   letter-spacing: -0.02em;
 }
-.tone-violet { background: linear-gradient(135deg,#6366f1,#8b5cf6); box-shadow: 0 3px 10px rgba(99,102,241,0.35); }
-.tone-blue   { background: linear-gradient(135deg,#3b82f6,#6366f1); box-shadow: 0 3px 10px rgba(59,130,246,0.35); }
+.tone-violet { background: var(--app-accent); box-shadow: 0 3px 10px rgba(230, 230, 230,0.35); }
+.tone-blue   { background: linear-gradient(135deg,#3b82f6,#e6e6e6); box-shadow: 0 3px 10px rgba(59,130,246,0.35); }
 .tone-teal   { background: linear-gradient(135deg,#14b8a6,#3b82f6); box-shadow: 0 3px 10px rgba(20,184,166,0.35); }
 .tone-amber  { background: linear-gradient(135deg,#f59e0b,#ef4444); box-shadow: 0 3px 10px rgba(245,158,11,0.35); }
-.tone-rose   { background: linear-gradient(135deg,#ec4899,#8b5cf6); box-shadow: 0 3px 10px rgba(236,72,153,0.35); }
+.tone-rose   { background: linear-gradient(135deg,#ec4899,#e6e6e6); box-shadow: 0 3px 10px rgba(236,72,153,0.35); }
 
 /* ── Item body ─────────────────────────────── */
 .cpm-item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .cpm-item-name {
   font-size: 14px; font-weight: 700;
   letter-spacing: -0.015em;
-  color: var(--app-text,#e8e8f0);
+  color: var(--app-text,#ececec);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .cpm-item-meta {
   display: flex; align-items: center; gap: 5px;
-  font-size: 11.5px; color: var(--app-text-subtle,#6060a0);
+  font-size: 11.5px; color: var(--app-text-subtle,#808080);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.cpm-item-id { font-family: monospace; font-size: 11px; max-width: 100px; overflow: hidden; text-overflow: ellipsis; color: #818cf8; }
+.cpm-item-id { font-family: monospace; font-size: 11px; max-width: 100px; overflow: hidden; text-overflow: ellipsis; color: #e6e6e6; }
 .cpm-dot { opacity: 0.4; }
 .cpm-badge-private {
   display: inline-flex; align-items: center; gap: 3px;
@@ -349,10 +349,10 @@ watch(() => props.modelValue, async (open) => {
 /* ── Selected check ────────────────────────── */
 .cpm-check-wrap {
   width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
-  background: rgba(99,102,241,0.18); border: 1px solid rgba(99,102,241,0.35);
+  background: rgba(230, 230, 230,0.18); border: 1px solid rgba(230, 230, 230,0.35);
   display: flex; align-items: center; justify-content: center;
 }
-.cpm-check { width: 14px; height: 14px; color: #818cf8; }
+.cpm-check { width: 14px; height: 14px; color: #e6e6e6; }
 
 /* ── Empty state ───────────────────────────── */
 .cpm-empty {
@@ -361,13 +361,13 @@ watch(() => props.modelValue, async (open) => {
 }
 .cpm-empty-icon-wrap {
   width: 52px; height: 52px; border-radius: 50%;
-  background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.2);
+  background: rgba(230, 230, 230,0.1); border: 1px solid rgba(230, 230, 230,0.2);
   display: flex; align-items: center; justify-content: center;
-  color: #818cf8;
+  color: #e6e6e6;
 }
 .cpm-empty-icon-wrap svg { width: 24px; height: 24px; }
-.cpm-empty-title { margin: 0; font-size: 15px; font-weight: 700; color: var(--app-text,#e8e8f0); }
-.cpm-empty-sub { margin: 0; font-size: 13px; color: var(--app-text-subtle,#6060a0); }
+.cpm-empty-title { margin: 0; font-size: 15px; font-weight: 700; color: var(--app-text,#ececec); }
+.cpm-empty-sub { margin: 0; font-size: 13px; color: var(--app-text-subtle,#808080); }
 
 /* ── Transitions ───────────────────────────── */
 .picker-fade-enter-active,

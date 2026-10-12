@@ -19,6 +19,7 @@
     <noscript>
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Grand+Hotel&family=Cormorant+Garamond:ital@1&display=swap" />
     </noscript>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
@@ -32,7 +33,7 @@
 
     <!-- PWA / mobile chrome. Keep theme-color in sync with the manifest
          theme_color in vite.config.ts. -->
-    <meta name="theme-color" content="#141420" />
+    <meta name="theme-color" content="#1a1a1a" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="InterPoll" />
@@ -78,13 +79,13 @@
          page is blank. Inline-styled because no CSS has loaded yet. -->
     <div id="app">
       <noscript><h1>InterPoll</h1><p>Decentralized polls and discussions with cryptographically signed, verifiable votes. Enable JavaScript to use the app.</p></noscript>
-      <div id="boot-splash" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#141420;color:#c8c8d8;font:15px system-ui,-apple-system,sans-serif;text-align:center;padding:16px">
+      <div id="boot-splash" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#1a1a1a;color:#d0d0d0;font:15px system-ui,-apple-system,sans-serif;text-align:center;padding:16px">
         <style>
-          html:not(.dark) #boot-splash{background:#f6f6fa!important;color:#44445a!important}
-          #boot-splash .bs-logo{font:400 56px/1 "Grand Hotel",cursive,system-ui;background:linear-gradient(160deg,#fff,#a5a0ff);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
-          html:not(.dark) #boot-splash .bs-logo{background:linear-gradient(160deg,#4f46e5,#7c3aed);-webkit-background-clip:text;background-clip:text}
-          #boot-splash .bs-net line{stroke:#6366f1;stroke-opacity:.25;stroke-width:1}
-          #boot-splash .bs-net circle{fill:#818cf8;animation:bs-pulse 2.4s ease-in-out infinite}
+          html:not(.dark) #boot-splash{background:#f8f8f8!important;color:#4f4f4f!important}
+          #boot-splash .bs-logo{font:400 56px/1 "Grand Hotel",cursive,system-ui;background:linear-gradient(160deg,#fff,#ff7a70);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+          html:not(.dark) #boot-splash .bs-logo{background:linear-gradient(160deg,#ff3a2c,#ff3729);-webkit-background-clip:text;background-clip:text}
+          #boot-splash .bs-net line{stroke:#ff6055;stroke-opacity:.25;stroke-width:1}
+          #boot-splash .bs-net circle{fill:#ff7a70;animation:bs-pulse 2.4s ease-in-out infinite}
           #boot-splash .bs-net circle:nth-of-type(2){animation-delay:.3s}#boot-splash .bs-net circle:nth-of-type(3){animation-delay:.6s}
           #boot-splash .bs-net circle:nth-of-type(4){animation-delay:.9s}#boot-splash .bs-net circle:nth-of-type(5){animation-delay:1.2s}
           #boot-splash .bs-net circle:nth-of-type(6){animation-delay:1.5s}
@@ -104,7 +105,7 @@
         <div style="opacity:.75">Connecting to peers…</div>
         <div id="boot-slow" style="display:none;max-width:320px;font-size:13px;opacity:.8">
           This is taking longer than usual.
-          <a href="" onclick="location.reload();return false" style="color:#818cf8">Reload</a>
+          <a href="" onclick="location.reload();return false" style="color:#ff7a70">Reload</a>
         </div>
         <script>setTimeout(function(){var e=document.getElementById('boot-slow');if(e)e.style.display='block'},15000)</script>
       </div>

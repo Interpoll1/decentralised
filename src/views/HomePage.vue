@@ -255,6 +255,16 @@
               </ion-infinite-scroll>
             </div>
 
+            <div v-else-if="activeTagFilter || (selectedCategory && selectedCategory !== 'all')" class="empty-state empty-state--home">
+              <BitMascot :size="64" mood="sleepy" />
+              <p>Nothing in {{ activeTagFilter ? '#' + activeTagFilter : (CATEGORY_MAP.get(selectedCategory)?.label ?? selectedCategory) }} yet</p>
+              <p class="subtitle">No live posts match this {{ activeTagFilter ? 'tag' : 'category' }} right now. Be the first to post one.</p>
+              <div class="empty-state__actions">
+                <button class="empty-state-btn empty-state-btn--primary" @click="activeTagFilter = null; selectCategory('all')">Show everything</button>
+                <button class="empty-state-btn empty-state-btn--ghost" @click="activeTab = 'create'">Create a post</button>
+              </div>
+            </div>
+
             <div v-else class="empty-state empty-state--home">
               <ion-icon :icon="documentTextOutline" size="large"></ion-icon>
               <p>No content yet</p>
@@ -411,7 +421,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick, defineAsyncComponent } from 'vue';
+import BitMascot from '../components/BitMascot.vue';
+import { useBitStore } from '../stores/bitStore';
+import { ref, shallowRef, computed, onMounted, onUnmounted, watch, nextTick, defineAsyncComponent } from 'vue';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonBadge,
   IonButtons, IonButton, IonIcon, IonModal, IonSpinner,
@@ -477,6 +489,7 @@ const chainStore     = useChainStore();
 const communityStore = useCommunityStore();
 const navStore       = useNavStore();
 const postStore      = usePostStore();
+const bitStore       = useBitStore();
 const pollStore      = usePollStore();
 
 const FEED_DEBUG      = localStorage.getItem('interpoll_feed_debug') === 'true';
@@ -707,11 +720,39 @@ function handleTagClick(tag: string) {
   recordEngagement(undefined, [tag]);
 }
 
+// Category/tags are assigned server-side by the relay's categoriser, so feed items often
+// arrive without them. When a tag/category filter is active we ask the relay's search index
+// which items match and remember their labels here.
+const relayMeta = shallowRef(new Map<string, { category: string | null; tags: string[] }>());
+let relayMetaSeq = 0;
+async function loadRelayMeta(term: string) {
+  const seq = ++relayMetaSeq;
+  if (term.length < 2) return;
+  try {
+    const res = await fetch(`${config.relay.api}/api/search?q=${encodeURIComponent(term)}&limit=50`);
+    if (!res.ok || seq !== relayMetaSeq) return;
+    const json = await res.json();
+    const next = new Map(relayMeta.value);
+    for (const r of json?.results ?? []) {
+      if (r?.id) next.set(r.id, { category: r.category ?? null, tags: Array.isArray(r.tags) ? r.tags : [] });
+    }
+    relayMeta.value = next;
+    // Matches older than the loaded window aren't in the store yet — fetch them.
+    const postIds = (json?.results ?? []).filter((r: any) => r?.type === 'post' && r?.id).map((r: any) => r.id);
+    if (postIds.length) await postStore.ensurePostsLoaded(postIds);
+    if (seq !== relayMetaSeq) return;
+    _rankDirty.value++;
+  } catch { /* non-fatal: local labels still apply */ }
+}
+watch(activeTagFilter, (tag) => { if (tag) void loadRelayMeta(tag.replace(/^#/, '')); });
+watch(selectedCategory, (cat) => { if (cat && cat !== 'all') void loadRelayMeta(cat); }, { immediate: true });
+
 function itemMatchesTag(item: { type: string; data: any }, tag: string): boolean {
-  const tags = item.data.tags;
-  if (!tags) return false;
-  const arr = Array.isArray(tags) ? tags : String(tags).split(',').map((t: string) => t.trim());
-  return arr.includes(tag);
+  const norm = (t: unknown) => String(t).trim().replace(/^#/, '').toLowerCase();
+  const local = item.data.tags;
+  const localArr = !local ? [] : Array.isArray(local) ? local : String(local).split(',');
+  const arr = [...localArr, ...(relayMeta.value.get(item.data.id)?.tags ?? [])];
+  return arr.some((t: unknown) => norm(t) === norm(tag));
 }
 
 // ── Feed computation with scope filtering ──────────────────────────────────
@@ -726,9 +767,12 @@ function itemMatchesScope(item: { type: string; data: any }): boolean {
 function itemMatchesCategory(item: { type: string; data: any }): boolean {
   if (selectedCategory.value === 'all') return true;
   const cat = selectedCategory.value.toLowerCase();
-  if (item.data.category && String(item.data.category).toLowerCase() === cat) return true;
-  if (item.data.tags) {
-    const tags = Array.isArray(item.data.tags) ? item.data.tags : String(item.data.tags).split(',');
+  const meta = relayMeta.value.get(item.data.id);
+  const category = item.data.category || meta?.category;
+  if (category && String(category).toLowerCase() === cat) return true;
+  const rawTags = item.data.tags?.length ? item.data.tags : meta?.tags;
+  if (rawTags) {
+    const tags = Array.isArray(rawTags) ? rawTags : String(rawTags).split(',');
     if (tags.some((t: any) => String(t).toLowerCase().trim() === cat)) return true;
   }
   return false;
@@ -767,7 +811,7 @@ const _rankedItems   = new Map<string, any>();   // id → feed item (kept fresh
 const _rankDirty     = ref(0);                   // increment to force a re-rank
 
 // Explicit re-rank triggers: mode, category, scope, preferences
-watch([feedMode, selectedCategory, feedScope, topCategories, recentTags],
+watch([feedMode, selectedCategory, activeTagFilter, feedScope, topCategories, recentTags],
   () => { _rankDirty.value++; _weightCache.clear(); },
   { flush: 'post' }
 );
@@ -775,6 +819,7 @@ watch([feedMode, selectedCategory, feedScope, topCategories, recentTags],
 const combinedFeed = computed(() => {
   moderationVersion.value;
   selectedCategory.value;
+  activeTagFilter.value;
   feedScope.value;
   feedMode.value;
   _rankDirty.value; // explicit re-rank trigger only
@@ -797,9 +842,8 @@ const combinedFeed = computed(() => {
   // Apply category filter
   const filtered: Array<{ type: 'post' | 'poll'; data: any; createdAt: number }> = [];
   for (const item of _rankedItems.values()) {
-    if (selectedCategory.value && selectedCategory.value !== 'all') {
-      if (item.data.category !== selectedCategory.value) continue;
-    }
+    if (!itemMatchesCategory(item)) continue;
+    if (activeTagFilter.value && !itemMatchesTag(item, activeTagFilter.value)) continue;
     filtered.push(item);
   }
 
@@ -1124,10 +1168,11 @@ onMounted(async () => {
 
   // Don't stack the moderation modal on top of the quick tour — wait until
   // the tour is finished or skipped.
-  if (!tutorialVisible.value) maybeShowOnboarding();
+  // (Bit's tour replaced the old tutorial card; its state lives in bitStore.)
+  if (bitStore.tourDone) maybeShowOnboarding();
   else {
-    const stop = watch(tutorialVisible, (visible) => {
-      if (!visible) { stop(); maybeShowOnboarding(); }
+    const stop = watch(() => bitStore.tourDone, (done) => {
+      if (done) { stop(); maybeShowOnboarding(); }
     });
   }
   void loadTrendingCategories();
@@ -1297,7 +1342,7 @@ if (typeof window !== 'undefined') {
         const dv = (p as any).dataVersion ?? '(undefined)';
         byVersion[dv] = (byVersion[dv] || 0) + 1;
       }
-      console.group('%c[Interpoll] postsMap dataVersion breakdown', 'color:#6366f1;font-weight:bold');
+      console.group('%c[Interpoll] postsMap dataVersion breakdown', 'color:#e6e6e6;font-weight:bold');
       console.table(byVersion);
       console.log('Full sample (first 5):', entries.slice(0, 5).map((p: any) => ({
         id: p.id, title: p.title?.slice(0,40), dataVersion: p.dataVersion
@@ -1312,7 +1357,7 @@ if (typeof window !== 'undefined') {
       const polls   = pollStore.sortedPolls;
       const feed    = combinedFeed.value;
       const mapSize = postStore.postsMap?.size ?? 'N/A';
-      console.group('%c[Interpoll Debug]', 'color:#6366f1;font-weight:bold');
+      console.group('%c[Interpoll Debug]', 'color:#e6e6e6;font-weight:bold');
       console.log('postsMap size (raw store):', mapSize);
       console.log('sortedPosts length:', posts.length);
       console.log('sortedPolls length:', polls.length);
@@ -1378,7 +1423,7 @@ if (typeof window !== 'undefined') {
       console.groupEnd();
     },
   };
-  console.log('%c[Interpoll] Debug ready → window.__interpoll.diagnose()', 'color:#6366f1;font-style:italic');
+  console.log('%c[Interpoll] Debug ready → window.__interpoll.diagnose()', 'color:#e6e6e6;font-style:italic');
 
   // View tracking debug shortcuts
   (window as any).__interpoll.views = {

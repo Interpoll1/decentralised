@@ -286,9 +286,9 @@ async function shareViaNativeShare() {
 .rsp-toggle-left { display: flex; align-items: center; gap: 12px; }
 .rsp-toggle-icon {
   width: 34px; height: 34px; border-radius: 9px;
-  background: rgba(var(--app-accent-rgb, 94 106 210), 0.1);
-  border: 1px solid rgba(var(--app-accent-rgb, 94 106 210), 0.2);
-  color: var(--app-accent-bright, #a5b4fc);
+  background: rgba(var(--app-accent-rgb, 255 63 49), 0.1);
+  border: 1px solid rgba(var(--app-accent-rgb, 255 63 49), 0.2);
+  color: var(--app-accent-bright, #e6e6e6);
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 .rsp-toggle-title { font-size: 14px; font-weight: 700; color: var(--app-text); display: block; margin-bottom: 2px; }
@@ -307,7 +307,7 @@ async function shareViaNativeShare() {
   width: 18px; height: 18px; border-radius: 50%; background: #fff;
   box-shadow: 0 1px 4px rgba(0,0,0,0.3); transition: transform 0.2s;
 }
-.rsp-switch input:checked + .rsp-track { background: var(--app-accent, #5e6ad2); }
+.rsp-switch input:checked + .rsp-track { background: var(--app-accent, #e6e6e6); }
 .rsp-switch input:checked + .rsp-track::after { transform: translateX(20px); }
 
 /* ── Panel ──────────────────────────────────────── */
@@ -373,9 +373,9 @@ async function shareViaNativeShare() {
 /* ── Soul ───────────────────────────────────────── */
 .rsp-epoch-badge {
   font-size: 11px; font-weight: 600;
-  color: var(--app-accent-bright, #a5b4fc);
-  background: rgba(var(--app-accent-rgb, 94 106 210), 0.1);
-  border: 0.5px solid rgba(var(--app-accent-rgb, 94 106 210), 0.2);
+  color: var(--app-accent-bright, #e6e6e6);
+  background: rgba(var(--app-accent-rgb, 255 63 49), 0.1);
+  border: 0.5px solid rgba(var(--app-accent-rgb, 255 63 49), 0.2);
   padding: 2px 8px; border-radius: 6px;
 }
 
@@ -395,12 +395,12 @@ async function shareViaNativeShare() {
 .rsp-share-btn {
   flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px;
   padding: 10px; border-radius: 10px;
-  background: rgba(var(--app-accent-rgb, 94 106 210), 0.1);
-  border: 1px solid rgba(var(--app-accent-rgb, 94 106 210), 0.22);
-  color: var(--app-accent-bright, #a5b4fc); font-size: 13px; font-weight: 700;
+  background: rgba(var(--app-accent-rgb, 255 63 49), 0.1);
+  border: 1px solid rgba(var(--app-accent-rgb, 255 63 49), 0.22);
+  color: var(--app-accent-bright, #e6e6e6); font-size: 13px; font-weight: 700;
   cursor: pointer; transition: all 0.15s;
 }
-.rsp-share-btn:hover { background: rgba(var(--app-accent-rgb, 94 106 210), 0.18); }
+.rsp-share-btn:hover { background: rgba(var(--app-accent-rgb, 255 63 49), 0.18); }
 
 /* ── Warning ────────────────────────────────────── */
 .rsp-warn {
