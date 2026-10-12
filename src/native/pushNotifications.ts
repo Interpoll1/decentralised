@@ -108,10 +108,10 @@ export async function initPushNotifications(): Promise<void> {
  * Keep in sync with `relay-push/push-notifications.js`.
  */
 function registerMessage(userId: string, deviceId: string, token: string, ts: number): string {
-  return `interpoll-push-register-1:${userId}:${deviceId}:${token}:${ts}`;
+  return JSON.stringify(['interpoll-push-register-2', userId, deviceId, token, ts]);
 }
 function unregisterMessage(userId: string, deviceId: string, ts: number): string {
-  return `interpoll-push-unregister-1:${userId}:${deviceId}:${ts}`;
+  return JSON.stringify(['interpoll-push-unregister-2', userId, deviceId, ts]);
 }
 
 /** Send the FCM token to the relay so it can target this device. */

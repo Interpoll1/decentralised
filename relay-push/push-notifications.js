@@ -17,7 +17,7 @@
  * There is no session to trust here — InterPoll identities are keys, not
  * accounts, and the relay is explicitly untrusted. So registration is
  * self-authenticating: `userId` IS the x-only Schnorr public key, and the
- * client signs the (userId, deviceId, token, ts) tuple with the matching
+ * client signs the (userId, deviceId, token, ts) tuple (JSON-encoded) with the matching
  * private key. The relay verifies that signature against `userId` itself, so
  * nobody can bind their FCM token to someone else's identity (which would
  * leak who is messaging that user) or unregister someone else's device
@@ -133,9 +133,17 @@ class TokenStore {
     }
   }
 
+  /**
+   * Bind a device to an identity. A deviceId already held by a different
+   * userId is never overwritten; only that identity may update or remove it.
+   * @returns {boolean} false if the device belongs to someone else
+   */
   register({ deviceId, userId, token, platform }) {
+    const existing = this.devices.get(deviceId);
+    if (existing && existing.userId !== userId) return false;
     this.devices.set(deviceId, { userId, token, platform: platform || 'android', updatedAt: Date.now() });
     this.save();
+    return true;
   }
 
   /** Only the identity that registered a device may remove it. */
@@ -237,12 +245,17 @@ class FcmSender {
   }
 }
 
-/** Canonical strings the client signs. Keep in sync with src/native/pushNotifications.ts. */
+/**
+ * Canonical strings the client signs. Keep in sync with src/native/pushNotifications.ts.
+ * JSON-encoded so field boundaries are unambiguous (a ':' inside deviceId or
+ * token cannot shift values between fields), with a version tag for domain
+ * separation.
+ */
 function registerMessage({ userId, deviceId, token, ts }) {
-  return `interpoll-push-register-1:${userId}:${deviceId}:${token}:${ts}`;
+  return JSON.stringify(['interpoll-push-register-2', userId, deviceId, token, ts]);
 }
 function unregisterMessage({ userId, deviceId, ts }) {
-  return `interpoll-push-unregister-1:${userId}:${deviceId}:${ts}`;
+  return JSON.stringify(['interpoll-push-unregister-2', userId, deviceId, ts]);
 }
 
 /**
@@ -331,7 +344,11 @@ function attachPush(app, opts = {}) {
     if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
 
     const { userId, token, deviceId, platform } = auth.body;
-    store.register({ userId, token, deviceId, platform });
+    // A deviceId already registered to a different identity is not ours to
+    // overwrite, even though the caller proved they own their own userId.
+    if (!store.register({ userId, token, deviceId, platform })) {
+      return res.status(403).json({ error: 'deviceId is registered to another identity' });
+    }
     res.json({ ok: true });
   });
 

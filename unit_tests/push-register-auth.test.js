@@ -14,12 +14,18 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 const require = createRequire(import.meta.url);
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // Kept inside the repo so node resolves @noble from the project's node_modules.
-const cjsCopy = path.join(repoRoot, 'relay-push', `.push-notifications.${process.pid}.cjs`);
-fs.copyFileSync(path.join(repoRoot, 'relay-push', 'push-notifications.js'), cjsCopy);
-const { attachPush, registerMessage, unregisterMessage } = require(cjsCopy);
+// A nested package.json marks the copy as CommonJS, so the module's own
+// require('./email-notifications') resolves too.
+const cjsDir = path.join(repoRoot, 'relay-push', `.test-tmp-${process.pid}`);
+fs.mkdirSync(cjsDir, { recursive: true });
+fs.writeFileSync(path.join(cjsDir, 'package.json'), '{"type":"commonjs"}');
+for (const file of ['push-notifications.js', 'email-notifications.js']) {
+  fs.copyFileSync(path.join(repoRoot, 'relay-push', file), path.join(cjsDir, file));
+}
+const { attachPush, registerMessage, unregisterMessage } = require(path.join(cjsDir, 'push-notifications.js'));
 
 afterAll(() => {
-  try { fs.unlinkSync(cjsCopy); } catch { /* already gone */ }
+  fs.rmSync(cjsDir, { recursive: true, force: true });
 });
 
 function makeIdentity() {
@@ -152,6 +158,44 @@ describe('relay push registration auth', () => {
     expect(res.statusCode).toBe(200);
     const stored = JSON.parse(fs.readFileSync(storePath, 'utf8'));
     expect(stored['device-1']).toBeUndefined();
+  });
+
+  it('refuses to overwrite a device registered to another identity', () => {
+    const victim   = makeIdentity();
+    const attacker = makeIdentity();
+    expect(app.call('/api/push/register', registerBody(victim)).statusCode).toBe(200);
+
+    const res = app.call('/api/push/register', registerBody(attacker, { token: 'attacker-token' }));
+    expect(res.statusCode).toBe(403);
+    const stored = JSON.parse(fs.readFileSync(storePath, 'utf8'));
+    expect(stored['device-1'].userId).toBe(victim.userId);
+    expect(stored['device-1'].token).toBe('fcm-token-abc');
+  });
+
+  it('lets the same identity update its own device token', () => {
+    const me = makeIdentity();
+    expect(app.call('/api/push/register', registerBody(me)).statusCode).toBe(200);
+    expect(app.call('/api/push/register', registerBody(me, { token: 'rotated' })).statusCode).toBe(200);
+    const stored = JSON.parse(fs.readFileSync(storePath, 'utf8'));
+    expect(stored['device-1'].token).toBe('rotated');
+  });
+
+  it('signs fields unambiguously so values cannot be shifted between them', () => {
+    const base = { userId: 'u', ts: 1 };
+    const a = registerMessage({ ...base, deviceId: 'a:b', token: 'c' });
+    const b = registerMessage({ ...base, deviceId: 'a', token: 'b:c' });
+    expect(a).not.toBe(b);
+
+    const me = makeIdentity();
+    const ts = Date.now();
+    const body = {
+      userId: me.userId, deviceId: 'a:b', token: 'c', platform: 'android', ts,
+      sig: sign(registerMessage({ userId: me.userId, deviceId: 'a:b', token: 'c', ts }), me.privateKey),
+    };
+    // Same signature, fields shifted across the old ':' boundary.
+    const shifted = { ...body, deviceId: 'a', token: 'b:c' };
+    expect(app.call('/api/push/register', shifted).statusCode).toBe(403);
+    expect(app.call('/api/push/register', body).statusCode).toBe(200);
   });
 
   it('rate-limits a flood of registrations from one IP', () => {

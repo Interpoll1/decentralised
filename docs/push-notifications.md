@@ -119,7 +119,7 @@ There is no session to trust — InterPoll identities are keys, not accounts, an
 the relay is explicitly untrusted. So registration is self-authenticating:
 
 - `userId` **is** the x-only Schnorr public key.
-- The client signs `interpoll-push-register-1:<userId>:<deviceId>:<token>:<ts>`
+- The client signs `JSON.stringify(['interpoll-push-register-2', userId, deviceId, token, ts])`
   with the matching private key (`CryptoService.sign`, same primitive as
   `signRawSchnorr` in `shared-validation/signatures.js`).
 - The relay verifies that signature *against `userId` itself*, so no key
@@ -130,7 +130,13 @@ the relay is explicitly untrusted. So registration is self-authenticating:
   captured request cannot be replayed. Registrations are rate-limited to 20 per
   IP per minute.
 
-Unregister is signed the same way (`interpoll-push-unregister-1:…`) and only
+A `deviceId` that is already registered to a different `userId` is never
+overwritten: `register` answers 403. Only the owning identity can update or
+remove it. The JSON encoding means a `:` inside a field cannot shift values
+between fields. **Deploy note:** the signed format changed (`-1` to `-2`), so
+ship the relay and app together; old clients get 403 until updated.
+
+Unregister is signed the same way (`JSON.stringify(['interpoll-push-unregister-2', userId, deviceId, ts])`) and only
 removes a device whose stored `userId` matches the signer.
 
 ### 4. Email fallback (Resend)
