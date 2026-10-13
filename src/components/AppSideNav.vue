@@ -22,14 +22,13 @@
       <span>Feed</span>
     </button>
 
-    <button class="asn-item" data-tour="communities" :class="{ active: activeRoute === 'spaces' }" @click="go('spaces')">
+    <button class="asn-item" data-tour="orbit" :class="{ active: activeRoute === 'orbit' }" @click="go('orbit')">
       <svg class="asn-icon" viewBox="0 0 24 24" fill="none">
-        <circle v-if="activeRoute==='spaces'" cx="9" cy="7" r="4" fill="currentColor"/>
-        <circle v-else cx="9" cy="7" r="4" stroke="currentColor" stroke-width="1.7"/>
-        <path d="M3 21v-1a6 6 0 0112 0v1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-        <path d="M16 3.13a4 4 0 010 7.74M21 21v-1a4 4 0 00-3-3.85" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        <circle cx="12" cy="12" r="3" :fill="activeRoute==='orbit' ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="1.7"/>
+        <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.7" stroke-dasharray="2 3"/>
+        <circle cx="19" cy="9" r="1.6" fill="currentColor"/><circle cx="6" cy="17" r="1.3" fill="currentColor"/>
       </svg>
-      <span>Spaces</span>
+      <span>Orbit</span>
     </button>
 
     <button class="asn-item" data-tour="chat" :class="{ active: activeRoute === 'chat' }" @click="go('chat')">
@@ -164,10 +163,10 @@ const catsExpanded = ref(false);
 
 // Derive active route from current path OR from activeTab prop (HomePage passes this)
 const activeRoute = computed(() => {
-  if (props.activeTab) return props.activeTab === 'communities' ? 'spaces' : props.activeTab;
+  if (props.activeTab) return props.activeTab === 'communities' ? 'orbit' : props.activeTab;
   const p = route.path;
   if (p === '/home' || p === '/') return 'home';
-  if (p.includes('communit'))      return 'spaces';
+  if (p.includes('communit'))      return 'orbit';
   if (p.includes('chat'))          return 'chat';
   if (p.includes('search'))        return 'search';
   if (p.includes('profile'))       return 'profile';
@@ -185,12 +184,11 @@ function goHome() {
 function go(tab: string) {
   if (props.activeTab !== undefined) {
     // HomePage mode — emit to parent
-    const ionicTab = tab === 'spaces' ? 'communities' : tab;
-    emit('update:activeTab', ionicTab);
+    emit('update:activeTab', tab);
   } else {
     // Subpage mode — navigate directly
     const paths: Record<string, string> = {
-      home: '/home', spaces: '/home', chat: '/home', create: '/home'
+      home: '/home', orbit: '/home?tab=orbit', chat: '/home?tab=chat', create: '/home?tab=create'
     };
     router.push(paths[tab] ?? '/home');
   }

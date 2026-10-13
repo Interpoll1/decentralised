@@ -19,8 +19,8 @@ export const routes: Array<RouteRecordRaw> = [
   },
   { path: '/home', name: 'Home', component: () => import('../views/HomePage.vue') },
   // Shareable aliases for the HomePage tabs (tab state lives in the ?tab query)
-  { path: '/communities', redirect: { path: '/home', query: { tab: 'communities' } } },
-  { path: '/spaces',      redirect: { path: '/home', query: { tab: 'communities' } } },
+  { path: '/communities', redirect: { path: '/home', query: { tab: 'orbit', view: 'spaces' } } },
+  { path: '/spaces',      redirect: { path: '/home', query: { tab: 'orbit', view: 'spaces' } } },
   { path: '/create',      redirect: { path: '/home', query: { tab: 'create' } } },
   {
     path: '/community/:communityId',

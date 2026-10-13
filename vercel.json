@@ -1,3 +1,8 @@
 {
-  "rewrites": [{ "source": "/((?!assets2/|.*\\..*).*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/", "destination": "/index.html" },
+    { "source": "/(onboarding|home|communities|spaces|create|create-community|create-poll|profile|settings|network|chain-explorer|search|resilience|claim-username|chatrooms)", "destination": "/index.html" },
+    { "source": "/(community|poll|post|user|u|vote|results|receipt|chat|chatroom|join)/:path*", "destination": "/index.html" },
+    { "source": "/auth/callback", "destination": "/index.html" }
+  ]
 }

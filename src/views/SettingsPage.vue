@@ -168,11 +168,14 @@
               <div>
                 <div class="toggle-label">Bottom bar items</div>
                 <div class="toggle-sub">
-                  Hold any tab and drag it onto another to swap their places. The first tab is
-                  where the app opens (put Messages first to start there). Works on the bar itself too.
+                  Mobile: hold a tab and drag it onto another to swap places. The first tab is
+                  where the app opens.
                 </div>
               </div>
-              <button class="settings-inline-btn" :disabled="!navStore.enabled" @click="openNavCustomiser">Customise</button>
+              <div class="settings-inline-actions">
+                <button v-if="isMobileViewport" class="settings-inline-btn" :disabled="!navStore.enabled" @click="replayNavTip">Show me how</button>
+                <button class="settings-inline-btn" :disabled="!navStore.enabled" @click="navStore.reset()">Reset</button>
+              </div>
             </div>
 
             <div class="toggle-row">
@@ -1183,6 +1186,7 @@ ion-content {
 }
 .settings-inline-btn:active { opacity: 0.7; }
 .settings-inline-btn:disabled { opacity: 0.4; cursor: default; }
+.settings-inline-actions { display: flex; flex-shrink: 0; gap: 8px; }
 
 /* The email fallback needs an input, so its row stacks instead of sitting on one line. */
 .toggle-row-stacked { align-items: flex-start; }
@@ -1751,12 +1755,17 @@ function replayBitTour() { void router.push('/home').then(() => bitStore.replayT
 // ── Bottom nav + notifications ─────────────────────────────────────────────
 const navStore    = useNavStore();
 const pushEnabled = ref(isPushEnabled());
+const navTipMedia = typeof window === 'undefined' ? null : window.matchMedia('(max-width: 767px)');
+const isMobileViewport = ref(navTipMedia?.matches ?? false);
 
-/** Jump to the home feed with the bottom bar in edit mode. */
-function openNavCustomiser() {
-  // Set the flag after the route settles: BottomNav clears `editing` when it
-  // unmounts, which would otherwise race the navigation away from Settings.
-  void router.push('/home').then(() => navStore.setEditing(true));
+function syncNavTipViewport(event?: MediaQueryListEvent) {
+  isMobileViewport.value = event?.matches ?? navTipMedia?.matches ?? false;
+}
+
+/** Replay just the bottom-bar step of Bit's tour on the home feed. */
+function replayNavTip() {
+  if (!navStore.enabled || !isMobileViewport.value) return;
+  void router.push('/home').then(() => window.setTimeout(() => bitStore.startNavTour(), 400));
 }
 
 async function togglePush(on: boolean) {
@@ -3037,6 +3046,8 @@ onIonViewWillEnter(async () => {
 });
 
 onMounted(async () => {
+  syncNavTipViewport();
+  navTipMedia?.addEventListener('change', syncNavTipViewport);
   await refreshStorageStats();
   await loadPolicy();
   userProfile.value = await UserService.getCurrentUser(true);
@@ -3088,6 +3099,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  navTipMedia?.removeEventListener('change', syncNavTipViewport);
   if (statusCleanup) statusCleanup();
   if (networkPollInterval) clearInterval(networkPollInterval);
 });

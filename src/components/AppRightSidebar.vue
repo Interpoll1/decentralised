@@ -5,7 +5,7 @@
     <div class="ars-section surface-card">
       <div class="ars-header">
         <span>Spaces</span>
-        <button class="ars-link" @click="router.push('/home?tab=communities')">See all</button>
+        <button class="ars-link" @click="router.push('/home?tab=orbit&view=spaces')">See all</button>
       </div>
       <button class="ars-create-cta" @click="router.push('/create-community')">
         <svg viewBox="0 0 24 24" fill="none" width="14" height="14">

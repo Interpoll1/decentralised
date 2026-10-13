@@ -1,13 +1,6 @@
 <template>
-  <ion-footer class="bottom-nav-footer" :class="{ 'footer-hidden': hidden && !navStore.editing && !drag.active }">
-    <!-- Shown when opened from Settings → Customise. The gesture itself needs no mode. -->
-    <div v-if="navStore.editing" class="nav-edit-hint">
-      <span class="nav-edit-hint__text">Hold a tab, then drag it onto another to swap places. The first tab is where the app opens.</span>
-      <button class="nav-edit-hint__btn" @click="navStore.reset()">Reset</button>
-      <button class="nav-edit-hint__btn nav-edit-hint__btn--done" @click="navStore.setEditing(false)">Done</button>
-    </div>
-
-    <div ref="navEl" class="bottom-nav">
+  <ion-footer class="bottom-nav-footer" :class="{ 'footer-hidden': hidden && !drag.active }">
+    <div ref="navEl" class="bottom-nav" data-tour="bottom-nav">
       <button
         v-for="(item, index) in navStore.items"
         :key="item.id"
@@ -37,26 +30,9 @@
       </button>
     </div>
 
-    <!-- Drag layer: the lifted tab following your finger, plus a tray of everything that isn't in
-         the bar. Teleported because the footer clips overflow. Only exists while dragging. -->
+    <!-- Drag layer: the lifted tab following your finger. Teleported because the footer clips overflow. -->
     <Teleport to="body">
       <div v-if="drag.active && draggedItem" class="nav-drag-layer" aria-hidden="true">
-        <div v-if="trayItems.length" class="nav-tray" :style="trayStyle">
-          <div class="nav-tray__title">Drop on one to swap it in</div>
-          <div class="nav-tray__row">
-            <div
-              v-for="t in trayItems"
-              :key="t.id"
-              class="nav-tray__chip"
-              :class="{ 'nav-tray__chip--over': drag.overTray === t.id }"
-              :data-tray-id="t.id"
-            >
-              <span class="nav-tray__icon"><NavIcon :id="t.id" :active="drag.overTray === t.id" /></span>
-              <span class="nav-tray__label">{{ t.label }}</span>
-            </div>
-          </div>
-        </div>
-
         <div class="nav-ghost" :style="ghostStyle">
           <span class="nav-ghost__icon"><NavIcon :id="draggedItem.id" :active="true" /></span>
           <span class="nav-ghost__label">{{ draggedItem.label }}</span>
@@ -67,7 +43,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, defineAsyncComponent, nextTick, watch, onUnmounted } from 'vue';
+import { ref, reactive, computed, defineAsyncComponent, nextTick, onUnmounted } from 'vue';
 import { IonFooter } from '@ionic/vue';
 import { useRouter } from 'vue-router';
 import { useNavStore, type NavItemDef } from '../stores/navStore';
@@ -103,22 +79,18 @@ function onItemClick(item: NavItemDef) {
 
 // ── Hold → drag → drop to swap ─────────────────────────────────────────────
 const HOLD_MS        = 450;   // press-and-hold before a tab lifts
-const HOLD_SLOP_PX   = 10;    // moving further than this before the hold completes means "swipe", not "hold"
-const SLOT_REACH_PX  = 28;    // forgiveness above the bar when aiming at a slot
+const HOLD_SLOP_PX   = 14;    // moving further than this before the hold completes means "swipe", not "hold"
+const SLOT_REACH_PX  = 60;    // forgiveness above the bar when aiming at a slot
 
 const drag = reactive({
   active: false,
   from: -1,
   x: 0, y: 0,
   overSlot: -1,        // bar slot currently under the finger (never the lifted one)
-  overTray: '' as string,
-  trayBottom: 90,
 });
 
 const draggedItem = computed<NavItemDef | null>(() => (drag.active ? navStore.items[drag.from] ?? null : null));
-const trayItems   = computed(() => navStore.availableItems);
 const ghostStyle  = computed(() => ({ left: `${drag.x}px`, top: `${drag.y}px` }));
-const trayStyle   = computed(() => ({ bottom: `${drag.trayBottom}px` }));
 
 let pressTimer: ReturnType<typeof setTimeout> | null = null;
 let pressIndex = -1;
@@ -152,16 +124,14 @@ function cancelPress() {
 
 function lift() {
   cancelPress();
-  const bar = navEl.value?.getBoundingClientRect();
   drag.active     = true;
   drag.from       = pressIndex;
   drag.x          = lastX;
   drag.y          = lastY;
   drag.overSlot   = -1;
-  drag.overTray   = '';
-  drag.trayBottom = bar ? Math.max(0, window.innerHeight - bar.top + 12) : 90;
   suppressClick   = true;          // released at some later moment; cleared shortly after that
   window.addEventListener('pointermove', onDragMove);
+  window.addEventListener('touchmove', blockScroll, { passive: false });
   window.addEventListener('pointerup', onDragEnd);
   window.addEventListener('pointercancel', onDragCancel);
   buzz(15);
@@ -171,33 +141,29 @@ function inside(x: number, y: number, r: DOMRect, pad = 0) {
   return x >= r.left - pad && x <= r.right + pad && y >= r.top - pad && y <= r.bottom + pad;
 }
 
-/** What is under the finger: a tray chip (floats above the bar) or a bar slot. */
-function hitTest(x: number, y: number): { slot: number; tray: string } {
-  for (const el of Array.from(document.querySelectorAll<HTMLElement>('[data-tray-id]'))) {
-    if (inside(x, y, el.getBoundingClientRect(), 6)) return { slot: -1, tray: el.dataset.trayId ?? '' };
-  }
+/** Which bar slot is under the finger (or -1). */
+function hitSlot(x: number, y: number): number {
   const bar = navEl.value;
-  if (bar && y >= bar.getBoundingClientRect().top - SLOT_REACH_PX) {
-    const slots = Array.from(bar.querySelectorAll<HTMLElement>('[data-nav-index]'));
-    for (let i = 0; i < slots.length; i++) {
-      const r = slots[i].getBoundingClientRect();
-      if (x >= r.left && x <= r.right) return { slot: i, tray: '' };
-    }
+  if (!bar || y < bar.getBoundingClientRect().top - SLOT_REACH_PX) return -1;
+  const slots = Array.from(bar.querySelectorAll<HTMLElement>('[data-nav-index]'));
+  for (let i = 0; i < slots.length; i++) {
+    const r = slots[i].getBoundingClientRect();
+    if (x >= r.left && x <= r.right) return i;
   }
-  return { slot: -1, tray: '' };
+  return -1;
 }
 
 function track(ev: PointerEvent) {
   drag.x = ev.clientX; drag.y = ev.clientY;
-  const hit  = hitTest(drag.x, drag.y);
-  const slot = hit.slot === drag.from ? -1 : hit.slot;     // hovering your own slot is a no-op
-  if (slot !== drag.overSlot || hit.tray !== drag.overTray) {
-    if (slot >= 0 || hit.tray) buzz(6);                    // tiny tick when a new target engages
+  const hit  = hitSlot(drag.x, drag.y);
+  const slot = hit === drag.from ? -1 : hit;               // hovering your own slot is a no-op
+  if (slot !== drag.overSlot) {
+    if (slot >= 0) buzz(6);                                // tiny tick when a new target engages
     drag.overSlot = slot;
-    drag.overTray = hit.tray;
   }
 }
 
+function blockScroll(ev: TouchEvent) { if (ev.cancelable) ev.preventDefault(); }
 function onDragMove(ev: PointerEvent) { track(ev); }
 function onDragEnd(ev: PointerEvent)  { track(ev); finishDrag(true); }
 function onDragCancel()               { finishDrag(false); }
@@ -205,13 +171,13 @@ function onDragCancel()               { finishDrag(false); }
 function finishDrag(apply: boolean) {
   let changed = false;
   if (apply) {
-    if (drag.overSlot >= 0)    changed = navStore.swap(drag.from, drag.overSlot);
-    else if (drag.overTray)    changed = navStore.replaceAt(drag.from, drag.overTray);
+    if (drag.overSlot >= 0) changed = navStore.swap(drag.from, drag.overSlot);
   }
   window.removeEventListener('pointermove', onDragMove);
+  window.removeEventListener('touchmove', blockScroll);
   window.removeEventListener('pointerup', onDragEnd);
   window.removeEventListener('pointercancel', onDragCancel);
-  drag.active = false; drag.from = -1; drag.overSlot = -1; drag.overTray = '';
+  drag.active = false; drag.from = -1; drag.overSlot = -1;
   if (changed) buzz(20);
   setTimeout(() => { suppressClick = false; }, 150);     // after the release click has come and gone
 }
@@ -223,17 +189,9 @@ function nudge(index: number, dir: -1 | 1) {
   void nextTick(() => navEl.value?.querySelectorAll<HTMLElement>('[data-nav-index]')[to]?.focus());
 }
 
-// The Settings → Customise hint fades by itself so it can't linger.
-let hintTimer: ReturnType<typeof setTimeout> | null = null;
-watch(() => navStore.editing, (on) => {
-  if (hintTimer) { clearTimeout(hintTimer); hintTimer = null; }
-  if (on) hintTimer = setTimeout(() => navStore.setEditing(false), 12_000);
-}, { immediate: true });
-
 onUnmounted(() => {
   cancelPress();
   if (drag.active) finishDrag(false);
-  if (hintTimer) clearTimeout(hintTimer);
 });
 </script>
 
@@ -242,7 +200,7 @@ onUnmounted(() => {
    don't reach into this component's elements. */
 .bottom-nav-footer { --background: transparent; --border: none; }
 ion-footer.bottom-nav-footer {
-  max-height: 200px;
+  max-height: 120px;
   overflow: hidden;
   transition: max-height 240ms cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -337,27 +295,6 @@ ion-footer.bottom-nav-footer.footer-hidden { max-height: 0; }
   pointer-events: none;
 }
 
-.nav-edit-hint {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  justify-content: center;
-  padding: 6px 10px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
-  background: rgba(0, 0, 0, 0.55);
-}
-.nav-edit-hint__text { flex: 1; min-width: 0; line-height: 1.25; }
-.nav-edit-hint__btn {
-  background: rgba(255, 255, 255, 0.12);
-  color: inherit;
-  border: none;
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 12px;
-}
-.nav-edit-hint__btn--done { background: var(--ion-color-primary, #3880ff); color: #fff; }
-
 /* ── Drag layer (teleported to <body>) ───────────────────────────────────── */
 .nav-drag-layer { position: fixed; inset: 0; z-index: 20000; pointer-events: none; }
 .nav-ghost {
@@ -375,29 +312,5 @@ ion-footer.bottom-nav-footer.footer-hidden { max-height: 0; }
 .nav-ghost__icon :deep(svg), .nav-ghost__icon :deep(.nav-svg) { width: 24px; height: 24px; display: block; }
 .nav-ghost__label { font-size: 10px; font-weight: 700; line-height: 1; }
 
-.nav-tray {
-  position: fixed; left: 8px; right: 8px;
-  padding: 8px 10px 10px;
-  border-radius: 16px;
-  background: rgba(21, 21, 21, 0.94);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-  animation: nav-tray-in 140ms ease-out;
-}
-.nav-tray__title { font-size: 11px; color: rgba(255, 255, 255, 0.55); margin-bottom: 8px; text-align: center; }
-.nav-tray__row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
-.nav-tray__chip {
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
-  width: 64px; padding: 8px 4px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.7);
-  transition: background 120ms, color 120ms, transform 120ms;
-}
-.nav-tray__chip--over { background: rgba(230, 230, 230, 0.28); color: #eaeaea; transform: scale(1.08); }
-.nav-tray__icon { width: 24px; height: 24px; display: flex; }
-.nav-tray__icon :deep(svg), .nav-tray__icon :deep(.nav-svg) { width: 24px; height: 24px; display: block; }
-.nav-tray__label { font-size: 10px; font-weight: 600; line-height: 1; }
-@keyframes nav-tray-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-@media (prefers-reduced-motion: reduce) { .nav-tray { animation: none; } .nav-tray__chip, .nav-item { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .nav-item { transition: none; } }
 </style>

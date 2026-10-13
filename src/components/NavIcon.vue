@@ -8,7 +8,15 @@
       <path d="M9 22V12h6v10" />
     </template>
 
-    <!-- Spaces -->
+    <!-- Orbit -->
+    <template v-else-if="id === 'orbit'">
+      <circle cx="12" cy="12" r="3" :fill="active ? 'currentColor' : 'none'" />
+      <circle cx="12" cy="12" r="8" stroke-dasharray="2 3" />
+      <circle cx="19" cy="9" r="1.6" fill="currentColor" stroke="none" />
+      <circle cx="6" cy="17" r="1.3" fill="currentColor" stroke="none" />
+    </template>
+
+    <!-- Spaces (legacy id) -->
     <template v-else-if="id === 'communities'">
       <circle :fill="active ? 'currentColor' : 'none'" cx="9" cy="8" r="3.5" />
       <path d="M3 21v-.5A5.5 5.5 0 018.5 15h1A5.5 5.5 0 0115 20.5v.5" />

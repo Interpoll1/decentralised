@@ -12,6 +12,8 @@ const MODERATION_ONBOARDING_KEY = 'interpoll_moderation_onboarding_complete';
 
 export function useModeration() {
   const moderationOnboardingOpen   = ref(false);
+  /** True once Home has decided whether the first-run cleanup modal should be shown. */
+  const moderationOnboardingReady  = ref(false);
   const moderationChoice           = ref<'default' | 'custom'>('default');
   const moderationCustomApiUrl     = ref('');
   const moderationCustomApiInput   = ref<HTMLInputElement | null>(null);
@@ -80,12 +82,17 @@ export function useModeration() {
     const done = localStorage.getItem(MODERATION_ONBOARDING_KEY);
     if (!done) {
       // Defer so it doesn't block first paint
-      setTimeout(() => { moderationOnboardingOpen.value = true; }, 2000);
+      setTimeout(() => {
+        moderationOnboardingOpen.value = true;
+        moderationOnboardingReady.value = true;
+      }, 2000);
+    } else {
+      moderationOnboardingReady.value = true;
     }
   }
 
   return {
-    moderationOnboardingOpen, moderationChoice,
+    moderationOnboardingOpen, moderationOnboardingReady, moderationChoice,
     moderationCustomApiUrl, moderationCustomApiInput,
     moderationCustomApiError, moderationSaving,
     openModerationOnboarding, closeModerationOnboarding,

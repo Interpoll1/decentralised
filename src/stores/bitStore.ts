@@ -6,6 +6,7 @@ import { computed, ref } from 'vue';
 import { UserService } from '../services/userService';
 
 const TOUR_KEY   = 'interpoll_bit_tour_v1';
+const NAV_STEP_KEY = 'interpoll_bit_navswap_v1';
 const REMIND_KEY = 'interpoll_bit_remind_v1';
 const REMIND_RECOVERY_KEY = 'interpoll_bit_remind_recovery_v1';
 const PENDING_GAP_MS = 3 * 60 * 60 * 1000; // re-show a pending-recovery warning at most every 3 h
@@ -30,8 +31,8 @@ export const BASE_TOUR_STEPS: TourStep[] = [
     body: 'I\'ll show you around in under a minute. Nothing here is run by a company — your posts and votes live on peers, signed by a key only you hold.' },
   { id: 'feed', target: 'home', title: 'This is your feed', mood: 'idle',
     body: 'Polls and posts from every space show up here. Switch between For You and Latest at the top.' },
-  { id: 'spaces', target: 'communities', clickToAdvance: true, title: 'Spaces are communities', mood: 'happy',
-    body: 'Click Spaces. Join a few and their posts land in your feed.' },
+  { id: 'orbit', target: 'orbit', clickToAdvance: true, title: 'Orbit is your network', mood: 'happy',
+    body: 'Click Orbit. See your relays, live peers, spaces and contacts around you — tap anything to open it.' },
   { id: 'publish', target: 'create', clickToAdvance: true, title: 'Make something', mood: 'happy',
     body: 'Click Publish to start a poll, post, or a new space. Every vote is signed on your device.' },
   { id: 'chat', target: 'chat', clickToAdvance: true, title: 'Message people', mood: 'idle',
@@ -39,6 +40,15 @@ export const BASE_TOUR_STEPS: TourStep[] = [
   { id: 'username', target: 'profile', title: 'Pick a username', mood: 'alert',
     body: 'Until you do, people see a random name like "swift-bridge-vulture". Claiming one takes ten seconds.' },
 ];
+
+/** Bottom bar only exists on phones (< 768px), so this step is mobile-only. */
+const NAV_STEP: TourStep = {
+  id: 'navswap', target: 'bottom-nav', title: 'Make the tabs yours', mood: 'happy',
+  body: 'Tap a tab to open it. To reorder, hold a tab and drag it onto another — they swap places. The first tab is where the app opens.',
+};
+const isNarrow = () => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches;
+function navStepSeen(): boolean { try { return localStorage.getItem(NAV_STEP_KEY) !== null; } catch { return true; } }
+function markNavStepSeen() { try { localStorage.setItem(NAV_STEP_KEY, '1'); } catch { /* ignore */ } }
 
 const BACKUP_STEP: TourStep = {
   id: 'backup', target: 'settings', title: 'Back up your key', mood: 'alert',
@@ -48,8 +58,9 @@ const PHRASE_SAVED_KEY = 'interpoll_phrase_saved';
 export function phraseSaved(): boolean { try { return localStorage.getItem(PHRASE_SAVED_KEY) === 'true'; } catch { return false; } }
 /** Tour steps for this device: if the setup wizard never saved a phrase, nudge toward Settings before the username step. */
 export function buildTourSteps(): TourStep[] {
-  if (phraseSaved()) return BASE_TOUR_STEPS;
   const steps = [...BASE_TOUR_STEPS];
+  if (isNarrow()) steps.splice(1, 0, NAV_STEP);   // 2nd, phones only
+  if (phraseSaved()) return steps;
   steps.splice(steps.length - 1, 0, BACKUP_STEP);
   return steps;
 }
@@ -101,7 +112,13 @@ export const useBitStore = defineStore('bit', () => {
   }
 
   function startTour() { steps.value = buildTourSteps(); tourStepIdx.value = 0; tourActive.value = true; reminderOpen.value = false; }
+  /** Established mobile accounts get the bottom-bar step once; new accounts get it inside the full tour. */
+  function shouldOfferNavTour() { return isNarrow() && !navStepSeen(); }
+  function startNavTour() {
+    steps.value = [NAV_STEP]; tourStepIdx.value = 0; tourActive.value = true; reminderOpen.value = false;
+  }
   function finishTour() {
+    if (steps.value.some(s => s.id === 'navswap') && tourStepIdx.value >= steps.value.findIndex(s => s.id === 'navswap')) markNavStepSeen();
     tourActive.value = false; tourDone.value = true;
     try { localStorage.setItem(TOUR_KEY, 'done'); } catch { /* ignore */ }
     // Give the user a breather before the first reminder.
@@ -173,7 +190,7 @@ export const useBitStore = defineStore('bit', () => {
   return {
     steps, tourDone, tourActive, tourStepIdx, currentStep, isLastStep,
     hasUsername, reminderOpen, reminderLine, reminderKind, nameInfo,
-    refreshUsername, refreshNameInfo, startTour, finishTour, nextStep, prevStep, replayTour,
+    refreshUsername, refreshNameInfo, startTour, startNavTour, shouldOfferNavTour, finishTour, nextStep, prevStep, replayTour,
     reminderDue, dueKind, showReminder, snoozeReminder, acceptReminder,
   };
 });

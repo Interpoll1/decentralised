@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 150" role="img" aria-labelledby="title desc">
+  <title id="title">The Endless white logo</title>
+  <desc id="desc">A white bold italic editorial wordmark for The Endless with a warm accent.</desc>
+  <rect width="620" height="150" rx="24" fill="transparent"/>
+  <text x="36" y="42"
+        fill="#ffb199"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="22"
+        font-weight="700"
+        letter-spacing="6">THE</text>
+  <text x="32" y="116"
+        fill="#ffffff"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="88"
+        font-style="italic"
+        font-weight="700"
+        letter-spacing="-3"
+        transform="skewX(-6)"
+        style="paint-order: stroke fill; stroke: #15120f; stroke-width: 3px; stroke-linejoin: round;">Endless</text>
+  <path d="M56 128c22 6 57 5 82-3"
+        fill="none"
+        stroke="#ffb199"
+        stroke-width="4"
+        stroke-linecap="round"
+        opacity="0.92"/>
+  <path d="M472 120c16 4 35 2 49-5"
+        fill="none"
+        stroke="#ffb199"
+        stroke-width="4"
+        stroke-linecap="round"
+        opacity="0.9"/>
+  <circle cx="548" cy="45" r="5" fill="#ffb199"/>
+</svg>

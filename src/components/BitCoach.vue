@@ -14,6 +14,17 @@
           </div>
         </div>
         <p class="bc-body">{{ step.body }}</p>
+        <!-- Looping demo of hold → drag → swap (decorative; the text says the same) -->
+        <div v-if="step.id === 'navswap'" class="bc-demo" aria-hidden="true">
+          <div class="bc-demo-bar">
+            <div class="bc-demo-tab bc-demo-tab--a" style="--i:0"><NavIcon id="home" /><span>Feed</span></div>
+            <div class="bc-demo-tab" style="--i:1"><NavIcon id="orbit" /><span>Orbit</span></div>
+            <div class="bc-demo-tab bc-demo-tab--b" style="--i:2"><NavIcon id="chat" /><span>Messages</span></div>
+            <div class="bc-demo-tab" style="--i:3"><NavIcon id="create" /><span>Publish</span></div>
+            <span class="bc-demo-finger" />
+          </div>
+          <span class="bc-demo-cap">Hold → drag → drop</span>
+        </div>
         <p v-if="rect && step.clickToAdvance" class="bc-hint">Try it — click the highlighted item.</p>
 
         <div class="bc-dots" aria-hidden="true">
@@ -24,10 +35,11 @@
           <button class="bc-btn bc-btn--ghost" @click="bit.finishTour()">Skip tour</button>
           <span class="bc-spacer" />
           <button v-if="bit.tourStepIdx > 0 && !bit.isLastStep" class="bc-btn" @click="bit.prevStep()">Back</button>
-          <template v-if="bit.isLastStep">
+          <template v-if="bit.isLastStep && step.id === 'username'">
             <button class="bc-btn" @click="bit.finishTour()">Later</button>
             <button class="bc-btn bc-btn--primary" @click="claimNow(true)">Claim username</button>
           </template>
+          <button v-else-if="bit.isLastStep" class="bc-btn bc-btn--primary" @click="bit.finishTour()">Got it</button>
           <button v-else class="bc-btn bc-btn--primary" @click="bit.nextStep()">
             {{ step.clickToAdvance && rect ? 'Skip this' : 'Next' }}
           </button>
@@ -58,6 +70,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import BitMascot from './BitMascot.vue';
+import NavIcon from './NavIcon.vue';
 import { useBitStore } from '../stores/bitStore';
 
 const bit    = useBitStore();
@@ -205,6 +218,13 @@ onMounted(() => {
     }, 1500);
   }
   tick = window.setInterval(checkReminder, 15_000);
+
+  // Accounts that finished the tour before the bottom-bar step existed see just that step once.
+  if (bit.tourDone) {
+    window.setTimeout(() => {
+      if (bit.shouldOfferNavTour() && !bit.tourActive && !onQuietPage() && findTarget('bottom-nav')) bit.startNavTour();
+    }, 3000);
+  }
 });
 onUnmounted(() => {
   document.removeEventListener('click', onDocClick, true);
@@ -283,4 +303,17 @@ onUnmounted(() => {
   .bc-bubble:not(.bc-bubble--center) { transition: none; }
   .bc-pop-enter-active, .bc-pop-leave-active { transition: none; }
 }
+
+.bc-demo { margin: 10px 0 4px; }
+.bc-demo-bar { position: relative; height: 52px; border-radius: 12px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); overflow: hidden; }
+.bc-demo-tab { position: absolute; top: 0; bottom: 0; left: calc(var(--i) * 25%); width: 25%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 9px; font-weight: 600; color: rgba(255,255,255,.55); }
+.bc-demo-tab :deep(svg) { width: 20px; height: 20px; }
+.bc-demo-tab--a { animation: bc-a 3.6s ease-in-out infinite; z-index: 2; color: #fff; }
+.bc-demo-tab--b { animation: bc-b 3.6s ease-in-out infinite; }
+.bc-demo-finger { position: absolute; top: 22px; left: 12%; width: 18px; height: 18px; margin-left: -9px; border-radius: 50%; background: rgba(255,255,255,.55); box-shadow: 0 0 0 6px rgba(255,255,255,.12); animation: bc-f 3.6s ease-in-out infinite; z-index: 3; }
+@keyframes bc-a { 0%,25% { transform: translateX(0) scale(1); } 35% { transform: translateX(0) scale(1.15); } 70%,100% { transform: translateX(200%) scale(1); } }
+@keyframes bc-b { 0%,35% { transform: translateX(0); } 70%,100% { transform: translateX(-200%); } }
+@keyframes bc-f { 0% { left: 12%; opacity: 0; } 10% { opacity: 1; } 25%,35% { left: 12%; } 70%,90% { left: 62%; opacity: 1; } 100% { left: 62%; opacity: 0; } }
+.bc-demo-cap { display: block; margin-top: 6px; text-align: center; font-size: 11px; color: rgba(255,255,255,.55); }
+@media (prefers-reduced-motion: reduce) { .bc-demo-tab--a, .bc-demo-tab--b, .bc-demo-finger { animation: none; } }
 </style>

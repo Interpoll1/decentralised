@@ -3,10 +3,9 @@ import { defineStore } from 'pinia';
 /**
  * Mobile bottom-nav customisation.
  *
- * Interaction model (kept deliberately tiny): hold a tab, drag it onto another, they swap places.
- * While dragging, destinations that aren't in the bar are offered in a tray; dropping on one swaps
- * it into the bar. The FIRST tab in the bar is the one the app opens on (like WhatsApp), so there
- * is no separate "start tab" setting to manage.
+ * Interaction model: tap a tab to go there; hold a tab and drag it onto another to swap places.
+ * The FIRST tab in the bar is the one the app opens on (like WhatsApp), so there is no separate
+ * "start tab" setting to manage.
  *
  * Persisted to localStorage (device-local, like the feed scope preference): a UI preference,
  * not replicated state.
@@ -26,7 +25,7 @@ export interface NavItemDef {
 /** Everything the user may place in the bottom nav. */
 export const NAV_ITEM_POOL: NavItemDef[] = [
   { id: 'home',          label: 'Feed',     kind: 'tab'  },
-  { id: 'communities',   label: 'Spaces',   kind: 'tab'  },
+  { id: 'orbit',         label: 'Orbit',    kind: 'tab'  },
   { id: 'chat',          label: 'Messages', kind: 'tab'  },
   { id: 'create',        label: 'Publish',  kind: 'tab'  },
   { id: 'network',       label: 'Network',  kind: 'route', path: '/network' },
@@ -40,7 +39,9 @@ export const NAV_ITEM_POOL: NavItemDef[] = [
 const POOL_IDS = new Set(NAV_ITEM_POOL.map(i => i.id));
 const TAB_IDS  = new Set(NAV_ITEM_POOL.filter(i => i.kind === 'tab').map(i => i.id));
 
-export const DEFAULT_NAV_ORDER = ['home', 'communities', 'chat', 'create', 'network'];
+export const DEFAULT_NAV_ORDER = ['home', 'orbit', 'chat', 'create', 'network'];
+/** Spaces became Orbit; saved bars and start tabs that say 'communities' keep their slot. */
+const RENAMED: Record<string, string> = { communities: 'orbit' };
 const MAX_VISIBLE = 5;
 const MIN_VISIBLE = 3;
 
@@ -55,7 +56,7 @@ function readOrder(): string[] {
     if (!raw) return [...DEFAULT_NAV_ORDER];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [...DEFAULT_NAV_ORDER];
-    const cleaned = parsed.filter((id: unknown): id is string => typeof id === 'string' && POOL_IDS.has(id));
+    const cleaned = parsed.map((id: unknown) => (typeof id === 'string' ? RENAMED[id] ?? id : id)).filter((id: unknown): id is string => typeof id === 'string' && POOL_IDS.has(id));
     const deduped = Array.from(new Set(cleaned)).slice(0, MAX_VISIBLE);
     return deduped.length >= MIN_VISIBLE ? deduped : [...DEFAULT_NAV_ORDER];
   } catch {
@@ -74,8 +75,9 @@ function firstTab(order: string[]): string {
  */
 function migrateLegacyStart(order: string[]): string[] {
   try {
-    const legacy = localStorage.getItem(LEGACY_START_KEY);
-    if (legacy === null) return order;
+    const raw = localStorage.getItem(LEGACY_START_KEY);
+    if (raw === null) return order;
+    const legacy = RENAMED[raw] ?? raw;
     localStorage.removeItem(LEGACY_START_KEY);
     const first = firstTab(order);
     if (!TAB_IDS.has(legacy) || !order.includes(legacy) || legacy === first) return order;
@@ -103,8 +105,6 @@ export const useNavStore = defineStore('nav', {
     order: migrateLegacyStart(readOrder()) as string[],
     /** Whether the bar is shown at all (user toggle in Settings). */
     enabled: readEnabled(),
-    /** True while the "hold a tab and drag it" hint is showing (opened from Settings). */
-    editing: false,
   }),
 
   getters: {
@@ -115,10 +115,6 @@ export const useNavStore = defineStore('nav', {
       return state.order
         .map(id => NAV_ITEM_POOL.find(i => i.id === id))
         .filter((i): i is NavItemDef => !!i);
-    },
-    /** Pool items not currently in the bar (shown in the drag tray). */
-    availableItems(state): NavItemDef[] {
-      return NAV_ITEM_POOL.filter(i => !state.order.includes(i.id));
     },
     /** Which tab HomePage opens on when no ?tab= is present: the first tab in the bar. */
     defaultTab(state): string {
@@ -145,21 +141,6 @@ export const useNavStore = defineStore('nav', {
       return true;
     },
 
-    /**
-     * Put `id` into slot `index`. If `id` is already in the bar the two trade places; otherwise
-     * the slot's old item leaves the bar (it reappears in the drag tray).
-     */
-    replaceAt(index: number, id: string): boolean {
-      if (!POOL_IDS.has(id) || !Number.isInteger(index) || index < 0 || index >= this.order.length) return false;
-      const existing = this.order.indexOf(id);
-      if (existing >= 0) return this.swap(index, existing);
-      const next = [...this.order];
-      next[index] = id;
-      this.order = next;
-      this.persist();
-      return true;
-    },
-
     reset() {
       this.order = [...DEFAULT_NAV_ORDER];
       this.persist();
@@ -168,10 +149,6 @@ export const useNavStore = defineStore('nav', {
     setEnabled(v: boolean) {
       this.enabled = v;
       try { localStorage.setItem(ENABLED_KEY, v ? '1' : '0'); } catch { /* ignore */ }
-    },
-
-    setEditing(v: boolean) {
-      this.editing = v;
     },
   },
 });

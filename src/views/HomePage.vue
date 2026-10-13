@@ -186,7 +186,7 @@
             <div v-if="feedScope === 'mine' && joinedCommunityIds.size === 0" class="scope-hint surface-card">
               <ion-icon :icon="bookmarkOutline" size="large"></ion-icon>
               <p>You haven't joined any spaces yet.</p>
-              <p class="subtitle">Join spaces in the <button class="inline-link" @click="activeTab = 'communities'">Spaces</button> tab — your feed will be scoped to them.</p>
+              <p class="subtitle">Join spaces in the <button class="inline-link" @click="openSpaces()">Spaces</button> list in Orbit — your feed will be scoped to them.</p>
             </div>
 
             <!-- Active tag filter pill -->
@@ -277,7 +277,7 @@
                 </template>
               </p>
               <div class="empty-state__actions">
-                <button class="empty-state-btn empty-state-btn--primary" @click="activeTab = 'communities'">
+                <button class="empty-state-btn empty-state-btn--primary" @click="openSpaces()">
                   <ion-icon :icon="peopleOutline"></ion-icon>
                   Browse Spaces
                 </button>
@@ -289,10 +289,13 @@
             </div>
           </div>
 
-          <!-- SPACES TAB (was Communities) -->
-          <CommunitiesTab
-            v-else-if="activeTab === 'communities'"
+          <!-- ORBIT TAB (replaces Spaces; the Spaces list is its second view) -->
+          <OrbitTab
+            v-else-if="activeTab === 'orbit'"
+            :chatList="chatList"
             :communityFilter="communityFilter"
+            :view="orbitView"
+            @update:view="orbitView = $event"
             @update:communityFilter="communityFilter = $event"
           />
 
@@ -454,7 +457,7 @@ import { usePostStore } from '../stores/postStore';
 import { usePollStore } from '../stores/pollStore';
 
 // ── Lazy-loaded tab components ─────────────────────────────────────────────
-const CommunitiesTab   = defineAsyncComponent(() => import('../components/CommunitiesTab.vue'));
+const OrbitTab          = defineAsyncComponent(() => import('../components/OrbitTab.vue'));
 const CreateTab        = defineAsyncComponent(() => import('../components/CreateTab.vue'));
 const ChatTab          = defineAsyncComponent(() => import('../components/ChatTab.vue'));
 const PostCard         = defineAsyncComponent(() => import('../components/PostCard.vue'));
@@ -496,11 +499,12 @@ const FEED_DEBUG      = localStorage.getItem('interpoll_feed_debug') === 'true';
 const HOME_GUN_FEED_ENABLED         = localStorage.getItem('interpoll_home_gun_feed') !== 'false';
 const HOME_GUN_FEED_MAX_COMMUNITIES = 8;
 
-const HOME_TABS = ['home', 'communities', 'chat', 'create'] as const;
+const HOME_TABS = ['home', 'orbit', 'chat', 'create'] as const;
 type HomeTab = typeof HOME_TABS[number];
 function tabFromRoute(): HomeTab {
   const raw   = route.query.tab;
   const value = Array.isArray(raw) ? raw[0] : raw;
+  if (value === 'communities') return 'orbit';           // old links and bookmarks
   return HOME_TABS.includes(value as HomeTab) ? (value as HomeTab) : 'home';
 }
 
@@ -508,12 +512,16 @@ function tabFromRoute(): HomeTab {
 function initialTab(): HomeTab {
   const raw   = route.query.tab;
   const value = Array.isArray(raw) ? raw[0] : raw;
+  if (value === 'communities') return 'orbit';
   if (HOME_TABS.includes(value as HomeTab)) return value as HomeTab;
   const preferred = navStore.defaultTab;
   return HOME_TABS.includes(preferred as HomeTab) ? (preferred as HomeTab) : 'home';
 }
 
 const activeTab          = ref<string>(initialTab());
+const orbitView          = ref<'map' | 'spaces'>(route.query.view === 'spaces' || route.query.tab === 'communities' ? 'spaces' : 'map');
+function openSpaces() { orbitView.value = 'spaces'; activeTab.value = 'orbit'; }
+watch(() => route.query.view, (v) => { if (route.name === 'Home' && (v === 'spaces' || v === 'map')) orbitView.value = v; });
 const communityFilter    = ref('all');
 const isLoadingPosts     = ref(false);
 const voteVersion        = ref(0);
@@ -594,7 +602,7 @@ const {
   skipTutorial, previousTutorialStep, nextTutorialStep,
 } = tutorial;
 const {
-  moderationOnboardingOpen, moderationChoice, moderationCustomApiUrl,
+  moderationOnboardingOpen, moderationOnboardingReady, moderationChoice, moderationCustomApiUrl,
   moderationCustomApiInput, moderationCustomApiError, moderationSaving,
   skipModerationOnboarding, handleModerationModalDismiss, confirmModerationOnboarding,
   maybeShowOnboarding,
@@ -1320,6 +1328,7 @@ if (typeof window !== 'undefined') {
     get postStore()      { return postStore; },
     get pollStore()      { return pollStore; },
     get communityStore() { return communityStore; },
+    get navStore()       { return navStore; },
 
     // Computed snapshots
     get posts()       { return postStore.sortedPosts; },

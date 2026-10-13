@@ -19,6 +19,16 @@ function getBuildHash(): string {
 const BUILD_TIME = new Date().toISOString();
 const BUILD_ID   = Date.now().toString(36);
 
+// This origin also hosts independent projects (for example /about). Keep the
+// SPA fallback restricted to paths owned by InterPoll so its service worker
+// never supplies index.html for another project's navigation.
+const APP_NAVIGATION_ALLOWLIST = [
+  /^\/$/,
+  /^\/(?:onboarding|home|communities|spaces|create|create-community|create-poll|profile|settings|network|chain-explorer|search|resilience|claim-username|chatrooms)(?:\/|$)/,
+  /^\/(?:community|poll|post|user|u|vote|results|receipt|chat|chatroom|join)(?:\/|$)/,
+  /^\/auth\/callback(?:\/|$)/,
+];
+
 /**
  * Registers the service worker from an inline <script> in index.html, at a
  * per-build URL (`/sw.js?v=<BUILD_ID>`).
@@ -161,7 +171,7 @@ export default defineConfig({
         workbox: {
           globPatterns: ['**/*.{js,css,html,svg,woff2,png}'],
           navigateFallback: '/index.html',
-          navigateFallbackDenylist: [/^\/gun/, /^\/api/, /^\/oauth/, /^\/db/],
+          navigateFallbackAllowlist: APP_NAVIGATION_ALLOWLIST,
           cleanupOutdatedCaches: true,
           maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
           runtimeCaching: [

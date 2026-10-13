@@ -26,9 +26,13 @@
       <ion-icon :icon="activeTab === 'home' ? home : homeOutline"></ion-icon>
       <span>Feed</span>
     </button>
-    <button class="side-nav-item" :class="{ active: activeTab === 'communities' }" @click="goTab('communities')">
-      <ion-icon :icon="activeTab === 'communities' ? people : peopleOutline"></ion-icon>
-      <span>Spaces</span>
+    <button class="side-nav-item" :class="{ active: activeTab === 'orbit' }" @click="goTab('orbit')">
+      <svg class="nav-svg-icon" viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden="true">
+        <circle cx="12" cy="12" r="3" :fill="activeTab === 'orbit' ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="1.8"/>
+        <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.8" stroke-dasharray="2 3"/>
+        <circle cx="19" cy="9" r="1.6" fill="currentColor"/><circle cx="6" cy="17" r="1.3" fill="currentColor"/>
+      </svg>
+      <span>Orbit</span>
     </button>
     <button class="side-nav-item" :class="{ active: activeTab === 'chat' }" @click="goTab('chat')">
       <ion-icon :icon="activeTab === 'chat' ? chatbubble : chatbubbleOutline"></ion-icon>
@@ -125,7 +129,7 @@ import { ref } from 'vue';
 import { IonIcon } from '@ionic/vue';
 import { useRouter } from 'vue-router';
 import {
-  home, homeOutline, people, peopleOutline, chatbubble, chatbubbleOutline,
+  home, homeOutline, chatbubble, chatbubbleOutline,
   addCircle, addCircleOutline, searchOutline, personCircleOutline, settingsOutline,
   cube, shieldOutline, tvOutline, musicalNotesOutline, starOutline, bookOutline, helpCircleOutline,
   chatbubblesOutline, businessOutline, codeSlashOutline, flaskOutline, cashOutline,

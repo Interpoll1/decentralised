@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">The Endless logo mark</title>
+  <desc id="desc">A bold italic E mark for The Endless.</desc>
+  <rect width="128" height="128" rx="30" fill="#f8f3ea"/>
+  <text x="31" y="91"
+        fill="#15120f"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="88"
+        font-style="italic"
+        font-weight="700"
+        transform="skewX(-8)"
+        style="paint-order: stroke fill; stroke: #f8f3ea; stroke-width: 2px; stroke-linejoin: round;">E</text>
+  <path d="M31 99c15 6 42 5 58-2"
+        fill="none"
+        stroke="#c84b2f"
+        stroke-width="5"
+        stroke-linecap="round"/>
+  <circle cx="91" cy="34" r="6" fill="#c84b2f"/>
+</svg>
