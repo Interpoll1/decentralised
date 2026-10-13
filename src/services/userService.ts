@@ -113,7 +113,13 @@ export class UserService {
   private static deriveIdentityFields(
     profileLike: Partial<UserProfile>,
   ): Pick<UserProfile, 'identityUsername' | 'identityIssuer' | 'identityTrustLevel'> {
-    const raw = (profileLike.customUsername || profileLike.username || '').trim();
+    // Prefer the issuer-qualified identityUsername (e.g. `name@endless.sbs`):
+    // customUsername holds the bare name, so deriving from it alone would
+    // downgrade a verified claim to 'unverified'.
+    const qualified = (profileLike.identityUsername || '').trim();
+    const raw = parseIdentityTrust(qualified).hasIssuer
+      ? qualified
+      : (profileLike.customUsername || profileLike.username || '').trim();
     const trust = parseIdentityTrust(raw);
     // Never emit an explicit `undefined`: Gun rejects the whole node with
     // "Invalid data: undefined" when any field is undefined, which is how
@@ -271,7 +277,36 @@ export class UserService {
       return null;
     }
 
-    return profile as UserProfile;
+    return this.enforceIdentityCertificate(profile as UserProfile);
+  }
+
+  /**
+   * A profile's `trusted-issuer` badge is self-asserted (it is derived from the
+   * username string), so only honour it when the claimed username carries an
+   * issuer certificate that verifies against a registered issuer and binds the
+   * name to this profile's public key. Otherwise downgrade the in-memory copy.
+   */
+  private static async enforceIdentityCertificate(profile: UserProfile): Promise<UserProfile> {
+    if (profile.identityTrustLevel !== 'trusted-issuer') return profile;
+    const qualified = (profile.identityUsername || '').trim();
+    const at = qualified.lastIndexOf('@');
+    const bare = (at > 0 ? qualified.slice(0, at) : (profile.customUsername || profile.username || '')).trim();
+    const pubkey = profile.publicKey || profile._pub || profile.id;
+    try {
+      const { TrustService } = await import('./trustService');
+      const trust = await TrustService.resolveTrust(bare);
+      if (
+        trust.level === 'verified'
+        && trust.certificate?.userPubkey === pubkey
+        && (!profile.identityIssuer || trust.certificate.issuerDomain === profile.identityIssuer.toLowerCase())
+      ) {
+        return profile;
+      }
+    } catch {
+      // Fall through: an unverifiable claim is shown as unverified.
+    }
+    const { identityIssuer: _drop, ...rest } = profile;
+    return { ...rest, identityUsername: bare, identityTrustLevel: 'unverified' };
   }
 
   /**

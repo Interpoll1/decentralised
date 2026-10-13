@@ -133,9 +133,13 @@ class TokenStore {
     }
   }
 
+  /** A deviceId already owned by another identity cannot be taken over. */
   register({ deviceId, userId, token, platform }) {
+    const existing = this.devices.get(deviceId);
+    if (existing && existing.userId !== userId) return false;
     this.devices.set(deviceId, { userId, token, platform: platform || 'android', updatedAt: Date.now() });
     this.save();
+    return true;
   }
 
   /** Only the identity that registered a device may remove it. */
@@ -331,7 +335,9 @@ function attachPush(app, opts = {}) {
     if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
 
     const { userId, token, deviceId, platform } = auth.body;
-    store.register({ userId, token, deviceId, platform });
+    if (!store.register({ userId, token, deviceId, platform })) {
+      return res.status(409).json({ error: 'device registered to another identity' });
+    }
     res.json({ ok: true });
   });
 

@@ -94,7 +94,7 @@
         ></div>
       </div>
       <div class="rv-propagation-labels">
-        <span>{{ propagationPeers }}/20 peers confirmed</span>
+        <span>{{ propagationPeers }} peers online</span>
         <span>{{ propagationRelays }} relay{{ propagationRelays !== 1 ? 's' : '' }}</span>
       </div>
     </div>
@@ -215,6 +215,7 @@ import { toastController } from '@ionic/vue';
 import type { Receipt } from '../types/chain';
 import { CryptoService } from '../services/cryptoService';
 import { GunService } from '../services/gunService';
+import { WebSocketService } from '../services/websocketService';
 import { shareLink } from '../composables/useShare';
 
 const props = defineProps<{ receipt: Receipt | null }>();
@@ -330,9 +331,10 @@ async function verifyOnChain() {
 
 function pollPropagation() {
   try {
-    const health        = GunService.getPeerHealthReport();
-    propagationPeers.value  = health.filter((p: any) => p.connected).length;
-    propagationRelays.value = Math.max(1, Math.ceil(propagationPeers.value / 4));
+    // Live connectivity, not per-receipt acknowledgements: relays = open Gun
+    // relay sockets, peers = other browsers the WS relay reports online.
+    propagationRelays.value = GunService.getPeerStats().connectedCount;
+    propagationPeers.value  = WebSocketService.getPeerCount();
   } catch { /* non-fatal */ }
 }
 
