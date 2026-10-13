@@ -1,5 +1,5 @@
 <template>
-  <div class="video-player" :class="{ 'video-player--expanded': isExpanded, 'video-player--compact': props.compact }">
+  <div class="video-player" :class="{ 'video-player--expanded': isExpanded, 'video-player--compact': props.compact }" @click.stop>
 
     <!-- Thumbnail / poster state (before play) -->
     <div
@@ -61,10 +61,10 @@
         preload="metadata"
         @loadedmetadata="onLoadedMetadata"
         @error="onVideoError"
-        @canplay="isLoading = false"
+        @canplay="onCanPlay"
         @timeupdate="onTimeUpdate"
         @play="isPlaying = true"
-        @pause="isPlaying = false"
+        @pause="onPause"
         @ended="isPlaying = false"
         @click="togglePlay"
       >
@@ -160,7 +160,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { IonIcon, IonSpinner } from '@ionic/vue';
 import {
   videocamOutline, cloudOutline,
@@ -221,16 +221,34 @@ onUnmounted(() => {
 });
 
 // ── Methods ───────────────────────────────────────────────────────────────────
+let wantPlay = false;
+
 function expand() {
   isExpanded.value = true;
   isLoading.value  = true;
   loadError.value  = null;
+  wantPlay = true;
+  // Start playback on the same click (user gesture) instead of requiring a second one
+  nextTick(() => videoEl.value?.play().catch(() => { /* retried on canplay */ }));
+}
+
+function onPause() {
+  isPlaying.value = false;
+  wantPlay = false;
+}
+
+function onCanPlay() {
+  isLoading.value = false;
+  if (wantPlay && videoEl.value?.paused) {
+    videoEl.value.play().catch(() => { wantPlay = false; });
+  }
 }
 
 function collapse() {
   isExpanded.value = false;
   isPlaying.value  = false;
   loadError.value  = null;
+  wantPlay = false;
   if (videoEl.value) videoEl.value.pause();
 }
 
