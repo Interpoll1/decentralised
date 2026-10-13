@@ -108,7 +108,11 @@ class RateLimiter {
   }
 }
 
-/** Persisted map: deviceId -> { userId, token, platform, updatedAt }. */
+/**
+ * Persisted map: `${userId}:${deviceId}` -> { userId, token, platform, updatedAt }.
+ * Keyed per identity so one user can neither take over nor squat another
+ * user's deviceId.
+ */
 class TokenStore {
   constructor(filePath) {
     this.filePath = filePath;
@@ -120,7 +124,11 @@ class TokenStore {
     try {
       const raw = fs.readFileSync(this.filePath, 'utf8');
       const obj = JSON.parse(raw);
-      for (const [deviceId, rec] of Object.entries(obj)) this.devices.set(deviceId, rec);
+      for (const [key, rec] of Object.entries(obj)) {
+        // Legacy files were keyed by bare deviceId.
+        const prefix = `${rec && rec.userId}:`;
+        this.devices.set(key.startsWith(prefix) ? key : prefix + key, rec);
+      }
     } catch { /* first run — no file yet */ }
   }
 
@@ -133,20 +141,18 @@ class TokenStore {
     }
   }
 
-  /** A deviceId already owned by another identity cannot be taken over. */
+  static key(userId, deviceId) { return `${userId}:${deviceId}`; }
+
   register({ deviceId, userId, token, platform }) {
-    const existing = this.devices.get(deviceId);
-    if (existing && existing.userId !== userId) return false;
-    this.devices.set(deviceId, { userId, token, platform: platform || 'android', updatedAt: Date.now() });
+    this.devices.set(TokenStore.key(userId, deviceId), { userId, token, platform: platform || 'android', updatedAt: Date.now() });
     this.save();
-    return true;
   }
 
   /** Only the identity that registered a device may remove it. */
   unregister(deviceId, userId) {
-    const rec = this.devices.get(deviceId);
-    if (!rec || rec.userId !== userId) return false;
-    this.devices.delete(deviceId);
+    const key = TokenStore.key(userId, deviceId);
+    if (!this.devices.has(key)) return false;
+    this.devices.delete(key);
     this.save();
     return true;
   }
@@ -154,8 +160,8 @@ class TokenStore {
   /** Drop a token FCM told us is dead. */
   removeToken(token) {
     let changed = false;
-    for (const [deviceId, rec] of this.devices) {
-      if (rec.token === token) { this.devices.delete(deviceId); changed = true; }
+    for (const [key, rec] of this.devices) {
+      if (rec.token === token) { this.devices.delete(key); changed = true; }
     }
     if (changed) this.save();
   }
@@ -335,9 +341,7 @@ function attachPush(app, opts = {}) {
     if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
 
     const { userId, token, deviceId, platform } = auth.body;
-    if (!store.register({ userId, token, deviceId, platform })) {
-      return res.status(409).json({ error: 'device registered to another identity' });
-    }
+    store.register({ userId, token, deviceId, platform });
     res.json({ ok: true });
   });
 
