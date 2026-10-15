@@ -1,0 +1,42 @@
+{
+ "name": "genz",
+ "voice": {"am_onyx": 0.7, "am_michael": 0.3}, "speed": 1.18,
+ "lines": [
+  "Your post? Deleted. Your account? Banned. Your vote? Gone.",
+  "Not here.",
+  "This is Interpoll.",
+  "Only your device can sign your vote. Nobody can fake it. No cap.",
+  "Every vote gets a receipt. Mess with one, and everyone sees it.",
+  "No big tech server. Your posts live on everyone's devices.",
+  "One goes down? Doesn't matter. It keeps going.",
+  "Private chats? Actually private. Everyone else sees static.",
+  "No algorithm. No shadow bans. No off switch.",
+  "Interpoll. It's free. Nobody owns it. Go try it."
+ ],
+ "cues": {
+  "delete": [0, "deleted"], "cutB": [0, "your", 1, -0.1], "ban": [0, "banned"], "cutC": [0, "your", 2, -0.1], "erase": [0, "gone"], "uncounted": [0, "gone", 0, 0.25],
+  "not": [1, "not"], "here": [1, "here"], "logo": [2, "interpoll"],
+  "tap": [3, "only"], "t1": [3, "sign"], "t2": [3, "vote"], "t4": [3, "nobody"], "t5": [3, "cap"],
+  "touch": [4, "mess"], "snaps": [4, "sees"],
+  "noServer": [5, "no"], "server": [5, "server"], "posts": [5, "posts"],
+  "down": [6, "down"], "heals": [6, "keeps"],
+  "lock": [7, "actually"], "relays": [7, "everyone"], "noise": [7, "static"],
+  "switch": [8, "switch"],
+  "chip0": [9, "free"], "chip1": [9, "nobody"], "cta": [9, "go"]
+ },
+ "copy": {
+  "s0label": "// every app, every day",
+  "s3label": "01 / only you can sign it",
+  "termKeys": ["›", "key", "sig"],
+  "term": ["signing your vote…", "lives on your device only", "9324b9c0f7f622cf…  (unfakeable)", "nobody else ever sees your key", "✓ verified: it's really you"],
+  "s4label": "02 / every vote gets a receipt",
+  "blockName": "Receipt", "blockTag": "vote", "blockOk": "✓ legit", "blockEdited": "edited", "blockBad": "✗ busted",
+  "s4alert": "✗ caught · everyone can see it",
+  "s5label": "03 / no big tech server", "s6label": "04 / can't be switched off",
+  "serverName": "big-tech-server-01", "relayName": "hub",
+  "count": "copies <g>{n}</g> · bosses <r>0</r>", "down": "<r>● one hub down</r>", "healed": "<g>● still going · fixed itself</g>",
+  "s7label": "05 / actually private", "lockChip": "locked", "relaySees": "what everyone else sees",
+  "nos": ["algorithm.", "shadow bans.", "off switch."],
+  "chips": ["It's free", "Nobody owns it"], "cta": "Go try it →"
+ }
+}

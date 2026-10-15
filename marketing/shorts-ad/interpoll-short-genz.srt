@@ -1,0 +1,39 @@
+1
+00:00:00,150 --> 00:00:03,160
+Your post? Deleted. Your account? Banned. Your vote? Gone.
+
+2
+00:00:03,180 --> 00:00:04,061
+Not here.
+
+3
+00:00:04,081 --> 00:00:05,467
+This is Interpoll.
+
+4
+00:00:05,487 --> 00:00:09,452
+Only your device can sign your vote. Nobody can fake it. No cap.
+
+5
+00:00:09,472 --> 00:00:12,967
+Every vote gets a receipt. Mess with one, and everyone sees it.
+
+6
+00:00:12,987 --> 00:00:16,717
+No big tech server. Your posts live on everyone's devices.
+
+7
+00:00:16,737 --> 00:00:19,236
+One goes down? Doesn't matter. It keeps going.
+
+8
+00:00:19,316 --> 00:00:22,577
+Private chats? Actually private. Everyone else sees static.
+
+9
+00:00:22,597 --> 00:00:25,623
+No algorithm. No shadow bans. No off switch.
+
+10
+00:00:25,644 --> 00:00:30,000
+Interpoll. It's free. Nobody owns it. Go try it.

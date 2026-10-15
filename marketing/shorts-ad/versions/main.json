@@ -1,0 +1,42 @@
+{
+ "name": "main",
+ "voice": {"am_onyx": 0.7, "am_michael": 0.3}, "speed": 1.14,
+ "lines": [
+  "They can delete your posts. Ban your account. Erase your vote.",
+  "Not here.",
+  "This is Interpoll.",
+  "Every vote is signed by a key that never leaves your device.",
+  "Every block chains to the last. Touch one, and the chain snaps.",
+  "No central server. Your posts live on every peer.",
+  "Relay goes down? The network heals itself.",
+  "Private spaces? Encrypted. Relays only see noise.",
+  "No algorithm. No shadow bans. No off switch.",
+  "Interpoll. Free. Open source. Owned by no one."
+ ],
+ "cues": {
+  "delete": [0, "delete"], "cutB": [0, "ban", 0, -0.14], "ban": [0, "ban"], "cutC": [0, "erase", 0, -0.16], "erase": [0, "erase"], "uncounted": [0, "vote"],
+  "not": [1, "not"], "here": [1, "here"], "logo": [2, "interpoll"],
+  "tap": [3, "vote"], "t1": [3, "signed"], "t2": [3, "key"], "t4": [3, "never"], "t5": [3, "device"],
+  "touch": [4, "touch"], "snaps": [4, "snaps"],
+  "noServer": [5, "no"], "server": [5, "server"], "posts": [5, "posts"],
+  "down": [6, "down"], "heals": [6, "heals"],
+  "lock": [7, "encrypted"], "relays": [7, "relays"], "noise": [7, "noise"],
+  "switch": [8, "switch"],
+  "chip0": [9, "free"], "chip1": [9, "open"], "chip2": [9, "owned"], "cta": [9, "one", 0, 0.1]
+ },
+ "copy": {
+  "s0label": "// any platform, any day",
+  "s3label": "01 / signed on your device",
+  "termKeys": ["$", "key", "sig"],
+  "term": ["sign(vote, device_key)", "secp256k1 · on this device", "9324b9c0f7f622cf275eb3a8aa5687…", "private key never transmitted", "✓ Schnorr signature verified"],
+  "s4label": "02 / every vote chains to the last",
+  "blockName": "Block", "blockTag": "vote", "blockOk": "✓ Schnorr", "blockEdited": "edited", "blockBad": "✗ mismatch",
+  "s4alert": "✗ chain broken · tamper detected",
+  "s5label": "03 / no central server", "s6label": "04 / self-healing network",
+  "serverName": "central-server-01", "relayName": "relay",
+  "count": "copies <g>{n}</g> · central servers <r>0</r>", "down": "<r>● relay-1 offline</r>", "healed": "<g>● rerouted · network self-healed</g>",
+  "s7label": "05 / end-to-end encrypted", "lockChip": "AES-256-GCM", "relaySees": "what the relay sees",
+  "nos": ["algorithm.", "shadow bans.", "off switch."],
+  "chips": ["Free", "Open source", "Owned by no one"], "cta": "Join the network →"
+ }
+}

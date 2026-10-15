@@ -1,0 +1,4 @@
+build/
+venv/
+models/
+fonts/*.ttf

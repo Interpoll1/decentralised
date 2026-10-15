@@ -1,39 +1,39 @@
 1
-00:00:00,200 --> 00:00:03,651
+00:00:00,150 --> 00:00:03,270
 They can delete your posts. Ban your account. Erase your vote.
 
 2
-00:00:03,700 --> 00:00:04,480
+00:00:03,290 --> 00:00:04,197
 Not here.
 
 3
-00:00:04,500 --> 00:00:05,762
+00:00:04,217 --> 00:00:05,766
 This is Interpoll.
 
 4
-00:00:05,906 --> 00:00:09,168
+00:00:05,858 --> 00:00:09,337
 Every vote is signed by a key that never leaves your device.
 
 5
-00:00:09,188 --> 00:00:12,918
+00:00:09,374 --> 00:00:13,104
 Every block chains to the last. Touch one, and the chain snaps.
 
 6
-00:00:12,938 --> 00:00:16,043
+00:00:13,124 --> 00:00:16,385
 No central server. Your posts live on every peer.
 
 7
-00:00:16,219 --> 00:00:19,011
+00:00:16,405 --> 00:00:19,140
 Relay goes down? The network heals itself.
 
 8
-00:00:19,031 --> 00:00:22,292
+00:00:19,217 --> 00:00:22,713
 Private spaces? Encrypted. Relays only see noise.
 
 9
-00:00:22,312 --> 00:00:25,394
+00:00:22,733 --> 00:00:25,856
 No algorithm. No shadow bans. No off switch.
 
 10
-00:00:25,594 --> 00:00:30,000
+00:00:26,014 --> 00:00:30,000
 Interpoll. Free. Open source. Owned by no one.
