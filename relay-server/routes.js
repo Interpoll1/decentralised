@@ -110,6 +110,10 @@ function serializePost(d, nsPrefix) {
   };
 }
 
+// Malformed Gun nodes (numeric titles / community ids from stray writes) must not reach the public feed or SEO pages.
+function isSaneFeedText(v) { return typeof v === 'string' && v.trim().length > 0 && !/^\d{8,}$/.test(v.trim()); }
+function isSaneFeedId(v) { return typeof v === 'string' && /^[A-Za-z][\w-]{0,127}$/.test(v); }
+
 server.on('request', async (req, res) => {
   setSecurityHeaders(res);
   setCorsHeaders(req, res);
@@ -999,7 +1003,7 @@ server.on('request', async (req, res) => {
       for (const row of postRows || []) {
         try {
           const d = JSON.parse(row.data);
-          if (!d?.id || !d?.title || !d?.communityId || seen.has(d.id)) continue;
+          if (!d?.id || !isSaneFeedText(d.title) || !isSaneFeedId(d.communityId) || seen.has(d.id)) continue;
           seen.add(d.id);
           items.push({ type: 'post', createdAt: d.createdAt || 0, data: serializePost(d, nsPrefix) });
         } catch {}
@@ -1007,7 +1011,7 @@ server.on('request', async (req, res) => {
       for (const row of pollRows || []) {
         try {
           const d = JSON.parse(row.data);
-          if (!d?.id || !d?.question || !d?.communityId || seen.has(d.id) || d.isPrivate) continue;
+          if (!d?.id || !isSaneFeedText(d.question) || !isSaneFeedId(d.communityId) || seen.has(d.id) || d.isPrivate) continue;
           seen.add(d.id);
           const options = optionsByPoll.get(d.id) || [];
           items.push({ type: 'poll', createdAt: d.createdAt || 0, data: serializePoll(d, options, nsPrefix, now) });
@@ -1767,6 +1771,41 @@ server.on('request', async (req, res) => {
         if (!pubkey) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'pubkey required' })); return; }
         await db.execute(`INSERT IGNORE INTO blocklist (type, value, reason, added_at) VALUES ('pubkey', ?, ?, ?)`, [pubkey, reason || null, Date.now()]);
         res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true }));
+      } catch (err) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: err.message })); }
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/admin/mod/bots') {
+      const limit = Math.min(parseInt(url.searchParams.get('limit') || '50', 10) || 50, 200);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(botDetector.snapshot(limit)));
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/admin/mod/users') {
+      try {
+        const count = async (sql) => { try { const [[r]] = await db.execute(sql); return Number(r?.c || 0); } catch { return null; } };
+        const [profiles, chatRegistered, authors, voters, activeSessions] = await Promise.all([
+          count(`SELECT COUNT(*) AS c FROM user_profiles`),
+          count(`SELECT COUNT(*) AS c FROM signal_bundles`),
+          count(`SELECT COUNT(DISTINCT author) AS c FROM search_index WHERE author IS NOT NULL AND author <> ''`),
+          count(`SELECT COUNT(DISTINCT pubkey) AS c FROM chain_blocks WHERE pubkey IS NOT NULL`),
+          count(`SELECT COUNT(DISTINCT user_id) AS c FROM sessions WHERE expires_at > ${Date.now()}`),
+        ]);
+        let joinedPerDay = [];
+        try {
+          const [rows] = await db.execute(`SELECT DATE(FROM_UNIXTIME(first_seen / 1000)) AS day, COUNT(*) AS c FROM (SELECT author, MIN(created_at) AS first_seen FROM search_index WHERE author IS NOT NULL AND author <> '' GROUP BY author) t GROUP BY day ORDER BY day DESC LIMIT 60`);
+          joinedPerDay = rows.map(r => ({ day: r.day, newAuthors: Number(r.c) }));
+        } catch { /* optional */ }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          // Sources use different id spaces, so they are reported separately rather than summed.
+          everJoined: { profiles, chatRegistered, contentAuthors: authors, signedVoters: voters },
+          estimatedTotal: Math.max(profiles || 0, chatRegistered || 0, authors || 0, voters || 0),
+          activeSessions,
+          liveWebsocketPeers: clients.size,
+          joinedPerDay,
+        }));
       } catch (err) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: err.message })); }
       return;
     }

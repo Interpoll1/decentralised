@@ -1,5 +1,6 @@
 const MAX_TIMESTAMPS = 100;
 const MAX_HASHES = 20;
+const MAX_FLAGGED = 200;
 const RECALC_INTERVAL = 10;
 const BURST_WINDOW_MS = 5000;
 const CLEANUP_INTERVAL_MS = 2 * 60_000;
@@ -81,6 +82,7 @@ function createPeerState(now) {
 export class BotDetector {
   constructor() {
     this.peers = new Map();
+    this.flagged = []; // recent detections (score > 30), survives peer cleanup
     this._cleanupTimer = setInterval(() => this.cleanup(), CLEANUP_INTERVAL_MS);
     if (this._cleanupTimer.unref) this._cleanupTimer.unref();
   }
@@ -138,11 +140,34 @@ export class BotDetector {
 
     state.score = Math.min(100, s1 + s2 + s3 + s4 + s5);
 
+    if (state.score > 30) this._recordFlag(peerId, state);
     if (state.score > 80) {
       console.log(`🤖 Bot detected: ${peerId} score=${state.score} action=ban`);
     } else if (state.score > 30) {
       console.log(`👀 Suspicious: ${peerId} score=${state.score}`);
     }
+  }
+
+  _recordFlag(peerId, state) {
+    const action = this.getAction(peerId).action;
+    const existing = this.flagged.find(f => f.peerId === peerId);
+    const entry = { peerId, score: state.score, action, messageCount: state.messageCount, lastSeen: Date.now() };
+    if (existing) Object.assign(existing, entry);
+    else this.flagged.push({ ...entry, firstFlagged: entry.lastSeen });
+    if (this.flagged.length > MAX_FLAGGED) this.flagged = this.flagged.slice(-MAX_FLAGGED);
+  }
+
+  /** Admin snapshot: live peers by action bucket plus recent flagged peers. */
+  snapshot(limit = 50) {
+    const buckets = { allow: 0, throttle: 0, challenge: 0, ban: 0 };
+    const live = [];
+    for (const [peerId, st] of this.peers) {
+      const { action } = this.getAction(peerId);
+      buckets[action]++;
+      if (st.score > 30) live.push({ peerId, score: st.score, action, messageCount: st.messageCount, connectedMs: Date.now() - st.connectTime, connected: !st.disconnectedAt });
+    }
+    live.sort((a, b) => b.score - a.score);
+    return { tracked: this.peers.size, buckets, live: live.slice(0, limit), recentFlagged: this.flagged.slice(-limit).reverse() };
   }
 
   getScore(peerId) {
