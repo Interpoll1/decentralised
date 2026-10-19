@@ -6,6 +6,8 @@
   <img width="1920" alt="InterPoll — decentralized polling platform" src="docs/screenshots/homepage.jpg" />
 </p>
 
+**Try it:** https://interpoll.endless.sbs
+
 ---
 
 ## So what is this, exactly?
@@ -121,7 +123,7 @@ For the full technical threat model, see the [IPP specification series](docs/pro
 node peer.js
 ```
 
-**Run a relay** — give your community full data sovereignty. See `gun-relay-server/` for the GunDB relay and `relay-server.js` for the WebSocket relay.
+**Run a relay** — give your community full data sovereignty. See `gun-relay/` for the GunDB relay and `relay-server/` for the WebSocket relay.
 
 **Contribute** — the project is fully open source. Open a PR.
 
@@ -136,8 +138,8 @@ chmod +x run.sh
 
 # Or run each service manually:
 npm run dev              # Vite frontend → http://localhost:5173
-node relay-server.js     # WebSocket relay → ws://localhost:8080
-cd gun-relay-server && node gun-relay.js  # GunDB relay → http://localhost:8765/gun
+node relay-server/relay-server-enhanced.js  # WebSocket relay → ws://localhost:8080
+node gun-relay/gun-relay-enhanced.js        # GunDB relay → http://localhost:8765/gun
 ```
 
 ### Environment variables
@@ -188,9 +190,8 @@ src/
   composables/    Reusable Vue 3 composition functions
   config.ts       Runtime-mutable relay URLs and app configuration
 
-relay-server.js                          Dev WebSocket relay + OAuth + vote authorization
-relay-server/relay-server-enhanced.js   Production relay (PM2, persisted vote registry)
-gun-relay-server/                       GunDB relay server
+relay-server/relay-server-enhanced.js   WebSocket relay + OAuth + vote authorization (PM2)
+gun-relay/gun-relay-enhanced.js         GunDB relay server
 shared-validation/                      Validation shared between frontend and relay
 ```
 
@@ -244,4 +245,4 @@ For the full technical specification — block structure, vote flow, sync protoc
 
 ## License
 
-Open source. See [LICENSE](LICENSE) for details.
+Unlicense (public domain). See [LICENSE](LICENSE) for details.
