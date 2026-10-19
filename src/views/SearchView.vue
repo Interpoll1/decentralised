@@ -503,9 +503,9 @@ ion-content {
 
 </style>
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonBackButton, IonSearchbar, IonSegment,
@@ -517,6 +517,7 @@ import { useSearch } from '../composables/useSearch';
 import { ALL_CATEGORIES } from '../composables/useCategories';
 
 const router  = useRouter();
+const route   = useRoute();
 
 const {
   results,
@@ -612,6 +613,15 @@ const performSearch = async () => {
   if (inferred) options.category = inferred;
   await searchPage(searchQuery.value, 1, options);
 };
+
+// The top-bar search box lands here with ?q=…; run it (the page stays cached by Ionic, so watch, don't just read once).
+watch(() => route.query.q, (q) => {
+  if (route.name !== 'Search' || typeof q !== 'string') return;
+  const text = q.trim();
+  if (text.length < 2 || text === searchQuery.value) return;
+  searchQuery.value = text;
+  void performSearch();
+}, { immediate: true });
 
 const goToPage = async (page: number | string) => {
   if (typeof page !== 'number') return;

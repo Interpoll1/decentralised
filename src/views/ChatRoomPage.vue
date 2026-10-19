@@ -1,9 +1,9 @@
 <template>
-  <ion-page class="room">
+  <ion-page class="room" :class="{ 'room--embedded': embedded }">
     <ion-header class="room-header">
       <ion-toolbar>
         <div class="bar">
-          <button class="icon-btn" aria-label="Back" @click="$router.back()">
+          <button v-if="!embedded" class="icon-btn" aria-label="Back" @click="$router.back()">
             <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
           <button class="bar-identity" :disabled="!ready" aria-label="Group info" @click="openInfo">
@@ -13,6 +13,16 @@
               <span v-if="ready" class="bar-sub" :class="{ 'bar-sub--typing': chatRoomStore.typingNames.length }">{{ subtitle }}</span>
             </span>
           </button>
+          <div v-if="embedded && ready" class="sync" :title="`${syncPeers} online · ${syncHealthy ? 'connected to the relay' : 'relay unreachable'}`">
+            <span class="sync-label">Synced across {{ syncPeers }} {{ syncPeers === 1 ? 'peer' : 'peers' }}</span>
+            <span class="sync-path">
+              <template v-for="(n, i) in syncNodes" :key="n.id">
+                <i v-if="i > 0" class="sync-line"></i>
+                <span class="sync-node"><ChatAvatar :name="n.name" :seed="n.id" size="sm" online /><small>{{ n.name.split(' ')[0] }}</small></span>
+              </template>
+            </span>
+            <span class="sync-health" :class="{ 'sync-health--bad': !syncHealthy }">{{ syncHealthy ? 'Healthy' : 'Offline' }}</span>
+          </div>
           <template v-if="ready">
             <button class="icon-btn" :class="{ 'icon-btn--on': searchOpen }" aria-label="Search messages" title="Search messages" @click="toggleSearch">
               <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.9"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
@@ -384,6 +394,7 @@ import { useChatRoomStore } from '@/stores/chatRoomStore';
 import { ChatRoomService } from '@/services/chatRoomService';
 import { KeyVaultService } from '@/services/keyVaultService';
 import { UserService } from '@/services/userService';
+import { GunService } from '@/services/gunService';
 import { InviteLinkService } from '@/services/inviteLinkService';
 import type { ChatRoom } from '@/services/chatRoomService';
 import GroupMessageBubble from '@/components/groupchat/GroupMessageBubble.vue';
@@ -392,7 +403,7 @@ import ChatAvatar from '@/components/groupchat/ChatAvatar.vue';
 import { previewText, type TimelineItem } from '@/utils/groupTimeline';
 import { EMOJI_PICKER, QUICK_REACTIONS } from '@/utils/chatFormat';
 
-const props = defineProps<{ roomId: string }>();
+const props = defineProps<{ roomId: string; /** Rendered inside the desktop Messages workspace rather than as a routed page. */ embedded?: boolean }>();
 
 const route = useRoute();
 const router = useRouter();
@@ -453,8 +464,21 @@ const subtitle = computed(() => {
   const accounts = accountCount.value;
   const online = chatRoomStore.onlineAccounts.size;
   if (accounts <= 1) return 'Only you — tap to invite people';
-  return online > 1 ? `${accounts} members, ${online} online` : `${accounts} members`;
+  const base = online > 1 ? `${accounts} members, ${online} online` : `${accounts} members`;
+  const about = props.embedded ? chatRoomStore.currentRoom?.description : '';
+  return about ? `${base} • ${about}` : base;
 });
+
+// ── Sync strip (desktop workspace header) ─────────────────────────────────
+const syncPeers = computed(() => chatRoomStore.onlineAccounts.size);
+const syncNodes = computed(() => {
+  const me = currentUserId.value;
+  const others = [...chatRoomStore.onlineAccounts].filter(a => a !== me);
+  return [me, ...others].filter(Boolean).slice(0, 4).map(id => ({ id, name: chatRoomStore.displayName(id) }));
+});
+const syncHealthy = ref(true);
+let syncTimer: ReturnType<typeof setInterval> | null = null;
+function readSync() { try { syncHealthy.value = GunService.getPeerStats().isConnected; } catch { /* keep last */ } }
 
 // ── Timeline helpers ──────────────────────────────────────────────────────
 const sameDay = (a: number, b: number) => new Date(a).toDateString() === new Date(b).toDateString();
@@ -996,11 +1020,13 @@ function onGlobalKey(ev: KeyboardEvent) {
 
 onMounted(() => {
   initRoom();
+  if (props.embedded) { readSync(); syncTimer = setInterval(readSync, 4000); }
   document.addEventListener('visibilitychange', onVisibility);
   window.addEventListener('keydown', onGlobalKey);
 });
 
 onUnmounted(() => {
+  if (syncTimer) clearInterval(syncTimer);
   stopJoinPoll();
   if (recording.value) stopRecording(false);
   clearPendingFile();
@@ -1208,4 +1234,18 @@ ion-toolbar { --border-width: 0 !important; --background: var(--app-bg-elevated)
 
 @media (max-width: 520px) { .room { --room-pad: 10px; } }
 @media (prefers-reduced-motion: reduce) { .menu-react, .send { transition: none; } .typing-dots span, .rec-dot { animation: none; } }
+/* ── Embedded in the desktop Messages workspace ─────────────────────── */
+.room--embedded { --room-col: 820px; }
+.room--embedded .room-content { --background: transparent; }
+.room--embedded ion-toolbar { --background: transparent; --border-width: 0 0 1px 0; --border-color: var(--app-border); }
+.sync { display: none; align-items: center; gap: 12px; margin: 0 6px; padding: 5px 12px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid var(--app-border); flex-shrink: 0; }
+.sync-label { font-size: 11px; font-weight: 600; color: var(--app-text-muted); white-space: nowrap; }
+.sync-path { display: flex; align-items: flex-start; }
+.sync-node { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.sync-node small { font-size: 9.5px; color: var(--app-text-subtle); max-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sync-node :deep(.cav) { width: 22px; height: 22px; font-size: 10px; }
+.sync-line { width: 18px; height: 2px; margin-top: 10px; background: repeating-linear-gradient(90deg, var(--app-accent) 0 4px, transparent 4px 7px); opacity: 0.8; }
+.sync-health { padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; color: var(--app-accent); background: rgba(var(--app-accent-rgb), 0.1); border: 1px solid rgba(var(--app-accent-rgb), 0.3); }
+.sync-health--bad { color: var(--app-danger); background: rgba(var(--app-danger-rgb), 0.1); border-color: rgba(var(--app-danger-rgb), 0.3); }
+@media (min-width: 1360px) { .room--embedded .sync { display: flex; } }
 </style>

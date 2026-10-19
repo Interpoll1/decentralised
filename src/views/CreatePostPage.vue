@@ -158,9 +158,10 @@ ion-content { --background: transparent; }
 .submit-btn {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 7px 18px; border-radius: 999px; border: none;
-  background: var(--app-accent); color: #111214;
+  /* Inverts per theme: accent is #e6e6e6, which vanishes on the light theme's near-white header. */
+  background: var(--app-text); color: var(--app-bg-base);
   font-size: 13.5px; font-weight: 700; cursor: pointer;
-  box-shadow: 0 4px 14px rgba(230, 230, 230,.38);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .22);
   transition: opacity 160ms, transform 160ms; margin-right: 8px;
 }
 .submit-btn:hover:not(:disabled) { opacity: .9; transform: translateY(-1px); }
@@ -168,7 +169,7 @@ ion-content { --background: transparent; }
 
 .btn-spinner {
   width: 15px; height: 15px;
-  border: 2px solid rgba(255,255,255,.3); border-top-color: #fff;
+  border: 2px solid currentColor; border-top-color: transparent; opacity: .8;
   border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0;
 }
 @keyframes spin { to { transform: rotate(360deg); } }

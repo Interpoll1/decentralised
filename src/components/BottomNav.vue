@@ -213,10 +213,10 @@ ion-footer.bottom-nav-footer.footer-hidden { max-height: 0; }
   display: flex;
   align-items: stretch;
   justify-content: space-around;
-  background: rgba(13, 13, 13, 0.72);
+  background: var(--app-bg-elevated);
   backdrop-filter: blur(40px) saturate(1.8);
   -webkit-backdrop-filter: blur(40px) saturate(1.8);
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--app-border-strong);
   padding: 0 0 env(safe-area-inset-bottom);
   pointer-events: all;
 }
@@ -235,7 +235,7 @@ ion-footer.bottom-nav-footer.footer-hidden { max-height: 0; }
   -webkit-tap-highlight-color: transparent;
   position: relative;
   transition: color 140ms, background 140ms, opacity 140ms;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--app-text-subtle);
   font: inherit;
   /* A hold-and-drag must reach us as pointer events, not be taken over as a scroll or a long-press menu. */
   touch-action: none;
@@ -243,9 +243,9 @@ ion-footer.bottom-nav-footer.footer-hidden { max-height: 0; }
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 }
-.nav-item:hover { color: rgba(255, 255, 255, 0.75); background: rgba(255, 255, 255, 0.04); }
+.nav-item:hover { color: var(--app-text-muted); background: var(--app-surface); }
 .nav-item:active { opacity: 0.6; background: transparent; }
-.nav-item.active { color: #e6e6e6; }
+.nav-item.active { color: var(--app-text); }
 .nav-item.active::before {
   content: '';
   position: absolute;
@@ -253,7 +253,7 @@ ion-footer.bottom-nav-footer.footer-hidden { max-height: 0; }
   transform: translateX(-50%);
   width: 32px; height: 2.5px;
   border-radius: 0 0 3px 3px;
-  background: var(--app-accent);
+  background: var(--app-text);
 }
 .nav-item--lifted { opacity: 0.25; }
 .nav-item--target { background: rgba(230, 230, 230, 0.22); color: #e6e6e6; border-radius: 12px; }

@@ -20,7 +20,10 @@
     "test:coordination-v2": "node --test --test-concurrency=1 tools/coordination-impact-v2/core.test.mjs tools/coordination-impact-v2/host.test.mjs tools/coordination-pilot/runner-v2.test.mjs",
     "evaluate:coordination-v2": "node tools/coordination-impact-v2/evaluate.mjs",
     "test:coordination-pilot": "node --test --test-concurrency=1 tools/coordination-pilot/export.test.mjs tools/coordination-pilot/mysql-source.test.mjs tools/coordination-pilot/runner.test.mjs tools/coordination-pilot/io-cli.test.mjs",
-    "test:watch": "vitest --config unit_tests/vitest.config.ts"
+    "test:watch": "vitest --config unit_tests/vitest.config.ts",
+    "tauri": "tauri",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build"
   },
   "dependencies": {
     "@capacitor-mlkit/barcode-scanning": "^6.2.0",
@@ -62,6 +65,7 @@
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^6.2.2",
+    "@tauri-apps/cli": "^2.12.3",
     "@types/node": "^20.10.0",
     "@vitejs/plugin-vue": "^6.0.0",
     "autoprefixer": "^10.6.1",

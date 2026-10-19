@@ -1,8 +1,27 @@
 <template>
-  <div class="ct">
+  <div class="ct" :class="{ 'ct--split': split, 'ct--nointel': split && !selectedRoomId }">
+   <div class="ct-pane">
 
     <!-- Header: title, unread pill, and a compact "New chat" action (replaces the big card) -->
     <header class="ct-head">
+      <!-- Desktop workspace: title, primary action, Direct / Rooms switch -->
+      <div v-if="split" class="ct-top">
+        <h2 class="ct-top__title">Messages</h2>
+        <button
+          class="ct-newconv"
+          data-test="new-menu"
+          :aria-expanded="composerOpen || newMenuOpen"
+          aria-haspopup="menu"
+          @click="composerOpen ? toggleComposer(false) : (newMenuOpen = !newMenuOpen)"
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.5 11.6a8.1 8.1 0 01-.9 3.7 8.2 8.2 0 01-7.3 4.5 8.1 8.1 0 01-3.7-.9L3.5 20.5l1.6-4.9a8.1 8.1 0 01-.9-3.7A8.2 8.2 0 018.7 4.6a8.1 8.1 0 013.6-.9h.5a8.2 8.2 0 017.7 7.7v.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8.6v6M9 11.6h6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+          {{ composerOpen ? 'Close' : 'New conversation' }}
+        </button>
+      </div>
+      <div v-if="split" class="ct-seg" role="tablist" aria-label="Conversation type">
+        <button role="tab" :aria-selected="tab === 'dm'" :class="{ active: tab === 'dm' }" @click="tab = 'dm'">Direct<span v-if="dmUnread" class="ct-seg__badge">{{ dmUnread }}</span></button>
+        <button role="tab" :aria-selected="tab === 'rooms'" :class="{ active: tab === 'rooms' }" @click="tab = 'rooms'">Rooms<span v-if="roomUnread" class="ct-seg__badge">{{ roomUnread }}</span></button>
+      </div>
       <div class="ct-search" role="search">
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
         <input
@@ -20,6 +39,7 @@
         </button>
       </div>
       <button
+        v-if="!split"
         class="ct-new"
         data-test="new-menu"
         :class="{ 'ct-new--open': composerOpen || newMenuOpen }"
@@ -91,12 +111,13 @@
     </Transition>
 
     <!-- The list: ONE continuous surface, rows separated by hairlines (WhatsApp-style) -->
-    <ul v-if="rows.length" class="ct-list">
-      <template v-for="row in rows" :key="row.key">
+    <ul v-if="listRows.length" class="ct-list">
+      <template v-for="(row, ri) in listRows" :key="row.key">
+      <li v-if="sectionLabel(ri)" class="ct-sec" aria-hidden="true">{{ sectionLabel(ri) }}</li>
       <li
         v-if="row.kind === 'group'"
         class="ct-row"
-        :class="{ 'ct-row--unread': row.unread > 0 }"
+        :class="{ 'ct-row--unread': row.unread > 0, 'ct-row--active': split && selectedRoomId === row.id }"
         role="button"
         tabindex="0"
         @click="openGroup(row.id)"
@@ -107,6 +128,18 @@
         <div class="ct-row__main">
           <div class="ct-row__top">
             <span class="ct-row__name">{{ row.name }}</span>
+            <button
+              v-if="split"
+              type="button"
+              class="ct-row__pin"
+              :class="{ 'ct-row__pin--on': isPinned(row.id) }"
+              :aria-label="isPinned(row.id) ? `Unpin ${row.name}` : `Pin ${row.name}`"
+              :title="isPinned(row.id) ? 'Unpin' : 'Pin to top'"
+              @click.stop="togglePin(row.id)"
+              @keydown.stop
+            >
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5zM12 14v6" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/></svg>
+            </button>
             <span class="ct-row__time">{{ formatChatTime(row.time) }}</span>
           </div>
           <div class="ct-row__bottom">
@@ -182,6 +215,7 @@
       </template>
     </ul>
 
+    <p v-else-if="split && !trimmed && (chatList.length || groupRooms.length)" class="ct-nomatch">{{ tab === 'rooms' ? 'No rooms yet — start one with New conversation.' : 'No direct messages yet — open someone\'s chat link.' }}</p>
     <p v-else-if="trimmed && (chatList.length || groupRooms.length)" class="ct-nomatch">{{ searchPending ? 'Searching messages…' : `No chats or messages match “${trimmed}”.` }}</p>
 
     <!-- Loading: skeleton in the same surface so the layout doesn't jump -->
@@ -203,17 +237,34 @@
       </div>
     </div>
 
+   </div>
+
+    <!-- Desktop workspace: the open room, then its intelligence panel -->
+    <section v-if="split" class="ct-stage">
+      <ChatRoomPage v-if="selectedRoomId" :room-id="selectedRoomId" embedded />
+      <div v-else class="ct-stage__empty">
+        <BitMascot :size="72" mood="sleepy" />
+        <p class="ct-empty__title">Pick a room</p>
+        <p class="ct-empty__sub">Choose a room on the left to read it here, or start a new conversation.</p>
+      </div>
+    </section>
+    <RoomIntelligence v-if="split && selectedRoomId" class="ct-intel" />
+
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, watch, onBeforeUnmount, onMounted } from 'vue';
+import { ref, computed, nextTick, watch, onBeforeUnmount, onMounted, defineAsyncComponent } from 'vue';
 import ChatAvatar from './groupchat/ChatAvatar.vue';
 import BitMascot from './BitMascot.vue';
 import GroupCreateSheet from './groupchat/GroupCreateSheet.vue';
+import RoomIntelligence from './groupchat/RoomIntelligence.vue';
 import { useChatRoomStore } from '../stores/chatRoomStore';
 import { UserService } from '../services/userService';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
+
+// The thread itself is the routed room page, embedded; load it only when the desktop workspace needs it.
+const ChatRoomPage = defineAsyncComponent(() => import('../views/ChatRoomPage.vue'));
 import { chatPath } from '../utils/privateRoute';
 import { cleanNickname, MAX_NICKNAME } from '../utils/nicknameText';
 import { findMatch, splitHighlight, MIN_MESSAGE_QUERY, type MessageHit } from '../utils/chatSearch';
@@ -378,6 +429,52 @@ onMounted(async () => {
   await roomStore.loadRooms();
 });
 const groupRooms = computed(() => roomStore.rooms.filter(r => r.securityMode === 'EPOCH_GROUP_V1'));
+
+// ── Desktop workspace (list | thread | room intelligence) ──────────────────
+const route = useRoute();
+const SPLIT_QUERY = '(min-width: 1100px)';
+const split = ref(typeof matchMedia === 'function' && matchMedia(SPLIT_QUERY).matches);
+let splitMql: MediaQueryList | null = null;
+const onSplitChange = (e: MediaQueryListEvent) => { split.value = e.matches; };
+onMounted(() => { splitMql = matchMedia(SPLIT_QUERY); split.value = splitMql.matches; splitMql.addEventListener('change', onSplitChange); });
+onBeforeUnmount(() => splitMql?.removeEventListener('change', onSplitChange));
+
+const LAST_ROOM_KEY = 'interpoll_last_room';
+const PINNED_KEY = 'interpoll_pinned_rooms';
+function readJSON<T>(key: string, fallback: T): T {
+  try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) as T : fallback; } catch { return fallback; }
+}
+function writeStore(key: string, value: unknown) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode */ } }
+
+const tab = ref<'dm' | 'rooms'>('rooms');
+const pinnedIds = ref<string[]>(readJSON<string[]>(PINNED_KEY, []));
+const isPinned = (id: string) => pinnedIds.value.includes(id);
+function togglePin(id: string) {
+  pinnedIds.value = isPinned(id) ? pinnedIds.value.filter(x => x !== id) : [id, ...pinnedIds.value];
+  writeStore(PINNED_KEY, pinnedIds.value);
+}
+
+const queryRoom = () => { const r = route.query.room; return typeof r === 'string' ? r : ''; };
+const selectedRoomId = ref(queryRoom() || (typeof localStorage !== 'undefined' ? readJSON<string>(LAST_ROOM_KEY, '') : ''));
+function selectRoom(id: string) {
+  selectedRoomId.value = id;
+  writeStore(LAST_ROOM_KEY, id);
+  void router.replace({ query: { ...route.query, room: id } });
+}
+// A remembered room that is no longer joined must not leave the stage trying to open it.
+watch([groupRooms, () => roomStore.rooms.length], () => {
+  if (roomStore.rooms.length && selectedRoomId.value && !groupRooms.value.some(r => r.id === selectedRoomId.value)) selectedRoomId.value = '';
+});
+// First visit with only direct chats: start on the tab that has something in it.
+const tabChosen = ref(false);
+watch([groupRooms, () => props.chatList.length], ([g, d]) => {
+  if (tabChosen.value || !(g.length || d)) return;
+  tabChosen.value = true;
+  if (!g.length && d) tab.value = 'dm';
+}, { immediate: true });
+
+const roomUnread = computed(() => groupRooms.value.reduce((n, r) => n + (roomStore.summaries[r.id]?.unread ?? 0), 0));
+const dmUnread = computed(() => props.chatList.reduce((n, c) => n + (c.unreadCount || 0), 0));
 type Row =
   | { kind: 'dm'; key: string; time: number; chat: ChatEntry }
   | { kind: 'group'; key: string; time: number; id: string; name: string; unread: number; mentions: number; preview: string; sender: string; memberCount: number };
@@ -394,6 +491,21 @@ const rows = computed<Row[]>(() => {
   // While searching, keep the parent's ranking for people; otherwise newest first.
   return q ? [...groups, ...dms] : [...groups, ...dms].sort((a, b) => b.time - a.time);
 });
+/** What the list shows: on desktop one conversation type at a time, with pinned rooms first. */
+const listRows = computed<Row[]>(() => {
+  if (!split.value) return rows.value;
+  const wanted = rows.value.filter(r => (tab.value === 'rooms') === (r.kind === 'group'));
+  const pinned = (r: Row) => r.kind === 'group' && isPinned(r.id);
+  return [...wanted.filter(pinned), ...wanted.filter(r => !pinned(r))];
+});
+function sectionLabel(i: number): string {
+  if (!split.value || tab.value !== 'rooms') return '';
+  const row = listRows.value[i];
+  const pinned = row.kind === 'group' && isPinned(row.id);
+  const prevPinned = i > 0 && (() => { const p = listRows.value[i - 1]; return p.kind === 'group' && isPinned(p.id); })();
+  if (pinned) return i === 0 ? 'Pinned' : '';
+  return i === 0 || prevPinned ? 'Recent' : '';
+}
 /** Your personal chat link, same format as the profile page shares. */
 async function copyMyLink() {
   const user = await UserService.getCurrentUser().catch(() => null);
@@ -408,7 +520,10 @@ async function copyMyLink() {
   const t = await toastController.create({ message: shared ? 'Link shared' : 'Your invite link is copied', duration: 1800, position: 'top' });
   await t.present();
 }
-function openGroup(id: string) { void router.push(`/chatroom/${encodeURIComponent(id)}`); }
+function openGroup(id: string) {
+  if (split.value) { selectRoom(id); return; }
+  void router.push(`/chatroom/${encodeURIComponent(id)}`);
+}
 
 function extractChatPath(raw: string): { userId: string; name: string } | null {
   const s = raw.trim();
@@ -788,6 +903,61 @@ function formatChatTime(timestamp: number): string {
   .ct-skel__avatar, .ct-skel__lines span, .mini-spinner { animation: none; }
   .ct-new, .ct-row, .ct-slide-enter-active, .ct-slide-leave-active { transition: none; }
 }
+/* ── Desktop workspace: list | thread | room intelligence ─────────────── */
+.ct-pane { display: contents; }
+.ct-stage, .ct-intel { display: none; }
+.ct--split {
+  display: grid; grid-template-columns: 308px minmax(0, 1fr) 286px; gap: 0; padding: 0;
+  height: calc(100vh - 56px - 44px); min-height: 540px;
+}
+.ct--split.ct--nointel { grid-template-columns: 308px minmax(0, 1fr); }
+.ct--split .ct-pane {
+  display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 0; overflow-y: auto; padding: 16px 12px 12px;
+  border-right: 1px solid var(--app-border); scrollbar-width: thin;
+}
+.ct--split .ct-stage { display: block; position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+.ct--split .ct-intel { display: block; min-height: 0; border-left: 1px solid var(--app-border); background: rgba(255, 255, 255, 0.012); }
+.ct-stage__empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 8px; padding: 24px; }
+
+.ct--split .ct-head { flex-wrap: wrap; margin: 0; gap: 10px; }
+.ct--split .ct-search { flex: 1 1 100%; height: 38px; border-radius: 10px; background: rgba(255,255,255,0.04); border-color: var(--app-border); }
+.ct--split .ct-search:focus-within { border-color: rgba(var(--app-accent-rgb), 0.5); background: rgba(255,255,255,0.06); box-shadow: 0 0 0 3px rgba(var(--app-accent-rgb), 0.12); }
+.ct--split .ct-menu { top: 46px; left: 0; right: auto; }
+.ct-top { flex: 1 1 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ct-top__title { margin: 0; font-size: 18px; font-weight: 750; letter-spacing: -0.02em; color: var(--app-text); }
+.ct-newconv {
+  display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 13px; border: none; border-radius: 9px; cursor: pointer;
+  background: var(--app-accent); color: #04120a; font: inherit; font-size: 12.5px; font-weight: 700; white-space: nowrap; transition: filter 120ms;
+}
+.ct-newconv svg { width: 16px; height: 16px; }
+.ct-newconv:hover { filter: brightness(1.08); }
+.ct-seg { flex: 1 1 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 3px; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--app-border); }
+.ct-seg button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 30px; border: none; border-radius: 8px; cursor: pointer;
+  background: none; color: var(--app-text-muted); font: inherit; font-size: 12.5px; font-weight: 650; transition: background 120ms, color 120ms;
+}
+.ct-seg button.active { background: rgba(var(--app-accent-rgb), 0.14); color: var(--app-accent); }
+.ct-seg__badge { min-width: 17px; height: 17px; padding: 0 5px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: var(--app-accent); color: #04120a; font-size: 10.5px; font-weight: 800; }
+
+.ct--split .ct-composer { margin: 0; }
+.ct--split .ct-list { border-radius: 0; overflow: visible; }
+.ct--split .ct-row { gap: 11px; padding: 9px 10px; border-radius: 10px; }
+.ct--split .ct-row + .ct-row::before { display: none; }
+.ct--split .ct-row--active { background: rgba(var(--app-accent-rgb), 0.1); box-shadow: inset 2px 0 0 var(--app-accent); }
+.ct--split .ct-row--active:hover { background: rgba(var(--app-accent-rgb), 0.13); }
+.ct--split .avatar, .ct--split .ct-row :deep(.cav--md) { width: 40px; height: 40px; font-size: 15px; }
+.ct--split .ct-row__name { font-size: 14px; }
+.ct--split .ct-row__preview { font-size: 12.5px; }
+.ct-sec { list-style: none; padding: 10px 10px 4px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--app-text-subtle); }
+.ct-sec:first-child { padding-top: 2px; }
+.ct-row__pin {
+  flex-shrink: 0; width: 24px; height: 24px; padding: 0; display: none; align-items: center; justify-content: center; border: none; border-radius: 6px;
+  background: none; color: var(--app-text-subtle); cursor: pointer;
+}
+.ct-row__pin svg { width: 14px; height: 14px; }
+.ct-row:hover .ct-row__pin, .ct-row__pin--on, .ct-row__pin:focus-visible { display: inline-flex; }
+.ct-row__pin--on { color: var(--app-accent); }
+.ct-row__pin:hover { background: rgba(var(--app-accent-rgb), 0.14); color: var(--app-accent); }
 </style>
 
 

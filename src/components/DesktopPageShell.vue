@@ -1,12 +1,16 @@
 <template>
-  <div class="dps-root">
-    <AppSideNav @open-relay="relaySheetOpen = true" />
+  <div class="dps-shell">
+    <AppTopNav @open-relay="relaySheetOpen = true" />
 
-    <main class="dps-main surface-card">
-      <slot />
-    </main>
+    <div class="dps-root">
+      <RelayPulseSidebar @open-relay="relaySheetOpen = true" />
 
-    <AppRightSidebar />
+      <main class="dps-main surface-card">
+        <slot />
+      </main>
+
+      <AppRightSidebar />
+    </div>
 
     <RelaySheet v-model="relaySheetOpen" />
   </div>
@@ -14,7 +18,8 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import AppSideNav      from './AppSideNav.vue';
+import AppTopNav       from './AppTopNav.vue';
+import RelayPulseSidebar from './RelayPulseSidebar.vue';
 import AppRightSidebar from './AppRightSidebar.vue';
 import RelaySheet      from './RelaySheet.vue';
 
@@ -24,6 +29,7 @@ const relaySheetOpen = ref(false);
 </script>
 
 <style scoped>
+.dps-shell { width: 100%; }
 .dps-root { display: block; width: 100%; }
 .dps-main { width: 100%; min-width: 0; }
 
@@ -47,7 +53,7 @@ const relaySheetOpen = ref(false);
     gap: 20px;
     width: min(1320px, calc(100% - 32px));
     margin: 0 auto;
-    padding: 24px 0 80px;
+    padding: 20px 0 80px;
   }
   .dps-main {
     flex: 1;

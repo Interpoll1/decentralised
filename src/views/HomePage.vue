@@ -38,22 +38,18 @@
       </ion-toolbar>
     </ion-header>
 
+    <!-- Desktop top bar (hidden on phones, which keep the header above and the bottom nav) -->
+    <AppTopNav :total-unread="totalUnread" @open-relay="relaySheetOpen = true" />
+
     <ion-content class="ambient-page" :scroll-events="true" @ionScroll="handleScroll">
       <BurstOverlay />
-      <div class="hp-root page-layout ambient-page__content">
+      <div class="hp-root page-layout ambient-page__content" :class="{ 'hp-root--chat': activeTab === 'chat' }">
 
-        <!-- ── LEFT NAV (desktop only) ─────────────────────────────── -->
-        <AppSideNav
-          :active-tab="activeTab"
-          :total-unread="totalUnread"
-          :active-category="selectedCategory"
-          @update:active-tab="activeTab = $event"
-          @select-category="selectCategory($event); activeTab = 'home'"
-          @open-relay="relaySheetOpen = true"
-        />
+        <!-- ── LEFT: relay pulse (desktop only) ─────────────────────── -->
+        <RelayPulseSidebar v-if="activeTab !== 'chat'" @open-relay="relaySheetOpen = true" />
 
         <!-- ── MAIN CONTENT ──────────────────────────────────────────── -->
-        <main class="main-content surface-card">
+        <main class="main-content surface-card" :class="{ 'main-content--chat': activeTab === 'chat' }">
 
           <!-- FEED TAB -->
           <div v-if="activeTab === 'home'" class="home-tab">
@@ -79,6 +75,31 @@
                 </button>
               </div>
             </section>
+
+            <!-- Desktop heading + composer -->
+            <div class="net-head">
+              <div class="net-head__text">
+                <h1>Your network</h1>
+                <p>What's moving across this relay</p>
+              </div>
+              <div class="net-seg" role="tablist" aria-label="Feed order">
+                <button role="tab" :aria-selected="feedMode === 'for-you'" :class="{ active: feedMode === 'for-you' }" @click="setFeedMode('for-you')">Relevant</button>
+                <button role="tab" :aria-selected="feedMode === 'latest'" :class="{ active: feedMode === 'latest' }" @click="setFeedMode('latest')">Recent</button>
+              </div>
+            </div>
+            <div class="net-composer">
+              <span class="net-composer__avatar" aria-hidden="true">{{ meInitial }}</span>
+              <button class="net-composer__input" @click="showPostOptions()">Share something with the network…</button>
+              <button class="net-composer__tool" aria-label="Post with an image" title="Post with an image" @click="showPostOptions()">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="10" r="1.6" fill="currentColor"/><path d="M4 17l5-4.5 4 3.5 3-2.5 4 3.5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+              </button>
+              <button class="net-composer__tool net-composer__tool--text" @click="showPollOptions()">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 20V11M12 20V4M19 20v-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>Poll
+              </button>
+              <button class="net-composer__publish" @click="showPostOptions()">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3.4 20.4l17.4-7.5c.8-.4.8-1.5 0-1.8L3.4 3.6c-.7-.3-1.4.3-1.2 1l1.6 6.2c.1.4.4.6.8.7L12 12l-7.4.5c-.4.1-.7.3-.8.7l-1.6 6.2c-.2.7.5 1.3 1.2 1z" fill="currentColor"/></svg>Publish
+              </button>
+            </div>
 
             <!-- Feed toolbar: pill row on mobile, split tabs on desktop -->
             <div class="feed-toolbar">
@@ -127,14 +148,22 @@
                     <ion-icon :icon="ellipseOutline"></ion-icon> Explore
                   </button>
                 </div>
-                <div class="feed-mode-toggle">
-                  <button class="mode-btn" :class="{ active: feedMode === 'for-you' }" @click="setFeedMode('for-you')">For You</button>
-                  <button class="mode-btn" :class="{ active: feedMode === 'latest' }"  @click="setFeedMode('latest')">Latest</button>
-                </div>
               </div>
             </div>
 
-            <!-- Tag strip — desktop only (categories live in sidebar on desktop) -->
+            <!-- Category chips — desktop only (the left rail now shows relay pulse instead) -->
+            <div class="desktop-cat-strip" role="group" aria-label="Categories">
+              <button class="tag-chip" :class="{ active: selectedCategory === 'all' }" @click="selectCategory('all')">All</button>
+              <button
+                v-for="cat in VISIBLE_CATEGORIES"
+                :key="'dc-' + cat.id"
+                class="tag-chip"
+                :class="{ active: selectedCategory === cat.id }"
+                @click="selectCategory(selectedCategory === cat.id ? 'all' : cat.id)"
+              >{{ cat.label }}</button>
+            </div>
+
+            <!-- Tag strip — desktop only -->
             <div class="desktop-tag-strip">
               <button
                 v-for="t in trendingTagChips"
@@ -326,7 +355,7 @@
         </main>
 
         <!-- ── RIGHT SIDEBAR ─────────────────────────────────────────── -->
-        <AppRightSidebar />
+        <AppRightSidebar v-if="activeTab !== 'chat'" />
 
       </div>
     </ion-content>
@@ -463,11 +492,12 @@ const ChatTab          = defineAsyncComponent(() => import('../components/ChatTa
 const PostCard         = defineAsyncComponent(() => import('../components/PostCard.vue'));
 const PollCard         = defineAsyncComponent(() => import('../components/PollCard.vue'));
 // Heavy sidebar/overlay components — loaded async so they don't block initial paint
-const AppSideNav       = defineAsyncComponent(() => import('../components/AppSideNav.vue'));
+const RelayPulseSidebar = defineAsyncComponent(() => import('../components/RelayPulseSidebar.vue'));
 const BurstOverlay     = defineAsyncComponent(() => import('../components/BurstOverlay.vue'));
 const AppRightSidebar  = defineAsyncComponent(() => import('../components/AppRightSidebar.vue'));
 const RelaySheet       = defineAsyncComponent(() => import('../components/RelaySheet.vue'));
 import BottomNav from '../components/BottomNav.vue';
+import AppTopNav from '../components/AppTopNav.vue';
 import { useNavStore } from '../stores/navStore';
 
 // ── New components ─────────────────────────────────────────────────────────
@@ -551,7 +581,7 @@ function setScopeAndHome(s: FeedScope) {
   void router.push({ query: { ...route.query, scope: s, tab: undefined } });
 }
 
-// Sync scope from URL (e.g. when DesktopSideNav pushes ?scope=)
+// Sync scope from URL (e.g. when the top nav pushes ?scope=)
 watch(
   () => route.query.scope,
   (s) => {
@@ -1171,6 +1201,13 @@ watch(activeTab, (tab) => {
   if (tab === 'chat') { void ensureChatInitialized(); }
 });
 
+// Initial shown in the desktop composer avatar.
+const meInitial = ref('·');
+void UserService.getCurrentUser().then((u: any) => {
+  const name = u?.customUsername || u?.displayName || u?.username || '';
+  if (name) meInitial.value = String(name).charAt(0).toUpperCase();
+}).catch(() => { /* keeps the placeholder */ });
+
 onMounted(async () => {
   void bootstrapChat();
 
@@ -1695,4 +1732,75 @@ if (typeof window !== 'undefined') {
 }
 .tag-chip.active:hover,
 .tag-chip--history:hover { background: rgba(251,191,36,0.14); }
+/* ── Desktop redesign: top bar + relay pulse + "Your network" feed ──── */
+@media (min-width: 768px) {
+  /* The top nav replaces the Ionic header on desktop */
+  ion-header { display: none; }
+
+  .hp-root.page-layout {
+    gap: 20px;
+    width: min(1320px, calc(100% - 32px));
+    margin: 0 auto;
+    padding: 20px 0 80px;
+  }
+  .hp-root.hp-root--chat.page-layout { padding-bottom: 24px; }
+  /* Feed column sits straight on the page, no outer glass box */
+  .hp-root .main-content {
+    background: none; border: none; box-shadow: none; border-radius: 0;
+    backdrop-filter: none; -webkit-backdrop-filter: none; overflow: visible;
+  }
+  /* Messages is a full-width 3-pane workspace */
+  .hp-root .main-content--chat { background: var(--app-bg-elevated); border: 1px solid var(--app-border); border-radius: 14px; overflow: hidden; }
+}
+
+.net-head, .net-composer, .desktop-cat-strip { display: none; }
+@media (min-width: 768px) {
+  .net-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+  .net-head h1 { margin: 0; font-size: 22px; font-weight: 750; letter-spacing: -0.02em; color: var(--app-text); }
+  .net-head p { margin: 3px 0 0; font-size: 13px; color: var(--app-text-muted); }
+  .net-seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--app-border); }
+  .net-seg button {
+    padding: 6px 14px; border: none; border-radius: 8px; background: none; cursor: pointer;
+    font: inherit; font-size: 12.5px; font-weight: 650; color: var(--app-text-muted); transition: background 120ms, color 120ms;
+  }
+  .net-seg button.active { background: var(--app-accent); color: #04120a; }
+  .net-seg button:not(.active):hover { color: var(--app-text); }
+
+  .net-composer {
+    display: flex; align-items: center; gap: 8px; padding: 10px 12px; margin-bottom: 14px;
+    border-radius: 14px; background: var(--app-bg-elevated); border: 1px solid var(--app-border);
+  }
+  .net-composer__avatar {
+    width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center;
+    background: linear-gradient(135deg, #1c3a2a, #0f2218); border: 1px solid rgba(var(--app-accent-rgb), 0.4);
+    color: var(--app-accent); font-size: 13px; font-weight: 800;
+  }
+  .net-composer__input {
+    flex: 1; min-width: 0; height: 36px; padding: 0 14px; border-radius: 10px; cursor: text; text-align: left;
+    background: rgba(255,255,255,0.04); border: 1px solid var(--app-border); color: var(--app-text-subtle); font: inherit; font-size: 13.5px;
+    transition: border-color 120ms;
+  }
+  .net-composer__input:hover { border-color: var(--app-border-strong); }
+  .net-composer__tool {
+    display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 9px; border: none; border-radius: 9px; cursor: pointer;
+    background: none; color: var(--app-text-muted); font: inherit; font-size: 13px; font-weight: 600; transition: background 120ms, color 120ms;
+  }
+  .net-composer__tool svg { width: 17px; height: 17px; }
+  .net-composer__tool:hover { background: rgba(255,255,255,0.06); color: var(--app-text); }
+  .net-composer__publish {
+    display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border: none; border-radius: 9px; cursor: pointer;
+    background: var(--app-accent); color: #04120a; font: inherit; font-size: 13px; font-weight: 700; transition: filter 120ms;
+  }
+  .net-composer__publish svg { width: 14px; height: 14px; }
+  .net-composer__publish:hover { filter: brightness(1.08); }
+
+  .desktop-cat-strip { display: flex; gap: 6px; overflow-x: auto; padding: 0 0 10px; scrollbar-width: none; }
+  .desktop-cat-strip::-webkit-scrollbar { display: none; }
+  .desktop-cat-strip .tag-chip { flex-shrink: 0; white-space: nowrap; }
+
+  /* Re-seat the old desktop toolbar/tag strip flush with the new heading (they carried a 20px inset for the old card) */
+  .feed-toolbar--desktop { padding: 0 0 10px; }
+  .desktop-tag-strip { padding: 0 0 12px; }
+  .feed-scope-tabs { background: rgba(255,255,255,0.04); }
+}
 </style>

@@ -176,6 +176,19 @@ npm test          # Vitest test suite
 
 ---
 
+## Desktop app (Tauri)
+
+The web build is wrapped as a native desktop app with [Tauri v2](https://tauri.app) (`src-tauri/`).
+It talks to the same relays configured in `src/config.ts`.
+
+```bash
+npm run desktop:dev     # dev window against the Vite server
+npm run desktop:build   # release build + installers
+```
+
+Linux needs `webkit2gtk-4.1`, `libsoup-3.0` and a Rust toolchain. Installers land in
+`src-tauri/target/release/bundle/` (`.deb`, `.rpm`, `.AppImage`). macOS and Windows installers must be built on those platforms.
+
 ## Architecture
 
 ```
