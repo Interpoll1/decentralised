@@ -1926,19 +1926,20 @@ ion-content { --background: transparent; }
 .input-pill {
   flex: 1; display: flex; align-items: flex-end;
   padding: 8px 14px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: var(--app-bg-elevated);
+  border: 1px solid var(--app-border-strong);
   border-radius: 22px;
   transition: border-color 180ms, box-shadow 180ms;
   min-height: 44px;
 }
 .input-pill.focused {
-  border-color: rgba(230, 230, 230,0.45);
-  box-shadow: 0 0 0 3px rgba(230, 230, 230,0.1);
+  border-color: rgba(var(--app-accent-rgb), 0.5);
+  box-shadow: 0 0 0 3px rgba(var(--app-accent-rgb), 0.12);
 }
 
 .message-input {
-  flex: 1; background: transparent; border: none; outline: none;
+  flex: 1; min-width: 0; background: transparent !important; border: none; outline: none; box-shadow: none;
+  -webkit-appearance: none; appearance: none; border-radius: 0;
   resize: none; font-size: 14.5px; line-height: 1.5;
   color: var(--ion-text-color); font-family: inherit;
   max-height: 120px; padding: 0;

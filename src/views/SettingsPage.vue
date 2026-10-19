@@ -471,6 +471,15 @@
               <div class="card-heading-icon accent-violet">
                 <ion-icon :icon="keyOutline"></ion-icon>
               </div>
+              <div><h3>Clear app cache</h3><p>Stuck on an old version? This drops cached app files and reloads. Your keys, chats and settings are kept.</p></div>
+            </div>
+            <button class="field-native" style="cursor:pointer;font-weight:600" @click="uncache()">Clear cache &amp; reload</button>
+          </div>
+          <div class="settings-card">
+            <div class="card-heading">
+              <div class="card-heading-icon accent-violet">
+                <ion-icon :icon="keyOutline"></ion-icon>
+              </div>
               <div><h3>Moderation API</h3><p>Authenticate and enable click-to-submit from Home feed</p></div>
             </div>
             <div class="field-group">
@@ -1636,6 +1645,7 @@ code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0
 </style>
 
 <script setup lang="ts">
+import { uncache } from '../utils/uncache';
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useNavStore } from '../stores/navStore';

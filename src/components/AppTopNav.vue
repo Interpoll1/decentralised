@@ -73,10 +73,11 @@ onMounted(async () => {
   if (name) initial.value = String(name).charAt(0).toUpperCase();
 });
 
-type TabId = 'home' | 'orbit' | 'chat' | 'explore';
+type TabId = 'home' | 'spaces' | 'orbit' | 'chat' | 'explore';
 const tabs: Array<{ id: TabId; label: string; icon: string; tour?: string }> = [
   { id: 'home', label: 'Home', tour: 'home', icon: '<path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H5a1 1 0 01-1-1V9.5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>' },
-  { id: 'orbit', label: 'Spaces', tour: 'orbit', icon: '<circle cx="9" cy="9" r="3.2" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 19c.7-3 2.9-4.6 5.5-4.6s4.8 1.6 5.5 4.6M16 6.5a3 3 0 010 5.8M18 19c-.3-1.8-1.1-3.1-2.4-3.9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' },
+  { id: 'spaces', label: 'Spaces', icon: '<circle cx="9" cy="9" r="3.2" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 19c.7-3 2.9-4.6 5.5-4.6s4.8 1.6 5.5 4.6M16 6.5a3 3 0 010 5.8M18 19c-.3-1.8-1.1-3.1-2.4-3.9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' },
+  { id: 'orbit', label: 'Orbit', tour: 'orbit', icon: '<circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.8" stroke-dasharray="2 3"/><circle cx="19" cy="9" r="1.6" fill="currentColor"/><circle cx="6" cy="17" r="1.3" fill="currentColor"/>' },
   { id: 'chat', label: 'Messages', tour: 'chat', icon: '<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>' },
   { id: 'explore', label: 'Explore', icon: '<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M15.5 8.5l-2 5-5 2 2-5 5-2z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>' },
 ];
@@ -85,12 +86,13 @@ const active = computed<TabId | ''>(() => {
   const p = route.path;
   const tab = Array.isArray(route.query.tab) ? route.query.tab[0] : route.query.tab;
   if (p === '/home' || p === '/') {
-    if (tab === 'orbit' || tab === 'communities') return 'orbit';
+    if (tab === 'communities') return 'spaces';
+    if (tab === 'orbit') return route.query.view === 'spaces' ? 'spaces' : 'orbit';
     if (tab === 'chat') return 'chat';
     if (tab === 'create') return '';
     return route.query.scope === 'explore' ? 'explore' : 'home';
   }
-  if (p.includes('communit')) return 'orbit';
+  if (p.includes('communit')) return 'spaces';
   if (p.includes('chat')) return 'chat';
   return '';
 });
@@ -106,7 +108,8 @@ function go(id: TabId | 'create') {
   menuOpen.value = false;
   switch (id) {
     case 'home':    void router.push({ path: '/home', query: { scope: lastScope() } }); break;
-    case 'orbit':   void router.push({ path: '/home', query: { tab: 'orbit', view: 'spaces' } }); break;
+    case 'spaces':  void router.push({ path: '/home', query: { tab: 'orbit', view: 'spaces' } }); break;
+    case 'orbit':   void router.push({ path: '/home', query: { tab: 'orbit', view: 'map' } }); break;
     case 'chat':    void router.push({ path: '/home', query: { tab: 'chat' } }); break;
     case 'explore': void router.push({ path: '/home', query: { scope: 'explore' } }); break;
     case 'create':  void router.push({ path: '/home', query: { tab: 'create' } }); break;

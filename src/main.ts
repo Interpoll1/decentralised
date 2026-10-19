@@ -17,6 +17,7 @@ import './theme-raycast.css';
 import App from './App.vue';
 import router from './router';
 import { recordError, reportFatal } from './utils/errorReporting';
+import { startStaleBuildWatch } from './utils/uncache';
 
 type CleanupLevel = 'none' | 'light' | 'aggressive' | 'emergency';
 
@@ -150,6 +151,8 @@ router.isReady().then(() => {
     resumeReactions();
     window.addEventListener('online', resumeReactions);
   }).catch(() => {});
+
+  startStaleBuildWatch();
 
   // Defer after first paint
   setTimeout(() => {
