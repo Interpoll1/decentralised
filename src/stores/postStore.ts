@@ -328,6 +328,8 @@ export const usePostStore = defineStore('post', () => {
           videoThumbnailCID: updated.videoThumbnailCID ?? existing.videoThumbnailCID,
           videoDuration:     updated.videoDuration     ?? existing.videoDuration,
           videoSize:         updated.videoSize         ?? existing.videoSize,
+          videoWidth:        updated.videoWidth        ?? existing.videoWidth,
+          videoHeight:       updated.videoHeight       ?? existing.videoHeight,
           videoMimeType:     updated.videoMimeType     ?? existing.videoMimeType,
           // Use || not ?? for string media fields: API warmup returns imageThumbnail
           // as '' (empty string via serializePost's `d.imageThumbnail || ''`).
@@ -696,6 +698,8 @@ export const usePostStore = defineStore('post', () => {
     videoCID?: string;
     videoThumbnailCID?: string;
     videoDuration?: number;
+    videoWidth?: number;
+    videoHeight?: number;
     videoSize?: number;
     videoMimeType?: string;
   }) {
@@ -732,6 +736,7 @@ export const usePostStore = defineStore('post', () => {
         ...(data.videoThumbnailCID ? { videoThumbnailCID: data.videoThumbnailCID } : {}),
         ...(data.videoDuration     ? { videoDuration:     data.videoDuration }     : {}),
         ...(data.videoSize         ? { videoSize:         data.videoSize }         : {}),
+        ...(data.videoWidth && data.videoHeight ? { videoWidth: data.videoWidth, videoHeight: data.videoHeight } : {}),
         ...(data.videoMimeType     ? { videoMimeType:     data.videoMimeType }     : {}),
       }, data.imageFiles, postId);
 

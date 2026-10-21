@@ -4,10 +4,9 @@
     <!-- Header -->
     <div v-if="!ambient" class="ob-head">
       <div class="ob-seg" role="tablist" aria-label="Orbit view">
-        <button class="ob-seg__btn" :class="{ on: view === 'map' }" role="tab" :aria-selected="view === 'map'" @click="$emit('update:view', 'map')">Map</button>
+        <button class="ob-seg__btn" :class="{ on: view === 'nearby' }" role="tab" :aria-selected="view === 'nearby'" @click="$emit('update:view', 'nearby')">Map</button>
         <button class="ob-seg__btn" :class="{ on: view === 'spaces' }" role="tab" :aria-selected="view === 'spaces'" @click="$emit('update:view', 'spaces')">Spaces</button>
       </div>
-      <button v-if="view === 'map'" class="ob-ghost" @click="ambient = true" aria-label="Ambient mode">Ambient</button>
     </div>
 
     <!-- Spaces list (the old Spaces tab lives here) -->
@@ -17,125 +16,10 @@
       @update:communityFilter="$emit('update:communityFilter', $event)"
     />
 
-    <!-- Map -->
-    <template v-else>
-      <div v-if="!ambient" class="ob-stats" aria-live="polite">
-        <span class="ob-stat"><i :style="{ background: C.relayOn }"></i>{{ relaysOnline }}/{{ relayCount }} relays</span>
-        <span class="ob-stat"><i :style="{ background: C.p2p }"></i>{{ peerList.length }} peers</span>
-        <span class="ob-stat"><i :style="{ background: C.dm }"></i>{{ p2pCount }} direct</span>
-        <span v-if="scrubbing" class="ob-stat ob-stat--replay">Replay · {{ scrubLabel }}</span>
-      </div>
+    <!-- Nearby: opt-in, coarse-location people / meetups / local spaces -->
+    <NearbyPanel v-else :chatList="chatList" :mapStats="mapStats" />
 
-      <p v-if="!ambient" class="ob-hint">You're in the middle. <b>Tap any dot</b> to open it · drag to move · pinch or +/− to zoom.</p>
-      <ul v-if="!ambient" class="ob-legend" aria-label="Legend">
-        <li><i :style="{ background: C.relayOn }"></i>Relay</li>
-        <li><i :style="{ background: C.p2p }"></i>Peer</li>
-        <li><i :style="{ background: C.space }"></i>Space</li>
-        <li><i :style="{ background: C.dm }"></i>Contact</li>
-      </ul>
 
-      <div ref="stage" class="ob-stage">
-        <svg
-          ref="svgEl"
-          class="ob-svg"
-          :viewBox="`0 0 ${VW} ${VH}`"
-          preserveAspectRatio="xMidYMid meet"
-          role="img"
-          aria-label="Map of your relays, peers, spaces and contacts"
-          @pointerdown="onDown"
-          @pointermove="onMove"
-          @pointerup="onUp"
-          @pointercancel="onUp"
-          @wheel.prevent="onWheel"
-          @click="onBgClick"
-        >
-          <defs>
-            <radialGradient id="ob-glow"><stop offset="0" stop-color="var(--app-accent, #7dd3fc)" stop-opacity=".4" /><stop offset="1" stop-color="var(--app-accent, #7dd3fc)" stop-opacity="0" /></radialGradient>
-          </defs>
-
-          <g :transform="`translate(${tx} ${ty}) translate(${CX} ${CY}) scale(${scale}) translate(${-CX} ${-CY})`">
-            <circle :cx="CX" :cy="CY" :r="RINGS[1] + 22" fill="url(#ob-glow)" />
-            <circle v-for="(r, i) in RINGS" :key="'ring' + i" :cx="CX" :cy="CY" :r="r" class="ob-ring" />
-            <text v-for="(r, i) in RINGS" :key="'rn' + i" :x="CX" :y="CY - r - 3" text-anchor="middle" class="ob-ringname">{{ RING_NAMES[i] }}</text>
-
-            <!-- Links -->
-            <line
-              v-for="n in nodes" :key="'l' + n.id"
-              class="ob-link" :class="{ 'ob-link--solid': n.solid, 'ob-link--hot': n.hot }"
-              :x1="CX" :y1="CY" :x2="P(n).x" :y2="P(n).y"
-            />
-
-            <!-- Pulses -->
-            <circle v-for="p in pulseDots" :key="p.id" :cx="p.x" :cy="p.y" :r="p.r" :fill="p.color" :opacity="p.o" />
-
-            <!-- Nodes -->
-            <g
-              v-for="n in nodes" :key="n.id"
-              class="ob-node" :class="{ 'ob-node--sel': selected?.id === n.id }"
-              :transform="`translate(${P(n).x} ${P(n).y})`"
-              role="button" tabindex="0" :aria-label="n.title"
-              @click.stop="pick(n)" @keydown.enter.stop="pick(n)"
-            >
-              <circle v-if="n.glow" class="ob-halo" :r="n.r + 7" :fill="n.color" />
-              <circle :r="n.r" :fill="n.color" :stroke="selected?.id === n.id ? '#fff' : 'rgba(255,255,255,.18)'" stroke-width="1.5" />
-              <text v-if="n.badge" class="ob-badge" y="3.5" text-anchor="middle">{{ n.badge }}</text>
-              <text v-if="showLabel(n)" class="ob-label" :y="n.r + 12" text-anchor="middle">{{ n.label }}</text>
-            </g>
-
-            <!-- You -->
-            <g class="ob-you" @click.stop="pick(youNode)" role="button" tabindex="0" aria-label="You" @keydown.enter.stop="pick(youNode)">
-              <circle :cx="CX" :cy="CY" r="24" class="ob-you__dot" />
-              <text :x="CX" :y="CY + 4" text-anchor="middle" class="ob-you__txt">You</text>
-            </g>
-          </g>
-        </svg>
-
-        <!-- Zoom controls -->
-        <div class="ob-zoom">
-          <button aria-label="Zoom in" @click="zoomBy(1.25)">+</button>
-          <button aria-label="Zoom out" @click="zoomBy(0.8)">−</button>
-          <button aria-label="Reset view" @click="resetView">⟲</button>
-        </div>
-
-        <button v-if="ambient" class="ob-exit" @click="ambient = false">← Back</button>
-
-        <!-- Legend when empty -->
-
-        <!-- Tap sheet (inside the stage so it is always on screen) -->
-      <Transition name="ob-sheet">
-        <section v-if="selected" class="ob-sheet" @click.stop>
-          <header class="ob-sheet__head">
-            <span class="ob-sheet__dot" :style="{ background: selected.color }"></span>
-            <div class="ob-sheet__titles">
-              <strong>{{ selected.title }}</strong>
-              <small>{{ selected.sub }}</small>
-            </div>
-            <button class="ob-sheet__x" aria-label="Close" @click="selected = null">✕</button>
-          </header>
-          <ul v-if="selected.facts?.length" class="ob-facts">
-            <li v-for="f in selected.facts" :key="f[0]"><span>{{ f[0] }}</span><b>{{ f[1] }}</b></li>
-          </ul>
-          <div class="ob-actions">
-            <button v-for="a in actionsFor(selected)" :key="a.label" class="ob-btn" :class="{ 'ob-btn--primary': a.primary }" :disabled="busy" @click="a.run()">{{ a.label }}</button>
-          </div>
-        </section>
-      </Transition>
-
-        <p v-if="!ambient && !nodes.length" class="ob-empty">Nothing to show yet — connect to a relay or join a space.</p>
-      </div>
-
-      <!-- Time scrub -->
-      <div v-if="!ambient && history.length > 2" class="ob-scrub">
-        <button class="ob-ghost" :class="{ on: !scrubbing }" @click="scrub = null">Live</button>
-        <input
-          type="range" min="0" :max="history.length - 1" step="1"
-          :value="scrub ?? history.length - 1"
-          aria-label="Replay the last few minutes"
-          @input="scrub = Math.min(history.length - 1, Number(($event.target as HTMLInputElement).value)); if (scrub === history.length - 1) scrub = null"
-        />
-      </div>
-
-    </template>
   </div>
   </Teleport>
 </template>
@@ -143,6 +27,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, defineAsyncComponent } from 'vue';
 import { useRouter } from 'vue-router';
+import { useNearby } from '../composables/useNearby';
 import { RelayManager, type RelayEndpoint } from '../services/relayManager';
 import { WebSocketService } from '../services/websocketService';
 import { WebRTCService } from '../services/webrtcService';
@@ -150,17 +35,31 @@ import { PeerReputationService } from '../services/peerReputationService';
 import { useCommunityStore } from '../stores/communityStore';
 
 const CommunitiesTab = defineAsyncComponent(() => import('./CommunitiesTab.vue'));
+const NearbyPanel = defineAsyncComponent(() => import('./NearbyPanel.vue'));
+const NearbyMap = defineAsyncComponent(() => import('./NearbyMap.vue'));
+const nb = useNearby();
+const mapStats = computed(() => [
+  { label: 'people', n: nb.prefs.enabled ? nb.people.value.length : 0, color: '#5eeab0' },
+  { label: 'meetups', n: nb.prefs.enabled ? nb.meetups.value.length : 0, color: '#fbbf24' },
+  { label: 'spaces', n: nb.prefs.enabled ? nb.spaces.value.length : 0, color: '#a78bfa' },
+  { label: 'relays', n: relaysOnline.value, color: '#60a5fa', of: relayCount.value },
+  { label: 'peers', n: peerList.value.length, color: '#f472b6' },
+]);
+const TILES_KEY = 'interpoll_nearby_tiles';
+const tilesOn = ref((() => { try { return localStorage.getItem(TILES_KEY) === '1'; } catch { return false; } })());
+function setTiles(v: boolean) { tilesOn.value = v; try { localStorage.setItem(TILES_KEY, v ? '1' : '0'); } catch { /* ignore */ } }
+function msgNearby(id: string) { void router.push(`/chat/${id}`); }
 
-interface ChatEntry { userId: string; name: string; nickname?: string; unreadCount: number; lastMessageTime: number }
+interface ChatEntry { userId: string; publicKey?: string; name: string; nickname?: string; unreadCount: number; lastMessageTime: number }
 
 const props = defineProps<{
   chatList: ChatEntry[];
   communityFilter: 'all' | 'joined' | 'private';
-  view: 'map' | 'spaces';
+  view: 'map' | 'spaces' | 'nearby';
 }>();
 defineEmits<{
   (e: 'update:communityFilter', v: 'all' | 'joined' | 'private'): void;
-  (e: 'update:view', v: 'map' | 'spaces'): void;
+  (e: 'update:view', v: 'map' | 'spaces' | 'nearby'): void;
 }>();
 
 const router = useRouter();
@@ -510,6 +409,13 @@ onUnmounted(() => {
 .orbit--ambient { position: fixed; inset: 0; z-index: 9000; background: var(--app-bg, #0b0c0f); padding: 0; gap: 0; }
 
 .ob-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 2px; }
+.ob-world { display: flex; flex-direction: column; gap: 10px; }
+.ob-world__stats { display: flex; flex-wrap: wrap; gap: 8px; }
+.ob-world__map { position: relative; }
+.ob-world__map :deep(.nm) { height: clamp(340px, 64vh, 620px); }
+.ob-world__cta { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 5; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; max-width: 280px; padding: 16px 18px; border-radius: 14px; background: rgba(8,11,10,.82); border: 1px solid var(--app-border-strong); backdrop-filter: blur(6px); color: #fff; font-size: 12.5px; }
+.ob-world__cta b { font-size: 15px; }
+.ob-world__cta button { margin-top: 4px; padding: 8px 16px; border: 0; border-radius: 10px; cursor: pointer; font: inherit; font-weight: 700; background: var(--app-accent); color: #04120a; }
 .ob-seg { display: inline-flex; padding: 3px; border-radius: 999px; background: rgba(255,255,255,.06); }
 .ob-seg__btn { border: 0; background: transparent; color: rgba(255,255,255,.6); font: inherit; font-size: 13px; font-weight: 600; padding: 6px 16px; border-radius: 999px; cursor: pointer; }
 .ob-seg__btn.on { background: rgba(255,255,255,.14); color: #fff; }

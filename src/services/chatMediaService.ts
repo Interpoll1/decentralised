@@ -70,14 +70,41 @@ export async function encryptAndUpload(file: File, authToken: string): Promise<M
   };
 }
 
-/** Authenticate before rendering; sender preview must not delete recipient media. */
-export async function fetchAndDecrypt(meta: MediaMeta, authToken: string): Promise<string> {
-  const res = await fetch(`${RELAY_BASE}/api/chat-media/${encodeURIComponent(meta.mediaId)}`, {
-    headers: { Authorization: `Bearer ${authToken}` },
-  });
-  if (!res.ok) throw new Error(`Media fetch failed: ${res.status}`);
+/**
+ * Decrypted media is memoised per media id for the life of the tab (and concurrent callers share one
+ * download). Re-opening a chat used to re-download and re-decrypt every image and create a fresh blob
+ * URL each time. Only the CIPHERTEXT is persisted across sessions (Cache Storage) — never plaintext.
+ */
+const decrypted = new Map<string, Promise<string>>();
+const CIPHER_CACHE = 'interpoll-dm-media-v1';
 
-  const ciphertext = await res.arrayBuffer();
+async function fetchCiphertext(url: string, authToken: string): Promise<ArrayBuffer> {
+  let cache: Cache | null = null;
+  try { cache = typeof caches !== 'undefined' ? await caches.open(CIPHER_CACHE) : null; } catch { cache = null; }
+  try {
+    const hit = await cache?.match(url);
+    if (hit) return await hit.arrayBuffer();
+  } catch { /* fall through to network */ }
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${authToken}` } });
+  if (!res.ok) throw new Error(`Media fetch failed: ${res.status}`);
+  void cache?.put(url, res.clone()).catch(() => {});
+  return await res.arrayBuffer();
+}
+
+/** Authenticate before rendering; sender preview must not delete recipient media. */
+export function fetchAndDecrypt(meta: MediaMeta, authToken: string): Promise<string> {
+  const id = meta.mediaId;
+  let p = decrypted.get(id);
+  if (!p) {
+    p = fetchAndDecryptUncached(meta, authToken);
+    decrypted.set(id, p);
+    p.catch(() => { if (decrypted.get(id) === p) decrypted.delete(id); });   // failures are retried next time
+  }
+  return p;
+}
+
+async function fetchAndDecryptUncached(meta: MediaMeta, authToken: string): Promise<string> {
+  const ciphertext = await fetchCiphertext(`${RELAY_BASE}/api/chat-media/${encodeURIComponent(meta.mediaId)}`, authToken);
   const rawKey = Uint8Array.from(atob(meta.mediaKey), c => c.charCodeAt(0));
   const iv     = Uint8Array.from(atob(meta.mediaIV),  c => c.charCodeAt(0));
 

@@ -19,7 +19,8 @@
         </button>
       </div>
       <div v-if="split" class="ct-seg" role="tablist" aria-label="Conversation type">
-        <button role="tab" :aria-selected="tab === 'dm'" :class="{ active: tab === 'dm' }" @click="tab = 'dm'">Direct<span v-if="dmUnread" class="ct-seg__badge">{{ dmUnread }}</span></button>
+        <button role="tab" :aria-selected="tab === 'all'" :class="{ active: tab === 'all' }" @click="tab = 'all'">All</button>
+        <button role="tab" :aria-selected="tab === 'unread'" :class="{ active: tab === 'unread' }" @click="tab = 'unread'">Unread<span v-if="dmUnread + roomUnread" class="ct-seg__badge">{{ dmUnread + roomUnread }}</span></button>
         <button role="tab" :aria-selected="tab === 'rooms'" :class="{ active: tab === 'rooms' }" @click="tab = 'rooms'">Rooms<span v-if="roomUnread" class="ct-seg__badge">{{ roomUnread }}</span></button>
       </div>
       <div class="ct-search" role="search">
@@ -156,7 +157,7 @@
         v-for="chat in [row.chat]"
         :key="chat.userId"
         class="ct-row"
-        :class="{ 'ct-row--unread': chat.unreadCount > 0 }"
+        :class="{ 'ct-row--unread': chat.unreadCount > 0, 'ct-row--active': split && selectedDm?.id === chat.userId }"
         role="button"
         tabindex="0"
         @click="onRowClick(chat)"
@@ -215,7 +216,7 @@
       </template>
     </ul>
 
-    <p v-else-if="split && !trimmed && (chatList.length || groupRooms.length)" class="ct-nomatch">{{ tab === 'rooms' ? 'No rooms yet — start one with New conversation.' : 'No direct messages yet — open someone\'s chat link.' }}</p>
+    <p v-else-if="split && !trimmed && (chatList.length || groupRooms.length)" class="ct-nomatch">{{ tab === 'rooms' ? 'No rooms yet — start one with New conversation.' : tab === 'unread' ? 'You\'re all caught up.' : 'No conversations yet — open someone\'s chat link.' }}</p>
     <p v-else-if="trimmed && (chatList.length || groupRooms.length)" class="ct-nomatch">{{ searchPending ? 'Searching messages…' : `No chats or messages match “${trimmed}”.` }}</p>
 
     <!-- Loading: skeleton in the same surface so the layout doesn't jump -->
@@ -242,10 +243,11 @@
     <!-- Desktop workspace: the open room, then its intelligence panel -->
     <section v-if="split" class="ct-stage">
       <ChatRoomPage v-if="selectedRoomId" :room-id="selectedRoomId" embedded />
+      <ChatView v-else-if="selectedDm" :key="selectedDm.id" :user-id="selectedDm.id" :name="selectedDm.name" embedded />
       <div v-else class="ct-stage__empty">
         <BitMascot :size="72" mood="sleepy" />
-        <p class="ct-empty__title">Pick a room</p>
-        <p class="ct-empty__sub">Choose a room on the left to read it here, or start a new conversation.</p>
+        <p class="ct-empty__title">Pick a conversation</p>
+        <p class="ct-empty__sub">Choose a chat or room on the left to read it here, or start a new conversation.</p>
       </div>
     </section>
     <RoomIntelligence v-if="split && selectedRoomId" class="ct-intel" />
@@ -265,6 +267,7 @@ import { useRouter, useRoute } from 'vue-router';
 
 // The thread itself is the routed room page, embedded; load it only when the desktop workspace needs it.
 const ChatRoomPage = defineAsyncComponent(() => import('../views/ChatRoomPage.vue'));
+const ChatView = defineAsyncComponent(() => import('../views/ChatView.vue'));
 import { chatPath } from '../utils/privateRoute';
 import { cleanNickname, MAX_NICKNAME } from '../utils/nicknameText';
 import { findMatch, splitHighlight, MIN_MESSAGE_QUERY, type MessageHit } from '../utils/chatSearch';
@@ -299,6 +302,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'openChat', chat: ChatEntry): void;
+  /** Desktop workspace: a chat was opened in the side pane (no navigation) — mark it read. */
+  (e: 'selectChat', chat: ChatEntry): void;
   (e: 'rename', payload: { userId: string; nickname: string }): void;
   /** The (debounced) search text; the parent looks through stored messages and answers via `messageSearch`. */
   (e: 'search', query: string): void;
@@ -345,13 +350,18 @@ function onEditKey(e: KeyboardEvent, chat: ChatEntry) {
   else if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
 }
 
+/** Desktop: open beside the list. Phones: go to the chat page, exactly as before. */
+function openDm(chat: ChatEntry) {
+  if (split.value) { selectDm(chat); return; }
+  emit('openChat', chat);
+}
 function onRowClick(chat: ChatEntry) {
   if (editingId.value) cancelEdit();                     // tapping elsewhere abandons an edit in progress
-  emit('openChat', chat);
+  openDm(chat);
 }
 function onRowKey(e: KeyboardEvent, chat: ChatEntry) {
   if (e.target !== e.currentTarget) return;              // keys from the pencil / editor are theirs, not ours
-  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); emit('openChat', chat); }
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDm(chat); }
 }
 
 // "You: hey" is how the list stores our own last message; show the prefix as a muted label.
@@ -446,7 +456,7 @@ function readJSON<T>(key: string, fallback: T): T {
 }
 function writeStore(key: string, value: unknown) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode */ } }
 
-const tab = ref<'dm' | 'rooms'>('rooms');
+const tab = ref<'all' | 'unread' | 'rooms'>('all');
 const pinnedIds = ref<string[]>(readJSON<string[]>(PINNED_KEY, []));
 const isPinned = (id: string) => pinnedIds.value.includes(id);
 function togglePin(id: string) {
@@ -456,7 +466,17 @@ function togglePin(id: string) {
 
 const queryRoom = () => { const r = route.query.room; return typeof r === 'string' ? r : ''; };
 const selectedRoomId = ref(queryRoom() || (typeof localStorage !== 'undefined' ? readJSON<string>(LAST_ROOM_KEY, '') : ''));
+/** One conversation is open at a time: a room or a direct chat. Direct chat ids stay out of the URL on purpose. */
+const selectedDm = ref<{ id: string; name: string } | null>(null);
+function selectDm(chat: ChatEntry) {
+  selectedDm.value = { id: chat.userId, name: displayName(chat) };
+  selectedRoomId.value = '';
+  const { room: _drop, ...rest } = route.query;
+  void router.replace({ query: rest });
+  emit('selectChat', chat);
+}
 function selectRoom(id: string) {
+  selectedDm.value = null;
   selectedRoomId.value = id;
   writeStore(LAST_ROOM_KEY, id);
   void router.replace({ query: { ...route.query, room: id } });
@@ -465,14 +485,6 @@ function selectRoom(id: string) {
 watch([groupRooms, () => roomStore.rooms.length], () => {
   if (roomStore.rooms.length && selectedRoomId.value && !groupRooms.value.some(r => r.id === selectedRoomId.value)) selectedRoomId.value = '';
 });
-// First visit with only direct chats: start on the tab that has something in it.
-const tabChosen = ref(false);
-watch([groupRooms, () => props.chatList.length], ([g, d]) => {
-  if (tabChosen.value || !(g.length || d)) return;
-  tabChosen.value = true;
-  if (!g.length && d) tab.value = 'dm';
-}, { immediate: true });
-
 const roomUnread = computed(() => groupRooms.value.reduce((n, r) => n + (roomStore.summaries[r.id]?.unread ?? 0), 0));
 const dmUnread = computed(() => props.chatList.reduce((n, c) => n + (c.unreadCount || 0), 0));
 type Row =
@@ -494,7 +506,10 @@ const rows = computed<Row[]>(() => {
 /** What the list shows: on desktop one conversation type at a time, with pinned rooms first. */
 const listRows = computed<Row[]>(() => {
   if (!split.value) return rows.value;
-  const wanted = rows.value.filter(r => (tab.value === 'rooms') === (r.kind === 'group'));
+  const wanted = rows.value.filter(r =>
+    tab.value === 'rooms' ? r.kind === 'group'
+    : tab.value === 'unread' ? (r.kind === 'group' ? r.unread > 0 : r.chat.unreadCount > 0)
+    : true);
   const pinned = (r: Row) => r.kind === 'group' && isPinned(r.id);
   return [...wanted.filter(pinned), ...wanted.filter(r => !pinned(r))];
 });
@@ -642,15 +657,15 @@ function formatChatTime(timestamp: number): string {
 .ct-head { display: flex; align-items: center; gap: 8px; padding: 2px 0 0; margin: 0 6px; }
 .ct-new {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex-shrink: 0;
-  height: 46px; padding: 0 14px 0 11px; border: none; border-radius: 999px; white-space: nowrap;
-  background: var(--app-accent); color: #111214;
-  font: inherit; font-size: 13px; font-weight: 700; letter-spacing: -0.005em; line-height: 1;
-  cursor: pointer; box-shadow: 0 4px 14px rgba(230, 230, 230, 0.35);
+  height: 38px; padding: 0 12px 0 9px; flex-direction: row; border-radius: 999px; white-space: nowrap;
+  background: transparent !important; color: var(--app-accent) !important; border: 1.5px solid var(--app-accent) !important;
+  font: inherit; font-size: 12.5px; font-weight: 700; letter-spacing: -0.005em; line-height: 1;
+  cursor: pointer; box-shadow: none !important;
   transition: transform 140ms, box-shadow 140ms; -webkit-tap-highlight-color: transparent;
 }
 .ct-new:active { transform: scale(0.96); }
-.ct-new__icon { width: 19px; height: 19px; flex-shrink: 0; }
-.ct-new--open { background: rgba(var(--app-accent-rgb), 0.18); color: var(--app-text); box-shadow: none; }
+.ct-new__icon { width: 16px; height: 16px; flex-shrink: 0; }
+.ct-new--open { background: rgba(var(--app-accent-rgb), 0.12) !important; }
 /* Phones: the label would squeeze the placeholder ("Search by message or name") off the pill, so the
    icon sits ABOVE a small caption in a compact tile. The label stays visible at every width. */
 @media (max-width: 399px) {
@@ -780,9 +795,9 @@ function formatChatTime(timestamp: number): string {
 
 /* ── Avatars ────────────────────────────────────────────────────────── */
 .avatar {
-  width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0;
+  width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  font-size: 19px; font-weight: 800; color: #fff;
+  font-size: 16px; font-weight: 800; color: #fff;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
 }
 .avatar__ghost { width: 60%; height: 60%; opacity: 0.92; }
@@ -800,12 +815,12 @@ function formatChatTime(timestamp: number): string {
   border-radius: 18px; background: transparent; border: none;
 }
 .ct-row {
-  position: relative; display: flex; align-items: center; gap: 14px; padding: 12px 16px;
+  position: relative; display: flex; align-items: center; gap: 14px; padding: 10px 16px;
   cursor: pointer; transition: background 140ms; -webkit-tap-highlight-color: transparent; outline: none;
 }
 /* hairline between rows, starting after the avatar (16 padding + 52 avatar + 14 gap) */
 .ct-row + .ct-row::before {
-  content: ''; position: absolute; top: 0; left: 82px; right: 16px; height: 1px; background: rgba(var(--app-accent-rgb), 0.16);
+  content: ''; position: absolute; top: 0; left: 72px; right: 16px; height: 1px; background: rgba(var(--app-accent-rgb), 0.16);
 }
 .ct-row:hover { background: var(--ct-hover); }
 .ct-row:active { background: var(--ct-press); }
@@ -881,7 +896,7 @@ function formatChatTime(timestamp: number): string {
   background: var(--app-accent);
   background-size: 200% 100%; animation: ct-skel 1.2s ease-in-out infinite;
 }
-.ct-skel__avatar { width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0; }
+.ct-skel__avatar { width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0; }
 .ct-skel__lines { flex: 1; display: flex; flex-direction: column; gap: 9px; }
 .ct-skel__lines span { height: 12px; border-radius: 6px; width: 62%; }
 .ct-skel__lines span + span { width: 40%; height: 10px; }
@@ -931,7 +946,7 @@ function formatChatTime(timestamp: number): string {
 }
 .ct-newconv svg { width: 16px; height: 16px; }
 .ct-newconv:hover { filter: brightness(1.08); }
-.ct-seg { flex: 1 1 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 3px; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--app-border); }
+.ct-seg { flex: 1 1 100%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 3px; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--app-border); }
 .ct-seg button {
   display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 30px; border: none; border-radius: 8px; cursor: pointer;
   background: none; color: var(--app-text-muted); font: inherit; font-size: 12.5px; font-weight: 650; transition: background 120ms, color 120ms;

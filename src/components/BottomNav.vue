@@ -7,6 +7,7 @@
         class="nav-item"
         :class="{
           active: !drag.active && isActive(item),
+          'nav-item--fab': item.id === 'create',
           'nav-item--lifted': drag.active && drag.from === index,
           'nav-item--target': drag.active && drag.overSlot === index,
         }"
@@ -20,8 +21,18 @@
         @contextmenu.prevent
       >
         <span class="nav-icon-wrap">
-          <RelayIndicator v-if="item.id === 'network' && !drag.active" :compact="true" />
-          <NavIcon v-else :id="item.id" :active="!drag.active && isActive(item)" />
+          <!-- Publish: raised round button sitting in a curved notch of the bar -->
+          <template v-if="item.id === 'create'">
+            <span class="nav-fab-bump" aria-hidden="true"></span>
+            <span class="nav-fab" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5v8M2.5 7.5h8"/><path d="M20.4 8.1l-9.9 9.9-3.6.9.9-3.6 9.9-9.9a1.9 1.9 0 012.7 2.7z"/></svg>
+            </span>
+          </template>
+          <template v-else>
+            <NavIcon :id="item.id" :active="!drag.active && isActive(item)" />
+            <!-- Network: live relay status dot on the icon -->
+            <RelayIndicator v-if="item.id === 'network' && !drag.active" :compact="true" class="nav-live" />
+          </template>
           <span v-if="item.id === 'chat' && unread > 0" class="nav-badge nav-badge--mobile">
             {{ unread > 99 ? '99+' : unread }}
           </span>
@@ -201,10 +212,13 @@ onUnmounted(() => {
 .bottom-nav-footer { --background: transparent; --border: none; }
 ion-footer.bottom-nav-footer {
   max-height: 120px;
-  overflow: hidden;
+  overflow: hidden;            /* Ionic/global CSS clip the footer box, so the notch gets its own room inside it (see .bottom-nav) */
+  pointer-events: none;        /* the transparent notch strip must not block taps on the page behind it */
+  margin-top: 0;
   transition: max-height 240ms cubic-bezier(0.4, 0, 0.2, 1);
 }
-ion-footer.bottom-nav-footer.footer-hidden { max-height: 0; }
+ion-footer.bottom-nav-footer.footer-hidden { max-height: 0; overflow: hidden; margin-top: 0; }
+.bottom-nav { margin-top: 0; }
 @media (min-width: 768px) {
   .bottom-nav-footer { display: none !important; }
 }
@@ -245,16 +259,48 @@ ion-footer.bottom-nav-footer.footer-hidden { max-height: 0; }
 }
 .nav-item:hover { color: var(--app-text-muted); background: var(--app-surface); }
 .nav-item:active { opacity: 0.6; background: transparent; }
-.nav-item.active { color: var(--app-text); }
+.nav-item.active { color: var(--app-accent); }
 .nav-item.active::before {
   content: '';
   position: absolute;
   top: 0; left: 50%;
   transform: translateX(-50%);
-  width: 32px; height: 2.5px;
+  width: 38px; height: 2.5px;
   border-radius: 0 0 3px 3px;
-  background: var(--app-text);
+  background: var(--app-accent);
+  box-shadow: 0 0 10px rgba(var(--app-accent-rgb), 0.6);
 }
+.nav-item.active .nav-icon-wrap { filter: drop-shadow(0 0 6px rgba(var(--app-accent-rgb), 0.45)); }
+
+/* Publish: raised round button in a curved notch */
+.nav-item--fab.active::before { display: none; }
+.nav-fab-bump {
+  display: none;
+  position: absolute; top: -36px; left: 50%; transform: translateX(-50%);
+  width: 72px; height: 36px; box-sizing: border-box;
+  border-radius: 36px 36px 0 0;
+  background: var(--app-bg-elevated);
+  border: 1px solid var(--app-border-strong); border-bottom: none;
+  pointer-events: none;
+}
+.nav-fab {
+  position: relative; flex-shrink: 0;
+  width: 30px; height: 30px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--app-accent); color: #04120a;
+  box-shadow: 0 0 12px rgba(var(--app-accent-rgb), 0.35);
+  transition: transform 140ms;
+}
+.nav-item--fab .nav-label { margin-top: 0; }
+.nav-fab svg { width: 17px; height: 17px; display: block; }
+.nav-item--fab:active .nav-fab { transform: scale(0.94); }
+.nav-item--fab { color: var(--app-text-muted); }
+.nav-item--fab.active { color: var(--app-accent); }
+.nav-item--fab .nav-icon-wrap { filter: none; }
+/* The dark theme paints every .nav-badge green; unread counts stay red like the design. */
+.nav-icon-wrap .nav-badge.nav-badge--mobile { background: #ff4d4f; color: #fff; top: -6px; right: -12px; }
+.nav-live { position: absolute; top: -2px; right: -5px; }
+.nav-live :deep(.relay-dot) { box-shadow: 0 0 0 2px var(--app-bg-elevated); }
 .nav-item--lifted { opacity: 0.25; }
 .nav-item--target { background: rgba(230, 230, 230, 0.22); color: #e6e6e6; border-radius: 12px; }
 .nav-label {
@@ -274,8 +320,8 @@ ion-footer.bottom-nav-footer.footer-hidden { max-height: 0; }
   justify-content: center;
   width: 24px; height: 24px;
 }
-.nav-icon-wrap :deep(svg),
-.nav-icon-wrap :deep(.nav-svg) {
+.nav-icon-wrap > :deep(svg),
+.nav-icon-wrap > :deep(.nav-svg) {
   width: 24px; height: 24px;
   display: block;
   flex-shrink: 0;
@@ -284,8 +330,8 @@ ion-footer.bottom-nav-footer.footer-hidden { max-height: 0; }
 .nav-badge {
   position: absolute;
   top: -4px; right: -10px;
-  background: #f59e0b;
-  color: #1a1200;
+  background: #ff4d4f;
+  color: #fff;
   font-size: 9px; font-weight: 900;
   min-width: 16px; height: 16px;
   border-radius: 999px;

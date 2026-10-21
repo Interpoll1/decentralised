@@ -244,6 +244,13 @@ export class SearchService {
 
     if (this._docStore.size > 0) {
       const result = this._searchLocal(trimmed, options);
+      if (result.total === 0 && trimmed.length >= 2) {
+        // Local index may be incomplete (only content this client has seen) — ask the relay before saying "nothing".
+        try {
+          const remote = await this._searchRemote(query, { ...options, category: undefined });
+          if (remote.results.length > 0) return remote;
+        } catch { /* offline — keep the empty local result */ }
+      }
       this.cache.set(cacheKey, result);
       return result;
     }

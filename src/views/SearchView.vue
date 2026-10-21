@@ -26,7 +26,7 @@
           v-model="searchQuery"
           @input="handleSearch"
           type="search"
-          placeholder="Search posts and polls..."
+          placeholder="Search posts, polls and spaces..."
           class="search-input"
           autofocus
         />
@@ -53,6 +53,18 @@
 
     <!-- Results Area -->
     <div class="results-container">
+      <!-- Spaces whose name or description matches -->
+      <div v-if="spaceMatches.length" class="space-matches">
+        <h4 class="space-matches__title">Spaces</h4>
+        <button v-for="c in spaceMatches" :key="c.id" class="space-match" @click="router.push(`/community/${c.id}`)">
+          <span class="space-match__avatar">{{ (c.displayName || c.name || '?').charAt(0).toUpperCase() }}</span>
+          <span class="space-match__info">
+            <b>{{ c.displayName || c.name }}</b>
+            <small>{{ c.memberCount || 0 }} {{ c.memberCount === 1 ? 'member' : 'members' }}<template v-if="c.description"> · {{ truncate(c.description, 70) }}</template></small>
+          </span>
+        </button>
+      </div>
+
       <!-- Loading -->
       <div v-if="loading" class="loading-state">
         <div class="spinner"></div>
@@ -68,7 +80,7 @@
       </div>
 
       <!-- No Results -->
-      <div v-else-if="results.length === 0 && searchQuery" class="no-results">
+      <div v-else-if="results.length === 0 && searchQuery && !spaceMatches.length" class="no-results">
         <svg class="no-results-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
@@ -185,9 +197,17 @@ ion-content { --background: transparent; }
 .back-btn svg { width: 22px; height: 22px; }
 
 .search-page {
-  max-width: 700px;
+  max-width: 640px;
   margin: 0 auto;
   padding: 16px 16px 40px;
+}
+/* Large screens: the top-bar search box is the input, so this page just shows filters + results, a bit tighter. */
+@media (min-width: 768px) {
+  .search-box { display: none; }
+  .search-header { margin-bottom: 12px; }
+  .result-item { padding: 12px 14px; border-radius: 12px; }
+  .result-title { font-size: 14.5px !important; }
+  .result-content { font-size: 12.5px !important; margin-bottom: 6px !important; }
 }
 
 /* ── Search box ── */
@@ -352,10 +372,8 @@ ion-content { --background: transparent; }
   font-weight: 800;
   line-height: 1.25;
   letter-spacing: -0.025em;
-  background: linear-gradient(135deg, var(--app-text, #fff) 60%, rgba(230, 230, 230,0.85));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--app-text, #fff);
+  text-shadow: none;
 }
 
 .result-content {
@@ -379,6 +397,14 @@ ion-content { --background: transparent; }
 }
 
 .result-author { font-weight: 600; color: var(--app-text-muted, rgba(255,255,255,0.55)); }
+.space-matches { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.space-matches__title { margin: 0 0 2px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--app-text-muted, #9aa39e); }
+.space-match { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; text-align: left; cursor: pointer; border-radius: 12px; font: inherit; color: inherit; background: rgba(255,255,255,0.03); border: 1px solid #2b332f; }
+.space-match:hover { border-color: rgba(61,255,122,.45); }
+.space-match__avatar { width: 38px; height: 38px; flex-shrink: 0; display: grid; place-items: center; border-radius: 10px; font-weight: 700; color: #3dff7a; background: #0b1a12; border: 1px solid #1d6b3a; }
+.space-match__info { display: flex; flex-direction: column; min-width: 0; }
+.space-match__info b { font-size: 14px; }
+.space-match__info small { font-size: 12px; color: var(--app-text-muted, #9aa39e); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .result-community { color: #e6e6e6; font-weight: 600; }
 .result-community::before { content: '·'; margin-right: 6px; color: rgba(255,255,255,0.2); }
 .result-date::before      { content: '·'; margin-right: 6px; color: rgba(255,255,255,0.2); }
@@ -514,6 +540,10 @@ import {
   IonBadge, IonButton
 } from '@ionic/vue';
 import { useSearch } from '../composables/useSearch';
+import SearchService from '../services/searchService';
+import { useCommunityStore } from '../stores/communityStore';
+import { usePostStore } from '../stores/postStore';
+import { usePollStore } from '../stores/pollStore';
 import { ALL_CATEGORIES } from '../composables/useCategories';
 
 const router  = useRouter();
@@ -533,6 +563,25 @@ const {
 } = useSearch();
 
 const searchQuery     = ref('');
+const communityStore  = useCommunityStore();
+// Spaces are searched locally by name / display name / description (they aren't in the post index).
+const spaceMatches = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase().replace(/^[c#@\/]+\//, '');
+  if (q.length < 2 || filterType.value || filterCommunity.value) return [];
+  const joined = communityStore.joinedCommunities as Set<string> | undefined;
+  return (communityStore.communities as any[])
+    .filter(c => !c.isPrivate || joined?.has?.(c.id))
+    .map(c => {
+      const name = String(c.displayName || c.name || '').toLowerCase();
+      const slug = String(c.name || c.id || '').toLowerCase();
+      const desc = String(c.description || '').toLowerCase();
+      const score = name === q || slug === q ? 4 : name.startsWith(q) || slug.startsWith(q) ? 3 : name.includes(q) || slug.includes(q) ? 2 : desc.includes(q) ? 1 : 0;
+      return { c, score };
+    })
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score || (b.c.memberCount || 0) - (a.c.memberCount || 0))
+    .slice(0, 5).map(x => x.c);
+});
 const filterType      = ref<'post' | 'poll' | ''>('');
 const filterCommunity = ref('');
 const filterCategory  = ref('');
@@ -613,6 +662,25 @@ const performSearch = async () => {
   if (inferred) options.category = inferred;
   await searchPage(searchQuery.value, 1, options);
 };
+
+const postStore = usePostStore();
+const pollStore = usePollStore();
+const indexedIds = new Set<string>();
+// Index everything this client already holds (not just what the Gun listener happened to see), then re-run the open query.
+watch(() => [postStore.sortedPosts.length, pollStore.sortedPolls.length], async () => {
+  let added = 0;
+  for (const p of postStore.sortedPosts as any[]) {
+    if (!p?.id || indexedIds.has('p' + p.id)) continue;
+    indexedIds.add('p' + p.id); added++;
+    await SearchService.indexContent('post', p.id, p);
+  }
+  for (const p of pollStore.sortedPolls as any[]) {
+    if (!p?.id || p.isPrivate || indexedIds.has('l' + p.id)) continue;
+    indexedIds.add('l' + p.id); added++;
+    await SearchService.indexContent('poll', p.id, p);
+  }
+  if (added && searchQuery.value.trim().length >= 2) void performSearch();
+}, { immediate: true });
 
 // The top-bar search box lands here with ?q=…; run it (the page stays cached by Ionic, so watch, don't just read once).
 watch(() => route.query.q, (q) => {

@@ -177,6 +177,7 @@ export async function warmupFromDB(): Promise<void> {
           ...(d.videoThumbnailCID ? { videoThumbnailCID: d.videoThumbnailCID } : {}),
           ...(d.videoDuration     ? { videoDuration:     Number(d.videoDuration) || 0 } : {}),
           ...(d.videoSize         ? { videoSize:         Number(d.videoSize) || 0 }     : {}),
+          ...(d.videoWidth && d.videoHeight ? { videoWidth: Number(d.videoWidth) || 0, videoHeight: Number(d.videoHeight) || 0 } : {}),
           ...(d.videoMimeType     ? { videoMimeType:     d.videoMimeType }     : {}),
           // View count — passed through from relay's search_index enrichment
           ...(d.viewCount     ? { viewCount:     d.viewCount }     : {}),

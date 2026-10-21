@@ -17,7 +17,7 @@ import {
   verifyContentPow,
 } from '../../shared-validation/contentPow.js';
 
-export type ContentKind = 'post' | 'comment' | 'poll';
+export type ContentKind = 'post' | 'comment' | 'poll' | 'nearby';
 
 export interface ContentStampInput {
   kind: ContentKind;

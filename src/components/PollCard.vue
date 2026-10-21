@@ -31,8 +31,8 @@
           <span v-if="flagged && filterAction === 'flag'" class="flag-badge">
             <ion-icon :icon="warningOutline"></ion-icon>
           </span>
-          <!-- Relay attribution -->
-          <span v-if="relayLabel" class="relay-attr-badge">
+          <!-- Relay attribution (desktop shows it on the second line instead) -->
+          <span v-if="relayLabel" class="relay-attr-badge relay-attr-badge--inline">
             <svg viewBox="0 0 24 24" fill="none" width="9" height="9">
               <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/>
               <path d="M12 2a10 10 0 100 20A10 10 0 0012 2z" stroke="currentColor" stroke-width="1.8"/>
@@ -40,6 +40,16 @@
             {{ relayLabel }}
           </span>
         </div>
+      </div>
+
+      <!-- Desktop only: space + relay on a second line, like post cards -->
+      <div v-if="communityName || relayLabel" class="poll-sub">
+        <span v-if="communityName" class="poll-sub__item">
+          <ion-icon :icon="peopleOutline"></ion-icon>{{ communityName }}
+        </span>
+        <span v-if="relayLabel" class="poll-sub__item">
+          <svg viewBox="0 0 24 24" fill="none" width="13" height="13" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8"/><path d="M2 12h20M12 2c-3 3-4.5 6.5-4.5 10S9 19 12 22c3-3 4.5-6.5 4.5-10S15 5 12 2z" stroke="currentColor" stroke-width="1.8"/></svg>{{ relayLabel }}
+        </span>
       </div>
 
       <!-- ── Question ─────────────────────────────── -->
@@ -54,12 +64,14 @@
           class="option-preview"
         >
           <div class="option-info">
+            <span class="option-radio" aria-hidden="true"></span>
             <span class="option-text">{{ option.text || `Option ${index + 1}` }}</span>
             <span class="option-votes">{{ option.votes || 0 }}</span>
           </div>
           <div class="option-bar">
             <div class="option-fill" :style="{ width: `${getOptionPercent(option)}%` }"></div>
           </div>
+          <span class="option-pct">{{ Math.round(getOptionPercent(option)) }}% ({{ option.votes || 0 }})</span>
         </div>
         <div v-if="poll.options.length > 3" class="more-options">
           +{{ poll.options.length - 3 }} more option{{ poll.options.length - 3 !== 1 ? 's' : '' }}
@@ -185,6 +197,8 @@ import TrustTierBadge from './TrustTierBadge.vue';
 const cardEl = ref<HTMLElement | null>(null);
 const props = defineProps<{
   poll: Poll;
+  /** Space the poll belongs to (HomePage already passes it; shown on the desktop card's second line). */
+  communityName?: string;
   flagged?: boolean;
   filterAction?: FilterAction;
   showModerationAction?: boolean;
@@ -487,6 +501,42 @@ function formatViewCount(n: number): string {
   color: #fbbf24; border-color: rgba(251,191,36,0.28); background: rgba(251,191,36,0.08);
 }
 .post-tag-chip--highlight:hover { background: rgba(251,191,36,0.14); }
+
+
+/* ── Desktop feed card (matches the "Your network" design; phones keep the compact layout) ── */
+.poll-sub, .option-radio, .option-pct { display: none; }
+@media (min-width: 768px) {
+  .poll-card { padding: 18px 22px 14px; }
+  .poll-badge { display: none; }
+  .poll-header { gap: 0; margin-bottom: 12px; }
+  .poll-meta { gap: 8px; font-size: 12.5px; }
+  .author-avatar-sm { width: 40px; height: 40px; font-size: 16px; margin-right: 4px; }
+  .author { font-size: 14.5px; }
+  .timestamp { font-size: 12.5px; }
+  .identity-badge {
+    font-size: 11.5px; font-weight: 600; text-transform: none; letter-spacing: 0;
+    padding: 2px 9px; border-radius: 7px; background: rgba(255,255,255,0.03);
+    border: 1px solid var(--app-border-strong); color: var(--app-text-muted);
+  }
+  .identity-badge.unverified { background: rgba(255,255,255,0.03); color: var(--app-text-muted); }
+  .relay-attr-badge--inline { display: none; }
+  .poll-sub { display: flex; align-items: center; gap: 14px; margin: -8px 0 12px 52px; font-size: 12.5px; color: var(--app-text-subtle); }
+  .poll-sub__item { display: inline-flex; align-items: center; gap: 5px; }
+  .poll-sub__item ion-icon { font-size: 13px; }
+  .poll-question { font-size: 21px; letter-spacing: -0.02em; }
+  .poll-description { font-size: 14.5px; }
+
+  /* options: ( ) label ——— bar ——— 71% (17) */
+  .poll-options-preview { gap: 12px; padding: 14px 16px; margin-bottom: 12px; border: 1px solid var(--app-border); border-radius: 12px; background: rgba(255,255,255,0.015); }
+  .option-preview { display: grid; grid-template-columns: 18px minmax(110px, 190px) 1fr 84px; align-items: center; column-gap: 14px; }
+  .option-info { display: contents; }
+  .option-radio { display: block; width: 16px; height: 16px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid var(--app-border-strong); }
+  .option-text { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .option-votes { display: none; }
+  .option-bar { height: 7px; }
+  .option-pct { display: block; text-align: right; font-size: 13px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .more-options { padding-left: 32px; }
+}
 
 @media (max-width: 576px) {
   .poll-card { padding: 14px 12px 12px; }

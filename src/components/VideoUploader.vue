@@ -30,7 +30,7 @@
     <!-- File selected, not yet uploading -->
     <div v-if="selectedFile && !uploading && !meta && !error" class="video-uploader__preview">
       <div class="video-uploader__preview-thumb">
-        <img v-if="thumbnailPreview" :src="thumbnailPreview" alt="Thumbnail preview" />
+        <video v-if="previewUrl" :src="previewUrl + '#t=0.1'" muted playsinline preload="metadata" />
         <ion-icon v-else :icon="videocamOutline" />
       </div>
       <div class="video-uploader__preview-info">
@@ -88,7 +88,7 @@
     <!-- Success state -->
     <div v-if="meta && !uploading" class="video-uploader__success">
       <div class="video-uploader__success-thumb">
-        <img v-if="thumbnailPreview" :src="thumbnailPreview" />
+        <video v-if="previewUrl" :src="previewUrl + '#t=0.1'" muted playsinline preload="metadata" />
         <ion-icon v-else :icon="checkmarkCircleOutline" />
       </div>
       <div class="video-uploader__success-info">
@@ -102,14 +102,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onBeforeUnmount } from 'vue';
 import { IonIcon, IonButton } from '@ionic/vue';
 import {
   cloudUploadOutline, videocamOutline, alertCircleOutline, checkmarkCircleOutline,
   settingsOutline, linkOutline,
 } from 'ionicons/icons';
 import {
-  uploadVideo, validateVideoFile, getVideoDuration, extractVideoThumbnail,
+  uploadVideo, validateVideoFile, getVideoDuration,
   formatFileSize, formatDuration,
   VIDEO_MAX_SIZE_BYTES, VIDEO_MAX_DURATION_S,
   type VideoMeta, type VideoUploadProgress,
@@ -131,7 +131,12 @@ const MAX_DURATION_MIN = Math.round(VIDEO_MAX_DURATION_S / 60);
 
 const fileInput       = ref<HTMLInputElement | null>(null);
 const selectedFile    = ref<File | null>(null);
-const thumbnailPreview = ref<string | null>(null);
+/** Local object URL: the preview is simply the video's first frame. */
+const previewUrl = ref<string | null>(null);
+function setPreview(file: File | null) {
+  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
+  previewUrl.value = file ? URL.createObjectURL(file) : null;
+}
 const detectedDuration = ref<number | null>(null);
 const uploading       = ref(false);
 const error           = ref<string | null>(null);
@@ -160,7 +165,7 @@ function onDrop(event: DragEvent) {
 
 async function handleFile(file: File) {
   error.value           = null;
-  thumbnailPreview.value = null;
+  setPreview(null);
   detectedDuration.value = null;
 
   // Validate
@@ -178,12 +183,7 @@ async function handleFile(file: File) {
     return;
   }
 
-  // Extract thumbnail for preview
-  try {
-    thumbnailPreview.value = await extractVideoThumbnail(file);
-  } catch {
-    // No thumbnail — show icon instead
-  }
+  setPreview(file);
 }
 
 // ── Upload ────────────────────────────────────────────────────────────────────
@@ -210,7 +210,7 @@ async function startUpload() {
 
 function clearSelection() {
   selectedFile.value     = null;
-  thumbnailPreview.value = null;
+  setPreview(null);
   detectedDuration.value = null;
   error.value            = null;
   if (fileInput.value) fileInput.value.value = '';
@@ -221,6 +221,7 @@ function reset() {
   meta.value = null;
   emit('cleared');
 }
+onBeforeUnmount(() => setPreview(null));
 </script>
 
 <style scoped>
@@ -268,7 +269,7 @@ function reset() {
   display: flex;
   align-items: center;
   justify-content: center;
-  img { width: 100%; height: 100%; object-fit: cover; }
+  img, video { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
   ion-icon { font-size: 1.5rem; color: #666; }
 }
 .video-uploader__preview-info { flex: 1; min-width: 0; }
@@ -350,7 +351,7 @@ function reset() {
   align-items: center;
   justify-content: center;
   background: rgba(39,174,96,0.1);
-  img { width: 100%; height: 100%; object-fit: cover; }
+  img, video { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
   ion-icon { font-size: 1.5rem; color: var(--ion-color-success, #27ae60); }
 }
 .video-uploader__success-info { flex: 1; min-width: 0; p { margin: 0 0 2px; font-size: 0.82rem; } }

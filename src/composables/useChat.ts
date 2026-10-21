@@ -491,12 +491,17 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
 
   // ─── Navigation ───────────────────────────────────────────────────────────
 
-  function openChat(chat: ChatEntry) {
+  /** The chat is now on screen (page or desktop side pane): zero its badge and notification. */
+  function markChatOpened(chat: ChatEntry) {
     const entry = chatList.value.find(c => c.userId === chat.userId);
     if (entry) entry.unreadCount = 0;
     void clearChatNotification(chat.userId);
     totalUnread.value = chatList.value.reduce((s, c) => s + c.unreadCount, 0);
     schedulePersist();
+  }
+
+  function openChat(chat: ChatEntry) {
+    markChatOpened(chat);
     router.push(chatPath(chat.userId, nicknames.get(chat.userId) || chat.nickname || chat.name));
   }
 
@@ -564,7 +569,7 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
     userSearchQuery, userSearchResults, searchingUsers,
     loadChatList, ensureChatInitialized,
     processPendingChatInvites,
-    openChat, startChatWithUser,
+    openChat, markChatOpened, startChatWithUser,
     clearUserSearch, handleUserSearch,
     teardown,
   };

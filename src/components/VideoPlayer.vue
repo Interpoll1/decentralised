@@ -1,5 +1,5 @@
 <template>
-  <div class="video-player" :class="{ 'video-player--expanded': isExpanded, 'video-player--compact': props.compact }" @click.stop>
+  <div ref="rootEl" class="video-player" :class="{ 'video-player--expanded': isExpanded, 'video-player--compact': props.compact }" :style="{ '--ar': String(aspect) }" @click.stop>
 
     <!-- Thumbnail / poster state (before play) -->
     <div
@@ -7,11 +7,22 @@
       class="video-player__poster"
       @click="expand"
     >
+      <!-- No stored thumbnail: the poster is the video's own first frame (metadata + a seek to ~0.1s) -->
+      <video
+        v-if="!posterFailed && posterSrc"
+        :src="posterSrc"
+        :poster="thumbnailSrc || undefined"
+        class="video-player__thumbnail"
+        muted
+        playsinline
+        preload="metadata"
+        @loadedmetadata="onPosterMeta"
+        @error="onPosterError"
+      ></video>
       <img
-        v-if="thumbnailSrc"
+        v-else-if="thumbnailSrc"
         :src="thumbnailSrc"
         class="video-player__thumbnail"
-        loading="lazy"
         @error="thumbnailSrc = null"
       />
       <div v-else class="video-player__thumbnail-placeholder">
@@ -167,7 +178,7 @@ import {
   alertCircleOutline, chevronUpOutline, openOutline,
 } from 'ionicons/icons';
 import {
-  getAllGatewayUrls, getVideoThumbnail,
+  getAllGatewayUrls,
   formatDuration, formatFileSize,
   IPFS_GATEWAYS,
 } from '../services/videoService';
@@ -179,13 +190,22 @@ const props = defineProps<{
   duration?: number;
   fileSize?: number;
   mimeType?: string;
+  /** Pixel size, when known (stored on newer posts) — avoids a layout jump before the first frame loads. */
+  width?: number;
+  height?: number;
   autoPlay?: boolean;
   compact?: boolean;  // true in feed cards — caps poster height
 }>();
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const videoEl       = ref<HTMLVideoElement | null>(null);
-const thumbnailSrc  = ref<string | null>(props.thumbnailUrl || null);
+const thumbnailSrc  = ref<string | null>(props.thumbnailUrl || null);   // legacy posts only
+const rootEl        = ref<HTMLElement | null>(null);
+/** width / height of the real video; defaults to 16:9 until the first frame reports its size. */
+const aspect        = ref(props.width && props.height ? props.width / props.height : 16 / 9);
+const inView        = ref(false);
+const posterGateway = ref(0);
+const posterFailed  = ref(false);
 const isExpanded    = ref(props.autoPlay || false);
 const isPlaying     = ref(false);
 const isLoading     = ref(false);
@@ -201,18 +221,30 @@ const hoverX        = ref(0);
 const mimeType    = computed(() => props.mimeType || 'video/mp4');
 const gatewayUrls = computed(() => getAllGatewayUrls(props.cid));
 const primaryUrl  = computed(() => gatewayUrls.value[gatewayIndex.value] || gatewayUrls.value[0]);
+/** First-frame poster; only requested once the card is near the viewport. */
+const posterSrc = computed(() => inView.value ? `${gatewayUrls.value[posterGateway.value] || gatewayUrls.value[0]}#t=0.1` : '');
+function setAspect(w: number, h: number) { if (w > 0 && h > 0) aspect.value = w / h; }
+function onPosterMeta(e: Event) { const v = e.target as HTMLVideoElement; setAspect(v.videoWidth, v.videoHeight); }
+function onPosterError() {
+  if (posterGateway.value < gatewayUrls.value.length - 1) posterGateway.value++;
+  else posterFailed.value = true;
+}
+let io: IntersectionObserver | null = null;
 const progressPercent = computed(() =>
   duration.value > 0 ? (currentTime.value / duration.value) * 100 : 0
 );
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
-onMounted(async () => {
-  if (!thumbnailSrc.value && props.cid) {
-    try { thumbnailSrc.value = await getVideoThumbnail(props.cid); } catch { /* no thumbnail */ }
-  }
+onMounted(() => {
+  if (typeof IntersectionObserver === 'undefined' || !rootEl.value) { inView.value = true; return; }
+  io = new IntersectionObserver((entries) => {
+    if (entries.some(e => e.isIntersecting)) { inView.value = true; io?.disconnect(); io = null; }
+  }, { rootMargin: '400px 0px' });
+  io.observe(rootEl.value);
 });
 
 onUnmounted(() => {
+  io?.disconnect();
   if (videoEl.value) {
     videoEl.value.pause();
     videoEl.value.src = '';
@@ -301,6 +333,7 @@ function toggleFullscreen() {
 function onLoadedMetadata() {
   isLoading.value = false;
   if (videoEl.value && !duration.value) duration.value = videoEl.value.duration;
+  if (videoEl.value) setAspect(videoEl.value.videoWidth, videoEl.value.videoHeight);
 }
 
 function onVideoError() {
@@ -330,34 +363,25 @@ watch(() => props.cid, () => {
   gatewayIndex.value = 0;
   currentTime.value  = 0;
   thumbnailSrc.value = props.thumbnailUrl || null;
+  posterGateway.value = 0;
+  posterFailed.value  = false;
+  aspect.value = props.width && props.height ? props.width / props.height : 16 / 9;
 });
 </script>
 
 <style scoped>
 /* ── Compact (feed card) mode ─────────────────────────────────────────── */
-.video-player--compact .video-player__poster {
-  /* Keep the natural 16:9 ratio so nothing is cropped,
-     but clamp the height so it doesn't go huge on wide screens */
-  aspect-ratio: 16 / 9;
-  height: auto;
-  max-height: clamp(220px, 35vw, 360px);
-  overflow: hidden;
-}
-.video-player--compact .video-player__poster .video-player__thumbnail {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;   /* never crop — letterbox if needed */
-  background: #121212;
-}
-.video-player--compact .video-player__video {
-  max-height: clamp(260px, 40vw, 420px);
-  object-fit: contain;
-  background: #000;
-}
+/* Feed cards cap the height a little lower than the full player. */
+.video-player.video-player--compact { --vp-max-h: min(340px, 46vh); }
 
 /* ── Shell ───────────────────────────────────────────────────────────────── */
 .video-player {
-  width: 100%;
+  /* The player takes the video's own shape: wide videos fill the width, tall ones get a narrower box
+     (capped at --vp-max-h tall) instead of being squeezed into a 16:9 frame. */
+  --vp-max-h: min(520px, 62vh);
+  width: min(100%, calc(var(--vp-max-h) * var(--ar, 1.7778)));
+  max-width: 100%;
+  margin-inline: auto;
   border-radius: 12px;
   overflow: hidden;
   background: #121212;
@@ -369,7 +393,7 @@ watch(() => props.cid, () => {
 .video-player__poster {
   position: relative;
   cursor: pointer;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: var(--ar, 1.7778);
   background: #121212;
   display: flex;
   align-items: center;
@@ -380,8 +404,10 @@ watch(() => props.cid, () => {
 .video-player__thumbnail {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
+  pointer-events: none;
+  background: #121212;
 }
 
 .video-player__thumbnail-placeholder {
@@ -468,7 +494,9 @@ watch(() => props.cid, () => {
 .video-player__video {
   width: 100%;
   display: block;
-  max-height: 60vh;
+  height: auto;
+  max-height: var(--vp-max-h);
+  object-fit: contain;
   background: #000;
   cursor: pointer;
 }
@@ -648,4 +676,11 @@ watch(() => props.cid, () => {
   color: #e6e6e6;
 }
 .vp-ipfs-link:hover { color: #e6e6e6; background: rgba(230, 230, 230,0.1); }
+
+/* Phones: never a narrow strip on the left. Always full width; very tall videos sit letterboxed in a 4:5 frame. */
+@media (max-width: 767px) {
+  .video-player, .video-player.video-player--compact { width: 100%; }
+  .video-player__poster { aspect-ratio: clamp(0.8, var(--ar, 1.7778), 1.7778); }
+  .video-player__video { aspect-ratio: clamp(0.8, var(--ar, 1.7778), 1.7778); height: auto; max-height: none; }
+}
 </style>

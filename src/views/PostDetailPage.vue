@@ -85,6 +85,8 @@
                   ? `https://ipfs.filebase.io/ipfs/${post.videoThumbnailCID}`
                   : null"
                 :duration="post.videoDuration"
+                :width="post.videoWidth"
+                :height="post.videoHeight"
                 :file-size="post.videoSize"
                 :mime-type="post.videoMimeType"
               />

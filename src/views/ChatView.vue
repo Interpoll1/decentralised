@@ -1,9 +1,10 @@
 <template>
-  <ion-page>
+  <ion-page class="dm" :class="{ 'dm--embedded': embedded, 'dm--details': embedded && detailsOpen }">
+    <div class="dm-main">
     <ion-header>
       <ion-toolbar>
         <ion-buttons slot="start">
-          <button class="back-btn" @click="$router.back()">
+          <button v-if="!embedded" class="back-btn" @click="$router.back()">
             <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
         </ion-buttons>
@@ -23,7 +24,7 @@
         </div>
 
         <ion-buttons slot="end">
-          <span class="hdr-ws-status" :class="{ 'hdr-ws-status--ok': connected && !chatError }">
+          <span v-if="!embedded" class="hdr-ws-status" :class="{ 'hdr-ws-status--ok': connected && !chatError }">
             {{ connected && !chatError ? 'Connected' : chatError ? 'Error' : 'Offline' }}
           </span>
           <template v-if="canCall">
@@ -39,6 +40,9 @@
               </svg>
             </button>
           </template>
+          <button v-if="embedded" class="header-action-btn" :class="{ 'header-action-btn--on': detailsOpen }" title="Conversation details" aria-label="Conversation details" @click="detailsOpen = !detailsOpen">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 11v5M12 8v.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
           <button class="header-action-btn sn-btn" @click="showSafetyNumber = true" title="Verify encryption">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -100,10 +104,10 @@
                 <div v-else-if="msg.mediaType === 'video'" class="media-wrap media-wrap--video">
                   <div class="video-thumb-shell" @click="openLightbox(msg)">
                     <video
-                      :src="msg.mediaUrl"
+                      :src="msg.mediaUrl + '#t=0.1'"
                       playsinline preload="metadata"
                       class="media-video"
-                      @loadedmetadata="(e: any) => e.target.closest('.video-thumb-shell')?.classList.add('loaded')"
+                      @loadedmetadata="onChatVideoMeta"
                       @click.stop
                     />
                     <!-- shimmer shown until metadata loaded -->
@@ -278,6 +282,48 @@
         </div>
       </div>
     </ion-content>
+    </div>
+
+    <!-- Desktop workspace only: conversation details (hidden on phones, where this is a routed page) -->
+    <aside v-if="embedded && detailsOpen" class="dm-details" aria-label="Conversation details">
+      <header class="dm-details__head">
+        <h3>Conversation details</h3>
+        <button class="dm-details__x" aria-label="Close details" @click="detailsOpen = false">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </header>
+      <div class="dm-details__who">
+        <div class="dm-details__avatar" :class="avatarTone(recipientId)">{{ (recipientName || '?').charAt(0).toUpperCase() }}</div>
+        <div>
+          <p class="dm-details__name">{{ recipientName }}</p>
+          <p class="dm-details__status"><span class="presence-dot" :class="recipientOnline ? 'presence-dot--online' : 'presence-dot--offline'"></span>{{ recipientOnline ? 'Online' : 'Offline' }}</p>
+        </div>
+      </div>
+      <button class="dm-details__row" @click="showSafetyNumber = true">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span><strong>Encryption</strong><small>Peer-to-peer encrypted</small></span>
+        <svg class="dm-details__chev" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <section class="dm-details__sec">
+        <p class="dm-details__label">Shared media <span>{{ sharedMedia.length }}</span></p>
+        <div v-if="sharedMedia.length" class="dm-details__grid">
+          <button v-for="m in sharedMedia.slice(0, 6)" :key="m.id" class="dm-details__thumb" @click="openLightbox(m)">
+            <img v-if="m.mediaType === 'image'" :src="m.mediaUrl" alt="" loading="lazy" />
+            <span v-else>▶</span>
+          </button>
+        </div>
+        <p v-else class="dm-details__empty">Photos and videos you share appear here.</p>
+      </section>
+      <button class="dm-details__row" @click="showSafetyNumber = true">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3.4 8.4-8 11-4.6-2.6-8-6-8-11V5l8-3z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+        <span><strong>View safety number</strong></span>
+        <svg class="dm-details__chev" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="dm-details__row dm-details__row--danger" @click="confirmDeleteAll">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 6h18M19 6l-1 14H6L5 6M9 6V4h6v2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span><strong>Delete all messages</strong></span>
+      </button>
+    </aside>
 
     <!-- Safety number modal -->
     <transition name="sn-fade">
@@ -326,7 +372,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted, nextTick, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import {
   IonPage, IonHeader, IonToolbar, IonContent,
@@ -341,21 +387,29 @@ import { GunService } from '../services/gunService';
 import { StorageService } from '../services/storageService';
 import config from '@/config';
 import { useCallStore, type CallHistoryEntry } from '@/stores/callStore';
+import { readHistory, stashHistory } from '../utils/chatHistoryCache';
 import { chatPath, isSealedToken, replaceAddressBar, unsealRoute } from '../utils/privateRoute';
 
 const route = useRoute();
-const props = defineProps<{ userId?: string }>();
+const props = defineProps<{
+  userId?: string;
+  /** Display name when rendered inside the desktop Messages workspace (no route to read it from). */
+  name?: string;
+  /** Rendered next to the conversation list on desktop instead of as its own routed page. */
+  embedded?: boolean;
+}>();
+const detailsOpen = ref(typeof matchMedia === 'function' && matchMedia('(min-width: 1360px)').matches);
 
 // Fragment-based link support: `/chat#<userId>&name=<name>` keeps the
 // recipient's pubkey out of the path, browser history entries, Referer
 // headers, and server access logs (unlike `/chat/:userId`, which older
 // links and in-app navigation may still use).
 const hashParams = computed(() => new URLSearchParams(
-  (route.hash || window.location.hash || '').replace(/^#/, '')
+  props.embedded ? '' : (route.hash || window.location.hash || '').replace(/^#/, '')
 ));
 // In-app navigation uses opaque /chat/~token URLs (see utils/privateRoute);
 // the real id/name live on this device only.
-const routeParam = computed(() => props.userId || (route.params.userId as string) || '');
+const routeParam = computed(() => props.userId || (props.embedded ? '' : (route.params.userId as string)) || '');
 const sealedChat = computed(() => unsealRoute('chat', routeParam.value));
 const recipientId = computed(() =>
   sealedChat.value?.id
@@ -382,7 +436,8 @@ function callLogText(c: CallHistoryEntry): string {
 // The name YOU gave this person (set from the chat list) outranks whatever the link or network says.
 const customName = ref('');
 const recipientName = computed(() =>
-  customName.value || sealedChat.value?.name || (route.query.name as string) || hashParams.value.get('name') || 'User'
+  customName.value || sealedChat.value?.name || props.name
+    || (props.embedded ? '' : (route.query.name as string) || hashParams.value.get('name') || '') || 'User'
 );
 
 // Inbound links (old shares, notifications, #id= links) still carry the raw
@@ -1086,6 +1141,7 @@ function openFilePickerWithPresence() {
 }
 
 // Lightbox state
+const sharedMedia = computed(() => messages.value.filter(m => m.mediaUrl && (m.mediaType === 'image' || m.mediaType === 'video')).slice().reverse());
 const lightbox = ref<{ mediaUrl: string; mediaType: 'image'|'video'; fileName?: string } | null>(null);
 function openLightbox(msg: any) { lightbox.value = { mediaUrl: msg.mediaUrl, mediaType: msg.mediaType, fileName: msg.fileName }; }
 function downloadMedia(msg: any) {
@@ -1350,6 +1406,9 @@ async function initializeChat() {
   }
   if (gen !== initGeneration) return;
   myUserId = resolvedUserId;
+  // Paint the last-seen thread straight away; the real history replaces it as soon as storage answers.
+  const cached = readHistory(`${resolvedUserId}:${targetUserId}`);
+  if (cached?.length && !messages.value.length) { messages.value = cached.slice(); forceScrollImmediate(); }
   try { customName.value = await getNickname(resolvedUserId, targetUserId); } catch { customName.value = ''; }
   if (gen !== initGeneration) return;
 
@@ -1387,7 +1446,10 @@ async function initializeChat() {
 }
 
 watch(recipientId, async (n, o) => { if (n && n !== o) await initializeChat(); });
+// Embedded in the desktop workspace there is no route lifecycle: start on mount, never touch the address bar.
+onMounted(() => { if (props.embedded && recipientId.value) void initializeChat(); });
 onIonViewWillEnter(() => {
+  if (props.embedded) return;
   scrubChatUrl();
   if (isSealedToken(routeParam.value) && !sealedChat.value) {
     chatError.value = 'This chat link is private to the device that opened it. Open the chat from your chat list.';
@@ -1398,7 +1460,10 @@ onIonViewWillEnter(() => {
   chatService?.markAsRead(recipientId.value);
   forceScrollImmediate();
 });
-onUnmounted(() => { initGeneration++; disconnectChat(); closePeer(); });
+onUnmounted(() => {
+  if (myUserId && recipientId.value) stashHistory(`${myUserId}:${recipientId.value}`, messages.value);
+  initGeneration++; disconnectChat(); closePeer();
+});
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -1429,7 +1494,23 @@ const forceScrollImmediate = () => {
   nextTick(attempt);
 };
 
-watch(currentMessages, () => scrollToBottom(), { deep: true });
+// Watch a cheap signature instead of deep-walking every message on each change (that walk grew with the thread).
+watch(
+  () => {
+    const m = currentMessages.value, last = m[m.length - 1];
+    return `${m.length}|${last?.id ?? ''}|${last?.mediaUrl ?? ''}`;
+  },
+  () => scrollToBottom(),
+);
+
+/** The bubble takes the video's own shape (portrait stays portrait); its first frame is the preview. */
+function onChatVideoMeta(e: Event) {
+  const v = e.target as HTMLVideoElement;
+  const shell = v.closest('.video-thumb-shell') as HTMLElement | null;
+  if (!shell) return;
+  if (v.videoWidth && v.videoHeight) shell.style.setProperty('--ar', String(v.videoWidth / v.videoHeight));
+  shell.classList.add('loaded');
+}
 
 const handleSend = async () => {
   if (!messageInput.value.trim() || !chatReady.value || !chatService) return;
@@ -1689,12 +1770,13 @@ ion-content { --background: transparent; }
 
 /* Video thumbnail shell — shimmer until metadata loads */
 .video-thumb-shell {
-  position: relative; width: 230px; height: 170px; border-radius: 14px;
+  /* sized from --ar (set once the first frame reports its size): wide ≤ 230px, tall ≤ 250px high */
+  position: relative; width: min(230px, calc(250px * var(--ar, 1.35))); aspect-ratio: var(--ar, 1.35); border-radius: 14px;
   overflow: hidden; cursor: pointer; background: #101010;
 }
 .video-thumb-shell .media-video {
   position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: cover; opacity: 0; transition: opacity 300ms ease;
+  object-fit: contain; opacity: 0; transition: opacity 300ms ease;
 }
 .video-thumb-shell.loaded .media-video  { opacity: 1; }
 .video-thumb-shell.loaded .video-shimmer { opacity: 0; pointer-events: none; }
@@ -2046,4 +2128,46 @@ ion-content { --background: transparent; }
 .sn-fade-enter-from,
 .sn-fade-leave-to    { opacity: 0; }
 
+
+/* ── Desktop workspace: thread + conversation details ───────────────────────
+   Routed (phone) layout is untouched: .dm-main collapses with display: contents. */
+.dm-main { display: contents; }
+.dm-details { display: none; }
+.dm--embedded { flex-direction: row; }
+.dm--embedded .dm-main { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; position: relative; }
+.dm--embedded .dm-main ion-content { flex: 1; min-height: 0; }
+.dm--embedded ion-toolbar { --background: transparent; --border-width: 0 0 1px 0; --border-color: var(--app-border); }
+.dm--embedded .messages-area { padding: 16px 24px 8px; }
+.header-action-btn--on { color: var(--app-accent); background: rgba(var(--app-accent-rgb), 0.1); }
+.dm--embedded .dm-details {
+  display: flex; flex-direction: column; gap: 4px; flex: 0 0 286px; min-height: 0; overflow-y: auto; padding: 16px 14px;
+  border-left: 1px solid var(--app-border); background: rgba(255, 255, 255, 0.012);
+}
+.dm-details__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.dm-details__head h3 { margin: 0; font-size: 15px; font-weight: 700; color: var(--app-text); }
+.dm-details__x { width: 28px; height: 28px; display: grid; place-items: center; border: none; border-radius: 8px; background: none; color: var(--app-text-muted); cursor: pointer; }
+.dm-details__x:hover { background: rgba(255,255,255,0.06); color: var(--app-text); }
+.dm-details__x svg { width: 16px; height: 16px; }
+.dm-details__who { display: flex; align-items: center; gap: 12px; padding: 8px 0 14px; border-bottom: 1px solid var(--app-border); margin-bottom: 6px; }
+.dm-details__avatar { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font-size: 20px; font-weight: 800; color: #fff; flex-shrink: 0; }
+.dm-details__name { margin: 0; font-size: 15px; font-weight: 700; color: var(--app-text); }
+.dm-details__status { margin: 3px 0 0; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--app-text-muted); }
+.dm-details__row {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 6px; border: none; border-radius: 10px; background: none;
+  color: var(--app-text); font: inherit; text-align: left; cursor: pointer; transition: background 120ms;
+}
+.dm-details__row:hover { background: rgba(255,255,255,0.04); }
+.dm-details__row > svg:first-child { width: 20px; height: 20px; flex-shrink: 0; color: var(--app-text-muted); }
+.dm-details__row span { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.dm-details__row strong { font-size: 13.5px; font-weight: 650; }
+.dm-details__row small { font-size: 12px; color: var(--app-accent); }
+.dm-details__chev { width: 15px; height: 15px; color: var(--app-text-subtle); flex-shrink: 0; }
+.dm-details__row--danger, .dm-details__row--danger > svg:first-child { color: #f87171; }
+.dm-details__sec { padding: 6px 6px 10px; border-top: 1px solid var(--app-border); border-bottom: 1px solid var(--app-border); margin: 4px 0; }
+.dm-details__label { display: flex; justify-content: space-between; margin: 6px 0 8px; font-size: 13.5px; font-weight: 650; color: var(--app-text); }
+.dm-details__label span { color: var(--app-text-muted); font-weight: 500; }
+.dm-details__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.dm-details__thumb { aspect-ratio: 1; padding: 0; overflow: hidden; border: 1px solid var(--app-border); border-radius: 8px; background: rgba(255,255,255,0.04); color: var(--app-text-muted); cursor: pointer; }
+.dm-details__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.dm-details__empty { margin: 0; font-size: 12px; line-height: 1.5; color: var(--app-text-muted); }
 </style>

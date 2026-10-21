@@ -117,6 +117,10 @@
                   <svg viewBox="0 0 24 24" width="13" height="13" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                   Explore
                 </button>
+                <button class="scope-pill" :class="{ active: feedScope === 'nearby' }" @click="setScope('nearby')">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none"><path d="M12 22s7-6.2 7-12a7 7 0 10-14 0c0 5.8 7 12 7 12z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.5" stroke="currentColor" stroke-width="2"/></svg>
+                  Nearby
+                </button>
                 <span class="feed-pills-divider"></span>
                 <button class="scope-pill" :class="{ active: feedMode === 'for-you' }" @click="setFeedMode('for-you')">✦ For You</button>
                 <button class="scope-pill" :class="{ active: feedMode === 'latest' }"  @click="setFeedMode('latest')">Latest</button>
@@ -146,6 +150,9 @@
                   </button>
                   <button class="scope-tab" :class="{ active: feedScope === 'explore' }" @click="setScope('explore')">
                     <ion-icon :icon="ellipseOutline"></ion-icon> Explore
+                  </button>
+                  <button class="scope-tab" :class="{ active: feedScope === 'nearby' }" @click="setScope('nearby')">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true"><path d="M12 22s7-6.2 7-12a7 7 0 10-14 0c0 5.8 7 12 7 12z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.5" stroke="currentColor" stroke-width="2"/></svg> Nearby
                   </button>
                 </div>
               </div>
@@ -216,6 +223,16 @@
               <ion-icon :icon="bookmarkOutline" size="large"></ion-icon>
               <p>You haven't joined any spaces yet.</p>
               <p class="subtitle">Join spaces in the <button class="inline-link" @click="openSpaces()">Spaces</button> list in Orbit — your feed will be scoped to them.</p>
+            </div>
+
+            <!-- "Nearby" needs opt-in -->
+            <div v-if="feedScope === 'nearby' && !nearby.prefs.enabled" class="scope-hint surface-card">
+              <p>Nearby is off.</p>
+              <p class="subtitle">Turn it on in <button class="inline-link" @click="router.push({ path: '/home', query: { tab: 'orbit', view: 'nearby' } })">Orbit → Nearby</button> to see posts and polls from people around you. You choose how rough your area is.</p>
+            </div>
+            <div v-else-if="feedScope === 'nearby' && nearby.prefs.enabled && nearby.people.value.length === 0" class="scope-hint surface-card">
+              <p>No one nearby yet.</p>
+              <p class="subtitle">Posts from people within {{ nearby.prefs.radius }} km show up here. Try a wider radius in <button class="inline-link" @click="router.push({ path: '/home', query: { tab: 'orbit', view: 'nearby' } })">Orbit → Nearby</button>.</p>
             </div>
 
             <!-- Active tag filter pill -->
@@ -349,6 +366,7 @@
             @clearUserSearch="clearUserSearch"
             @startChat="startChatWithUser"
             @openChat="openChat"
+            @selectChat="selectChat"
             @rename="renameChat"
           />
 
@@ -512,6 +530,7 @@ import { RelayManager } from '../services/relayManager';
 import config from '../config';
 
 import { useChat }       from '../composables/useChat';
+import { useNearby }     from '../composables/useNearby';
 import { useModeration } from '../composables/useModeration';
 import { useTutorial }   from '../composables/useTutorial';
 
@@ -549,9 +568,9 @@ function initialTab(): HomeTab {
 }
 
 const activeTab          = ref<string>(initialTab());
-const orbitView          = ref<'map' | 'spaces'>(route.query.view === 'spaces' || route.query.tab === 'communities' ? 'spaces' : 'map');
+const orbitView          = ref<'map' | 'spaces' | 'nearby'>(route.query.view === 'spaces' || route.query.tab === 'communities' ? 'spaces' : 'nearby');
 function openSpaces() { orbitView.value = 'spaces'; activeTab.value = 'orbit'; }
-watch(() => route.query.view, (v) => { if (route.name === 'Home' && (v === 'spaces' || v === 'map')) orbitView.value = v; });
+watch(() => route.query.view, (v) => { if (route.name === 'Home' && (v === 'spaces' || v === 'map' || v === 'nearby')) orbitView.value = v === 'map' ? 'nearby' : v; });
 const communityFilter    = ref('all');
 const isLoadingPosts     = ref(false);
 const voteVersion        = ref(0);
@@ -565,7 +584,7 @@ const feedListEl = ref<HTMLElement | null>(null);
 let feedMutObs: MutationObserver | null = null;
 
 // ── Feed scope: 'mine' | 'relay' | 'explore' ──────────────────────────────
-type FeedScope = 'mine' | 'relay' | 'explore';
+type FeedScope = 'mine' | 'relay' | 'explore' | 'nearby';
 const feedScope = ref<FeedScope>(
   (route.query.scope as FeedScope)
   || (localStorage.getItem('interpoll_feed_scope') as FeedScope)
@@ -585,12 +604,16 @@ function setScopeAndHome(s: FeedScope) {
 watch(
   () => route.query.scope,
   (s) => {
-    if (s && ['mine', 'relay', 'explore'].includes(s as string)) {
+    if (s && ['mine', 'relay', 'explore', 'nearby'].includes(s as string)) {
       feedScope.value = s as FeedScope;
     }
   },
   { immediate: true },
 );
+// Nearby feed: start the (opt-in) location watcher when the scope needs it, and keep its contact list fresh.
+const nearby = useNearby();
+watch(feedScope, (sc) => { if (sc === 'nearby' && nearby.prefs.enabled) void nearby.ensureStarted(); }, { immediate: true });
+
 // Persist scope to localStorage
 watch(feedScope, (s) => {
   localStorage.setItem('interpoll_feed_scope', s);
@@ -644,6 +667,10 @@ let currentUserId = '';
 let chatComposable: ReturnType<typeof useChat> | null = null;
 
 const chatList          = ref<any[]>([]);
+watch(() => chatList.value, (list) => {
+  if (!nearby.prefs.enabled) return;
+  void nearby.setContacts((list || []).map((c: any) => c.publicKey || c.userId || '').filter((k: string) => /^[0-9a-f]{64}$/i.test(k)));
+}, { immediate: false });
 const totalUnread       = ref(0);
 const chatListHydrated  = ref(false);
 const chatMessageSearch = ref<{ query: string; hits: Record<string, any> } | null>(null);
@@ -665,6 +692,7 @@ function ensureChat() {
 }
 async function ensureChatInitialized()           { const c = ensureChat(); if (c) await c.ensureChatInitialized(activeTab); }
 function openChat(chat: any)          { ensureChat()?.openChat(chat); }
+function selectChat(chat: any)        { ensureChat()?.markChatOpened(chat); }
 function startChatWithUser(user: any) { ensureChat()?.startChatWithUser(user); }
 function clearUserSearch()            { ensureChat()?.clearUserSearch(); userSearchQuery.value = ''; }
 async function handleUserSearch()     { await ensureChat()?.handleUserSearch(); }
@@ -796,6 +824,7 @@ function itemMatchesTag(item: { type: string; data: any }, tag: string): boolean
 // ── Feed computation with scope filtering ──────────────────────────────────
 function itemMatchesScope(item: { type: string; data: any }): boolean {
   if (feedScope.value === 'relay' || feedScope.value === 'explore') return true;
+  if (feedScope.value === 'nearby') return nearby.nearbyAuthorIds.value.has(item.data.authorId);
   // 'mine' — show only items from joined communities
   const communityId = item.data.communityId;
   if (!communityId) return false;
@@ -1739,9 +1768,9 @@ if (typeof window !== 'undefined') {
 
   .hp-root.page-layout {
     gap: 20px;
-    width: min(1320px, calc(100% - 32px));
+    width: min(1320px, calc(100% - 64px));
     margin: 0 auto;
-    padding: 20px 0 80px;
+    padding: 32px 0 80px;
   }
   .hp-root.hp-root--chat.page-layout { padding-bottom: 24px; }
   /* Feed column sits straight on the page, no outer glass box */
@@ -1802,5 +1831,14 @@ if (typeof window !== 'undefined') {
   .feed-toolbar--desktop { padding: 0 0 10px; }
   .desktop-tag-strip { padding: 0 0 12px; }
   .feed-scope-tabs { background: rgba(255,255,255,0.04); }
+
+  /* Feed cards: rounded panel with the accent edge */
+  html.dark .hp-root .feed-list .post-card,
+  html.dark .hp-root .feed-list .poll-card {
+    border-radius: 0 14px 14px 0 !important;
+    border: 1px solid #2b332f !important;
+    box-shadow: inset 4px 0 0 var(--app-accent) !important;
+    background: var(--app-bg-elevated) !important;
+  }
 }
 </style>

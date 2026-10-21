@@ -57,9 +57,13 @@ const VIDEO_META_KEY = (cid: string) => `video-meta:${cid}`;
 
 export interface VideoMeta {
   cid:              string;
-  thumbnailDataUrl: string | null;  // base64 thumbnail extracted from video frame
-  thumbnailCID:     string | null;  // IPFS CID of thumbnail (uploaded separately)
+  /** Legacy: no thumbnail is generated any more — the player shows the video's first frame. */
+  thumbnailDataUrl: string | null;
+  thumbnailCID:     string | null;
   duration:         number;         // seconds
+  /** Pixel size as displayed (after rotation) — lets the UI keep vertical/horizontal videos in their own shape. */
+  width?:           number;
+  height?:          number;
   size:             number;         // bytes (compressed)
   mimeType:         string;
   uploadedAt:       number;
@@ -97,8 +101,14 @@ const METADATA_TIMEOUT_MS = 10_000;
  */
 const _pendingVideoEls = new Set<HTMLVideoElement>();
 
-/** Get video duration and basic metadata without loading the full file */
-export function getVideoDuration(file: File): Promise<number> {
+export interface VideoInfo { duration: number; width: number; height: number }
+
+/** Get video duration and display size without loading the full file */
+export async function getVideoDuration(file: File): Promise<number> {
+  return (await readVideoInfo(file)).duration;
+}
+
+export function readVideoInfo(file: File): Promise<VideoInfo> {
   return new Promise((resolve, reject) => {
     const url   = URL.createObjectURL(file);
     const video = document.createElement('video');
@@ -126,17 +136,18 @@ export function getVideoDuration(file: File): Promise<number> {
 
     video.onloadedmetadata = () => {
       const dur = video.duration;
+      const width = video.videoWidth || 0, height = video.videoHeight || 0;
       if (!Number.isFinite(dur) || dur <= 0) {
         // Fragmented / streamed MP4s report Infinity or NaN — not fatal, the
         // duration is only used for metadata, so fall back to 0.
         console.warn('[VideoService] Video reported non-finite duration:', dur, '— continuing with 0');
-        finish(() => resolve(0));
+        finish(() => resolve({ duration: 0, width, height }));
         return;
       }
       if (dur > VIDEO_MAX_DURATION_S) {
         finish(() => reject(new Error(`Video is ${Math.round(dur / 60)} minutes. Maximum is ${VIDEO_MAX_DURATION_S / 60} minutes.`)));
       } else {
-        finish(() => resolve(dur));
+        finish(() => resolve({ duration: dur, width, height }));
       }
     };
     video.onerror = () => {
@@ -410,7 +421,7 @@ function getFileExtension(filename: string): string {
  *   - Returns { cid, size, mimeType } on success
  *
  * Progress is reported via the onProgress callback:
- *   - 0–10%:  validation + thumbnail extraction
+ *   - 0–10%:  validation
  *   - 10–90%: upload (tracked via XMLHttpRequest.upload.onprogress)
  *   - 90–100%: IPFS pinning confirmation from Filebase
  */
@@ -429,20 +440,14 @@ export async function uploadVideo(
   if (rawValidation) throw new Error(rawValidation);
 
   let duration: number;
+  let width = 0, height = 0;
   try {
-    duration = await getVideoDuration(file);
+    ({ duration, width, height } = await readVideoInfo(file));
   } catch (err: any) {
     throw new Error(err.message || 'Could not read video duration.');
   }
 
-  // 2. Extract thumbnail BEFORE compression (original quality → better thumbnail)
-  report('extracting-thumbnail', 5, 'Generating thumbnail…');
-  let thumbnailDataUrl: string | null = null;
-  try {
-    thumbnailDataUrl = await extractVideoThumbnail(file);
-  } catch (err) {
-    console.warn('[VideoService] Thumbnail extraction failed — continuing without:', err);
-  }
+  // 2. No separate thumbnail: the player shows the video's own first frame.
 
   // 3. Compress video with ffmpeg.wasm
   report('compressing', 10, 'Compressing video…');
@@ -467,29 +472,6 @@ export async function uploadVideo(
     if (err.message?.includes('MB')) throw err;
     console.warn('[VideoService] Compression error — using original:', err);
     fileToUpload = file;
-  }
-
-  // 4. Upload thumbnail first (small, fast)
-  report('uploading', 62, 'Uploading thumbnail…');
-  let thumbnailCID: string | null = null;
-  if (thumbnailDataUrl) {
-    try {
-      const thumbBlob = await dataUrlToBlob(thumbnailDataUrl);
-      const thumbForm = new FormData();
-      thumbForm.append('video', thumbBlob, 'thumbnail.jpg');
-      thumbForm.append('type', 'thumbnail');
-      const thumbRes = await fetchWithTimeout(
-        `${config.relay.api}/api/upload-video`,
-        { method: 'POST', body: thumbForm },
-        30_000,
-      );
-      if (thumbRes.ok) {
-        const thumbJson = await thumbRes.json();
-        thumbnailCID = thumbJson.cid || null;
-      }
-    } catch (err) {
-      console.warn('[VideoService] Thumbnail upload failed — continuing without:', err);
-    }
   }
 
   // 5. Upload compressed video with progress tracking
@@ -518,9 +500,8 @@ export async function uploadVideo(
     }, 5_000);
     gun.get('videos').get(cid).put({
       id:              cid,
-      thumbnailCID:    thumbnailCID || null,
-      thumbnail:       thumbnailDataUrl || null,
       duration:        Math.round(duration),
+      ...(width && height ? { width, height } : {}),
       size,
       mimeType,
       originalSize:    compressionResult?.originalSize ?? size,
@@ -535,8 +516,9 @@ export async function uploadVideo(
   });
 
   const meta: VideoMeta = {
-    cid, thumbnailDataUrl, thumbnailCID,
+    cid, thumbnailDataUrl: null, thumbnailCID: null,
     duration, size, mimeType,
+    ...(width && height ? { width, height } : {}),
     uploadedAt: Date.now(),
   };
 

@@ -75,6 +75,9 @@ export interface Post {
   videoThumbnailCID?: string;
   /** Video duration in seconds */
   videoDuration?: number;
+  /** Video pixel size — lets feeds keep vertical and horizontal videos in their own shape */
+  videoWidth?: number;
+  videoHeight?: number;
   /** Compressed video file size in bytes */
   videoSize?: number;
   /** Video MIME type, e.g. 'video/mp4' */
@@ -123,6 +126,8 @@ function normalizeGunPost(postData: any): any {
   // Video fields — Gun stores numbers as strings in some edge cases, coerce back
   if (out.videoDuration !== undefined) out.videoDuration = Number(out.videoDuration) || 0;
   if (out.videoSize     !== undefined) out.videoSize     = Number(out.videoSize)     || 0;
+  if (out.videoWidth    !== undefined) out.videoWidth    = Number(out.videoWidth)    || 0;
+  if (out.videoHeight   !== undefined) out.videoHeight   = Number(out.videoHeight)   || 0;
   // Clean empty string CIDs (Gun sometimes writes '' instead of omitting the field)
   if (!out.videoCID)          delete out.videoCID;
   if (!out.videoThumbnailCID) delete out.videoThumbnailCID;
@@ -289,6 +294,7 @@ export class PostService {
       ...(post.videoThumbnailCID ? { videoThumbnailCID: post.videoThumbnailCID } : {}),
       ...(post.videoDuration     ? { videoDuration:     post.videoDuration }     : {}),
       ...(post.videoSize         ? { videoSize:         post.videoSize }         : {}),
+      ...(post.videoWidth && post.videoHeight ? { videoWidth: post.videoWidth, videoHeight: post.videoHeight } : {}),
       ...(post.videoMimeType     ? { videoMimeType:     post.videoMimeType }     : {}),
     };
 
@@ -324,6 +330,7 @@ export class PostService {
     if (newPost.videoThumbnailCID) cleanPost.videoThumbnailCID = newPost.videoThumbnailCID;
     if (newPost.videoDuration)     cleanPost.videoDuration     = newPost.videoDuration;
     if (newPost.videoSize)         cleanPost.videoSize         = newPost.videoSize;
+    if (newPost.videoWidth && newPost.videoHeight) { cleanPost.videoWidth = newPost.videoWidth; cleanPost.videoHeight = newPost.videoHeight; }
     if (newPost.videoMimeType)     cleanPost.videoMimeType     = newPost.videoMimeType;
 
     // Per-post proof-of-work; relays reject new posts without it.

@@ -86,6 +86,8 @@
                 ? `https://ipfs.filebase.io/ipfs/${post.videoThumbnailCID}`
                 : null"
               :duration="post.videoDuration"
+              :width="post.videoWidth"
+              :height="post.videoHeight"
               :file-size="post.videoSize"
               :mime-type="post.videoMimeType"
               :compact="true"
@@ -98,6 +100,7 @@
             </template>
           </Suspense>
         </template>
+        <span v-if="post.imageIPFS" class="post-media-chip">IPFS</span>
       </div>
 
       <ImageLightbox
@@ -429,7 +432,7 @@ function formatViewCount(n: number): string {
   /* No max-height cap — let image render at its natural aspect ratio.
      object-fit: contain keeps full image visible without cropping.
      Background matches card surface so letterboxing is invisible. */
-  max-height: 520px;
+  max-height: 360px;
   object-fit: contain;
   object-position: center;
   display: block;
@@ -437,9 +440,9 @@ function formatViewCount(n: number): string {
   cursor: zoom-in;
 }
 @media (min-width: 768px) {
-  .post-media-img { max-height: 600px; }
+  .post-media-img { max-height: 400px; }
 }
-.post-media-video { width: 100%; }
+.post-media-video { max-width: 100%; }
 .post-video-skeleton {
   width: 100%; height: 220px;
   background: rgba(255,255,255,0.05);
@@ -541,6 +544,37 @@ function formatViewCount(n: number): string {
   color: #fbbf24; border-color: rgba(251,191,36,0.28); background: rgba(251,191,36,0.08);
 }
 .post-tag-chip--highlight:hover { background: rgba(251,191,36,0.14); }
+
+
+/* ── Desktop feed card (matches the "Your network" design; phones keep the compact layout) ── */
+@media (min-width: 768px) {
+  .post-card { padding: 18px 22px 14px; }
+  .post-inner { gap: 12px; }
+  .post-avatar { width: 40px; height: 40px; font-size: 16px; }
+  .post-meta-text { gap: 4px; }
+  .post-author { font-size: 14.5px; }
+  .post-time { font-size: 12.5px; }
+  .post-identity-badge {
+    font-size: 11.5px; font-weight: 600; text-transform: none; letter-spacing: 0;
+    padding: 2px 9px; border-radius: 7px; background: rgba(255,255,255,0.03);
+    border: 1px solid var(--app-border-strong); color: var(--app-text-muted);
+  }
+  .post-identity-badge.unverified { background: rgba(255,255,255,0.03); color: var(--app-text-muted); }
+  .post-meta-row--sub { gap: 14px; font-size: 12.5px; }
+  .post-community { font-size: 12.5px; gap: 5px; }
+  .post-relay-attr { font-size: 12.5px; font-weight: 500; gap: 5px; padding: 0; background: none; border: none; }
+  .post-relay-attr svg { width: 13px; height: 13px; }
+  .post-title { font-size: 21px; letter-spacing: -0.02em; }
+  .post-excerpt { font-size: 14.5px; }
+  .post-media { position: relative; border-radius: 12px; }
+  .post-media-img { border: 1px solid var(--app-border); border-radius: 12px; }
+  .post-media-chip {
+    position: absolute; left: 10px; bottom: 10px; padding: 3px 9px; border-radius: 999px; pointer-events: none;
+    font-size: 11.5px; font-weight: 600; color: #e8ece8; background: rgba(0,0,0,0.62); backdrop-filter: blur(6px);
+  }
+}
+.post-media-chip { display: none; }
+@media (min-width: 768px) { .post-media-chip { display: block; } }
 
 @media (max-width: 576px) {
   .post-card  { padding: 14px 12px 12px; }

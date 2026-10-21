@@ -140,6 +140,14 @@ function resendDue(attempts: number, lastTry: number | undefined, now: number): 
 }
 const lastTryAt = new Map<string, number>();
 
+/**
+ * One delivery at a time per conversation. Every send advances the same double-ratchet state through a
+ * compare-and-swap; messages sent in quick succession used to race for it, lose, and redo the whole
+ * (signature-verifying) encrypt — each extra message made every later one slower. Queued, each send
+ * encrypts once, in the order it was typed. Shared by all ChatService instances in this tab.
+ */
+const deliverQueues = new Map<string, Promise<unknown>>();
+
 const _seenIds = new Map<string, BoundedSet<string>>();
 function seenIds(userId: string): BoundedSet<string> {
   if (!_seenIds.has(userId))
@@ -252,6 +260,7 @@ class ChatService {
   private receiving = 0;
   private retryingReceive = false; // senderId → tail of chain
   private clearedRooms        = new Set<string>();                // rooms user cleared
+  private clearMarkerReset    = new Set<string>();                // rooms whose Gun cleared-marker we already reset
 
   // ── Presence ──────────────────────────────────────────────────────────────
   private presenceTimer:             number | null = null;
@@ -754,6 +763,9 @@ class ChatService {
     for (const row of current) byId.set(row.id, row);
     for (const { value } of remote) {
       if (!value || typeof value !== 'object') continue;
+      // Already stored and healthy: re-running the whole receive pipeline on it is wasted work on every open.
+      const known = typeof value.id === 'string' ? byId.get(value.id) : undefined;
+      if (known && known.syncStatus !== 'corrupted') continue;
       const m = await this.mergeRemote(value, roomId);
       if (m) byId.set(m.id, m);
     }
@@ -786,7 +798,11 @@ class ChatService {
     seenIds(this.userId).add(row.id);
     // Remove cleared marker so new messages aren't blocked after a fresh send
     this.clearedRooms.delete(row.roomId);
-    GunService.getGun().get('chat-deleted').get(row.roomId).get(this.userId).put(null as any);
+    // The cleared-marker only needs resetting once per conversation per session, not on every message.
+    if (!this.clearMarkerReset.has(row.roomId)) {
+      this.clearMarkerReset.add(row.roomId);
+      GunService.getGun().get('chat-deleted').get(row.roomId).get(this.userId).put(null as any);
+    }
 
     void this.deliver(row).then(d => {
       this.fanOut('onMessageStatus', { id: d.id, status: d.syncStatus, error: d.error });
@@ -794,7 +810,37 @@ class ChatService {
     return toChatMessage(row);
   }
 
-  private async deliver(row: StoredChatMessage): Promise<StoredChatMessage> {
+  private deliver(row: StoredChatMessage): Promise<StoredChatMessage> {
+    const key = `${this.userId}:${row.recipientId || ''}`;
+    const run = (deliverQueues.get(key) ?? Promise.resolve()).then(() => this.deliverNow(row));
+    const tail = run.then(() => undefined, () => undefined);
+    deliverQueues.set(key, tail);
+    void tail.then(() => { if (deliverQueues.get(key) === tail) deliverQueues.delete(key); });
+    return run;
+  }
+
+  /** Our own bundle never changes between sends: verify it once, not on every message. */
+  private ownVerifiedCache: { src: unknown; value: Awaited<ReturnType<typeof verifyAuthenticatedBundle>>; peers: Map<string, Awaited<ReturnType<typeof verifyContext>>['peer']> } | null = null;
+  private async ownVerified() {
+    const src = this.myBundle!.bundle;
+    if (this.ownVerifiedCache?.src !== src)
+      this.ownVerifiedCache = { src, value: await verifyAuthenticatedBundle(src, this.userId), peers: new Map() };
+    return this.ownVerifiedCache;
+  }
+  /** Bootstrap contexts are immutable strings, so their verification result can be remembered per peer. */
+  private async peerFromContext(auth: string, recipientId: string) {
+    const own = await this.ownVerified();
+    const k = `${recipientId}\u0000${auth}`;
+    let peer = own.peers.get(k);
+    if (!peer) {
+      ({ peer } = await verifyContext(auth, this.userId, recipientId, own.value));
+      if (own.peers.size >= 64) own.peers.clear();
+      own.peers.set(k, peer);
+    }
+    return peer;
+  }
+
+  private async deliverNow(row: StoredChatMessage): Promise<StoredChatMessage> {
     row = await StorageService.getChatMessage(row.id) ?? row;
     const recipientId = row.recipientId;
     if (!recipientId || !row.text || row.deliveryEvidence) return row;
@@ -815,8 +861,7 @@ class ChatService {
       const envelope: SignalEnvelope = journal?.envelope ?? await this.encryptFor(recipientId, row.text, row.id);
       if (envelope.v !== SIGNAL_WIRE_VERSION) throw new DMIdentityError('LEGACY_UNAUTHENTICATED','Legacy envelope retained; authenticated mode cannot retransmit it');
       if (envelope.v === SIGNAL_WIRE_VERSION) {
-        const own = await verifyAuthenticatedBundle(this.myBundle!.bundle,this.userId);
-        const {peer} = await verifyContext(envelope.auth!,this.userId,recipientId,own);
+        const peer = await this.peerFromContext(envelope.auth!, recipientId);
         await continuityChange(this.userId,peer);
       }
       row = await StorageService.patchDMDelivery(row.id, { encryptedEnvelope: JSON.stringify(envelope) }) ?? row;

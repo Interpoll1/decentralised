@@ -39,7 +39,11 @@ export const NAV_ITEM_POOL: NavItemDef[] = [
 const POOL_IDS = new Set(NAV_ITEM_POOL.map(i => i.id));
 const TAB_IDS  = new Set(NAV_ITEM_POOL.filter(i => i.kind === 'tab').map(i => i.id));
 
-export const DEFAULT_NAV_ORDER = ['home', 'orbit', 'chat', 'create', 'network'];
+/** Messages · Orbit · [Publish] · Feed · Network — Publish sits in the centre as the raised button. */
+export const DEFAULT_NAV_ORDER = ['chat', 'orbit', 'create', 'home', 'network'];
+/** The bar shipped with this order before the redesign; anyone still on it moves to the new default. */
+const PREVIOUS_DEFAULT_ORDER = ['home', 'orbit', 'chat', 'create', 'network'];
+const sameOrder = (a: string[], b: string[]) => a.length === b.length && a.every((id, i) => id === b[i]);
 /** Spaces became Orbit; saved bars and start tabs that say 'communities' keep their slot. */
 const RENAMED: Record<string, string> = { communities: 'orbit' };
 const MAX_VISIBLE = 5;
@@ -58,6 +62,7 @@ function readOrder(): string[] {
     if (!Array.isArray(parsed)) return [...DEFAULT_NAV_ORDER];
     const cleaned = parsed.map((id: unknown) => (typeof id === 'string' ? RENAMED[id] ?? id : id)).filter((id: unknown): id is string => typeof id === 'string' && POOL_IDS.has(id));
     const deduped = Array.from(new Set(cleaned)).slice(0, MAX_VISIBLE);
+    if (sameOrder(deduped, PREVIOUS_DEFAULT_ORDER)) return [...DEFAULT_NAV_ORDER];
     return deduped.length >= MIN_VISIBLE ? deduped : [...DEFAULT_NAV_ORDER];
   } catch {
     return [...DEFAULT_NAV_ORDER];
@@ -116,9 +121,12 @@ export const useNavStore = defineStore('nav', {
         .map(id => NAV_ITEM_POOL.find(i => i.id === id))
         .filter((i): i is NavItemDef => !!i);
     },
-    /** Which tab HomePage opens on when no ?tab= is present: the first tab in the bar. */
+    /**
+     * Which tab HomePage opens on when no ?tab= is present: the first tab in the bar —
+     * except on the untouched default bar, which still opens on Feed (Messages leads that bar visually).
+     */
     defaultTab(state): string {
-      return firstTab(state.order);
+      return sameOrder(state.order, DEFAULT_NAV_ORDER) ? 'home' : firstTab(state.order);
     },
   },
 

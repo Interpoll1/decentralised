@@ -1,5 +1,6 @@
 <template>
   <aside class="app-right-sidebar">
+  <div class="ars-sticky">
 
     <!-- Explore spaces -->
     <section class="ars-section">
@@ -30,25 +31,22 @@
         </button>
         <p v-if="!communities.length" class="ars-empty">No spaces yet — create the first one.</p>
       </div>
-      <button class="ars-create" @click="router.push('/create-community')">
-        <svg viewBox="0 0 24 24" fill="none" width="14" height="14" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
-        Create space
-      </button>
     </section>
 
     <!-- Topics gaining momentum -->
     <section class="ars-section">
       <header class="ars-header">
         <h2>Topics gaining momentum</h2>
-        <span class="ars-pill">This week</span>
+        <span class="ars-pill">This week <svg viewBox="0 0 24 24" fill="none" width="11" height="11" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
       </header>
       <div v-if="trendingLoaded" class="ars-list">
         <button
-          v-for="row in trendingCategories"
+          v-for="(row, i) in trendingCategories"
           :key="row.tag || row.id"
           class="ars-row ars-topic"
           @click="router.push(row.tag ? `/home?tag=${row.tag}` : `/home?category=${row.id}`)"
         >
+          <span class="ars-rank">{{ i + 1 }}</span>
           <ion-icon v-if="row.icon" :icon="row.icon" :class="row.tone" class="ars-topic__icon"></ion-icon>
           <span class="ars-topic__label">{{ row.label }}</span>
           <span v-if="row.posts" class="ars-topic__count">{{ row.posts }} {{ row.posts === '1' ? 'post' : 'posts' }}</span>
@@ -73,6 +71,7 @@
       </div>
     </section>
 
+  </div>
   </aside>
 </template>
 
@@ -183,80 +182,77 @@ onMounted(async () => {
 }
 
 @media (min-width: 768px) {
-  .app-right-sidebar {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    width: 240px;
-    flex-shrink: 0;
-    position: sticky;
-    top: 72px;
-    align-self: flex-start;
-    max-height: calc(100vh - 88px);
-    overflow-y: auto;
-    scrollbar-width: none;
+  /* The column stretches the full height of the feed; its content stays pinned while the feed scrolls. */
+  .app-right-sidebar { display: block; border: 0 !important; background: none !important; box-shadow: none !important; padding: 0 !important; width: 232px; flex-shrink: 0; align-self: stretch; margin-left: auto; }
+  .ars-sticky {
+    border: 0 !important; background: none !important; padding: 0 !important;
+    display: flex; flex-direction: column; gap: 12px;
+    position: sticky; top: 16px; 
+    
   }
-  .app-right-sidebar::-webkit-scrollbar { display: none; }
 }
 
-@media (min-width: 1024px) { .app-right-sidebar { width: 268px; } }
-@media (min-width: 1280px) { .app-right-sidebar { width: 288px; } }
+@media (min-width: 1024px) { .app-right-sidebar { width: 272px; } }
+@media (min-width: 1280px) { .app-right-sidebar { width: 300px; } }
 
 .ars-section {
-  padding: 14px;
+  padding: 14px 16px;
   border-radius: 14px;
   background: var(--app-bg-elevated);
   border: 1px solid var(--app-border);
 }
 
-.ars-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-.ars-header h2, .ars-about h2 { margin: 0; font-size: 13.5px; font-weight: 700; letter-spacing: -0.005em; color: var(--app-text); }
+.ars-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.ars-header h2 { text-shadow: none; letter-spacing: normal !important; margin: 0; font-size: 14.5px; font-weight: 700; letter-spacing: -0.005em; color: var(--app-text); }
+/* Same wordmark style as the top-bar brand */
+.ars-about h2 { margin: 0; font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; font-size: 17px; font-weight: 750; letter-spacing: normal !important; line-height: 1.2; color: var(--app-text); text-shadow: none; }
 .ars-link { background: none; border: none; cursor: pointer; color: var(--app-accent); font: inherit; font-size: 12px; font-weight: 600; padding: 0; }
 .ars-pill {
-  padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--app-text-muted);
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; flex-shrink: 0; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--app-text-muted);
   background: rgba(255,255,255,0.04); border: 1px solid var(--app-border);
 }
 
-.ars-list { display: flex; flex-direction: column; gap: 2px; }
+.ars-list { display: flex; flex-direction: column; gap: 0; }
+.ars-list > .ars-row + .ars-row { border-top: 1px solid #2b332f; border-radius: 0; }
+.ars-list > .ars-row:first-child { border-top-left-radius: 10px; border-top-right-radius: 10px; }
+.ars-list > .ars-row:last-child { border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; }
 .ars-row {
-  display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 6px; border-radius: 10px; cursor: pointer;
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 9px 6px; border-radius: 10px; cursor: pointer;
   background: none; border: none; text-align: left; font: inherit; color: var(--app-text); transition: background 120ms;
 }
 .ars-row:hover { background: rgba(255,255,255,0.04); }
 .ars-chev { width: 15px; height: 15px; flex-shrink: 0; color: var(--app-text-subtle); margin-left: auto; }
 
 .ars-avatar {
-  width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex-shrink: 0;
-  font-size: 14px; font-weight: 800;
+  width: 44px; height: 44px; border-radius: 11px; border: 1px solid #2f3a35; box-sizing: border-box; display: grid; place-items: center; flex-shrink: 0;
+  font-size: 18px; font-weight: 700;
 }
-.tone-violet  { background: rgba(167,139,250,0.16); color: #c4b5fd; }
-.tone-blue    { background: rgba(59,130,246,0.16);  color: #93c5fd; }
-.tone-teal    { background: rgba(20,184,166,0.16);  color: #5eead4; }
-.tone-amber   { background: rgba(245,158,11,0.16);  color: #fcd34d; }
-.tone-rose    { background: rgba(236,72,153,0.16);  color: #f9a8d4; }
-.tone-general { background: rgba(var(--app-accent-rgb),0.14); color: var(--app-accent); }
-.tone-tech    { background: rgba(var(--app-accent-rgb),0.14); color: var(--app-accent); }
+.tone-violet  { background: #14131f; color: #c4b5fd; border-color: #3b3566; }
+.tone-blue    { background: #101827; color: #93c5fd; border-color: #25406b; }
+.tone-teal    { background: #0e1b1a; color: #5eead4; border-color: #1f4a45; }
+.tone-amber   { background: #1c1709; color: #fcd34d; border-color: #5a4713; }
+.tone-rose    { background: #1f1019; color: #f9a8d4; border-color: #5c2744; }
+.tone-general { background: #0b1a12; color: var(--app-accent); border-color: #1d6b3a; }
+.tone-tech    { background: #0b1a12; color: var(--app-accent); border-color: #1d6b3a; }
 .tone-politics{ background: rgba(239,68,68,0.15);   color: #fca5a5; }
 .tone-private { background: rgba(251,191,36,0.15);  color: #fcd34d; }
 .tone-nsfw    { background: rgba(236,72,153,0.15);  color: #f9a8d4; }
 
 .ars-info { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
-.ars-name { font-size: 13px; font-weight: 650; color: var(--app-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ars-meta { font-size: 11.5px; color: var(--app-text-muted); }
-.ars-desc { font-size: 11.5px; line-height: 1.35; color: var(--app-text-subtle); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ars-name { font-size: 14px; font-weight: 650; color: var(--app-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ars-meta { font-size: 12px; color: var(--app-text-muted); }
+.ars-desc { font-size: 11.5px; line-height: 1.35; color: var(--app-text-subtle); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
 
-.ars-create {
-  display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; margin-top: 8px; padding: 8px 12px; cursor: pointer;
-  border-radius: 10px; background: rgba(var(--app-accent-rgb), 0.08); border: 1px dashed rgba(var(--app-accent-rgb), 0.35);
-  color: var(--app-accent); font: inherit; font-size: 12.5px; font-weight: 650; transition: background 120ms;
-}
-.ars-create:hover { background: rgba(var(--app-accent-rgb), 0.14); }
 
-.ars-topic { padding: 9px 6px; }
+.ars-topic { padding: 8px 6px; }
+.ars-rank { width: 14px; flex-shrink: 0; text-align: center; font-size: 13px; font-weight: 600; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
 .ars-topic__icon { font-size: 16px; flex-shrink: 0; }
 .ars-topic__label { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ars-topic__count { font-size: 11.5px; color: var(--app-text-muted); white-space: nowrap; }
-.ars-topic .ars-chev { margin-left: 0; }
+.ars-topic__count {
+  padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; color: var(--app-text-muted);
+  background: rgba(255,255,255,0.05); border: 1px solid var(--app-border);
+}
+.ars-topic .ars-chev { display: none; }
 .ars-empty { margin: 4px 6px 2px; font-size: 12px; line-height: 1.5; color: var(--app-text-muted); }
 
 .ars-skeleton { display: flex; flex-direction: column; gap: 8px; }
@@ -267,4 +263,8 @@ onMounted(async () => {
 .ars-about-text { flex: 1; min-width: 0; }
 .ars-about-text p { font-size: 12px; color: var(--app-text-muted); margin: 4px 0 8px; line-height: 1.5; }
 .ars-about-link { font-size: 12.5px; }
+</style>
+<style>
+html.dark .app-right-sidebar .ars-section { border: 1px solid #2b332f !important; }
+html.dark .app-right-sidebar.app-right-sidebar, html.dark .app-right-sidebar .ars-sticky { border: 0 !important; background: transparent !important; background-image: none !important; box-shadow: none !important; }
 </style>

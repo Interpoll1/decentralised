@@ -33,7 +33,7 @@ export const PROTECTED_SOULS = new Set([
   `${GUN_NAMESPACE}/users`,
 ]);
 
-const NAMESPACED_ROOTS = new Set(['posts', 'communities', 'polls', 'postVotes', 'users', 'comments', 'commentVotes', 'events', 'chatrooms', 'chats', 'chat-presence', 'chat-read', 'chat-p2p', 'server-config', 'user-pubkey-index']);
+const NAMESPACED_ROOTS = new Set(['posts', 'communities', 'polls', 'postVotes', 'users', 'comments', 'commentVotes', 'events', 'chatrooms', 'chats', 'chat-presence', 'chat-read', 'chat-p2p', 'server-config', 'user-pubkey-index', 'nearby']);
 
 function createNamespacedProxy(gun: any, nsNode: any): any {
   return new Proxy(gun, {

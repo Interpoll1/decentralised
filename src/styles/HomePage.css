@@ -77,7 +77,7 @@ ion-header ion-toolbar {
    Gutter mirrors .ambient-page__content width + .hp-root padding-inline. */
 @media (min-width: 768px) {
   ion-header ion-toolbar {
-    --hp-gutter: calc((100% - min(1320px, 100% - 32px)) / 2 + 4px);
+    --hp-gutter: calc((100% - min(1320px, 100% - 64px)) / 2 + 4px);
     --padding-start: 0; --padding-end: 0;
     padding-inline-start: calc(var(--hp-gutter) + 16px);
     padding-inline-end:   calc(var(--hp-gutter) + 1px);

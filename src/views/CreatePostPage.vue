@@ -158,14 +158,13 @@ ion-content { --background: transparent; }
 .submit-btn {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 7px 18px; border-radius: 999px; border: none;
-  /* Inverts per theme: accent is #e6e6e6, which vanishes on the light theme's near-white header. */
-  background: var(--app-text); color: var(--app-bg-base);
+  background: #3dff7a !important; color: #04120a !important;
   font-size: 13.5px; font-weight: 700; cursor: pointer;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, .22);
+  box-shadow: 0 0 14px rgba(61, 255, 122, .3);
   transition: opacity 160ms, transform 160ms; margin-right: 8px;
 }
 .submit-btn:hover:not(:disabled) { opacity: .9; transform: translateY(-1px); }
-.submit-btn:disabled { opacity: .38; cursor: not-allowed; }
+.submit-btn:disabled { opacity: .45; cursor: not-allowed; }
 
 .btn-spinner {
   width: 15px; height: 15px;
@@ -337,6 +336,8 @@ const videoCID          = ref<string | null>(null);
 const videoThumbnailCID = ref<string | null>(null);
 const videoDuration     = ref<number>(0);
 const videoSize         = ref<number>(0);
+const videoWidth        = ref<number>(0);
+const videoHeight       = ref<number>(0);
 const videoMimeType     = ref<string>('video/mp4');
 
 function onVideoUploaded(meta: VideoMeta) {
@@ -344,6 +345,8 @@ function onVideoUploaded(meta: VideoMeta) {
   videoThumbnailCID.value = meta.thumbnailCID || null;
   videoDuration.value     = meta.duration;
   videoSize.value         = meta.size;
+  videoWidth.value        = meta.width  || 0;
+  videoHeight.value       = meta.height || 0;
   videoMimeType.value     = meta.mimeType;
 }
 function onVideoCleared() {
@@ -351,6 +354,8 @@ function onVideoCleared() {
   videoThumbnailCID.value = null;
   videoDuration.value     = 0;
   videoSize.value         = 0;
+  videoWidth.value        = 0;
+  videoHeight.value       = 0;
   videoMimeType.value     = 'video/mp4';
 }
 
@@ -471,6 +476,8 @@ const submitPost = async () => {
         videoThumbnailCID: videoThumbnailCID.value || undefined,
         videoDuration:     videoDuration.value     || undefined,
         videoSize:         videoSize.value         || undefined,
+        videoWidth:        videoWidth.value        || undefined,
+        videoHeight:       videoHeight.value       || undefined,
         videoMimeType:     videoMimeType.value     || undefined,
       } : {}),
     });
