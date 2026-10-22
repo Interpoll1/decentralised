@@ -157,15 +157,15 @@ export default defineConfig({
           name: 'InterPoll',
           short_name: 'InterPoll',
           description: 'Decentralized, censorship-resistant polling & discussion',
-          theme_color: '#1a1a1a',
-          background_color: '#1a1a1a',
+          theme_color: '#07110b',
+          background_color: '#040506',
           display: 'standalone',
           start_url: '/',
           icons: [
             { src: '/pwa-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
             { src: '/pwa-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
             { src: '/pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-            { src: '/pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+            { src: '/pwa-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
           ],
         },
         workbox: {

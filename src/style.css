@@ -1,6 +1,7 @@
 :root {
   color-scheme: light;
   font-family: "Inter", "Geist Sans", system-ui, sans-serif;
+  --system-chrome-color: #eef6f0;
 
   --app-bg-deep: #dde4f5;
   --app-bg-base: #f6f6f6;
@@ -165,6 +166,7 @@
 html.dark,
 body.dark {
   color-scheme: dark;
+  --system-chrome-color: #07110b;
   --app-bg-deep: #060807;
   --app-bg-base: #090b0a;
   --app-bg-elevated: #111513;
@@ -278,7 +280,7 @@ ion-content.nav-hidden-bottom {
 
 html,
 body {
-  background: var(--aurora-base-bg);
+  background: var(--system-chrome-color);
   color: var(--app-text);
 }
 

@@ -2,29 +2,68 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/svg+xml" href="/pwa-icon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Web fonts: loaded without blocking first paint. The stylesheet is fetched
+         as a preload and flipped to rel=stylesheet once it arrives; display=swap
+         shows the fallback font until the real one is ready. (An @import inside
+         the bundled CSS used to sit in the render-blocking path.) -->
+    <link
+      rel="preload"
+      as="style"
+      href="https://fonts.googleapis.com/css2?family=Grand+Hotel&family=Cormorant+Garamond:ital@1&display=swap"
+      onload="this.onload=null;this.rel='stylesheet'"
+    />
+    <noscript>
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Grand+Hotel&family=Cormorant+Garamond:ital@1&display=swap" />
+    </noscript>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta
       name="description"
       content="Interpoll is a browser-first decentralized social and polling app for communities, posts, chat, and verifiable voting."
     />
-    <title>InterPoll — decentralized polls, no company in control</title>
+    <title>InterPoll - decentralized polls, no company in control</title>
+    <link rel="canonical" href="https://endless.sbs/" />
+    <meta name="keywords" content="polls, voting, community, discussions, opinions, interpoll" />
+    <meta name="author" content="Interpoll" />
+    <meta name="robots" content="index, follow" />
+
+    <!-- PWA / mobile chrome. Keep theme-color in sync with the manifest
+         theme_color in vite.config.ts. -->
+    <meta name="theme-color" content="#07110b" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="InterPoll" />
+    <meta name="mobile-web-app-capable" content="yes" />
 
     <!-- Open Graph / social link previews -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="InterPoll" />
     <meta property="og:title" content="InterPoll — decentralized polls, no company in control" />
     <meta property="og:description" content="Create polls and discussions that live across peers, not one company's servers. Every vote is cryptographically signed and tamper-evident." />
-    <meta property="og:image" content="/og-preview.svg" />
-    <meta property="og:url" content="https://interpoll.endless.sbs/" />
+    <meta property="og:image" content="https://endless.sbs/og-preview.webp" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/webp" />
+    <meta property="og:image:alt" content="InterPoll — decentralized polls" />
+    <meta property="og:url" content="https://endless.sbs/" />
+    <meta property="og:locale" content="en_US" />
 
     <!-- Twitter card -->
+    <meta name="twitter:image:alt" content="InterPoll — decentralized polls" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="InterPoll — decentralized polls, no company in control" />
     <meta name="twitter:description" content="Create polls and discussions that live across peers, not one company's servers. Every vote is cryptographically signed and tamper-evident." />
-    <meta name="twitter:image" content="/og-preview.svg" />
+    <meta name="twitter:image" content="https://endless.sbs/og-preview.webp" />
+    <script type="application/ld+json">
+      {"@context":"https://schema.org","@type":"WebApplication","name":"InterPoll","url":"https://endless.sbs/","applicationCategory":"SocialNetworkingApplication","operatingSystem":"Any","description":"Decentralized social and polling app for communities, posts, chat, and verifiable voting.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}
+    </script>
     <script>
       // Apply dark mode class ASAP to prevent flash of light theme.
       // Only target <html> here since <body> doesn't exist yet in <head>.
@@ -36,16 +75,51 @@
         }
       })();
     </script>
-    <script type="module" crossorigin src="/assets2/index-CBRTm0T4.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets2/vendor-misc-D3onbQe-.js">
-    <link rel="modulepreload" crossorigin href="/assets2/vendor-vue-BiYa0jMH.js">
-    <link rel="modulepreload" crossorigin href="/assets2/vendor-ionic-Dz2FvtR9.js">
-    <link rel="modulepreload" crossorigin href="/assets2/vendor-crypto-CBqg2YUR.js">
-    <link rel="modulepreload" crossorigin href="/assets2/vendor-gun-C-Wo9m74.js">
-    <link rel="stylesheet" crossorigin href="/assets2/vendor-ionic-DQHlluBt.css">
-    <link rel="stylesheet" crossorigin href="/assets2/index-B6hJgDFe.css">
+    <script type="module" crossorigin src="/assets2/index-DqprwROe.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets2/vendor-vue-DNn6ZPEM.js">
+    <link rel="modulepreload" crossorigin href="/assets2/vendor-ionic-DPTloh-B.js">
+    <link rel="modulepreload" crossorigin href="/assets2/vendor-ionicons-B64FNN1M.js">
+    <link rel="modulepreload" crossorigin href="/assets2/vendor-crypto-B_ca_2PK.js">
+    <link rel="modulepreload" crossorigin href="/assets2/vendor-misc-B0Pn0cC7.js">
+    <link rel="stylesheet" crossorigin href="/assets2/vendor-ionic-Bs7VIY7J.css">
+    <link rel="stylesheet" crossorigin href="/assets2/index-D06Ut2aX.css">
   </head>
   <body>
-    <div id="app"></div>
+    <!-- Boot splash: shown until Vue mounts and replaces #app's content.
+         Bundles can take many seconds on a cold CDN edge; without this the
+         page is blank. Inline-styled because no CSS has loaded yet. -->
+    <div id="app">
+      <noscript><h1>InterPoll</h1><p>Decentralized polls and discussions with cryptographically signed, verifiable votes. Enable JavaScript to use the app.</p></noscript>
+      <div id="boot-splash" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#1a1a1a;color:#d0d0d0;font:15px system-ui,-apple-system,sans-serif;text-align:center;padding:16px">
+        <style>
+          html:not(.dark) #boot-splash{background:#f8f8f8!important;color:#4f4f4f!important}
+          #boot-splash .bs-logo{font:400 56px/1 "Grand Hotel",cursive,system-ui;background:linear-gradient(160deg,#fff,#ff7a70);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+          html:not(.dark) #boot-splash .bs-logo{background:linear-gradient(160deg,#ff3a2c,#ff3729);-webkit-background-clip:text;background-clip:text}
+          #boot-splash .bs-net line{stroke:#ff6055;stroke-opacity:.25;stroke-width:1}
+          #boot-splash .bs-net circle{fill:#ff7a70;animation:bs-pulse 2.4s ease-in-out infinite}
+          #boot-splash .bs-net circle:nth-of-type(2){animation-delay:.3s}#boot-splash .bs-net circle:nth-of-type(3){animation-delay:.6s}
+          #boot-splash .bs-net circle:nth-of-type(4){animation-delay:.9s}#boot-splash .bs-net circle:nth-of-type(5){animation-delay:1.2s}
+          #boot-splash .bs-net circle:nth-of-type(6){animation-delay:1.5s}
+          @keyframes bs-pulse{0%,100%{opacity:.25;transform:scale(.7)}50%{opacity:1;transform:scale(1.25)}}
+          #boot-splash .bs-net circle{transform-box:fill-box;transform-origin:center}
+          @media (prefers-reduced-motion:reduce){#boot-splash .bs-net circle{animation:none;opacity:.7}}
+        </style>
+        <div class="bs-logo">Interpoll</div>
+        <svg class="bs-net" width="220" height="70" viewBox="0 0 220 70" aria-hidden="true">
+          <line x1="20" y1="35" x2="70" y2="15"/><line x1="20" y1="35" x2="70" y2="55"/>
+          <line x1="70" y1="15" x2="125" y2="35"/><line x1="70" y1="55" x2="125" y2="35"/>
+          <line x1="125" y1="35" x2="175" y2="15"/><line x1="125" y1="35" x2="175" y2="55"/>
+          <line x1="175" y1="15" x2="200" y2="35"/><line x1="175" y1="55" x2="200" y2="35"/>
+          <circle cx="20" cy="35" r="5"/><circle cx="70" cy="15" r="5"/><circle cx="70" cy="55" r="5"/>
+          <circle cx="125" cy="35" r="6"/><circle cx="175" cy="15" r="5"/><circle cx="175" cy="55" r="5"/>
+        </svg>
+        <div style="opacity:.75">Connecting to peers…</div>
+        <div id="boot-slow" style="display:none;max-width:320px;font-size:13px;opacity:.8">
+          This is taking longer than usual.
+          <a href="" onclick="location.reload();return false" style="color:#ff7a70">Reload</a>
+        </div>
+        <script>setTimeout(function(){var e=document.getElementById('boot-slow');if(e)e.style.display='block'},15000)</script>
+      </div>
+    </div>
   </body>
 </html>

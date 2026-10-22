@@ -23,7 +23,8 @@ onMounted(async () => {
 
   // Navigate back to where the user was before login
   const returnUrl = AuditService.consumeReturnUrl();
-  router.replace(returnUrl);
+  await router.replace(returnUrl);
+  window.dispatchEvent(new Event('interpoll:user-logged-in'));
 });
 </script>
 

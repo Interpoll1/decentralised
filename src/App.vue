@@ -8,6 +8,7 @@
     <GlobalCommandPalette :is-open="globalPaletteOpen" @close="closeGlobalPalette" />
     <CallOverlay />
     <BitCoach v-if="appReady" />
+    <DownloadAppPrompt />
   </ion-app>
 </template>
 
@@ -29,6 +30,7 @@ import AppErrorBoundary from './components/AppErrorBoundary.vue';
 import GlobalCommandPalette from './components/GlobalCommandPalette.vue';
 import CallOverlay from './components/CallOverlay.vue';
 import BitCoach from './components/BitCoach.vue';
+import DownloadAppPrompt from './components/DownloadAppPrompt.vue';
 import AuroraBackground from './components/AuroraBackground.vue';
 
 const chainStore = useChainStore();
@@ -40,6 +42,14 @@ let visibilityHandler: (() => void) | null = null;
 let wireWatchdogTimer: ReturnType<typeof setInterval> | null = null;
 let internalLinkHandler: ((event: MouseEvent) => void) | null = null;
 let keydownHandler: ((event: KeyboardEvent) => void) | null = null;
+let themeObserver: MutationObserver | null = null;
+
+function syncSystemChrome() {
+  const dark = document.documentElement.classList.contains('dark');
+  const color = dark ? '#07110b' : '#eef6f0';
+  document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute('content', color);
+  document.documentElement.style.setProperty('--system-chrome-color', color);
+}
 
 function isTypingTarget(event: KeyboardEvent): boolean {
   const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
@@ -98,6 +108,9 @@ onMounted(async () => {
     document.body?.classList.add('dark');
     if (!storedTheme) localStorage.setItem('theme', 'dark');
   }
+  syncSystemChrome();
+  themeObserver = new MutationObserver(syncSystemChrome);
+  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
   internalLinkHandler = (event: MouseEvent) => {
     if (
@@ -204,6 +217,7 @@ onUnmounted(() => {
   if (keydownHandler) {
     document.removeEventListener('keydown', keydownHandler);
   }
+  themeObserver?.disconnect();
 });
 </script>
 

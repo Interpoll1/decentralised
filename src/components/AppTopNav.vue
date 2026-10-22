@@ -13,7 +13,7 @@
         </button>
       </nav>
 
-      <form class="atn-search" role="search" @submit.prevent="submitSearch">
+      <form class="atn-search" data-tour="search" role="search" @submit.prevent="submitSearch">
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
         <input v-model="query" type="search" placeholder="Search Interpoll" aria-label="Search Interpoll" autocomplete="off" spellcheck="false" enterkeyhint="search" @focus="onSearchFocus" @input="onSearchInput" />
       </form>
@@ -23,7 +23,7 @@
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
           Publish
         </button>
-        <button class="atn-icon atn-relay" aria-label="Relay & network" title="Relay & network" @click="emit('open-relay')">
+        <button class="atn-icon atn-relay" data-tour="relay" aria-label="Relay & network" title="Relay & network" @click="emit('open-relay')">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 20v-8M8.5 16.5C7 15.2 6 13.2 6 11a6 6 0 0112 0c0 2.2-1 4.2-2.5 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>
           <RelayIndicator :compact="true" class="atn-live" />
         </button>
@@ -74,8 +74,8 @@ const tabs: Array<{ id: TabId; label: string; icon: string; tour?: string }> = [
   { id: 'home', label: 'Home', tour: 'home', icon: '<path d="M4 10.5L12 4l8 6.5V19a1.5 1.5 0 01-1.5 1.5H15v-5.5a1 1 0 00-1-1h-4a1 1 0 00-1 1v5.5H5.5A1.5 1.5 0 014 19z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>' },
   { id: 'orbit', label: 'Orbit', tour: 'orbit', icon: '<circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.8" stroke-dasharray="2 3"/><circle cx="19" cy="9" r="1.6" fill="currentColor"/><circle cx="6" cy="17" r="1.3" fill="currentColor"/>' },
   { id: 'chat', label: 'Messages', tour: 'chat', icon: '<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>' },
-  { id: 'network', label: 'Network', icon: '<circle cx="12" cy="5.5" r="2.2" stroke="currentColor" stroke-width="1.8"/><circle cx="5.5" cy="18" r="2.2" stroke="currentColor" stroke-width="1.8"/><circle cx="18.5" cy="18" r="2.2" stroke="currentColor" stroke-width="1.8"/><path d="M11 7.4L6.5 16M13 7.4l4.5 8.6M7.7 18h8.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' },
-  { id: 'settings', label: 'Settings', icon: '<circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' },
+  { id: 'network', label: 'Network', tour: 'network', icon: '<circle cx="12" cy="5.5" r="2.2" stroke="currentColor" stroke-width="1.8"/><circle cx="5.5" cy="18" r="2.2" stroke="currentColor" stroke-width="1.8"/><circle cx="18.5" cy="18" r="2.2" stroke="currentColor" stroke-width="1.8"/><path d="M11 7.4L6.5 16M13 7.4l4.5 8.6M7.7 18h8.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' },
+  { id: 'settings', label: 'Settings', tour: 'settings', icon: '<circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' },
 ];
 
 const active = computed<TabId | ''>(() => {
@@ -240,3 +240,18 @@ const menuItems = computed(() => {
   .atn-search { max-width: 220px; }
 }
 </style>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

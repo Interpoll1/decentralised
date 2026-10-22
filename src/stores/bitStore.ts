@@ -21,6 +21,8 @@ export interface TourStep {
   target?: string;
   title: string;
   body: string;
+  /** Used instead of `target` on phones, where the desktop element doesn't exist. */
+  mobileTarget?: string;
   /** When true the user must click the highlighted element (Next is still offered as a fallback). */
   clickToAdvance?: boolean;
   mood?: 'idle' | 'happy' | 'wave' | 'alert';
@@ -28,17 +30,17 @@ export interface TourStep {
 
 export const BASE_TOUR_STEPS: TourStep[] = [
   { id: 'hi', title: 'Hi, I\'m Bit', mood: 'wave',
-    body: 'I\'ll show you around in under a minute. Nothing here is run by a company — your posts and votes live on peers, signed by a key only you hold.' },
-  { id: 'feed', target: 'home', title: 'This is your feed', mood: 'idle',
-    body: 'Polls and posts from every space show up here. Switch between For You and Latest at the top.' },
-  { id: 'orbit', target: 'orbit', clickToAdvance: true, title: 'Orbit is your network', mood: 'happy',
-    body: 'Click Orbit. See your relays, live peers, spaces and contacts around you — tap anything to open it.' },
-  { id: 'publish', target: 'create', clickToAdvance: true, title: 'Make something', mood: 'happy',
-    body: 'Click Publish to start a poll, post, or a new space. Every vote is signed on your device.' },
-  { id: 'chat', target: 'chat', clickToAdvance: true, title: 'Message people', mood: 'idle',
-    body: 'Click Messages. Chats are end-to-end encrypted — share your link or start a group.' },
-  { id: 'username', target: 'profile', title: 'Pick a username', mood: 'alert',
-    body: 'Until you do, people see a random name like "swift-bridge-vulture". Claiming one takes ten seconds.' },
+    body: 'Two minutes, no tab-by-tab walkthrough — I\'ll only point out the things people usually miss. Nothing here is run by a company: your posts and votes live on peers, signed by a key only you hold.' },
+  { id: 'scopes', target: 'feed-scopes', title: 'Choose what you see', mood: 'idle',
+    body: 'My Spaces, This Relay, Explore and Nearby change where posts come from. Explore is the widest; Nearby only shows people around you (and only if you opt in).' },
+  { id: 'search', target: 'search', title: 'Search finds spaces too', mood: 'happy',
+    body: 'Posts, polls and spaces by name. On a computer, just click the bar — results open right away as you type.' },
+  { id: 'relay', target: 'relay', mobileTarget: 'network', title: 'Check your connection', mood: 'idle',
+    body: 'The little dot shows whether your relay is reachable. Open it to see peers, switch relays or add your own — handy when something won\'t load.' },
+  { id: 'map', target: 'orbit', title: 'See who\'s around', mood: 'happy',
+    body: 'Orbit\'s Map shows people, meetups and spaces near you, down to the whole world. It\'s opt-in: you pick how rough your area is, and nothing is shared until you turn it on.' },
+  { id: 'username', target: 'profile', mobileTarget: 'settings', title: 'Pick a username', mood: 'alert',
+    body: 'Until you do, people see a random name like "swift-bridge-vulture". Claiming one takes ten seconds — find it in your profile menu.' },
 ];
 
 /** Bottom bar only exists on phones (< 768px), so this step is mobile-only. */
@@ -58,7 +60,7 @@ const PHRASE_SAVED_KEY = 'interpoll_phrase_saved';
 export function phraseSaved(): boolean { try { return localStorage.getItem(PHRASE_SAVED_KEY) === 'true'; } catch { return false; } }
 /** Tour steps for this device: if the setup wizard never saved a phrase, nudge toward Settings before the username step. */
 export function buildTourSteps(): TourStep[] {
-  const steps = [...BASE_TOUR_STEPS];
+  const steps = BASE_TOUR_STEPS.map(st => (isNarrow() && st.mobileTarget ? { ...st, target: st.mobileTarget } : st));
   if (isNarrow()) steps.splice(1, 0, NAV_STEP);   // 2nd, phones only
   if (phraseSaved()) return steps;
   steps.splice(steps.length - 1, 0, BACKUP_STEP);

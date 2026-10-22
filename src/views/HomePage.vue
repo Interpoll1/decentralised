@@ -9,7 +9,7 @@
           <ion-button v-if="canScanQr" @click="scanQr()" aria-label="Scan QR code">
             <ion-icon :icon="qrCodeOutline"></ion-icon>
           </ion-button>
-          <ion-button @click="$router.push('/search')">
+          <ion-button data-tour="search" @click="$router.push('/search')">
             <ion-icon :icon="searchOutline"></ion-icon>
           </ion-button>
           <ion-button @click="$router.push('/profile')">
@@ -104,7 +104,7 @@
             <!-- Feed toolbar: pill row on mobile, split tabs on desktop -->
             <div class="feed-toolbar">
               <!-- Mobile row 1: scope + mode pills -->
-              <div class="feed-pills-row">
+              <div class="feed-pills-row" data-tour="feed-scopes">
                 <button class="scope-pill" :class="{ active: feedScope === 'mine' }"  @click="setScope('mine')">
                   <svg viewBox="0 0 24 24" width="13" height="13" fill="none"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
                   Mine
@@ -141,7 +141,7 @@
             <!-- Desktop only: split scope tabs + mode toggle -->
             <div class="feed-toolbar feed-toolbar--desktop">
               <div class="feed-toolbar-row">
-                <div class="feed-scope-tabs">
+                <div class="feed-scope-tabs" data-tour="feed-scopes">
                   <button class="scope-tab" :class="{ active: feedScope === 'mine' }"  @click="setScope('mine')">
                     <ion-icon :icon="bookmarkOutline"></ion-icon> My Spaces
                   </button>
