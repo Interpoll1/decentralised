@@ -197,9 +197,12 @@
           </button>
         </div>
 
-        <div v-if="emojiOpen" class="emoji-grid">
-          <button v-for="e in EMOJI_PICKER" :key="e" class="emoji-cell" @click="insertEmoji(e)">{{ e }}</button>
-        </div>
+        <Teleport to="body">
+          <div v-if="emojiOpen" class="pop-backdrop" @click="emojiOpen = false"></div>
+          <div v-if="emojiOpen" class="pop emoji-grid" :style="emojiStyle" role="menu">
+            <button v-for="e in EMOJI_PICKER" :key="e" class="emoji-cell" @click="insertEmoji(e)">{{ e }}</button>
+          </div>
+        </Teleport>
 
         <div class="composer" :class="{ 'composer--rec': recording }">
           <template v-if="recording">
@@ -250,7 +253,7 @@
                 rows="1"
                 aria-label="Message"
               />
-              <button class="icon-btn icon-btn--sm" :class="{ 'icon-btn--on': emojiOpen }" aria-label="Emoji" @click="emojiOpen = !emojiOpen; attachOpen = false">
+              <button class="icon-btn icon-btn--sm" :class="{ 'icon-btn--on': emojiOpen }" aria-label="Emoji" @click="toggleEmoji($event)">
                 <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.8"/><path d="M8.5 14c.9 1.3 2.1 2 3.5 2s2.6-.7 3.5-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="9.3" cy="9.8" r="1.1" fill="currentColor"/><circle cx="14.7" cy="9.8" r="1.1" fill="currentColor"/></svg>
               </button>
             </div>
@@ -267,6 +270,7 @@
     </ion-footer>
 
     <!-- Message actions -->
+    <Teleport to="body">
     <div v-if="menu" class="menu-backdrop" @click="closeMenu" @contextmenu.prevent="closeMenu">
       <div class="menu" :style="menu.style" role="menu" @click.stop>
         <div class="menu-reacts">
@@ -289,6 +293,7 @@
         </template>
       </div>
     </div>
+    </Teleport>
 
     <!-- Poll composer -->
     <ion-modal :is-open="pollOpen" class="sheet" @didDismiss="pollOpen = false">
@@ -449,6 +454,20 @@ function placePop(ev: Event, above: boolean) {
   popStyle.value = above
     ? { left: `${Math.max(8, r.left)}px`, bottom: `${window.innerHeight - r.top + 8}px` }
     : { right: `${Math.max(8, window.innerWidth - r.right)}px`, top: `${r.bottom + 4}px` };
+}
+const emojiStyle = ref<Record<string, string>>({});
+function toggleEmoji(ev: Event) {
+  attachOpen.value = false;
+  if (!emojiOpen.value) {
+    const r = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+    const w = Math.min(320, window.innerWidth - 16);
+    emojiStyle.value = {
+      left: `${Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8))}px`,
+      bottom: `${window.innerHeight - r.top + 8}px`,
+      width: `${w}px`,
+    };
+  }
+  emojiOpen.value = !emojiOpen.value;
 }
 function toggleOverflow(ev: Event) { attachOpen.value = false; if (!overflowOpen.value) placePop(ev, false); overflowOpen.value = !overflowOpen.value; }
 function toggleAttach(ev: Event) { overflowOpen.value = false; emojiOpen.value = false; if (!attachOpen.value) placePop(ev, true); attachOpen.value = !attachOpen.value; }
@@ -1185,7 +1204,7 @@ ion-toolbar { --border-width: 0 !important; --background: var(--app-bg-elevated)
 .rec-hint { font-weight: 400; font-size: 13.5px; color: var(--app-text-muted); }
 
 /* ── Message actions menu ── */
-.menu-backdrop { position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, 0.15); }
+.menu-backdrop { position: fixed; inset: 0; z-index: 9998; background: rgba(0, 0, 0, 0.15); }
 .menu { position: fixed; padding: 6px; border-radius: 16px; background: var(--app-bg-elevated); border: 1px solid var(--app-border-strong, var(--app-border)); box-shadow: var(--app-shadow-lg, 0 18px 44px rgba(0,0,0,.35)); }
 .menu-reacts { display: flex; justify-content: space-between; padding: 2px 2px 6px; border-bottom: 1px solid var(--app-border); margin-bottom: 4px; }
 .menu-react { width: 38px; height: 38px; border: none; border-radius: 50%; background: none; font-size: 23px; cursor: pointer; transition: transform 120ms ease; }

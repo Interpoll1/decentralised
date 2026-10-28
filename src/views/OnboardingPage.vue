@@ -33,7 +33,7 @@
               </span>
               <div class="ob-option-body">
                 <strong>InterPoll public relay</strong>
-                <span>interpoll2.endless.sbs — open, censorship-resistant</span>
+                <span>interpoll2.endless.social — open, censorship-resistant</span>
               </div>
               <span class="ob-option-check" v-if="relayChoice === 'default'">✓</span>
             </button>

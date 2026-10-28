@@ -66,9 +66,9 @@ describe('VoteTierService.tierOf', () => {
     const issuer = keypair();
     const voter = keypair();
     vi.spyOn(TrustService, 'getIssuers').mockResolvedValue(
-      [{ domain: 'endless.sbs', endpoint: '', publicKey: issuer.pub }] as any,
+      [{ domain: 'endless.social', endpoint: '', publicKey: issuer.pub }] as any,
     );
-    const cert = issuerCert(issuer.priv, 'endless.sbs', voter.pub);
+    const cert = issuerCert(issuer.priv, 'endless.social', voter.pub);
     const ev = baseEvent(voter.pub, 'poll1', [['trust_cert', JSON.stringify(cert)]]);
     expect(await VoteTierService.tierOf(ev)).toBe('issuer');
   });
@@ -78,9 +78,9 @@ describe('VoteTierService.tierOf', () => {
     const victim = keypair();
     const attacker = keypair();
     vi.spyOn(TrustService, 'getIssuers').mockResolvedValue(
-      [{ domain: 'endless.sbs', endpoint: '', publicKey: issuer.pub }] as any,
+      [{ domain: 'endless.social', endpoint: '', publicKey: issuer.pub }] as any,
     );
-    const cert = issuerCert(issuer.priv, 'endless.sbs', victim.pub); // binds victim, not attacker
+    const cert = issuerCert(issuer.priv, 'endless.social', victim.pub); // binds victim, not attacker
     const ev = baseEvent(attacker.pub, 'poll1', [['trust_cert', JSON.stringify(cert)]]);
     expect(await VoteTierService.tierOf(ev)).toBe('anonymous');
   });

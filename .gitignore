@@ -125,3 +125,9 @@ HANDOFF*.md
 # Root-level notes/handoffs (README.md stays)
 /CHANGES.md
 relay-push/.push-notifications.*.cjs
+
+# One-off ops scripts (kept locally, not part of the public repo)
+/bash.sh
+/probe-community-writes.cjs
+/repair-community-husks.cjs
+/restore-gtaclips.cjs

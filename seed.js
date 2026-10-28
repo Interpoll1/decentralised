@@ -3,8 +3,8 @@
 // MySQL DB via the /api/seed endpoint (bypasses Gun WebSocket reliability issues).
 // Run: node seed.js
 
-const GUN_RELAY  = process.env.GUN_RELAY  || 'https://interpoll2.endless.sbs';
-const API_SERVER = process.env.API_SERVER || 'https://interpoll.endless.sbs';
+const GUN_RELAY  = process.env.GUN_RELAY  || 'https://interpoll2.endless.social';
+const API_SERVER = process.env.API_SERVER || 'https://interpoll.endless.social';
 const NAMESPACE  = 'v2';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

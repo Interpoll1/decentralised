@@ -9,17 +9,17 @@ served from the production VPS; edit here, then copy them to the VPS (see Deploy
 | `/install.ps1` | `install.ps1` | Home server, Windows (Scheduled Task at startup, firewall rule). ASCII-only so `irm \| iex` decodes cleanly. |
 | `/vps.sh` (also `/install-relay-vps.sh`) | `vps.sh` | Cloud VPS: Docker + Caddy (auto-TLS). `curl … \| sudo bash -s relay.example.com [email]` |
 | `/relay-kit/relay.js`, `/relay-kit/package.json` | `kit/` | The relay itself, downloaded by all three installers. |
-| `wss://interpoll.endless.sbs/tunnel` | `relay-bridge-server.js` | Tunnel bridge for the in-browser relay (`src/services/browserRelayService.ts`). |
+| `wss://interpoll.endless.social/tunnel` | `relay-bridge-server.js` | Tunnel bridge for the in-browser relay (`src/services/browserRelayService.ts`). |
 
 The relay (`kit/relay.js`) is a plain Gun relay that meshes with
-`UPSTREAM_PEERS` (default `https://interpoll2.endless.sbs/gun`) and dials them
+`UPSTREAM_PEERS` (default `https://interpoll2.endless.social/gun`) and dials them
 at startup — Gun on Node otherwise connects lazily on first read, so a relay
 nobody reads from would never forward writes upstream.
 
 ## Browser-tab relay
 
 A tab can't accept connections, so it registers with the bridge and gets
-`wss://interpoll.endless.sbs/tunnel/<id>/gun`. Each peer that connects there is
+`wss://interpoll.endless.social/tunnel/<id>/gun`. Each peer that connects there is
 multiplexed over the tab's socket (`open` / `msg` / `close` frames keyed by a
 client id) and plugged into the tab's Gun mesh as a virtual peer. Path-based,
 so no wildcard DNS or wildcard certificate is needed. Limits: 50 peers per tab,

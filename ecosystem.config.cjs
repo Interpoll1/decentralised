@@ -27,8 +27,8 @@ module.exports = {
       env: {
         PORT: 3001,
         NODE_ENV: 'production',
-        DOMAIN: process.env.DOMAIN || 'https://endless.sbs',
-        FRONTEND_ORIGIN: process.env.FRONTEND_ORIGIN || 'https://endless.sbs',
+        DOMAIN: process.env.DOMAIN || 'https://endless.social',
+        FRONTEND_ORIGIN: process.env.FRONTEND_ORIGIN || 'https://endless.social',
         MYSQL_HOST: process.env.MYSQL_HOST || '127.0.0.1',
         MYSQL_USER: process.env.MYSQL_USER || '',
         MYSQL_PASSWORD: process.env.MYSQL_PASSWORD || '',

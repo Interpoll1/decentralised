@@ -1,6 +1,6 @@
 const TRUST_ISSUER_DOMAINS = new Set([
   'endles.sbs',
-  'endless.sbs',
+  'endless.social',
 ]);
 
 export type IdentityTrustLevel = 'trusted-issuer' | 'unverified';

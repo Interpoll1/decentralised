@@ -240,7 +240,7 @@ export class AuditService {
     const startUrl = `${this.getTrustedApiBase()}/auth/${provider}/start`;
 
     // In the native shell a full-page redirect can't come back: the OAuth
-    // callback lands on the web origin (endless.sbs), a different origin than
+    // callback lands on the web origin (endless.social), a different origin than
     // the app's https://localhost WebView, so the session/redirect is lost.
     // Instead open the system browser and rely on a deep-link return.
     //

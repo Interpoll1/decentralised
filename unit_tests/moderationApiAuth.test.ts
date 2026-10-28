@@ -34,7 +34,7 @@ describe('ModerationService.authenticateModerationApiKey', () => {
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe(`${MODERATION_API_DEFAULT_BASE_URL}/v1/api-keys`);
-    expect(url).toBe('https://interpoll.endless.sbs/moderation/v1/api-keys');
+    expect(url).toBe('https://interpoll.endless.social/moderation/v1/api-keys');
     expect(init.headers.Authorization).toBe('Bearer mod_sk_admin');
   });
 
@@ -65,7 +65,7 @@ describe('ModerationService.authenticateModerationApiKey', () => {
   });
 
   it('migrates a saved legacy site-root base URL to the /moderation prefix', () => {
-    storage.set('moderation_settings', JSON.stringify({ moderationApiBaseUrl: 'https://interpoll.endless.sbs/' }));
+    storage.set('moderation_settings', JSON.stringify({ moderationApiBaseUrl: 'https://interpoll.endless.social/' }));
     expect(ModerationService.getSettings().moderationApiBaseUrl).toBe(MODERATION_API_DEFAULT_BASE_URL);
   });
 

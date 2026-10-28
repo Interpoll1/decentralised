@@ -19,11 +19,11 @@ openssl rand -hex 32   # → TURN_SECRET (keep it; used by coturn AND the relay)
 ```
 use-auth-secret
 static-auth-secret=<TURN_SECRET>
-realm=turn.endless.sbs
+realm=turn.endless.social
 listening-port=3478
 tls-listening-port=5349
-cert=/etc/letsencrypt/live/turn.endless.sbs/fullchain.pem
-pkey=/etc/letsencrypt/live/turn.endless.sbs/privkey.pem
+cert=/etc/letsencrypt/live/turn.endless.social/fullchain.pem
+pkey=/etc/letsencrypt/live/turn.endless.social/privkey.pem
 min-port=49160
 max-port=49200
 fingerprint
@@ -62,7 +62,7 @@ Add to the relay's env (PM2 ecosystem / `.env`), then restart the relay:
 
 ```
 TURN_SECRET=<same secret as coturn>
-TURN_URLS=turn:turn.endless.sbs:3478,turns:turn.endless.sbs:5349
+TURN_URLS=turn:turn.endless.social:3478,turns:turn.endless.social:5349
 ```
 
 When either one is unset, `GET /api/turn-credentials` returns 503. Calls then run
@@ -71,9 +71,9 @@ STUN-only, which still works for most NATs.
 ## 5. Verify
 
 ```bash
-curl -s https://interpoll.endless.sbs/api/turn-credentials   # → 401 without auth (expected; needs session or ?pk&ts&sig)
+curl -s https://interpoll.endless.social/api/turn-credentials   # → 401 without auth (expected; needs session or ?pk&ts&sig)
 # Easiest real check: start a call in the app with DevTools open and inspect the 200 response.
-turnutils_uclient -u <username> -w <credential> turn.endless.sbs
+turnutils_uclient -u <username> -w <credential> turn.endless.social
 ```
 
 Credentials have a 1 h TTL. The username is `<expiry>:<sha256(session user | device pubkey)[:32]>`.

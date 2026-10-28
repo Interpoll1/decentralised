@@ -113,7 +113,7 @@ export class UserService {
   private static deriveIdentityFields(
     profileLike: Partial<UserProfile>,
   ): Pick<UserProfile, 'identityUsername' | 'identityIssuer' | 'identityTrustLevel'> {
-    // Prefer the issuer-qualified identityUsername (e.g. `name@endless.sbs`):
+    // Prefer the issuer-qualified identityUsername (e.g. `name@endless.social`):
     // customUsername holds the bare name, so deriving from it alone would
     // downgrade a verified claim to 'unverified'.
     const qualified = (profileLike.identityUsername || '').trim();

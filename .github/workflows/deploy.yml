@@ -1,4 +1,4 @@
-name: Deploy to endless.sbs
+name: Deploy to endless.social
 
 on:
   push:

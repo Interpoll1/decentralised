@@ -90,7 +90,7 @@ bridge_entry = """,
       cwd: '/var/www/interpoll',
       interpreter: 'node',
       env: {
-        TUNNEL_DOMAIN: 'tunnel.interpoll.endless.sbs',
+        TUNNEL_DOMAIN: 'tunnel.interpoll.endless.social',
       },
       max_memory_restart: '200M',
       restart_delay: 3000,
@@ -131,7 +131,7 @@ done
 
 if [[ -z "$NGINX_CONF" ]]; then
   # Try to find any conf that references our domain
-  NGINX_CONF=$(grep -rl "interpoll.endless.sbs" /etc/nginx/ 2>/dev/null | head -1 || echo "")
+  NGINX_CONF=$(grep -rl "interpoll.endless.social" /etc/nginx/ 2>/dev/null | head -1 || echo "")
 fi
 
 if [[ -z "$NGINX_CONF" ]]; then
@@ -165,7 +165,7 @@ install_locs = """
 
 """
 
-# Insert before "location / {" in the first server block (interpoll.endless.sbs)
+# Insert before "location / {" in the first server block (interpoll.endless.social)
 content = content.replace(
     '    location / {\n        proxy_pass http://127.0.0.1:3000;',
     install_locs + '    location / {\n        proxy_pass http://127.0.0.1:3000;',
@@ -255,15 +255,15 @@ echo "  relay-server logs:     pm2 logs relay-server --lines 50"
 echo "  relay-bridge logs:     pm2 logs relay-bridge --lines 20"
 echo ""
 echo "  Test install scripts:"
-echo "    curl -I https://interpoll.endless.sbs/install-relay.sh"
-echo "    curl -I https://interpoll.endless.sbs/install-relay-vps.sh"
+echo "    curl -I https://interpoll.endless.social/install-relay.sh"
+echo "    curl -I https://interpoll.endless.social/install-relay-vps.sh"
 echo ""
 echo "  Test bridge:"
 echo "    curl -s http://localhost:9000"
 echo ""
 echo "  STILL NEEDED (in DNS dashboard):"
 echo "    Add wildcard A record:"
-echo "    *.tunnel.interpoll.endless.sbs  →  $(curl -s ifconfig.me 2>/dev/null || echo '<your VPS IP>')"
+echo "    *.tunnel.interpoll.endless.social  →  $(curl -s ifconfig.me 2>/dev/null || echo '<your VPS IP>')"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 cat << 'MANUAL'
@@ -300,7 +300,7 @@ Add inside apps: [ ... ] before the closing ]:
       script: './backend/relay-bridge-server.js',
       cwd: '/var/www/interpoll',
       interpreter: 'node',
-      env: { TUNNEL_DOMAIN: 'tunnel.interpoll.endless.sbs' },
+      env: { TUNNEL_DOMAIN: 'tunnel.interpoll.endless.social' },
       max_memory_restart: '200M',
       restart_delay: 3000,
     },

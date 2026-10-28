@@ -228,9 +228,9 @@ function attachEmailFallback(app, opts = {}) {
     return null;
   }
 
-  const from   = opts.from   || process.env.RESEND_FROM   || 'InterPoll <notifications@endless.sbs>';
+  const from   = opts.from   || process.env.RESEND_FROM   || 'InterPoll <notifications@endless.social>';
   const appUrl = opts.appUrl || process.env.APP_PUBLIC_URL || process.env.FRONTEND_ORIGIN
-    || 'https://endless.sbs';
+    || 'https://endless.social';
   // The open-the-app link points at the frontend; the unsubscribe link has to
   // point at this relay, which is a different origin in every real deployment.
   const relayUrl = opts.relayUrl || process.env.SERVER_ORIGIN || appUrl;

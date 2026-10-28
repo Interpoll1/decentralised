@@ -1,5 +1,5 @@
 // InterPoll community Gun relay.
-// Installed by install.sh / install.ps1 / vps.sh from https://interpoll.endless.sbs/relay-kit/
+// Installed by install.sh / install.ps1 / vps.sh from https://interpoll.endless.social/relay-kit/
 //
 // Env:
 //   PORT            listen port (default 8765)
@@ -14,7 +14,7 @@ import cors from 'cors';
 const PORT = parseInt(process.env.PORT || '8765', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const DATA_DIR = process.env.GUN_DATA_DIR || './radata';
-const UPSTREAM = (process.env.UPSTREAM_PEERS ?? 'https://interpoll2.endless.sbs/gun')
+const UPSTREAM = (process.env.UPSTREAM_PEERS ?? 'https://interpoll2.endless.social/gun')
   .split(',').map((s) => s.trim()).filter(Boolean);
 
 const app = express();

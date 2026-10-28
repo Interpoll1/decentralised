@@ -495,7 +495,7 @@
               <label class="field-label">API Base URL</label>
               <div class="field-wrap">
                 <input class="field-native mono-sm" v-model="modSettings.moderationApiBaseUrl"
-                  @blur="saveModerationSettings" placeholder="https://interpoll.endless.sbs/moderation" />
+                  @blur="saveModerationSettings" placeholder="https://interpoll.endless.social/moderation" />
               </div>
             </div>
             <div class="field-group mt-8">
@@ -2304,14 +2304,14 @@ const vpsOs   = ref('Linux (bash)');
 const copied  = ref<'home' | 'vps' | 'tab' | null>(null);
 
 const HOME_CMDS: Record<string, string> = {
-  'Linux / Pi': 'curl -sSL https://interpoll.endless.sbs/install.sh | bash',
-  'macOS':      'curl -sSL https://interpoll.endless.sbs/install.sh | bash',
-  'Windows':    "irm https://interpoll.endless.sbs/install.ps1 | iex",
+  'Linux / Pi': 'curl -sSL https://interpoll.endless.social/install.sh | bash',
+  'macOS':      'curl -sSL https://interpoll.endless.social/install.sh | bash',
+  'Windows':    "irm https://interpoll.endless.social/install.ps1 | iex",
 };
 // vps.sh runs on the (Linux) server either way; the tab only reflects the shell you SSH from.
 const VPS_CMDS: Record<string, string> = {
-  'Linux (bash)': 'curl -sSL https://interpoll.endless.sbs/vps.sh | sudo bash -s yourdomain.com',
-  'macOS (zsh)':  'curl -sSL https://interpoll.endless.sbs/vps.sh | sudo bash -s yourdomain.com',
+  'Linux (bash)': 'curl -sSL https://interpoll.endless.social/vps.sh | sudo bash -s yourdomain.com',
+  'macOS (zsh)':  'curl -sSL https://interpoll.endless.social/vps.sh | sudo bash -s yourdomain.com',
 };
 const homeCmd = computed(() => HOME_CMDS[homeOs.value] ?? HOME_CMDS['Linux / Pi']);
 const vpsCmd  = computed(() => VPS_CMDS[vpsOs.value]  ?? VPS_CMDS['Linux (bash)']);

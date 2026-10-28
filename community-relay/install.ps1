@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # InterPoll community relay - Windows installer
 #
-#   irm https://interpoll.endless.sbs/install.ps1 | iex      (PowerShell as Administrator)
+#   irm https://interpoll.endless.social/install.ps1 | iex      (PowerShell as Administrator)
 #
 # Installs Node.js LTS (winget) if missing, downloads the relay into
 # %ProgramData%\InterPollRelay, registers a startup Scheduled Task, opens the
@@ -15,9 +15,9 @@
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
-$Base     = if ($env:INTERPOLL_BASE) { $env:INTERPOLL_BASE } else { 'https://interpoll.endless.sbs' }
+$Base     = if ($env:INTERPOLL_BASE) { $env:INTERPOLL_BASE } else { 'https://interpoll.endless.social' }
 $Port     = if ($env:RELAY_PORT) { [int]$env:RELAY_PORT } else { 8765 }
-$Upstream = if ($null -ne $env:UPSTREAM_PEERS) { $env:UPSTREAM_PEERS } else { 'https://interpoll2.endless.sbs/gun' }
+$Upstream = if ($null -ne $env:UPSTREAM_PEERS) { $env:UPSTREAM_PEERS } else { 'https://interpoll2.endless.social/gun' }
 $Dir      = Join-Path $env:ProgramData 'InterPollRelay'
 $TaskName = 'InterPollRelay'
 
