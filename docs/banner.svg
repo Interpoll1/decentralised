@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" width="1200" height="320" role="img" aria-label="InterPoll: polls and discussions nobody can switch off">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="60%">
+      <stop offset="0" stop-color="#3dff7a" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#3dff7a" stop-opacity="0"/>
+    </radialGradient>
+    <style>
+      .t{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+      .edge{stroke:#3dff7a;stroke-opacity:.28;stroke-width:1.2;fill:none}
+      .node{fill:#3dff7a}
+      .ring{fill:none;stroke:#3dff7a;stroke-width:1.5;transform-box:fill-box;transform-origin:center;animation:ping 3.2s ease-out infinite}
+      .d2{animation-delay:.8s}.d3{animation-delay:1.6s}.d4{animation-delay:2.4s}
+      @keyframes ping{0%{transform:scale(.4);opacity:.9}100%{transform:scale(2.6);opacity:0}}
+      @media (prefers-reduced-motion:reduce){.ring{animation:none;opacity:.4}}
+    </style>
+  </defs>
+  <rect width="1200" height="320" rx="18" fill="#050806"/>
+  <rect width="1200" height="320" rx="18" fill="url(#glow)"/>
+
+  <!-- mesh -->
+  <g class="edge">
+    <path d="M840 70 L960 150 L1090 90"/>
+    <path d="M960 150 L880 250 L1040 255"/>
+    <path d="M840 70 L880 250"/>
+    <path d="M1090 90 L1040 255"/>
+    <path d="M960 150 L1040 255"/>
+  </g>
+  <g>
+    <circle class="node" cx="840" cy="70" r="6"/><circle class="ring" cx="840" cy="70" r="6"/>
+    <circle class="node" cx="960" cy="150" r="9"/><circle class="ring d2" cx="960" cy="150" r="9"/>
+    <circle class="node" cx="1090" cy="90" r="6"/><circle class="ring d3" cx="1090" cy="90" r="6"/>
+    <circle class="node" cx="880" cy="250" r="6"/><circle class="ring d4" cx="880" cy="250" r="6"/>
+    <circle class="node" cx="1040" cy="255" r="6"/><circle class="ring d2" cx="1040" cy="255" r="6"/>
+  </g>
+  <!-- a signed block travelling along an edge -->
+  <rect width="10" height="10" rx="2" fill="#fff" opacity=".9">
+    <animateMotion dur="4s" repeatCount="indefinite" path="M835 65 L955 145 L1085 85 L955 145 L1035 250 L875 245 Z"/>
+  </rect>
+
+  <text class="t" x="64" y="148" font-size="76" font-weight="800" fill="#f3fff6" letter-spacing="-2">InterPoll</text>
+  <text class="t" x="66" y="196" font-size="26" fill="#9bd9ae">Polls and discussions nobody can switch off.</text>
+  <text class="t" x="66" y="248" font-size="17" fill="#5f8a6c">signed on your device  ·  copied across peers  ·  yours to run</text>
+</svg>

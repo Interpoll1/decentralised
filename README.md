@@ -1,11 +1,28 @@
-# InterPoll
-
-**Polls and discussions that nobody can switch off.**
-
-Live at **[endless.social](https://endless.social)** · [Releases](https://github.com/Interpoll1/decentralised/releases) · Public domain
+<p align="center">
+  <img src="docs/banner.svg" alt="InterPoll: polls and discussions nobody can switch off" width="100%" />
+</p>
 
 <p align="center">
-  <img width="1920" alt="InterPoll home page" src="docs/screenshots/homepage.jpg" />
+  <a href="https://endless.social"><img alt="Relay status" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Finterpoll.endless.social%2Fhealth&query=%24.status&label=live%20relay&color=3dff7a&labelColor=111" /></a>
+  <a href="https://endless.social"><img alt="Peers online" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Finterpoll.endless.social%2Fhealth&query=%24.clients&label=clients%20connected&color=3dff7a&labelColor=111" /></a>
+  <a href="https://github.com/Interpoll1/decentralised/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/Interpoll1/decentralised?include_prereleases&color=3dff7a&labelColor=111" /></a>
+  <a href="https://github.com/Interpoll1/decentralised/commits/master"><img alt="Last commit" src="https://img.shields.io/github/last-commit/Interpoll1/decentralised?color=3dff7a&labelColor=111" /></a>
+  <a href="LICENSE"><img alt="License: Unlicense" src="https://img.shields.io/badge/license-Unlicense-3dff7a?labelColor=111" /></a>
+</p>
+
+<p align="center">
+  <b><a href="https://endless.social">Open the app</a></b> ·
+  <a href="#run-it-yourself">Run it yourself</a> ·
+  <a href="#desktop-app">Desktop</a> ·
+  <a href="docs/protocol/IPP-00-overview.md">Spec</a>
+</p>
+
+<p align="center">
+  <sub>The badges above are live: they query the production relay's <code>/health</code> endpoint every time this page loads.</sub>
+</p>
+
+<p align="center">
+  <img width="900" alt="InterPoll home feed" src="docs/screenshots/homepage.jpg" />
 </p>
 
 ## Why this exists
@@ -24,9 +41,12 @@ InterPoll keeps your polls, posts and votes on *your* device first, then spreads
 - **No feed algorithm.** You see what your communities post, in order.
 - **Anyone can run a relay.** A small Node server is all it takes (see below).
 
-<p align="center">
-  <img width="1920" alt="Chain Explorer verifying a vote" src="docs/screenshots/chain-explorer.jpg" />
-</p>
+<table>
+  <tr>
+    <td width="50%"><img alt="Chain Explorer: the genesis block and hash links" src="docs/screenshots/chain-explorer.jpg" /><br /><sub><b>Chain Explorer.</b> Every block, hash and signature, checkable by you.</sub></td>
+    <td width="50%"><img alt="Network page showing the active relay" src="docs/screenshots/network.jpg" /><br /><sub><b>Network.</b> See your relay, add your own, turn on Anonymity mode.</sub></td>
+  </tr>
+</table>
 
 ## How it works, in plain terms
 
@@ -47,8 +67,26 @@ graph TD
 A relay can be slow, or even hostile, but it **can't forge** a signed action from your key. The full spec (block format, sync, encryption, trust model) is the [IPP series](docs/protocol/IPP-00-overview.md).
 
 <p align="center">
-  <img width="1920" alt="Resilience Center showing relay health" src="docs/screenshots/resilience-center.jpg" />
+  <img width="900" alt="Resilience Center: relay health, fallback rendezvous and backups" src="docs/screenshots/resilience-center.jpg" /><br />
+  <sub><b>Resilience Center.</b> If every relay gets blocked, nodes derive the same rendezvous point and find each other again.</sub>
 </p>
+
+<details>
+<summary><b>What happens when you vote?</b> (click to expand)</summary>
+
+1. Your vote becomes a block: payload, timestamp, your device key.
+2. The block is hashed (SHA-256) and linked to the previous block.
+3. It's signed with your key and saved locally.
+4. You get a receipt code to check in the Chain Explorer.
+5. The block goes out to peers over WebSocket and BroadcastChannel.
+6. The relay hands out a short-lived token (`/api/vote-authorize`) and your app confirms it (`/api/vote-confirm`), so the same device can't register twice.
+
+```mermaid
+graph LR
+    G[Genesis] -->|hash| B1[Vote A] -->|hash| B2[Vote B] -->|hash| B3[Vote C]
+```
+
+</details>
 
 ## Straight talk about limits
 
