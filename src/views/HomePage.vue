@@ -41,7 +41,7 @@
     <!-- Desktop top bar (hidden on phones, which keep the header above and the bottom nav) -->
     <AppTopNav :total-unread="totalUnread" @open-relay="relaySheetOpen = true" />
 
-    <ion-content class="ambient-page" :scroll-events="true" @ionScroll="handleScroll">
+    <ion-content class="ambient-page" :fullscreen="fullscreenContent" :scroll-events="true" @ionScroll="handleScroll">
       <BurstOverlay />
       <div class="hp-root page-layout ambient-page__content" :class="{ 'hp-root--chat': activeTab === 'chat' }">
 
@@ -515,6 +515,7 @@ const BurstOverlay     = defineAsyncComponent(() => import('../components/BurstO
 const AppRightSidebar  = defineAsyncComponent(() => import('../components/AppRightSidebar.vue'));
 const RelaySheet       = defineAsyncComponent(() => import('../components/RelaySheet.vue'));
 import BottomNav from '../components/BottomNav.vue';
+import { createHeaderScrollTracker } from '../utils/headerScrollTracker';
 import AppTopNav from '../components/AppTopNav.vue';
 import { useNavStore } from '../stores/navStore';
 
@@ -1092,28 +1093,23 @@ async function handleModerationSubmitPoll(poll: Poll) {
 
 // ── Scroll / chrome hide-show ──────────────────────────────────────────────
 //
-// Architecture: header and footer use max-height collapse (not translateY).
-// Collapsing the layout height triggers Ionic's internal ResizeObserver which
-// recalculates --offset-top / --offset-bottom automatically. ion-content then
-// expands to fill the freed space with no JS padding manipulation required.
-// See HomePage.css for the max-height transition on ion-header / ion-footer.
+// Keep the header's layout height constant. Fullscreen ion-content scrolls
+// behind it, so moving the header does not resize/clamp the scroll viewport.
+// Require deliberate direction changes instead of reacting to subpixel jitter.
+const trackHeaderScroll = createHeaderScrollTracker();
 
-let lastScrollTop     = 0;
-const scrollThreshold = 50;
-
-function handleScroll(event: CustomEvent) {
-  const scrollTop = event.detail.scrollTop;
-  if (scrollTop > lastScrollTop && scrollTop > scrollThreshold) {
-    if (!isHeaderHidden.value) {
-      isHeaderHidden.value = true;
-    }
-  } else if (scrollTop < lastScrollTop) {
-    if (isHeaderHidden.value) {
-      isHeaderHidden.value = false;
-    }
-  }
-  lastScrollTop = scrollTop;
+function handleScroll(event: CustomEvent<{ scrollTop: number }>) {
+  isHeaderHidden.value = trackHeaderScroll(event.detail.scrollTop);
 }
+
+// Desktop uses a separate sticky top nav; keep its original scroll viewport.
+const mobileHeaderMedia = window.matchMedia('(max-width: 767px)');
+const fullscreenContent = ref(mobileHeaderMedia.matches);
+function syncFullscreenContent() {
+  fullscreenContent.value = mobileHeaderMedia.matches;
+}
+onMounted(() => mobileHeaderMedia.addEventListener('change', syncFullscreenContent));
+onUnmounted(() => mobileHeaderMedia.removeEventListener('change', syncFullscreenContent));
 
 function flushNewContent() {
   postStore.flushNewPosts?.();
