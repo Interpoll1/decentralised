@@ -1,6 +1,6 @@
 <template>
   <AuroraBackground />
-  <ion-app>
+  <ion-app class="interpoll-interface">
     <AppErrorBoundary>
       <AppLoader v-if="!appReady" />
       <ion-router-outlet v-else :animated="true" :animation="pageTransition" />

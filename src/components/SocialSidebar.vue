@@ -5,7 +5,7 @@
         <NavIcon :id="item.id" :active="activeTab === item.id" /><span>{{ item.label }}</span>
         <span v-if="item.id === 'chat' && totalUnread" class="ss-unread">{{ totalUnread > 99 ? '99+' : totalUnread }}</span>
       </button>
-      <button @click="router.push('/search')"><NavIcon id="search" /><span>Search</span></button>
+      <button :class="{ selected: activeTab === 'search' }" :aria-current="activeTab === 'search' ? 'page' : undefined" @click="router.push('/search')"><NavIcon id="search" /><span>Search</span></button>
     </nav>
     <section class="ss-spaces">
       <div class="ss-section-head"><h2>Spaces</h2><button aria-label="Browse all spaces" @click="emit('spaces')">+</button></div>
@@ -17,9 +17,9 @@
       <button class="ss-discover" @click="emit('spaces')"><NavIcon id="communities" /><span>Discover spaces</span></button>
     </section>
     <nav class="ss-tools" aria-label="Account and network">
-      <button @click="router.push('/profile')"><NavIcon id="profile" /><span>Your profile</span></button>
+      <button :class="{ selected: activeTab === 'profile' }" @click="router.push('/profile')"><NavIcon id="profile" /><span>Your profile</span></button>
       <button @click="emit('relay')"><NavIcon id="network" /><span>Network</span></button>
-      <button @click="router.push('/settings')"><NavIcon id="settings" /><span>Settings</span></button>
+      <button :class="{ selected: activeTab === 'settings' }" @click="router.push('/settings')"><NavIcon id="settings" /><span>Settings</span></button>
     </nav>
     <button class="ss-publish" @click="emit('tab', 'create')"><span>+</span>Create a post</button>
     <p class="ss-footnote">Interpoll · Public posts & polls</p>

@@ -5,8 +5,8 @@
   font-display: swap;
 }
 /* Social feed: content in the centre, familiar navigation at the edges.
-   This sheet is scoped to Home; data, signing and moderation stay unchanged. */
-html:root .interpoll-home {
+   The shared app scope keeps linked pages in the same graphite theme. */
+html:root :is(.interpoll-home, .interpoll-interface) {
   color-scheme: light;
   color: #232a31;
   --app-bg-base: #e7e9ec;
@@ -32,14 +32,14 @@ html:root .interpoll-home {
   --ion-color-primary-rgb: 23, 102, 75;
   --ion-color-primary-contrast: #ffffff;
 }
-html:root .interpoll-home,
-html:root .interpoll-home :is(ion-content, ion-header, ion-toolbar, ion-footer, .bottom-nav) {
+html:root :is(.interpoll-home, .interpoll-interface),
+html:root :is(.interpoll-home, .interpoll-interface) :is(.ion-page, ion-content, ion-header, ion-toolbar, ion-footer, .bottom-nav) {
   background: var(--app-bg-base) !important;
   background-image: none !important;
   --background: var(--app-bg-base);
 }
-html:root .interpoll-home :is(.atn-name, .logo-title) { font-family: 'Interpoll wordmark', cursive; font-weight: 400 !important; font-size: 35px; }
-html:root .interpoll-home .hp-root .main-content:not(.main-content--chat) {
+html:root :is(.interpoll-home, .interpoll-interface) :is(.atn-name, .logo-title) { font-family: 'Interpoll wordmark', cursive; font-weight: 400 !important; font-size: 35px; }
+html:root :is(.interpoll-home, .interpoll-interface) .hp-root .main-content:not(.main-content--chat) {
   padding: 0;
   background: transparent !important;
   background-image: none !important;
@@ -47,23 +47,23 @@ html:root .interpoll-home .hp-root .main-content:not(.main-content--chat) {
   box-shadow: none !important;
   border-radius: 0 !important;
 }
-html:root .interpoll-home .home-tab { min-width: 0; }
-html:root .interpoll-home .atn { background: var(--app-bg-base); border-bottom: 1px solid var(--app-border); backdrop-filter: none; }
-html:root .interpoll-home .atn-inner { width: min(1260px, calc(100% - 48px)); height: 68px; gap: 28px; }
-html:root .interpoll-home .atn-tabs { display: none; }
-html:root .interpoll-home .atn-search { flex: 1; max-width: 610px; min-width: 120px; margin-left: 24px; height: 40px; background: var(--app-item-surface); border-color: transparent; border-radius: 99px; }
-html:root .interpoll-home .atn-actions { margin-left: auto; }
-html:root .interpoll-home .atn-publish { min-height: 39px; border-radius: 99px !important; background: var(--app-accent); padding-inline: 20px; }
-html:root .interpoll-home .atn-avatar { border-radius: 50% !important; background: #294d42 !important; color: #b8e4d0; width: 36px; height: 36px; }
-html:root .interpoll-home .social-sidebar button { border-radius: 10px !important; }
-html:root .interpoll-home .social-sidebar { background: transparent !important; border: 0 !important; box-shadow: none !important; }
-html:root .interpoll-home .social-sidebar .ss-publish { border-radius: 99px !important; }
-html:root .interpoll-home .fh-heading h1 { font-weight: 700 !important; }
-html:root .interpoll-home .fh-prompt { border-radius: 99px !important; background: var(--app-item-surface) !important; }
-html:root .interpoll-home .fh-topics button { border-radius: 99px !important; }
-html:root .interpoll-home :is(.fh-sort, .fh-more) select { background: transparent !important; border: 0 !important; }
-html:root .interpoll-home .feed-list { display: flex; flex-direction: column; gap: 16px; }
-html:root .interpoll-home .hp-root .feed-list :is(.post-card, .poll-card) {
+html:root :is(.interpoll-home, .interpoll-interface) .home-tab { min-width: 0; }
+html:root :is(.interpoll-home, .interpoll-interface) .atn { background: var(--app-bg-base); border-bottom: 1px solid var(--app-border); backdrop-filter: none; }
+html:root :is(.interpoll-home, .interpoll-interface) .atn-inner { width: min(1260px, calc(100% - 48px)); height: 68px; gap: 28px; }
+html:root :is(.interpoll-home, .interpoll-interface) .atn-tabs { display: none; }
+html:root :is(.interpoll-home, .interpoll-interface) .atn-search { flex: 1; max-width: 610px; min-width: 120px; margin-left: 24px; height: 40px; background: var(--app-item-surface); border-color: transparent; border-radius: 99px; }
+html:root :is(.interpoll-home, .interpoll-interface) .atn-actions { margin-left: auto; }
+html:root :is(.interpoll-home, .interpoll-interface) .atn-publish { min-height: 39px; border-radius: 99px !important; background: var(--app-accent); padding-inline: 20px; }
+html:root :is(.interpoll-home, .interpoll-interface) .atn-avatar { border-radius: 50% !important; background: #294d42 !important; color: #b8e4d0; width: 36px; height: 36px; }
+html:root :is(.interpoll-home, .interpoll-interface) .social-sidebar button { border-radius: 10px !important; }
+html:root :is(.interpoll-home, .interpoll-interface) .social-sidebar { background: transparent !important; border: 0 !important; box-shadow: none !important; }
+html:root :is(.interpoll-home, .interpoll-interface) .social-sidebar .ss-publish { border-radius: 99px !important; }
+html:root :is(.interpoll-home, .interpoll-interface) .fh-heading h1 { font-weight: 700 !important; }
+html:root :is(.interpoll-home, .interpoll-interface) .fh-prompt { border-radius: 99px !important; background: var(--app-item-surface) !important; }
+html:root :is(.interpoll-home, .interpoll-interface) .fh-topics button { border-radius: 99px !important; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.fh-sort, .fh-more) select { background: transparent !important; border: 0 !important; }
+html:root :is(.interpoll-home, .interpoll-interface) .feed-list { display: flex; flex-direction: column; gap: 16px; }
+html:root :is(.interpoll-home, .interpoll-interface) .hp-root .feed-list :is(.post-card, .poll-card) {
   margin: 0 !important;
   padding: 0 !important;
   background: var(--app-bg-elevated) !important;
@@ -73,10 +73,10 @@ html:root .interpoll-home .hp-root .feed-list :is(.post-card, .poll-card) {
   box-shadow: none !important;
   overflow: hidden;
 }
-html:root .interpoll-home .hp-root .feed-list :is(.post-card, .poll-card):hover { border-color: var(--app-border-strong) !important; }
-html:root .interpoll-home :is(.post-inner, .poll-body) { padding: 18px 20px 15px; }
-html:root .interpoll-home .post-inner { gap: 0; }
-html:root .interpoll-home :is(.post-title, .poll-question) {
+html:root :is(.interpoll-home, .interpoll-interface) .hp-root .feed-list :is(.post-card, .poll-card):hover { border-color: var(--app-border-strong) !important; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-inner, .poll-body) { padding: 18px 20px 15px; }
+html:root :is(.interpoll-home, .interpoll-interface) .post-inner { gap: 0; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-title, .poll-question) {
   font-size: 19px !important;
   line-height: 1.4;
   font-weight: 650 !important;
@@ -84,136 +84,234 @@ html:root .interpoll-home :is(.post-title, .poll-question) {
   overflow-wrap: anywhere;
   animation: none !important;
 }
-html:root .interpoll-home :is(.post-excerpt, .poll-description) { font-size: 14px; line-height: 1.65; color: var(--app-text-muted); margin: 0; overflow-wrap: anywhere; }
-html:root .interpoll-home :is(.post-avatar, .author-avatar-sm) { width: 35px; height: 35px; border-radius: 50%; background: #294d42 !important; color: #b8e4d0 !important; font-size: 13px; flex-shrink: 0; }
-html:root .interpoll-home .post-header { margin: 0; }
-html:root .interpoll-home .post-meta-row--sub { order: -1; }
-html:root .interpoll-home .post-community { font-size: 12px; color: var(--app-text); font-weight: 650; }
-html:root .interpoll-home :is(.post-relay-attr, .relay-attr-badge--inline) { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; opacity: .75; }
-html:root .interpoll-home :is(.post-author, .author) { font-size: 12px; font-weight: 600; }
-html:root .interpoll-home :is(.post-time, .timestamp) { font-size: 10px; font-family: inherit; }
-html:root .interpoll-home :is(.post-identity-badge, .identity-badge) { font-size: 9px; font-family: inherit; padding: 1px 5px; background: transparent !important; border: 0; }
-html:root .interpoll-home .post-media { margin: 14px -20px 2px; border: 0; border-radius: 0; background: var(--app-bg-base); }
-html:root .interpoll-home .post-media-img { display: block; width: 100%; height: 390px; max-height: 560px; object-fit: cover; border: 0; border-radius: 0; }
-html:root .interpoll-home :is(.post-footer, .poll-footer) { padding-top: 12px; margin-top: 10px; border-top: 0; gap: 8px; }
-html:root .interpoll-home :is(.post-actions, .poll-stats) { display: flex; gap: 6px; flex-wrap: wrap; }
-html:root .interpoll-home :is(.post-action-btn, .stat-icon-btn, .stat-item, .post-share-btn) {
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-excerpt, .poll-description) { font-size: 14px; line-height: 1.65; color: var(--app-text-muted); margin: 0; overflow-wrap: anywhere; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-avatar, .author-avatar-sm) { width: 35px; height: 35px; border-radius: 50%; background: #294d42 !important; color: #b8e4d0 !important; font-size: 13px; flex-shrink: 0; }
+html:root :is(.interpoll-home, .interpoll-interface) .post-header { margin: 0; }
+html:root :is(.interpoll-home, .interpoll-interface) .post-meta-row--sub { order: -1; }
+html:root :is(.interpoll-home, .interpoll-interface) .post-community { font-size: 12px; color: var(--app-text); font-weight: 650; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-relay-attr, .relay-attr-badge--inline) { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; opacity: .75; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-author, .author) { font-size: 12px; font-weight: 600; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-time, .timestamp) { font-size: 10px; font-family: inherit; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-identity-badge, .identity-badge) { font-size: 9px; font-family: inherit; padding: 1px 5px; background: transparent !important; border: 0; }
+html:root :is(.interpoll-home, .interpoll-interface) .post-media { margin: 14px -20px 2px; border: 0; border-radius: 0; background: var(--app-bg-base); }
+html:root :is(.interpoll-home, .interpoll-interface) .post-media-img { display: block; width: 100%; height: 390px; max-height: 560px; object-fit: cover; border: 0; border-radius: 0; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-footer, .poll-footer) { padding-top: 12px; margin-top: 10px; border-top: 0; gap: 8px; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-actions, .poll-stats) { display: flex; gap: 6px; flex-wrap: wrap; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-action-btn, .stat-icon-btn, .stat-item, .post-share-btn) {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; padding: 7px 11px; border: 0 !important; border-radius: 99px !important;
   background: var(--app-item-surface) !important; color: var(--app-text-muted); font-size: 11px;
 }
-html:root .interpoll-home :is(.post-action-btn, .stat-icon-btn).active { color: var(--app-accent); background: rgba(var(--app-accent-rgb), .15) !important; }
-html:root .interpoll-home .poll-header { align-items: stretch; margin: 0; gap: 6px; }
-html:root .interpoll-home .poll-meta { justify-content: flex-start; flex-wrap: wrap; }
-html:root .interpoll-home .poll-sub { margin: 6px 0 0 44px; font-size: 10px; }
-html:root .interpoll-home .poll-options-preview { display: flex; flex-direction: column; gap: 8px; margin: 16px 0 0; padding: 0; border: 0; background: none; }
-html:root .interpoll-home .option-preview { display: block; position: relative; padding: 12px 14px; background: var(--app-bg-base); border: 1px solid var(--app-border); border-radius: 9px; }
-html:root .interpoll-home .option-info { display: flex; align-items: center; gap: 8px; }
-html:root .interpoll-home .option-radio { display: block; width: 15px; height: 15px; border: 1px solid var(--app-border-strong); border-radius: 50%; flex-shrink: 0; }
-html:root .interpoll-home .option-text { flex: 1; white-space: normal; font-size: 13px; line-height: 1.5; }
-html:root .interpoll-home .option-votes { display: inline; color: var(--app-text-subtle); font-size: 11px; }
-html:root .interpoll-home .option-bar { height: 3px; margin-top: 9px; }
-html:root .interpoll-home .option-pct { display: none; }
-html:root .interpoll-home .app-right-sidebar { background: transparent !important; border: 0 !important; box-shadow: none !important; }
-html:root .interpoll-home .app-right-sidebar .ars-section { background: var(--app-bg-elevated) !important; background-image: none !important; border: 1px solid var(--app-border) !important; border-radius: 14px !important; padding: 18px 15px; box-shadow: none !important; }
-html:root .interpoll-home .ars-about { display: none; }
-html:root .interpoll-home .ars-header { margin-bottom: 12px; }
-html:root .interpoll-home .ars-header h2 { font-weight: 650; font-size: 13px; }
-html:root .interpoll-home .ars-name { font-size: 12px; }
-html:root .interpoll-home .ars-meta { font-size: 10px; }
-html:root .interpoll-home .ars-desc { display: none; }
-html:root .interpoll-home .ars-avatar { width: 32px; height: 32px; border-radius: 50%; }
-html:root .interpoll-home .ars-topic__label { font-size: 12px; }
-html:root .interpoll-home .ars-topic__count { font-size: 10px; }
-html:root .interpoll-home .ars-pill { font-size: 10px; background: none; }
-html:root .interpoll-home :is(button, a, select):focus-visible { outline: 2px solid var(--app-accent) !important; outline-offset: 3px; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-action-btn, .stat-icon-btn).active { color: var(--app-accent); background: rgba(var(--app-accent-rgb), .15) !important; }
+html:root :is(.interpoll-home, .interpoll-interface) .poll-header { align-items: stretch; margin: 0; gap: 6px; }
+html:root :is(.interpoll-home, .interpoll-interface) .poll-meta { justify-content: flex-start; flex-wrap: wrap; }
+html:root :is(.interpoll-home, .interpoll-interface) .poll-sub { margin: 6px 0 0 44px; font-size: 10px; }
+html:root :is(.interpoll-home, .interpoll-interface) .poll-options-preview { display: flex; flex-direction: column; gap: 8px; margin: 16px 0 0; padding: 0; border: 0; background: none; }
+html:root :is(.interpoll-home, .interpoll-interface) .option-preview { display: block; position: relative; padding: 12px 14px; background: var(--app-bg-base); border: 1px solid var(--app-border); border-radius: 9px; }
+html:root :is(.interpoll-home, .interpoll-interface) .option-info { display: flex; align-items: center; gap: 8px; }
+html:root :is(.interpoll-home, .interpoll-interface) .option-radio { display: block; width: 15px; height: 15px; border: 1px solid var(--app-border-strong); border-radius: 50%; flex-shrink: 0; }
+html:root :is(.interpoll-home, .interpoll-interface) .option-text { flex: 1; white-space: normal; font-size: 13px; line-height: 1.5; }
+html:root :is(.interpoll-home, .interpoll-interface) .option-votes { display: inline; color: var(--app-text-subtle); font-size: 11px; }
+html:root :is(.interpoll-home, .interpoll-interface) .option-bar { height: 3px; margin-top: 9px; }
+html:root :is(.interpoll-home, .interpoll-interface) .option-pct { display: none; }
+html:root :is(.interpoll-home, .interpoll-interface) .app-right-sidebar { background: transparent !important; border: 0 !important; box-shadow: none !important; }
+html:root :is(.interpoll-home, .interpoll-interface) .app-right-sidebar .ars-section { background: var(--app-bg-elevated) !important; background-image: none !important; border: 1px solid var(--app-border) !important; border-radius: 14px !important; padding: 18px 15px; box-shadow: none !important; }
+html:root :is(.interpoll-home, .interpoll-interface) .ars-about { display: none; }
+html:root :is(.interpoll-home, .interpoll-interface) .ars-header { margin-bottom: 12px; }
+html:root :is(.interpoll-home, .interpoll-interface) .ars-header h2 { font-weight: 650; font-size: 13px; }
+html:root :is(.interpoll-home, .interpoll-interface) .ars-name { font-size: 12px; }
+html:root :is(.interpoll-home, .interpoll-interface) .ars-meta { font-size: 10px; }
+html:root :is(.interpoll-home, .interpoll-interface) .ars-desc { display: none; }
+html:root :is(.interpoll-home, .interpoll-interface) .ars-avatar { width: 32px; height: 32px; border-radius: 50%; }
+html:root :is(.interpoll-home, .interpoll-interface) .ars-topic__label { font-size: 12px; }
+html:root :is(.interpoll-home, .interpoll-interface) .ars-topic__count { font-size: 10px; }
+html:root :is(.interpoll-home, .interpoll-interface) .ars-pill { font-size: 10px; background: none; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(button, a, select):focus-visible { outline: 2px solid var(--app-accent) !important; outline-offset: 3px; }
 @media (min-width: 768px) {
-  html:root .interpoll-home .hp-root.page-layout { width: min(1260px, calc(100% - 48px)); gap: 28px; padding-top: 26px; }
-  html:root .interpoll-home .hp-root .main-content:not(.main-content--chat) { flex: 1; max-width: 680px; margin-inline: auto; }
-  html:root .interpoll-home .app-right-sidebar { width: 270px; flex-shrink: 0; margin-left: 0; }
+  html:root :is(.interpoll-home, .interpoll-interface) .hp-root.page-layout { width: min(1260px, calc(100% - 48px)); gap: 28px; padding-top: 26px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .hp-root .main-content:not(.main-content--chat) { flex: 1; max-width: 680px; margin-inline: auto; }
+  html:root :is(.interpoll-home, .interpoll-interface) .app-right-sidebar { width: 270px; flex-shrink: 0; margin-left: 0; }
 }
 @media (min-width: 768px) and (max-width: 1023px) {
-  html:root .interpoll-home .atn-tabs { display: flex; margin-left: 0; gap: 0; }
-  html:root .interpoll-home .atn-tab { padding-inline: 8px; }
-  html:root .interpoll-home .atn-tab svg { display: none; }
-  html:root .interpoll-home .atn-tab:nth-last-child(-n+2) { display: none; }
-  html:root .interpoll-home .atn-search { margin-left: 0; }
-  html:root .interpoll-home .atn-publish { display: none; }
-  html:root .interpoll-home .atn-inner { gap: 16px; }
-  html:root .interpoll-home .app-right-sidebar { display: none; }
+  html:root :is(.interpoll-home, .interpoll-interface) .atn-tabs { display: flex; margin-left: 0; gap: 0; }
+  html:root :is(.interpoll-home, .interpoll-interface) .atn-tab { padding-inline: 8px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .atn-tab svg { display: none; }
+  html:root :is(.interpoll-home, .interpoll-interface) .atn-tab span:not(.atn-badge) { display: inline; }
+  html:root :is(.interpoll-home, .interpoll-interface) .atn-tab:nth-last-child(-n+2) { display: none; }
+  html:root :is(.interpoll-home, .interpoll-interface) .atn-search { margin-left: 0; }
+  html:root :is(.interpoll-home, .interpoll-interface) .atn-publish { display: none; }
+  html:root :is(.interpoll-home, .interpoll-interface) .atn-inner { gap: 16px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .app-right-sidebar { display: none; }
 }
 @media (max-width: 767px) {
-  html:root .interpoll-home .hp-root.page-layout { width: 100%; padding-inline: 0; }
-  html:root .interpoll-home .hp-root .main-content:not(.main-content--chat) { padding-top: 14px; }
-  html:root .interpoll-home .feed-hub { padding-inline: max(14px, env(safe-area-inset-left)); }
-  html:root .interpoll-home .header-util-buttons ion-button { width: 44px; height: 44px; }
-  html:root .interpoll-home .logo-title { font-size: 32px; }
-  html:root .interpoll-home :is(.post-inner, .poll-body) { padding: 16px 15px 12px; }
-  html:root .interpoll-home :is(.post-title, .poll-question) { font-size: 17px !important; }
-  html:root .interpoll-home :is(.post-excerpt, .poll-description) { font-size: 13px; }
-  html:root .interpoll-home .feed-list { gap: 9px; padding-bottom: 12px; }
-  html:root .interpoll-home .hp-root .feed-list :is(.post-card, .poll-card) { border-radius: 0 !important; border-left: 0 !important; border-right: 0 !important; }
-  html:root .interpoll-home .post-media { margin-inline: -15px; }
-  html:root .interpoll-home .post-media-img { height: 290px; max-height: 480px; }
-  html:root .interpoll-home .bottom-nav { padding-top: 5px; border-top: 1px solid var(--app-border); }
-  html:root .interpoll-home .nav-item { gap: 5px; padding-block: 9px; }
-  html:root .interpoll-home .nav-item.active::before { display: none; }
-  html:root .interpoll-home .nav-item.active .nav-icon-wrap { filter: none; }
-  html:root .interpoll-home .nav-item.active { color: var(--app-accent); }
-  html:root .interpoll-home .nav-fab-bump { display: none; }
-  html:root .interpoll-home .nav-fab { width: 34px; height: 34px; transform: none; box-shadow: none; border-radius: 10px; }
-  html:root .interpoll-home .nav-label { font-size: 9px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .hp-root.page-layout { width: 100%; padding-inline: 0; }
+  html:root :is(.interpoll-home, .interpoll-interface) .hp-root .main-content:not(.main-content--chat) { padding-top: 14px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .feed-hub { padding-inline: max(14px, env(safe-area-inset-left)); }
+  html:root :is(.interpoll-home, .interpoll-interface) .header-util-buttons ion-button { width: 44px; height: 44px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .logo-title { font-size: 32px; }
+  html:root :is(.interpoll-home, .interpoll-interface) :is(.post-inner, .poll-body) { padding: 16px 15px 12px; }
+  html:root :is(.interpoll-home, .interpoll-interface) :is(.post-title, .poll-question) { font-size: 17px !important; }
+  html:root :is(.interpoll-home, .interpoll-interface) :is(.post-excerpt, .poll-description) { font-size: 13px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .feed-list { gap: 9px; padding-bottom: 12px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .hp-root .feed-list :is(.post-card, .poll-card) { border-radius: 0 !important; border-left: 0 !important; border-right: 0 !important; }
+  html:root :is(.interpoll-home, .interpoll-interface) .post-media { margin-inline: -15px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .post-media-img { height: 290px; max-height: 480px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .bottom-nav { padding-top: 5px; border-top: 1px solid var(--app-border); }
+  html:root :is(.interpoll-home, .interpoll-interface) .nav-item { gap: 5px; padding-block: 9px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .nav-item.active::before { display: none; }
+  html:root :is(.interpoll-home, .interpoll-interface) .nav-item.active .nav-icon-wrap { filter: none; }
+  html:root :is(.interpoll-home, .interpoll-interface) .nav-item.active { color: var(--app-accent); }
+  html:root :is(.interpoll-home, .interpoll-interface) .nav-fab-bump { display: none; }
+  html:root :is(.interpoll-home, .interpoll-interface) .nav-fab { width: 34px; height: 34px; transform: none; box-shadow: none; border-radius: 10px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .nav-label { font-size: 9px; }
 }
 @media (min-width: 1024px) {
-  html:root .interpoll-home .atn--workspace .atn-tabs { display: flex; margin-left: 0; }
-  html:root .interpoll-home .atn--workspace .atn-search { margin-left: 0; max-width: 280px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .atn--workspace .atn-tabs { display: flex; margin-left: 0; }
+  html:root :is(.interpoll-home, .interpoll-interface) .atn--workspace .atn-search { margin-left: 0; max-width: 280px; }
 }
 
 /* Readable graphite surfaces, including native select popups. */
-html:root .interpoll-home :is(.fh-sort, .fh-more) select {
+html:root :is(.interpoll-home, .interpoll-interface) :is(.fh-sort, .fh-more) select {
   color-scheme: light;
   color: var(--app-text) !important;
   font-size: 14px;
   min-height: 44px;
   max-width: 140px;
 }
-html:root .interpoll-home select option {
+html:root :is(.interpoll-home, .interpoll-interface) select option {
   color: #232a31 !important;
   background: #f7f8f9 !important;
   font-size: 14px;
 }
-html:root .interpoll-home :is(.atn-publish, .ss-publish, .nav-fab) { color: #fff !important; }
-html:root .interpoll-home :is(.atn-avatar, .fh-avatar, .post-avatar, .author-avatar-sm) {
+html:root :is(.interpoll-home, .interpoll-interface) :is(.atn-publish, .ss-publish, .nav-fab) { color: #fff !important; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.atn-avatar, .fh-avatar, .post-avatar, .author-avatar-sm) {
   background: #cddfd7 !important;
   color: #245344 !important;
 }
-html:root .interpoll-home .fh-space-circle { color: #325c4b; background: #d6e6de; border-color: var(--app-bg-base); }
-html:root .interpoll-home .fh-space-circle.fh-tone-1 { color: #57426e; background: #e5ddee; }
-html:root .interpoll-home .fh-space-circle.fh-tone-2 { color: #6b4e25; background: #ecdfc9; }
-html:root .interpoll-home .fh-space-circle.fh-tone-3 { color: #31556d; background: #d2e1ec; }
-html:root .interpoll-home .fh-space--discover .fh-space-circle { color: var(--app-text-muted); background: var(--app-bg-elevated); }
-html:root .interpoll-home :is(.fh-prompt, .fh-create, .fh-compose-actions button, .fh-heading > button) { font-size: 14px; }
-html:root .interpoll-home .fh-space { font-size: 12px; }
-html:root .interpoll-home .fh-scopes button { font-size: 14px; }
-html:root .interpoll-home .fh-topics button { font-size: 13px; min-height: 38px; }
-html:root .interpoll-home .fh-tags button { font-size: 13px; }
-html:root .interpoll-home :is(.post-excerpt, .poll-description) { font-size: 15px; }
-html:root .interpoll-home :is(.post-author, .author, .post-community, .option-text) { font-size: 14px; }
-html:root .interpoll-home :is(.post-time, .timestamp, .option-votes, .post-identity-badge, .identity-badge) { font-size: 12px; color: var(--app-text-muted) !important; }
-html:root .interpoll-home :is(.post-relay-attr, .relay-attr-badge--inline) { font-size: 11px; opacity: 1; color: var(--app-text-muted) !important; }
-html:root .interpoll-home :is(.post-action-btn, .stat-icon-btn, .stat-item, .post-share-btn) { font-size: 13px; min-height: 38px; }
-html:root .interpoll-home .ars-meta { font-size: 12px; }
-html:root .interpoll-home :is(.ars-name, .ars-topic__label, .ars-header h2) { font-size: 14px; }
-html:root .interpoll-home :is(.fh-create, .fh-compose-actions button) svg { color: var(--app-accent); }
-html:root .interpoll-home .atn-search input { color: var(--app-text) !important; font-size: 14px; background: transparent !important; }
-html:root .interpoll-home .atn-search input::placeholder { color: var(--app-text-muted); opacity: 1; }
-html:root .interpoll-home :is(.nav-item, .atn-tab) { color: var(--app-text-muted); }
-html:root .interpoll-home :is(.nav-item, .atn-tab).active { color: var(--app-accent); }
-html:root .interpoll-home .nav-label { font-size: 11px; }
+html:root :is(.interpoll-home, .interpoll-interface) .fh-space-circle { color: #325c4b; background: #d6e6de; border-color: var(--app-bg-base); }
+html:root :is(.interpoll-home, .interpoll-interface) .fh-space-circle.fh-tone-1 { color: #57426e; background: #e5ddee; }
+html:root :is(.interpoll-home, .interpoll-interface) .fh-space-circle.fh-tone-2 { color: #6b4e25; background: #ecdfc9; }
+html:root :is(.interpoll-home, .interpoll-interface) .fh-space-circle.fh-tone-3 { color: #31556d; background: #d2e1ec; }
+html:root :is(.interpoll-home, .interpoll-interface) .fh-space--discover .fh-space-circle { color: var(--app-text-muted); background: var(--app-bg-elevated); }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.fh-prompt, .fh-create, .fh-compose-actions button, .fh-heading > button) { font-size: 14px; }
+html:root :is(.interpoll-home, .interpoll-interface) .fh-space { font-size: 12px; }
+html:root :is(.interpoll-home, .interpoll-interface) .fh-scopes button { font-size: 14px; }
+html:root :is(.interpoll-home, .interpoll-interface) .fh-topics button { font-size: 13px; min-height: 38px; }
+html:root :is(.interpoll-home, .interpoll-interface) .fh-tags button { font-size: 13px; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-excerpt, .poll-description) { font-size: 15px; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-author, .author, .post-community, .option-text) { font-size: 14px; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-time, .timestamp, .option-votes, .post-identity-badge, .identity-badge) { font-size: 12px; color: var(--app-text-muted) !important; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-relay-attr, .relay-attr-badge--inline) { font-size: 11px; opacity: 1; color: var(--app-text-muted) !important; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-action-btn, .stat-icon-btn, .stat-item, .post-share-btn) { font-size: 13px; min-height: 38px; }
+html:root :is(.interpoll-home, .interpoll-interface) .ars-meta { font-size: 12px; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.ars-name, .ars-topic__label, .ars-header h2) { font-size: 14px; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.fh-create, .fh-compose-actions button) svg { color: var(--app-accent); }
+html:root :is(.interpoll-home, .interpoll-interface) .atn-search input { color: var(--app-text) !important; font-size: 14px; background: transparent !important; }
+html:root :is(.interpoll-home, .interpoll-interface) .atn-search input::placeholder { color: var(--app-text-muted); opacity: 1; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.nav-item, .atn-tab) { color: var(--app-text-muted); }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.nav-item, .atn-tab).active { color: var(--app-accent); }
+html:root :is(.interpoll-home, .interpoll-interface) .nav-label { font-size: 11px; }
 @media (max-width: 767px) {
-  html:root .interpoll-home .fh-scopes { gap: 10px; }
-  html:root .interpoll-home .fh-scopes button { font-size: 13px; }
-  html:root .interpoll-home .fh-sort select { font-size: 13px; max-width: 83px; }
-  html:root .interpoll-home .fh-more select { font-size: 13px; max-width: 110px; }
-  html:root .interpoll-home .fh-topics button { font-size: 12px; }
-  html:root .interpoll-home :is(.post-title, .poll-question) { font-size: 19px !important; }
+  html:root :is(.interpoll-home, .interpoll-interface) .fh-scopes { gap: 10px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .fh-scopes button { font-size: 13px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .fh-sort select { font-size: 13px; max-width: 83px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .fh-more select { font-size: 13px; max-width: 110px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .fh-topics button { font-size: 12px; }
+  html:root :is(.interpoll-home, .interpoll-interface) :is(.post-title, .poll-question) { font-size: 19px !important; }
+}
+
+/* The same navigation and canvas follow the user into secondary pages. */
+html:root .interpoll-interface :is(.profile-hero, .profile-card, .settings-card) {
+  background: var(--app-bg-elevated) !important;
+  background-image: none !important;
+  border: 1px solid var(--app-border) !important;
+  border-radius: 14px;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+html:root .interpoll-interface .settings-card.danger-zone { background: #f8eeee !important; border-color: #d8a3a3 !important; }
+html:root .interpoll-interface .settings-tab-bar { background: var(--app-bg-base); border-color: var(--app-border); }
+html:root .interpoll-interface .settings-tab { font-size: 13px; min-height: 40px; }
+html:root .interpoll-interface .settings-tab.active { background: var(--app-accent); border-color: var(--app-accent); color: #fff; }
+html:root .interpoll-interface :is(.profile-page, .settings-page) :is(.field-wrap, .info-row, .chat-link-box, .settings-input) {
+  background: var(--app-item-surface);
+  border: 1px solid var(--app-border);
+}
+html:root .interpoll-interface :is(.profile-page, .settings-page) .field-wrap:focus-within { border-color: var(--app-accent); box-shadow: 0 0 0 3px rgba(var(--app-accent-rgb), .15); }
+html:root .interpoll-interface :is(.profile-page, .settings-page) .field-native { color: var(--app-text); background: transparent !important; font-size: 14px; }
+html:root .interpoll-interface :is(.profile-page, .settings-page) select.field-native { appearance: auto; color-scheme: light; background-image: none; }
+html:root .interpoll-interface :is(.profile-page, .settings-page) :is(.field-label, .info-key, .info-val, .toggle-sub, .card-heading p, .card-sub) { font-size: 13px; }
+html:root .interpoll-interface :is(.profile-page, .settings-page) :is(.save-btn, .block-btn.accent, .pill-btn.accent) { color: #fff; background: var(--app-accent); box-shadow: none; }
+html:root .interpoll-interface :is(.profile-page, .settings-page) :is(.block-btn.outline, .pill-btn.outline, .settings-inline-btn) { background: var(--app-item-surface); border: 1px solid var(--app-border); color: var(--app-text); }
+html:root .interpoll-interface :is(.profile-page, .settings-page) :is(.block-btn.danger, .pill-btn.danger) { color: #a62b2b; border-color: #d8a3a3; }
+html:root .interpoll-interface :is(.profile-page, .settings-page) .toggle-track { background: #87939c; border-color: #74818b; }
+html:root .interpoll-interface :is(.profile-page, .settings-page) .toggle-switch input:checked + .toggle-track { background: var(--app-accent); border-color: var(--app-accent); }
+html:root .interpoll-interface :is(.profile-page, .settings-page) .toggle-switch input:focus-visible + .toggle-track { outline: 2px solid var(--app-accent); outline-offset: 3px; }
+html:root .interpoll-interface .dps-shell { min-width: 0; }
+html:root .interpoll-interface .dps-main {
+  background: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  padding: 0;
+}
+html:root .interpoll-interface .dps-shell .atn-name { color: var(--app-text); }
+html:root .interpoll-interface .search-page { padding: 0; max-width: none; }
+html:root .interpoll-interface .search-page-title { font-size: 26px; font-weight: 700; margin: 0 0 20px; }
+html:root .interpoll-interface .search-header {
+  background: var(--app-bg-elevated) !important;
+  border: 1px solid var(--app-border) !important;
+  border-radius: 14px !important;
+  padding: 20px;
+  margin-bottom: 18px;
+  box-shadow: none !important;
+}
+html:root .interpoll-interface .search-box {
+  display: flex !important;
+  border: 1px solid var(--app-border-strong);
+  background: var(--app-item-surface);
+  min-height: 48px;
+  padding: 6px 14px;
+  border-radius: 10px;
+}
+html:root .interpoll-interface .search-input {
+  min-width: 0;
+  color: var(--app-text) !important;
+  background: transparent !important;
+  font-size: 16px;
+  border: 0 !important;
+}
+html:root .interpoll-interface .search-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+html:root .interpoll-interface :is(.filter-select, .filter-input) {
+  min-width: 0; width: 100%; min-height: 44px; box-sizing: border-box;
+  border: 1px solid var(--app-border) !important;
+  border-radius: 9px !important;
+  background: var(--app-bg-elevated) !important;
+  color: var(--app-text) !important;
+  font-size: 14px;
+  padding: 9px 12px;
+  color-scheme: light;
+}
+html:root .interpoll-interface .filter-select { appearance: auto; }
+html:root .interpoll-interface .filter-select option { background: var(--app-bg-elevated); color: var(--app-text); font-size: 14px; }
+html:root .interpoll-interface :is(.search-input, .filter-input)::placeholder { color: var(--app-text-subtle); opacity: 1; }
+html:root .interpoll-interface .search-start { display: flex; flex-direction: column; align-items: center; padding: 52px 20px; text-align: center; color: var(--app-text-muted); }
+html:root .interpoll-interface .search-start svg { width: 42px; height: 42px; margin-bottom: 16px; }
+html:root .interpoll-interface .search-start h2 { color: var(--app-text); font-size: 19px; font-weight: 650; margin: 0 0 10px; }
+html:root .interpoll-interface .search-start p { max-width: 38ch; font-size: 15px; line-height: 1.6; margin: 0; }
+html:root .interpoll-interface :is(.result-item, .space-match) { background: var(--app-bg-elevated); border: 1px solid var(--app-border); border-radius: 12px; padding: 18px; }
+html:root .interpoll-interface .result-title { color: var(--app-text); font-size: 18px !important; }
+html:root .interpoll-interface .result-content { color: var(--app-text-muted); font-size: 15px !important; line-height: 1.65; }
+@media (min-width: 768px) {
+  html:root .interpoll-interface .search-view > ion-header { display: none; }
+  html:root .interpoll-interface .dps-root { width: min(1260px, calc(100% - 48px)); gap: 28px; padding-top: 26px; }
+  html:root .interpoll-interface .dps-main { max-width: 680px; flex: 1; margin-inline: auto; }
+}
+@media (max-width: 767px) {
+  html:root .interpoll-interface .dps-main { padding: 16px 14px 36px; }
+  html:root .interpoll-interface .search-page-title { display: none; }
+  html:root .interpoll-interface .search-header { padding: 14px; }
 }

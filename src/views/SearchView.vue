@@ -1,9 +1,9 @@
 <template>
-  <ion-page>
+  <ion-page class="search-view">
     <ion-header>
       <ion-toolbar>
         <ion-buttons slot="start">
-          <button class="back-btn" @click="router.back()">
+          <button class="back-btn" aria-label="Back" @click="router.back()">
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
@@ -16,6 +16,7 @@
     <ion-content>
       <DesktopPageShell>
       <div class="search-page">
+    <h1 class="search-page-title">Search</h1>
     <!-- Search Header -->
     <div class="search-header">
       <div class="search-box">
@@ -27,6 +28,7 @@
           @input="handleSearch"
           type="search"
           placeholder="Search posts, polls and spaces..."
+          aria-label="Search posts, polls and spaces"
           class="search-input"
           autofocus
         />
@@ -34,7 +36,7 @@
 
       <!-- Filter row 1: type + community -->
       <div class="search-filters">
-        <select v-model="filterType" @change="handleFilterChange" class="filter-select">
+        <select v-model="filterType" @change="handleFilterChange" class="filter-select" aria-label="Content type">
           <option value="">All Types</option>
           <option value="post">Posts</option>
           <option value="poll">Polls</option>
@@ -44,6 +46,7 @@
           @input="handleFilterChange"
           type="text"
           placeholder="Community..."
+          aria-label="Filter by community"
           class="filter-input"
         />
       </div>
@@ -65,8 +68,13 @@
         </button>
       </div>
 
+      <div v-if="!searchQuery.trim()" class="search-start">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.5"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <h2>Find a conversation</h2>
+        <p>Search posts, polls and spaces by a topic or a few words.</p>
+      </div>
       <!-- Loading -->
-      <div v-if="loading" class="loading-state">
+      <div v-else-if="loading" class="loading-state">
         <div class="spinner"></div>
         <p>Searching...</p>
       </div>
