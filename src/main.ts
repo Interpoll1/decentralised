@@ -14,6 +14,7 @@ import '@ionic/vue/css/flex-utils.css';
 import '@ionic/vue/css/display.css';
 import './style.css';
 import './theme-raycast.css';
+import './styles/interface-refresh.css';
 import App from './App.vue';
 import router from './router';
 import { recordError, reportFatal } from './utils/errorReporting';
