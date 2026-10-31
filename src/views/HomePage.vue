@@ -20,14 +20,14 @@
     </ion-header>
 
     <!-- Desktop top bar (hidden on phones, which keep the header above and the bottom nav) -->
-    <AppTopNav :total-unread="totalUnread" @open-relay="relaySheetOpen = true" />
+    <AppTopNav :class="{ 'atn--workspace': activeTab === 'chat' }" :total-unread="totalUnread" @open-relay="relaySheetOpen = true" />
 
     <ion-content class="ambient-page" :fullscreen="fullscreenContent" :scroll-events="true" @ionScroll="handleScroll">
       <BurstOverlay />
       <div class="hp-root page-layout ambient-page__content" :class="{ 'hp-root--chat': activeTab === 'chat' }">
 
-        <!-- ── LEFT: relay pulse (desktop only) ─────────────────────── -->
-        <RelayPulseSidebar v-if="activeTab !== 'chat'" @open-relay="relaySheetOpen = true" />
+        <!-- Familiar social navigation; network diagnostics live behind Network. -->
+        <SocialSidebar v-if="activeTab !== 'chat'" :active-tab="activeTab" :total-unread="totalUnread" :spaces="communityStore.communities" @tab="activeTab = $event" @spaces="openSpaces" @relay="relaySheetOpen = true" />
 
         <!-- ── MAIN CONTENT ──────────────────────────────────────────── -->
         <main class="main-content surface-card" :class="{ 'main-content--chat': activeTab === 'chat' }">
@@ -66,12 +66,15 @@
               :categories="VISIBLE_CATEGORIES"
               :tags="trendingTagChips"
               :active-tag="activeTagFilter"
+              :spaces="communityStore.communities"
               @scope="setScope"
               @order="setFeedMode"
               @category="selectCategory"
               @tag="handleTagChipClick"
               @post="showPostOptions"
               @poll="showPollOptions"
+              @spaces="openSpaces"
+              @space="router.push(`/community/${$event}`)"
             />
 
             <!-- "My Spaces" empty hint -->
@@ -368,7 +371,7 @@ const PollCard         = defineAsyncComponent(() => import('../components/PollCa
 // Heavy sidebar/overlay components — loaded async so they don't block initial paint
 import FeedHub from '../components/FeedHub.vue';
 
-const RelayPulseSidebar = defineAsyncComponent(() => import('../components/RelayPulseSidebar.vue'));
+import SocialSidebar from '../components/SocialSidebar.vue';
 const BurstOverlay     = defineAsyncComponent(() => import('../components/BurstOverlay.vue'));
 const AppRightSidebar  = defineAsyncComponent(() => import('../components/AppRightSidebar.vue'));
 const RelaySheet       = defineAsyncComponent(() => import('../components/RelaySheet.vue'));
