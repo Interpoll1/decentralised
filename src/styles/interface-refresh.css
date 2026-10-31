@@ -23,6 +23,7 @@ html:root :is(.interpoll-home, .interpoll-interface) {
   --app-accent-rgb: 23, 102, 75;
   --app-item-surface: #e3e6e9;
   --app-search-surface: #d9dee3;
+  --app-control-size: 44px;
   --app-heading-start: #232a31;
   --app-heading-end: #232a31;
   --ion-background-color: #e7e9ec;
@@ -197,7 +198,7 @@ html:root :is(.interpoll-home, .interpoll-interface) .fh-space { font-size: 12px
 html:root :is(.interpoll-home, .interpoll-interface) .fh-scopes button { font-size: 14px; }
 html:root :is(.interpoll-home, .interpoll-interface) .fh-topics button { font-size: 13px; min-height: 38px; }
 html:root :is(.interpoll-home, .interpoll-interface) .fh-tags button { font-size: 13px; }
-html:root :is(.interpoll-home, .interpoll-interface) :is(.post-excerpt, .poll-description) { font-size: 15px; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-excerpt, .poll-description) { font-size: 16px; }
 html:root :is(.interpoll-home, .interpoll-interface) :is(.post-author, .author, .post-community, .option-text) { font-size: 14px; }
 html:root :is(.interpoll-home, .interpoll-interface) :is(.post-time, .timestamp, .option-votes, .post-identity-badge, .identity-badge) { font-size: 12px; color: var(--app-text-muted) !important; }
 html:root :is(.interpoll-home, .interpoll-interface) :is(.post-relay-attr, .relay-attr-badge--inline) { font-size: 11px; opacity: 1; color: var(--app-text-muted) !important; }
@@ -210,13 +211,59 @@ html:root :is(.interpoll-home, .interpoll-interface) .atn-search input::placehol
 html:root :is(.interpoll-home, .interpoll-interface) :is(.nav-item, .atn-tab) { color: var(--app-text-muted); }
 html:root :is(.interpoll-home, .interpoll-interface) :is(.nav-item, .atn-tab).active { color: var(--app-accent); }
 html:root :is(.interpoll-home, .interpoll-interface) .nav-label { font-size: 11px; }
+/* Refinement of the established social feed: complete labels, distinct filter
+   rows, and one consistent hit area without adding decorative motion. */
+html:root .interpoll-interface .feed-hub { margin-bottom: 16px; }
+html:root .interpoll-interface .fh-heading { margin-bottom: 16px; }
+html:root .interpoll-interface .fh-spaces { gap: 16px; padding: 2px 0 20px; }
+html:root .interpoll-interface .fh-space { width: 80px; gap: 8px; font-size: 13px; }
+html:root .interpoll-interface .fh-space > span:last-child { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; line-height: 1.35; }
+html:root .interpoll-interface :is(.fh-prompt, .fh-create) { min-height: var(--app-control-size); height: auto; font-size: 15px; }
+html:root .interpoll-interface .fh-prompt { padding-block: 10px; line-height: 1.4; }
+html:root .interpoll-interface .fh-create { padding-inline: 10px; border-radius: 10px !important; color: var(--app-accent); }
+html:root .interpoll-interface .fh-compose-actions button { min-height: var(--app-control-size); padding: 8px; }
+html:root .interpoll-interface .fh-filter-row { gap: 8px; }
+html:root .interpoll-interface .fh-topics { flex: 1; }
+html:root .interpoll-interface :is(.fh-sort, .fh-more) { display: block; flex-shrink: 0; }
+html:root .interpoll-interface :is(.fh-sort, .fh-more) select { cursor: pointer; }
+html:root .interpoll-interface .fh-topics button { min-height: var(--app-control-size); }
+html:root .interpoll-interface .fh-tags button { min-height: var(--app-control-size); }
+html:root .interpoll-interface .hp-root :is(.post-action-btn, .stat-icon-btn, .post-share-btn, .poll-actions .action-btn) { min-width: var(--app-control-size); min-height: var(--app-control-size); font-size: 14px; }
+html:root .interpoll-interface .hp-root :is(.post-action-btn, .stat-icon-btn) :is(ion-icon, svg) { width: 18px; height: 18px; font-size: 18px !important; }
+html:root .interpoll-interface .hp-root :is(.post-action-btn--heart, .stat-icon-btn.heart) ion-icon { color: var(--app-text-muted); }
+html:root .interpoll-interface .hp-root :is(.post-action-btn--heart, .stat-icon-btn.heart).active ion-icon { color: var(--app-accent); }
+html:root .interpoll-interface .poll-actions { display: flex; align-items: center; gap: 8px; }
+html:root .interpoll-interface .poll-badge { color: var(--app-accent); background: rgba(var(--app-accent-rgb), .08); border-color: rgba(var(--app-accent-rgb), .24); font-size: 12px; }
+html:root .interpoll-interface .poll-open { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: var(--app-control-size); padding: 10px 16px; border: 1px solid var(--app-accent); border-radius: 99px; color: var(--app-accent); background: transparent; font-size: 14px; font-weight: 650; }
+html:root .interpoll-interface .post-image-trigger { display: block; width: 100%; padding: 0; border: 0; border-radius: 0 !important; background: transparent; cursor: zoom-in; }
+html:root .interpoll-interface .post-image-trigger:focus-visible { outline: 3px solid var(--app-accent) !important; outline-offset: -3px; }
+html:root .interpoll-interface .bottom-nav .nav-item { min-height: 60px; }
+html:root .interpoll-interface .feed-hub button:active,
+html:root .interpoll-interface .hp-root :is(.post-action-btn, .stat-icon-btn, .poll-open):active { background: var(--app-surface-hover) !important; }
+@media (hover: hover) {
+  html:root .interpoll-interface .fh-create:hover,
+  html:root .interpoll-interface .hp-root :is(.post-action-btn, .stat-icon-btn, .poll-open):hover { background: var(--app-surface-hover) !important; }
+}
 @media (max-width: 767px) {
-  html:root :is(.interpoll-home, .interpoll-interface) .fh-scopes { gap: 10px; }
-  html:root :is(.interpoll-home, .interpoll-interface) .fh-scopes button { font-size: 13px; }
-  html:root :is(.interpoll-home, .interpoll-interface) .fh-sort select { font-size: 13px; max-width: 83px; }
-  html:root :is(.interpoll-home, .interpoll-interface) .fh-more select { font-size: 13px; max-width: 110px; }
+  html:root .interpoll-interface .fh-heading { margin-bottom: 12px; }
+  html:root .interpoll-interface .fh-space-circle { width: 48px; height: 48px; }
+  html:root .interpoll-interface .fh-composer { padding: 12px; }
+  html:root .interpoll-interface .fh-prompt { font-size: 14px; }
+  html:root .interpoll-interface .fh-toolbar { margin-top: 12px; }
+  html:root .interpoll-interface .fh-scopes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; width: 100%; overflow: visible; }
+  html:root .interpoll-interface .fh-scopes button { font-size: 13px; min-width: 0; min-height: 48px; white-space: normal; line-height: 1.3; padding: 10px 4px; }
+  html:root .interpoll-interface .fh-topics { display: none; }
+  html:root .interpoll-interface .fh-filter-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(100px, .65fr); gap: 12px; padding-top: 12px; }
+  html:root .interpoll-interface :is(.fh-more, .fh-sort) { min-width: 0; }
+  html:root .interpoll-interface :is(.fh-more, .fh-sort) select { width: 100%; max-width: none; min-height: var(--app-control-size); border: 1px solid var(--app-border-strong) !important; border-radius: 10px !important; background: var(--app-bg-elevated) !important; padding: 8px 12px; font-size: 14px; }
   html:root :is(.interpoll-home, .interpoll-interface) .fh-topics button { font-size: 12px; }
   html:root :is(.interpoll-home, .interpoll-interface) :is(.post-title, .poll-question) { font-size: 19px !important; }
+  html:root .interpoll-interface :is(.post-inner, .poll-body) { padding: 16px 16px 12px; }
+  html:root .interpoll-interface .post-media { margin-inline: -16px; }
+  html:root .interpoll-interface .post-meta-row { flex-wrap: wrap; row-gap: 3px; }
+  html:root .interpoll-interface .poll-footer { align-items: flex-start; flex-direction: column; gap: 12px; }
+  html:root .interpoll-interface .poll-actions { justify-content: space-between; width: 100%; }
+  html:root .interpoll-interface .bottom-nav { padding-top: 0; }
 }
 
 /* The same navigation and canvas follow the user into secondary pages. */

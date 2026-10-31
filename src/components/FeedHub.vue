@@ -2,7 +2,7 @@
   <section class="feed-hub" aria-label="Feed controls">
     <header class="fh-heading">
       <h1>Home</h1>
-      <button @click="emit('spaces')">Discover spaces <span aria-hidden="true">↗</span></button>
+      <button v-if="!spaces.length" @click="emit('spaces')">Discover spaces <span aria-hidden="true">↗</span></button>
     </header>
     <div v-if="spaces.length" class="fh-spaces" aria-label="Explore spaces">
       <button class="fh-space fh-space--discover" @click="emit('spaces')"><span class="fh-space-circle">+</span><span>Discover</span></button>
@@ -23,18 +23,20 @@
         <button @click="emit('post')"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5h16M4 10h16M4 15h10M4 20h7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Start a discussion</button>
       </div>
     </div>
+    <div class="fh-feed-controls">
     <div class="fh-toolbar">
       <div class="fh-scopes" data-tour="feed-scopes" role="group" aria-label="Feed source">
         <button v-for="scope in scopes" :key="scope.id" :aria-pressed="scope.id === feedScope" :class="{ selected: scope.id === feedScope }" @click="emit('scope', scope.id)">{{ scope.label }}</button>
       </div>
-      <label class="fh-sort"><span class="fh-sr">Feed order</span><select :value="feedMode" aria-label="Feed order" @change="changeOrder"><option value="for-you">Relevant</option><option value="latest">Recent</option></select></label>
     </div>
     <div class="fh-filter-row">
       <div class="fh-topics" role="group" aria-label="Topics">
         <button :class="{ selected: category === 'all' }" :aria-pressed="category === 'all'" @click="emit('category', 'all')">All topics</button>
         <button v-for="topic in categories.slice(0, 3)" :key="topic.id" :class="{ selected: category === topic.id }" :aria-pressed="category === topic.id" @click="emit('category', topic.id)">{{ topic.label }}</button>
       </div>
-      <label class="fh-more"><span class="fh-sr">Choose any topic</span><select :value="category" aria-label="Choose any topic" @change="emit('category', ($event.target as HTMLSelectElement).value)"><option value="all">More topics</option><option v-for="topic in categories" :key="topic.id" :value="topic.id">{{ topic.label }}</option></select></label>
+      <label class="fh-more"><span class="fh-sr">Choose any topic</span><select :value="category" aria-label="Choose any topic" @change="emit('category', ($event.target as HTMLSelectElement).value)"><option value="all">All topics</option><option v-for="topic in categories" :key="topic.id" :value="topic.id">{{ topic.label }}</option></select></label>
+      <label class="fh-sort"><span class="fh-sr">Feed order</span><select :value="feedMode" aria-label="Feed order" @change="changeOrder"><option value="for-you">Relevant</option><option value="latest">Recent</option></select></label>
+    </div>
     </div>
     <div v-if="tags.length" class="fh-tags" role="group" aria-label="Trending tags"><button v-for="tag in tags.slice(0, 5)" :key="tag.tag" :aria-pressed="activeTag === tag.tag" :class="{ selected: activeTag === tag.tag }" @click="emit('tag', tag.tag)">#{{ tag.tag }}</button></div>
   </section>
