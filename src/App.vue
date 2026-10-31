@@ -98,15 +98,11 @@ function pageTransition(baseEl: HTMLElement, opts: { direction?: string }) {
 }
 
 onMounted(async () => {
-  // Dark/glass is the default theme. Apply it unless the user has
-  // explicitly chosen light mode. Also normalise any missing/unknown
-  // value so future reads are always 'dark' | 'light'.
-  const storedTheme = localStorage.getItem('theme');
-  if (storedTheme !== 'light') {
-    document.documentElement?.classList.add('dark');
-    document.body?.classList.add('dark');
-    if (!storedTheme) localStorage.setItem('theme', 'dark');
-  }
+  // This interface uses the light graphite palette, including upgrades from
+  // the older dark preview. Keep legacy dark component overrides inactive.
+  document.documentElement?.classList.remove('dark');
+  document.body?.classList.remove('dark');
+  localStorage.setItem('theme', 'light');
   syncSystemChrome();
   themeObserver = new MutationObserver(syncSystemChrome);
   themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });

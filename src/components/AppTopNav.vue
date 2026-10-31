@@ -151,7 +151,6 @@ const menuItems = computed(() => {
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Grand+Hotel&display=swap');
 /* Desktop only — phones keep the Ionic header and bottom nav. */
 .atn { display: none; }
 

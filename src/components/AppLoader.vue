@@ -159,7 +159,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Grand+Hotel&family=Cormorant+Garamond:ital@1&display=swap');
 
 .ip-loader {
   position: fixed;
