@@ -6,23 +6,31 @@
 }
 /* Social feed: content in the centre, familiar navigation at the edges.
    This sheet is scoped to Home; data, signing and moderation stay unchanged. */
-html.dark .interpoll-home {
-  --app-bg-base: #101416;
-  --app-bg-elevated: #191e21;
-  --app-surface: #191e21;
-  --app-surface-hover: #242b2f;
-  --app-border: #2b3439;
-  --app-border-strong: #46545c;
-  --app-text: #eff3f5;
-  --app-text-muted: #b0bac0;
-  --app-text-subtle: #8f9ca4;
-  --app-accent: #65dca9;
-  --app-accent-bright: #86e6bd;
-  --app-accent-rgb: 101, 220, 169;
-  --app-item-surface: #252d31;
-  --app-search-surface: #252d31;
-  --ion-background-color: #101416;
-  --ion-color-primary: #65dca9;
+html:root .interpoll-home {
+  color-scheme: light;
+  color: #232a31;
+  --app-bg-base: #e7e9ec;
+  --app-bg-elevated: #f7f8f9;
+  --app-surface: #f7f8f9;
+  --app-surface-hover: #dde2e7;
+  --app-border: #c9ced4;
+  --app-border-strong: #87939c;
+  --app-text: #232a31;
+  --app-text-muted: #48545f;
+  --app-text-subtle: #5b6873;
+  --app-accent: #17664b;
+  --app-accent-bright: #145c43;
+  --app-accent-rgb: 23, 102, 75;
+  --app-item-surface: #e3e6e9;
+  --app-search-surface: #d9dee3;
+  --app-heading-start: #232a31;
+  --app-heading-end: #232a31;
+  --ion-background-color: #e7e9ec;
+  --ion-text-color: #232a31;
+  --ion-toolbar-color: #232a31;
+  --ion-color-primary: #17664b;
+  --ion-color-primary-rgb: 23, 102, 75;
+  --ion-color-primary-contrast: #ffffff;
 }
 html:root .interpoll-home,
 html:root .interpoll-home :is(ion-content, ion-header, ion-toolbar, ion-footer, .bottom-nav) {
@@ -158,4 +166,54 @@ html:root .interpoll-home :is(button, a, select):focus-visible { outline: 2px so
 @media (min-width: 1024px) {
   html:root .interpoll-home .atn--workspace .atn-tabs { display: flex; margin-left: 0; }
   html:root .interpoll-home .atn--workspace .atn-search { margin-left: 0; max-width: 280px; }
+}
+
+/* Readable graphite surfaces, including native select popups. */
+html:root .interpoll-home :is(.fh-sort, .fh-more) select {
+  color-scheme: light;
+  color: var(--app-text) !important;
+  font-size: 14px;
+  min-height: 44px;
+  max-width: 140px;
+}
+html:root .interpoll-home select option {
+  color: #232a31 !important;
+  background: #f7f8f9 !important;
+  font-size: 14px;
+}
+html:root .interpoll-home :is(.atn-publish, .ss-publish, .nav-fab) { color: #fff !important; }
+html:root .interpoll-home :is(.atn-avatar, .fh-avatar, .post-avatar, .author-avatar-sm) {
+  background: #cddfd7 !important;
+  color: #245344 !important;
+}
+html:root .interpoll-home .fh-space-circle { color: #325c4b; background: #d6e6de; border-color: var(--app-bg-base); }
+html:root .interpoll-home .fh-space-circle.fh-tone-1 { color: #57426e; background: #e5ddee; }
+html:root .interpoll-home .fh-space-circle.fh-tone-2 { color: #6b4e25; background: #ecdfc9; }
+html:root .interpoll-home .fh-space-circle.fh-tone-3 { color: #31556d; background: #d2e1ec; }
+html:root .interpoll-home .fh-space--discover .fh-space-circle { color: var(--app-text-muted); background: var(--app-bg-elevated); }
+html:root .interpoll-home :is(.fh-prompt, .fh-create, .fh-compose-actions button, .fh-heading > button) { font-size: 14px; }
+html:root .interpoll-home .fh-space { font-size: 12px; }
+html:root .interpoll-home .fh-scopes button { font-size: 14px; }
+html:root .interpoll-home .fh-topics button { font-size: 13px; min-height: 38px; }
+html:root .interpoll-home .fh-tags button { font-size: 13px; }
+html:root .interpoll-home :is(.post-excerpt, .poll-description) { font-size: 15px; }
+html:root .interpoll-home :is(.post-author, .author, .post-community, .option-text) { font-size: 14px; }
+html:root .interpoll-home :is(.post-time, .timestamp, .option-votes, .post-identity-badge, .identity-badge) { font-size: 12px; color: var(--app-text-muted) !important; }
+html:root .interpoll-home :is(.post-relay-attr, .relay-attr-badge--inline) { font-size: 11px; opacity: 1; color: var(--app-text-muted) !important; }
+html:root .interpoll-home :is(.post-action-btn, .stat-icon-btn, .stat-item, .post-share-btn) { font-size: 13px; min-height: 38px; }
+html:root .interpoll-home .ars-meta { font-size: 12px; }
+html:root .interpoll-home :is(.ars-name, .ars-topic__label, .ars-header h2) { font-size: 14px; }
+html:root .interpoll-home :is(.fh-create, .fh-compose-actions button) svg { color: var(--app-accent); }
+html:root .interpoll-home .atn-search input { color: var(--app-text) !important; font-size: 14px; background: transparent !important; }
+html:root .interpoll-home .atn-search input::placeholder { color: var(--app-text-muted); opacity: 1; }
+html:root .interpoll-home :is(.nav-item, .atn-tab) { color: var(--app-text-muted); }
+html:root .interpoll-home :is(.nav-item, .atn-tab).active { color: var(--app-accent); }
+html:root .interpoll-home .nav-label { font-size: 11px; }
+@media (max-width: 767px) {
+  html:root .interpoll-home .fh-scopes { gap: 10px; }
+  html:root .interpoll-home .fh-scopes button { font-size: 13px; }
+  html:root .interpoll-home .fh-sort select { font-size: 13px; max-width: 83px; }
+  html:root .interpoll-home .fh-more select { font-size: 13px; max-width: 110px; }
+  html:root .interpoll-home .fh-topics button { font-size: 12px; }
+  html:root .interpoll-home :is(.post-title, .poll-question) { font-size: 19px !important; }
 }
