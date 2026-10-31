@@ -45,8 +45,7 @@ let keydownHandler: ((event: KeyboardEvent) => void) | null = null;
 let themeObserver: MutationObserver | null = null;
 
 function syncSystemChrome() {
-  const dark = document.documentElement.classList.contains('dark');
-  const color = dark ? '#07110b' : '#eef6f0';
+  const color = getComputedStyle(document.documentElement).getPropertyValue('--app-bg-base').trim() || '#e7e9ec';
   document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute('content', color);
   document.documentElement.style.setProperty('--system-chrome-color', color);
 }

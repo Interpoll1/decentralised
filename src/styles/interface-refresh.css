@@ -6,6 +6,9 @@
 }
 /* Social feed: content in the centre, familiar navigation at the edges.
    The shared app scope keeps linked pages in the same graphite theme. */
+html:root,
+html:root.dark,
+html:root body,
 html:root :is(.interpoll-home, .interpoll-interface) {
   color-scheme: light;
   color: #232a31;
@@ -21,6 +24,8 @@ html:root :is(.interpoll-home, .interpoll-interface) {
   --app-accent: #17664b;
   --app-accent-bright: #145c43;
   --app-accent-rgb: 23, 102, 75;
+  --app-danger: #b42318;
+  --app-warning: #7a5000;
   --app-item-surface: #e3e6e9;
   --app-search-surface: #d9dee3;
   --app-control-size: 44px;
