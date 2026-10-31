@@ -89,11 +89,11 @@
         <div class="poll-stats">
 
           <!-- Like / dislike (kept for content curation) -->
-          <button class="stat-icon-btn heart" @click="$emit('upvote')" :class="{ active: hasUpvoted }">
+          <button class="stat-icon-btn heart" @click="$emit('upvote')" :class="{ active: hasUpvoted }" :aria-label="hasUpvoted ? 'Unlike poll' : 'Like poll'" :aria-pressed="hasUpvoted">
             <ion-icon :icon="hasUpvoted ? heart : heartOutline"></ion-icon>
             <span>{{ poll.upvotes || 0 }}</span>
           </button>
-          <button class="stat-icon-btn downvote" @click="$emit('downvote')" :class="{ active: hasDownvoted }">
+          <button class="stat-icon-btn downvote" @click="$emit('downvote')" :class="{ active: hasDownvoted }" :aria-label="hasDownvoted ? 'Remove poll downvote' : 'Downvote poll'" :aria-pressed="hasDownvoted">
             <svg class="thumb-down-icon" viewBox="0 0 24 24" fill="none">
               <path d="M15 3H6C5.17 3 4.46 3.5 4.16 4.22l-3.02 7.05C1.05 11.5 1 11.74 1 12v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.59-6.59c.36-.36.58-.86.58-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z" fill="currentColor"/>
             </svg>
@@ -152,6 +152,7 @@
         </div>
 
         <div class="poll-actions">
+          <button class="poll-open" @click.stop="$emit('click')" :aria-label="`Open poll: ${poll.question || 'Untitled Poll'}`">Open poll <ion-icon :icon="chevronForwardOutline" aria-hidden="true"></ion-icon></button>
           <!-- Share -->
           <button class="action-btn" title="Share" @click.stop="handleShare">
             <svg class="reddit-share-icon" viewBox="0 0 24 24" fill="none">
@@ -389,8 +390,7 @@ function formatViewCount(n: number): string {
 .poll-question {
   margin: 0 0 8px;
   font-size: 18px; font-weight: 800; line-height: 1.25; letter-spacing: -0.03em;
-  background: linear-gradient(135deg, var(--app-text) 60%, rgba(230, 230, 230,0.85));
-  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  color: var(--app-text);
 }
 .poll-description { margin: 0 0 12px; font-size: 13.5px; line-height: 1.6; color: var(--app-text-muted); }
 

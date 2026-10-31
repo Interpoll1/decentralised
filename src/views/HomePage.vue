@@ -1,52 +1,33 @@
 <template>
-  <ion-page>
-    <ion-header :class="{ 'header-hidden': isHeaderHidden }">
+  <ion-page class="interpoll-home">
+    <ion-header class="home-scroll-header" :class="{ 'header-hidden': isHeaderHidden }">
       <ion-toolbar>
         <ion-buttons slot="start">
           <div class="logo-title" role="button" tabindex="0" style="cursor:pointer" @click="activeTab = 'home'" @keydown.enter="activeTab = 'home'">Interpoll</div>
         </ion-buttons>
         <ion-buttons slot="end" class="header-util-buttons">
-          <ion-button v-if="canScanQr" @click="scanQr()" aria-label="Scan QR code">
-            <ion-icon :icon="qrCodeOutline"></ion-icon>
-          </ion-button>
-          <ion-button data-tour="search" @click="$router.push('/search')">
+          <ion-button data-tour="search" aria-label="Search Interpoll" @click="$router.push('/search')">
             <ion-icon :icon="searchOutline"></ion-icon>
           </ion-button>
-          <ion-button @click="$router.push('/profile')">
+          <ion-button aria-label="Your profile" @click="$router.push('/profile')">
             <ion-icon :icon="personCircleOutline"></ion-icon>
           </ion-button>
-          <!-- Resilience Center — mobile only, side nav shows it on desktop -->
-          <ion-button class="resilience-header-btn" @click="$router.push('/resilience')" aria-label="Resilience Center">
-            <svg viewBox="0 0 24 24" fill="none" style="flex-shrink:0;width:21px;height:21px">
-              <path d="M12 21C12 21 3 15 3 9a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 6-9 12-9 12z"
-                stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-              <path d="M5.5 11.5h2.5l1.5-3 2 6 1.5-3H18"
-                stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </ion-button>
-          <!-- Relay status — tap to open relay sheet -->
-          <ion-button class="relay-header-btn" @click="relaySheetOpen = true" aria-label="Relay status">
-            <svg viewBox="0 0 24 24" fill="none" style="flex-shrink:0;width:20px;height:20px">
-              <!-- broadcast tower -->
-              <path d="M12 20v-8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-              <path d="M8.5 16.5C7 15.2 6 13.2 6 11a6 6 0 0112 0c0 2.2-1 4.2-2.5 5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-              <path d="M5 19.5C2.8 17.5 1.5 14.4 1.5 11a10.5 10.5 0 0121 0c0 3.4-1.3 6.5-3.5 8.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-              <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
-            </svg>
+          <ion-button aria-label="More options" @click="showHomeMenu">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
           </ion-button>
         </ion-buttons>
       </ion-toolbar>
     </ion-header>
 
     <!-- Desktop top bar (hidden on phones, which keep the header above and the bottom nav) -->
-    <AppTopNav :total-unread="totalUnread" @open-relay="relaySheetOpen = true" />
+    <AppTopNav :class="{ 'atn--workspace': activeTab === 'chat' }" :total-unread="totalUnread" @open-relay="relaySheetOpen = true" />
 
-    <ion-content class="ambient-page" :scroll-events="true" @ionScroll="handleScroll">
+    <ion-content class="ambient-page" :fullscreen="fullscreenContent" :scroll-events="true" @ionScroll="handleScroll">
       <BurstOverlay />
       <div class="hp-root page-layout ambient-page__content" :class="{ 'hp-root--chat': activeTab === 'chat' }">
 
-        <!-- ── LEFT: relay pulse (desktop only) ─────────────────────── -->
-        <RelayPulseSidebar v-if="activeTab !== 'chat'" @open-relay="relaySheetOpen = true" />
+        <!-- Familiar social navigation; network diagnostics live behind Network. -->
+        <SocialSidebar v-if="activeTab !== 'chat'" :active-tab="activeTab" :total-unread="totalUnread" :spaces="communityStore.communities" @tab="activeTab = $event" @spaces="openSpaces" @relay="relaySheetOpen = true" />
 
         <!-- ── MAIN CONTENT ──────────────────────────────────────────── -->
         <main class="main-content surface-card" :class="{ 'main-content--chat': activeTab === 'chat' }">
@@ -77,146 +58,24 @@
             </section>
 
             <!-- Desktop heading + composer -->
-            <div class="net-head">
-              <div class="net-head__text">
-                <h1>Your network</h1>
-                <p>What's moving across this relay</p>
-              </div>
-              <div class="net-seg" role="tablist" aria-label="Feed order">
-                <button role="tab" :aria-selected="feedMode === 'for-you'" :class="{ active: feedMode === 'for-you' }" @click="setFeedMode('for-you')">Relevant</button>
-                <button role="tab" :aria-selected="feedMode === 'latest'" :class="{ active: feedMode === 'latest' }" @click="setFeedMode('latest')">Recent</button>
-              </div>
-            </div>
-            <div class="net-composer">
-              <span class="net-composer__avatar" aria-hidden="true">{{ meInitial }}</span>
-              <button class="net-composer__input" @click="showPostOptions()">Share something with the network…</button>
-              <button class="net-composer__tool" aria-label="Post with an image" title="Post with an image" @click="showPostOptions()">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="10" r="1.6" fill="currentColor"/><path d="M4 17l5-4.5 4 3.5 3-2.5 4 3.5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
-              </button>
-              <button class="net-composer__tool net-composer__tool--text" @click="showPollOptions()">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 20V11M12 20V4M19 20v-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>Poll
-              </button>
-              <button class="net-composer__publish" @click="showPostOptions()">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3.4 20.4l17.4-7.5c.8-.4.8-1.5 0-1.8L3.4 3.6c-.7-.3-1.4.3-1.2 1l1.6 6.2c.1.4.4.6.8.7L12 12l-7.4.5c-.4.1-.7.3-.8.7l-1.6 6.2c-.2.7.5 1.3 1.2 1z" fill="currentColor"/></svg>Publish
-              </button>
-            </div>
-
-            <!-- Feed toolbar: pill row on mobile, split tabs on desktop -->
-            <div class="feed-toolbar">
-              <!-- Mobile row 1: scope + mode pills -->
-              <div class="feed-pills-row" data-tour="feed-scopes">
-                <button class="scope-pill" :class="{ active: feedScope === 'mine' }"  @click="setScope('mine')">
-                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
-                  Mine
-                </button>
-                <button class="scope-pill" :class="{ active: feedScope === 'relay' }" @click="setScope('relay')">
-                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20" stroke="currentColor" stroke-width="2"/></svg>
-                  Relay
-                </button>
-                <button class="scope-pill" :class="{ active: feedScope === 'explore' }" @click="setScope('explore')">
-                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                  Explore
-                </button>
-                <button class="scope-pill" :class="{ active: feedScope === 'nearby' }" @click="setScope('nearby')">
-                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none"><path d="M12 22s7-6.2 7-12a7 7 0 10-14 0c0 5.8 7 12 7 12z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.5" stroke="currentColor" stroke-width="2"/></svg>
-                  Nearby
-                </button>
-                <span class="feed-pills-divider"></span>
-                <button class="scope-pill" :class="{ active: feedMode === 'for-you' }" @click="setFeedMode('for-you')">✦ For You</button>
-                <button class="scope-pill" :class="{ active: feedMode === 'latest' }"  @click="setFeedMode('latest')">Latest</button>
-              </div>
-              <!-- Mobile row 2: category pills -->
-              <div class="feed-pills-row feed-cat-pills-row">
-                <button class="scope-pill" :class="{ active: selectedCategory === 'all' }" @click="selectCategory('all')">All</button>
-                <button
-                  v-for="cat in VISIBLE_CATEGORIES"
-                  :key="'mp-' + cat.id"
-                  class="scope-pill"
-                  :class="{ active: selectedCategory === cat.id }"
-                  @click="selectCategory(cat.id)"
-                >{{ cat.label }}</button>
-              </div>
-            </div>
-
-            <!-- Desktop only: split scope tabs + mode toggle -->
-            <div class="feed-toolbar feed-toolbar--desktop">
-              <div class="feed-toolbar-row">
-                <div class="feed-scope-tabs" data-tour="feed-scopes">
-                  <button class="scope-tab" :class="{ active: feedScope === 'mine' }"  @click="setScope('mine')">
-                    <ion-icon :icon="bookmarkOutline"></ion-icon> My Spaces
-                  </button>
-                  <button class="scope-tab" :class="{ active: feedScope === 'relay' }" @click="setScope('relay')">
-                    <ion-icon :icon="globeOutline"></ion-icon> This Relay
-                  </button>
-                  <button class="scope-tab" :class="{ active: feedScope === 'explore' }" @click="setScope('explore')">
-                    <ion-icon :icon="ellipseOutline"></ion-icon> Explore
-                  </button>
-                  <button class="scope-tab" :class="{ active: feedScope === 'nearby' }" @click="setScope('nearby')">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true"><path d="M12 22s7-6.2 7-12a7 7 0 10-14 0c0 5.8 7 12 7 12z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.5" stroke="currentColor" stroke-width="2"/></svg> Nearby
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Category chips — desktop only (the left rail now shows relay pulse instead) -->
-            <div class="desktop-cat-strip" role="group" aria-label="Categories">
-              <button class="tag-chip" :class="{ active: selectedCategory === 'all' }" @click="selectCategory('all')">All</button>
-              <button
-                v-for="cat in VISIBLE_CATEGORIES"
-                :key="'dc-' + cat.id"
-                class="tag-chip"
-                :class="{ active: selectedCategory === cat.id }"
-                @click="selectCategory(selectedCategory === cat.id ? 'all' : cat.id)"
-              >{{ cat.label }}</button>
-            </div>
-
-            <!-- Tag strip — desktop only -->
-            <div class="desktop-tag-strip">
-              <button
-                v-for="t in trendingTagChips"
-                :key="t.tag"
-                class="tag-chip"
-                :class="{ active: activeTagFilter === t.tag, 'tag-chip--history': isUserTag(t.tag) }"
-                @click="handleTagChipClick(t.tag)"
-              >
-                <svg v-if="isUserTag(t.tag)" viewBox="0 0 24 24" fill="none" width="9" height="9">
-                  <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" stroke="currentColor" stroke-width="2"/>
-                </svg>
-                #{{ t.tag }}
-              </button>
-            </div>
-
-            <!-- Mobile-top-strip: desktop tags only — categories now in pill strip -->
-            <div class="mobile-top-strip mobile-top-strip--desktop-only" :class="{ 'show-tags': mobileShowTags }">
-              <div class="mobile-top-strip__tags">
-                <button
-                  v-for="t in trendingTagChips.slice(0, 8)"
-                  :key="t.tag"
-                  class="tag-chip"
-                  :class="{ 'tag-chip--history': isUserTag(t.tag) }"
-                  @click="handleTagChipClick(t.tag)"
-                >#{{ t.tag }}</button>
-              </div>
-              <div class="mobile-top-strip__cats">
-                <button
-                  class="feed-cat-pill"
-                  :class="{ active: selectedCategory === 'all' }"
-                  @click="selectCategory('all')"
-                >All</button>
-                <button
-                  v-for="cat in (showMoreCategories ? VISIBLE_CATEGORIES : VISIBLE_CATEGORIES.slice(0, 5))"
-                  :key="'mob-' + cat.id"
-                  class="feed-cat-pill"
-                  :class="{ active: selectedCategory === cat.id }"
-                  @click="selectCategory(cat.id)"
-                >{{ cat.label }}</button>
-                <button class="feed-cat-pill feed-cat-more" @click="showMoreCategories = !showMoreCategories">
-                  <ion-icon :icon="chevronDownOutline" :style="showMoreCategories ? 'transform:rotate(180deg)' : ''"></ion-icon>
-                </button>
-              </div>
-            </div>
-
-            <!-- Category pills: mobile uses mobile-top-strip__cats, tablet+ uses sidebar -->
+            <FeedHub
+              :initial="meInitial"
+              :feed-scope="feedScope"
+              :feed-mode="feedMode"
+              :category="selectedCategory"
+              :categories="VISIBLE_CATEGORIES"
+              :tags="trendingTagChips"
+              :active-tag="activeTagFilter"
+              :spaces="communityStore.communities"
+              @scope="setScope"
+              @order="setFeedMode"
+              @category="selectCategory"
+              @tag="handleTagChipClick"
+              @post="showPostOptions"
+              @poll="showPollOptions"
+              @spaces="openSpaces"
+              @space="router.push(`/community/${$event}`)"
+            />
 
             <!-- "My Spaces" empty hint -->
             <div v-if="feedScope === 'mine' && joinedCommunityIds.size === 0" class="scope-hint surface-card">
@@ -483,12 +342,12 @@ import {
 import {
   cube, personCircleOutline, settingsOutline, addCircleOutline, addOutline,
   earthOutline, peopleOutline, home, homeOutline, documentTextOutline,
-  chevronForwardOutline, chevronDownOutline, people, addCircle, statsChartOutline,
-  searchOutline, chatbubble, chatbubbleOutline, bookmarkOutline, globeOutline,
+  chevronForwardOutline, people, addCircle, statsChartOutline,
+  searchOutline, chatbubble, chatbubbleOutline, bookmarkOutline,
   shieldCheckmarkOutline, sparklesOutline, eyeOffOutline, linkOutline,
   codeSlashOutline, gameControllerOutline, flaskOutline, businessOutline,
   logoBitcoin, trophyOutline, ellipsisHorizontalOutline, lockClosedOutline,
-  qrCodeOutline, tvOutline, happyOutline, chatbubblesOutline, cashOutline,
+  tvOutline, happyOutline, chatbubblesOutline, cashOutline,
   heartOutline, schoolOutline, locationOutline, ellipseOutline,
 } from 'ionicons/icons';
 
@@ -510,11 +369,15 @@ const ChatTab          = defineAsyncComponent(() => import('../components/ChatTa
 const PostCard         = defineAsyncComponent(() => import('../components/PostCard.vue'));
 const PollCard         = defineAsyncComponent(() => import('../components/PollCard.vue'));
 // Heavy sidebar/overlay components — loaded async so they don't block initial paint
-const RelayPulseSidebar = defineAsyncComponent(() => import('../components/RelayPulseSidebar.vue'));
+import FeedHub from '../components/FeedHub.vue';
+
+import SocialSidebar from '../components/SocialSidebar.vue';
 const BurstOverlay     = defineAsyncComponent(() => import('../components/BurstOverlay.vue'));
 const AppRightSidebar  = defineAsyncComponent(() => import('../components/AppRightSidebar.vue'));
 const RelaySheet       = defineAsyncComponent(() => import('../components/RelaySheet.vue'));
 import BottomNav from '../components/BottomNav.vue';
+import { createHeaderScrollTracker } from '../utils/headerScrollTracker';
+import { matchesFeedScope, type FeedScope } from '../utils/feedScope';
 import AppTopNav from '../components/AppTopNav.vue';
 import { useNavStore } from '../stores/navStore';
 
@@ -576,7 +439,6 @@ const isLoadingPosts     = ref(false);
 const voteVersion        = ref(0);
 const isHeaderHidden     = ref(false);
 const warmupComplete     = ref(false);
-const showMoreCategories = ref(false);
 const relaySheetOpen     = ref(false);
 
 // ── View tracking — feed list ref (must be in setup scope for template binding) ──
@@ -584,7 +446,6 @@ const feedListEl = ref<HTMLElement | null>(null);
 let feedMutObs: MutationObserver | null = null;
 
 // ── Feed scope: 'mine' | 'relay' | 'explore' ──────────────────────────────
-type FeedScope = 'mine' | 'relay' | 'explore' | 'nearby';
 const feedScope = ref<FeedScope>(
   (route.query.scope as FeedScope)
   || (localStorage.getItem('interpoll_feed_scope') as FeedScope)
@@ -620,13 +481,10 @@ watch(feedScope, (s) => {
 });
 
 // Set of joined community IDs for "My Spaces" filtering
-const joinedCommunityIds = computed(() => {
-  const ids = new Set<string>();
-  communityStore.communities.forEach((c: any) => {
-    if (communityStore.isJoined?.(c.id)) ids.add(c.id);
-  });
-  return ids;
-});
+const joinedCommunityIds = computed(() => communityStore.joinedCommunities);
+const privateCommunityIds = computed(() => new Set(
+  communityStore.communities.filter(c => c.isPrivate).map(c => c.id),
+));
 
 // Active relay label for relay-attribution on cards
 const activeRelayLabel = computed(() => {
@@ -756,16 +614,11 @@ watch(() => route.query.category, () => {
 import { useCategories } from '../composables/useCategories';
 import { useBurst }      from '../composables/useBurst';
 import { observePost, isAlreadyTracked, setOnViewConfirmed, getViewedIds } from '../services/viewTrackingService';
-const { ALL_CATEGORIES, recordEngagement, recentTags, isUserTag, loadTrendingTags, topCategories } = useCategories();
+const { ALL_CATEGORIES, recordEngagement, recentTags, loadTrendingTags, topCategories } = useCategories();
 const { triggerBurst } = useBurst();
 const VISIBLE_CATEGORIES = ALL_CATEGORIES;
-const feedCategories = computed(() =>
-  showMoreCategories.value ? VISIBLE_CATEGORIES : VISIBLE_CATEGORIES.slice(0, 6)
-);
-
 const sidebarCatsOpen     = ref(true);
 const sidebarCatsExpanded = ref(false);
-const mobileShowTags   = ref(false);
 const trendingTagChips = ref<Array<{ tag: string; count: number }>>([]);
 
 function handleTagChipClick(tag: string) {
@@ -823,12 +676,11 @@ function itemMatchesTag(item: { type: string; data: any }, tag: string): boolean
 
 // ── Feed computation with scope filtering ──────────────────────────────────
 function itemMatchesScope(item: { type: string; data: any }): boolean {
-  if (feedScope.value === 'relay' || feedScope.value === 'explore') return true;
-  if (feedScope.value === 'nearby') return nearby.nearbyAuthorIds.value.has(item.data.authorId);
-  // 'mine' — show only items from joined communities
-  const communityId = item.data.communityId;
-  if (!communityId) return false;
-  return joinedCommunityIds.value.has(communityId);
+  return matchesFeedScope(feedScope.value, item.data, {
+    joinedCommunityIds: joinedCommunityIds.value,
+    privateCommunityIds: privateCommunityIds.value,
+    nearbyAuthorIds: nearby.nearbyAuthorIds.value,
+  });
 }
 
 function itemMatchesCategory(item: { type: string; data: any }): boolean {
@@ -906,9 +758,10 @@ const combinedFeed = computed(() => {
     _rankedItems.set(`poll-${poll.id}`, { type: 'poll' as const, data: poll, createdAt: poll.createdAt });
   }
 
-  // Apply category filter
+  // Apply scope before ranking or pagination, for both posts and polls.
   const filtered: Array<{ type: 'post' | 'poll'; data: any; createdAt: number }> = [];
   for (const item of _rankedItems.values()) {
+    if (!itemMatchesScope(item)) continue;
     if (!itemMatchesCategory(item)) continue;
     if (activeTagFilter.value && !itemMatchesTag(item, activeTagFilter.value)) continue;
     filtered.push(item);
@@ -1092,28 +945,23 @@ async function handleModerationSubmitPoll(poll: Poll) {
 
 // ── Scroll / chrome hide-show ──────────────────────────────────────────────
 //
-// Architecture: header and footer use max-height collapse (not translateY).
-// Collapsing the layout height triggers Ionic's internal ResizeObserver which
-// recalculates --offset-top / --offset-bottom automatically. ion-content then
-// expands to fill the freed space with no JS padding manipulation required.
-// See HomePage.css for the max-height transition on ion-header / ion-footer.
+// Keep the header's layout height constant. Fullscreen ion-content scrolls
+// behind it, so moving the header does not resize/clamp the scroll viewport.
+// Require deliberate direction changes instead of reacting to subpixel jitter.
+const trackHeaderScroll = createHeaderScrollTracker();
 
-let lastScrollTop     = 0;
-const scrollThreshold = 50;
-
-function handleScroll(event: CustomEvent) {
-  const scrollTop = event.detail.scrollTop;
-  if (scrollTop > lastScrollTop && scrollTop > scrollThreshold) {
-    if (!isHeaderHidden.value) {
-      isHeaderHidden.value = true;
-    }
-  } else if (scrollTop < lastScrollTop) {
-    if (isHeaderHidden.value) {
-      isHeaderHidden.value = false;
-    }
-  }
-  lastScrollTop = scrollTop;
+function handleScroll(event: CustomEvent<{ scrollTop: number }>) {
+  isHeaderHidden.value = trackHeaderScroll(event.detail.scrollTop);
 }
+
+// Desktop uses a separate sticky top nav; keep its original scroll viewport.
+const mobileHeaderMedia = window.matchMedia('(max-width: 767px)');
+const fullscreenContent = ref(mobileHeaderMedia.matches);
+function syncFullscreenContent() {
+  fullscreenContent.value = mobileHeaderMedia.matches;
+}
+onMounted(() => mobileHeaderMedia.addEventListener('change', syncFullscreenContent));
+onUnmounted(() => mobileHeaderMedia.removeEventListener('change', syncFullscreenContent));
 
 function flushNewContent() {
   postStore.flushNewPosts?.();
@@ -1127,9 +975,22 @@ async function onInfiniteScroll(event: any) {
 }
 
 // ── Create actions ─────────────────────────────────────────────────────────
+async function showHomeMenu() {
+  const buttons = [
+    ...(canScanQr ? [{ text: 'Scan QR code', handler: () => { void scanQr(); } }] : []),
+    { text: 'Relay & network', handler: () => { relaySheetOpen.value = true; } },
+    { text: 'Resilience Center', handler: () => { void router.push('/resilience'); } },
+    { text: 'Settings', handler: () => { void router.push('/settings'); } },
+    { text: 'Cancel', role: 'cancel' },
+  ];
+  const sheet = await actionSheetController.create({ header: 'Interpoll', buttons });
+  await sheet.present();
+}
+
 async function showPostOptions() {
   const joined = communityStore.communities.filter((c: any) => communityStore.isJoined(c.id));
   const list = joined.length > 0 ? joined : communityStore.communities;
+  if (list.length === 0) { openSpaces(); return; }
   const actionSheet = await actionSheetController.create({
     header: 'Create a post in…',
     buttons: list.slice(0, 8).map((c: any) => ({
@@ -1142,6 +1003,7 @@ async function showPostOptions() {
 async function showPollOptions() {
   const joined = communityStore.communities.filter((c: any) => communityStore.isJoined(c.id));
   const list = joined.length > 0 ? joined : communityStore.communities;
+  if (list.length === 0) { void router.push('/create-poll'); return; }
   const actionSheet = await actionSheetController.create({
     header: 'Create a poll in…',
     buttons: list.slice(0, 8).map((c: any) => ({
@@ -1270,9 +1132,6 @@ onMounted(async () => {
       trendingTagChips.value = (json.tags || []).slice(0, 12);
     }
   } catch { /* non-fatal — strip stays empty */ }
-
-  // Mobile strip: rotate between tags and categories every 8s
-  setInterval(() => { mobileShowTags.value = !mobileShowTags.value; }, 8000);
 
   await warmupFromDB();
   ensureInitialFeedVisible('warmup-finished');
@@ -1782,63 +1641,4 @@ if (typeof window !== 'undefined') {
   .hp-root .main-content--chat { background: var(--app-bg-elevated); border: 1px solid var(--app-border); border-radius: 14px; overflow: hidden; }
 }
 
-.net-head, .net-composer, .desktop-cat-strip { display: none; }
-@media (min-width: 768px) {
-  .net-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
-  .net-head h1 { margin: 0; font-size: 22px; font-weight: 750; letter-spacing: -0.02em; color: var(--app-text); }
-  .net-head p { margin: 3px 0 0; font-size: 13px; color: var(--app-text-muted); }
-  .net-seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--app-border); }
-  .net-seg button {
-    padding: 6px 14px; border: none; border-radius: 8px; background: none; cursor: pointer;
-    font: inherit; font-size: 12.5px; font-weight: 650; color: var(--app-text-muted); transition: background 120ms, color 120ms;
-  }
-  .net-seg button.active { background: var(--app-accent); color: #04120a; }
-  .net-seg button:not(.active):hover { color: var(--app-text); }
-
-  .net-composer {
-    display: flex; align-items: center; gap: 8px; padding: 10px 12px; margin-bottom: 14px;
-    border-radius: 14px; background: var(--app-bg-elevated); border: 1px solid var(--app-border);
-  }
-  .net-composer__avatar {
-    width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center;
-    background: linear-gradient(135deg, #1c3a2a, #0f2218); border: 1px solid rgba(var(--app-accent-rgb), 0.4);
-    color: var(--app-accent); font-size: 13px; font-weight: 800;
-  }
-  .net-composer__input {
-    flex: 1; min-width: 0; height: 36px; padding: 0 14px; border-radius: 10px; cursor: text; text-align: left;
-    background: rgba(255,255,255,0.04); border: 1px solid var(--app-border); color: var(--app-text-subtle); font: inherit; font-size: 13.5px;
-    transition: border-color 120ms;
-  }
-  .net-composer__input:hover { border-color: var(--app-border-strong); }
-  .net-composer__tool {
-    display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 9px; border: none; border-radius: 9px; cursor: pointer;
-    background: none; color: var(--app-text-muted); font: inherit; font-size: 13px; font-weight: 600; transition: background 120ms, color 120ms;
-  }
-  .net-composer__tool svg { width: 17px; height: 17px; }
-  .net-composer__tool:hover { background: rgba(255,255,255,0.06); color: var(--app-text); }
-  .net-composer__publish {
-    display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border: none; border-radius: 9px; cursor: pointer;
-    background: var(--app-accent); color: #04120a; font: inherit; font-size: 13px; font-weight: 700; transition: filter 120ms;
-  }
-  .net-composer__publish svg { width: 14px; height: 14px; }
-  .net-composer__publish:hover { filter: brightness(1.08); }
-
-  .desktop-cat-strip { display: flex; gap: 6px; overflow-x: auto; padding: 0 0 10px; scrollbar-width: none; }
-  .desktop-cat-strip::-webkit-scrollbar { display: none; }
-  .desktop-cat-strip .tag-chip { flex-shrink: 0; white-space: nowrap; }
-
-  /* Re-seat the old desktop toolbar/tag strip flush with the new heading (they carried a 20px inset for the old card) */
-  .feed-toolbar--desktop { padding: 0 0 10px; }
-  .desktop-tag-strip { padding: 0 0 12px; }
-  .feed-scope-tabs { background: rgba(255,255,255,0.04); }
-
-  /* Feed cards: rounded panel with the accent edge */
-  html.dark .hp-root .feed-list .post-card,
-  html.dark .hp-root .feed-list .poll-card {
-    border-radius: 0 14px 14px 0 !important;
-    border: 1px solid #2b332f !important;
-    box-shadow: inset 4px 0 0 var(--app-accent) !important;
-    background: var(--app-bg-elevated) !important;
-  }
-}
 </style>

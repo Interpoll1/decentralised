@@ -1,15 +1,15 @@
 <template>
   <div class="dps-shell">
-    <AppTopNav @open-relay="relaySheetOpen = true" />
+    <AppTopNav :show-search="route.path !== '/search'" @open-relay="relaySheetOpen = true" />
 
     <div class="dps-root">
-      <RelayPulseSidebar @open-relay="relaySheetOpen = true" />
+      <SocialSidebar v-if="!hideSidebar" :active-tab="currentTab" :total-unread="0" :spaces="communityStore.communities" @tab="openTab" @spaces="openSpaces" @relay="relaySheetOpen = true" />
 
       <main class="dps-main surface-card">
         <slot />
       </main>
 
-      <AppRightSidebar />
+      <AppRightSidebar v-if="!hideSidebar" />
     </div>
 
     <RelaySheet v-model="relaySheetOpen" />
@@ -17,13 +17,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { useCommunityStore } from '../stores/communityStore';
 import AppTopNav       from './AppTopNav.vue';
-import RelayPulseSidebar from './RelayPulseSidebar.vue';
+import SocialSidebar from './SocialSidebar.vue';
 import AppRightSidebar from './AppRightSidebar.vue';
 import RelaySheet      from './RelaySheet.vue';
 
-defineProps<{ activeTab?: string; selectedCategory?: string; hideSidebar?: boolean; }>();
+const props = defineProps<{ activeTab?: string; selectedCategory?: string; hideSidebar?: boolean; }>();
+const route = useRoute();
+const router = useRouter();
+const communityStore = useCommunityStore();
+const routeTabs: Record<string, string> = { '/search': 'search', '/profile': 'profile', '/settings': 'settings' };
+const currentTab = computed(() => props.activeTab ?? routeTabs[route.path] ?? '');
+function openTab(tab: string) { void router.push({ path: '/home', query: tab === 'home' ? {} : { tab } }); }
+function openSpaces() { void router.push({ path: '/home', query: { tab: 'orbit', view: 'spaces' } }); }
 
 const relaySheetOpen = ref(false);
 </script>

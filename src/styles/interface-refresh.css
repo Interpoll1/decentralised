@@ -1,0 +1,369 @@
+@font-face {
+  font-family: 'Interpoll wordmark';
+  src: url('../assets/fonts/GrandHotel-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+/* Social feed: content in the centre, familiar navigation at the edges.
+   The shared app scope keeps linked pages in the same graphite theme. */
+html:root,
+html:root.dark,
+html:root body,
+html:root :is(.interpoll-home, .interpoll-interface) {
+  color-scheme: light;
+  color: #232a31;
+  --app-bg-base: #e7e9ec;
+  --app-bg-elevated: #f7f8f9;
+  --app-surface: #f7f8f9;
+  --app-surface-hover: #dde2e7;
+  --app-border: #c9ced4;
+  --app-border-strong: #87939c;
+  --app-text: #232a31;
+  --app-text-muted: #48545f;
+  --app-text-subtle: #5b6873;
+  --app-accent: #17664b;
+  --app-accent-bright: #145c43;
+  --app-accent-rgb: 23, 102, 75;
+  --app-danger: #b42318;
+  --app-warning: #7a5000;
+  --app-item-surface: #e3e6e9;
+  --app-search-surface: #d9dee3;
+  --app-control-size: 44px;
+  --app-heading-start: #232a31;
+  --app-heading-end: #232a31;
+  --ion-background-color: #e7e9ec;
+  --ion-text-color: #232a31;
+  --ion-toolbar-color: #232a31;
+  --ion-color-primary: #17664b;
+  --ion-color-primary-rgb: 23, 102, 75;
+  --ion-color-primary-contrast: #ffffff;
+}
+html:root :is(.interpoll-home, .interpoll-interface),
+html:root :is(.interpoll-home, .interpoll-interface) :is(.ion-page, ion-content, ion-header, ion-toolbar, ion-footer, .bottom-nav) {
+  background: var(--app-bg-base) !important;
+  background-image: none !important;
+  --background: var(--app-bg-base);
+}
+html:root :is(.interpoll-home, .interpoll-interface) :is(.atn-name, .logo-title) { font-family: 'Interpoll wordmark', cursive; font-weight: 400 !important; font-size: 35px; }
+html:root :is(.interpoll-home, .interpoll-interface) .hp-root .main-content:not(.main-content--chat) {
+  padding: 0;
+  background: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+html:root :is(.interpoll-home, .interpoll-interface) .home-tab { min-width: 0; }
+html:root :is(.interpoll-home, .interpoll-interface) .atn { background: var(--app-bg-base); border-bottom: 1px solid var(--app-border); backdrop-filter: none; }
+html:root :is(.interpoll-home, .interpoll-interface) .atn-inner { width: min(1260px, calc(100% - 48px)); height: 68px; gap: 28px; }
+html:root :is(.interpoll-home, .interpoll-interface) .atn-tabs { display: none; }
+html:root :is(.interpoll-home, .interpoll-interface) .atn-search { flex: 1; max-width: 610px; min-width: 120px; margin-left: 24px; height: 40px; background: var(--app-item-surface); border-color: transparent; border-radius: 99px; }
+html:root :is(.interpoll-home, .interpoll-interface) .atn-actions { margin-left: auto; }
+html:root :is(.interpoll-home, .interpoll-interface) .atn-publish { min-height: 39px; border-radius: 99px !important; background: var(--app-accent); padding-inline: 20px; }
+html:root :is(.interpoll-home, .interpoll-interface) .atn-avatar { border-radius: 50% !important; background: #294d42 !important; color: #b8e4d0; width: 36px; height: 36px; }
+html:root :is(.interpoll-home, .interpoll-interface) .social-sidebar button { border-radius: 10px !important; }
+html:root :is(.interpoll-home, .interpoll-interface) .social-sidebar { background: transparent !important; border: 0 !important; box-shadow: none !important; }
+html:root :is(.interpoll-home, .interpoll-interface) .social-sidebar .ss-publish { border-radius: 99px !important; }
+html:root :is(.interpoll-home, .interpoll-interface) .fh-heading h1 { font-weight: 700 !important; }
+html:root :is(.interpoll-home, .interpoll-interface) .fh-prompt { border-radius: 99px !important; background: var(--app-item-surface) !important; }
+html:root :is(.interpoll-home, .interpoll-interface) .fh-topics button { border-radius: 99px !important; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.fh-sort, .fh-more) select { background: transparent !important; border: 0 !important; }
+html:root :is(.interpoll-home, .interpoll-interface) .feed-list { display: flex; flex-direction: column; gap: 16px; }
+html:root :is(.interpoll-home, .interpoll-interface) .hp-root .feed-list :is(.post-card, .poll-card) {
+  margin: 0 !important;
+  padding: 0 !important;
+  background: var(--app-bg-elevated) !important;
+  background-image: none !important;
+  border: 1px solid var(--app-border) !important;
+  border-radius: 14px !important;
+  box-shadow: none !important;
+  overflow: hidden;
+}
+html:root :is(.interpoll-home, .interpoll-interface) .hp-root .feed-list :is(.post-card, .poll-card):hover { border-color: var(--app-border-strong) !important; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-inner, .poll-body) { padding: 18px 20px 15px; }
+html:root :is(.interpoll-home, .interpoll-interface) .post-inner { gap: 0; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-title, .poll-question) {
+  font-size: 19px !important;
+  line-height: 1.4;
+  font-weight: 650 !important;
+  margin: 14px 0 8px;
+  overflow-wrap: anywhere;
+  animation: none !important;
+}
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-excerpt, .poll-description) { font-size: 14px; line-height: 1.65; color: var(--app-text-muted); margin: 0; overflow-wrap: anywhere; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-avatar, .author-avatar-sm) { width: 35px; height: 35px; border-radius: 50%; background: #294d42 !important; color: #b8e4d0 !important; font-size: 13px; flex-shrink: 0; }
+html:root :is(.interpoll-home, .interpoll-interface) .post-header { margin: 0; }
+html:root :is(.interpoll-home, .interpoll-interface) .post-meta-row--sub { order: -1; }
+html:root :is(.interpoll-home, .interpoll-interface) .post-community { font-size: 12px; color: var(--app-text); font-weight: 650; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-relay-attr, .relay-attr-badge--inline) { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; opacity: .75; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-author, .author) { font-size: 12px; font-weight: 600; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-time, .timestamp) { font-size: 10px; font-family: inherit; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-identity-badge, .identity-badge) { font-size: 9px; font-family: inherit; padding: 1px 5px; background: transparent !important; border: 0; }
+html:root :is(.interpoll-home, .interpoll-interface) .post-media { margin: 14px -20px 2px; border: 0; border-radius: 0; background: var(--app-bg-base); }
+html:root :is(.interpoll-home, .interpoll-interface) .post-media-img { display: block; width: 100%; height: 390px; max-height: 560px; object-fit: cover; border: 0; border-radius: 0; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-footer, .poll-footer) { padding-top: 12px; margin-top: 10px; border-top: 0; gap: 8px; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-actions, .poll-stats) { display: flex; gap: 6px; flex-wrap: wrap; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-action-btn, .stat-icon-btn, .stat-item, .post-share-btn) {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; padding: 7px 11px; border: 0 !important; border-radius: 99px !important;
+  background: var(--app-item-surface) !important; color: var(--app-text-muted); font-size: 11px;
+}
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-action-btn, .stat-icon-btn).active { color: var(--app-accent); background: rgba(var(--app-accent-rgb), .15) !important; }
+html:root :is(.interpoll-home, .interpoll-interface) .poll-header { align-items: stretch; margin: 0; gap: 6px; }
+html:root :is(.interpoll-home, .interpoll-interface) .poll-meta { justify-content: flex-start; flex-wrap: wrap; }
+html:root :is(.interpoll-home, .interpoll-interface) .poll-sub { margin: 6px 0 0 44px; font-size: 10px; }
+html:root :is(.interpoll-home, .interpoll-interface) .poll-options-preview { display: flex; flex-direction: column; gap: 8px; margin: 16px 0 0; padding: 0; border: 0; background: none; }
+html:root :is(.interpoll-home, .interpoll-interface) .option-preview { display: block; position: relative; padding: 12px 14px; background: var(--app-bg-base); border: 1px solid var(--app-border); border-radius: 9px; }
+html:root :is(.interpoll-home, .interpoll-interface) .option-info { display: flex; align-items: center; gap: 8px; }
+html:root :is(.interpoll-home, .interpoll-interface) .option-radio { display: block; width: 15px; height: 15px; border: 1px solid var(--app-border-strong); border-radius: 50%; flex-shrink: 0; }
+html:root :is(.interpoll-home, .interpoll-interface) .option-text { flex: 1; white-space: normal; font-size: 13px; line-height: 1.5; }
+html:root :is(.interpoll-home, .interpoll-interface) .option-votes { display: inline; color: var(--app-text-subtle); font-size: 11px; }
+html:root :is(.interpoll-home, .interpoll-interface) .option-bar { height: 3px; margin-top: 9px; }
+html:root :is(.interpoll-home, .interpoll-interface) .option-pct { display: none; }
+html:root :is(.interpoll-home, .interpoll-interface) .app-right-sidebar { background: transparent !important; border: 0 !important; box-shadow: none !important; }
+html:root :is(.interpoll-home, .interpoll-interface) .app-right-sidebar .ars-section { background: var(--app-bg-elevated) !important; background-image: none !important; border: 1px solid var(--app-border) !important; border-radius: 14px !important; padding: 18px 15px; box-shadow: none !important; }
+html:root :is(.interpoll-home, .interpoll-interface) .ars-about { display: none; }
+html:root :is(.interpoll-home, .interpoll-interface) .ars-header { margin-bottom: 12px; }
+html:root :is(.interpoll-home, .interpoll-interface) .ars-header h2 { font-weight: 650; font-size: 13px; }
+html:root :is(.interpoll-home, .interpoll-interface) .ars-name { font-size: 12px; }
+html:root :is(.interpoll-home, .interpoll-interface) .ars-meta { font-size: 10px; }
+html:root :is(.interpoll-home, .interpoll-interface) .ars-desc { display: none; }
+html:root :is(.interpoll-home, .interpoll-interface) .ars-avatar { width: 32px; height: 32px; border-radius: 50%; }
+html:root :is(.interpoll-home, .interpoll-interface) .ars-topic__label { font-size: 12px; }
+html:root :is(.interpoll-home, .interpoll-interface) .ars-topic__count { font-size: 10px; }
+html:root :is(.interpoll-home, .interpoll-interface) .ars-pill { font-size: 10px; background: none; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(button, a, select):focus-visible { outline: 2px solid var(--app-accent) !important; outline-offset: 3px; }
+@media (min-width: 768px) {
+  html:root :is(.interpoll-home, .interpoll-interface) .hp-root.page-layout { width: min(1260px, calc(100% - 48px)); gap: 28px; padding-top: 26px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .hp-root .main-content:not(.main-content--chat) { flex: 1; max-width: 680px; margin-inline: auto; }
+  html:root :is(.interpoll-home, .interpoll-interface) .app-right-sidebar { width: 270px; flex-shrink: 0; margin-left: 0; }
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  html:root :is(.interpoll-home, .interpoll-interface) .atn-tabs { display: flex; margin-left: 0; gap: 0; }
+  html:root :is(.interpoll-home, .interpoll-interface) .atn-tab { padding-inline: 8px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .atn-tab svg { display: none; }
+  html:root :is(.interpoll-home, .interpoll-interface) .atn-tab span:not(.atn-badge) { display: inline; }
+  html:root :is(.interpoll-home, .interpoll-interface) .atn-tab:nth-last-child(-n+2) { display: none; }
+  html:root :is(.interpoll-home, .interpoll-interface) .atn-search { margin-left: 0; }
+  html:root :is(.interpoll-home, .interpoll-interface) .atn-publish { display: none; }
+  html:root :is(.interpoll-home, .interpoll-interface) .atn-inner { gap: 16px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .app-right-sidebar { display: none; }
+}
+@media (max-width: 767px) {
+  html:root :is(.interpoll-home, .interpoll-interface) .hp-root.page-layout { width: 100%; padding-inline: 0; }
+  html:root :is(.interpoll-home, .interpoll-interface) .hp-root .main-content:not(.main-content--chat) { padding-top: 14px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .feed-hub { padding-inline: max(14px, env(safe-area-inset-left)); }
+  html:root :is(.interpoll-home, .interpoll-interface) .header-util-buttons ion-button { width: 44px; height: 44px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .logo-title { font-size: 32px; }
+  html:root :is(.interpoll-home, .interpoll-interface) :is(.post-inner, .poll-body) { padding: 16px 15px 12px; }
+  html:root :is(.interpoll-home, .interpoll-interface) :is(.post-title, .poll-question) { font-size: 17px !important; }
+  html:root :is(.interpoll-home, .interpoll-interface) :is(.post-excerpt, .poll-description) { font-size: 13px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .feed-list { gap: 9px; padding-bottom: 12px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .hp-root .feed-list :is(.post-card, .poll-card) { border-radius: 0 !important; border-left: 0 !important; border-right: 0 !important; }
+  html:root :is(.interpoll-home, .interpoll-interface) .post-media { margin-inline: -15px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .post-media-img { height: 290px; max-height: 480px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .bottom-nav { padding-top: 5px; border-top: 1px solid var(--app-border); }
+  html:root :is(.interpoll-home, .interpoll-interface) .nav-item { gap: 5px; padding-block: 9px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .nav-item.active::before { display: none; }
+  html:root :is(.interpoll-home, .interpoll-interface) .nav-item.active .nav-icon-wrap { filter: none; }
+  html:root :is(.interpoll-home, .interpoll-interface) .nav-item.active { color: var(--app-accent); }
+  html:root :is(.interpoll-home, .interpoll-interface) .nav-fab-bump { display: none; }
+  html:root :is(.interpoll-home, .interpoll-interface) .nav-fab { width: 34px; height: 34px; transform: none; box-shadow: none; border-radius: 10px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .nav-label { font-size: 9px; }
+}
+@media (min-width: 1024px) {
+  html:root :is(.interpoll-home, .interpoll-interface) .atn--workspace .atn-tabs { display: flex; margin-left: 0; }
+  html:root :is(.interpoll-home, .interpoll-interface) .atn--workspace .atn-search { margin-left: 0; max-width: 280px; }
+}
+
+/* Readable graphite surfaces, including native select popups. */
+html:root :is(.interpoll-home, .interpoll-interface) :is(.fh-sort, .fh-more) select {
+  color-scheme: light;
+  color: var(--app-text) !important;
+  font-size: 14px;
+  min-height: 44px;
+  max-width: 140px;
+}
+html:root :is(.interpoll-home, .interpoll-interface) select option {
+  color: #232a31 !important;
+  background: #f7f8f9 !important;
+  font-size: 14px;
+}
+html:root :is(.interpoll-home, .interpoll-interface) :is(.atn-publish, .ss-publish, .nav-fab) { color: #fff !important; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.atn-avatar, .fh-avatar, .post-avatar, .author-avatar-sm) {
+  background: #cddfd7 !important;
+  color: #245344 !important;
+}
+html:root :is(.interpoll-home, .interpoll-interface) .fh-space-circle { color: #325c4b; background: #d6e6de; border-color: var(--app-bg-base); }
+html:root :is(.interpoll-home, .interpoll-interface) .fh-space-circle.fh-tone-1 { color: #57426e; background: #e5ddee; }
+html:root :is(.interpoll-home, .interpoll-interface) .fh-space-circle.fh-tone-2 { color: #6b4e25; background: #ecdfc9; }
+html:root :is(.interpoll-home, .interpoll-interface) .fh-space-circle.fh-tone-3 { color: #31556d; background: #d2e1ec; }
+html:root :is(.interpoll-home, .interpoll-interface) .fh-space--discover .fh-space-circle { color: var(--app-text-muted); background: var(--app-bg-elevated); }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.fh-prompt, .fh-create, .fh-compose-actions button, .fh-heading > button) { font-size: 14px; }
+html:root :is(.interpoll-home, .interpoll-interface) .fh-space { font-size: 12px; }
+html:root :is(.interpoll-home, .interpoll-interface) .fh-scopes button { font-size: 14px; }
+html:root :is(.interpoll-home, .interpoll-interface) .fh-topics button { font-size: 13px; min-height: 38px; }
+html:root :is(.interpoll-home, .interpoll-interface) .fh-tags button { font-size: 13px; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-excerpt, .poll-description) { font-size: 16px; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-author, .author, .post-community, .option-text) { font-size: 14px; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-time, .timestamp, .option-votes, .post-identity-badge, .identity-badge) { font-size: 12px; color: var(--app-text-muted) !important; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-relay-attr, .relay-attr-badge--inline) { font-size: 11px; opacity: 1; color: var(--app-text-muted) !important; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.post-action-btn, .stat-icon-btn, .stat-item, .post-share-btn) { font-size: 13px; min-height: 38px; }
+html:root :is(.interpoll-home, .interpoll-interface) .ars-meta { font-size: 12px; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.ars-name, .ars-topic__label, .ars-header h2) { font-size: 14px; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.fh-create, .fh-compose-actions button) svg { color: var(--app-accent); }
+html:root :is(.interpoll-home, .interpoll-interface) .atn-search input { color: var(--app-text) !important; font-size: 14px; background: transparent !important; }
+html:root :is(.interpoll-home, .interpoll-interface) .atn-search input::placeholder { color: var(--app-text-muted); opacity: 1; }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.nav-item, .atn-tab) { color: var(--app-text-muted); }
+html:root :is(.interpoll-home, .interpoll-interface) :is(.nav-item, .atn-tab).active { color: var(--app-accent); }
+html:root :is(.interpoll-home, .interpoll-interface) .nav-label { font-size: 11px; }
+/* Refinement of the established social feed: complete labels, distinct filter
+   rows, and one consistent hit area without adding decorative motion. */
+html:root .interpoll-interface .feed-hub { margin-bottom: 16px; }
+html:root .interpoll-interface .fh-heading { margin-bottom: 16px; }
+html:root .interpoll-interface .fh-spaces { gap: 16px; padding: 2px 0 20px; }
+html:root .interpoll-interface .fh-space { width: 80px; gap: 8px; font-size: 13px; }
+html:root .interpoll-interface .fh-space > span:last-child { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; line-height: 1.35; }
+html:root .interpoll-interface :is(.fh-prompt, .fh-create) { min-height: var(--app-control-size); height: auto; font-size: 15px; }
+html:root .interpoll-interface .fh-prompt { padding-block: 10px; line-height: 1.4; }
+html:root .interpoll-interface .fh-create { padding-inline: 10px; border-radius: 10px !important; color: var(--app-accent); }
+html:root .interpoll-interface .fh-compose-actions button { min-height: var(--app-control-size); padding: 8px; }
+html:root .interpoll-interface .fh-filter-row { gap: 8px; }
+html:root .interpoll-interface .fh-topics { flex: 1; }
+html:root .interpoll-interface :is(.fh-sort, .fh-more) { display: block; flex-shrink: 0; }
+html:root .interpoll-interface :is(.fh-sort, .fh-more) select { cursor: pointer; }
+html:root .interpoll-interface .fh-topics button { min-height: var(--app-control-size); }
+html:root .interpoll-interface .fh-tags button { min-height: var(--app-control-size); }
+html:root .interpoll-interface .hp-root :is(.post-action-btn, .stat-icon-btn, .post-share-btn, .poll-actions .action-btn) { min-width: var(--app-control-size); min-height: var(--app-control-size); font-size: 14px; }
+html:root .interpoll-interface .hp-root :is(.post-action-btn, .stat-icon-btn) :is(ion-icon, svg) { width: 18px; height: 18px; font-size: 18px !important; }
+html:root .interpoll-interface .hp-root :is(.post-action-btn--heart, .stat-icon-btn.heart) ion-icon { color: var(--app-text-muted); }
+html:root .interpoll-interface .hp-root :is(.post-action-btn--heart, .stat-icon-btn.heart).active ion-icon { color: var(--app-accent); }
+html:root .interpoll-interface .poll-actions { display: flex; align-items: center; gap: 8px; }
+html:root .interpoll-interface .poll-badge { color: var(--app-accent); background: rgba(var(--app-accent-rgb), .08); border-color: rgba(var(--app-accent-rgb), .24); font-size: 12px; }
+html:root .interpoll-interface .poll-open { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: var(--app-control-size); padding: 10px 16px; border: 1px solid var(--app-accent); border-radius: 99px; color: var(--app-accent); background: transparent; font-size: 14px; font-weight: 650; }
+html:root .interpoll-interface .post-image-trigger { display: block; width: 100%; padding: 0; border: 0; border-radius: 0 !important; background: transparent; cursor: zoom-in; }
+html:root .interpoll-interface .post-image-trigger:focus-visible { outline: 3px solid var(--app-accent) !important; outline-offset: -3px; }
+html:root .interpoll-interface .bottom-nav .nav-item { min-height: 60px; }
+html:root .interpoll-interface .feed-hub button:active,
+html:root .interpoll-interface .hp-root :is(.post-action-btn, .stat-icon-btn, .poll-open):active { background: var(--app-surface-hover) !important; }
+@media (hover: hover) {
+  html:root .interpoll-interface .fh-create:hover,
+  html:root .interpoll-interface .hp-root :is(.post-action-btn, .stat-icon-btn, .poll-open):hover { background: var(--app-surface-hover) !important; }
+}
+@media (max-width: 767px) {
+  html:root .interpoll-interface .fh-heading { margin-bottom: 12px; }
+  html:root .interpoll-interface .fh-space-circle { width: 48px; height: 48px; }
+  html:root .interpoll-interface .fh-composer { padding: 12px; }
+  html:root .interpoll-interface .fh-prompt { font-size: 14px; }
+  html:root .interpoll-interface .fh-toolbar { margin-top: 12px; }
+  html:root .interpoll-interface .fh-scopes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; width: 100%; overflow: visible; }
+  html:root .interpoll-interface .fh-scopes button { font-size: 13px; min-width: 0; min-height: 48px; white-space: normal; line-height: 1.3; padding: 10px 4px; }
+  html:root .interpoll-interface .fh-topics { display: none; }
+  html:root .interpoll-interface .fh-filter-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(100px, .65fr); gap: 12px; padding-top: 12px; }
+  html:root .interpoll-interface :is(.fh-more, .fh-sort) { min-width: 0; }
+  html:root .interpoll-interface :is(.fh-more, .fh-sort) select { width: 100%; max-width: none; min-height: var(--app-control-size); border: 1px solid var(--app-border-strong) !important; border-radius: 10px !important; background: var(--app-bg-elevated) !important; padding: 8px 12px; font-size: 14px; }
+  html:root :is(.interpoll-home, .interpoll-interface) .fh-topics button { font-size: 12px; }
+  html:root :is(.interpoll-home, .interpoll-interface) :is(.post-title, .poll-question) { font-size: 19px !important; }
+  html:root .interpoll-interface :is(.post-inner, .poll-body) { padding: 16px 16px 12px; }
+  html:root .interpoll-interface .post-media { margin-inline: -16px; }
+  html:root .interpoll-interface .post-meta-row { flex-wrap: wrap; row-gap: 3px; }
+  html:root .interpoll-interface .poll-footer { align-items: flex-start; flex-direction: column; gap: 12px; }
+  html:root .interpoll-interface .poll-actions { justify-content: space-between; width: 100%; }
+  html:root .interpoll-interface .bottom-nav { padding-top: 0; }
+}
+
+/* The same navigation and canvas follow the user into secondary pages. */
+html:root .interpoll-interface :is(.profile-hero, .profile-card, .settings-card) {
+  background: var(--app-bg-elevated) !important;
+  background-image: none !important;
+  border: 1px solid var(--app-border) !important;
+  border-radius: 14px;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+html:root .interpoll-interface .settings-card.danger-zone { background: #f8eeee !important; border-color: #d8a3a3 !important; }
+html:root .interpoll-interface .settings-tab-bar { background: var(--app-bg-base); border-color: var(--app-border); }
+html:root .interpoll-interface .settings-tab { font-size: 13px; min-height: 40px; }
+html:root .interpoll-interface .settings-tab.active { background: var(--app-accent); border-color: var(--app-accent); color: #fff; }
+html:root .interpoll-interface :is(.profile-page, .settings-page) :is(.field-wrap, .info-row, .chat-link-box, .settings-input) {
+  background: var(--app-item-surface);
+  border: 1px solid var(--app-border);
+}
+html:root .interpoll-interface :is(.profile-page, .settings-page) .field-wrap:focus-within { border-color: var(--app-accent); box-shadow: 0 0 0 3px rgba(var(--app-accent-rgb), .15); }
+html:root .interpoll-interface :is(.profile-page, .settings-page) .field-native { color: var(--app-text); background: transparent !important; font-size: 14px; }
+html:root .interpoll-interface :is(.profile-page, .settings-page) select.field-native { appearance: auto; color-scheme: light; background-image: none; }
+html:root .interpoll-interface :is(.profile-page, .settings-page) :is(.field-label, .info-key, .info-val, .toggle-sub, .card-heading p, .card-sub) { font-size: 13px; }
+html:root .interpoll-interface :is(.profile-page, .settings-page) :is(.save-btn, .block-btn.accent, .pill-btn.accent) { color: #fff; background: var(--app-accent); box-shadow: none; }
+html:root .interpoll-interface :is(.profile-page, .settings-page) :is(.block-btn.outline, .pill-btn.outline, .settings-inline-btn) { background: var(--app-item-surface); border: 1px solid var(--app-border); color: var(--app-text); }
+html:root .interpoll-interface :is(.profile-page, .settings-page) :is(.block-btn.danger, .pill-btn.danger) { color: #a62b2b; border-color: #d8a3a3; }
+html:root .interpoll-interface :is(.profile-page, .settings-page) .toggle-track { background: #87939c; border-color: #74818b; }
+html:root .interpoll-interface :is(.profile-page, .settings-page) .toggle-switch input:checked + .toggle-track { background: var(--app-accent); border-color: var(--app-accent); }
+html:root .interpoll-interface :is(.profile-page, .settings-page) .toggle-switch input:focus-visible + .toggle-track { outline: 2px solid var(--app-accent); outline-offset: 3px; }
+html:root .interpoll-interface .dps-shell { min-width: 0; }
+html:root .interpoll-interface .dps-main {
+  background: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  padding: 0;
+}
+html:root .interpoll-interface .dps-shell .atn-name { color: var(--app-text); }
+html:root .interpoll-interface .search-page { padding: 0; max-width: none; }
+html:root .interpoll-interface .search-page-title { font-size: 26px; font-weight: 700; margin: 0 0 20px; }
+html:root .interpoll-interface .search-header {
+  background: var(--app-bg-elevated) !important;
+  border: 1px solid var(--app-border) !important;
+  border-radius: 14px !important;
+  padding: 20px;
+  margin-bottom: 18px;
+  box-shadow: none !important;
+}
+html:root .interpoll-interface .search-box {
+  display: flex !important;
+  border: 1px solid var(--app-border-strong);
+  background: var(--app-item-surface);
+  min-height: 48px;
+  padding: 6px 14px;
+  border-radius: 10px;
+}
+html:root .interpoll-interface .search-input {
+  min-width: 0;
+  color: var(--app-text) !important;
+  background: transparent !important;
+  font-size: 16px;
+  border: 0 !important;
+}
+html:root .interpoll-interface .search-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+html:root .interpoll-interface :is(.filter-select, .filter-input) {
+  min-width: 0; width: 100%; min-height: 44px; box-sizing: border-box;
+  border: 1px solid var(--app-border) !important;
+  border-radius: 9px !important;
+  background: var(--app-bg-elevated) !important;
+  color: var(--app-text) !important;
+  font-size: 14px;
+  padding: 9px 12px;
+  color-scheme: light;
+}
+html:root .interpoll-interface .filter-select { appearance: auto; }
+html:root .interpoll-interface .filter-select option { background: var(--app-bg-elevated); color: var(--app-text); font-size: 14px; }
+html:root .interpoll-interface :is(.search-input, .filter-input)::placeholder { color: var(--app-text-subtle); opacity: 1; }
+html:root .interpoll-interface .search-start { display: flex; flex-direction: column; align-items: center; padding: 52px 20px; text-align: center; color: var(--app-text-muted); }
+html:root .interpoll-interface .search-start svg { width: 42px; height: 42px; margin-bottom: 16px; }
+html:root .interpoll-interface .search-start h2 { color: var(--app-text); font-size: 19px; font-weight: 650; margin: 0 0 10px; }
+html:root .interpoll-interface .search-start p { max-width: 38ch; font-size: 15px; line-height: 1.6; margin: 0; }
+html:root .interpoll-interface :is(.result-item, .space-match) { background: var(--app-bg-elevated); border: 1px solid var(--app-border); border-radius: 12px; padding: 18px; }
+html:root .interpoll-interface .result-title { color: var(--app-text); font-size: 18px !important; }
+html:root .interpoll-interface .result-content { color: var(--app-text-muted); font-size: 15px !important; line-height: 1.65; }
+@media (min-width: 768px) {
+  html:root .interpoll-interface .search-view > ion-header { display: none; }
+  html:root .interpoll-interface .dps-root { width: min(1260px, calc(100% - 48px)); gap: 28px; padding-top: 26px; }
+  html:root .interpoll-interface .dps-main { max-width: 680px; flex: 1; margin-inline: auto; }
+}
+@media (max-width: 767px) {
+  html:root .interpoll-interface .dps-main { padding: 16px 14px 36px; }
+  html:root .interpoll-interface .search-page-title { display: none; }
+  html:root .interpoll-interface .search-header { padding: 14px; }
+}
