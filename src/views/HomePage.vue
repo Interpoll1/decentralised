@@ -377,6 +377,7 @@ const AppRightSidebar  = defineAsyncComponent(() => import('../components/AppRig
 const RelaySheet       = defineAsyncComponent(() => import('../components/RelaySheet.vue'));
 import BottomNav from '../components/BottomNav.vue';
 import { createHeaderScrollTracker } from '../utils/headerScrollTracker';
+import { matchesFeedScope, type FeedScope } from '../utils/feedScope';
 import AppTopNav from '../components/AppTopNav.vue';
 import { useNavStore } from '../stores/navStore';
 
@@ -445,7 +446,6 @@ const feedListEl = ref<HTMLElement | null>(null);
 let feedMutObs: MutationObserver | null = null;
 
 // ── Feed scope: 'mine' | 'relay' | 'explore' ──────────────────────────────
-type FeedScope = 'mine' | 'relay' | 'explore' | 'nearby';
 const feedScope = ref<FeedScope>(
   (route.query.scope as FeedScope)
   || (localStorage.getItem('interpoll_feed_scope') as FeedScope)
@@ -481,13 +481,10 @@ watch(feedScope, (s) => {
 });
 
 // Set of joined community IDs for "My Spaces" filtering
-const joinedCommunityIds = computed(() => {
-  const ids = new Set<string>();
-  communityStore.communities.forEach((c: any) => {
-    if (communityStore.isJoined?.(c.id)) ids.add(c.id);
-  });
-  return ids;
-});
+const joinedCommunityIds = computed(() => communityStore.joinedCommunities);
+const privateCommunityIds = computed(() => new Set(
+  communityStore.communities.filter(c => c.isPrivate).map(c => c.id),
+));
 
 // Active relay label for relay-attribution on cards
 const activeRelayLabel = computed(() => {
@@ -679,12 +676,11 @@ function itemMatchesTag(item: { type: string; data: any }, tag: string): boolean
 
 // ── Feed computation with scope filtering ──────────────────────────────────
 function itemMatchesScope(item: { type: string; data: any }): boolean {
-  if (feedScope.value === 'relay' || feedScope.value === 'explore') return true;
-  if (feedScope.value === 'nearby') return nearby.nearbyAuthorIds.value.has(item.data.authorId);
-  // 'mine' — show only items from joined communities
-  const communityId = item.data.communityId;
-  if (!communityId) return false;
-  return joinedCommunityIds.value.has(communityId);
+  return matchesFeedScope(feedScope.value, item.data, {
+    joinedCommunityIds: joinedCommunityIds.value,
+    privateCommunityIds: privateCommunityIds.value,
+    nearbyAuthorIds: nearby.nearbyAuthorIds.value,
+  });
 }
 
 function itemMatchesCategory(item: { type: string; data: any }): boolean {
@@ -762,9 +758,10 @@ const combinedFeed = computed(() => {
     _rankedItems.set(`poll-${poll.id}`, { type: 'poll' as const, data: poll, createdAt: poll.createdAt });
   }
 
-  // Apply category filter
+  // Apply scope before ranking or pagination, for both posts and polls.
   const filtered: Array<{ type: 'post' | 'poll'; data: any; createdAt: number }> = [];
   for (const item of _rankedItems.values()) {
+    if (!itemMatchesScope(item)) continue;
     if (!itemMatchesCategory(item)) continue;
     if (activeTagFilter.value && !itemMatchesTag(item, activeTagFilter.value)) continue;
     filtered.push(item);

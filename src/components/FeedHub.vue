@@ -38,6 +38,7 @@
       <label class="fh-sort"><span class="fh-sr">Feed order</span><select :value="feedMode" aria-label="Feed order" @change="changeOrder"><option value="for-you">Relevant</option><option value="latest">Recent</option></select></label>
     </div>
     </div>
+    <p class="fh-scope-description" role="status">{{ scopeDescriptions[feedScope] }}</p>
     <div v-if="tags.length" class="fh-tags" role="group" aria-label="Trending tags"><button v-for="tag in tags.slice(0, 5)" :key="tag.tag" :aria-pressed="activeTag === tag.tag" :class="{ selected: activeTag === tag.tag }" @click="emit('tag', tag.tag)">#{{ tag.tag }}</button></div>
   </section>
 </template>
@@ -59,6 +60,12 @@ const scopes: { id: Scope; label: string }[] = [
   { id: 'relay', label: 'This relay' }, { id: 'mine', label: 'My spaces' },
   { id: 'explore', label: 'Explore' }, { id: 'nearby', label: 'Nearby' },
 ];
+const scopeDescriptions: Record<Scope, string> = {
+  relay: 'All available posts and polls.',
+  mine: "Posts and polls from spaces you've joined.",
+  explore: "Discover public spaces you haven't joined.",
+  nearby: 'Posts and polls from people near you.',
+};
 function changeOrder(event: Event) {
   const value = (event.target as HTMLSelectElement).value;
   if (value === 'for-you' || value === 'latest') emit('order', value);
@@ -67,6 +74,7 @@ function changeOrder(event: Event) {
 
 <style scoped>
 .feed-hub { min-width: 0; margin-bottom: 12px; }
+.fh-scope-description { margin: 10px 0 0; color: var(--app-text-muted); font-size: 13px; line-height: 1.5; }
 .fh-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; gap: 12px; }
 .fh-heading h1 { font-size: 24px; font-weight: 700; margin: 0; color: var(--app-text); }
 .fh-heading > button { font-size: 12px; color: var(--app-text-muted); border: 0; background: none; padding: 8px 0; }
