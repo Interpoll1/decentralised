@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimary">#2EE67A</color>
-    <color name="colorPrimaryDark">#07110B</color>
-    <color name="colorAccent">#3DFF7A</color>
-    <color name="interpollSystemBar">#07110B</color>
+    <color name="colorPrimary">#17664B</color>
+    <color name="colorPrimaryDark">#145C43</color>
+    <color name="colorAccent">#17664B</color>
+    <color name="interpollSystemBar">#E7E9EC</color>
 </resources>

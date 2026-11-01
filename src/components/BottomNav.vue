@@ -14,6 +14,7 @@
         :data-nav-index="index"
         :data-tour="item.id"
         :aria-label="item.label"
+        :aria-current="!drag.active && isActive(item) ? 'page' : undefined"
         @click="onItemClick(item)"
         @pointerdown="onPointerDown($event, index)"
         @keydown.alt.left.prevent="nudge(index, -1)"

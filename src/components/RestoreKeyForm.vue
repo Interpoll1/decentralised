@@ -47,16 +47,20 @@ async function submit() {
 </script>
 
 <style scoped>
-.rk { display: flex; flex-direction: column; gap: 10px; font-family: 'Inter', system-ui, sans-serif; }
-.rk-label { font-size: 13.5px; color: #a3aaa3; }
-.rk-input { width: 100%; box-sizing: border-box; resize: vertical; padding: 10px 12px; font: 13.5px var(--font-mono, monospace); color: #fff; background: #050605; border: 1px solid #2a312a; border-radius: 6px; outline: none; }
-.rk-input:focus { border-color: #3dff7a; }
-.rk-count { margin: 0; font-size: 12.5px; color: #6b736b; }
-.rk-count.ok { color: #3dff7a; }
-.rk-warn { margin: 0; font-size: 13px; color: #ffd84a; line-height: 1.45; }
-.rk-check { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: #c9d1c9; }
-.rk-check input { accent-color: #3dff7a; }
-.rk-error { margin: 0; font-size: 13.5px; color: #ff8a8a; }
-.rk-btn { align-self: flex-start; font: inherit; font-size: 14px; font-weight: 500; padding: 9px 16px; border-radius: 6px; cursor: pointer; background: #3dff7a; color: #000; border: 1px solid #3dff7a; }
+.rk { display: flex; flex-direction: column; gap: 10px; font-family: inherit; }
+.rk-label { font-size: 13.5px; color: var(--app-text-muted); }
+.rk-input { width: 100%; box-sizing: border-box; resize: vertical; padding: 10px 12px; font: 13.5px var(--font-mono, monospace); color: var(--app-text); background: var(--app-bg-elevated); border: 1px solid var(--app-border-strong); border-radius: 6px; outline: none; }
+.rk-input:focus { border-color: var(--app-accent); }
+.rk-count { margin: 0; font-size: 12.5px; color: var(--app-text-muted); }
+.rk-count.ok { color: var(--app-accent); }
+.rk-warn { margin: 0; font-size: 13px; color: var(--app-warning); line-height: 1.45; }
+.rk-check { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--app-text); }
+.rk-check input { accent-color: var(--app-accent); }
+.rk-error { margin: 0; font-size: 13.5px; color: var(--app-danger); }
+.rk-btn { align-self: flex-start; font: inherit; font-size: 14px; font-weight: 500; padding: 9px 16px; border-radius: 6px; cursor: pointer; background: var(--app-accent); color: #fff; border: 1px solid var(--app-accent); }
 .rk-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.rk-btn, .rn-btn { min-height: 48px; }
+.rk-input, .rn-input { font-size: 16px; border-radius: 10px; }
+.rk :is(button, textarea):focus-visible, .rn :is(button, input, textarea):focus-visible { outline: 2px solid var(--app-accent); outline-offset: 3px; }
 </style>

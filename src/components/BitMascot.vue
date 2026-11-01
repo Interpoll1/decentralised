@@ -27,7 +27,7 @@ const props = withDefaults(defineProps<{ size?: number; mood?: BitMood; animated
 const COLS = 12;
 const ROWS = 11;
 const COLORS: Record<string, string> = {
-  G: '#3dff7a', D: '#1f9e4b', W: '#ffffff', K: '#000000', P: '#ff8fb3', Y: '#ffd84a',
+  G: '#4fc79a', D: '#2f9a76', W: '#ffffff', K: '#000000', P: '#ff8fb3', Y: '#ffd84a',
 };
 
 // Body shared by every mood; eyes (rows 1-2), mouth (rows 6-7) and the raised arm vary.

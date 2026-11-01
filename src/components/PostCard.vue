@@ -68,15 +68,18 @@
           :primary-src="post.imageThumbnail"
           :alt="post.title"
         />
-        <img
+        <button
           v-else-if="post.imageThumbnail || post.imageIPFS"
+          class="post-image-trigger"
+          :aria-label="`View image: ${post.title}`"
+          @click.stop="lightboxOpen = true"
+        ><img
           :src="post.imageThumbnail || `https://ipfs.filebase.io/ipfs/${post.imageIPFS}`"
           :alt="post.title"
           class="post-media-img"
           loading="lazy"
           @error="(e: any) => { if (post.imageIPFS && e.target.src !== `https://ipfs.filebase.io/ipfs/${post.imageIPFS}`) e.target.src = `https://ipfs.filebase.io/ipfs/${post.imageIPFS}`; }"
-          @click.stop="lightboxOpen = true"
-        />
+        /></button>
         <!-- Video: use IPFS CID path with skeleton while async component loads -->
         <template v-else-if="post.videoCID">
           <Suspense>
@@ -144,6 +147,7 @@
             :class="{ active: hasUpvoted }"
             @click.stop="$emit('upvote')"
             :aria-label="hasUpvoted ? 'Unlike' : 'Like'"
+            :aria-pressed="hasUpvoted"
           >
             <ion-icon :icon="hasUpvoted ? heart : heartOutline" style="font-size:15px"></ion-icon>
             <span>{{ post.upvotes || 0 }}</span>
@@ -155,6 +159,7 @@
             :class="{ active: hasDownvoted }"
             @click.stop="$emit('downvote')"
             :aria-label="hasDownvoted ? 'Remove downvote' : 'Downvote'"
+            :aria-pressed="hasDownvoted"
           >
             <svg class="thumb-down-icon" viewBox="0 0 24 24" fill="none" width="14" height="14">
               <path d="M15 3H6C5.17 3 4.46 3.5 4.16 4.22l-3.02 7.05C1.05 11.5 1 11.74 1 12v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.59-6.59c.36-.36.58-.86.58-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z" fill="currentColor"/>
@@ -163,7 +168,7 @@
           </button>
 
           <!-- Comments -->
-          <button class="post-action-btn" @click.stop="$emit('comments')">
+          <button class="post-action-btn" @click.stop="$emit('comments')" :aria-label="`Open comments (${commentCount})`">
             <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
               <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
             </svg>
