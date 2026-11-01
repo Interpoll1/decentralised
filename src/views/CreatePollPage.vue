@@ -243,9 +243,9 @@ ion-content { --background: transparent; }
 .submit-btn {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 7px 18px; border-radius: 999px; border: none;
-  background: #3dff7a !important; color: #04120a !important;
+  background: var(--app-accent) !important; color: var(--ip-on-accent, #04120a) !important;
   font-size: 13.5px; font-weight: 700; cursor: pointer;
-  box-shadow: 0 0 14px rgba(61, 255, 122, .3);
+  box-shadow: 0 0 14px rgba(var(--app-accent-rgb), .3);
   transition: opacity 160ms, transform 160ms; margin-right: 8px;
 }
 .submit-btn:hover:not(:disabled) { opacity: .9; transform: translateY(-1px); }

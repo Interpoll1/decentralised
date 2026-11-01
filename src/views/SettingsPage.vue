@@ -128,19 +128,12 @@
             <div class="toggle-row">
               <div>
                 <div class="toggle-label">Dark mode</div>
-                <div class="toggle-sub">Currently the only available theme</div>
+                <div class="toggle-sub">Switch between light and dark graphite</div>
               </div>
-              <label class="toggle-switch toggle-switch--locked" title="Dark mode is always on">
-                <input type="checkbox" checked disabled />
+              <label class="toggle-switch" title="Toggle dark mode">
+                <input v-model="isDarkMode" type="checkbox" @change="toggleDarkMode" />
                 <span class="toggle-track"></span>
               </label>
-            </div>
-            <div class="theme-coming-soon">
-              <svg viewBox="0 0 16 16" fill="none" width="13" height="13" aria-hidden="true">
-                <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4"/>
-                <path d="M8 5v3.5m0 2.5h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              </svg>
-              Light mode is coming in a future update
             </div>
           </div>
 
@@ -3085,12 +3078,11 @@ onMounted(async () => {
 
   // Reflect the actual stored theme — dark/glass is the default.
   const storedTheme = localStorage.getItem('theme');
-  const prefersDark = storedTheme !== 'light';
+  const prefersDark = storedTheme === 'dark' || (!storedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches);
   isDarkMode.value = prefersDark;
   if (prefersDark) {
     document.documentElement.classList.add('dark');
     document.body.classList.add('dark');
-    if (!storedTheme) localStorage.setItem('theme', 'dark');
   } else {
     document.documentElement.classList.remove('dark');
     document.body.classList.remove('dark');

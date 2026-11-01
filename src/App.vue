@@ -98,11 +98,12 @@ function pageTransition(baseEl: HTMLElement, opts: { direction?: string }) {
 }
 
 onMounted(async () => {
-  // This interface uses the light graphite palette, including upgrades from
-  // the older dark preview. Keep legacy dark component overrides inactive.
-  document.documentElement?.classList.remove('dark');
-  document.body?.classList.remove('dark');
-  localStorage.setItem('theme', 'light');
+  // Graphite comes in light and dark. Follow the saved choice, else the system.
+  let storedTheme: string | null = null;
+  try { storedTheme = localStorage.getItem('theme'); } catch { /* storage blocked */ }
+  const dark = storedTheme === 'dark' || (!storedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement?.classList.toggle('dark', dark);
+  document.body?.classList.toggle('dark', dark);
   syncSystemChrome();
   themeObserver = new MutationObserver(syncSystemChrome);
   themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });

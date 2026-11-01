@@ -36,7 +36,7 @@
 
     <!-- PWA / mobile chrome. Keep theme-color in sync with the manifest
          theme_color in vite.config.ts. -->
-    <meta name="theme-color" content="#e7e9ec" />
+    <meta name="theme-color" content="#dfe3e7" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="InterPoll" />
@@ -65,10 +65,16 @@
       {"@context":"https://schema.org","@type":"WebApplication","name":"InterPoll","url":"https://endless.social/","applicationCategory":"SocialNetworkingApplication","operatingSystem":"Any","description":"Decentralized social and polling app for communities, posts, chat, and verifiable voting.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}
     </script>
     <script>
-      // Match the graphite interface before the first paint, including upgrades.
+      // Apply the graphite theme before first paint to avoid a flash.
       (function() {
-        document.documentElement.classList.remove('dark');
-        try { localStorage.setItem('theme', 'light'); } catch (_) {}
+        var storedTheme = null;
+        try { storedTheme = localStorage.getItem('theme'); } catch (_) {}
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (storedTheme === 'dark' || (!storedTheme && prefersDark)) {
+          document.documentElement.classList.add('dark');
+          var m = document.querySelector('meta[name="theme-color"]');
+          if (m) m.setAttribute('content', '#15191d');
+        }
       })();
     </script>
   </head>
@@ -78,9 +84,9 @@
          page is blank. Inline-styled because no CSS has loaded yet. -->
     <div id="app">
       <noscript><h1>InterPoll</h1><p>Decentralized polls and discussions with cryptographically signed, verifiable votes. Enable JavaScript to use the app.</p></noscript>
-      <div id="boot-splash" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#e7e9ec;color:#232a31;font:15px system-ui,-apple-system,sans-serif;text-align:center;padding:16px">
+      <div id="boot-splash" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#dfe3e7;color:#3b4650;font:15px system-ui,-apple-system,sans-serif;text-align:center;padding:16px">
         <style>
-          html:not(.dark) #boot-splash{background:#f8f8f8!important;color:#4f4f4f!important}
+          html.dark #boot-splash{background:#15191d!important;color:#e8ecef!important}
           #boot-splash .bs-logo{font:400 56px/1 "Grand Hotel",cursive,system-ui;background:linear-gradient(160deg,#fff,#ff7a70);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
           html:not(.dark) #boot-splash .bs-logo{background:linear-gradient(160deg,#ff3a2c,#ff3729);-webkit-background-clip:text;background-clip:text}
           #boot-splash .bs-net line{stroke:#ff6055;stroke-opacity:.25;stroke-width:1}
