@@ -109,9 +109,11 @@ Or start the pieces by hand:
 
 ```bash
 npm run dev                                # app → http://localhost:5173
-node relay-server.js                       # WebSocket relay → ws://localhost:8080
-cd gun-relay-server && node gun-relay.js   # Gun relay → http://localhost:8765/gun
+(cd community-relay/kit && npm install)    # once
+node community-relay/kit/relay.js          # Gun relay → http://localhost:8765/gun
 ```
+
+The app runs fine against the public relays without a local one. The old `relay-server/` WebSocket relay currently can't start from a clone (its `config.js` and `crypto-utils.js` aren't in the repo).
 
 Want to help the network without running a full relay? `node peer.js` runs a headless peer that just keeps a copy of the data.
 
@@ -172,8 +174,8 @@ Windows releases are signed for free by [SignPath.io](https://signpath.io) with 
 
 ```
 src/                 Vue 3 + Pinia app (components, views, services, stores)
-relay-server.js      Dev WebSocket relay, OAuth, vote authorization
-gun-relay-server/    Gun relay
+relay-server/        WebSocket relay, OAuth, vote authorization (production)
+gun-relay/           Gun relay (production)
 community-relay/     One-command relay kit for communities
 shared-validation/   Validation shared by the app and relays
 src-tauri/           Desktop wrapper
