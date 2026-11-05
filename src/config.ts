@@ -168,16 +168,16 @@ function loadGunPeers(): string[] | null {
 
 // Defaults point to VPS
 const defaults = {
-  websocket: 'wss://interpoll.endless.sbs',
-  gun: 'https://interpoll2.endless.sbs/gun',
-  api: 'https://interpoll.endless.sbs',
+  websocket: 'wss://interpoll.endless.social',
+  gun: 'https://interpoll2.endless.social/gun',
+  api: 'https://interpoll.endless.social',
 };
 
 // ── Built-in peer tiers ───────────────────────────────────────────────────────
 // Tier 1 — Private VPS (always first, most trusted)
 
 export const PRIVATE_PEERS = [
-  'https://interpoll2.endless.sbs/gun',
+  'https://interpoll2.endless.social/gun',
   'http://v7so4otlnuleppayd7znkqwzjq6xhvzpetywpyzuth3jrykdqklxlwqd.onion/gun',
 ] as const;
 
@@ -188,7 +188,7 @@ export const PUBLIC_PEERS = [
 
 // Canonical public web origin where the browser build of the app is hosted.
 // Used to construct shareable links from the native app (see config.web).
-const WEB_ORIGIN = 'https://endless.sbs';
+const WEB_ORIGIN = 'https://endless.social';
 function loadEncryptionConfig(): EncryptionConfig {
   try {
     const raw = localStorage.getItem(ENCRYPTION_STORAGE_KEY);

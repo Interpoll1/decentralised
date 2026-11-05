@@ -16,11 +16,7 @@ tmux send-keys -t "$SESSION:services.0" "npm run dev" C-m
 
 # Split right → Pane 2
 tmux split-window -h -t "$SESSION:services"
-tmux send-keys -t "$SESSION:services.1" "node relay-server.js" C-m
-
-# Split right again → Pane 3
-tmux split-window -h -t "$SESSION:services"
-tmux send-keys -t "$SESSION:services.2" "cd gun-relay-server && node gun-relay.js" C-m
+tmux send-keys -t "$SESSION:services.1" "cd community-relay/kit && npm install && node relay.js" C-m
 
 # Make panes evenly sized
 tmux select-layout -t "$SESSION:services" even-horizontal

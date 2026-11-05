@@ -147,9 +147,9 @@ scp relay-push/email-notifications.js <vps>:/path/to/relay-server/
 ```bash
 # relay environment
 RESEND_API_KEY=re_...
-RESEND_FROM='InterPoll <notifications@endless.sbs>'   # must be a Resend-verified domain
-APP_PUBLIC_URL=https://endless.sbs                    # "open the app" link
-SERVER_ORIGIN=https://relay.endless.sbs               # where the unsubscribe link points
+RESEND_FROM='InterPoll <notifications@endless.social>'   # must be a Resend-verified domain
+APP_PUBLIC_URL=https://endless.social                    # "open the app" link
+SERVER_ORIGIN=https://relay.endless.social               # where the unsubscribe link points
 EMAIL_STORE=./push-emails.json                        # optional, this is the default
 EMAIL_COOLDOWN_MS=900000                              # optional, 15 min default
 ```

@@ -39,10 +39,13 @@ export const NAV_ITEM_POOL: NavItemDef[] = [
 const POOL_IDS = new Set(NAV_ITEM_POOL.map(i => i.id));
 const TAB_IDS  = new Set(NAV_ITEM_POOL.filter(i => i.kind === 'tab').map(i => i.id));
 
-/** Messages · Orbit · [Publish] · Feed · Network — Publish sits in the centre as the raised button. */
-export const DEFAULT_NAV_ORDER = ['chat', 'orbit', 'create', 'home', 'network'];
+/** Feed first, creation in the centre, then messages and profile. Saved custom orders stay intact. */
+export const DEFAULT_NAV_ORDER = ['home', 'orbit', 'create', 'chat', 'profile'];
 /** The bar shipped with this order before the redesign; anyone still on it moves to the new default. */
-const PREVIOUS_DEFAULT_ORDER = ['home', 'orbit', 'chat', 'create', 'network'];
+const PREVIOUS_DEFAULT_ORDERS = [
+  ['home', 'orbit', 'chat', 'create', 'network'],
+  ['chat', 'orbit', 'create', 'home', 'network'],
+];
 const sameOrder = (a: string[], b: string[]) => a.length === b.length && a.every((id, i) => id === b[i]);
 /** Spaces became Orbit; saved bars and start tabs that say 'communities' keep their slot. */
 const RENAMED: Record<string, string> = { communities: 'orbit' };
@@ -62,7 +65,7 @@ function readOrder(): string[] {
     if (!Array.isArray(parsed)) return [...DEFAULT_NAV_ORDER];
     const cleaned = parsed.map((id: unknown) => (typeof id === 'string' ? RENAMED[id] ?? id : id)).filter((id: unknown): id is string => typeof id === 'string' && POOL_IDS.has(id));
     const deduped = Array.from(new Set(cleaned)).slice(0, MAX_VISIBLE);
-    if (sameOrder(deduped, PREVIOUS_DEFAULT_ORDER)) return [...DEFAULT_NAV_ORDER];
+    if (PREVIOUS_DEFAULT_ORDERS.some(order => sameOrder(deduped, order))) return [...DEFAULT_NAV_ORDER];
     return deduped.length >= MIN_VISIBLE ? deduped : [...DEFAULT_NAV_ORDER];
   } catch {
     return [...DEFAULT_NAV_ORDER];

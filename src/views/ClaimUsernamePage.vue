@@ -62,7 +62,7 @@
               <ion-label position="stacked">Issuer endpoint</ion-label>
               <ion-input
                 v-model="customIssuerEndpoint"
-                placeholder="https://interpoll.endless.sbs/trust"
+                placeholder="https://interpoll.endless.social/trust"
                 autocomplete="off"
               />
             </ion-item>
@@ -196,7 +196,7 @@
     <ion-alert
       :is-open="showTrustInfo"
       header="What is a trust issuer?"
-      message="A trust issuer is an authority (like admin@endless.sbs) that endorses your username with a cryptographic certificate. Verification requires solving a ~15-second Proof-of-Work challenge — this deters spam while keeping registration open. Verified users get higher rate limits and a green shield badge."
+      message="A trust issuer is an authority (like admin@endless.social) that endorses your username with a cryptographic certificate. Verification requires solving a ~15-second Proof-of-Work challenge — this deters spam while keeping registration open. Verified users get higher rate limits and a green shield badge."
       :buttons="[{ text: 'Got it', role: 'cancel' }]"
       @didDismiss="showTrustInfo = false"
     />
@@ -237,7 +237,7 @@ const powError = ref('');
 const claimedVerified = ref(false);
 const claimedCertificate = ref<TrustCertificate | null>(null);
 const showCustomIssuerMenu = ref(false);
-const customIssuerEndpoint = ref('https://interpoll.endless.sbs/trust');
+const customIssuerEndpoint = ref('https://interpoll.endless.social/trust');
 const customIssuerContact = ref('');
 const addingCustomIssuer = ref(false);
 const customIssuerError = ref('');
@@ -254,7 +254,7 @@ onMounted(async () => {
   try {
     issuers.value = await TrustService.getIssuers();
     const defaultIssuer = issuers.value.find((issuer) =>
-      issuer.endpoint === 'https://interpoll.endless.sbs/trust' || issuer.domain === 'endless.sbs'
+      issuer.endpoint === 'https://interpoll.endless.social/trust' || issuer.domain === 'endless.social'
     );
     if (defaultIssuer) selectedIssuer.value = defaultIssuer;
   } catch (e) {

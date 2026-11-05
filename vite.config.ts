@@ -157,8 +157,8 @@ export default defineConfig({
           name: 'InterPoll',
           short_name: 'InterPoll',
           description: 'Decentralized, censorship-resistant polling & discussion',
-          theme_color: '#07110b',
-          background_color: '#040506',
+          theme_color: '#dfe3e7', // keep in sync with index.html theme-color (light default)
+          background_color: '#dfe3e7',
           display: 'standalone',
           start_url: '/',
           icons: [

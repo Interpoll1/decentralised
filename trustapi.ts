@@ -47,7 +47,7 @@ type PersistedState = {
 };
 
 const PORT = Number(process.env.TRUST_PORT || 8787);
-const ISSUER_DOMAIN = (process.env.TRUST_ISSUER_DOMAIN || 'endless.sbs').trim().toLowerCase();
+const ISSUER_DOMAIN = (process.env.TRUST_ISSUER_DOMAIN || 'endless.social').trim().toLowerCase();
 const FRONTEND_ORIGINS = parseAllowedOrigins(process.env.TRUST_FRONTEND_ORIGIN);
 const PRIVATE_KEY_HEX = (process.env.TRUST_PRIVATE_KEY_HEX || '').trim();
 const DIFFICULTY = clampInt(process.env.TRUST_POW_DIFFICULTY, 22, 18, 30);
@@ -60,8 +60,8 @@ const MAX_BODY_BYTES = clampInt(process.env.TRUST_MAX_BODY_BYTES, 32_000, 1_024,
 const STATE_FILE = resolve(process.env.TRUST_STATE_FILE || './data/trust-issuer-state.json');
 const ALLOWED_ORIGIN_SET = new Set([
   ...FRONTEND_ORIGINS,
-  'https://endless.sbs',
-  'https://interpoll.endless.sbs',
+  'https://endless.social',
+  'https://interpoll.endless.social',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
 ]);
@@ -206,7 +206,7 @@ function parseAllowedOrigins(input: string | undefined): string[] {
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
-  return configured.length > 0 ? configured : ['https://endless.sbs', 'https://interpoll.endless.sbs'];
+  return configured.length > 0 ? configured : ['https://endless.social', 'https://interpoll.endless.social'];
 }
 
 async function start(): Promise<void> {

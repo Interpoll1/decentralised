@@ -270,8 +270,9 @@ ion-content {
     --offset-top    240ms cubic-bezier(0.4,0,0.2,1),
     --offset-bottom 240ms cubic-bezier(0.4,0,0.2,1);
 }
-ion-header.header-hidden ~ ion-content,
-ion-header.header-hidden + ion-content {
+/* Home keeps a constant fullscreen viewport while its header transforms. */
+ion-header.header-hidden:not(.home-scroll-header) ~ ion-content,
+ion-header.header-hidden:not(.home-scroll-header) + ion-content {
   --offset-top: 0px !important;
 }
 ion-content.nav-hidden-bottom {

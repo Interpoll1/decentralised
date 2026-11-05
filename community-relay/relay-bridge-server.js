@@ -26,7 +26,7 @@ import http from 'http';
 import crypto from 'crypto';
 
 const BRIDGE_PORT = parseInt(process.env.BRIDGE_PORT || '9000', 10);
-const PUBLIC_BASE = (process.env.TUNNEL_PUBLIC_BASE || 'wss://interpoll.endless.sbs/tunnel').replace(/\/+$/, '');
+const PUBLIC_BASE = (process.env.TUNNEL_PUBLIC_BASE || 'wss://interpoll.endless.social/tunnel').replace(/\/+$/, '');
 const MAX_CLIENTS_PER_TAB = 50;
 const MAX_TABS_PER_IP = 3;
 const MAX_PAYLOAD = 1024 * 1024;

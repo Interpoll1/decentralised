@@ -289,7 +289,7 @@ describe('makeTurnCredentials', () => {
 
 - [ ] **Step 3: Implement**
   - `relay-server/turn.js`: `makeTurnCredentials(secret, subject, nowMs, ttlSec)` returns `{ username: \`${Math.floor(nowMs/1000)+ttlSec}:${subject}\`, credential: HMAC-SHA1 base64, ttl: ttlSec }`.
-  - `routes.js`: handler returns 503 when `TURN_SECRET`/`TURN_URLS` env is unset; subject = SHA-256 of the authenticated user id (or request IP hash for anonymous), rate-limit 10/min per subject using the existing limiter in that file. `urls` from `TURN_URLS` (comma list, e.g. `turn:turn.endless.sbs:3478,turns:turn.endless.sbs:5349`).
+  - `routes.js`: handler returns 503 when `TURN_SECRET`/`TURN_URLS` env is unset; subject = SHA-256 of the authenticated user id (or request IP hash for anonymous), rate-limit 10/min per subject using the existing limiter in that file. `urls` from `TURN_URLS` (comma list, e.g. `turn:turn.endless.social:3478,turns:turn.endless.social:5349`).
   - `config.ts`: `getTurnServers()` fetches `${config.relay.api}/api/turn-credentials`, maps to `[{ urls, username, credential }]`, caches with expiry; `[]` if `anonymityMode` or fetch fails.
   - `docs/ops/coturn.md`: install (`apt install coturn`), `/etc/turnserver.conf` with `use-auth-secret`, `static-auth-secret=<TURN_SECRET>`, `realm`, `listening-port=3478`, `tls-listening-port=5349`, cert paths, `min-port/max-port` (e.g. 49160-49200), `no-cli`, `no-multicast-peers`, `denied-peer-ip` for RFC1918/loopback ranges; ufw rules; `TURN_SECRET`/`TURN_URLS` env on the relay; note to use ONE multiplexed SSH session (VPS bans rapid reconnects).
 

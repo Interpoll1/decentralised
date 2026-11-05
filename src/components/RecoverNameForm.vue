@@ -49,15 +49,19 @@ async function submit() {
 </script>
 
 <style scoped>
-.rn { display: flex; flex-direction: column; gap: 10px; font-family: 'Inter', system-ui, sans-serif; }
-.rn-note { margin: 0; font-size: 13.5px; line-height: 1.5; color: #b4bbb4; }
-.rn-label { font-size: 13.5px; color: #b4bbb4; }
-.rn-input { width: 100%; box-sizing: border-box; padding: 10px 12px; font: 14px var(--font-mono, monospace); color: #fff; background: #000; border: 1px solid #1d231d; border-radius: 6px; outline: none; resize: vertical; }
-.rn-input:focus { border-color: #3dff7a; }
-.rn-count { margin: 0; font-size: 12.5px; color: #8c948c; }
-.rn-count.ok { color: #3dff7a; }
-.rn-error { margin: 0; font-size: 13.5px; color: #ff8a8a; }
-.rn-ok { margin: 0; font-size: 13.5px; line-height: 1.5; color: #3dff7a; }
-.rn-btn { align-self: flex-start; font: inherit; font-size: 14px; font-weight: 500; padding: 9px 16px; border-radius: 6px; cursor: pointer; background: #3dff7a; color: #000; border: 1px solid #3dff7a; }
+.rn { display: flex; flex-direction: column; gap: 10px; font-family: inherit; }
+.rn-note { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--app-text-muted); }
+.rn-label { font-size: 13.5px; color: var(--app-text-muted); }
+.rn-input { width: 100%; box-sizing: border-box; padding: 10px 12px; font: 14px var(--font-mono, monospace); color: var(--app-text); background: var(--app-bg-base); border: 1px solid var(--app-border); border-radius: 6px; outline: none; resize: vertical; }
+.rn-input:focus { border-color: var(--app-accent); }
+.rn-count { margin: 0; font-size: 12.5px; color: var(--app-text-muted); }
+.rn-count.ok { color: var(--app-accent); }
+.rn-error { margin: 0; font-size: 13.5px; color: var(--app-danger); }
+.rn-ok { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--app-accent); }
+.rn-btn { align-self: flex-start; font: inherit; font-size: 14px; font-weight: 500; padding: 9px 16px; border-radius: 6px; cursor: pointer; background: var(--app-accent); color: #fff; border: 1px solid var(--app-accent); }
 .rn-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.rk-btn, .rn-btn { min-height: 48px; }
+.rk-input, .rn-input { font-size: 16px; border-radius: 10px; }
+.rk :is(button, textarea):focus-visible, .rn :is(button, input, textarea):focus-visible { outline: 2px solid var(--app-accent); outline-offset: 3px; }
 </style>

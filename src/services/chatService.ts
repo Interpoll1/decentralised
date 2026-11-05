@@ -34,7 +34,7 @@ import { verifyAuthenticatedBundle, verifyContext, continuityChange, DMIdentityE
 
 /** HTTP base URL of the relay-server (port 3001) — where signal bundles and chat APIs live. */
 function chatRelayBase(): string {
-  const ws = config.relay.websocket; // e.g. wss://interpoll.endless.sbs
+  const ws = config.relay.websocket; // e.g. wss://interpoll.endless.social
   return ws.replace(/^wss:\/\//, 'https://').replace(/^ws:\/\//, 'http://').replace(/\/$/, '');
 }
 import {

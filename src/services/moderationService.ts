@@ -133,9 +133,9 @@ const API_KEY_STORAGE_KEY = 'moderation_api_key';
  * Default URL for the InterPoll-hosted moderation API — the prefix under which
  * moderation-api's `/v1/*` routes are served (nginx maps `/moderation/v1/`).
  */
-export const MODERATION_API_DEFAULT_BASE_URL = 'https://interpoll.endless.sbs/moderation';
+export const MODERATION_API_DEFAULT_BASE_URL = 'https://interpoll.endless.social/moderation';
 /** Pre-fix default (site root, no `/v1` there); migrated on load. */
-const LEGACY_MODERATION_API_BASE_URL = 'https://interpoll.endless.sbs';
+const LEGACY_MODERATION_API_BASE_URL = 'https://interpoll.endless.social';
 
 const DEFAULT_SETTINGS: ModerationSettings = {
   minUserKarma: -1000,

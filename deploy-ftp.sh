@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Build the frontend and deploy it to endless.sbs over FTP.
+# Build the frontend and deploy it to endless.social over FTP.
 #
 #   ./deploy-ftp.sh              build + upload
 #   ./deploy-ftp.sh --no-build   upload the existing dist/ as-is
@@ -24,7 +24,7 @@ fi
 FTP_HOST="${FTP_HOST:-185.232.14.177}"
 FTP_USER="${FTP_USER:?set FTP_USER}"
 FTP_PASS="${FTP_PASS:?set FTP_PASS}"
-REMOTE_DIR="${REMOTE_DIR:-/domains/endless.sbs/public_html}"
+REMOTE_DIR="${REMOTE_DIR:-/domains/endless.social/public_html}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIST="$ROOT/dist"
@@ -103,4 +103,4 @@ $PUT_INDEX
 bye
 LFTP
 
-echo "==> done: https://endless.sbs/"
+echo "==> done: https://endless.social/"

@@ -1,6 +1,6 @@
 # InterPoll launch copy
 
-Links: site https://endless.sbs · video https://youtu.be/SnxliGXuY88 · GitHub [GITHUB_URL] · Android APK [APK_URL]
+Links: site https://endless.social · video https://youtu.be/SnxliGXuY88 · GitHub [GITHUB_URL] · Android APK [APK_URL]
 
 Core claims (all true of the current build — keep copy to these):
 - No ads, no data collection
@@ -15,7 +15,7 @@ Core claims (all true of the current build — keep copy to these):
 
 **Channel description**
 InterPoll is a decentralised polling and discussion platform: no ads, no data collection, no company in control. Every poll, post and vote is signed on your device and replicated across peers, so nothing can be quietly altered or taken down.
-🌐 https://endless.sbs · 💻 [GITHUB_URL]
+🌐 https://endless.social · 💻 [GITHUB_URL]
 
 **Video description**
 InterPoll in 75 seconds. Polls and discussion with no ads, no data collection, and no way to fake a vote.
@@ -26,14 +26,14 @@ InterPoll in 75 seconds. Polls and discussion with no ads, no data collection, a
 ✔ Switch relays, or go browser-to-browser
 ✔ Open source: run it locally with your own relay
 
-🌐 Website: https://endless.sbs
+🌐 Website: https://endless.social
 💻 GitHub: [GITHUB_URL]
 📱 Android: [APK_URL]
 
 **Tags:** interpoll, decentralized polls, no ads social media, verifiable voting, encrypted chat, open source, private communities, anti bot
 
 **Pinned comment**
-No ads, no tracking, no one deciding what you see. What poll would you start first? 👇 https://endless.sbs
+No ads, no tracking, no one deciding what you see. What poll would you start first? 👇 https://endless.social
 
 ## Instagram (image/carousel + text)
 
@@ -41,7 +41,7 @@ No ads, no tracking, no one deciding what you see. What poll would you start fir
 Social media without ads, bot farms or a company deciding what stays up. 🗳️
 InterPoll: polls and discussion where every vote is signed and verifiable, chats are encrypted, and you can run your own relay or skip relays entirely.
 Free, open source, no data collection.
-🌐 endless.sbs · ▶️ full video on YouTube (link in bio)
+🌐 endless.social · ▶️ full video on YouTube (link in bio)
 
 **Carousel text (one line per slide)**
 1. No ads. Ever.
@@ -49,7 +49,7 @@ Free, open source, no data collection.
 3. Encrypted chats, keys stay on your device
 4. Switch relays, or go browser-to-browser
 5. Nothing can be quietly taken down
-6. Open source: run it yourself → endless.sbs
+6. Open source: run it yourself → endless.social
 
 **Hashtags:** #interpoll #decentralized #noads #privacy #opensource #polls #web3 #selfhosted
 
@@ -61,7 +61,7 @@ Rules: read each sub's self-promo rule first; many require a flair, a mod ping, 
 **Title:** We built a polling + discussion platform with no ads, no data collection, and an option to run your own relay
 **Body:**
 We were tired of platforms that decide what stays up and monetise what you do. InterPoll is open source: polls, posts and comments are signed on your device and replicated across peers, so the host can delay content but can't forge or alter it. Chats and private communities are end-to-end encrypted (keys never leave your device). You can switch relays in settings, or clone the repo and run your own.
-Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
+Site: https://endless.social · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 Happy to answer questions about the threat model and where it's still weak.
 
 ### Template B — censorship / free speech (r/FreeSpeech, r/privacytoolsIO, r/decentralization)

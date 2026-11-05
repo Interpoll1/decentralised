@@ -64,17 +64,17 @@ function download() {
 <style scoped>
 .rp { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; font-family: 'Inter', system-ui, sans-serif; }
 .rp-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-.rp-label { font-size: 13.5px; color: #b4bbb4; }
-.rp-state { font-size: 12.5px; color: #ffd84a; }
-.rp-state.ok { color: #3dff7a; }
-.rp-note { margin: 0; font-size: 13px; line-height: 1.5; color: #8c948c; }
+.rp-label { font-size: 13.5px; color: var(--app-text-muted); }
+.rp-state { font-size: 12.5px; color: var(--app-warning); }
+.rp-state.ok { color: var(--app-accent); }
+.rp-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--app-text-subtle); }
 .rp-words { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; }
-.rp-words span { padding: 7px 9px; border: 1px solid #1d231d; border-radius: 5px; font: 13px var(--font-mono, monospace); }
-.rp-words i { font-style: normal; color: #8c948c; margin-right: 8px; }
+.rp-words span { padding: 7px 9px; border: 1px solid var(--app-border); border-radius: 5px; font: 13px var(--font-mono, monospace); }
+.rp-words i { font-style: normal; color: var(--app-text-subtle); margin-right: 8px; }
 .rp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.rp-btn { font: inherit; font-size: 13.5px; font-weight: 500; padding: 8px 14px; border-radius: 6px; cursor: pointer; color: #fff; background: #000; border: 1px solid #1d231d; align-self: flex-start; }
-.rp-btn:hover { border-color: #3dff7a; }
-.rp-check { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: #c9d1c9; cursor: pointer; }
-.rp-check input { accent-color: #3dff7a; }
-.rp-error { margin: 0; font-size: 13px; color: #ff8a8a; }
+.rp-btn { font: inherit; font-size: 13.5px; font-weight: 500; padding: 8px 14px; border-radius: 6px; cursor: pointer; color: var(--app-text); background: var(--app-item-surface); border: 1px solid var(--app-border); align-self: flex-start; }
+.rp-btn:hover { border-color: var(--app-accent); }
+.rp-check { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--app-text-muted); cursor: pointer; }
+.rp-check input { accent-color: var(--app-accent); }
+.rp-error { margin: 0; font-size: 13px; color: var(--app-danger); }
 </style>

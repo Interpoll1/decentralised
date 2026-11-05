@@ -1,9 +1,9 @@
 <template>
-  <ion-page>
+  <ion-page class="search-view">
     <ion-header>
       <ion-toolbar>
         <ion-buttons slot="start">
-          <button class="back-btn" @click="router.back()">
+          <button class="back-btn" aria-label="Back" @click="router.back()">
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
@@ -16,6 +16,7 @@
     <ion-content>
       <DesktopPageShell>
       <div class="search-page">
+    <h1 class="search-page-title">Search</h1>
     <!-- Search Header -->
     <div class="search-header">
       <div class="search-box">
@@ -27,6 +28,7 @@
           @input="handleSearch"
           type="search"
           placeholder="Search posts, polls and spaces..."
+          aria-label="Search posts, polls and spaces"
           class="search-input"
           autofocus
         />
@@ -34,7 +36,7 @@
 
       <!-- Filter row 1: type + community -->
       <div class="search-filters">
-        <select v-model="filterType" @change="handleFilterChange" class="filter-select">
+        <select v-model="filterType" @change="handleFilterChange" class="filter-select" aria-label="Content type">
           <option value="">All Types</option>
           <option value="post">Posts</option>
           <option value="poll">Polls</option>
@@ -44,6 +46,7 @@
           @input="handleFilterChange"
           type="text"
           placeholder="Community..."
+          aria-label="Filter by community"
           class="filter-input"
         />
       </div>
@@ -65,8 +68,13 @@
         </button>
       </div>
 
+      <div v-if="!searchQuery.trim()" class="search-start">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.5"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <h2>Find a conversation</h2>
+        <p>Search posts, polls and spaces by a topic or a few words.</p>
+      </div>
       <!-- Loading -->
-      <div v-if="loading" class="loading-state">
+      <div v-else-if="loading" class="loading-state">
         <div class="spinner"></div>
         <p>Searching...</p>
       </div>
@@ -400,8 +408,8 @@ ion-content { --background: transparent; }
 .space-matches { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
 .space-matches__title { margin: 0 0 2px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--app-text-muted, #9aa39e); }
 .space-match { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; text-align: left; cursor: pointer; border-radius: 12px; font: inherit; color: inherit; background: rgba(255,255,255,0.03); border: 1px solid #2b332f; }
-.space-match:hover { border-color: rgba(61,255,122,.45); }
-.space-match__avatar { width: 38px; height: 38px; flex-shrink: 0; display: grid; place-items: center; border-radius: 10px; font-weight: 700; color: #3dff7a; background: #0b1a12; border: 1px solid #1d6b3a; }
+.space-match:hover { border-color: rgba(var(--app-accent-rgb), .45); }
+.space-match__avatar { width: 38px; height: 38px; flex-shrink: 0; display: grid; place-items: center; border-radius: 10px; font-weight: 700; color: var(--app-accent); background: var(--app-item-surface); border: 1px solid var(--app-border); }
 .space-match__info { display: flex; flex-direction: column; min-width: 0; }
 .space-match__info b { font-size: 14px; }
 .space-match__info small { font-size: 12px; color: var(--app-text-muted, #9aa39e); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -128,19 +128,12 @@
             <div class="toggle-row">
               <div>
                 <div class="toggle-label">Dark mode</div>
-                <div class="toggle-sub">Currently the only available theme</div>
+                <div class="toggle-sub">Switch between light and dark graphite</div>
               </div>
-              <label class="toggle-switch toggle-switch--locked" title="Dark mode is always on">
-                <input type="checkbox" checked disabled />
+              <label class="toggle-switch" title="Toggle dark mode">
+                <input v-model="isDarkMode" type="checkbox" @change="toggleDarkMode" />
                 <span class="toggle-track"></span>
               </label>
-            </div>
-            <div class="theme-coming-soon">
-              <svg viewBox="0 0 16 16" fill="none" width="13" height="13" aria-hidden="true">
-                <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4"/>
-                <path d="M8 5v3.5m0 2.5h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              </svg>
-              Light mode is coming in a future update
             </div>
           </div>
 
@@ -495,7 +488,7 @@
               <label class="field-label">API Base URL</label>
               <div class="field-wrap">
                 <input class="field-native mono-sm" v-model="modSettings.moderationApiBaseUrl"
-                  @blur="saveModerationSettings" placeholder="https://interpoll.endless.sbs/moderation" />
+                  @blur="saveModerationSettings" placeholder="https://interpoll.endless.social/moderation" />
               </div>
             </div>
             <div class="field-group mt-8">
@@ -2304,14 +2297,14 @@ const vpsOs   = ref('Linux (bash)');
 const copied  = ref<'home' | 'vps' | 'tab' | null>(null);
 
 const HOME_CMDS: Record<string, string> = {
-  'Linux / Pi': 'curl -sSL https://interpoll.endless.sbs/install.sh | bash',
-  'macOS':      'curl -sSL https://interpoll.endless.sbs/install.sh | bash',
-  'Windows':    "irm https://interpoll.endless.sbs/install.ps1 | iex",
+  'Linux / Pi': 'curl -sSL https://interpoll.endless.social/install.sh | bash',
+  'macOS':      'curl -sSL https://interpoll.endless.social/install.sh | bash',
+  'Windows':    "irm https://interpoll.endless.social/install.ps1 | iex",
 };
 // vps.sh runs on the (Linux) server either way; the tab only reflects the shell you SSH from.
 const VPS_CMDS: Record<string, string> = {
-  'Linux (bash)': 'curl -sSL https://interpoll.endless.sbs/vps.sh | sudo bash -s yourdomain.com',
-  'macOS (zsh)':  'curl -sSL https://interpoll.endless.sbs/vps.sh | sudo bash -s yourdomain.com',
+  'Linux (bash)': 'curl -sSL https://interpoll.endless.social/vps.sh | sudo bash -s yourdomain.com',
+  'macOS (zsh)':  'curl -sSL https://interpoll.endless.social/vps.sh | sudo bash -s yourdomain.com',
 };
 const homeCmd = computed(() => HOME_CMDS[homeOs.value] ?? HOME_CMDS['Linux / Pi']);
 const vpsCmd  = computed(() => VPS_CMDS[vpsOs.value]  ?? VPS_CMDS['Linux (bash)']);
@@ -3085,12 +3078,11 @@ onMounted(async () => {
 
   // Reflect the actual stored theme — dark/glass is the default.
   const storedTheme = localStorage.getItem('theme');
-  const prefersDark = storedTheme !== 'light';
+  const prefersDark = storedTheme === 'dark' || (!storedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches);
   isDarkMode.value = prefersDark;
   if (prefersDark) {
     document.documentElement.classList.add('dark');
     document.body.classList.add('dark');
-    if (!storedTheme) localStorage.setItem('theme', 'dark');
   } else {
     document.documentElement.classList.remove('dark');
     document.body.classList.remove('dark');

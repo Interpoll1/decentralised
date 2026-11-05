@@ -100,7 +100,7 @@ Sources: [libp2p WebRTC (browser-to-browser) docs](https://docs.libp2p.io/concep
 
 This repo's `browserRelayService.ts` is actually a Gun-relay-in-a-tab, not a
 signalling rendezvous per se: it tries to get a public `wss://` tunnel URL from a
-bridge service (`BRIDGE_URLS`, e.g. `tunnel.interpoll.endless.sbs` or the
+bridge service (`BRIDGE_URLS`, e.g. `tunnel.interpoll.endless.social` or the
 `localtunnel` public fallback), and if no bridge answers, falls back to exposing
 `http://<lan-ip>:8765/gun` for same-network peers. Note the LAN-IP discovery trick —
 opening an `RTCPeerConnection` with no ICE servers and reading the host candidate's
