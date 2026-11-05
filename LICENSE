@@ -1,24 +1,39 @@
-This is free and unencumbered software released into the public domain.
+Proprietary Source-Available License
 
-Anyone is free to copy, modify, publish, use, compile, sell, or
-distribute this software, either in source code form or as a compiled
-binary, for any purpose, commercial or non-commercial, and by any
-means.
+Copyright (c) 2026 Interpoll1. All rights reserved.
 
-In jurisdictions that recognize copyright laws, the author or authors
-of this software dedicate any and all copyright interest in the
-software to the public domain. We make this dedication for the benefit
-of the public at large and to the detriment of our heirs and
-successors. We intend this dedication to be an overt act of
-relinquishment in perpetuity of all present and future rights to this
-software under copyright law.
+1. Permission
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
-OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
-ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
-OTHER DEALINGS IN THE SOFTWARE.
+Permission is granted to individuals to:
 
-For more information, please refer to <https://unlicense.org>
+View and inspect the source code.
+Download the software for personal use.
+Install and run the software on privately controlled infrastructure.
+Modify the source code for personal, private use.
+Experiment with and learn from the software.
+2. Restrictions
+
+Without prior written permission from the copyright owner, you may NOT:
+
+Redistribute, republish, or sublicense the original or modified source code.
+Publish forks or derivative versions of this software.
+Host, deploy, or operate a publicly accessible competing instance.
+Sell, license, or commercially exploit the software or derivative works.
+Offer the software as a hosted service, SaaS product, or commercial offering.
+Use the software or its source code to create a competing commercial product.
+
+3. Commercial Licensing
+
+Commercial use, redistribution, public hosting, and commercial deployment require a separate written commercial license from the copyright owner.
+
+4. Ownership
+
+All intellectual property rights remain with the original copyright owner, except for the limited permissions expressly granted in this license.
+
+5. Termination
+
+Any rights granted under this license terminate automatically upon violation of its terms.
+
+6. Disclaimer
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, TO THE MAXIMUM EXTENT PERMITTED BY LAW.
