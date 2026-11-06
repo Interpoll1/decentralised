@@ -154,7 +154,7 @@ npm run desktop:dev       # dev window
 npm run desktop:build     # release build and installers
 ```
 
-Linux builds need `webkit2gtk-4.1`, `libsoup-3.0` and Rust. Windows and macOS installers have to be built on those systems. The Windows installer is produced by a release workflow whenever a `v*` tag is pushed, and it lands on the [Releases page](https://github.com/Interpoll1/decentralised/releases), the only official place to download it.
+Linux builds need `webkit2gtk-4.1`, `libsoup-3.0` and Rust. Windows and macOS installers have to be built on those systems. The Windows installer is produced by [`release-windows.yml`](.github/workflows/release-windows.yml) whenever a `v*` tag is pushed, and it lands on the [Releases page](https://github.com/Interpoll1/decentralised/releases), the only official place to download it.
 
 The Android app uses [Capacitor](https://capacitorjs.com). `npm run cap:android` builds the web bundle, syncs it into `android/` and opens Android Studio.
 
