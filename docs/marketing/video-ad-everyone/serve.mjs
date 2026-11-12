@@ -1,0 +1,3 @@
+import http from 'http';import fs from 'fs';import path from 'path';
+const types={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.json':'application/json','.woff2':'font/woff2','.woff':'font/woff','.png':'image/png','.jpg':'image/jpeg','.svg':'image/svg+xml'};
+export function serve(root,port){return new Promise(r=>{const s=http.createServer((q,a)=>{let p=path.join(root,decodeURIComponent(q.url.split('?')[0]));if(p.endsWith('/'))p+='index.html';fs.readFile(p,(e,d)=>{if(e){a.writeHead(404);a.end();return;}a.writeHead(200,{'content-type':types[path.extname(p)]||'application/octet-stream'});a.end(d);});});s.listen(port,()=>r(s));});}
