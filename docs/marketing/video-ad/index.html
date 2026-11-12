@@ -1,0 +1,89 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="node_modules/@fontsource/inter/400.css">
+<link rel="stylesheet" href="node_modules/@fontsource/inter/500.css">
+<link rel="stylesheet" href="node_modules/@fontsource/inter/600.css">
+<link rel="stylesheet" href="node_modules/@fontsource/inter/700.css">
+<link rel="stylesheet" href="node_modules/@fontsource/inter/800.css">
+<link rel="stylesheet" href="node_modules/@fontsource/grand-hotel/400.css">
+<link rel="stylesheet" href="node_modules/@fontsource/geist-mono/400.css">
+<link rel="stylesheet" href="node_modules/@fontsource/geist-mono/500.css">
+<style>
+:root{--g:#3dff7a;--g2:#9bd9ae;--red:#ff4d5e;--bg:#040506}
+*{box-sizing:border-box}
+html,body{margin:0;background:#000;overflow:hidden}
+#stage{position:relative;width:1920px;height:1080px;overflow:hidden;background:#000;font-family:Inter,system-ui,sans-serif;color:#fff}
+canvas{position:absolute;inset:0;width:1920px;height:1080px}
+#ui{position:absolute;inset:0;pointer-events:none}
+.abs{position:absolute;opacity:0;will-change:transform,opacity}
+.kicker{font-family:'Geist Mono',monospace;font-weight:500;font-size:22px;letter-spacing:.22em;color:var(--g);text-transform:uppercase}
+.kicker i{display:inline-block;width:10px;height:10px;background:var(--g);border-radius:50%;margin-right:14px;box-shadow:0 0 14px var(--g);vertical-align:1px}
+.h{font-weight:800;font-size:var(--hs);line-height:1.04;letter-spacing:-.035em;text-shadow:0 4px 40px rgba(0,0,0,.9),0 0 2px rgba(0,0,0,.9)}
+.h .w{display:inline-block;white-space:pre}
+.h em{font-style:normal;color:var(--g)}
+.h.red em{color:var(--red)}
+.lower{left:110px;bottom:110px;width:1640px}
+.center{left:0;right:0;text-align:center}
+.chip{display:inline-block;font-family:'Geist Mono',monospace;font-size:26px;padding:12px 22px;border:1px solid rgba(255,255,255,.28);border-radius:999px;background:rgba(10,12,14,.72);margin-right:16px;color:#e8e8e8}
+.chip b{color:var(--red);font-weight:500}
+/* kill switch */
+#sw{left:1330px;top:760px;width:440px;padding:26px 30px;border-radius:22px;background:rgba(8,9,11,.86);border:1px solid #2a2b2e;box-shadow:0 30px 80px rgba(0,0,0,.7)}
+#sw .lab{font-family:'Geist Mono',monospace;font-size:19px;color:#9c9c9d;letter-spacing:.08em;text-transform:uppercase}
+#sw .row{display:flex;align-items:center;justify-content:space-between;margin-top:14px}
+#sw .name{font-size:27px;font-weight:700;letter-spacing:-.02em}
+#sw .tog{width:112px;height:58px;border-radius:40px;background:#2bd566;position:relative}
+#sw .knob{position:absolute;top:6px;left:60px;width:46px;height:46px;border-radius:50%;background:#fff;box-shadow:0 4px 10px rgba(0,0,0,.4)}
+#cur{width:44px;height:44px}
+/* logo */
+#logo{font-family:'Grand Hotel',cursive;font-size:330px;line-height:1;letter-spacing:.01em;color:#fff;text-shadow:0 0 60px rgba(61,255,122,.55),0 0 160px rgba(61,255,122,.35)}
+#logoWrap{top:310px}
+#logoSub{top:690px;font-family:'Geist Mono',monospace;font-size:28px;letter-spacing:.3em;color:var(--g2);text-transform:uppercase}
+.scrim{position:absolute;inset:0;opacity:0}
+#scrimC{background:radial-gradient(ellipse 60% 46% at 50% 50%,rgba(0,0,0,.86),rgba(0,0,0,0) 72%)}
+#scrimL{background:linear-gradient(90deg,rgba(0,0,0,.82) 0%,rgba(0,0,0,.55) 38%,rgba(0,0,0,0) 66%)}
+#scrimB{background:linear-gradient(0deg,rgba(0,0,0,.85) 0%,rgba(0,0,0,.4) 30%,rgba(0,0,0,0) 52%)}
+/* poll card */
+#poll{left:110px;top:130px;width:720px;padding:34px;border-radius:24px;background:rgba(7,8,10,.9);border:1px solid #232427;box-shadow:rgba(255,255,255,.06) 0 1px 0 0 inset,0 40px 90px rgba(0,0,0,.7)}
+#poll .meta{display:flex;align-items:center;gap:14px;font-size:21px;color:#9c9c9d}
+#poll .av{width:44px;height:44px;border-radius:50%;background:var(--g);color:#04130a;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:22px}
+#poll .tag{font-family:'Geist Mono',monospace;font-size:16px;border:1px solid #363739;border-radius:6px;padding:3px 8px}
+#poll .q{font-size:38px;font-weight:700;letter-spacing:-.025em;line-height:1.15;margin:22px 0 24px}
+.opt{position:relative;height:74px;border-radius:14px;border:1px solid #2c2d30;margin-bottom:14px;overflow:hidden;background:#0b0c0e}
+.opt .bar{position:absolute;inset:0;width:0;background:rgba(255,255,255,.09)}
+.opt.sel{border-color:var(--g)}
+.opt.sel .bar{background:rgba(61,255,122,.24)}
+.opt .t{position:absolute;left:24px;top:20px;font-size:27px;font-weight:600}
+.opt .p{position:absolute;right:24px;top:22px;font-family:'Geist Mono',monospace;font-size:24px;color:#cfcfcf}
+#poll .foot{display:flex;justify-content:space-between;align-items:center;margin-top:20px;font-family:'Geist Mono',monospace;font-size:19px;color:#9c9c9d;height:44px}
+#signed{color:var(--g);font-weight:500;border:1px solid rgba(61,255,122,.5);background:rgba(61,255,122,.1);padding:8px 14px;border-radius:10px;opacity:0}
+.tag3d{font-family:'Geist Mono',monospace;font-size:19px;padding:6px 12px;border-radius:8px;background:rgba(4,5,6,.78);border:1px solid rgba(61,255,122,.4);color:var(--g2);white-space:nowrap;transform-origin:50% 50%}
+.tag3d.bad{border-color:var(--red);color:#fff;background:rgba(255,40,60,.85);font-weight:500;font-size:24px;letter-spacing:.08em}
+.tag3d.warn{border-color:rgba(255,77,94,.7);color:#ff9aa4}
+/* chat */
+.bubble{width:430px;padding:26px 28px;border-radius:26px;background:rgba(9,10,12,.92);border:1px solid #2a2b2e;box-shadow:0 30px 70px rgba(0,0,0,.7)}
+.bubble .who{font-family:'Geist Mono',monospace;font-size:18px;color:#9c9c9d;letter-spacing:.08em;text-transform:uppercase;display:flex;justify-content:space-between}
+.bubble .who span:last-child{color:var(--g)}
+.bubble .msg{margin-top:14px;font-size:30px;font-weight:600;line-height:1.25;letter-spacing:-.015em;padding:16px 20px;border-radius:18px;background:var(--g);color:#04130a;min-height:108px}
+.bubble.rx .msg{background:#17181b;color:#fff}
+#bubL{left:110px;top:210px}#bubR{left:1380px;top:210px}
+#sees{top:738px;font-family:'Geist Mono',monospace;font-size:24px;color:#9c9c9d;letter-spacing:.06em}
+#sees b{color:var(--g);font-weight:500}
+#aes{top:118px}
+#aes span{font-family:'Geist Mono',monospace;font-size:21px;letter-spacing:.16em;border:1px solid rgba(61,255,122,.45);color:var(--g);padding:10px 18px;border-radius:999px;background:rgba(4,5,6,.7)}
+/* beats */
+.beat{top:420px;font-weight:800;font-size:170px;letter-spacing:-.05em;line-height:1;text-shadow:0 10px 80px rgba(0,0,0,.95)}
+.beat .no{position:relative;display:inline-block}
+.beat .no s{position:absolute;left:-2%;top:56%;height:18px;background:var(--red);width:0;border-radius:8px;box-shadow:0 0 30px var(--red)}
+.beat.ok{color:var(--g);text-shadow:0 0 90px rgba(61,255,122,.5),0 10px 80px rgba(0,0,0,.95)}
+/* end card */
+#endLogo{top:392px;font-family:'Grand Hotel',cursive;font-size:250px;line-height:1;text-shadow:0 0 60px rgba(61,255,122,.5),0 0 150px rgba(61,255,122,.3)}
+#endTag{top:668px;font-size:50px;font-weight:700;letter-spacing:-.025em}
+#endTag em{font-style:normal;color:var(--g)}
+#endUrl{top:782px}
+#endUrl span{display:inline-block;font-size:46px;font-weight:800;letter-spacing:-.02em;background:var(--g);color:#03140a;padding:22px 54px;border-radius:20px;box-shadow:0 0 70px rgba(61,255,122,.55)}
+#endNote{top:922px;font-family:'Geist Mono',monospace;font-size:23px;letter-spacing:.14em;color:var(--g2);text-transform:uppercase}
+</style></head>
+<body><div id="stage"><canvas id="c" width="1920" height="1080"></canvas><div id="ui"></div></div>
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
+<script type="module" src="main.js"></script>
+</body></html>

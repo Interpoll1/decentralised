@@ -1,0 +1,40 @@
+{
+ "en": {
+  "a1": "Communities get deleted.",
+  "a2": "A policy changes. A company gets sold.",
+  "a3": "And years of conversation vanish, with one click.",
+  "b1": "What if there was nothing to switch off?",
+  "b2": "This is Interpoll.",
+  "c1": "Every vote is signed on your device, and chained to the one before it.",
+  "c2": "Tamper with one, and the chain breaks, in plain sight.",
+  "d1": "Your posts live on your device first, then spread across peers and relays that anyone can run.",
+  "d2": "Take one down, and the rest carry on.",
+  "e1": "Private communities and chats are encrypted before they leave your browser.",
+  "e2": "Relays only ever carry scrambled bytes.",
+  "f1": "No ads.",
+  "g1": "Interpoll. Polls and discussions nobody can switch off.",
+  "g2": "Open endless dot social. There is nothing to install.",
+  "f2": "No tracking.",
+  "f3": "No hidden algorithm.",
+  "f4": "And it's fully open source."
+ },
+ "fr": {
+  "a1": "Des communautés disparaissent.",
+  "a2": "Une règle change. Une entreprise est rachetée.",
+  "a3": "Et des années de discussions s'effacent, en un seul clic.",
+  "b1": "Et s'il n'y avait plus rien à éteindre ?",
+  "b2": "Voici Interpol.",
+  "c1": "Chaque vote est signé sur votre appareil, et enchaîné au précédent.",
+  "c2": "Modifiez-en un seul, et la chaîne se brise, aux yeux de tous.",
+  "d1": "Vos publications vivent d'abord sur votre appareil, puis se propagent entre pairs et relais, que chacun peut héberger.",
+  "d2": "Coupez-en un, et les autres continuent.",
+  "e1": "Communautés privées et messages sont chiffrés avant même de quitter votre navigateur.",
+  "e2": "Les relais ne transportent que des octets illisibles.",
+  "f1": "Sans publicité.",
+  "g1": "Interpoll. Des sondages et des discussions que personne ne peut éteindre.",
+  "g2": "Rendez-vous sur endless point social. Il n'y a rien à installer.",
+  "f2": "Sans pistage.",
+  "f3": "Sans algorithme caché.",
+  "f4": "Et c'est entièrement open source."
+ }
+}
