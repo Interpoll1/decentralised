@@ -472,13 +472,13 @@ if (MODE === 'short') {
   // ------------------------------------------------------------------ PHONK
   const BT = 60 / CUE.bpm, BAR = BT * 4, PH = T.phonk;
   const chipT = el('div', 'abs center pchip them', PH.them), chipU = el('div', 'abs center pchip us', 'INTERPOLL');
-  const intro1 = el('div', 'abs center ptext them', PH.them), intro2 = el('div', 'abs center pvs', 'VS');
+  const introN = PH.names.map(n => el('div', 'abs center ptext them pname', n)), intro2 = el('div', 'abs center pvs', 'VS');
   const dropLogo = el('div', 'abs center', '<span id="logo">Interpoll</span>'); dropLogo.id = 'logoWrap';
   const pairs = PH.pairs.map(p => ({
     te: el('div', 'abs center pemoji', p.e), tt: el('div', 'abs center ptext them', p.them), ts: el('div', 'abs center psub them', p.themSub || ''),
     ut: el('div', 'abs center ptext us', p.us), us: el('div', 'abs center psub us', p.usSub || ''), uc: el('div', 'abs center pcheck', '✓')
   }));
-  const sw = el('div', 'abs sw', swHTML(T.swLab, T.swName)); const tog = sw.querySelector('.tog'), knob = sw.querySelector('.knob'), swName = sw.querySelector('.name');
+  const sw = el('div', 'abs sw', swHTML(PH.swLab, T.swName2)); const tog = sw.querySelector('.tog'), knob = sw.querySelector('.knob'), swName = sw.querySelector('.name');
   const swD = el('div', 'abs sw', swHTML(T.swLab2, T.swName2)); const dTog = swD.querySelector('.tog'), dKnob = swD.querySelector('.knob');
   const out1 = el('div', 'abs center ptext us', PH.out), out1s = el('div', 'abs center psub us', PH.outSub);
   const eLogo = el('div', 'abs center', 'Interpoll'); eLogo.id = 'endLogo';
@@ -507,17 +507,17 @@ if (MODE === 'short') {
     };
     if (b < 2) {
       themLook(); o.fade = .8 * ss(0, .5, t);
-      intro1.style.opacity = 1; intro1.style.top = '760px'; intro1.style.fontSize = LANG === 'fr' ? '84px' : '104px'; intro1.style.letterSpacing = lerp(.3, .02, eOut(t / 1.2)) + 'em'; intro1.style.transform = `scale(${1 + t * .015})`;
-      if (b === 1) { slam(intro2, lb, 1010, { from: 1.8, shake: 6 }); o.glitch = .15 + ss(BAR * .5, BAR, lb) * .8; if (lb > BAR - BT * .5) { o.fade = 0; intro1.style.opacity = intro2.style.opacity = 0; } }
+      introN.forEach((e, i) => slam(e, t - i * BT, 300 + i * 150, { from: 1.7, shake: 6, drift: .01 }));
+      const tv = t - 6 * BT; if (tv > 0) { slam(intro2, tv, 1250, { from: 2.2, shake: 10 }); o.glitch = .15 + ss(0, BT * 2, tv) * .8; if (tv > BT * 1.5) { o.fade = 0; introN.forEach(e => e.style.opacity = 0); intro2.style.opacity = 0; } }
     } else if (b === 2) {
       usLook(0); slam(dropLogo, lb, 700, { from: 3, shake: 22 }); dropLogo.style.transform += ` scale(${1 + pulse * .06})`;
       slam(chipU, lb - BT * 2, 1090, { from: 2, shake: 8 }); chipU.textContent = PH.ours;
     } else if (b < 3 + PH.pairs.length * 2) {
       const pi = (b - 3) >> 1, side = (b - 3) & 1, p = pairs[pi];
       if (!side) {
-        themLook(); chipT.style.opacity = 1; chipT.style.top = '170px'; chipT.style.transform = 'none';
+        themLook(); chipT.textContent = PH.pairs[pi].names; chipT.style.opacity = 1; chipT.style.top = '150px'; chipT.style.transform = 'none';
         slam(p.te, lb, 430, { from: 1.4, shake: 3, drift: .03 }); slam(p.tt, lb - .08, 760, { from: 1.25, shake: 3, drift: .025 }); slam(p.ts, lb - BT * 2, 1240, { from: 1.2, shake: 2 });
-        if (PH.pairs[pi].sw) { sw.style.opacity = 1; sw.style.transform = 'scale(1.35)'; const off = sat((lb - BT * 2) / .12); knob.style.left = lerp(60, 6, eOut(off)) + 'px'; tog.style.background = off > 0 ? '#ff3b4e' : '#2bd566'; swName.textContent = off > 0 ? T.swOff : T.swName; swName.style.color = off > 0 ? '#ff6b78' : '#fff'; if (off > 0) { o.glitch = Math.max(.12, 1 - (lb - BT * 2) / .4); o.fade = .8 * lerp(1, .45, sat((lb - BT * 2) / .6)); } }
+        if (PH.pairs[pi].sw) { sw.style.opacity = 1; sw.style.transform = 'scale(1.35)'; const off = sat((lb - BT * 2) / .12); knob.style.left = lerp(60, 6, eOut(off)) + 'px'; tog.style.background = off > 0 ? '#ff3b4e' : '#2bd566'; swName.textContent = off > 0 ? T.swOff : T.swName2; swName.style.color = off > 0 ? '#ff6b78' : '#fff'; if (off > 0) { o.glitch = Math.max(.12, 1 - (lb - BT * 2) / .4); o.fade = .8 * lerp(1, .45, sat((lb - BT * 2) / .6)); } }
       } else {
         usLook(pi + 1); chipU.textContent = 'INTERPOLL'; chipU.style.opacity = 1; chipU.style.top = '170px'; chipU.style.transform = `scale(${1 + pulse * .05})`;
         slam(p.uc, lb, 400, { from: 3, shake: 10 }); slam(p.ut, lb, 740, { from: 2.6, shake: 20 }); p.ut.style.transform += ` scale(${1 + pulse * .035})`;

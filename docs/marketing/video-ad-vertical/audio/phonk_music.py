@@ -127,79 +127,118 @@ dry=buf(); wet=buf(); dly=buf(); drums=buf(); sub=buf(); sfx=buf()
 K=CUE
 
 
+
 BPM=CUE['bpm']; BT=60/BPM; ST=BT/4; BARL=BT*4; NP=CUE['pairs']
-def cowbell(semi,dur=.22,amp=1.0):
+ROOT=554.37   # cowbell fundamental pair (540/800) = tonic; melody moves in a minor scale around it
+def cowbell(semi,dur=.34,amp=1.0):
     n=int(dur*SR); t=np.arange(n)/SR; r=2**(semi/12)
-    x=sq(540*r,n)+sq(800*r,n)*.9
-    x=bp(x,500*r,3200*r)*np.exp(-t*15)*env(n,.001,.03)
-    return np.tanh(x*1.6)*.33*amp
-def b808(semi,dur,amp=1.0):
-    n=int(dur*SR); t=np.arange(n)/SR; f=87.31*2**(semi/12)
-    x=sine(f*(1+.6*np.exp(-t*45)),n)*np.exp(-t*1.9)
-    x=np.tanh(x*3.2)*.8+np.tanh(x*9)*.2
-    return lp(x,1800)*env(n,.002,.04)*amp
+    x=sq(ROOT*r,n)*.9+sq(ROOT*1.4815*r,n)
+    x=bp(x,380*r,2600*r)
+    e=.75*np.exp(-t*38)+.3*np.exp(-t*7.5)
+    return np.tanh(x*e*2.4)*.42*amp*env(n,.0008,.03)
+def b808(semi,dur,amp=1.0,glide=0):
+    n=int(dur*SR); t=np.arange(n)/SR; f0=69.30*2**(semi/12)
+    f=f0*(1+.9*np.exp(-t*55))*2**(glide*np.minimum(1,t/dur*1.6)/12)
+    x=sine(f,n)+.5*sine(f*2,n)
+    x=np.tanh(x*np.exp(-t*1.4)*4.5)                      # hard saturation -> harmonics audible on phones
+    x=lp(x,2200)+.25*bp(np.tanh(x*3),600,1800)
+    return x*env(n,.002,.05)*amp*.6
 def pkick():
-    n=int(.3*SR); t=np.arange(n)/SR
-    x=sine(50+170*np.exp(-t*42),n)*np.exp(-t*11)+.5*hp(rs.randn(n),2500)*np.exp(-t*260)
-    return np.tanh(x*2.6)*env(n,.001,.04)
-def crash(dur=1.6):
-    n=int(dur*SR); t=np.arange(n)/SR; x=np.stack([rs.randn(n),rs.randn(n)],1); return hp(x,5000)*np.exp(-t*3.2)[:,None]*.3
-RIFA=[0,None,0,None, 3,None,0,None, 7,None,5,None, 3,None,0,-2]
-RIFB=[0,None,0,None, 3,None,0,None, 8,None,7,None, 5,3,0,None]
-B808=[(0,0,3),(3,0,3),(6,0,4),(10,-2,2),(12,3,2),(14,-2,2)]
-riff=buf(); low=buf(); drm=buf(); fxb=buf(); them=buf()
-def bar_riff(b,dest,amp=1.0,octave=12):
-    pat=RIFA if b%2==0 else RIFB
-    for s,nn in enumerate(pat):
+    n=int(.34*SR); t=np.arange(n)/SR
+    x=sine(48+190*np.exp(-t*48),n)*np.exp(-t*9)+.6*hp(rs.randn(n),3000)*np.exp(-t*300)
+    return np.tanh(x*3.0)*env(n,.0008,.05)
+def snare():
+    n=int(.28*SR); t=np.arange(n)/SR
+    x=bp(rs.randn(n),700,6000)*(np.exp(-t*22)+.6*np.exp(-np.abs(t-.011)*500)+.5*np.exp(-np.abs(t-.022)*500))+sine(190,n)*np.exp(-t*30)*.5
+    return np.tanh(x*1.6)*.55
+def chat(open_=False,amp=1.0):
+    n=int((.3 if open_ else .05)*SR); t=np.arange(n)/SR
+    x=sum(sq(f_,n) for f_ in (3263,4117,5481,6827,8432,9713))/6
+    return hp(x+rs.randn(n)*.6,6500)*np.exp(-t*(11 if open_ else 85))*.28*amp
+def crash(dur=1.8):
+    n=int(dur*SR); t=np.arange(n)/SR; x=np.stack([rs.randn(n),rs.randn(n)],1); return hp(x,4500)*np.exp(-t*2.8)[:,None]*.3
+def revcrash(dur):
+    n=int(dur*SR); k=np.arange(n)/n; x=np.stack([rs.randn(n),rs.randn(n)],1); return hp(x,3500)*(k**3)[:,None]*.32
+def choir(m,dur,amp=1.0):
+    # dark "ahh" pad: detuned saws through two vowel formants
+    n=int((dur+.4)*SR); f=mtof(m); out=np.zeros((n,2))
+    for c,sg in ((0,-1),(1,1)):
+        x=sum(saw(f*2**((d+sg*4)/1200),n,rs.rand()) for d in (-11,0,9))
+        out[:,c]=bp(x,600,1000)*1.0+bp(x,1000,1400)*.6+lp(x,350)*.4
+    return out*env(n,.25,.4)[:,None]*.09*amp
+# 4-bar minor riff (semitones from tonic), 16 steps per bar
+R=[[0,0,None,0, None,3,None,0, 0,None,7,None, 5,None,3,None],
+   [0,0,None,0, None,3,None,0, 0,None,8,None, 7,None,5,3],
+   [0,0,None,0, None,3,None,0, 0,None,7,None, 5,None,3,None],
+   [0,0,None,0, None,3,None,0, 10,None,8,None, 7,5,3,2]]
+B=[[(0,0,7,0),(8,0,3,0),(11,3,3,0),(14,-2,2,2)],
+   [(0,0,7,0),(8,0,3,0),(11,-4,3,0),(14,-2,2,0)]]
+KICK=[0,3,8,11]; SN=[4,12]
+riff=buf(); low=buf(); kik=buf(); drm=buf(); fxb=buf(); pad=buf(); ducks=[]
+def bar_riff(b,amp=1.0,oct_up=True):
+    for s,nn in enumerate(R[b%4]):
         if nn is None: continue
-        c=cowbell(nn+octave,amp=amp); add(dest,c,b*BARL+s*ST,1,(-1)**s*.25)
-def bar_full(b,last=False):
+        t=b*BARL+s*ST; acc=1.0 if s%4==0 else .85
+        add(riff,cowbell(nn,amp=amp*acc),t,1,-.12)
+        if oct_up: add(riff,cowbell(nn+12,dur=.2,amp=amp*.22),t,1,.3)
+def bar_low(b,stop=16):
+    for s,nn,ln,gl in B[b%2]:
+        if s>=stop: continue
+        add(low,b808(nn,ln*ST*1.2,glide=gl),b*BARL+s*ST,1)
+def bar_drums(b,stop=16,roll=False):
     t0=b*BARL
-    bar_riff(b,riff)
-    for s,nn,ln in B808:
-        if last and s>=10: continue
-        add(low,b808(nn,ln*ST*1.15),t0+s*ST,.95)
-    for s in (0,6,10): 
-        if not (last and s>=10): add(drm,pkick(),t0+s*ST,1.0)
-    for s in (4,12): add(drm,clap(),t0+s*ST,1.3,.05); add(drm,hp(rs.randn(int(.12*SR)),1800)*np.exp(-np.arange(int(.12*SR))/SR*30)*.25,t0+s*ST,1)
-    for s in range(16):
-        if s%2==0: add(drm,hat(),t0+s*ST,.9,.3)
-        elif rs.rand()<.5: add(drm,hat(),t0+s*ST,.45,-.3)
-    if b%2==1:
-        for k_ in range(6): add(drm,hat(),t0+14*ST+k_*ST/3,.4+.1*k_,.5-.2*k_)
-    else: add(drm,hat(True),t0+14*ST,.8,.2)
-def bar_them(b):
-    t0=b*BARL; bar_riff(b,them,amp=.8,octave=0)
-    add(drm,pkick(),t0,.55); add(drm,pkick(),t0+8*ST,.4)
-    add(fxb,powerdown(.5),t0,.35)
-    n=int(BARL*SR); add(them,(lp(rs.randn(n),2500)*.012*(rs.rand(n)>.7)),t0,1)     # vinyl crackle
+    for s in KICK:
+        if s<stop: add(kik,pkick(),t0+s*ST,1); ducks.append(t0+s*ST)
+    for s in SN:
+        if s<stop: sn=snare(); add(drm,sn,t0+s*ST,1.0,.05)
+    for s in range(0,min(stop,16),2): add(drm,chat(),t0+s*ST,1.0 if s%4==0 else .7,.35)
+    if stop>=16:
+        add(drm,chat(True),t0+6*ST,.7,.2)
+        if roll:
+            for k_ in range(6): add(drm,chat(amp=.5+.1*k_),t0+13*ST+k_*ST/2,1,.5-.2*k_)
+        else: add(drm,chat(True),t0+14*ST,.8,.2)
+def bar_pad(b,amp=1.0):
+    for m_ in ((49,56,61,64) if b%2==0 else (45,57,61,64)): add(pad,choir(m_,BARL,amp),b*BARL,1)
 def drop(b,g=1.0):
-    t0=b*BARL; add(low,impact(2.5,70),t0,.9*g); add(fxb,crash(),t0,1.0*g)
-# intro: filtered riff, vinyl, riser
-for b in (0,1): bar_riff(b,them,amp=.9,octave=0)
-n=int(2*BARL*SR); add(them,lp(rs.randn(n),2500)*.014*(rs.rand(n)>.7),0,1)
-add(fxb,riser(BARL,250,11000,tone=53),BARL,.9)
-for k_ in range(8): add(drm,clap(),2*BARL-BT+k_*BT/8,.3+.6*k_/8)
-drop(2); bar_full(2)
-for p_ in range(NP):
-    bt_,bu=3+p_*2,4+p_*2
-    bar_them(bt_); add(fxb,riser(BT*1.5,400,10000),bu*BARL-BT*1.5,.6)
-    for k_ in range(4): add(drm,clap(),bu*BARL-BT/2+k_*BT/8,.4+.2*k_)
-    drop(bu); bar_full(bu)
-bo=3+NP*2
-drop(bo); bar_full(bo); drop(bo+1,.8); bar_full(bo+1); bar_full(bo+2,last=True)
-endt=(bo+2)*BARL+10*ST
-for m_ in (41,53,56,60): 
-    p=pad_note(m_,1.2,fc=1800,a=.01,r=1.6); add(riff,p,endt,.5)
-add(low,impact(3,60),endt,.8)
-# dark pad under everything after the drop
-for b in range(2,bo+3):
-    for m_ in (41,48,53,56): p=pad_note(m_,BARL,fc=700,a=.05,r=.3); add(low,p*.0+0,b*BARL,0)
-themf=lp(them,650)
-kenv=np.ones(N)
-riffv=riff+reverb(riff,1.6,5000)*.22
-mix=np.tanh((riffv*3.4+low*.5+lp(drm,200)*.8+hp(drm,200)*2.0+fxb*.8)*1.3)*.8+themf*2.2+reverb(themf,2.2,1500,seed=4)*.5
-mix=hp(mix,30)
+    t0=b*BARL; add(fxb,impact(2.5,70)[:,None]*np.ones((1,2)),t0,.7*g); add(fxb,crash(),t0,1.0*g)
+    add(fxb,revcrash(BT*2),t0-BT*2,.9*g)
+THEM=[0,1]+[3+2*i for i in range(NP)]
+bo=3+NP*2; LAST=bo+2
+for b in range(0,LAST+1):
+    last=b==LAST
+    bar_riff(b); bar_pad(b)
+    if b in THEM:
+        # groove keeps moving underneath: kick on every beat, sub on the root
+        for q in range(4): add(kik,pkick(),b*BARL+q*BT,.9); ducks.append(b*BARL+q*BT)
+        add(low,b808(0,BT*3.6),b*BARL,.6)
+        if b>=2: add(fxb,powerdown(.55)[:,None]*np.ones((1,2)),b*BARL,.35)
+        if b!=0:
+            for k_ in range(8): add(drm,snare(),(b+1)*BARL-BT+k_*BT/8,.25+.6*k_/8)     # snare build into the drop
+    else:
+        bar_low(b,stop=10 if last else 16); bar_drums(b,stop=10 if last else 16,roll=(b%2==0))
+        if b-1 in THEM or b==2: drop(b)
+endt=LAST*BARL+10*ST
+add(fxb,impact(3,60)[:,None]*np.ones((1,2)),endt,.8); add(riff,cowbell(0,dur=1.2,amp=1.1),endt,1); add(riff,cowbell(7,dur=1.2,amp=.7),endt,1)
+# ---- bus processing ----
+# sidechain pump from the kick
+pump=np.ones(N); nd=int(.22*SR); shape=.3+.7*(np.arange(nd)/nd)**1.3
+for t in ducks:
+    i=int(t*SR)
+    if i<N: m_=min(nd,N-i); pump[i:i+m_]=np.minimum(pump[i:i+m_],shape[:m_])
+pump=pump[:,None]
+# section mask: on THEM bars the top end is rolled off (filter dip), full range elsewhere
+mask=np.ones(N)
+for b in THEM:
+    a,e=int(b*BARL*SR),min(N,int((b+1)*BARL*SR)); mask[a:e]=0
+mask=signal.sosfiltfilt(signal.butter(1,25,'low',fs=SR,output='sos'),mask)[:,None]
+riffw=riff+delay(riff,BT*.75,.32,3)*.35; riffw=riffw+reverb(riffw,1.4,4500)*.2; riffw=riffw*1.9
+music_hi=(riffw*1.0)*(.55+.45*pump)+pad*(.4+.6*pump)*.6+drm*1.35
+music_lo=hp(np.tanh(low*(.25+.75*pump)*1.2)*.36,36)+kik*.7
+full=music_hi+music_lo+fxb*.75
+dull=lp(music_hi,750)*.95+lp(music_lo,220)*.9+lp(fxb,1500)*.6+reverb(lp(riffw,750),2.0,1200,seed=4)*.5
+mix=full*mask+dull*(1-mask)
+mix=hp(mix,28)
+mix=np.tanh(mix*.95)/np.tanh(.95)*.8
 fo=int(.7*SR); mix[-fo:]*=np.linspace(1,0,fo)[:,None]
 pk=np.abs(mix).max(); mix*=.92/pk
 sf.write(OUT,mix,SR,subtype='PCM_24'); print('peak',pk,'rms',np.sqrt((mix**2).mean()),'dur',DUR)
