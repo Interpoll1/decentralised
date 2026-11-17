@@ -177,13 +177,13 @@
           <ion-list v-if="poll.allowMultipleChoices && poll.options && poll.options.length > 0">
             <ion-item v-for="(option, index) in poll.options" :key="`option-${index}-${option.id}`">
               <ion-checkbox
-                v-model="selectedOptions"
+                :checked="selectedOptions.includes(option.id)"
                 :value="option.id"
-                slot="start"
-              ></ion-checkbox>
-              <ion-label>
-                <h3>{{ option.text }}</h3>
-              </ion-label>
+                @ionChange="toggleOption(option.id, $event.detail.checked)"
+                label-placement="end"
+                justify="start"
+                class="poll-option-control"
+              >{{ option.text }}</ion-checkbox>
             </ion-item>
           </ion-list>
 
@@ -193,11 +193,10 @@
               <ion-item v-for="(option, index) in poll.options" :key="`option-${index}-${option.id}`">
                 <ion-radio
                   :value="option.id"
-                  slot="start"
-                ></ion-radio>
-                <ion-label>
-                  <h3>{{ option.text }}</h3>
-                </ion-label>
+                  label-placement="end"
+                  justify="start"
+                  class="poll-option-control"
+                >{{ option.text }}</ion-radio>
               </ion-item>
             </ion-list>
           </ion-radio-group>
@@ -443,6 +442,11 @@ const canSubmitVote = computed(() => {
   return selectedOption.value !== '';
 });
 
+function toggleOption(optionId: string, checked: boolean) {
+  selectedOptions.value = selectedOptions.value.filter(id => id !== optionId);
+  if (checked) selectedOptions.value.push(optionId);
+}
+
 // Verified results (CRITICAL-2): the displayed total and result bars are anchored
 // to the signature-verified tally, not the forgeable Gun counts. See
 // useVerifiedPollResults. `actualTotalVotes` collapses to the verified floor when
@@ -570,7 +574,7 @@ async function submitVote() {
     }
 
     const optionIds = poll.value.allowMultipleChoices
-      ? selectedOptions.value
+      ? [...selectedOptions.value]
       : [selectedOption.value]
 
     const choiceText = optionIds
@@ -881,6 +885,15 @@ watch(
 
 
 <style scoped>
+.poll-option-control {
+  width: 100%;
+  min-height: 48px;
+}
+
+.poll-option-control::part(label) {
+  white-space: normal;
+}
+
 .loading-container,
 .empty-state {
   display: flex;

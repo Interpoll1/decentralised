@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <!-- ── First-boot tour: spotlight + Bit's speech bubble ─────────────── -->
-    <div v-if="bit.tourActive && step" class="bc-tour" role="dialog" aria-live="polite" aria-label="Interpoll tour">
+    <div v-if="onTourPage && bit.tourActive && step" class="bc-tour" role="dialog" aria-live="polite" aria-label="Interpoll tour">
       <div v-if="rect" class="bc-ring" :style="ringStyle" />
       <div v-else class="bc-dim" />
 
@@ -48,7 +48,7 @@
     </div>
 
     <!-- Bit mid-leap from the setup wizard to the tour bubble -->
-    <div v-if="flight" ref="flyEl" class="bc-fly" :style="{ left: flight.x + 'px', top: flight.y + 'px', width: flight.w + 'px' }"><BitMascot :size="flight.w" mood="happy" :animated="false" /></div>
+    <div v-if="onTourPage && flight" ref="flyEl" class="bc-fly" :style="{ left: flight.x + 'px', top: flight.y + 'px', width: flight.w + 'px' }"><BitMascot :size="flight.w" mood="happy" :animated="false" /></div>
 
     <!-- ── Username reminder: Bit pops up in the corner ─────────────────── -->
     <transition name="bc-pop">
@@ -78,6 +78,7 @@ const route  = useRoute();
 const router = useRouter();
 
 const step = computed(() => bit.currentStep);
+const onTourPage = computed(() => route.name === 'Home');
 
 // Bit leaps in from the setup wizard: start rect handed over via sessionStorage.
 const flight = ref<{ x: number; y: number; w: number } | null>(null);
@@ -160,12 +161,12 @@ const bubbleStyle = computed(() => {
 // Interactive: clicking the highlighted element advances the tour (the click itself is not blocked).
 function onDocClick(e: MouseEvent) {
   const s = step.value;
-  if (!bit.tourActive || !s?.clickToAdvance || !s.target) return;
+  if (!onTourPage.value || !bit.tourActive || !s?.clickToAdvance || !s.target) return;
   const t = e.target as Element | null;
   if (t?.closest(`[data-tour="${s.target}"]`)) window.setTimeout(() => bit.nextStep(), 250);
 }
 function onKey(e: KeyboardEvent) {
-  if (bit.tourActive && e.key === 'Escape') bit.finishTour();
+  if (onTourPage.value && bit.tourActive && e.key === 'Escape') bit.finishTour();
 }
 
 const reminderCta = computed(() => bit.reminderKind === 'pending' ? 'Review' : bit.reminderKind === 'recovery' ? 'Set up recovery' : 'Claim username');
@@ -195,13 +196,21 @@ watch(() => bit.reminderOpen, (open) => {
   if (open) autoHide = window.setTimeout(() => bit.reminderOpen && bit.snoozeReminder(), 20_000);
 });
 // Landing on the claim page (or finishing it) closes any open reminder.
+let tourTimer: number | undefined;
+function scheduleTour(delay: number) {
+  window.clearTimeout(tourTimer);
+  if (!onTourPage.value || bit.tourDone || bit.tourActive) return;
+  takeFlight();
+  tourTimer = window.setTimeout(() => {
+    if (onTourPage.value && !bit.tourDone && !bit.tourActive) bit.startTour();
+  }, delay);
+}
+
 watch(() => route.path, () => {
   if (bit.reminderOpen && onQuietPage()) bit.acceptReminder();
   // Setup wizard finished → hand over to the tour once the feed has painted.
-  if (!bit.tourDone && !bit.tourActive && route.path.startsWith('/home')) {
-    takeFlight(); // Bit hangs in mid-air until the tour bubble is ready to catch him
-    window.setTimeout(() => { if (!bit.tourDone && !bit.tourActive && !onQuietPage()) bit.startTour(); }, 1200);
-  }
+  scheduleTour(1200);
+  if (!onTourPage.value) flight.value = null;
 });
 
 onMounted(() => {
@@ -210,19 +219,14 @@ onMounted(() => {
   raf = requestAnimationFrame(track);
 
   void bit.refreshUsername();
-  if (!bit.tourDone) takeFlight();
-  if (!bit.tourDone) {
-    // Wait for the feed to paint so the nav targets exist.
-    window.setTimeout(() => {
-      if (!bit.tourDone && !bit.tourActive && !onQuietPage()) bit.startTour();
-    }, 1500);
-  }
+  // The tour teaches Home's controls. Shared content stays immediately usable.
+  scheduleTour(1500);
   tick = window.setInterval(checkReminder, 15_000);
 
   // Accounts that finished the tour before the bottom-bar step existed see just that step once.
   if (bit.tourDone) {
     window.setTimeout(() => {
-      if (bit.shouldOfferNavTour() && !bit.tourActive && !onQuietPage() && findTarget('bottom-nav')) bit.startNavTour();
+      if (onTourPage.value && bit.shouldOfferNavTour() && !bit.tourActive && findTarget('bottom-nav')) bit.startNavTour();
     }, 3000);
   }
 });
@@ -232,6 +236,7 @@ onUnmounted(() => {
   cancelAnimationFrame(raf);
   window.clearInterval(tick);
   window.clearTimeout(autoHide);
+  window.clearTimeout(tourTimer);
 });
 </script>
 

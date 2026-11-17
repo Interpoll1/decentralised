@@ -17,6 +17,7 @@
     "start": "node community-relay/kit/relay.js",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore",
     "test": "vitest run --config unit_tests/vitest.config.ts",
+    "test:poll-first-use": "playwright test --config e2e/poll-first-use.config.mjs",
     "test:coordination": "node --test tools/coordination-impact/core.test.mjs",
     "test:coordination-v2": "node --test --test-concurrency=1 tools/coordination-impact-v2/core.test.mjs tools/coordination-impact-v2/host.test.mjs tools/coordination-pilot/runner-v2.test.mjs",
     "evaluate:coordination-v2": "node tools/coordination-impact-v2/evaluate.mjs",
@@ -66,6 +67,7 @@
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^6.2.2",
+    "@playwright/test": "^1.65.1",
     "@tauri-apps/cli": "^2.12.3",
     "@types/node": "^20.10.0",
     "@vitejs/plugin-vue": "^6.0.0",
