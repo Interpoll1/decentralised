@@ -159,8 +159,8 @@ export default defineConfig({
           name: 'InterPoll',
           short_name: 'InterPoll',
           description: 'Decentralized, censorship-resistant polling & discussion',
-          theme_color: '#07110b',
-          background_color: '#040506',
+          theme_color: '#e7e9ec',
+          background_color: '#e7e9ec',
           display: 'standalone',
           start_url: '/',
           icons: [
@@ -171,7 +171,7 @@ export default defineConfig({
           ],
         },
         workbox: {
-          globPatterns: ['**/*.{js,css,html,svg,woff2,png}'],
+          globPatterns: ['**/*.{js,css,html,svg,woff2,ttf,png}'],
           navigateFallback: '/index.html',
           navigateFallbackAllowlist: APP_NAVIGATION_ALLOWLIST,
           cleanupOutdatedCaches: true,
@@ -284,6 +284,7 @@ export default defineConfig({
             id.includes('node_modules/pinia')      ||
             id.includes('node_modules/vue-router') ||
             id.includes('node_modules/@vue')       ||
+            id.includes('node_modules/@intlify')   ||
             id.includes('node_modules/@unhead')
           ) return 'vendor-vue';
 
@@ -293,7 +294,9 @@ export default defineConfig({
           // nearly every service then imported — so the chunk named "lazy" was
           // on the critical path of every page. Let Rollup split it naturally.
 
-          if (id.includes('node_modules')) return 'vendor-misc';
+          // Let Rollup place other dependencies by their actual graph. A catch-all
+          // vendor-misc grouped low-level Vue/i18n dependencies with Vue consumers,
+          // creating a cross-chunk cycle and a production-only initialization error.
         },
       },
     },

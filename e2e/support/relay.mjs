@@ -24,13 +24,13 @@ export function makePoll(overrides = {}) {
 
 // Exercise the actual app with fresh device storage and local relay responses.
 // Every external HTTP request and WebSocket is intercepted before opening a page.
-export async function mockRelay(context, poll = makePoll(), realGunOrigin) {
+export async function mockRelay(context, poll = makePoll(), realGunOrigin, appOrigin = 'http://127.0.0.1:5197') {
   await context.routeWebSocket('**', ws => {
     if (realGunOrigin && ws.url().startsWith(realGunOrigin.replace('http:', 'ws:'))) ws.connectToServer();
   });
   await context.route('**/*', async route => {
     const url = new URL(route.request().url());
-    if (url.origin === 'http://127.0.0.1:5197') return route.continue();
+    if (url.origin === appOrigin) return route.continue();
     if (url.origin === realGunOrigin && url.pathname.startsWith('/gun')) return route.continue();
     if (url.pathname === `/api/poll/${poll.id}`) return route.fulfill({ json: poll });
     if (url.pathname === '/api/vote-authorize') {

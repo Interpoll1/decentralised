@@ -26,6 +26,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:poll-first-use
       - run: npm run build
+      - run: npm run test:production
       - run: npm run verify:build
       - uses: actions/upload-artifact@v4
         with:

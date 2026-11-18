@@ -24,7 +24,16 @@ Run `npm run check:locales`, `npm test` and `npm run test:poll-first-use` after
 editing a pack. CI checks key completeness and parameter parity. Browser coverage
 includes live switching, persistence, automatic device-language selection, small
 and landscape screens, original user content, and a real local vote/receipt in
-Ukrainian. Native review builds also need an offline language-switch/restart check.
+Ukrainian. Run `npm run build` followed by `npm run test:production` to exercise
+the emitted production chunks rather than only Vite's development modules. CI
+runs both browser configurations. Native review builds also need an offline
+language-switch/restart check.
+
+Keep Vue's i18n dependencies in the framework chunk and let Rollup group unrelated
+dependencies naturally. A catch-all miscellaneous vendor chunk introduced an
+initialization cycle that compiled successfully but prevented the production app
+from booting; the production smoke test rejects that earlier bundle. PWA launch
+colors match graphite and its offline cache includes the bundled wordmark font.
 
 To add a language, supply its complete catalog, register its BCP 47 language code
 and native name in `src/i18n/index.ts`, update runtime preference validation and
