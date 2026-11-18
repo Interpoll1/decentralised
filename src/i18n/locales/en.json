@@ -1679,5 +1679,11 @@
   "No content signature — posted before signing was enabled": "No content signature — posted before signing was enabled",
   "WS Only": "WS Only",
   "Gun Only": "Gun Only",
-  "left": "left"
+  "left": "left",
+  "No ads. No tracking. No algorithm deciding what you see.": "No ads. No tracking. No algorithm deciding what you see.",
+  "Every vote is signed on your device and can’t be forged by a relay.": "Every vote is signed on your device and can’t be forged by a relay.",
+  "Polls and posts live across peers — no single company owns them.": "Polls and posts live across peers — no single company owns them.",
+  "Your identity is a key you hold. Back it up in Settings.": "Your identity is a key you hold. Back it up in Settings.",
+  "Anyone can run a relay. Add yours under Network.": "Anyone can run a relay. Add yours under Network.",
+  "Verify any vote yourself with its receipt code in the Chain Explorer.": "Verify any vote yourself with its receipt code in the Chain Explorer."
 }

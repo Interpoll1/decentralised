@@ -1679,5 +1679,11 @@
   "No content signature — posted before signing was enabled": "Немає підпису вмісту — опубліковано до ввімкнення підписів",
   "WS Only": "Лише WS",
   "Gun Only": "Лише Gun",
-  "left": "до кінця"
+  "left": "до кінця",
+  "No ads. No tracking. No algorithm deciding what you see.": "Без реклами. Без стеження. Без алгоритму, який обирає, що тобі бачити.",
+  "Every vote is signed on your device and can’t be forged by a relay.": "Кожен голос підписується на твоєму пристрої, і ретранслятор не може його підробити.",
+  "Polls and posts live across peers — no single company owns them.": "Опитування й дописи зберігаються на вузлах — жодна компанія ними не володіє.",
+  "Your identity is a key you hold. Back it up in Settings.": "Твоя ідентичність — це ключ, який є в тебе. Збережи його копію в Налаштуваннях.",
+  "Anyone can run a relay. Add yours under Network.": "Кожен може запустити ретранслятор. Додай свій у розділі «Мережа».",
+  "Verify any vote yourself with its receipt code in the Chain Explorer.": "Самостійно перевіряй голоси за кодом квитанції в Оглядачі ланцюга."
 }

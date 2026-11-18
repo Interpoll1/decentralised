@@ -6,7 +6,7 @@
       <div class="ip-logo">{{ $ui("Interpoll") }}</div>
       <div class="ip-tag">{{ $ui("peer-to-peer · decentralized") }}</div>
       <div class="ip-bar-wrap"><div class="ip-bar" /></div>
-      <div class="ip-tip" :key="tipIdx">{{ TIPS[tipIdx] }}</div>
+      <div class="ip-tip" :key="tipIdx">{{ $ui(TIPS[tipIdx]) }}</div>
       <div class="ip-status-wrap">
         <div class="ip-dot" />
         <div class="ip-status"> {{ $ui("Connecting peers") }}<span class="ip-d">.</span><span class="ip-d">.</span><span class="ip-d">.</span>
@@ -180,6 +180,9 @@ onUnmounted(() => {
 
 .ip-bit { margin: 0 auto 14px; }
 .ip-content {
+  width: 100%;
+  box-sizing: border-box;
+  padding-inline: 20px;
   position: relative;
   z-index: 2;
   display: flex;
@@ -200,6 +203,9 @@ onUnmounted(() => {
 }
 
 .ip-tag {
+  max-width: 100%;
+  text-align: center;
+  overflow-wrap: anywhere;
   font-family: 'Cormorant Garamond', serif;
   font-size: 20px;
   font-style: italic;
