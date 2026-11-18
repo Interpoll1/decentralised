@@ -5,10 +5,10 @@
     :class="status"
     role="status"
     :aria-label="tooltipText"
-    :title="tooltipText"
+    :title="$ui(tooltipText)"
   >
     <ion-icon :icon="badgeIcon"></ion-icon>
-    <span v-if="showLabel" class="badge-label">{{ labelText }}</span>
+    <span v-if="showLabel" class="badge-label">{{ $ui(labelText) }}</span>
   </span>
 </template>
 

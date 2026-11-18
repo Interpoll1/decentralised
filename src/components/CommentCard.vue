@@ -19,7 +19,7 @@
 
           <div class="cc-meta">
             <span class="author-name">{{ displayName }}</span>
-            <span class="identity-badge" :class="authorIdentityClass">{{ authorIdentityLabel }}</span>
+            <span class="identity-badge" :class="authorIdentityClass">{{ $ui(authorIdentityLabel) }}</span>
             <button v-if="canInviteAuthor" class="invite-btn" @click.stop="sendInviteToCommentAuthor">{{ $ui("Chat") }}</button>
           </div>
 

@@ -255,7 +255,7 @@
           <div v-else class="poll-results">
             <div class="policy-banner">
               <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
-              <span> {{ $ui("The creator requires") }} <strong>{{ tierLabel }}</strong> {{ $ui("to count as verified.") }} {{ policyIsGate
+              <span> {{ $ui("The creator requires") }} <strong>{{ $ui(tierLabel) }}</strong> {{ $ui("to count as verified.") }} {{ policyIsGate
                   ? $ui("Unverified votes are shown separately and kept out of the verified result.")
                   : $ui("Verified and open votes are tallied separately below.") }}
               </span>

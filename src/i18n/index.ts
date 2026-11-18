@@ -97,10 +97,12 @@ export function remainingTime(expiresAt: number, expired: boolean): string {
   const remaining = expiresAt - Date.now();
   if (expired || remaining <= 0) return ui('Ended');
   const minutes = Math.floor(remaining / 60000);
-  const formatter = new Intl.RelativeTimeFormat(currentLanguage.value, { numeric: 'always', style: 'short' });
-  if (minutes >= 1440) return formatter.format(Math.floor(minutes / 1440), 'day');
-  if (minutes >= 60) return formatter.format(Math.floor(minutes / 60), 'hour');
-  return minutes > 0 ? formatter.format(minutes, 'minute') : ui('Ending soon');
+  const unit = (value: number, name: string) => new Intl.NumberFormat(currentLanguage.value,
+    { style: 'unit', unit: name, unitDisplay: 'narrow' }).format(value);
+  const days = Math.floor(minutes / 1440), hours = Math.floor((minutes % 1440) / 60);
+  if (days > 0) return `${unit(days, 'day')} ${unit(hours, 'hour')} ${ui('left')}`;
+  if (hours > 0) return `${unit(hours, 'hour')} ${unit(minutes % 60, 'minute')} ${ui('left')}`;
+  return minutes > 0 ? `${unit(minutes, 'minute')} ${ui('left')}` : ui('Ending soon');
 }
 export function localeDate(value: Date | number, options?: Intl.DateTimeFormatOptions): string {
   return new Intl.DateTimeFormat(currentLanguage.value === 'uk' ? 'uk-UA' : 'en-US', options).format(value);

@@ -8,7 +8,7 @@
           class="px-3 py-1 rounded-full text-[10px] uppercase tracking-wider"
           :key="`ws-${chainStore.isWebSocketConnected}-gun-${gunConnected}`"
         >
-          {{ overallStatusLabel }}
+          {{ $ui(overallStatusLabel) }}
         </ion-badge>
       </ion-card-title>
     </ion-card-header>

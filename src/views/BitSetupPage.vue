@@ -125,9 +125,9 @@
           <section v-else key="done" class="bs-step">
             <h1 class="bs-title">{{ $ui("You're all set") }}</h1>
             <ul class="bs-list">
-              <li>{{ picked.size }} {{ picked.size === 1 ? 'space' : 'spaces' }} {{ $ui("joined") }}</li>
+              <li>{{ $count(picked.size, 'space') }} {{ $ui("joined") }}</li>
               <li>{{ savedKey ? $ui("Recovery phrase saved") : $ui("Recovery phrase not saved — you can back it up in Settings") }}</li>
-              <li>{{ $ui("Connected via") }} {{ relayLabel }}</li>
+              <li>{{ $ui("Connected via") }} {{ relayChoice === 'community' ? relayLabel : $ui(relayLabel) }}</li>
               <li>{{ filterChoice === 'none' ? $ui("Feed filter off") : $ui("Feed filter on") }}</li>
             </ul>
             <p class="bs-note">{{ $ui("Next I'll show you around the app.") }}</p>
@@ -137,7 +137,7 @@
           <button v-if="step > 0 && step < STEPS.length - 1" class="bs-btn" @click="step--">{{ $ui("Back") }}</button>
           <span class="bs-spacer" />
           <button v-if="canSkip" class="bs-btn bs-btn--ghost" @click="skipStep">{{ $ui("Skip") }}</button>
-          <button class="bs-btn bs-btn--primary" :disabled="busy || !canContinue" @click="next">{{ nextLabel }}</button>
+          <button class="bs-btn bs-btn--primary" :disabled="busy || !canContinue" @click="next">{{ $ui(nextLabel) }}</button>
         </nav>
       </div>
     </ion-content>

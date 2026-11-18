@@ -44,6 +44,7 @@ test.describe('Ukrainian device language',()=>{
   test('a fresh visitor can choose English during onboarding',async({context,page},testInfo)=>{
     await mockRelay(context);await page.goto('/onboarding');
     await expect(page.getByRole('heading',{name:'Налаштуймо застосунок',exact:true})).toBeVisible();
+    await expect(page.getByRole('button',{name:'Почнімо',exact:true})).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('lang','uk');
     await expect(page.getByPlaceholder('слово1 слово2 слово3 …')).toHaveCount(0);
     await page.screenshot({animations:'disabled',path:testInfo.outputPath('onboarding-uk.png')});

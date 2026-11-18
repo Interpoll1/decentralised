@@ -44,7 +44,7 @@
               <div class="post-author-info">
                 <div class="post-author-name-row">
                   <span class="author-name">{{ postAuthorDisplayName }}</span>
-                  <span class="identity-badge" :class="postAuthorIdentityClass">{{ postAuthorIdentityLabel }}</span>
+                  <span class="identity-badge" :class="postAuthorIdentityClass">{{ $ui(postAuthorIdentityLabel) }}</span>
                 </div>
                 <div class="post-author-sub">
                   <ion-chip class="community-chip" @click="$router.push(`/community/${post.communityId}`)">

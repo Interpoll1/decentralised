@@ -145,8 +145,8 @@
           </svg>
         </div>
         <div class="rv-tier-body">
-          <span class="rv-tier-name">{{ tierLabels[trustTier]?.name }}</span>
-          <span class="rv-tier-desc">{{ tierLabels[trustTier]?.desc }}</span>
+          <span class="rv-tier-name">{{ $ui(tierLabels[trustTier]?.name) }}</span>
+          <span class="rv-tier-desc">{{ $ui(tierLabels[trustTier]?.desc) }}</span>
         </div>
       </div>
     </div>
@@ -169,7 +169,7 @@
           <path d="M12 22s8-4.5 8-11V5l-8-3-8 3v6c0 6.5 8 11 8 11z" stroke="currentColor" stroke-width="1.8"/>
           <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
         </svg>
-        {{ verifyLabel }}
+        {{ $ui(verifyLabel) }}
       </button>
     </div>
 
