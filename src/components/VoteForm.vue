@@ -84,7 +84,7 @@ import type { Poll } from '../types/poll';
 import { VoteTierService } from '../services/voteTierService';
 
 interface Props {
-  poll: ChainPollSnapshot;
+  poll: ChainPollSnapshot | Poll;
   inviteCode?: string | null;
   requiresInviteCode?: boolean;
 }

@@ -317,32 +317,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRoute, useRouter } from 'vue-router';
-import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonContent,
-  IonButtons,
-  IonBackButton,
-  IonCard,
-  IonCardHeader,
-  IonCardTitle,
-  IonCardSubtitle,
-  IonCardContent,
-  IonList,
-  IonItem,
-  IonLabel,
-  IonCheckbox,
-  IonRadio,
-  IonRadioGroup,
-  IonButton,
-  IonIcon,
-  IonChip,
-  IonBadge,
-  IonSpinner,
-  toastController
-} from '@ionic/vue';
+import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons, IonBackButton, IonList, IonItem, IonLabel, IonCheckbox, IonRadio, IonRadioGroup, IonButton, IonIcon, IonChip, IonBadge, IonSpinner, toastController } from '@ionic/vue';
 import {
   statsChartOutline,
   timeOutline,

@@ -216,7 +216,7 @@ import type { Receipt } from '../types/chain';
 import { CryptoService } from '../services/cryptoService';
 import { GunService } from '../services/gunService';
 import { WebSocketService } from '../services/websocketService';
-import { shareLink } from '../composables/useShare';
+import '../composables/useShare';
 
 const props = defineProps<{ receipt: Receipt | null }>();
 

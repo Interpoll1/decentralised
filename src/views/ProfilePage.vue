@@ -448,11 +448,7 @@ ion-content {
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonButtons, IonIcon, IonSpinner,
-  toastController
-} from '@ionic/vue';
+import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons, IonIcon, toastController } from '@ionic/vue';
 import {
   personCircleOutline, settingsOutline, saveOutline, copyOutline,
   documentTextOutline, chatbubbleOutline, trophyOutline, peopleOutline,

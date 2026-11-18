@@ -42,6 +42,8 @@ export interface Poll {
   isExpired: boolean;
   authorPubkey?: string;
   contentSignature?: string;
+  /** Client-computed; legacy verification covers only question/community/time/policy. */
+  signatureStatus?: import('../utils/pollSignature').PollSignatureStatus;
   /** Proof-of-work nonce bound to (id, createdAt, authorId) — see contentPowService. */
   powNonce?: number;
   isEncrypted?: boolean;

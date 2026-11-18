@@ -18,7 +18,7 @@
  * Records authored elsewhere and merely observed arrive as `confirmed`: they
  * demonstrably exist outside this browser, which is exactly what the status means.
  */
-export type SyncStatus = 'pending' | 'published' | 'confirmed' | 'failed';
+export type SyncStatus = 'pending' | 'published' | 'confirmed' | 'failed' | 'corrupted';
 
 export interface Comment {
   id: string;

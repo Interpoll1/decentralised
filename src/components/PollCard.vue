@@ -175,13 +175,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, computed, watch } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { IonIcon, IonButton } from '@ionic/vue';
-import {
-  statsChartOutline, peopleOutline, timeOutline, checkmarkDoneOutline,
-  chevronForwardOutline, warningOutline, shieldCheckmarkOutline,
-  heart, heartOutline,
-} from 'ionicons/icons';
+import { statsChartOutline, peopleOutline, timeOutline, checkmarkDoneOutline, warningOutline, shieldCheckmarkOutline, heart, heartOutline } from 'ionicons/icons';
 import { Poll } from '../services/pollService';
 import type { PollOption } from '../types/poll';
 import { useVerifiedPollResults } from '../composables/useVerifiedPollResults';
@@ -194,7 +190,7 @@ import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 import TrustTierBadge from './TrustTierBadge.vue';
 // observePost called by HomePage MutationObserver, not directly here
 
-const cardEl = ref<HTMLElement | null>(null);
+
 const props = defineProps<{
   poll: Poll;
   /** Space the poll belongs to (HomePage already passes it; shown on the desktop card's second line). */
@@ -259,13 +255,7 @@ const voteTier = computed<'anonymous' | 'pow' | 'relay' | 'issuer' | null>(() =>
   return t;
 });
 
-const displayTags = computed<string[]>(() => {
-  const raw = (props.poll as any).tags ?? [];
-  const arr = Array.isArray(raw)
-    ? raw
-    : String(raw).split(',').map((t: string) => t.trim());
-  return arr.filter((t: string) => Boolean(t)).slice(0, 5);
-});
+
 
 // Time-lock
 const isTimeLocked = computed(() => {

@@ -128,7 +128,7 @@ const emit = defineEmits<{
 const query = ref('');
 const searchFocused = ref(false);
 const searchInput = ref<HTMLInputElement | null>(null);
-const listEl = ref<HTMLElement | null>(null);
+
 
 const filtered = computed(() => {
   const q = query.value.trim().toLowerCase();

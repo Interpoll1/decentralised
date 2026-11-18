@@ -215,7 +215,6 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
       void bgChatService.startChat({
         userId: otherUserId,
         name: otherName,
-        publicKey: otherPublicKey || undefined,
       });
     }
 
@@ -277,7 +276,7 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
     if (chatDiscoverySubscribed || !currentUserId) return;
     const gun = GunService.getGun();
     const discoveryListener = gun.get('users').get(currentUserId).get('rooms').map()
-      .on((roomData: any, roomId: string) => {
+      .on((_roomData: any, roomId: string) => {
         if (!roomId || roomId === '_' || typeof roomId !== 'string') return;
         if (!roomId.includes(':') || !roomId.includes(currentUserId)) return;
         const otherUserId = roomId.split(':').find(id => id !== currentUserId);
@@ -317,7 +316,7 @@ export function useChat(currentUserId: string, gunListeners: Array<() => void>) 
     // The raw HTML message with <strong> tags was leaking into the UI as escaped markup.
   }
 
-  async function initBackgroundChat(activeTabRef: { value: string }) {
+  async function initBackgroundChat(_activeTabRef: { value: string }) {
     const WS_URL = config.relay.websocket;
     bgChatService = new ChatService(WS_URL, currentUserId);
     bgChatService.onConnectionChange = () => {};

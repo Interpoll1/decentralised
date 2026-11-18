@@ -23,7 +23,7 @@ vi.mock('@/services/storageService', () => ({
 import { EventService } from '@/services/eventService';
 import { VoteTallyService } from '@/services/voteTallyService';
 import { useVerifiedPollResults } from '@/composables/useVerifiedPollResults';
-import { GunService } from '@/services/gunService';
+import { GunService, GUN_NAMESPACE } from '@/services/gunService';
 import { EventKind } from '@/types/nostr';
 import type { Poll, PollOption } from '@/types/poll';
 import config from '@/config';
@@ -126,7 +126,7 @@ describe('CRITICAL-2 end-to-end (real crypto)', () => {
     // Attacker tries to write a node outside the app namespace over the mesh.
     bridge.receive({ '#': 'atk', put: { 'evil/backdoor': { pwn: true } } });
     // A legitimate in-namespace poll update still flows.
-    bridge.receive({ '#': 'ok', put: { 'v4/polls/poll-x': { totalVotes: 3 } } });
+    bridge.receive({ '#': 'ok', put: { [`${GUN_NAMESPACE}/polls/poll-x`]: { totalVotes: 3 } } });
 
     expect(inbound.some((m) => (m as any)['#'] === 'atk')).toBe(false); // forged write blocked
     expect(inbound.some((m) => (m as any)['#'] === 'ok')).toBe(true);   // real sync unaffected

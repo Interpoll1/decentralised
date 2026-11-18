@@ -222,7 +222,7 @@ import { shareLink } from '../composables/useShare';
 
 const VideoPlayer = defineAsyncComponent(() => import('./VideoPlayer.vue'));
 
-const cardEl = ref<HTMLElement | null>(null);
+
 const props = defineProps<{
   post: Post;
   communityName?: string;
@@ -283,13 +283,7 @@ const authorIdentityClass = computed(() =>
 
 const commentCount  = computed(() => (props.post as any).commentCount ?? 0);
 
-const displayTags = computed<string[]>(() => {
-  const raw = (props.post as any).tags ?? [];
-  const arr = Array.isArray(raw)
-    ? raw
-    : String(raw).split(',').map((t: string) => t.trim());
-  return arr.filter((t: string) => Boolean(t)).slice(0, 5);
-});
+
 const isTimeLocked  = computed(() => !!(props.post as any).resultsLockedUntil && (props.post as any).resultsLockedUntil > Date.now());
 const nostrEventId  = computed(() => (props.post as any).nostrEventId || (props.post as any).eventId || '');
 
@@ -309,9 +303,7 @@ function truncateText(text: string, max: number): string {
   return text.slice(0, max).trimEnd() + '…';
 }
 
-function isImageUrl(url: string): boolean {
-  return /\.(jpg|jpeg|png|gif|webp|avif|svg)(\?|$)/i.test(url);
-}
+
 
 function shortenNostrId(id: string): string {
   if (id.length > 20) return id.slice(0, 12) + '…' + id.slice(-6);

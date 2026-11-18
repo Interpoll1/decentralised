@@ -344,22 +344,11 @@ import { useRoute, useRouter } from 'vue-router';
 // Accept communityId from both /community/:id/create-poll route params
 // and legacy ?communityId query usage
 const props = defineProps<{ communityId?: string }>();
-import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonContent,
-  IonButtons,
-  IonButton,
-  IonIcon,
-  alertController,
-  toastController
-} from '@ionic/vue';
+import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons, IonIcon, alertController, toastController } from '@ionic/vue';
 import CommunityPickerModal from '../components/CommunityPickerModal.vue';
 import HoneypotField from '../components/HoneypotField.vue';
 import { useHumanGate } from '../composables/useHumanGate';
-import { chevronDownOutline, addCircleOutline, closeCircleOutline, timeOutline, listOutline, settingsOutline, shieldCheckmarkOutline, lockClosedOutline, informationCircleOutline } from 'ionicons/icons';
+import { chevronDownOutline, closeCircleOutline, timeOutline, listOutline, settingsOutline, shieldCheckmarkOutline, lockClosedOutline, informationCircleOutline } from 'ionicons/icons';
 import { useCommunityStore } from '../stores/communityStore';
 import { usePollStore } from '../stores/pollStore';
 import { Community } from '../services/communityService';
@@ -718,7 +707,7 @@ onMounted(async () => {
     await communityStore.loadCommunities();
   }
   if (joinedCommunities.value.length === 0 && communityStore.communities.length > 0) {
-    await communityStore.syncJoinedFromRelay?.().catch(() => {});
+    await communityStore.syncJoinedPrivateCommunitiesFromKeys().catch(() => {});
   }
 });
 </script>

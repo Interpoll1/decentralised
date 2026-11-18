@@ -9,6 +9,8 @@
  *   const ws = new WebSocket(config.relay.websocket);
  */
 
+import { migrateLegacyRelayUrl } from './utils/legacyRelayUrl';
+
 const STORAGE_KEY = 'interpoll_relay_config';
 const ENCRYPTION_STORAGE_KEY = 'interpoll_encryption_config';
 // v3 — removed dead Heroku relays; existing installs get clean defaults
@@ -139,7 +141,12 @@ interface EncryptionConfig {
 function loadOverrides(): RelayOverrides {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return Object.fromEntries(['websocket', 'gun', 'api']
+        .filter(key => typeof parsed?.[key] === 'string')
+        .map(key => [key, migrateLegacyRelayUrl(parsed[key])]));
+    }
   } catch {
     // Corrupted data; ignore
   }
@@ -151,7 +158,8 @@ function loadGunPeers(): string[] | null {
     const raw = localStorage.getItem(GUN_PEERS_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+        .filter((url): url is string => typeof url === 'string').map(migrateLegacyRelayUrl);
     }
   } catch {
     // Corrupted data; ignore
@@ -168,16 +176,16 @@ function loadGunPeers(): string[] | null {
 
 // Defaults point to VPS
 const defaults = {
-  websocket: 'wss://interpoll.endless.sbs',
-  gun: 'https://interpoll2.endless.sbs/gun',
-  api: 'https://interpoll.endless.sbs',
+  websocket: import.meta.env.VITE_WS_RELAY_URL || 'wss://interpoll.endless.social',
+  gun: import.meta.env.VITE_GUN_RELAY_URL || 'https://interpoll2.endless.social/gun',
+  api: import.meta.env.VITE_API_BASE_URL || 'https://interpoll.endless.social',
 };
 
 // ── Built-in peer tiers ───────────────────────────────────────────────────────
 // Tier 1 — Private VPS (always first, most trusted)
 
 export const PRIVATE_PEERS = [
-  'https://interpoll2.endless.sbs/gun',
+  defaults.gun,
   'http://v7so4otlnuleppayd7znkqwzjq6xhvzpetywpyzuth3jrykdqklxlwqd.onion/gun',
 ] as const;
 
@@ -188,7 +196,7 @@ export const PUBLIC_PEERS = [
 
 // Canonical public web origin where the browser build of the app is hosted.
 // Used to construct shareable links from the native app (see config.web).
-const WEB_ORIGIN = 'https://endless.sbs';
+const WEB_ORIGIN = import.meta.env.VITE_WEB_ORIGIN || 'https://endless.social';
 function loadEncryptionConfig(): EncryptionConfig {
   try {
     const raw = localStorage.getItem(ENCRYPTION_STORAGE_KEY);

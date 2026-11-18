@@ -148,9 +148,7 @@ function lift() {
   buzz(15);
 }
 
-function inside(x: number, y: number, r: DOMRect, pad = 0) {
-  return x >= r.left - pad && x <= r.right + pad && y >= r.top - pad && y <= r.bottom + pad;
-}
+
 
 /** Which bar slot is under the finger (or -1). */
 function hitSlot(x: number, y: number): number {

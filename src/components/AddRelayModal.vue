@@ -160,7 +160,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted } from 'vue';
+import { ref, watch, nextTick } from 'vue';
 import { toastController } from '@ionic/vue';
 import {
   DialogRoot, DialogPortal, DialogOverlay, DialogContent,
@@ -175,7 +175,7 @@ const emit   = defineEmits<{
   connected: [relay: RelayEndpoint];
 }>();
 
-const { isSupported: canScan, scan: doScan } = useQrScan();
+const { isSupported: canScan, scanRaw: doScan } = useQrScan();
 
 // ── State ──────────────────────────────────────────────────────────────────
 const urlInput      = ref('');
@@ -189,9 +189,9 @@ const discoveredRelays = ref<RelayEndpoint[]>([]);
 // ── Presets ────────────────────────────────────────────────────────────────
 const PRESETS = [
   {
-    url:         'https://interpoll2.endless.sbs',
+    url:         'https://interpoll2.endless.social',
     label:       'InterPoll public relay',
-    description: 'interpoll2.endless.sbs — the default open relay',
+    description: 'interpoll2.endless.social — the default open relay',
   },
   // Add more known community relays here as they are established
 ];
@@ -325,7 +325,9 @@ async function connect() {
     });
 
     successMessage.value = `Connected to ${shortenUrl(base)}`;
-    emit('connected', relay);
+    const endpoint = RelayManager.getRelayList().find(item => item.id === relay);
+    if (!endpoint) throw new Error('Relay was not saved');
+    emit('connected', endpoint);
 
     setTimeout(close, 1400);
   } catch (e) {

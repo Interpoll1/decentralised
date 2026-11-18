@@ -26,7 +26,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, defineAsyncComponent } from 'vue';
-import { useRouter } from 'vue-router';
+import 'vue-router';
 import { useNearby } from '../composables/useNearby';
 import { RelayManager, type RelayEndpoint } from '../services/relayManager';
 import { WebSocketService } from '../services/websocketService';
@@ -36,7 +36,7 @@ import { useCommunityStore } from '../stores/communityStore';
 
 const CommunitiesTab = defineAsyncComponent(() => import('./CommunitiesTab.vue'));
 const NearbyPanel = defineAsyncComponent(() => import('./NearbyPanel.vue'));
-const NearbyMap = defineAsyncComponent(() => import('./NearbyMap.vue'));
+
 const nb = useNearby();
 const mapStats = computed(() => [
   { label: 'people', n: nb.prefs.enabled ? nb.people.value.length : 0, color: '#5eeab0' },
@@ -45,10 +45,10 @@ const mapStats = computed(() => [
   { label: 'relays', n: relaysOnline.value, color: '#60a5fa', of: relayCount.value },
   { label: 'peers', n: peerList.value.length, color: '#f472b6' },
 ]);
-const TILES_KEY = 'interpoll_nearby_tiles';
-const tilesOn = ref((() => { try { return localStorage.getItem(TILES_KEY) === '1'; } catch { return false; } })());
-function setTiles(v: boolean) { tilesOn.value = v; try { localStorage.setItem(TILES_KEY, v ? '1' : '0'); } catch { /* ignore */ } }
-function msgNearby(id: string) { void router.push(`/chat/${id}`); }
+
+
+
+
 
 interface ChatEntry { userId: string; publicKey?: string; name: string; nickname?: string; unreadCount: number; lastMessageTime: number }
 
@@ -62,15 +62,14 @@ defineEmits<{
   (e: 'update:view', v: 'map' | 'spaces' | 'nearby'): void;
 }>();
 
-const router = useRouter();
+
 const communityStore = useCommunityStore();
 
 // ── Geometry (virtual units; the SVG scales to fit) ───────────────────────
-const VW = 420, VH = 420, CX = 210, CY = 210;
-const RINGS = [54, 96, 136, 176];            // relays · peers · spaces · contacts
-const PHASE = [-Math.PI / 2, 0.35, 1.1, 2.0];
-const SPEED = [0.05, -0.034, 0.024, -0.017];  // rad/s, gentle drift
-const RING_NAMES = ['Relays', 'Peers', 'Spaces', 'Contacts'];
+            // relays · peers · spaces · contacts
+
+  // rad/s, gentle drift
+
 const MAX_PEERS = 20, MAX_SPACES = 10, MAX_CONTACTS = 8;
 
 const C = {
@@ -114,11 +113,7 @@ function record() {
   history.value = next.length > 180 ? next.slice(next.length - 180) : next;
 }
 const view$ = computed<Snap>(() => (scrub.value !== null && history.value[scrub.value]) ? history.value[scrub.value] : liveSnap());
-const scrubLabel = computed(() => {
-  if (scrub.value === null || !history.value.length) return 'live';
-  const secs = Math.round((Date.now() - history.value[scrub.value].t) / 1000);
-  return secs < 60 ? `${secs}s ago` : `${Math.floor(secs / 60)}m ${secs % 60}s ago`;
-});
+
 
 // ── Node model ────────────────────────────────────────────────────────────
 interface ONode {
@@ -191,14 +186,10 @@ const nodes = computed<ONode[]>(() => {
   return out;
 });
 
-const youNode = computed<ONode>(() => ({
-  id: 'you', kind: 'you', ring: 0, i: 0, n: 1, r: 24, color: 'var(--app-accent, #7dd3fc)', label: 'You', title: 'You',
-  sub: wsConnected.value ? 'Connected to your relay' : 'Not connected to a relay',
-  facts: [['Relays online', `${relaysOnline.value}/${relayCount.value}`], ['Peers seen', String(peerList.value.length)], ['Direct links', String(p2pCount.value)]],
-}));
+
 
 const peerList = computed(() => view$.value.peers);
-const p2pCount = computed(() => view$.value.peers.filter(p => p.p2p).length);
+
 const relayCount = computed(() => view$.value.relays.length);
 const relaysOnline = computed(() => view$.value.relays.filter(r => r.status === 'online').length);
 
@@ -229,25 +220,9 @@ function frame(now: number) {
 }
 const nowMs = ref(performance.now());
 
-function P(n: ONode) {
-  const a = (n.i / Math.max(1, n.n)) * Math.PI * 2 + PHASE[n.ring] + (driftOn.value ? tick.value * SPEED[n.ring] : 0);
-  const r = RINGS[n.ring];
-  return { x: CX + Math.cos(a) * r, y: CY + Math.sin(a) * r };
-}
 
-const pulseDots = computed(() => {
-  const now = nowMs.value;
-  const out: Array<{ id: number; x: number; y: number; r: number; o: number; color: string }> = [];
-  for (const p of pulses.value) {
-    const n = nodes.value.find(x => x.id === p.node);
-    if (!n) continue;
-    const k = Math.min(1, (now - p.t0) / p.dur), e = k * k * (3 - 2 * k);
-    const from = P(n);
-    const a = p.out ? { x: CX, y: CY } : from, b = p.out ? from : { x: CX, y: CY };
-    out.push({ id: p.id, x: a.x + (b.x - a.x) * e, y: a.y + (b.y - a.y) * e, r: 3.2 * (1 - k * 0.4), o: 1 - k * 0.8, color: p.color });
-  }
-  return out;
-});
+
+
 
 // ── Pulse sources (all real events) ───────────────────────────────────────
 // 1. Heartbeat along the active relay's link while the socket is up.
@@ -285,87 +260,33 @@ watch(() => communityStore.communities.map((c: any) => `${c.id}:${c.postCount ??
 watch(relays, record, { deep: true });
 
 // ── Pan / zoom ────────────────────────────────────────────────────────────
-const stage = ref<HTMLElement | null>(null);
-const svgEl = ref<SVGSVGElement | null>(null);
-const scale = ref(1), tx = ref(0), ty = ref(0);
-const ptrs = new Map<number, { x: number; y: number }>();
-let pinchDist = 0, dragged = false, downX = 0, downY = 0;
 
-function unit() {
-  const r = svgEl.value?.getBoundingClientRect();
-  return r ? Math.min(r.width / VW, r.height / VH) || 1 : 1;
-}
-function clampView() {
-  scale.value = Math.min(3, Math.max(0.6, scale.value));
-  tx.value = Math.min(260, Math.max(-260, tx.value));
-  ty.value = Math.min(320, Math.max(-320, ty.value));
-}
-function onDown(e: PointerEvent) {
-  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (ptrs.size === 1) { dragged = false; downX = e.clientX; downY = e.clientY; }
-  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinchDist = Math.hypot(a.x - b.x, a.y - b.y); }
-}
-function onMove(e: PointerEvent) {
-  const prev = ptrs.get(e.pointerId);
-  if (!prev) return;
-  const cur = { x: e.clientX, y: e.clientY };
-  ptrs.set(e.pointerId, cur);
-  if (ptrs.size === 2) {
-    const [a, b] = [...ptrs.values()];
-    const d = Math.hypot(a.x - b.x, a.y - b.y);
-    if (pinchDist) scale.value *= d / pinchDist;
-    pinchDist = d; dragged = true; clampView();
-    return;
-  }
-  if (Math.hypot(cur.x - downX, cur.y - downY) > 6) dragged = true;
-  if (dragged) { const k = unit(); tx.value += (cur.x - prev.x) / k; ty.value += (cur.y - prev.y) / k; clampView(); }
-}
-function onUp(e: PointerEvent) { ptrs.delete(e.pointerId); pinchDist = 0; }
-function onWheel(e: WheelEvent) { scale.value *= e.deltaY < 0 ? 1.1 : 0.9; clampView(); }
-function zoomBy(f: number) { scale.value *= f; clampView(); }
+
+const scale = ref(1), tx = ref(0), ty = ref(0);
+
+
+
+
+
+
+
+
+
+
 function resetView() { scale.value = 1; tx.value = 0; ty.value = 0; }
 
 /** Semantic zoom: peer names only appear once you zoom in; everything else always has a name. */
-function showLabel(n: ONode) {
-  if (!n.label) return false;
-  if (n.kind === 'peer') return scale.value >= 1.5;
-  return scale.value >= 0.8;
-}
+
 
 // ── Selection + actions ───────────────────────────────────────────────────
 const selected = ref<ONode | null>(null);
-const busy = ref(false);
-function onBgClick() { if (!dragged) selected.value = null; }
-function pick(n: ONode) { if (dragged) return; selected.value = n; }
 
-async function guard(fn: () => unknown) {
-  busy.value = true;
-  try { await fn(); } catch { /* the sheet simply stays; services surface their own errors */ } finally { busy.value = false; readRelays(); record(); }
-}
 
-function actionsFor(n: ONode): Array<{ label: string; primary?: boolean; run: () => void }> {
-  switch (n.kind) {
-    case 'relay': {
-      const active = RelayManager.getActiveRelay?.()?.id === n.ref.id;
-      return [
-        ...(active ? [] : [{ label: 'Use this relay', primary: true, run: () => void guard(() => RelayManager.switchToRelay(n.ref.id)) }]),
-        { label: 'Relay settings', run: () => void router.push('/network') },
-      ];
-    }
-    case 'peer':
-      return n.ref.p2p
-        ? [{ label: 'Disconnect direct link', run: () => void guard(() => { WebRTCService.disconnectPeer(n.ref.id); rtcPeers.value = WebRTCService.getConnectedPeers(); }) }]
-        : [{ label: 'Connect directly', primary: true, run: () => void guard(() => WebRTCService.connectToPeer(n.ref.id)) }];
-    case 'space':
-      return [{ label: 'Open space', primary: true, run: () => void router.push(`/community/${n.ref.id}`) }];
-    case 'contact':
-      return [{ label: 'Message', primary: true, run: () => void router.push(`/chat/${n.ref.userId}`) }];
-    case 'you':
-      return [{ label: 'Network details', run: () => void router.push('/network') }];
-    default:
-      return [];
-  }
-}
+
+
+
+
+
 
 // ── Ambient mode ──────────────────────────────────────────────────────────
 const ambient = ref(false);

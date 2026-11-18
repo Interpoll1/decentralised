@@ -9,7 +9,7 @@ export default defineConfig({
   timeout: 30000,
   use: {
     baseURL: 'http://127.0.0.1:5197',
-    channel: 'chrome',
+    channel: process.env.CI ? undefined : 'chrome',
     viewport: { width: 390, height: 844 },
     isMobile: true,
     hasTouch: true,

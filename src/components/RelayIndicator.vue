@@ -21,7 +21,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { RelayManager } from '../services/relayManager';
-import { GunService } from '../services/gunService';
+import { getPeerHealthReport } from '../services/gunService';
 
 defineProps<{ compact?: boolean }>();
 defineEmits<{ open: [] }>();
@@ -83,7 +83,7 @@ const dotClass = computed(() => {
 // ── Peer health poll ───────────────────────────────────────────────────────
 function pollPeers() {
   try {
-    const health = GunService.getPeerHealthReport?.() ?? [];
+    const health = getPeerHealthReport?.() ?? [];
     gunPeers.value = health.filter((p: any) => p.connected).length;
   } catch { /* non-fatal */ }
 }

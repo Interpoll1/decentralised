@@ -144,7 +144,7 @@ export class SEOService {
 
   private static async loadPollOptions(
     pollId: string,
-    communityId: string
+    _communityId: string
   ): Promise<any[] | null> {
     return new Promise((resolve) => {
       let resolved = false;
@@ -192,22 +192,4 @@ export class SEOService {
       }, 2000);
     });
   }
-}
-
-interface Poll {
-  id: string;
-  communityId: string;
-  authorId: string;
-  authorName: string;
-  question: string;
-  description?: string;
-  options: any[];
-  createdAt: number;
-  expiresAt: number;
-  allowMultipleChoices: boolean;
-  showResultsBeforeVoting: boolean;
-  requireLogin: boolean;
-  isPrivate: boolean;
-  totalVotes: number;
-  isExpired: boolean;
 }

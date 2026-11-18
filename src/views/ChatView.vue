@@ -458,7 +458,7 @@ const messageInput        = ref('');
 const inputFocused        = ref(false);
 const messages            = ref<(ChatMessage & { mediaUrl?: string; mediaType?: 'image' | 'video' | 'file'; mediaLoading?: boolean })[]>([]);
 const typingState         = ref(false);
-const content             = ref<any>(null);
+
 const typingTimer         = ref<number | null>(null);
 const fileInput           = ref<HTMLInputElement | null>(null);
 const messagesContainer   = ref<HTMLDivElement | null>(null);
@@ -535,8 +535,8 @@ const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
 ];
-const CHUNK_SIZE    = 64 * 1024;
-const MAX_FILE_SIZE = 100 * 1024 * 1024;
+
+
 
 // ── Relay WS P2P signaling ────────────────────────────────────────────────────
 const _rtcWaiters = new Map<string, (payload: any) => void>();
@@ -666,7 +666,7 @@ function onNextIce(handler: (candidate: any) => void) {
   for (const c of _iceQueue.splice(0)) handler(c);
 }
 
-function startSignalKeepAlive() {}
+
 function stopSignalKeepAlive() {}
 
 // Sender sets this true in offererConnect(), receiver sets false in answererConnect().
@@ -680,16 +680,7 @@ function closePeer() {
   transportTier.value = null;
 }
 
-async function clearSignals() {
-  // Null want-p2p so Gun's in-memory graph doesn't replay it to the next
-  // answerer subscriber. The relay no longer persists bare chat-p2p nodes
-  // to MySQL, but Gun's own in-memory graph still holds the last value.
-  p2pLog('clearSignals: nulling want-p2p');
-  // Clear stale want-p2p from Gun graph so it doesn't replay to new subscribers
-  const roomKey = [myUserId, recipientId.value].sort().join(':');
-  try { GunService.getGun().get('chat-p2p').get(roomKey).get('want-p2p').put(null as any); } catch {}
-  await new Promise<void>(r => setTimeout(r, 100));
-}
+
 
 async function setupPeerConnection(): Promise<void> {
   closePeer();
@@ -889,44 +880,7 @@ function setupDataChannelHandlers(dc: RTCDataChannel) {
 }
 
 // Offerer: generates session, clears stale signals, drives the negotiation
-async function offererConnect(): Promise<RTCDataChannel> {
-  iAmOfferer = true;  // must be set before setupPeerConnection/negotiate/waitForDataChannel
-  p2pSession = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  p2pLog('offererConnect: new session', { sess: p2pSession, myUserId, recipientId: recipientId.value });
 
-  startSignalKeepAlive();
-  await clearSignals();
-
-  await setupPeerConnection();
-  p2pLog('offererConnect: peer conn ready');
-
-  ensureRtcListener();
-  startIceQueue(recipientId.value, p2pSession);
-
-  // Pre-register 'ready' waiter BEFORE sending want-p2p.
-  // The answerer can send 'ready' very fast (sub-ms on same device) and if
-  // we haven't registered the waiter yet the signal is dropped and we timeout.
-  const readyPromise = waitForRtcSignal(recipientId.value, 'ready', p2pSession, 30_000);
-
-  p2pLog('offererConnect: sending want-p2p');
-  sendRtcSignal(recipientId.value, { kind: 'want-p2p', sess: p2pSession, from: myUserId, ts: Date.now() });
-  // Gun fallback: also write to Gun so receiver picks it up even if relay
-  // rtc-signal forwarding is not yet deployed on the production server
-  const _wantRoomKey = [myUserId, recipientId.value].sort().join(':');
-  try { GunService.getGun().get('chat-p2p').get(_wantRoomKey).get('want-p2p')
-    .put(JSON.stringify({ kind: 'want-p2p', sess: p2pSession, from: myUserId, ts: Date.now() })); } catch {}
-
-  const [dc] = await Promise.all([waitForDataChannel(), negotiate(readyPromise)]);
-  p2pLog('offererConnect: negotiation done, waiting for ICE');
-
-  await waitForConnected();
-  stopIceQueue(recipientId.value);
-  stopSignalKeepAlive();
-  transportTier.value = await resolveTransportTier();
-  p2pLog('offererConnect: READY', { tier: transportTier.value });
-  setupDataChannelHandlers(dc);
-  return dc;
-}
 
 // Answerer: takes the session token from the offerer's want-p2p signal, never generates one
 async function answererConnect(sess: string): Promise<void> {
@@ -953,58 +907,7 @@ async function answererConnect(sess: string): Promise<void> {
   setupDataChannelHandlers(dc);
 }
 
-async function sendFileP2P(file: File) {
-  p2pLog('sendFileP2P: start', { name: file.name, size: file.size, type: file.type });
 
-  if (file.size > MAX_FILE_SIZE) {
-    const t = await toastController.create({
-      message: `File too large (${(file.size / 1024 / 1024).toFixed(0)} MB). Maximum is 100 MB.`,
-      duration: 4000, position: 'top', color: 'warning',
-    });
-    await t.present();
-    return;
-  }
-
-  // Suppress offline signal for the full transfer duration.
-  const releaseOfflineSuppression = chatService?.suppressOffline(120_000) ?? (() => {});
-
-  // Warn if offline but still attempt
-  if (chatService && !(await chatService.isPeerOnline(recipientId.value))) {
-    const tw = await toastController.create({ message: recipientName.value + ' appears offline. Attempting anyway...', duration: 3000, position: 'top', color: 'warning' });
-    await tw.present();
-  }
-    const previewUrl = file.type.startsWith('image') ? URL.createObjectURL(file) : undefined;
-  p2pTransfer.value = { name: file.name, progress: 0, direction: 'sending', previewUrl, tier: transportTier.value };
-
-  const doTransfer = async () => {
-    const dc = await offererConnect();
-    dc.send(JSON.stringify({ type: 'meta', name: file.name, size: file.size, mime: file.type }));
-    const buffer = await file.arrayBuffer();
-    let offset = 0;
-    while (offset < buffer.byteLength) {
-      while (dc.bufferedAmount > 256 * 1024) await new Promise(r => setTimeout(r, 20));
-      const chunk = buffer.slice(offset, offset + CHUNK_SIZE);
-      dc.send(chunk); offset += chunk.byteLength;
-      p2pTransfer.value = { name: file.name, progress: Math.round(offset / buffer.byteLength * 100), direction: 'sending', previewUrl };
-    }
-    dc.send(JSON.stringify({ type: 'done' }));
-  };
-  let lastErr: any;
-  for (const [attempt, delay] of [[0,0],[1,3000],[2,8000]] as [number,number][]) {
-    if (delay) { closePeer(); p2pTransfer.value = { name: file.name, progress: 0, direction: 'sending', previewUrl }; await new Promise(r => setTimeout(r, delay)); }
-    try {
-      await doTransfer();
-      const url = URL.createObjectURL(file);
-      const mtype = file.type.startsWith('video') ? 'video' : 'image';
-      messages.value = [...messages.value, { id: 'p2p-sent-' + Date.now(), from: myUserId, to: recipientId.value, message: '[' + mtype + ']', timestamp: Date.now(), read: false, sent: true, mediaUrl: url, mediaType: mtype } as any];
-      nextTick(() => scrollToBottom(true)); p2pTransfer.value = null; releaseOfflineSuppression();
-      p2pLog('sendFileP2P: complete', { attempt }); return;
-    } catch (e: any) { lastErr = e; p2pErr('sendFileP2P attempt ' + attempt, e); }
-  }
-  p2pTransfer.value = null; releaseOfflineSuppression(); closePeer();
-  const t = await toastController.create({ message: 'File transfer failed after 3 attempts.', duration: 5000, position: 'top', color: 'warning' });
-  await t.present();
-}
 
 function listenForIncomingP2P() {
   p2pLog('listenForIncomingP2P: watching for want-p2p via relay WS + Gun fallback');
@@ -1201,11 +1104,7 @@ async function confirmDeleteAll() {
 const currentMessages = computed(() => messages.value);
 const isTypingState   = computed(() => typingState.value);
 
-const statusLabel = computed(() => {
-  if (chatError.value)  return 'Failed';
-  if (!chatReady.value) return 'Setting up…';
-  return connected.value ? 'Connected' : 'Offline';
-});
+
 
 // ⋯ not yet accepted by the relay · ✓ sent (relay has it, recipient hasn't confirmed)
 // ✓✓ delivered (authenticated receipt from the recipient) · ! not confirmed, no longer retrying

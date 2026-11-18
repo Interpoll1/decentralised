@@ -5,6 +5,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { execSync } from 'child_process';
 import crypto from 'crypto';
+import { buildProvenancePlugin } from './tools/build-provenance.mjs';
 
 function getBuildHash(): string {
   try {
@@ -133,6 +134,7 @@ const isNativeBuild = process.env.CAP_BUILD === '1';
 export default defineConfig({
   base: '/',
   plugins: [
+    buildProvenancePlugin(),
     vue({
       template: {
         compilerOptions: {

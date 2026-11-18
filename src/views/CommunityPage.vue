@@ -192,10 +192,10 @@
       </div>
 
        <!-- Rules Section -->
-      <div v-if="hasAccess && displayCommunity?.rules?.length > 0" class="rules-section">
+      <div v-if="hasAccess && (displayCommunity?.rules?.length ?? 0) > 0" class="rules-section">
         <h3>Community Rules</h3>
         <ol class="rules-list">
-          <li v-for="(rule, index) in displayCommunity.rules" :key="index">{{ rule }}</li>
+          <li v-for="(rule, index) in displayCommunity?.rules" :key="index">{{ rule }}</li>
         </ol>
       </div>
      
@@ -443,28 +443,7 @@ ion-content {
 import { ref, computed, watchEffect, watch, onUnmounted, defineAsyncComponent } from 'vue';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRoute, useRouter } from 'vue-router';
-import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonContent,
-  IonButtons,
-  IonBackButton,
-  IonButton,
-  IonIcon,
-  IonCard,
-  IonCardHeader,
-  IonCardTitle,
-  IonCardContent,
-  IonSegment,
-  IonSegmentButton,
-  IonLabel,
-  IonSpinner,
-  toastController,
-  onIonViewWillEnter,
-  onIonViewDidLeave
-} from '@ionic/vue';
+import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons, IonBackButton, IonButton, IonIcon, IonSpinner, toastController, onIonViewWillEnter, onIonViewDidLeave } from '@ionic/vue';
 import {
   homeOutline,
   peopleOutline,

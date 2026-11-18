@@ -94,7 +94,7 @@
         <div>
           <div class="section-heading">Community Rules</div>
           <div class="rules-list-edit">
-            <div v-for="(rule, index) in rules" :key="index" class="rule-row">
+            <div v-for="(_rule, index) in rules" :key="index" class="rule-row">
               <span class="rule-number">{{ index + 1 }}</span>
               <input
                 v-model="rules[index]"
@@ -502,7 +502,7 @@ const nsfw = ref(false);
 const rules = ref(['Be respectful', 'No spam']);
 const isCreating = ref(false);
 const nameError = ref('');
-const privacyConfig = ref<PrivateCommunityConfig>({ isPrivate: false, method: 'invite' });
+const privacyConfig = ref<PrivateCommunityConfig>({ isPrivate: false, method: 'invite', valid: true });
 
 const categoryOptions = [
   { value: 'technology', label: 'Technology' },

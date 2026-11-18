@@ -62,7 +62,7 @@
               <ion-label position="stacked">Issuer endpoint</ion-label>
               <ion-input
                 v-model="customIssuerEndpoint"
-                placeholder="https://interpoll.endless.sbs/trust"
+                placeholder="https://interpoll.endless.social/trust"
                 autocomplete="off"
               />
             </ion-item>
@@ -205,7 +205,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import 'vue-router';
 import {
   IonPage, IonHeader, IonToolbar, IonButtons, IonBackButton,
   IonTitle, IonContent, IonItem, IonLabel, IonInput,
@@ -222,7 +222,7 @@ import UserIdentityBadge from '@/components/UserIdentityBadge.vue';
 
 type Step = 'input' | 'pow' | 'done';
 
-const router = useRouter();
+
 const userStore = useUserStore();
 
 const step = ref<Step>('input');
@@ -237,7 +237,7 @@ const powError = ref('');
 const claimedVerified = ref(false);
 const claimedCertificate = ref<TrustCertificate | null>(null);
 const showCustomIssuerMenu = ref(false);
-const customIssuerEndpoint = ref('https://interpoll.endless.sbs/trust');
+const customIssuerEndpoint = ref('https://interpoll.endless.social/trust');
 const customIssuerContact = ref('');
 const addingCustomIssuer = ref(false);
 const customIssuerError = ref('');
@@ -254,7 +254,7 @@ onMounted(async () => {
   try {
     issuers.value = await TrustService.getIssuers();
     const defaultIssuer = issuers.value.find((issuer) =>
-      issuer.endpoint === 'https://interpoll.endless.sbs/trust' || issuer.domain === 'endless.sbs'
+      issuer.endpoint === 'https://interpoll.endless.social/trust' || issuer.domain === 'endless.sbs'
     );
     if (defaultIssuer) selectedIssuer.value = defaultIssuer;
   } catch (e) {

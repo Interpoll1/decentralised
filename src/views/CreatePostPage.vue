@@ -268,18 +268,7 @@ ion-content { --background: transparent; }
 import { ref, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { onMounted } from 'vue';
-import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonContent,
-  IonButtons,
-  IonButton,
-  IonIcon,
-  IonSpinner,
-  toastController
-} from '@ionic/vue';
+import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons, IonIcon, toastController } from '@ionic/vue';
 import { imageOutline, closeCircle, informationCircle, videocamOutline, chevronDownOutline, chevronUpOutline, timeOutline } from 'ionicons/icons';
 import { defineAsyncComponent } from 'vue';
 const VideoUploader = defineAsyncComponent(() => import('../components/VideoUploader.vue'));
@@ -368,7 +357,7 @@ onMounted(async () => {
   // If no joined communities are recorded (empty localStorage / new device),
   // sync joined state from the relay so the list isn't empty.
   if (joinedCommunities.value.length === 0 && communityStore.communities.length > 0) {
-    await communityStore.syncJoinedFromRelay?.().catch(() => {});
+    await communityStore.syncJoinedPrivateCommunitiesFromKeys().catch(() => {});
   }
   // Pre-select the community from route param if still joined
   if (communityId && communityStore.isJoined(communityId)) {

@@ -7,11 +7,12 @@
 
 import type { SyncStatus } from '../types/social';
 
-const RANK: Record<Exclude<SyncStatus, 'failed'>, number> = { pending: 0, published: 1, confirmed: 2 };
+const RANK: Record<Exclude<SyncStatus, 'failed' | 'corrupted'>, number> = { pending: 0, published: 1, confirmed: 2 };
 
 export function mergeStatus(current?: SyncStatus, next?: SyncStatus): SyncStatus | undefined {
   if (!next) return current;
   if (!current) return next;
+  if (current === 'corrupted' || next === 'corrupted') return 'corrupted';
   if (current === 'confirmed') return 'confirmed';
   if (next === 'failed' || current === 'failed') return next;
   return RANK[next] >= RANK[current] ? next : current;

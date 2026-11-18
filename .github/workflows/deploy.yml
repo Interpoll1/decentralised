@@ -1,4 +1,4 @@
-name: Deploy to endless.sbs
+name: Deploy InterPoll SPA
 
 on:
   push:
@@ -15,14 +15,29 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      FTP_HOST: ${{ vars.FTP_HOST }}
+      REMOTE_DIR: ${{ vars.REMOTE_DIR }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
+      - name: Validate deployment configuration
+        env:
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASS: ${{ secrets.FTP_PASS }}
+        run: node tools/check-deploy-env.mjs
       - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
       - run: npm run build
+      - run: npm run verify:build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: interpoll-spa-${{ github.sha }}
+          path: dist/
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
       - name: Upload over FTP
         env:

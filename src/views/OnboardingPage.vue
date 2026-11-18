@@ -33,7 +33,7 @@
               </span>
               <div class="ob-option-body">
                 <strong>InterPoll public relay</strong>
-                <span>interpoll2.endless.sbs — open, censorship-resistant</span>
+                <span>interpoll2.endless.social — open, censorship-resistant</span>
               </div>
               <span class="ob-option-check" v-if="relayChoice === 'default'">✓</span>
             </button>
@@ -256,6 +256,8 @@ async function loadCommunities() {
       .slice(0, 16)
       .map((c: any): Community => ({
         id:          String(c.id),
+        creatorId: String(c.creatorId || ''),
+        createdAt: Number(c.createdAt) || 0,
         name:        String(c.name || c.id),
         displayName: String(c.displayName || c.name || c.id),
         description: c.description ?? '',

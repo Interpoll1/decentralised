@@ -291,7 +291,7 @@ function autoLink(text: string): string {
   return text.replace(/(https?:\/\/[\w\-\.\/?#&=;%+~:@,]+[\w\/])/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
 }
 
-import { ref, computed, type Ref, onMounted, onUnmounted, watch, defineAsyncComponent, h } from 'vue';
+import { ref, computed, type Ref, onMounted, onUnmounted, watch, defineAsyncComponent } from 'vue';
 const VideoPlayer = defineAsyncComponent({
   loader: () => import('../components/VideoPlayer.vue'),
   loadingComponent: {
@@ -307,19 +307,9 @@ const VideoPlayer = defineAsyncComponent({
 });
 const PostCard = defineAsyncComponent(() => import('../components/PostCard.vue'));
 const PollCard = defineAsyncComponent(() => import('../components/PollCard.vue'));
-import { useRoute, useRouter } from 'vue-router';
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonButtons, IonBackButton, IonButton, IonIcon,
-  IonChip,
-  IonLabel, IonSpinner, IonTextarea, IonBadge,
-  toastController
-} from '@ionic/vue';
-import {
-  peopleOutline, heart, heartOutline, thumbsDownOutline, thumbsDown,
-  trendingUpOutline, chatbubbleOutline, sendOutline,
-  shareSocialOutline, alertCircleOutline, refreshOutline
-} from 'ionicons/icons';
+import { useRoute } from 'vue-router';
+import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons, IonBackButton, IonButton, IonIcon, IonChip, IonLabel, IonSpinner, toastController } from '@ionic/vue';
+import { peopleOutline, trendingUpOutline, chatbubbleOutline, shareSocialOutline, alertCircleOutline, refreshOutline } from 'ionicons/icons';
 import { usePostStore } from '../stores/postStore';
 import { usePollStore } from '../stores/pollStore';
 import { useCommentStore } from '../stores/commentStore';
@@ -341,7 +331,7 @@ import { checkContent } from '../utils/contentGuard';
 import { shareLink } from '../composables/useShare';
 
 const route = useRoute();
-const router = useRouter();
+
 const postStore  = usePostStore();
 const pollStore  = usePollStore();
 const commentStore = useCommentStore();
@@ -362,16 +352,16 @@ const singleImageSrc = computed(() =>
   fullImageSrc.value || post.value?.imageThumbnail || getIPFSUrl(post.value?.imageIPFS));
 const postAuthorTrustLevel = ref<'trusted-issuer' | 'unverified'>('unverified');
 let postAuthorTrustRequestId = 0;
-let fullImageLoadPromise: Promise<string | null> | null = null;
+
 
 // Load full-res image from GunDB to replace thumbnail
 watch(
   () => post.value?.imageIPFS,
   (cid) => {
     fullImageSrc.value = null;
-    fullImageLoadPromise = null;
+
     if (!cid) return;
-    fullImageLoadPromise = loadFullImageSrc(cid);
+    void loadFullImageSrc(cid);
   },
   { immediate: true }
 );
@@ -508,70 +498,11 @@ function isCommentFlagged(content: string): boolean {
   return ModerationService.checkContent(content || '').flagged;
 }
 
-const uniqueCommenters = computed(() => {
-  const authorMap = new Map<string, {
-    authorId: string;
-    displayName: string;
-    commentCount: number;
-    authorShowRealName: boolean;
-    identityTrustLevel: 'trusted-issuer' | 'unverified';
-    identityTrustLabel: string;
-  }>();
 
-  commentStore.comments
-    .filter(c => c.postId === postId.value || c.postId === post.value?.id)
-    .forEach(c => {
-      const existing = authorMap.get(c.authorId);
-      if (existing) {
-        existing.commentCount++;
-        if (!existing.authorShowRealName && c.authorShowRealName === true) {
-          existing.displayName = c.authorName || 'anon';
-        }
-        existing.authorShowRealName = existing.authorShowRealName || c.authorShowRealName === true;
-        existing.identityTrustLevel = userStore.profiles[c.authorId]?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified';
-        existing.identityTrustLabel = existing.identityTrustLevel === 'trusted-issuer'
-          ? formatTrustedIdentityLabel({
-            username: userStore.profiles[c.authorId]?.identityUsername
-              || userStore.profiles[c.authorId]?.customUsername
-              || userStore.profiles[c.authorId]?.username
-              || existing.displayName,
-            issuer: userStore.profiles[c.authorId]?.identityIssuer,
-          })
-          : 'Unverified identity';
-      } else {
-        const name = c.authorShowRealName
-          ? (c.authorName || 'anon')
-          : (c.authorId && postId.value
-            ? generatePseudonym(postId.value, c.authorId)
-            : (c.authorName || 'anon'));
-        authorMap.set(c.authorId, {
-          authorId: c.authorId,
-          displayName: name,
-          commentCount: 1,
-          authorShowRealName: c.authorShowRealName === true,
-          identityTrustLevel: userStore.profiles[c.authorId]?.identityTrustLevel === 'trusted-issuer' ? 'trusted-issuer' : 'unverified',
-          identityTrustLabel: userStore.profiles[c.authorId]?.identityTrustLevel === 'trusted-issuer'
-            ? formatTrustedIdentityLabel({
-              username: userStore.profiles[c.authorId]?.identityUsername
-                || userStore.profiles[c.authorId]?.customUsername
-                || userStore.profiles[c.authorId]?.username
-                || name,
-              issuer: userStore.profiles[c.authorId]?.identityIssuer,
-            })
-            : 'Unverified identity',
-        });
-      }
-    });
-
-  return Array.from(authorMap.values()).sort((a, b) => b.commentCount - a.commentCount);
-});
 
 // Avatar tone for commenter chips
-const COMMENTER_TONES = ['av-violet','av-blue','av-teal','av-amber','av-rose','av-indigo'];
-function commenterAvatarTone(authorId: string): string {
-  const code = (authorId || '').split('').reduce((a,c) => a + c.charCodeAt(0), 0);
-  return COMMENTER_TONES[code % COMMENTER_TONES.length];
-}
+
+
 
 // Related posts — overlapping tags only (community too broad, category way too broad)
 const activeSection = ref<'comments' | 'related' | 'recent'>('comments');
@@ -685,7 +616,7 @@ async function loadFullImageSrc(cid: string): Promise<string | null> {
     return null;
   } finally {
     if (post.value?.imageIPFS === cid) {
-      fullImageLoadPromise = null;
+
     }
   }
 }
@@ -824,6 +755,7 @@ async function refreshPost() {
 let unsubscribeVotes: (() => void) | null = null;
 
 onMounted(async () => {
+  void userStore.loadCurrentUser().catch(() => {});
   await loadPost();
   // Live counts while the post is on screen — other people's votes land here
   // without a refresh, and cannot be undone by a stale post-node echo.

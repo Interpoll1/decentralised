@@ -1,55 +1,56 @@
+import { migrateLegacyRelayUrl } from '../utils/legacyRelayUrl';
 // Moderation & content-filtering service (client-side only)
 //
 // Rewritten to use context-aware regex patterns instead of bare word matching.
-// No profanity filter, no slurs, no abusive language — those are normal on most
+// No profanity filter, no slurs, no abusive language вЂ” those are normal on most
 // platforms and cause far too many false positives. This filter covers only
 // content that is genuinely illegal or harmful regardless of context.
 //
 // Categories kept:
-//   threats  — direct personal threats, doxxing, self-harm instructions
-//   sexual   — commercial solicitation only (not anatomy or discussion)
-//   spam     — financial scams and solicitation
+//   threats  вЂ” direct personal threats, doxxing, self-harm instructions
+//   sexual   вЂ” commercial solicitation only (not anatomy or discussion)
+//   spam     вЂ” financial scams and solicitation
 //
 // Categories removed from before:
-//   profanity — common on all platforms, user preference not platform safety
-//   slurs     — handled at relay level (moderation-middleware.js), not client
-//   drugs     — bare drug names cause too many false positives in news/harm-reduction
+//   profanity вЂ” common on all platforms, user preference not platform safety
+//   slurs     вЂ” handled at relay level (moderation-middleware.js), not client
+//   drugs     вЂ” bare drug names cause too many false positives in news/harm-reduction
 //
-// ── Decentralised moderation design ──────────────────────────────────────────
+// в”Ђв”Ђ Decentralised moderation design в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 //
 // The platform is intentionally decentralised, which creates a genuine tension
 // with traditional server-side moderation. Here is how moderation works
 // across the three layers:
 //
-// LAYER 1 — Client-side (this file)
-//   • Pattern filter (ModerationService.checkContent): runs in the browser
+// LAYER 1 вЂ” Client-side (this file)
+//   вЂў Pattern filter (ModerationService.checkContent): runs in the browser
 //     before content is submitted. Catches threats, CSAM references, scam
 //     solicitation, and user-defined custom phrases.
-//   • Score/karma filters (shouldHideByScore, shouldHideByKarma): hide low-
+//   вЂў Score/karma filters (shouldHideByScore, shouldHideByKarma): hide low-
 //     quality content from view without deleting it. User-controlled threshold.
-//   • Community moderators can write custom rules that are published to Gun
+//   вЂў Community moderators can write custom rules that are published to Gun
 //     and loaded by community members' clients on next sync.
-//   • This is the PRIMARY moderation layer for the decentralised network
+//   вЂў This is the PRIMARY moderation layer for the decentralised network
 //     because it works even when the relay is unreachable.
 //
-// LAYER 2 — Relay-side (moderation-middleware.js on relay server)
-//   • Slur and hate-speech patterns (relay has a larger, non-public pattern set)
-//   • PoW-based rate limiting (blocks spam floods)
-//   • IP/device-level blocks for repeat violators
-//   • This layer is bypassed if users connect to a community relay that doesn't
+// LAYER 2 вЂ” Relay-side (moderation-middleware.js on relay server)
+//   вЂў Slur and hate-speech patterns (relay has a larger, non-public pattern set)
+//   вЂў PoW-based rate limiting (blocks spam floods)
+//   вЂў IP/device-level blocks for repeat violators
+//   вЂў This layer is bypassed if users connect to a community relay that doesn't
 //     run it, or when peers share data directly via WebRTC.
 //
-// LAYER 3 — Gun graph (cryptographic)
-//   • Every post, poll, vote is Ed25519-signed by the author's key pair
-//   • A community moderator can "soft-delete" a post by writing a deletion
+// LAYER 3 вЂ” Gun graph (cryptographic)
+//   вЂў Every post, poll, vote is Ed25519-signed by the author's key pair
+//   вЂў A community moderator can "soft-delete" a post by writing a deletion
 //     marker to Gun (the content is not actually removed from other peers'
 //     caches, but clients hide it on load)
-//   • Hard deletion is not possible in a decentralised network — once content
+//   вЂў Hard deletion is not possible in a decentralised network вЂ” once content
 //     propagates to other peers it persists in their local graph. This is a
 //     fundamental constraint, not a bug.
 //
 // WHAT THE RELAY README SAYS:
-//   "Has no admin power over the app or its users" — this refers to community
+//   "Has no admin power over the app or its users" вЂ” this refers to community
 //   relays run by third parties. YOUR relay server (relay-server-enhanced.js)
 //   DOES have moderation power via moderation-middleware.js. Community-run
 //   relays are just Gun repeaters with no special privileges unless the operator
@@ -85,7 +86,7 @@ export interface PatternEntry {
   enabled: boolean;
 }
 
-// Legacy interface — kept so existing UI components don't break
+// Legacy interface вЂ” kept so existing UI components don't break
 export interface WordEntry {
   word: string;
   category: WordCategory;
@@ -130,12 +131,12 @@ const STORAGE_KEY = 'moderation_settings';
 const API_KEY_STORAGE_KEY = 'moderation_api_key';
 
 /**
- * Default URL for the InterPoll-hosted moderation API — the prefix under which
+ * Default URL for the InterPoll-hosted moderation API вЂ” the prefix under which
  * moderation-api's `/v1/*` routes are served (nginx maps `/moderation/v1/`).
  */
-export const MODERATION_API_DEFAULT_BASE_URL = 'https://interpoll.endless.sbs/moderation';
+export const MODERATION_API_DEFAULT_BASE_URL = 'https://interpoll.endless.social/moderation';
 /** Pre-fix default (site root, no `/v1` there); migrated on load. */
-const LEGACY_MODERATION_API_BASE_URL = 'https://interpoll.endless.sbs';
+const LEGACY_MODERATION_API_BASE_URL = 'https://interpoll.endless.social';
 
 const DEFAULT_SETTINGS: ModerationSettings = {
   minUserKarma: -1000,
@@ -154,15 +155,15 @@ const DEFAULT_SETTINGS: ModerationSettings = {
   moderationApiKey: '',
 };
 
-// ── Pattern list ──────────────────────────────────────────────────────────────
+// в”Ђв”Ђ Pattern list в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 // Every pattern requires enough context that innocent text won't match.
 // Organised by category and severity to mirror relay-side middleware.
 
 const DEFAULT_PATTERNS: PatternEntry[] = [
 
-  // ── threats: high ────────────────────────────────────────────────────────
+  // в”Ђв”Ђ threats: high в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
-  // Direct personal threats — requires subject + verb + target
+  // Direct personal threats вЂ” requires subject + verb + target
   { pattern: /i(?:'ll|\s+will|\s+am\s+going\s+to)\s+(kill|murder|shoot|stab|rape)\s+(you|u|him|her|them|your\s+\w+)/i,
     label: 'direct threat', category: 'threats', severity: 'high', enabled: true },
 
@@ -193,7 +194,7 @@ const DEFAULT_PATTERNS: PatternEntry[] = [
   { pattern: /\bhow\s+to\s+(make|build|create|assemble)\s+a\s+(bomb|explosive|pipe\s*bomb|ied)\b/i,
     label: 'weapons instructions', category: 'threats', severity: 'high', enabled: true },
 
-  // ── CSAM — always high regardless of category ─────────────────────────────
+  // в”Ђв”Ђ CSAM вЂ” always high regardless of category в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
   { pattern: /\bcsam\b/i,
     label: 'CSAM', category: 'threats', severity: 'high', enabled: true },
@@ -207,9 +208,9 @@ const DEFAULT_PATTERNS: PatternEntry[] = [
   { pattern: /\bloli(?:con)?\s*(porn|hentai|content|pics?)\b/i,
     label: 'CSAM', category: 'threats', severity: 'high', enabled: true },
 
-  // ── threats: medium ───────────────────────────────────────────────────────
+  // в”Ђв”Ђ threats: medium в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
-  // Self-harm facilitation — method + instructional framing only
+  // Self-harm facilitation вЂ” method + instructional framing only
   { pattern: /\b(easiest|quickest|painless|best)\s+way\s+to\s+(kill\s+yourself|commit\s+suicide|end\s+it)\b/i,
     label: 'self-harm facilitation', category: 'threats', severity: 'medium', enabled: true },
 
@@ -219,7 +220,7 @@ const DEFAULT_PATTERNS: PatternEntry[] = [
   { pattern: /\b(lethal\s+dose|overdose\s+on)\s+(tylenol|acetaminophen|insulin|medication)\b/i,
     label: 'self-harm method', category: 'threats', severity: 'medium', enabled: true },
 
-  // ── sexual: medium — solicitation context only ────────────────────────────
+  // в”Ђв”Ђ sexual: medium вЂ” solicitation context only в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
   { pattern: /\b(selling|buy|purchase|dm\s+for)\s+(nudes?|porn|content|pics?)\b/i,
     label: 'sexual solicitation', category: 'sexual', severity: 'medium', enabled: true },
@@ -233,7 +234,7 @@ const DEFAULT_PATTERNS: PatternEntry[] = [
   { pattern: /\b(rates?|booking)\s+.{0,20}\s+(escort|companionship|full\s+service)\b/i,
     label: 'escort solicitation', category: 'sexual', severity: 'medium', enabled: true },
 
-  // ── spam: low — financial scams ───────────────────────────────────────────
+  // в”Ђв”Ђ spam: low вЂ” financial scams в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
   { pattern: /\bnigerian\s+prince\b/i,
     label: 'scam', category: 'spam', severity: 'low', enabled: true },
@@ -250,7 +251,7 @@ const DEFAULT_PATTERNS: PatternEntry[] = [
   { pattern: /\byou\s+have\s+(won|been\s+selected).{0,40}(prize|lottery|reward)\b/i,
     label: 'lottery scam', category: 'spam', severity: 'low', enabled: true },
 
-  // ── spam: low — drug dealing solicitation ─────────────────────────────────
+  // в”Ђв”Ђ spam: low вЂ” drug dealing solicitation в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   // Drug names alone ignored; only dealing intent triggers
 
   { pattern: /\b(selling|buy|cop|score|plug)\s+(coke|crack|meth|mdma|molly|heroin|fent(?:anyl)?|xans?|percs?)\b/i,
@@ -266,10 +267,10 @@ const DEFAULT_PATTERNS: PatternEntry[] = [
     label: 'fentanyl dealing', category: 'spam', severity: 'low', enabled: true },
 ];
 
-// ── Reactive version counter ──────────────────────────────────────────────────
+// в”Ђв”Ђ Reactive version counter в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 export const moderationVersion = ref(0);
 
-// ── Service ───────────────────────────────────────────────────────────────────
+// в”Ђв”Ђ Service в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 export class ModerationService {
   private static settings: ModerationSettings | null = null;
   private static _patterns: PatternEntry[] | null = null;
@@ -282,7 +283,7 @@ export class ModerationService {
    * Returns the built-in pattern list in the legacy WordEntry shape so existing
    * UI components (word list tables, category toggles) don't break.
    *
-   * One entry per pattern — ~30 of them, which is the filter's actual coverage.
+   * One entry per pattern вЂ” ~30 of them, which is the filter's actual coverage.
    * The old bare-word list ran to 100+ entries; that breadth came from
    * profanity and slurs, which this filter deliberately no longer carries.
    */
@@ -309,7 +310,7 @@ export class ModerationService {
     moderationVersion.value++;
   }
 
-  // Legacy shim — kept for UI components that call getWordList()
+  // Legacy shim вЂ” kept for UI components that call getWordList()
   static getWordList(): WordEntry[] {
     return this.getDefaultWordList();
   }
@@ -359,7 +360,7 @@ export class ModerationService {
     }));
   }
 
-  // ── Main content check ────────────────────────────────────────────────────
+  // в”Ђв”Ђ Main content check в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
   static checkContent(text: string): FilterResult {
     const s = this.getSettings();
@@ -401,7 +402,7 @@ export class ModerationService {
     return authorKarma < min;
   }
 
-  // ── Home-feed moderation ──────────────────────────────────────────────────
+  // в”Ђв”Ђ Home-feed moderation в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
   /** True when the API-based home-feed check is active and the user has a key */
   static isHomeFeedModerationEnabled(): boolean {
@@ -417,7 +418,7 @@ export class ModerationService {
 
   /**
    * Check whether a post body should be blocked via the local word/pattern filter.
-   * This runs synchronously in the feed render loop — must stay fast.
+   * This runs synchronously in the feed render loop вЂ” must stay fast.
    */
   static isPostBodyBlocked(text: string): boolean {
     if (!text) return false;
@@ -427,7 +428,7 @@ export class ModerationService {
 
   /**
    * Warm the home-feed moderation check for a batch of post texts.
-   * Currently a no-op stub — calls checkContent per item so the result
+   * Currently a no-op stub вЂ” calls checkContent per item so the result
    * is available from the browser's micro-task queue before the next render.
    * Replace with an actual API pre-fetch if the remote moderation endpoint is added.
    */
@@ -440,7 +441,7 @@ export class ModerationService {
 
   /**
    * Submit a post body hash to the moderation API for AI review.
-   * Fails silently — submission should never block the user action.
+   * Fails silently вЂ” submission should never block the user action.
    */
   static async submitPostBodyHash(text: string): Promise<void> {
     const s = this.getSettings();
@@ -463,7 +464,7 @@ export class ModerationService {
         signal: AbortSignal.timeout(5_000),
       });
     } catch {
-      // Non-fatal — never surface hash-submission errors to the user
+      // Non-fatal вЂ” never surface hash-submission errors to the user
     }
   }
 
@@ -495,7 +496,7 @@ export class ModerationService {
       if (res.status === 404) return { ok: false, message: 'Moderation API not found at this URL' };
       return { ok: false, message: `Server error: ${res.status}` };
     } catch (err: any) {
-      return { ok: false, message: err?.message ?? 'Network error — check your connection' };
+      return { ok: false, message: err?.message ?? 'Network error вЂ” check your connection' };
     }
   }
 
@@ -511,13 +512,14 @@ export class ModerationService {
     this._patterns = null; // re-build pattern list on next use
   }
 
-  // ── Private ───────────────────────────────────────────────────────────────
+  // в”Ђв”Ђ Private в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
   private static loadSettings(): void {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
+        if (typeof parsed.moderationApiBaseUrl === 'string') parsed.moderationApiBaseUrl = migrateLegacyRelayUrl(parsed.moderationApiBaseUrl);
         if (parsed.moderationApiBaseUrl?.replace(/\/+$/, '') === LEGACY_MODERATION_API_BASE_URL) {
           parsed.moderationApiBaseUrl = MODERATION_API_DEFAULT_BASE_URL;
         }

@@ -1,8 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
+import { spawn } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 const pollPath = '/poll/poll-first-use-local';
 
 function makePoll(overrides = {}) {
@@ -31,18 +32,14 @@ function makePoll(overrides = {}) {
 
 // Exercise the actual app with fresh device storage and local relay responses.
 // Every external HTTP request and WebSocket is intercepted before opening a page.
-async function mockRelay(context, poll = makePoll()) {
-  await context.routeWebSocket('**', () => {});
+async function mockRelay(context, poll = makePoll(), realGunOrigin) {
+  await context.routeWebSocket('**', ws => {
+    if (realGunOrigin && ws.url().startsWith(realGunOrigin.replace('http:', 'ws:'))) ws.connectToServer();
+  });
   await context.route('**/*', async route => {
     const url = new URL(route.request().url());
     if (url.origin === 'http://127.0.0.1:5197') return route.continue();
-    if (url.hostname === 'cdn.jsdelivr.net' && /\/(gun|sea)\.js$/.test(url.pathname)) {
-      const script = url.pathname.endsWith('/sea.js') ? 'sea.js' : 'gun.js';
-      return route.fulfill({
-        contentType: 'application/javascript',
-        body: readFileSync(require.resolve(`gun/${script}`)),
-      });
-    }
+    if (url.origin === realGunOrigin && url.pathname.startsWith('/gun')) return route.continue();
     if (url.pathname === `/api/poll/${poll.id}`) return route.fulfill({ json: poll });
     if (url.pathname === '/api/vote-authorize') {
       return route.fulfill({ json: { allowed: true, reservationToken: 'local-test-reservation' } });
@@ -57,6 +54,112 @@ async function navigate(page, path) {
     await router.push(destination);
   }, path);
 }
+
+async function verifySettingsPersistence(context, page, testInfo) {
+  await mockRelay(context);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/settings');
+  await page.getByRole('button', { name: 'Feed', exact: true }).click();
+  const posts = page.locator('.toggle-row').filter({ hasText: 'Show posts' });
+  const polls = page.locator('.toggle-row').filter({ hasText: 'Show polls' });
+  await expect(posts.locator('input')).toBeChecked();
+  await posts.locator('label').click();
+  await expect(posts.locator('input')).not.toBeChecked();
+  await posts.locator('label').click();
+  await expect(posts.locator('input')).toBeChecked();
+  await polls.locator('label').click();
+  await expect(polls.locator('input')).not.toBeChecked();
+  await page.getByRole('button', { name: 'Latest', exact: true }).click();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('interpoll_feed_preferences')))).toMatchObject({
+    showPosts: true, showPolls: false, mode: 'latest',
+  });
+  await page.screenshot({ path: testInfo.outputPath('settings-feed.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Data', exact: true }).click();
+  const mine = page.locator('.toggle-row').filter({ hasText: 'Always store my posts' });
+  await expect(mine.locator('input')).toBeChecked();
+  await mine.locator('label').click();
+  await page.locator('.field-group').filter({ hasText: 'Keep recent posts' }).locator('select').selectOption('100');
+  await expect.poll(async () => page.evaluate(async () => {
+    const { PinningService } = await import('/src/services/pinningService.ts');
+    return PinningService.getPolicy();
+  })).toMatchObject({ myPosts: false, recentPosts: 100 });
+  await page.reload();
+  await page.getByRole('button', { name: 'Data', exact: true }).click();
+  await expect(mine.locator('input')).not.toBeChecked();
+  await expect(page.locator('.field-group').filter({ hasText: 'Keep recent posts' }).locator('select')).toHaveValue('100');
+  await page.screenshot({ path: testInfo.outputPath('settings-storage.png'), fullPage: true });
+  expect(errors).toEqual([]);
+}
+
+test('mobile settings controls persist actual feed and storage preferences', async ({ context, page }, testInfo) => {
+  await verifySettingsPersistence(context, page, testInfo);
+});
+
+test.describe('local relay integration', () => {
+  let relay;
+  let directory;
+  const origin = 'http://127.0.0.1:5198';
+  test.beforeAll(async () => {
+    directory = mkdtempSync(join(tmpdir(), 'interpoll-browser-relay-'));
+    relay = spawn(process.execPath, [fileURLToPath(new URL('../community-relay/kit/relay.js', import.meta.url))], {
+      windowsHide: true, stdio: 'ignore',
+      env: { ...process.env, HOST: '127.0.0.1', PORT: '5198', UPSTREAM_PEERS: '', GUN_DATA_DIR: directory },
+    });
+    await expect.poll(async () => {
+      try { return (await fetch(origin + '/health')).ok; } catch { return false; }
+    }, { timeout: 15000 }).toBe(true);
+  });
+  test.afterAll(async () => {
+    if (relay && relay.exitCode === null) {
+      await new Promise(resolve => { relay.once('exit', resolve); relay.kill(); });
+    }
+    if (directory) rmSync(directory, { recursive: true, force: true });
+  });
+  test('bundled Gun replicates a poll between two fresh browser profiles', async ({ browser }) => {
+    const profiles = [await browser.newContext(), await browser.newContext()];
+    try {
+      const pages = [];
+      const id = `poll-${Date.now()}-relay-smoke`;
+      for (const profile of profiles) {
+        await profile.addInitScript(base => {
+          localStorage.setItem('interpoll_relay_config', JSON.stringify({
+            websocket: base.replace('http:', 'ws:'), gun: base + '/gun', api: base,
+          }));
+          localStorage.setItem('interpoll_peer_prefs', JSON.stringify({ usePrivate: false, usePublic: false }));
+        }, origin);
+        await mockRelay(profile, makePoll(), origin);
+        const page = await profile.newPage(); pages.push(page);
+        await page.goto('/settings');
+        await page.evaluate(async base => {
+          const { GunService } = await import('/src/services/gunService.ts');
+          GunService.reconnect([base + '/gun']);
+        }, origin);
+      }
+      await pages[1].evaluate(async id => {
+        const { GunService } = await import('/src/services/gunService.ts');
+        GunService.getGun().get('polls').get(id).on((data, _key, _message, event) => {
+          if (data?.question === 'Local relay transport fixture') {
+            window.__replicatedPoll = { id: data.id, question: data.question }; event?.off();
+          }
+        });
+      }, id);
+      await pages[0].evaluate(async id => {
+        const { GunService } = await import('/src/services/gunService.ts');
+        GunService.getGun().get('polls').get(id).put({ id, question: 'Local relay transport fixture', dataVersion: 'v5' });
+      }, id);
+      await expect.poll(() => pages[1].evaluate(() => window.__replicatedPoll), { timeout: 15000 })
+        .toEqual({ id, question: 'Local relay transport fixture' });
+    } finally { await Promise.all(profiles.map(profile => profile.close())); }
+  });
+});
+
+test.describe('desktop settings', () => {
+  test.use({ viewport: { width: 1280, height: 900 }, isMobile: false, hasTouch: false });
+  test('settings controls persist actual feed and storage preferences', async ({ context, page }, testInfo) => {
+    await verifySettingsPersistence(context, page, testInfo);
+  });
+});
 
 test('a fresh visitor can choose an answer through its label after tour timers expire', async ({ context, page }) => {
   await mockRelay(context);

@@ -346,6 +346,7 @@ const handleGlobalKeydown = (event: KeyboardEvent) => {
 }
 
 onMounted(() => {
+  void userStore.loadCurrentUser().catch(() => {});
   window.addEventListener('keydown', handleGlobalKeydown)
 })
 

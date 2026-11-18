@@ -98,10 +98,10 @@
         >
 
           
-          <h3 class="result-title">{{ result.title || result.question }}</h3>
+          <h3 class="result-title">{{ result.title }}</h3>
           
           <p class="result-content">
-            {{ truncate(result.content || result.description || '', 150) }}
+            {{ truncate(result.content || '', 150) }}
           </p>
           
           <div class="result-meta">
@@ -532,19 +532,13 @@ ion-content {
 import { ref, computed, watch } from 'vue';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRouter, useRoute } from 'vue-router';
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonButtons, IonBackButton, IonSearchbar, IonSegment,
-  IonSegmentButton, IonLabel, IonSpinner, IonIcon,
-  IonCard, IonCardHeader, IonCardTitle, IonCardContent,
-  IonBadge, IonButton
-} from '@ionic/vue';
+import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons } from '@ionic/vue';
 import { useSearch } from '../composables/useSearch';
 import SearchService from '../services/searchService';
 import { useCommunityStore } from '../stores/communityStore';
 import { usePostStore } from '../stores/postStore';
 import { usePollStore } from '../stores/pollStore';
-import { ALL_CATEGORIES } from '../composables/useCategories';
+import '../composables/useCategories';
 
 const router  = useRouter();
 const route   = useRoute();
@@ -584,7 +578,7 @@ const spaceMatches = computed(() => {
 });
 const filterType      = ref<'post' | 'poll' | ''>('');
 const filterCommunity = ref('');
-const filterCategory  = ref('');
+
 const debounceTimer   = ref<number | null>(null);
 
 const hasNextPage = computed(() => currentPage.value * perPage.value < total.value);

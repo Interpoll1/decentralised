@@ -265,7 +265,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonButton, IonIcon, IonBackButton,
@@ -273,7 +273,7 @@ import {
 import { refreshOutline } from 'ionicons/icons';
 import { useRouter } from 'vue-router';
 import { RelayManager, type RelayEndpoint, type TransportStrategySettings } from '../services/relayManager';
-import { GunService } from '../services/gunService';
+import { getPeerHealthReport } from '../services/gunService';
 import config from '../config';
 
 const router = useRouter();
@@ -314,7 +314,7 @@ function refresh() {
 
 function pollPeers() {
   try {
-    const health = GunService.getPeerHealthReport();
+    const health = getPeerHealthReport();
     peerHealth.value  = health;
     gunPeers.value    = health.filter(p => p.connected).length;
   } catch { /* non-fatal */ }

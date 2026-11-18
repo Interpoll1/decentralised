@@ -11,4 +11,4 @@ Disallow: /claim-username
 Disallow: /vote/
 Disallow: /onboarding
 
-Sitemap: https://endless.sbs/sitemap.xml
+Sitemap: https://endless.social/sitemap.xml

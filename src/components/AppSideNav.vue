@@ -138,11 +138,11 @@ import RelayIndicator from './RelayIndicator.vue';
 import { useCategories } from '../composables/useCategories';
 import { useQrScan } from '../composables/useQrScan';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   totalUnread?: number;
   activeTab?: string;          // for HomePage two-way binding
   activeCategory?: string;
-}>();
+}>(), { totalUnread: 0 });
 
 const emit = defineEmits<{
   (e: 'update:activeTab', v: string): void;

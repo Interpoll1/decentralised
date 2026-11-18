@@ -115,14 +115,14 @@ import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 import { checkContent } from '../utils/contentGuard';
 import { useBurst } from '../composables/useBurst';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   comment: Comment;
   postId: string;
   communityId: string;
   depth?: number;
   flagged?: boolean;
   filterAction?: FilterAction;
-}>();
+}>(), { depth: 0 });
 const emit = defineEmits(['upvote', 'downvote']);
 
 const commentStore  = useCommentStore();

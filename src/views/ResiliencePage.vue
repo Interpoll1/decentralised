@@ -485,21 +485,8 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonCard, IonCardHeader, IonCardTitle, IonCardContent,
-  IonButton, IonIcon, IonSpinner, IonToggle, IonBadge,
-  IonItem, IonLabel, IonList, IonInput, IonButtons, IonFooter,
-  toastController,
-} from '@ionic/vue';
-import {
-  refreshOutline, downloadOutline, cloudUploadOutline,
-  trashOutline, fingerPrintOutline, chevronDownOutline, chevronUpOutline,
-  ellipse, warningOutline, lockClosedOutline, checkmarkCircleOutline,
-  serverOutline, hardwareChipOutline, shieldCheckmarkOutline, analyticsOutline,
-  swapHorizontalOutline, copyOutline, sendOutline, terminalOutline,
-  radioOutline, pulseOutline,
-} from 'ionicons/icons';
+import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonIcon, IonButtons, toastController } from '@ionic/vue';
+import { refreshOutline, downloadOutline, cloudUploadOutline, trashOutline, fingerPrintOutline, chevronDownOutline, chevronUpOutline, warningOutline, lockClosedOutline, checkmarkCircleOutline, serverOutline, hardwareChipOutline, shieldCheckmarkOutline, analyticsOutline, swapHorizontalOutline, copyOutline, sendOutline, terminalOutline, radioOutline, pulseOutline } from 'ionicons/icons';
 import { RelayManager } from '../services/relayManager';
 import { RelayHealthService } from '../services/relayHealthService';
 import { SnapshotService } from '../services/snapshotService';
@@ -645,7 +632,7 @@ const gunPeerUrls = ref<string[]>(config.getGunPeers());
 const gunDetailedPeers = ref<Array<{ url: string; connected: boolean; latencyMs?: number }>>([]);
 const gunConnectedCount = ref(0);
 const gunAvgLatency = ref<number | undefined>(undefined);
-const gunScanning = ref(false);
+
 const gunScanResults = ref<GunScanResult[]>([]);
 const newGunPeerUrl = ref('');
 const selectedGunPreset = ref('');
@@ -751,34 +738,7 @@ async function resetGunPeers() {
   await showToast('Gun peers reset to defaults');
 }
 
-async function scanGunPeers() {
-  gunScanning.value = true;
-  gunScanResults.value = [];
 
-  // Reuse GunService probe (also discovers and adds live peers)
-  await GunService.probePresetsAndExpand().catch(() => {});
-
-  // Render results from the shared probe map
-  const results: GunScanResult[] = [];
-  for (const [url, status] of GunService.presetProbeResults) {
-    const latencyMs = GunService['peerLatency']?.get?.(url);
-    results.push({
-      url,
-      reachable: status === 'live',
-      latencyMs: latencyMs ?? (status === 'dead' ? undefined : undefined),
-    });
-  }
-  gunScanResults.value = results.sort((a, b) => {
-    if (a.reachable && !b.reachable) return -1;
-    if (!a.reachable && b.reachable) return 1;
-    return (a.latencyMs ?? 99999) - (b.latencyMs ?? 99999);
-  });
-
-  refreshGunStatus();
-  gunScanning.value = false;
-  const liveCount = results.filter(r => r.reachable).length;
-  await showToast(`${liveCount}/${results.length} Gun relays reachable`);
-}
 
 // --- Computed ---
 const canAddRelay = computed(() => {

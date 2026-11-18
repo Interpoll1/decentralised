@@ -1,11 +1,17 @@
 // src/stores/userStore.ts
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import type { UserProfile } from '../services/userService';
 import { UserService } from '../services/userService';
 
 export const useUserStore = defineStore('user', () => {
   const profiles = ref<Record<string, UserProfile>>({});
+  const currentUser = ref<UserProfile | null>(null);
+  const isAuthenticated = computed(() => Boolean(currentUser.value?.publicKey));
+  async function loadCurrentUser(): Promise<void> {
+    currentUser.value = await UserService.getCurrentUser();
+    profiles.value[currentUser.value.id] = currentUser.value;
+  }
   const profileRequests = new Map<string, Promise<UserProfile | null>>();
 
   async function getProfile(userId: string): Promise<UserProfile | null> {
@@ -31,6 +37,9 @@ export const useUserStore = defineStore('user', () => {
   }
 
   return {
+    currentUser,
+    isAuthenticated,
+    loadCurrentUser,
     profiles,
     getProfile,
     getCachedKarma,

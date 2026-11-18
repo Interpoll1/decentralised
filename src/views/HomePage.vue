@@ -342,7 +342,7 @@
             :communityFilter="communityFilter"
             :view="orbitView"
             @update:view="orbitView = $event"
-            @update:communityFilter="communityFilter = $event"
+            @update:communityFilter="setCommunityFilter"
           />
 
           <!-- PUBLISH TAB (was Create) -->
@@ -439,7 +439,7 @@
               v-model="moderationCustomApiUrl"
               type="url"
               inputmode="url"
-              placeholder="https://interpoll.endless.sbs/moderation"
+              placeholder="https://interpoll.endless.social/moderation"
               @input="moderationCustomApiError = ''"
             >
             <p class="moderation-onboarding-card__hint">This should be the base address of your moderation API.</p>
@@ -474,32 +474,17 @@
 import BitMascot from '../components/BitMascot.vue';
 import { useBitStore } from '../stores/bitStore';
 import { ref, shallowRef, computed, onMounted, onUnmounted, watch, nextTick, defineAsyncComponent } from 'vue';
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonBadge,
-  IonButtons, IonButton, IonIcon, IonModal, IonSpinner,
-  IonInfiniteScroll, IonInfiniteScrollContent,
-  actionSheetController, toastController,
-} from '@ionic/vue';
-import {
-  cube, personCircleOutline, settingsOutline, addCircleOutline, addOutline,
-  earthOutline, peopleOutline, home, homeOutline, documentTextOutline,
-  chevronForwardOutline, chevronDownOutline, people, addCircle, statsChartOutline,
-  searchOutline, chatbubble, chatbubbleOutline, bookmarkOutline, globeOutline,
-  shieldCheckmarkOutline, sparklesOutline, eyeOffOutline, linkOutline,
-  codeSlashOutline, gameControllerOutline, flaskOutline, businessOutline,
-  logoBitcoin, trophyOutline, ellipsisHorizontalOutline, lockClosedOutline,
-  qrCodeOutline, tvOutline, happyOutline, chatbubblesOutline, cashOutline,
-  heartOutline, schoolOutline, locationOutline, ellipseOutline,
-} from 'ionicons/icons';
+import { IonPage, IonHeader, IonToolbar, IonContent, IonButtons, IonButton, IonIcon, IonModal, IonSpinner, IonInfiniteScroll, IonInfiniteScrollContent, actionSheetController, toastController } from '@ionic/vue';
+import { personCircleOutline, addCircleOutline, peopleOutline, documentTextOutline, chevronDownOutline, searchOutline, bookmarkOutline, globeOutline, shieldCheckmarkOutline, sparklesOutline, eyeOffOutline, linkOutline, qrCodeOutline, ellipseOutline } from 'ionicons/icons';
 
 // Inline telescope icon SVG path as a fallback (not in all ionicons builds)
-const telescopeOutline = 'M21.03 3.03a1 1 0 00-1.42 0L16 6.64l-1.29-1.29a1 1 0 00-1.42 1.42L14.58 8l-3.29 3.29-1.29-1.3A1 1 0 008.58 11.4l1.3 1.3-5.3 5.3H3a1 1 0 000 2h18a1 1 0 000-2h-1.59l-2-2 1.3-1.3a1 1 0 00-1.42-1.41l-1.29 1.29L12.71 11l3.29-3.29 1.3 1.3a1 1 0 001.41-1.42L17.42 6.3l3.61-3.61a1 1 0 000-1.66z';
+
 
 import { useQrScan } from '../composables/useQrScan';
 import { useRoute, useRouter } from 'vue-router';
 import { useChainStore } from '../stores/chainStore';
 import { useCommunityStore } from '../stores/communityStore';
-import type { Community } from '../services/communityService';
+
 import { usePostStore } from '../stores/postStore';
 import { usePollStore } from '../stores/pollStore';
 
@@ -544,7 +529,7 @@ const postStore      = usePostStore();
 const bitStore       = useBitStore();
 const pollStore      = usePollStore();
 
-const FEED_DEBUG      = localStorage.getItem('interpoll_feed_debug') === 'true';
+
 const HOME_GUN_FEED_ENABLED         = localStorage.getItem('interpoll_home_gun_feed') !== 'false';
 const HOME_GUN_FEED_MAX_COMMUNITIES = 8;
 
@@ -571,7 +556,10 @@ const activeTab          = ref<string>(initialTab());
 const orbitView          = ref<'map' | 'spaces' | 'nearby'>(route.query.view === 'spaces' || route.query.tab === 'communities' ? 'spaces' : 'nearby');
 function openSpaces() { orbitView.value = 'spaces'; activeTab.value = 'orbit'; }
 watch(() => route.query.view, (v) => { if (route.name === 'Home' && (v === 'spaces' || v === 'map' || v === 'nearby')) orbitView.value = v === 'map' ? 'nearby' : v; });
-const communityFilter    = ref('all');
+const communityFilter = ref<'all' | 'private' | 'joined'>('all');
+function setCommunityFilter(value: string) {
+  if (value === 'all' || value === 'private' || value === 'joined') communityFilter.value = value;
+}
 const isLoadingPosts     = ref(false);
 const voteVersion        = ref(0);
 const isHeaderHidden     = ref(false);
@@ -594,11 +582,7 @@ function setScope(s: FeedScope) {
   feedScope.value = s;
   void router.push({ query: { ...route.query, scope: s, tab: 'home' } });
 }
-function setScopeAndHome(s: FeedScope) {
-  feedScope.value = s;
-  activeTab.value = 'home';
-  void router.push({ query: { ...route.query, scope: s, tab: undefined } });
-}
+
 
 // Sync scope from URL (e.g. when the top nav pushes ?scope=)
 watch(
@@ -654,12 +638,7 @@ const {
   tutorialVisible, tutorialStep, currentTutorialStep, TUTORIAL_STEPS: tutorialSteps,
   skipTutorial, previousTutorialStep, nextTutorialStep,
 } = tutorial;
-const {
-  moderationOnboardingOpen, moderationOnboardingReady, moderationChoice, moderationCustomApiUrl,
-  moderationCustomApiInput, moderationCustomApiError, moderationSaving,
-  skipModerationOnboarding, handleModerationModalDismiss, confirmModerationOnboarding,
-  maybeShowOnboarding,
-} = moderation;
+const { moderationOnboardingOpen, moderationChoice, moderationCustomApiUrl, moderationCustomApiError, moderationSaving, skipModerationOnboarding, handleModerationModalDismiss, confirmModerationOnboarding, maybeShowOnboarding } = moderation;
 
 // ── Chat lazy init ─────────────────────────────────────────────────────────
 const gunListeners: Array<() => void> = [];
@@ -696,7 +675,7 @@ function selectChat(chat: any)        { ensureChat()?.markChatOpened(chat); }
 function startChatWithUser(user: any) { ensureChat()?.startChatWithUser(user); }
 function clearUserSearch()            { ensureChat()?.clearUserSearch(); userSearchQuery.value = ''; }
 async function handleUserSearch()     { await ensureChat()?.handleUserSearch(); }
-async function loadChatList()         { await ensureChat()?.loadChatList(); }
+
 /** Message search for the chat list. Answers can arrive out of order, so only the newest request may set the result. */
 async function onChatSearch(query: string) {
   const seq = ++chatSearchSeq;
@@ -746,7 +725,7 @@ function categoryFromRoute(): string {
 const selectedCategory = ref<string>(categoryFromRoute());
 
 watch(selectedCategory, (cat) => {
-  if (cat !== 'all') void pollStore.loadAllCommunityPolls?.();
+  if (cat !== 'all') pollStore.resetVisibleCount();
 });
 watch(() => route.query.category, () => {
   const cat = categoryFromRoute();
@@ -759,12 +738,10 @@ import { observePost, isAlreadyTracked, setOnViewConfirmed, getViewedIds } from 
 const { ALL_CATEGORIES, recordEngagement, recentTags, isUserTag, loadTrendingTags, topCategories } = useCategories();
 const { triggerBurst } = useBurst();
 const VISIBLE_CATEGORIES = ALL_CATEGORIES;
-const feedCategories = computed(() =>
-  showMoreCategories.value ? VISIBLE_CATEGORIES : VISIBLE_CATEGORIES.slice(0, 6)
-);
 
-const sidebarCatsOpen     = ref(true);
-const sidebarCatsExpanded = ref(false);
+
+
+
 const mobileShowTags   = ref(false);
 const trendingTagChips = ref<Array<{ tag: string; count: number }>>([]);
 
@@ -822,14 +799,7 @@ function itemMatchesTag(item: { type: string; data: any }, tag: string): boolean
 }
 
 // ── Feed computation with scope filtering ──────────────────────────────────
-function itemMatchesScope(item: { type: string; data: any }): boolean {
-  if (feedScope.value === 'relay' || feedScope.value === 'explore') return true;
-  if (feedScope.value === 'nearby') return nearby.nearbyAuthorIds.value.has(item.data.authorId);
-  // 'mine' — show only items from joined communities
-  const communityId = item.data.communityId;
-  if (!communityId) return false;
-  return joinedCommunityIds.value.has(communityId);
-}
+
 
 function itemMatchesCategory(item: { type: string; data: any }): boolean {
   if (selectedCategory.value === 'all') return true;
@@ -999,7 +969,7 @@ function getPollModerationText(poll: Poll): string {
 function getPostModerationText(post: Post): string {
   return [post.title, post.content].filter(Boolean).join(' ');
 }
-function ensureInitialFeedVisible(reason: string) {
+function ensureInitialFeedVisible(_reason: string) {
   if (combinedFeed.value.length > 0) return;
   postStore.resetVisibleCount?.();
   pollStore.resetVisibleCount?.();
@@ -1132,10 +1102,10 @@ async function showPostOptions() {
   const list = joined.length > 0 ? joined : communityStore.communities;
   const actionSheet = await actionSheetController.create({
     header: 'Create a post in…',
-    buttons: list.slice(0, 8).map((c: any) => ({
+    buttons: [{ text: 'Cancel', role: 'cancel' }, ...list.slice(0, 8).map((c: any) => ({
       text: c.displayName,
       handler: () => { router.push(`/community/${c.id}/create-post`); },
-    })).concat([{ text: 'Cancel', role: 'cancel' }]),
+    }))],
   });
   await actionSheet.present();
 }
@@ -1144,10 +1114,10 @@ async function showPollOptions() {
   const list = joined.length > 0 ? joined : communityStore.communities;
   const actionSheet = await actionSheetController.create({
     header: 'Create a poll in…',
-    buttons: list.slice(0, 8).map((c: any) => ({
+    buttons: [{ text: 'Cancel', role: 'cancel' }, ...list.slice(0, 8).map((c: any) => ({
       text: c.displayName,
       handler: () => { router.push(`/community/${c.id}/create-poll`); },
-    })).concat([{ text: 'Cancel', role: 'cancel' }]),
+    }))],
   });
   await actionSheet.present();
 }
@@ -1180,22 +1150,10 @@ async function tryRecoverEmptyFeedFromGun() {
 }
 
 // ── Community display helpers ──────────────────────────────────────────────
-function communityBadge(community: Community | null | undefined) {
-  if (!community) return null;
-  if ((community as any).isPrivate) return { label: 'Private', tone: 'private' };
-  const cat = String((community as any).category || (community as any).tags?.[0] || '').toLowerCase();
-  if (cat.includes('nsfw') || (community as any).nsfw) return { label: 'NSFW', tone: 'nsfw' };
-  if (cat.includes('politic')) return { label: 'Politics', tone: 'politics' };
-  if (cat.includes('tech') || cat.includes('programming')) return { label: 'Tech', tone: 'tech' };
-  if (cat) return { label: cat.charAt(0).toUpperCase() + cat.slice(1), tone: 'general' };
-  return { label: 'General', tone: 'general' };
-}
-function communityAvatarTone(community: Community | null | undefined): string {
-  const badge = communityBadge(community);
-  return badge ? `tone-${badge.tone}` : 'tone-general';
-}
 
-const sidebarCommunities = computed(() => communityStore.communities);
+
+
+
 
 // ── Trending categories ────────────────────────────────────────────────────
 import { CATEGORY_MAP } from '../composables/useCategories';
@@ -1254,7 +1212,7 @@ onMounted(async () => {
 
   // Record engagement when a card is dwelled on — feed personalisation learns
   // from what you actually read, not just what you upvote.
-  setOnViewConfirmed((id, type, el) => {
+  setOnViewConfirmed((_id, _type, el) => {
     const article = el as HTMLElement;
     const category = article.dataset.category || undefined;
     const tagsRaw  = article.dataset.tags || '';

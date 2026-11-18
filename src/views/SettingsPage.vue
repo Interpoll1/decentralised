@@ -495,7 +495,7 @@
               <label class="field-label">API Base URL</label>
               <div class="field-wrap">
                 <input class="field-native mono-sm" v-model="modSettings.moderationApiBaseUrl"
-                  @blur="saveModerationSettings" placeholder="https://interpoll.endless.sbs/moderation" />
+                  @blur="saveModerationSettings" placeholder="https://interpoll.endless.social/moderation" />
               </div>
             </div>
             <div class="field-group mt-8">
@@ -524,7 +524,7 @@
                 <div class="toggle-sub">No author fields included — content hash only</div>
               </div>
               <label class="toggle-switch">
-                <input type="checkbox" v-model="modSettings.moderationClickToSubmit" @change="saveModerationSettings" />
+                <input type="checkbox" v-model="modSettings.moderateHomeFeed" @change="saveModerationSettings" />
                 <span class="toggle-track"></span>
               </label>
             </div>
@@ -618,7 +618,7 @@
             </div>
 
             <div class="peer-health-list">
-              <div v-for="peer in gunPeersDetail.length ? gunPeersDetail : gunPeersList.map(u => ({ url: u, connected: false }))"
+              <div v-for="peer in gunPeersDetail.length ? gunPeersDetail : gunPeersList.map(u => ({ url: u, connected: false, latencyMs: undefined }))"
                 :key="peer.url" class="peer-health-row">
                 <div class="peer-health-left">
                   <span class="health-dot" :class="peer.connected ? 'dot-ok' : 'dot-off'"></span>
@@ -921,7 +921,7 @@
               </div>
               <div><h3>Storage Policy</h3><p>Control what gets stored locally</p></div>
             </div>
-            <div class="toggle-row" v-for="(label, key) in { alwaysStoreMyPosts: 'Always store my posts', storeUpvotedPosts: 'Store posts I upvoted', storeMyCommunities: 'Store my communities', cachePopularPosts: 'Cache popular posts (100+ upvotes)', autoDeleteOldContent: 'Auto-delete old cached content' }" :key="key">
+            <div class="toggle-row" v-for="(label, key) in { myPosts: 'Always store my posts', myUpvotes: 'Store posts I upvoted', myCommunities: 'Store my communities', popularPosts: 'Cache popular posts (100+ upvotes)', autoPruneOldContent: 'Auto-delete old cached content' }" :key="key">
               <div class="toggle-label">{{ label }}</div>
               <label class="toggle-switch">
                 <input type="checkbox" v-model="policy[key]" @change="savePolicy" />
@@ -931,7 +931,7 @@
             <div class="field-group mt-12">
               <label class="field-label">Keep recent posts</label>
               <div class="field-wrap">
-                <select class="field-native" v-model="policy.keepRecentPostCount" @change="savePolicy">
+                <select class="field-native" v-model="policy.recentPosts" @change="savePolicy">
                   <option :value="25">Last 25</option>
                   <option :value="50">Last 50</option>
                   <option :value="100">Last 100</option>
@@ -1660,73 +1660,8 @@ import {
   getEmailNotificationAddress, registerEmailNotifications, unregisterEmailNotifications,
 } from '../native/emailNotifications';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
-import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonContent,
-  IonButtons,
-  IonBackButton,
-  IonCard,
-  IonCardHeader,
-  IonCardTitle,
-  IonCardSubtitle,
-  IonCardContent,
-  IonList,
-  IonItem,
-  IonLabel,
-  IonToggle,
-  IonSelect,
-  IonSelectOption,
-  IonButton,
-  IonIcon,
-  IonBadge,
-  IonSegment,
-  IonSegmentButton,
-  IonRange,
-  IonChip,
-  IonInput,
-  IonSpinner,
-  IonText,
-  alertController,
-  toastController,
-  onIonViewWillEnter
-} from '@ionic/vue';
-import {
-  refreshOutline,
-  downloadOutline,
-  cloudUploadOutline,
-  trashOutline,
-  warningOutline,
-  personCircleOutline,
-  globeOutline,
-  swapHorizontalOutline,
-  serverOutline,
-  copyOutline,
-  eyeOutline,
-  closeCircleOutline,
-  checkmarkCircleOutline,
-  addOutline,
-  lockClosedOutline,
-  shieldCheckmarkOutline
-,
-  rocketOutline,
-  keyOutline,
-  colorPaletteOutline,
-  analyticsOutline,
-  layersOutline,
-  cloudOutline,
-  constructOutline,
-  fingerPrintOutline,
-  addCircleOutline,
-  removeCircleOutline,
-  arrowDownOutline,
-  optionsOutline,
-  informationCircleOutline,
-  chatbubbleOutline,
-  personOutline,
-  notificationsOutline} from 'ionicons/icons';
+import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons, IonIcon, IonRange, alertController, toastController, onIonViewWillEnter } from '@ionic/vue';
+import { peopleOutline, refreshOutline, downloadOutline, cloudUploadOutline, trashOutline, warningOutline, personCircleOutline, globeOutline, swapHorizontalOutline, serverOutline, copyOutline, eyeOutline, lockClosedOutline, shieldCheckmarkOutline, rocketOutline, keyOutline, colorPaletteOutline, analyticsOutline, layersOutline, cloudOutline, constructOutline, fingerPrintOutline, addCircleOutline, removeCircleOutline, arrowDownOutline, optionsOutline, informationCircleOutline, chatbubbleOutline, personOutline, notificationsOutline } from 'ionicons/icons';
 import { PinningService } from '../services/pinningService';
 import { StorageManager } from '../services/storageManager';
 import { UserService } from '../services/userService';
@@ -1744,7 +1679,7 @@ import { BootstrapInviteService, type BootstrapEndpoint } from '../services/boot
 import { useChainStore } from '../stores/chainStore';
 import { useCommunityStore } from '../stores/communityStore';
 import config from '../config';
-import { ModerationService, moderationVersion, MODERATION_API_DEFAULT_BASE_URL, type ModerationSettings, type WordCategory } from '../services/moderationService';
+import { ModerationService, MODERATION_API_DEFAULT_BASE_URL, type ModerationSettings } from '../services/moderationService';
 import { getEnabledVersions, setEnabledVersions, probeForVersions, availableVersions, type DataVersion } from '../utils/dataVersionSettings';
 import { GUN_NAMESPACE } from '../services/gunService';
 import { useFeedPreferences } from '../composables/useFeedPreferences';
@@ -1895,12 +1830,7 @@ const feedCommunities = computed(() =>
   [...communityStore.communities].sort((a, b) => a.displayName.localeCompare(b.displayName)),
 );
 
-function versionLabel(ver: string): string {
-  if (ver === currentNamespace) return '(current)';
-  const verNum = parseInt(ver.replace('v', ''), 10);
-  const curNum = parseInt(currentNamespace.replace('v', ''), 10);
-  return verNum > curNum ? '(newer)' : '(legacy)';
-}
+
 
 function initVersionToggles() {
   const enabled = getEnabledVersions();
@@ -1911,13 +1841,7 @@ function initVersionToggles() {
   versionToggles.value = toggles;
 }
 
-function onToggleVersion(ver: string, ev: CustomEvent) {
-  versionToggles.value = {
-    ...versionToggles.value,
-    [ver]: ev.detail.checked,
-  };
-  syncDataVersions();
-}
+
 
 // Called by the plain checkbox in the template: flip this version's flag.
 function toggleVersion(ver: string) {
@@ -1947,7 +1871,7 @@ async function syncDataVersions() {
   await toast.present();
 }
 
-function onFeedModeChange(ev: CustomEvent) {
+function onFeedModeChange(ev: { detail: { value: string } }) {
   const mode = ev.detail.value;
   if (mode === 'latest' || mode === 'for-you') {
     setFeedMode(mode as FeedMode);
@@ -1976,13 +1900,13 @@ function removeFeedExcludeKeyword(keyword: string) {
   removeExcludeKeyword(keyword);
 }
 
-function onFeedPostsToggle(ev: CustomEvent) {
-  const checked = Boolean(ev.detail.checked);
+function onFeedPostsToggle(ev: Event) {
+  const checked = (ev.target as HTMLInputElement).checked;
   setContentTypeVisibility(checked, feedPreferences.value.showPolls);
 }
 
-function onFeedPollsToggle(ev: CustomEvent) {
-  const checked = Boolean(ev.detail.checked);
+function onFeedPollsToggle(ev: Event) {
+  const checked = (ev.target as HTMLInputElement).checked;
   setContentTypeVisibility(feedPreferences.value.showPosts, checked);
 }
 
@@ -2038,34 +1962,16 @@ async function resetFeedPreferencesToDefaults() {
 
 // Moderation state
 const modSettings = ref<ModerationSettings>(ModerationService.getSettings());
-const newBlockedWord = ref('');
-const newAllowedWord = ref('');
-const testText = ref('');
+
+
+
 const moderationApiKeyInput = ref('');
 const moderationAuthMessage = ref('Not authenticated.');
 const moderationDefaultApiUrl = MODERATION_API_DEFAULT_BASE_URL;
 
-const wordCategories = computed(() => {
-  const list = ModerationService.getDefaultWordList();
-  const cats: { id: WordCategory; label: string; count: number }[] = [
-    { id: 'profanity', label: 'Profanity', count: 0 },
-    { id: 'slurs', label: 'Slurs & hate speech', count: 0 },
-    { id: 'sexual', label: 'Sexual content', count: 0 },
-    { id: 'threats', label: 'Threats & violence', count: 0 },
-    { id: 'spam', label: 'Spam phrases', count: 0 },
-    { id: 'drugs', label: 'Drug references', count: 0 },
-  ];
-  for (const entry of list) {
-    const cat = cats.find(c => c.id === entry.category);
-    if (cat) cat.count++;
-  }
-  return cats;
-});
 
-const testResult = computed(() => {
-  moderationVersion.value; // re-evaluate when settings change
-  return ModerationService.checkContent(testText.value);
-});
+
+
 
 function onKarmaRangeChange(ev: CustomEvent) {
   const val = ev.detail.value as number;
@@ -2090,44 +1996,15 @@ function onModerationProviderChange() {
   saveModerationSettings();
 }
 
-function toggleCategory(catId: WordCategory, ev: CustomEvent) {
-  const enabled = ev.detail.checked;
-  const disabled = [...modSettings.value.disabledCategories];
-  if (enabled) {
-    const idx = disabled.indexOf(catId);
-    if (idx !== -1) disabled.splice(idx, 1);
-  } else {
-    if (!disabled.includes(catId)) disabled.push(catId);
-  }
-  modSettings.value.disabledCategories = disabled;
-  saveModerationSettings();
-}
 
-function addCustomBlocked() {
-  const w = newBlockedWord.value.trim().toLowerCase();
-  if (!w || modSettings.value.customBlockedWords.includes(w)) return;
-  modSettings.value.customBlockedWords.push(w);
-  newBlockedWord.value = '';
-  saveModerationSettings();
-}
 
-function removeCustomBlocked(w: string) {
-  modSettings.value.customBlockedWords = modSettings.value.customBlockedWords.filter(x => x !== w);
-  saveModerationSettings();
-}
 
-function addCustomAllowed() {
-  const w = newAllowedWord.value.trim().toLowerCase();
-  if (!w || modSettings.value.customAllowedWords.includes(w)) return;
-  modSettings.value.customAllowedWords.push(w);
-  newAllowedWord.value = '';
-  saveModerationSettings();
-}
 
-function removeCustomAllowed(w: string) {
-  modSettings.value.customAllowedWords = modSettings.value.customAllowedWords.filter(x => x !== w);
-  saveModerationSettings();
-}
+
+
+
+
+
 
 async function resetModerationDefaults() {
   const defaults = ModerationService.getDefaultSettings();
@@ -2190,33 +2067,16 @@ const networkStatus = ref({
   chainValid: true
 });
 
-const connectionStatusClass = computed(() => {
-  if (networkStatus.value.wsConnected && networkStatus.value.gunConnected) return 'connected';
-  if (networkStatus.value.wsConnected || networkStatus.value.gunConnected) return 'partial';
-  return '';
-});
 
-const connectionStatusLabel = computed(() => {
-  if (networkStatus.value.wsConnected && networkStatus.value.gunConnected) {
-    const gunPeers = networkStatus.value.gunConnectedCount || networkStatus.value.gunPeerCount;
-    const latency = networkStatus.value.gunAvgLatencyMs;
-    const latencyStr = latency ? ` · ${latency}ms` : '';
-    return `Connected · ${gunPeers} DB peer${gunPeers !== 1 ? 's' : ''}${latencyStr}`;
-  }
-  if (networkStatus.value.wsConnected) return 'WS Only';
-  if (networkStatus.value.gunConnected) {
-    const gunPeers = networkStatus.value.gunConnectedCount || networkStatus.value.gunPeerCount;
-    return `DB Only · ${gunPeers} peer${gunPeers !== 1 ? 's' : ''}`;
-  }
-  return 'Disconnected';
-});
+
+
 
 const peerList = ref<Array<{ peerId: string; relayUrl: string; gunPeers: string[]; joinedAt: number }>>([]);
 const myPeerId = ref('');
 const knownServers = ref<KnownServer[]>([]);
-const bootstrapInviteInput = ref('');
+
 const generatedBootstrapInvite = ref('');
-const bootstrapImporting = ref(false);
+
 const bootstrapDiscovering = ref(false);
 
 // Gun multi-relay peers management
@@ -2304,14 +2164,14 @@ const vpsOs   = ref('Linux (bash)');
 const copied  = ref<'home' | 'vps' | 'tab' | null>(null);
 
 const HOME_CMDS: Record<string, string> = {
-  'Linux / Pi': 'curl -sSL https://interpoll.endless.sbs/install.sh | bash',
-  'macOS':      'curl -sSL https://interpoll.endless.sbs/install.sh | bash',
-  'Windows':    "irm https://interpoll.endless.sbs/install.ps1 | iex",
+  'Linux / Pi': 'curl -sSL https://interpoll.endless.social/install.sh | bash',
+  'macOS':      'curl -sSL https://interpoll.endless.social/install.sh | bash',
+  'Windows':    "irm https://interpoll.endless.social/install.ps1 | iex",
 };
 // vps.sh runs on the (Linux) server either way; the tab only reflects the shell you SSH from.
 const VPS_CMDS: Record<string, string> = {
-  'Linux (bash)': 'curl -sSL https://interpoll.endless.sbs/vps.sh | sudo bash -s yourdomain.com',
-  'macOS (zsh)':  'curl -sSL https://interpoll.endless.sbs/vps.sh | sudo bash -s yourdomain.com',
+  'Linux (bash)': 'curl -sSL https://interpoll.endless.social/vps.sh | sudo bash -s yourdomain.com',
+  'macOS (zsh)':  'curl -sSL https://interpoll.endless.social/vps.sh | sudo bash -s yourdomain.com',
 };
 const homeCmd = computed(() => HOME_CMDS[homeOs.value] ?? HOME_CMDS['Linux / Pi']);
 const vpsCmd  = computed(() => VPS_CMDS[vpsOs.value]  ?? VPS_CMDS['Linux (bash)']);
@@ -2466,13 +2326,9 @@ const fullDeviceId = computed(() => {
   return deviceId.value || '';
 });
 
-function isConfiguredServer(wsUrl: string): boolean {
-  return config.relay.websocket === wsUrl;
-}
 
-function isCurrentlyConnectedServer(wsUrl: string): boolean {
-  return networkStatus.value.wsConnected && networkStatus.value.connectedWsUrl === wsUrl;
-}
+
+
 
 function shortenUrl(url: string): string {
   try {
@@ -2483,14 +2339,7 @@ function shortenUrl(url: string): string {
   }
 }
 
-function escapeHtml(value: string): string {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+
 
 function endpointToKnownServer(
   endpoint: BootstrapEndpoint,
@@ -2527,15 +2376,7 @@ function seedRelayList(endpoint: BootstrapEndpoint): void {
   });
 }
 
-function uniqueBootstrapEndpoints(endpoints: Array<BootstrapEndpoint | undefined>): BootstrapEndpoint[] {
-  const deduped = new Map<string, BootstrapEndpoint>();
-  for (const endpoint of endpoints) {
-    if (!endpoint) continue;
-    const key = `${endpoint.websocket}|${endpoint.gun}|${endpoint.api}`;
-    if (!deduped.has(key)) deduped.set(key, endpoint);
-  }
-  return Array.from(deduped.values());
-}
+
 
 function estimateLocalPostCount(): number {
   try {
@@ -2637,136 +2478,7 @@ async function seedCandidate(
   if (options.refresh !== false) refreshNetwork();
 }
 
-async function importBootstrapInvite() {
-  bootstrapImporting.value = true;
-  try {
-    const artifact = BootstrapInviteService.parseInvite(bootstrapInviteInput.value);
-    const candidateEndpoints = uniqueBootstrapEndpoints([
-      artifact.handoff?.connectedServer,
-      artifact.endpoint,
-    ]);
-    if (candidateEndpoints.length === 0) {
-      throw new Error('Bootstrap invite does not contain any valid endpoint');
-    }
 
-    const validatedCandidates = candidateEndpoints.map((endpoint) => ({
-      endpoint,
-      validation: BootstrapInviteService.validateEndpoint(endpoint),
-    }));
-    const validCandidateEndpoints = validatedCandidates
-      .filter((entry) => entry.validation.valid)
-      .map((entry) => entry.endpoint);
-    if (validCandidateEndpoints.length === 0) {
-      const firstInvalidReason = validatedCandidates.find((entry) => !entry.validation.valid)?.validation.errors[0];
-      throw new Error(firstInvalidReason || 'Bootstrap invite endpoints are invalid');
-    }
-    const candidateProbeResults = await Promise.all(
-      validCandidateEndpoints.map(async (endpoint) => ({
-        endpoint,
-        probe: await probeCandidate(endpoint),
-      })),
-    );
-    const selectedProbeResult = candidateProbeResults.find((result) => result.probe.overall === 'online')
-      ?? candidateProbeResults.find((result) => result.probe.overall === 'degraded')
-      ?? candidateProbeResults[0];
-    const primaryEndpoint = selectedProbeResult.endpoint;
-    const probe = selectedProbeResult.probe;
-    const switchDisabled = probe.overall === 'offline';
-    const hasSignatureMetadata = Boolean(artifact.signature?.alg && artifact.signature?.sig);
-    const signatureLabel = hasSignatureMetadata ? 'present' : 'none';
-    const sourcePeerLabel = escapeHtml(artifact.handoff?.sourcePeerId || artifact.meta?.createdBy || 'unknown');
-    const status = artifact.handoff?.status;
-    const connectedServerLabel = escapeHtml(artifact.handoff?.connectedServer?.websocket || artifact.endpoint.websocket);
-    const message = [
-      `Probe: ${probe.overall}`,
-      `WS: ${probe.ws.reachable ? 'ok' : 'fail'} · Gun: ${probe.gun.reachable ? 'ok' : 'fail'} · API: ${probe.api.reachable ? 'ok' : 'fail'}`,
-      `Signature metadata: ${signatureLabel}`,
-      `From peer: ${sourcePeerLabel}`,
-      `Connected server: ${connectedServerLabel}`,
-      ...(status
-        ? [`Shared status: posts ${status.postCount} · polls ${status.pollCount} · chain ${status.blockHeight} · peers ${status.peerCount}`]
-        : []),
-      'Choose how to proceed:',
-    ].join('\n');
-
-    const alert = await alertController.create({
-      header: 'Bootstrap invite imported',
-      message,
-      buttons: [
-        { text: 'Cancel', role: 'cancel' },
-        {
-          text: 'Seed only',
-          handler: async () => {
-            try {
-              for (const endpoint of validCandidateEndpoints) {
-                await seedCandidate(endpoint, {
-                  addedBy: 'bootstrap-invite',
-                  source: 'local',
-                  signatureValid: false,
-                  refresh: false,
-                });
-              }
-              refreshNetwork();
-              const toast = await toastController.create({
-                message: `Seeded ${validCandidateEndpoints.length} endpoint(s) from invite`,
-                duration: 2000,
-                color: 'success',
-              });
-              await toast.present();
-              return true;
-            } catch (e) {
-              const toast = await toastController.create({
-                message: e instanceof Error ? e.message : 'Seeding failed',
-                duration: 2200,
-                color: 'danger',
-              });
-              await toast.present();
-              return false;
-            }
-          },
-        },
-        ...(!switchDisabled
-          ? [{
-              text: 'Seed + Switch',
-              handler: async () => {
-                try {
-                  for (const endpoint of validCandidateEndpoints) {
-                    await seedCandidate(endpoint, {
-                      addedBy: 'bootstrap-invite',
-                      source: 'local',
-                      signatureValid: false,
-                      refresh: false,
-                    });
-                  }
-                  await applyRelayCandidate(primaryEndpoint, false);
-                } catch (e) {
-                  const toast = await toastController.create({
-                    message: e instanceof Error ? e.message : 'Switch failed',
-                    duration: 2200,
-                    color: 'danger',
-                  });
-                  await toast.present();
-                  return false;
-                }
-                return true;
-              },
-            }]
-          : []),
-      ],
-    });
-    await alert.present();
-    await alert.onDidDismiss();
-  } catch (error) {
-    const toast = await toastController.create({
-      message: error instanceof Error ? error.message : 'Invite import failed',
-      duration: 2500,
-      color: 'danger',
-    });
-    await toast.present();
-  } finally {
-    bootstrapImporting.value = false;
-  }
-}
 
 async function discoverBootstrapFromGun() {
   bootstrapDiscovering.value = true;
@@ -2935,73 +2647,7 @@ async function resetRelayConfig() {
   refreshNetwork();
 }
 
-async function probeAndSwitchToServer(server: KnownServer) {
-  const endpoint: BootstrapEndpoint = {
-    websocket: server.websocket,
-    gun: server.gun,
-    api: server.api,
-    label: shortenUrl(server.websocket),
-  };
-  let probe: Awaited<ReturnType<typeof probeCandidate>>;
-  try {
-    probe = await probeCandidate(endpoint);
-  } catch (error) {
-    const toast = await toastController.create({
-      message: error instanceof Error ? error.message : 'Probe failed',
-      duration: 2200,
-      color: 'danger',
-    });
-    await toast.present();
-    return;
-  }
 
-  if (probe.overall === 'offline') {
-    const toast = await toastController.create({
-      message: 'Candidate endpoints are offline. Switch blocked.',
-      duration: 2400,
-      color: 'danger',
-    });
-    await toast.present();
-    return;
-  }
-
-  const alert = await alertController.create({
-    header: `Switch to ${escapeHtml(shortenUrl(server.websocket))}?`,
-    message: [
-      `Probe: ${probe.overall}`,
-      `WS: ${probe.ws.reachable ? 'ok' : 'fail'} · Gun: ${probe.gun.reachable ? 'ok' : 'fail'} · API: ${probe.api.reachable ? 'ok' : 'fail'}`,
-      'You must confirm before switching.',
-    ].join('\n'),
-    buttons: [
-      { text: 'Cancel', role: 'cancel' },
-      {
-        text: 'Switch',
-        handler: async () => {
-          try {
-            const applied = await applyRelayCandidate(endpoint, false);
-            if (!applied) return false;
-            const toast = await toastController.create({
-              message: `Switching to ${shortenUrl(server.websocket)}...`,
-              duration: 2000,
-              color: 'success',
-            });
-            await toast.present();
-          } catch (e) {
-            const toast = await toastController.create({
-              message: e instanceof Error ? e.message : 'Switch failed',
-              duration: 2200,
-              color: 'danger',
-            });
-            await toast.present();
-            return false;
-          }
-          return true;
-        },
-      },
-    ],
-  });
-  await alert.present();
-}
 
 function formatPeerTime(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -3012,14 +2658,7 @@ function formatPeerTime(timestamp: number): string {
   return `${hours}h ago`;
 }
 
-function formatServerTtl(server: KnownServer): string {
-  if (typeof server.expiresAt !== 'number') return 'TTL n/a';
-  const expiresAt = server.expiresAt;
-  const msLeft = expiresAt - Date.now();
-  if (msLeft <= 0) return 'expired';
-  const minutesLeft = Math.ceil(msLeft / 60_000);
-  return `TTL ${minutesLeft}m`;
-}
+
 
 async function revealPrivateKey() {
   const keyPair = await KeyService.getKeyPair();
@@ -3133,19 +2772,7 @@ const savePolicy = async () => {
   await toast.present();
 };
 
-const toggleDarkMode = () => {
-  // isDarkMode.value is already updated by the v-model before this fires,
-  // so true = user just switched TO dark, false = user just switched TO light.
-  if (isDarkMode.value) {
-    document.documentElement.classList.add('dark');
-    document.body.classList.add('dark');
-    localStorage.setItem('theme', 'dark');
-  } else {
-    document.documentElement.classList.remove('dark');
-    document.body.classList.remove('dark');
-    localStorage.setItem('theme', 'light');
-  }
-};
+
 
 const exportData = async () => {
   try {

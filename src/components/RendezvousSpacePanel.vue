@@ -128,7 +128,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { toastController } from '@ionic/vue';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
-import { RENDEZVOUS_SECRET, EPOCH_MS, currentEpoch, rendezvousSoul } from '../utils/rendezvous';
+import { EPOCH_MS, currentEpoch } from '../utils/rendezvous';
 
 // ── props / emits ─────────────────────────────────────────────────────────
 defineProps<{ communityName?: string }>();

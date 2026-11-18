@@ -107,8 +107,8 @@ module.exports = {
       env: {
         PORT: 8080,
         NODE_ENV: 'production',
-        DOMAIN: 'https://endless.sbs',
-        FRONTEND_ORIGIN: 'https://endless.sbs',
+        DOMAIN: 'https://endless.social',
+        FRONTEND_ORIGIN: 'https://endless.social',
         MYSQL_HOST: process.env.MYSQL_HOST || '',
         MYSQL_USER: process.env.MYSQL_USER || '',
         MYSQL_PASSWORD: process.env.MYSQL_PASSWORD || '',
@@ -132,11 +132,11 @@ mkdir -p /var/log/pm2
 echo ""
 echo "▶ Writing Nginx config..."
 
-# Gun relay — interpoll2.endless.sbs (or keep using interpoll2.onrender.com for now)
+# Gun relay — interpoll2.endless.social (or keep using interpoll2.onrender.com for now)
 cat > /etc/nginx/sites-available/gun-relay << 'EOF'
 server {
     listen 80;
-    server_name interpoll2.endless.sbs;
+    server_name interpoll2.endless.social;
 
     # WebSocket support for Gun
     location /gun {
@@ -160,11 +160,11 @@ server {
 }
 EOF
 
-# Relay server — interpoll.endless.sbs
+# Relay server — interpoll.endless.social
 cat > /etc/nginx/sites-available/relay-server << 'EOF'
 server {
     listen 80;
-    server_name interpoll.endless.sbs;
+    server_name interpoll.endless.social;
 
     # WebSocket support
     location /ws {
@@ -214,10 +214,10 @@ echo "   cd /var/www/interpoll && pm2 start ecosystem.config.cjs"
 echo "   pm2 save && pm2 startup"
 echo ""
 echo "5. Add DNS A records pointing to this VPS IP:"
-echo "   interpoll.endless.sbs  → $(curl -s ifconfig.me)"
-echo "   interpoll2.endless.sbs → $(curl -s ifconfig.me)"
+echo "   interpoll.endless.social  → $(curl -s ifconfig.me)"
+echo "   interpoll2.endless.social → $(curl -s ifconfig.me)"
 echo ""
 echo "6. Get SSL certs:"
 echo "   apt install -y certbot python3-certbot-nginx"
-echo "   certbot --nginx -d interpoll.endless.sbs -d interpoll2.endless.sbs"
+echo "   certbot --nginx -d interpoll.endless.social -d interpoll2.endless.social"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

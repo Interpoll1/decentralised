@@ -217,11 +217,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue';
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonButtons, IonBackButton, IonSpinner, toastController,
-} from '@ionic/vue';
+import { ref, computed, onMounted } from 'vue';
+import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons, IonBackButton, IonSpinner } from '@ionic/vue';
 import { useRouter, useRoute } from 'vue-router';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
@@ -229,7 +226,7 @@ import { replaceAddressBar } from '../utils/privateRoute';
 import { GunService } from '../services/gunService';
 import { CommunityService } from '../services/communityService';
 import { useQrScan } from '../composables/useQrScan';
-import { currentEpoch, EPOCH_MS } from '../utils/rendezvous';
+import { currentEpoch } from '../utils/rendezvous';
 
 const router = useRouter();
 const route  = useRoute();
@@ -401,7 +398,7 @@ async function joinViaRendezvous() {
       // Gun lookup with 6-second timeout
       space = await new Promise<any>((resolve) => {
         const timeout = setTimeout(() => resolve(null), 6000);
-        GunService.gun
+        GunService.getGun()
           ?.get(`interpoll-rendezvous:${soul}`)
           .get('community')
           .once((data: any) => {
@@ -423,10 +420,7 @@ async function joinViaRendezvous() {
     foundSpace.value = space;
 
     // Join by community ID extracted from Gun data
-    await CommunityService.joinCommunity(space.id, {
-      rendezvousSeed: seedPhrase.value,
-      soul:           derivedSoul.value,
-    });
+    await CommunityService.joinCommunity(space.id, { memberCount: Number(space.memberCount) || 0 });
 
     joined.value = true;
     setTimeout(() => router.replace(`/community/${space.id}`), 1200);

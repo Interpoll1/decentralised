@@ -38,7 +38,7 @@
         <label class="toggle-row">
           <div>
             <strong>Private relay</strong>
-            <p class="sub">Your VPS (interpoll2.endless.sbs) — fastest, most trusted</p>
+            <p class="sub">Your VPS (interpoll2.endless.social) — fastest, most trusted</p>
           </div>
           <input type="checkbox" v-model="prefs.usePrivate" @change="savePrefs" />
         </label>

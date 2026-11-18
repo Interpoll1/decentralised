@@ -24,7 +24,7 @@
 import { GunService } from './gunService';
 import { KeyService } from './keyService';
 import { CryptoService } from './cryptoService';
-import { BoundedMap, BoundedSet } from '../utils/boundedMap';
+import { BoundedMap } from '../utils/boundedMap';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -85,7 +85,7 @@ const BUILTIN_ISSUERS: Omit<TrustIssuer, 'addedAt'>[] = [
   {
     domain: 'endless.sbs',
     contact: 'admin@endless.sbs',
-    endpoint: 'https://interpoll.endless.sbs/trust',
+    endpoint: 'https://interpoll.endless.social/trust',
     publicKey: '',
   },
 ];
@@ -518,24 +518,29 @@ export class TrustService {
    */
   static async getMyTrustLevel(): Promise<TrustLevel> {
     const pubkey = await KeyService.getPublicKeyHex();
-    if (this.certCache.has(pubkey)) {
-      return this.certCache.get(pubkey) ? 'verified' : 'none';
-    }
+    const issuers = await this.getIssuers();
+    const valid = (cert: TrustCertificate) => cert.userPubkey === pubkey
+      && issuers.some(issuer => issuer.domain === cert.issuerDomain && this.verifyCertificate(cert, issuer));
+    const cached = this.certCache.get(pubkey);
+    if (cached && valid(cached)) return 'verified';
 
     const gun = GunService.getGun();
-    let found: TrustLevel = 'none';
+    const found: { certificate: TrustCertificate | null } = { certificate: null };
 
     await new Promise<void>((resolve) => {
       gun.get(GUN_USERNAMES_ROOT).map().once((record: any) => {
         if (record && record.pubkey === pubkey && record.level === 'verified' && record.certificate) {
-          found = 'verified';
+          try {
+            const cert = typeof record.certificate === 'string' ? JSON.parse(record.certificate) : record.certificate;
+            if (cert && valid(cert)) found.certificate = cert;
+          } catch { /* malformed or untrusted certificate */ }
         }
       });
       setTimeout(resolve, 2000);
     });
 
-    this.certCache.set(pubkey, found === 'verified' ? ({} as TrustCertificate) : null);
-    return found;
+    this.certCache.set(pubkey, found.certificate);
+    return found.certificate ? 'verified' : 'none';
   }
 
   /**

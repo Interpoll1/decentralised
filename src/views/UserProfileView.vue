@@ -34,7 +34,7 @@
           v-if="!isOwnProfile"
           class="chat-button"
           @click="startChat"
-          :disabled="!chatPublicKey"
+          :disabled="!ownUserId || !userProfile?.publicKey"
         >
           <ion-icon slot="start" :icon="chatbubbleOutline"></ion-icon>
           Message
@@ -123,10 +123,10 @@ import {
 import { personCircleOutline, chatbubbleOutline } from 'ionicons/icons';
 import PostCard from '../components/PostCard.vue';
 import CommentCard from '../components/CommentCard.vue';
-import { useChat } from '../composables/useChat';
+import '../composables/useChat';
 import { UserService } from '../services/userService';
 import { TrustService } from '../services/trustService';
-import config from '@/config';
+import '@/config';
 import { chatPath } from '../utils/privateRoute';
 
 const router = useRouter();
@@ -138,13 +138,13 @@ const route = useRoute();
 const routeUserId = (route.params.userId as string) || '';
 const routeUsername = (route.params.username as string) || '';
 const userId = ref(routeUserId);
-const currentUserId = ref('current-user-id'); // chat composable identity (unchanged)
+ // chat composable identity (unchanged)
 const ownUserId = ref('');
 
-const WS_URL = config.relay.websocket;
+
 
 // Chat composable
-const { publicKey: chatPublicKey } = useChat(WS_URL, currentUserId.value);
+
 
 // User profile data
 const userProfile = ref<any>(null);

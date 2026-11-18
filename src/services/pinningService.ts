@@ -42,7 +42,7 @@ export class PinningService {
   }
 
   // Check if should pin this content
-  static async shouldPin(contentType: 'post' | 'image', contentId: string, metadata: any): Promise<boolean> {
+  static async shouldPin(contentType: 'post' | 'image', _contentId: string, metadata: any): Promise<boolean> {
     const policy = await this.getPolicy();
     
     // Always pin user's own content
