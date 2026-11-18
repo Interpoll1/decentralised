@@ -44,6 +44,8 @@ jobs:
           java-version: '17'
           cache: gradle
       - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
       - run: npm ci
       - run: npm run cap:sync
       - run: npm run verify:build
