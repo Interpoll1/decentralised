@@ -436,7 +436,7 @@ select.field-native option { background: #242424; color: #fff; }
   border-radius: 14px;
   border: none;
   background: var(--app-accent);
-  color: #111214;
+  color: var(--app-on-accent);
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.01em;

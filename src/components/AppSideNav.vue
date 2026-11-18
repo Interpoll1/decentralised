@@ -258,7 +258,7 @@ function selectCat(id: string) {
   display: flex; align-items: center; justify-content: center;
   background: var(--app-accent);
   border-radius: 8px;
-  color: #111214;
+  color: var(--app-on-accent);
   flex-shrink: 0;
 }
 .asn-brand-name {
@@ -300,7 +300,7 @@ function selectCat(id: string) {
 .asn-badge {
   margin-left: auto;
   background: var(--app-accent);
-  color: #111214;
+  color: var(--app-on-accent);
   font-size: 10px; font-weight: 700;
   padding: 1px 6px;
   border-radius: 999px;

@@ -211,7 +211,7 @@ watch(() => props.modelValue, async (open) => {
   background: var(--app-accent);
   box-shadow: 0 4px 12px rgba(230, 230, 230,0.35);
   display: flex; align-items: center; justify-content: center;
-  color: #111214;
+  color: var(--app-on-accent);
 }
 .cpm-title-icon svg { width: 18px; height: 18px; }
 

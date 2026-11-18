@@ -151,7 +151,7 @@ const menuItems = computed(() => {
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Grand+Hotel&display=swap');
+
 /* Desktop only — phones keep the Ionic header and bottom nav. */
 .atn { display: none; }
 
@@ -184,7 +184,7 @@ const menuItems = computed(() => {
 .atn-tab.active { color: var(--app-accent); background: rgba(var(--app-accent-rgb), 0.1); }
 .atn-badge {
   min-width: 17px; height: 17px; padding: 0 5px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center;
-  background: var(--app-accent); color: #04120a; font-size: 10.5px; font-weight: 800;
+  background: var(--app-accent); color: var(--app-on-accent); font-size: 10.5px; font-weight: 800;
 }
 
 .atn-search {
@@ -201,7 +201,7 @@ const menuItems = computed(() => {
 .atn-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 .atn-publish {
   display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border: none; border-radius: 9px; cursor: pointer;
-  background: var(--app-accent); color: #04120a; font: inherit; font-size: 13.5px; font-weight: 700; transition: filter 120ms, transform 120ms;
+  background: var(--app-accent); color: var(--app-on-accent); font: inherit; font-size: 13.5px; font-weight: 700; transition: filter 120ms, transform 120ms;
 }
 .atn-publish svg { width: 15px; height: 15px; }
 .atn-publish:hover { filter: brightness(1.08); }

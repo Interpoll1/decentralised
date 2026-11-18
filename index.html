@@ -36,7 +36,7 @@
 
     <!-- PWA / mobile chrome. Keep theme-color in sync with the manifest
          theme_color in vite.config.ts. -->
-    <meta name="theme-color" content="#07110b" />
+    <meta name="theme-color" content="#e7e9ec" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="InterPoll" />
@@ -65,14 +65,14 @@
       {"@context":"https://schema.org","@type":"WebApplication","name":"InterPoll","url":"https://endless.social/","applicationCategory":"SocialNetworkingApplication","operatingSystem":"Any","description":"Decentralized social and polling app for communities, posts, chat, and verifiable voting.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}
     </script>
     <script>
-      // Apply dark mode class ASAP to prevent flash of light theme.
-      // Only target <html> here since <body> doesn't exist yet in <head>.
+      // Match the app preference before first paint. Legacy forced-dark values are migrated by the app.
       (function() {
-        var storedTheme = localStorage.getItem('theme');
-        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        if (storedTheme === 'dark' || (!storedTheme && prefersDark)) {
-          document.documentElement.classList.add('dark');
-        }
+        var theme = 'light';
+        try { if (localStorage.getItem('interpoll_theme_preference_v1') === 'dark') theme = 'dark'; } catch (_) {}
+        document.documentElement.classList.toggle('dark', theme === 'dark');
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', theme === 'dark' ? '#232a31' : '#e7e9ec');
       })();
     </script>
   </head>
@@ -82,13 +82,13 @@
          page is blank. Inline-styled because no CSS has loaded yet. -->
     <div id="app">
       <noscript><h1>InterPoll</h1><p>Decentralized polls and discussions with cryptographically signed, verifiable votes. Enable JavaScript to use the app.</p></noscript>
-      <div id="boot-splash" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#1a1a1a;color:#d0d0d0;font:15px system-ui,-apple-system,sans-serif;text-align:center;padding:16px">
+      <div id="boot-splash" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#232a31;color:#edf0f2;font:15px system-ui,-apple-system,sans-serif;text-align:center;padding:16px">
         <style>
-          html:not(.dark) #boot-splash{background:#f8f8f8!important;color:#4f4f4f!important}
-          #boot-splash .bs-logo{font:400 56px/1 "Grand Hotel",cursive,system-ui;background:linear-gradient(160deg,#fff,#ff7a70);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
-          html:not(.dark) #boot-splash .bs-logo{background:linear-gradient(160deg,#ff3a2c,#ff3729);-webkit-background-clip:text;background-clip:text}
-          #boot-splash .bs-net line{stroke:#ff6055;stroke-opacity:.25;stroke-width:1}
-          #boot-splash .bs-net circle{fill:#ff7a70;animation:bs-pulse 2.4s ease-in-out infinite}
+          html:not(.dark) #boot-splash{background:#e7e9ec!important;color:#232a31!important}
+          #boot-splash .bs-logo{font:400 56px/1 "Grand Hotel",cursive,system-ui;color:#edf0f2}
+          html:not(.dark) #boot-splash .bs-logo{color:#232a31}
+          #boot-splash .bs-net line{stroke:#17664b;stroke-opacity:.25;stroke-width:1}
+          #boot-splash .bs-net circle{fill:#17664b;animation:bs-pulse 2.4s ease-in-out infinite}
           #boot-splash .bs-net circle:nth-of-type(2){animation-delay:.3s}#boot-splash .bs-net circle:nth-of-type(3){animation-delay:.6s}
           #boot-splash .bs-net circle:nth-of-type(4){animation-delay:.9s}#boot-splash .bs-net circle:nth-of-type(5){animation-delay:1.2s}
           #boot-splash .bs-net circle:nth-of-type(6){animation-delay:1.5s}

@@ -401,7 +401,7 @@ ion-content { --background: transparent; }
 .space-matches__title { margin: 0 0 2px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--app-text-muted, #9aa39e); }
 .space-match { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; text-align: left; cursor: pointer; border-radius: 12px; font: inherit; color: inherit; background: rgba(255,255,255,0.03); border: 1px solid #2b332f; }
 .space-match:hover { border-color: rgba(61,255,122,.45); }
-.space-match__avatar { width: 38px; height: 38px; flex-shrink: 0; display: grid; place-items: center; border-radius: 10px; font-weight: 700; color: #3dff7a; background: #0b1a12; border: 1px solid #1d6b3a; }
+.space-match__avatar { width: 38px; height: 38px; flex-shrink: 0; display: grid; place-items: center; border-radius: 10px; font-weight: 700; color: var(--app-accent); background: #0b1a12; border: 1px solid #1d6b3a; }
 .space-match__info { display: flex; flex-direction: column; min-width: 0; }
 .space-match__info b { font-size: 14px; }
 .space-match__info small { font-size: 12px; color: var(--app-text-muted, #9aa39e); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -460,7 +460,7 @@ ion-content { --background: transparent; }
 .page-btn.active {
   background: var(--app-accent);
   border-color: transparent;
-  color: #111214;
+  color: var(--app-on-accent);
   box-shadow: 0 4px 14px rgba(230, 230, 230,0.35);
 }
 .page-btn.ellipsis {

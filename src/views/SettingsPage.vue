@@ -128,19 +128,12 @@
             <div class="toggle-row">
               <div>
                 <div class="toggle-label">Dark mode</div>
-                <div class="toggle-sub">Currently the only available theme</div>
+                <div class="toggle-sub">{{ isDarkMode ? 'Dark graphite' : 'Light graphite' }}</div>
               </div>
-              <label class="toggle-switch toggle-switch--locked" title="Dark mode is always on">
-                <input type="checkbox" checked disabled />
+              <label class="toggle-switch theme-toggle">
+                <input type="checkbox" role="switch" aria-label="Dark mode" :checked="isDarkMode" @change="onThemeChange" />
                 <span class="toggle-track"></span>
               </label>
-            </div>
-            <div class="theme-coming-soon">
-              <svg viewBox="0 0 16 16" fill="none" width="13" height="13" aria-hidden="true">
-                <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4"/>
-                <path d="M8 5v3.5m0 2.5h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              </svg>
-              Light mode is coming in a future update
             </div>
           </div>
 
@@ -1010,6 +1003,10 @@
 
 
 <style scoped>
+.toggle-switch.theme-toggle { width: 48px; height: 44px; }
+.toggle-switch.theme-toggle input { display: block; position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; z-index: 1; cursor: pointer; }
+.toggle-switch.theme-toggle .toggle-track { top: 10px; bottom: 10px; }
+.toggle-switch.theme-toggle input:focus-visible + .toggle-track { outline: 2px solid var(--app-accent); outline-offset: 3px; }
 /* ── Global resets ──────────────────────────── */
 ion-header::after { display: none !important; }
 ion-toolbar { --border-width: 0 !important; }
@@ -1050,7 +1047,7 @@ ion-content {
   scrollbar-width: none;
   gap: 4px;
   padding: 10px 14px;
-  background: rgba(26, 26, 26, 0.55);
+  background: var(--app-bg-base);
   border-bottom: 1px solid rgba(230, 230, 230, 0.12);
   justify-content: center;
 }
@@ -1083,8 +1080,8 @@ ion-content {
   background: rgba(255,255,255,0.06);
 }
 .settings-tab.active {
-  color: #f0f0f0;
-  background: rgba(230, 230, 230,0.18);
+  color: var(--app-on-accent);
+  background: var(--app-accent);
   border-color: rgba(230, 230, 230,0.35);
 }
 
@@ -1100,8 +1097,8 @@ ion-content {
 /* ── Cards ──────────────────────────────────── */
 .settings-card {
   border-radius: 18px;
-  background: rgba(22, 22, 22, 0.55);
-  border: 1px solid rgba(230, 230, 230, 0.15);
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   padding: 18px 20px;
   position: relative;
   overflow: hidden;
@@ -1110,7 +1107,7 @@ ion-content {
 }
 .settings-card.danger-zone {
   border-color: rgba(239,68,68,0.18);
-  background: rgba(30, 10, 20, 0.55);
+  background: var(--app-surface);
 }
 .settings-card.decentralised-feature {
   border-color: rgba(230, 230, 230,0.30);
@@ -1227,12 +1224,12 @@ ion-content {
 .toggle-switch input { opacity: 0; width: 0; height: 0; }
 .toggle-track {
   position: absolute; inset: 0; border-radius: 999px;
-  background: rgba(255,255,255,0.12);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: var(--app-border-strong);
+  border: 1px solid var(--app-border-strong);
   cursor: pointer;
   transition: background 200ms ease;
 }
-.toggle-switch input:checked + .toggle-track { background: #e6e6e6; border-color: #e6e6e6; }
+.toggle-switch input:checked + .toggle-track { background: var(--app-accent); border-color: var(--app-accent); }
 .toggle-track::after {
   content: ''; position: absolute; top: 3px; left: 3px;
   width: 18px; height: 18px; border-radius: 50%;
@@ -1303,14 +1300,14 @@ select.field-native option { background: #242424; color: #fff; }
 }
 .block-btn.accent {
   background: var(--app-accent);
-  color: #111214; box-shadow: 0 6px 20px rgba(230, 230, 230,0.35);
+  color: var(--app-on-accent); box-shadow: 0 6px 20px rgba(230, 230, 230,0.35);
 }
 .block-btn.outline {
   background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.1);
+  border: 1px solid var(--app-border-strong);
   color: var(--app-text-muted);
 }
-.block-btn.danger { color: #ef4444; border-color: rgba(239,68,68,0.25); }
+.block-btn.danger { color: var(--app-danger); border-color: rgba(239,68,68,0.25); }
 .block-btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
 .block-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -1323,11 +1320,11 @@ select.field-native option { background: #242424; color: #fff; }
 }
 .pill-btn.accent {
   background: var(--app-accent);
-  color: #111214; box-shadow: 0 4px 14px rgba(230, 230, 230,0.35);
+  color: var(--app-on-accent); box-shadow: 0 4px 14px rgba(230, 230, 230,0.35);
 }
 .pill-btn.outline {
   background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.1);
+  border: 1px solid var(--app-border-strong);
   color: var(--app-text-muted);
 }
 .pill-btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
@@ -1341,8 +1338,8 @@ select.field-native option { background: #242424; color: #fff; }
   font-size: 16px; transition: background 160ms ease, color 160ms ease;
 }
 .icon-btn:hover { background: rgba(255,255,255,0.1); color: var(--app-text); }
-.icon-btn.warning { color: #fbbf24; }
-.icon-btn.danger { color: #ef4444; background: rgba(239,68,68,0.1); }
+.icon-btn.warning { color: var(--app-warning); }
+.icon-btn.danger { color: var(--app-danger); background: rgba(239,68,68,0.1); }
 
 .button-row {
   display: flex; flex-wrap: wrap; gap: 8px;
@@ -1368,7 +1365,7 @@ select.field-native option { background: #242424; color: #fff; }
 .seg-pill:hover { color: var(--app-text); }
 .seg-pill.active {
   background: var(--app-accent);
-  color: #111214; box-shadow: 0 2px 10px rgba(230, 230, 230,0.35);
+  color: var(--app-on-accent); box-shadow: 0 2px 10px rgba(230, 230, 230,0.35);
 }
 
 /* ── Keyword chips ──────────────────────────── */
@@ -1378,8 +1375,8 @@ select.field-native option { background: #242424; color: #fff; }
   font-size: 12.5px; font-weight: 600; cursor: pointer;
   transition: opacity 160ms;
 }
-.kw-chip.include { background: rgba(52,211,153,0.12); color: #34d399; border: 1px solid rgba(52,211,153,0.25); }
-.kw-chip.exclude { background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.25); }
+.kw-chip.include { background: rgba(52,211,153,0.12); color: var(--app-success); border: 1px solid rgba(52,211,153,0.25); }
+.kw-chip.exclude { background: rgba(251,191,36,0.12); color: var(--app-warning); border: 1px solid rgba(251,191,36,0.25); }
 .kw-chip:hover { opacity: 0.7; }
 
 /* ── Karma badge ────────────────────────────── */
@@ -1387,7 +1384,7 @@ select.field-native option { background: #242424; color: #fff; }
   padding: 4px 12px; border-radius: 999px;
   background: linear-gradient(135deg, rgba(230, 230, 230,0.15), rgba(230, 230, 230,0.15));
   border: 1px solid rgba(230, 230, 230,0.25);
-  color: #e6e6e6; font-weight: 700; font-size: 13px;
+  color: var(--app-accent); font-weight: 700; font-size: 13px;
 }
 
 /* ── Key block ──────────────────────────────── */
@@ -1406,7 +1403,7 @@ select.field-native option { background: #242424; color: #fff; }
   word-break: break-all; color: var(--app-text);
 }
 .key-val.muted { color: var(--app-text-subtle); }
-.key-val.danger { color: #ef4444; }
+.key-val.danger { color: var(--app-danger); }
 
 /* ── Alert boxes ────────────────────────────── */
 .alert-box {
@@ -1418,14 +1415,14 @@ select.field-native option { background: #242424; color: #fff; }
 .alert-box.info {
   background: rgba(230, 230, 230,0.08);
   border: 1px solid rgba(230, 230, 230,0.2);
-  color: #e6e6e6;
+  color: var(--app-accent);
 }
 .alert-box.warning {
   background: rgba(251,191,36,0.08);
   border: 1px solid rgba(251,191,36,0.2);
-  color: #fbbf24;
+  color: var(--app-warning);
 }
-.link { color: #e6e6e6; text-decoration: none; }
+.link { color: var(--app-accent); text-decoration: none; }
 .link:hover { text-decoration: underline; }
 
 /* ── Status pills / chips ───────────────────── */
@@ -1435,15 +1432,15 @@ select.field-native option { background: #242424; color: #fff; }
   text-transform: uppercase; letter-spacing: 0.06em;
   align-self: flex-start; flex-shrink: 0;
 }
-.pill-ok { background: rgba(52,211,153,0.12); color: #34d399; border: 1px solid rgba(52,211,153,0.25); }
+.pill-ok { background: rgba(52,211,153,0.12); color: var(--app-success); border: 1px solid rgba(52,211,153,0.25); }
 .pill-off { background: rgba(255,255,255,0.06); color: var(--app-text-muted); border: 1px solid rgba(255,255,255,0.09); }
-.pill-warn { background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.2); }
+.pill-warn { background: rgba(251,191,36,0.12); color: var(--app-warning); border: 1px solid rgba(251,191,36,0.2); }
 
 .count-badge {
   padding: 4px 10px; border-radius: 999px;
   background: rgba(230, 230, 230,0.12);
   border: 1px solid rgba(230, 230, 230,0.2);
-  color: #e6e6e6; font-size: 12px; font-weight: 700;
+  color: var(--app-accent); font-size: 12px; font-weight: 700;
   align-self: flex-start; flex-shrink: 0;
 }
 
@@ -1451,15 +1448,15 @@ select.field-native option { background: #242424; color: #fff; }
   padding: 3px 8px; border-radius: 999px;
   font-size: 11px; font-weight: 700;
 }
-.chip-ok { background: rgba(52,211,153,0.12); color: #34d399; }
+.chip-ok { background: rgba(52,211,153,0.12); color: var(--app-success); }
 .chip-off { background: rgba(255,255,255,0.06); color: var(--app-text-muted); }
 
 .status-row {
   display: flex; align-items: flex-start; gap: 8px;
   padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.5;
 }
-.row-ok { background: rgba(52,211,153,0.08); color: #34d399; border: 1px solid rgba(52,211,153,0.2); }
-.row-warn { background: rgba(251,191,36,0.08); color: #fbbf24; border: 1px solid rgba(251,191,36,0.2); }
+.row-ok { background: rgba(52,211,153,0.08); color: var(--app-success); border: 1px solid rgba(52,211,153,0.2); }
+.row-warn { background: rgba(251,191,36,0.08); color: var(--app-warning); border: 1px solid rgba(251,191,36,0.2); }
 .status-row ion-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
 code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0.07); padding: 1px 5px; border-radius: 4px; }
 
@@ -1494,8 +1491,8 @@ code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0
 .bmetric { text-align: center; }
 .bmetric span { display: block; font-size: 20px; font-weight: 800; letter-spacing: -0.03em; color: var(--app-text); }
 .bmetric small { font-size: 10.5px; color: var(--app-text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
-.bmetric.ok span { color: #34d399; }
-.bmetric.danger span { color: #ef4444; }
+.bmetric.ok span { color: var(--app-success); }
+.bmetric.danger span { color: var(--app-danger); }
 
 /* ── Peer health list ───────────────────────── */
 .peer-health-list { display: flex; flex-direction: column; gap: 8px; }
@@ -1531,7 +1528,7 @@ code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0
   padding: 4px 10px; border-radius: 999px;
   background: linear-gradient(135deg, rgba(230, 230, 230,0.2), rgba(230, 230, 230,0.2));
   border: 1px solid rgba(230, 230, 230,0.3);
-  color: #e6e6e6; font-size: 9.5px; font-weight: 800;
+  color: var(--app-accent); font-size: 9.5px; font-weight: 800;
   letter-spacing: 0.1em; text-transform: uppercase;
   margin-bottom: 14px;
 }
@@ -1549,15 +1546,15 @@ code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0
   padding: 3px 8px; border-radius: 999px;
   font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
 }
-.relay-difficulty.easy { background: rgba(52,211,153,0.12); color: #34d399; border: 1px solid rgba(52,211,153,0.25); }
-.relay-difficulty.medium { background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.25); }
+.relay-difficulty.easy { background: rgba(52,211,153,0.12); color: var(--app-success); border: 1px solid rgba(52,211,153,0.25); }
+.relay-difficulty.medium { background: rgba(251,191,36,0.12); color: var(--app-warning); border: 1px solid rgba(251,191,36,0.25); }
 .relay-difficulty.advanced { background: rgba(239,68,68,0.12); color: #f87171; border: 1px solid rgba(239,68,68,0.25); }
 .relay-option-name { font-size: 14px; font-weight: 700; color: var(--app-text); }
 .relay-option-desc { font-size: 13px; color: var(--app-text-muted); line-height: 1.55; margin: 0 0 12px; }
 .code-block {
   font-family: monospace; font-size: 12px;
-  background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
-  padding: 10px 14px; border-radius: 10px; color: #e6e6e6;
+  background: var(--app-item-surface); border: 1px solid var(--app-border-strong);
+  padding: 10px 14px; border-radius: 10px; color: var(--app-accent);
   word-break: break-all;
 }
 
@@ -1567,29 +1564,29 @@ code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0
 }
 .os-tab {
   padding: 4px 12px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
-  border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03);
+  border: 1px solid var(--app-border-strong); background: rgba(255,255,255,0.03);
   color: rgba(255,255,255,0.45); cursor: pointer; transition: all 130ms;
   font-family: inherit;
 }
 .os-tab:hover { color: var(--app-text); background: rgba(255,255,255,0.07); }
-.os-tab.active { background: rgba(230, 230, 230,0.15); border-color: rgba(230, 230, 230,0.4); color: #e6e6e6; }
+.os-tab.active { background: rgba(230, 230, 230,0.15); border-color: rgba(230, 230, 230,0.4); color: var(--app-accent); }
 
 .code-block-copy {
   display: flex; align-items: center; gap: 8px;
-  background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
+  background: var(--app-item-surface); border: 1px solid var(--app-border-strong);
   padding: 10px 14px; border-radius: 10px;
 }
 .code-text {
   flex: 1; font-family: monospace; font-size: 12px;
-  color: #e6e6e6; word-break: break-all;
+  color: var(--app-accent); word-break: break-all;
 }
 .copy-btn {
   flex-shrink: 0; background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.1); border-radius: 6px;
-  color: rgba(255,255,255,0.55); font-size: 14px; cursor: pointer;
+  border: 1px solid var(--app-border-strong); border-radius: 6px;
+  color: var(--app-text-muted); font-size: 14px; cursor: pointer;
   padding: 3px 8px; transition: all 120ms; font-family: inherit;
 }
-.copy-btn:hover { background: rgba(230, 230, 230,0.15); color: #e6e6e6; }
+.copy-btn:hover { background: rgba(230, 230, 230,0.15); color: var(--app-accent); }
 
 /* ── Range rows ─────────────────────────────── */
 .range-row { padding: 6px 0; }
@@ -1608,12 +1605,12 @@ code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0
 .community-id-text { font-size: 11.5px; color: var(--app-text-subtle); margin-top: 2px; }
 .pref-btns { display: flex; gap: 6px; }
 .pref-btn {
-  padding: 5px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.1);
+  padding: 5px 10px; border-radius: 999px; border: 1px solid var(--app-border-strong);
   background: rgba(255,255,255,0.05); color: var(--app-text-muted);
   font-size: 12px; font-weight: 600; cursor: pointer;
   transition: all 160ms ease;
 }
-.pref-btn.active { background: rgba(230, 230, 230,0.15); color: #e6e6e6; border-color: rgba(230, 230, 230,0.3); }
+.pref-btn.active { background: rgba(230, 230, 230,0.15); color: var(--app-accent); border-color: rgba(230, 230, 230,0.3); }
 .pref-btn.mute.active { background: rgba(255,255,255,0.08); color: var(--app-text); border-color: rgba(255,255,255,0.15); }
 
 /* ── Storage ring ───────────────────────────── */
@@ -1687,6 +1684,7 @@ import type { FeedMode, FeedRankingWeights } from '../services/feedPreferencesSe
 import { BUILD_HASH, BUILD_TIME } from '../utils/buildHash';
 import UserIdentityBadge from '../components/UserIdentityBadge.vue';
 import { GUN_RELAY_PRESETS, isValidGunUrl, labelForGunUrl, DEFAULT_GUN_PEERS } from '../services/gunRelayPresets';
+import { appTheme, setTheme } from '../services/themeService';
 
 const chainStore = useChainStore();
 const communityStore = useCommunityStore();
@@ -1802,7 +1800,10 @@ const policy = ref({
   autoPruneOldContent: true
 });
 
-const isDarkMode = ref(true);
+const isDarkMode = computed(() => appTheme.value === 'dark');
+function onThemeChange(event: Event) {
+  setTheme((event.target as HTMLInputElement).checked ? 'dark' : 'light');
+}
 const userProfile = ref<any>(null);
 const deviceId = ref('');
 const buildHash = BUILD_HASH;
@@ -2722,18 +2723,6 @@ onMounted(async () => {
     // Key generation failed silently
   }
 
-  // Reflect the actual stored theme — dark/glass is the default.
-  const storedTheme = localStorage.getItem('theme');
-  const prefersDark = storedTheme !== 'light';
-  isDarkMode.value = prefersDark;
-  if (prefersDark) {
-    document.documentElement.classList.add('dark');
-    document.body.classList.add('dark');
-    if (!storedTheme) localStorage.setItem('theme', 'dark');
-  } else {
-    document.documentElement.classList.remove('dark');
-    document.body.classList.remove('dark');
-  }
 
   // Load moderation settings (may have migrated legacy minUserKarma)
   modSettings.value = ModerationService.getSettings();

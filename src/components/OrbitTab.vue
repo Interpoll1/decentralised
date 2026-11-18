@@ -336,7 +336,7 @@ onUnmounted(() => {
 .ob-world__map :deep(.nm) { height: clamp(340px, 64vh, 620px); }
 .ob-world__cta { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 5; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; max-width: 280px; padding: 16px 18px; border-radius: 14px; background: rgba(8,11,10,.82); border: 1px solid var(--app-border-strong); backdrop-filter: blur(6px); color: #fff; font-size: 12.5px; }
 .ob-world__cta b { font-size: 15px; }
-.ob-world__cta button { margin-top: 4px; padding: 8px 16px; border: 0; border-radius: 10px; cursor: pointer; font: inherit; font-weight: 700; background: var(--app-accent); color: #04120a; }
+.ob-world__cta button { margin-top: 4px; padding: 8px 16px; border: 0; border-radius: 10px; cursor: pointer; font: inherit; font-weight: 700; background: var(--app-accent); color: var(--app-on-accent); }
 .ob-seg { display: inline-flex; padding: 3px; border-radius: 999px; background: rgba(255,255,255,.06); }
 .ob-seg__btn { border: 0; background: transparent; color: rgba(255,255,255,.6); font: inherit; font-size: 13px; font-weight: 600; padding: 6px 16px; border-radius: 999px; cursor: pointer; }
 .ob-seg__btn.on { background: rgba(255,255,255,.14); color: #fff; }

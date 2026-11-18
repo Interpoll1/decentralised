@@ -337,7 +337,7 @@ function formatNumber(n: number): string {
 .filter-pill:hover { color: var(--app-text); }
 .filter-pill.active {
   background: var(--app-accent);
-  color: #111214;
+  color: var(--app-on-accent);
   box-shadow: 0 1px 8px rgba(230, 230, 230,0.3);
 }
 
@@ -567,7 +567,7 @@ function formatNumber(n: number): string {
   border-radius: 999px;
   border: none;
   background: var(--app-accent);
-  color: #111214;
+  color: var(--app-on-accent);
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;

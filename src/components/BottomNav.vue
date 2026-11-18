@@ -285,7 +285,7 @@ ion-footer.bottom-nav-footer.footer-hidden { max-height: 0; overflow: hidden; ma
   position: relative; flex-shrink: 0;
   width: 30px; height: 30px; border-radius: 50%;
   display: grid; place-items: center;
-  background: var(--app-accent); color: #04120a;
+  background: var(--app-accent); color: var(--app-on-accent);
   box-shadow: 0 0 12px rgba(var(--app-accent-rgb), 0.35);
   transition: transform 140ms;
 }

@@ -461,7 +461,7 @@ async function connect() {
   width: calc(100% - 36px); margin: 0 18px 4px;
   padding: 13px; border-radius: 12px; border: none;
   background: var(--app-accent);
-  color: #111214; font-size: 15px; font-weight: 700; cursor: pointer;
+  color: var(--app-on-accent); font-size: 15px; font-weight: 700; cursor: pointer;
   box-shadow: 0 8px 20px rgba(var(--app-accent-rgb, 255 63 49), 0.28);
   transition: opacity 0.15s;
 }

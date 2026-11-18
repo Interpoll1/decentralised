@@ -347,7 +347,7 @@ function formatViewCount(n: number): string {
 .author-avatar-sm {
   width: 22px; height: 22px; border-radius: 50%;
   background: var(--app-accent);
-  color: #111214; font-size: 10px; font-weight: 700;
+  color: var(--app-on-accent); font-size: 10px; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }

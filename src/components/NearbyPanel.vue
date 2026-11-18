@@ -351,7 +351,7 @@ textarea.nb-input { resize: vertical; }
 }
 .nb-btn:hover:not(:disabled) { border-color: var(--app-border-strong); }
 .nb-btn:disabled { opacity: .5; cursor: default; }
-.nb-btn--primary { background: var(--app-accent); border-color: var(--app-accent); color: #04120a; }
+.nb-btn--primary { background: var(--app-accent); border-color: var(--app-accent); color: var(--app-on-accent); }
 .nb-btn--ghost { background: none; }
 .nb-wide { width: 100%; margin-top: 10px; padding: 10px; }
 .nb-icon { width: 28px; height: 28px; flex-shrink: 0; cursor: pointer; border-radius: 8px; border: none; background: none; color: var(--app-text-subtle); font-size: 12px; }
@@ -371,7 +371,7 @@ textarea.nb-input { resize: vertical; }
 .nb-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .nb-seg { display: inline-flex; align-self: flex-start; padding: 3px; gap: 2px; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--app-border); }
 .nb-seg button { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border: none; border-radius: 8px; background: none; cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 650; color: var(--app-text-muted); }
-.nb-seg button.on { background: var(--app-accent); color: #04120a; }
+.nb-seg button.on { background: var(--app-accent); color: var(--app-on-accent); }
 .nb-count { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; background: rgba(0,0,0,.25); }
 
 .nb-list { display: flex; flex-direction: column; gap: 4px; padding: 10px; }

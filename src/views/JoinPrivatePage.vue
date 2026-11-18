@@ -541,7 +541,7 @@ async function joinViaRendezvous() {
 .join-preview-avatar {
   width: 36px; height: 36px; border-radius: 10px;
   background: var(--app-accent);
-  color: #111214; font-size: 14px; font-weight: 800;
+  color: var(--app-on-accent); font-size: 14px; font-weight: 800;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
@@ -643,7 +643,7 @@ async function joinViaRendezvous() {
 }
 .join-btn--primary {
   background: var(--app-accent);
-  color: #111214;
+  color: var(--app-on-accent);
   box-shadow: 0 8px 20px rgba(var(--app-accent-rgb),0.28);
 }
 .join-btn--primary:hover:not(:disabled) { opacity: 0.92; }

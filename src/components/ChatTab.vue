@@ -761,7 +761,7 @@ function formatChatTime(timestamp: number): string {
   border-radius: 12px;
   background: var(--app-accent);
   border: none;
-  color: #111214;
+  color: var(--app-on-accent);
   font-size: 14px;
   font-weight: 700;
   font-family: inherit;
@@ -861,7 +861,7 @@ function formatChatTime(timestamp: number): string {
   background: rgba(var(--app-accent-rgb), 0.14); color: var(--app-text-muted); -webkit-tap-highlight-color: transparent;
 }
 .ct-edit__btn svg { width: 16px; height: 16px; }
-.ct-edit__btn--ok { background: var(--app-accent); color: #111214; }
+.ct-edit__btn--ok { background: var(--app-accent); color: var(--app-on-accent); }
 .ct-edit__btn:active { transform: scale(0.94); }
 .ct-row__preview {
   font-size: 14px; color: var(--app-text-muted); min-width: 0;
@@ -872,7 +872,7 @@ function formatChatTime(timestamp: number): string {
 .ct-row__badge {
   flex-shrink: 0; min-width: 21px; height: 21px; padding: 0 6px; border-radius: 999px;
   display: flex; align-items: center; justify-content: center;
-  background: var(--app-accent); color: #111214; font-size: 11.5px; font-weight: 800;
+  background: var(--app-accent); color: var(--app-on-accent); font-size: 11.5px; font-weight: 800;
 }
 /* unread: heavier name, bright accent time, brighter preview */
 .ct-row--unread { background: rgba(var(--app-accent-rgb), 0.07); }
@@ -942,7 +942,7 @@ function formatChatTime(timestamp: number): string {
 .ct-top__title { margin: 0; font-size: 18px; font-weight: 750; letter-spacing: -0.02em; color: var(--app-text); }
 .ct-newconv {
   display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 13px; border: none; border-radius: 9px; cursor: pointer;
-  background: var(--app-accent); color: #04120a; font: inherit; font-size: 12.5px; font-weight: 700; white-space: nowrap; transition: filter 120ms;
+  background: var(--app-accent); color: var(--app-on-accent); font: inherit; font-size: 12.5px; font-weight: 700; white-space: nowrap; transition: filter 120ms;
 }
 .ct-newconv svg { width: 16px; height: 16px; }
 .ct-newconv:hover { filter: brightness(1.08); }
@@ -952,7 +952,7 @@ function formatChatTime(timestamp: number): string {
   background: none; color: var(--app-text-muted); font: inherit; font-size: 12.5px; font-weight: 650; transition: background 120ms, color 120ms;
 }
 .ct-seg button.active { background: rgba(var(--app-accent-rgb), 0.14); color: var(--app-accent); }
-.ct-seg__badge { min-width: 17px; height: 17px; padding: 0 5px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: var(--app-accent); color: #04120a; font-size: 10.5px; font-weight: 800; }
+.ct-seg__badge { min-width: 17px; height: 17px; padding: 0 5px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: var(--app-accent); color: var(--app-on-accent); font-size: 10.5px; font-weight: 800; }
 
 .ct--split .ct-composer { margin: 0; }
 .ct--split .ct-list { border-radius: 0; overflow: visible; }

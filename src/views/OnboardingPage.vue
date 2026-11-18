@@ -445,7 +445,7 @@ onMounted(async () => {
 }
 .ob-option-icon--public    { background: rgba(var(--app-accent-rgb), 0.15); color: var(--app-accent-bright); }
 .ob-option-icon--community { background: rgba(52, 211, 153, 0.15); color: var(--app-success, #34d399); }
-.ob-option-icon--private   { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+.ob-option-icon--private   { background: rgba(251, 191, 36, 0.15); color: var(--app-warning); }
 .ob-option-body { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
 .ob-option-body strong { font-size: 14px; font-weight: 700; color: var(--app-text); }
 .ob-option-body span   { font-size: 12px; color: var(--app-text-muted); }
@@ -523,12 +523,12 @@ onMounted(async () => {
   display: flex; align-items: center; justify-content: center;
   font-size: 12px; font-weight: 800; flex-shrink: 0;
 }
-.tone-tech      { background: rgba(230, 230, 230, 0.2); color: #e6e6e6; }
-.tone-politics  { background: rgba(251, 113, 133, 0.2); color: #fb7185; }
-.tone-science   { background: rgba(56,  189, 248, 0.2); color: #38bdf8; }
-.tone-gaming    { background: rgba(74,  222, 128, 0.2); color: #4ade80; }
-.tone-sports    { background: rgba(45,  212, 191, 0.2); color: #2dd4bf; }
-.tone-music     { background: rgba(230, 230, 230, 0.2); color: #e6e6e6; }
+.tone-tech      { background: rgba(230, 230, 230, 0.2); color: var(--app-accent); }
+.tone-politics  { background: rgba(251, 113, 133, 0.2); color: var(--app-accent); }
+.tone-science   { background: rgba(56,  189, 248, 0.2); color: var(--app-accent); }
+.tone-gaming    { background: rgba(74,  222, 128, 0.2); color: var(--app-accent); }
+.tone-sports    { background: rgba(45,  212, 191, 0.2); color: var(--app-accent); }
+.tone-music     { background: rgba(230, 230, 230, 0.2); color: var(--app-accent); }
 .tone-general   { background: rgba(var(--app-accent-rgb), 0.15); color: var(--app-accent-bright); }
 
 .ob-community-count { font-size: 11px; color: var(--app-text-subtle); }
@@ -572,7 +572,7 @@ onMounted(async () => {
 .ob-btn-primary {
   padding: 12px 24px;
   background: var(--app-accent);
-  color: #111214; border: none; border-radius: 12px;
+  color: var(--app-on-accent); border: none; border-radius: 12px;
   font-size: 15px; font-weight: 700; cursor: pointer;
   transition: opacity 0.15s;
   box-shadow: 0 8px 20px rgba(var(--app-accent-rgb), 0.28);

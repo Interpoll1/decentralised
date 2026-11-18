@@ -58,3 +58,24 @@ FTP secrets are scoped to preflight/upload steps, outside dependency installatio
 - Keep certificate issuer identifiers and verified email-sender configuration separate from the website's transport-domain migration.
 
 Frozen audit reports, research evidence, past APKs and videos are unchanged.
+# Graphite appearance follow-up
+
+The default web and Android appearance restores the reviewed light graphite palette:
+canvas `#e7e9ec`, cards `#f7f8f9`, text `#232a31`, and accent `#17664b`.
+The terminal theme import is removed. Settings now provides an accessible, persistent
+dark-mode switch with a muted graphite counterpart rather than pure black and neon.
+
+The legacy `theme=dark` value was automatically written by the application, so it
+cannot establish a deliberate user preference. On the first upgrade it migrates to
+light graphite; subsequent explicit choices use `interpoll_theme_preference_v1`.
+This migration does not clear user identity, conversations, votes or other storage.
+
+Onboarding, the Home tour, recovery controls, post actions and accent-button
+foregrounds now use theme roles. The existing Grand Hotel wordmark font is bundled
+locally with its upstream OFL license so it also renders offline. Android launch,
+WebView and system-bar colors follow graphite; a small Capacitor plugin synchronizes
+the bars and icon brightness when the user changes appearance.
+
+Regression coverage includes legacy-preference migration, blocked storage,
+first paint, keyboard/touch theme selection, reload persistence, mobile/landscape/
+desktop layouts, and contrast of key feed, onboarding and tour controls.

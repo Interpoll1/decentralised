@@ -1750,7 +1750,7 @@ if (typeof window !== 'undefined') {
     padding: 6px 14px; border: none; border-radius: 8px; background: none; cursor: pointer;
     font: inherit; font-size: 12.5px; font-weight: 650; color: var(--app-text-muted); transition: background 120ms, color 120ms;
   }
-  .net-seg button.active { background: var(--app-accent); color: #04120a; }
+  .net-seg button.active { background: var(--app-accent); color: var(--app-on-accent); }
   .net-seg button:not(.active):hover { color: var(--app-text); }
 
   .net-composer {
@@ -1776,7 +1776,7 @@ if (typeof window !== 'undefined') {
   .net-composer__tool:hover { background: rgba(255,255,255,0.06); color: var(--app-text); }
   .net-composer__publish {
     display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border: none; border-radius: 9px; cursor: pointer;
-    background: var(--app-accent); color: #04120a; font: inherit; font-size: 13px; font-weight: 700; transition: filter 120ms;
+    background: var(--app-accent); color: var(--app-on-accent); font: inherit; font-size: 13px; font-weight: 700; transition: filter 120ms;
   }
   .net-composer__publish svg { width: 14px; height: 14px; }
   .net-composer__publish:hover { filter: brightness(1.08); }

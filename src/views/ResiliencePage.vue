@@ -1129,7 +1129,7 @@ ion-content {
   width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
   background: var(--app-accent);
   display: flex; align-items: center; justify-content: center;
-  font-size: 22px; color: #111214; box-shadow: 0 4px 14px rgba(230, 230, 230,.35);
+  font-size: 22px; color: var(--app-on-accent); box-shadow: 0 4px 14px rgba(230, 230, 230,.35);
 }
 .hero-title { font-size: 17px; font-weight: 800; letter-spacing: -0.025em; color: var(--app-text); margin: 0 0 4px; }
 .hero-sub { font-size: 13px; color: var(--app-text-muted); line-height: 1.55; margin: 0; }
@@ -1141,7 +1141,7 @@ ion-content {
   font-size: 13px; font-weight: 600; cursor: pointer;
   transition: all 160ms ease;
 }
-.qa-btn.primary { background: var(--app-accent); border-color: transparent; color: #111214; box-shadow: 0 4px 14px rgba(230, 230, 230,.35); }
+.qa-btn.primary { background: var(--app-accent); border-color: transparent; color: var(--app-on-accent); box-shadow: 0 4px 14px rgba(230, 230, 230,.35); }
 .qa-btn:hover:not(:disabled) { background: rgba(255,255,255,0.09); color: var(--app-text); }
 .qa-btn.primary:hover:not(:disabled) { opacity: .9; }
 .qa-btn:disabled { opacity: .35; cursor: not-allowed; }
@@ -1227,7 +1227,7 @@ ion-content {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   transition: opacity 160ms, transform 160ms; margin-top: 8px;
 }
-.block-btn.accent { background: var(--app-accent); color: #111214; box-shadow: 0 6px 20px rgba(230, 230, 230,.35); }
+.block-btn.accent { background: var(--app-accent); color: var(--app-on-accent); box-shadow: 0 6px 20px rgba(230, 230, 230,.35); }
 .block-btn.outline { background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); color: var(--app-text-muted); }
 .block-btn:hover:not(:disabled) { opacity: .88; transform: translateY(-1px); }
 .block-btn:disabled { opacity: .35; cursor: not-allowed; }
@@ -1238,7 +1238,7 @@ ion-content {
   font-size: 13px; font-weight: 700; cursor: pointer;
   transition: opacity 160ms, transform 160ms; white-space: nowrap;
 }
-.pill-btn.accent { background: var(--app-accent); color: #111214; box-shadow: 0 4px 12px rgba(230, 230, 230,.35); }
+.pill-btn.accent { background: var(--app-accent); color: var(--app-on-accent); box-shadow: 0 4px 12px rgba(230, 230, 230,.35); }
 .pill-btn.outline { background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); color: var(--app-text-muted); }
 .pill-btn.sm { padding: 5px 11px; font-size: 11.5px; }
 .pill-btn:hover:not(:disabled) { opacity: .88; transform: translateY(-1px); }

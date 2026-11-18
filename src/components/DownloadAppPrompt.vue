@@ -245,15 +245,15 @@ onUnmounted(() => {
   font-family: 'Inter', system-ui, sans-serif;
 }
 .dap__mark { position: relative; width: 42px; height: 42px; flex: 0 0 42px; display: flex; align-items: flex-end; justify-content: center; gap: 4px; border-radius: 11px; background: #101712; border: 1px solid #223329; padding: 9px; }
-.dap__mark i { display: block; width: 5px; border-radius: 3px; background: #3dff7a; }
+.dap__mark i { display: block; width: 5px; border-radius: 3px; background: var(--app-accent); }
 .dap__mark i:nth-of-type(1) { height: 9px; }
 .dap__mark i:nth-of-type(2) { height: 15px; }
 .dap__mark i:nth-of-type(3) { height: 22px; }
-.dap__dot { position: absolute; width: 5px; height: 5px; top: 5px; left: 18px; border-radius: 50%; background: #3dff7a; }
+.dap__dot { position: absolute; width: 5px; height: 5px; top: 5px; left: 18px; border-radius: 50%; background: var(--app-accent); }
 .dap__copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .dap__copy strong { color: #fff; font-size: 14px; font-weight: 650; line-height: 1.3; }
 .dap__copy span { color: #aebcaf; font-size: 12.5px; line-height: 1.4; }
-.dap__cta { flex: 0 0 auto; border: 1px solid #3dff7a; border-radius: 8px; background: #3dff7a; color: #020503; padding: 9px 14px; font: inherit; font-size: 12.5px; font-weight: 700; text-decoration: none; cursor: pointer; }
+.dap__cta { flex: 0 0 auto; border: 1px solid var(--app-accent); border-radius: 8px; background: var(--app-accent); color: #020503; padding: 9px 14px; font: inherit; font-size: 12.5px; font-weight: 700; text-decoration: none; cursor: pointer; }
 .dap__cta:hover { background: #67ff99; }
 .dap__close { position: absolute; top: 7px; right: 9px; width: 28px; height: 28px; border: 0; background: transparent; color: #718074; font: 22px/1 system-ui; cursor: pointer; }
 .dap__close:hover { color: #fff; }

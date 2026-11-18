@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 export default defineConfig({
   testDir: '.',
-  testMatch: 'poll-first-use.spec.mjs',
+  testMatch: ['poll-first-use.spec.mjs', 'theme-graphite.spec.mjs'],
   outputDir: '../test-results/poll-first-use',
   workers: 1,
   timeout: 30000,

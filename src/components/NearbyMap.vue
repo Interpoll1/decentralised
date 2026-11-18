@@ -318,7 +318,7 @@ watch(() => [props.me?.lat, props.me?.lon, props.radiusKm, props.myPrec], () => 
 
 .nm-pin {
   position: absolute; transform: translate(-50%, -50%); min-width: 30px; height: 30px; padding: 0 6px; border-radius: 50%; cursor: pointer;
-  display: grid; place-items: center; font: inherit; font-size: 12px; font-weight: 800; color: #04120a;
+  display: grid; place-items: center; font: inherit; font-size: 12px; font-weight: 800; color: var(--app-on-accent);
   background: var(--app-accent); border: 2px solid #04120a; box-shadow: 0 2px 10px rgba(0,0,0,.5);
 }
 .nm-pin.sel { box-shadow: 0 0 0 4px rgba(var(--app-accent-rgb), .35), 0 2px 10px rgba(0,0,0,.5); }

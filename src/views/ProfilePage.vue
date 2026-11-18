@@ -295,7 +295,7 @@ ion-content {
   background: var(--app-accent);
   border: 2px solid var(--ion-background-color, #141414);
   display: flex; align-items: center; justify-content: center;
-  color: #111214; font-size: 13px;
+  color: var(--app-on-accent); font-size: 13px;
 }
 
 .profile-name {
@@ -391,7 +391,7 @@ ion-content {
 .save-btn {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   padding: 13px; border-radius: 14px; border: none;
-  background: var(--app-accent); color: #111214;
+  background: var(--app-accent); color: var(--app-on-accent);
   font-size: 14px; font-weight: 700; cursor: pointer;
   box-shadow: 0 6px 20px rgba(230, 230, 230,0.35);
   transition: opacity 160ms, transform 160ms;
@@ -433,7 +433,7 @@ ion-content {
 .link-text { font-size: 13px; font-family: monospace; color: var(--app-text-muted); word-break: break-all; }
 .link-actions { display: flex; gap: 8px; }
 .pill-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; border-radius: 999px; border: none; font-size: 13.5px; font-weight: 700; cursor: pointer; transition: opacity 160ms, transform 160ms; }
-.pill-btn.accent { background: var(--app-accent); color: #111214; box-shadow: 0 4px 14px rgba(230, 230, 230,0.38); }
+.pill-btn.accent { background: var(--app-accent); color: var(--app-on-accent); box-shadow: 0 4px 14px rgba(230, 230, 230,0.38); }
 .pill-btn.outline { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--app-text-muted); }
 .pill-btn:hover { opacity: 0.88; transform: translateY(-1px); }
 

@@ -1942,7 +1942,7 @@ ion-content { --background: transparent; }
 .send-button {
   flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; border: none;
   cursor: pointer; display: flex; align-items: center; justify-content: center;
-  background: var(--app-accent); color: #111214;
+  background: var(--app-accent); color: var(--app-on-accent);
   box-shadow: 0 3px 12px rgba(230, 230, 230,0.38);
   transition: transform 160ms, box-shadow 160ms;
 }
