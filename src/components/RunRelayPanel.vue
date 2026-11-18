@@ -10,11 +10,8 @@
     Add this to Settings → Network, below the existing NetworkSettingsPanel.
   -->
   <div class="relay-panel">
-    <h3 class="panel-title">Run a Relay Node</h3>
-    <p class="panel-desc">
-      Every relay you run makes the network more resilient. Choose the option
-      that fits your setup — even a browser tab helps.
-    </p>
+    <h3 class="panel-title">{{ $ui("Run a Relay Node") }}</h3>
+    <p class="panel-desc"> {{ $ui("Every relay you run makes the network more resilient. Choose the option that fits your setup — even a browser tab helps.") }} </p>
 
     <!-- ── Path selector ─────────────────────────────────────────────── -->
     <div class="path-cards">
@@ -26,7 +23,7 @@
         @click="selectedPath = path.id"
       >
         <span class="path-icon">{{ path.icon }}</span>
-        <span class="path-label">{{ path.label }}</span>
+        <span class="path-label">{{ $ui(path.label) }}</span>
         <span class="path-diff" :class="`diff-${path.difficulty}`">
           {{ path.difficulty }}
         </span>
@@ -38,16 +35,13 @@
     ══════════════════════════════════════════════════════════════════ -->
     <section v-if="selectedPath === 'browser'" class="path-section">
       <div class="what-box">
-        <strong>What this does:</strong> Your open browser tab acts as a Gun
-        relay peer. Other users who add your URL can sync data through your tab.
-        The relay stops when you close this tab.
-      </div>
+        <strong>{{ $ui("What this does:") }}</strong> {{ $ui("Your open browser tab acts as a Gun relay peer. Other users who add your URL can sync data through your tab. The relay stops when you close this tab.") }} </div>
 
       <!-- Active state -->
       <div v-if="browserRelay.active" class="relay-active-card">
         <div class="active-header">
           <span class="green-dot" />
-          <strong>Browser relay is running</strong>
+          <strong>{{ $ui("Browser relay is running") }}</strong>
           <span class="uptime">{{ uptimeLabel }}</span>
         </div>
 
@@ -58,9 +52,7 @@
           </button>
         </div>
 
-        <p class="hint">
-          Share this URL with others. They add it in
-          <strong>Settings → Network → Relay Peers → Add Peer</strong>.
+        <p class="hint"> {{ $ui("Share this URL with others. They add it in") }} <strong>{{ $ui("Settings → Network → Relay Peers → Add Peer") }}</strong>.
         </p>
 
         <div v-if="browserRelay.error" class="warn-box">{{ browserRelay.error }}</div>
@@ -68,30 +60,30 @@
         <div class="stats-row">
           <div class="stat">
             <div class="stat-num">{{ browserRelay.peersServed }}</div>
-            <div class="stat-lbl">Peers served</div>
+            <div class="stat-lbl">{{ $ui("Peers served") }}</div>
           </div>
           <div class="stat">
             <div class="stat-num">{{ uptimeMinutes }}m</div>
-            <div class="stat-lbl">Uptime</div>
+            <div class="stat-lbl">{{ $ui("Uptime") }}</div>
           </div>
         </div>
 
-        <button class="btn-stop" @click="stopBrowserRelay">Stop relay</button>
+        <button class="btn-stop" @click="stopBrowserRelay">{{ $ui("Stop relay") }}</button>
       </div>
 
       <!-- Inactive state -->
       <div v-else class="relay-inactive-card">
         <ul class="feature-list">
-          <li>✅ Zero setup — works right now</li>
-          <li>✅ No server or domain needed</li>
-          <li>✅ Encrypted traffic stays encrypted</li>
-          <li>⚠️ Only works while this tab is open</li>
-          <li>⚠️ Limited to ~20 concurrent peers</li>
-          <li>⚠️ Your IP is shared with the tunnel bridge service</li>
+          <li>{{ $ui("✅ Zero setup — works right now") }}</li>
+          <li>{{ $ui("✅ No server or domain needed") }}</li>
+          <li>{{ $ui("✅ Encrypted traffic stays encrypted") }}</li>
+          <li>{{ $ui("⚠️ Only works while this tab is open") }}</li>
+          <li>{{ $ui("⚠️ Limited to ~20 concurrent peers") }}</li>
+          <li>{{ $ui("⚠️ Your IP is shared with the tunnel bridge service") }}</li>
         </ul>
 
         <button class="btn-start" :disabled="starting" @click="startBrowserRelay">
-          {{ starting ? 'Starting…' : 'Start Browser Relay' }}
+          {{ starting ? $ui("Starting…") : $ui("Start Browser Relay") }}
         </button>
         <p v-if="startError" class="err-msg">{{ startError }}</p>
       </div>
@@ -102,95 +94,67 @@
     ══════════════════════════════════════════════════════════════════ -->
     <section v-if="selectedPath === 'home'" class="path-section">
       <div class="what-box">
-        <strong>What this does:</strong> Runs a permanent relay on hardware
-        you already own — a Raspberry Pi, an old PC, or any Linux machine.
-        Always on, no monthly cost, works even when this app is closed.
-      </div>
+        <strong>{{ $ui("What this does:") }}</strong> {{ $ui("Runs a permanent relay on hardware you already own — a Raspberry Pi, an old PC, or any Linux machine. Always on, no monthly cost, works even when this app is closed.") }} </div>
 
       <div class="steps">
         <div class="step">
           <div class="step-num">1</div>
           <div class="step-body">
-            <strong>Open a terminal on your Pi / PC</strong>
-            <p>Any Linux machine works (Ubuntu, Raspberry Pi OS, Debian).</p>
+            <strong>{{ $ui("Open a terminal on your Pi / PC") }}</strong>
+            <p>{{ $ui("Any Linux machine works (Ubuntu, Raspberry Pi OS, Debian).") }}</p>
           </div>
         </div>
 
         <div class="step">
           <div class="step-num">2</div>
           <div class="step-body">
-            <strong>Run the one-line installer</strong>
+            <strong>{{ $ui("Run the one-line installer") }}</strong>
             <div class="code-block">
               <code>curl -fsSL {{ installScriptUrl }} | bash</code>
               <button class="btn-copy-small" @click="copyInstallScript">
                 {{ copiedInstall ? '✓' : '⎘' }}
               </button>
             </div>
-            <p class="hint">
-              This installs Node.js (if not present), downloads the relay, and
-              starts it as a system service that auto-restarts on reboot.
-            </p>
+            <p class="hint"> {{ $ui("This installs Node.js (if not present), downloads the relay, and starts it as a system service that auto-restarts on reboot.") }} </p>
           </div>
         </div>
 
         <div class="step">
           <div class="step-num">3</div>
           <div class="step-body">
-            <strong>Find your relay URL</strong>
-            <p>
-              The installer prints your relay URL when it finishes. It looks like:
-            </p>
+            <strong>{{ $ui("Find your relay URL") }}</strong>
+            <p> {{ $ui("The installer prints your relay URL when it finishes. It looks like:") }} </p>
             <code class="inline-code">http://192.168.x.x:8765/gun</code>
-            <p class="hint">
-              This URL works for anyone on your local network. For internet access,
-              see the optional port forwarding step below.
-            </p>
+            <p class="hint"> {{ $ui("This URL works for anyone on your local network. For internet access, see the optional port forwarding step below.") }} </p>
           </div>
         </div>
 
         <div class="step">
           <div class="step-num">4</div>
           <div class="step-body">
-            <strong>Add the URL in the app</strong>
-            <p>
-              Go to <strong>Settings → Network → Relay Peers → Add Peer</strong>
-              and paste your relay URL.
-            </p>
+            <strong>{{ $ui("Add the URL in the app") }}</strong>
+            <p> {{ $ui("Go to") }} <strong>{{ $ui("Settings → Network → Relay Peers → Add Peer") }}</strong> {{ $ui("and paste your relay URL.") }} </p>
             <div class="add-inline">
               <input
                 v-model="homeRelayUrl"
                 class="url-input"
                 placeholder="http://192.168.1.x:8765/gun"
               />
-              <button class="btn-primary-sm" :disabled="!homeRelayUrl" @click="addHomeRelay">
-                Add
-              </button>
+              <button class="btn-primary-sm" :disabled="!homeRelayUrl" @click="addHomeRelay"> {{ $ui("Add") }} </button>
             </div>
-            <p v-if="homeAdded" class="success-msg">✓ Relay added</p>
+            <p v-if="homeAdded" class="success-msg">{{ $ui("✓ Relay added") }}</p>
           </div>
         </div>
 
         <details class="optional-step">
-          <summary>Optional: make it reachable from the internet</summary>
+          <summary>{{ $ui("Optional: make it reachable from the internet") }}</summary>
           <div class="step-body">
-            <p>
-              By default your relay only works on your home network. To let
-              anyone reach it, you need to forward port <code>8765</code> in
-              your router settings to your Pi's local IP.
+            <p> {{ $ui("By default your relay only works on your home network. To let anyone reach it, you need to forward port") }} <code>8765</code> {{ $ui("in your router settings to your Pi's local IP.") }} </p>
+            <p> {{ $ui("Then add a free subdomain via") }} <a href="https://www.duckdns.org" target="_blank">{{ $ui("DuckDNS") }}</a>
+              (e.g. <code>myhome.duckdns.org</code>{{ $ui(") pointing to your home IP.") }} </p>
+            <p> {{ $ui("Your public relay URL would then be:") }} <code>http://myhome.duckdns.org:8765/gun</code>
             </p>
-            <p>
-              Then add a free subdomain via
-              <a href="https://www.duckdns.org" target="_blank">DuckDNS</a>
-              (e.g. <code>myhome.duckdns.org</code>) pointing to your home IP.
-            </p>
-            <p>
-              Your public relay URL would then be:
-              <code>http://myhome.duckdns.org:8765/gun</code>
-            </p>
-            <p class="warn-inline">
-              ⚠️ Port forwarding exposes your home network. Only do this if you
-              understand the security implications.
-            </p>
+            <p class="warn-inline"> {{ $ui("⚠️ Port forwarding exposes your home network. Only do this if you understand the security implications.") }} </p>
           </div>
         </details>
       </div>
@@ -201,14 +165,11 @@
     ══════════════════════════════════════════════════════════════════ -->
     <section v-if="selectedPath === 'vps'" class="path-section">
       <div class="what-box">
-        <strong>What this does:</strong> Runs a permanent, internet-facing relay
-        on a rented server. Cheapest option is ~$5/month (DigitalOcean, Hetzner,
-        Vultr). Supports your full community, always reachable.
-      </div>
+        <strong>{{ $ui("What this does:") }}</strong> {{ $ui("Runs a permanent, internet-facing relay on a rented server. Cheapest option is ~$5/month (DigitalOcean, Hetzner, Vultr). Supports your full community, always reachable.") }} </div>
 
       <!-- Provider shortcuts -->
       <div class="provider-row">
-        <span class="provider-label">Recommended providers:</span>
+        <span class="provider-label">{{ $ui("Recommended providers:") }}</span>
         <a
           v-for="p in providers"
           :key="p.name"
@@ -222,67 +183,54 @@
         <div class="step">
           <div class="step-num">1</div>
           <div class="step-body">
-            <strong>Create a $5/month Ubuntu 24 server</strong>
-            <p>Any provider works. You'll get an IP address when it's ready.</p>
+            <strong>{{ $ui("Create a $5/month Ubuntu 24 server") }}</strong>
+            <p>{{ $ui("Any provider works. You'll get an IP address when it's ready.") }}</p>
           </div>
         </div>
 
         <div class="step">
           <div class="step-num">2</div>
           <div class="step-body">
-            <strong>Point a domain at your server</strong>
-            <p>
-              Add an A record: <code>relay.yourdomain.com → your-server-ip</code>
-              <br />
-              Free option: use <a href="https://www.duckdns.org" target="_blank">DuckDNS</a>
-              for a free subdomain.
-            </p>
+            <strong>{{ $ui("Point a domain at your server") }}</strong>
+            <p> {{ $ui("Add an A record:") }} <code>relay.yourdomain.com → your-server-ip</code>
+              <br /> {{ $ui("Free option: use") }} <a href="https://www.duckdns.org" target="_blank">{{ $ui("DuckDNS") }}</a> {{ $ui("for a free subdomain.") }} </p>
           </div>
         </div>
 
         <div class="step">
           <div class="step-num">3</div>
           <div class="step-body">
-            <strong>SSH into your server and run</strong>
+            <strong>{{ $ui("SSH into your server and run") }}</strong>
             <div class="code-block">
               <code>{{ vpsInstallCmd }}</code>
               <button class="btn-copy-small" @click="copyVpsCmd">
                 {{ copiedVps ? '✓' : '⎘' }}
               </button>
             </div>
-            <p class="hint">
-              Replace <code>relay.yourdomain.com</code> with your actual domain.
-              The script installs Docker, Caddy (auto-TLS), and starts the relay.
-            </p>
+            <p class="hint"> {{ $ui("Replace") }} <code>relay.yourdomain.com</code> {{ $ui("with your actual domain. The script installs Docker, Caddy (auto-TLS), and starts the relay.") }} </p>
           </div>
         </div>
 
         <div class="step">
           <div class="step-num">4</div>
           <div class="step-body">
-            <strong>Your relay is live at</strong>
+            <strong>{{ $ui("Your relay is live at") }}</strong>
             <div class="add-inline">
               <input
                 v-model="vpsRelayUrl"
                 class="url-input"
                 placeholder="https://relay.yourdomain.com/gun"
               />
-              <button class="btn-primary-sm" :disabled="!vpsRelayUrl" @click="addVpsRelay">
-                Add
-              </button>
+              <button class="btn-primary-sm" :disabled="!vpsRelayUrl" @click="addVpsRelay"> {{ $ui("Add") }} </button>
             </div>
-            <p v-if="vpsAdded" class="success-msg">✓ Relay added</p>
+            <p v-if="vpsAdded" class="success-msg">{{ $ui("✓ Relay added") }}</p>
           </div>
         </div>
       </div>
 
       <details class="optional-step">
-        <summary>Full Docker Compose setup (advanced)</summary>
-        <p>
-          See <strong>community-relay/README.md</strong> in the app repository
-          for the full docker-compose.yml, Caddyfile, and moderation middleware
-          configuration.
-        </p>
+        <summary>{{ $ui("Full Docker Compose setup (advanced)") }}</summary>
+        <p> {{ $ui("See") }} <strong>{{ $ui("community-relay/README.md") }}</strong> {{ $ui("in the app repository for the full docker-compose.yml, Caddyfile, and moderation middleware configuration.") }} </p>
       </details>
     </section>
   </div>

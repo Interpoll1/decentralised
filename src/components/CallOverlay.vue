@@ -25,8 +25,8 @@
 
     <div class="call-controls">
       <template v-if="snap.state === 'incoming-ringing'">
-        <button class="call-btn call-btn--decline" data-testid="call-decline" @click="call.decline()">Decline</button>
-        <button class="call-btn call-btn--accept" data-testid="call-accept" @click="call.accept()">Accept</button>
+        <button class="call-btn call-btn--decline" data-testid="call-decline" @click="call.decline()">{{ $ui("Decline") }}</button>
+        <button class="call-btn call-btn--accept" data-testid="call-accept" @click="call.accept()">{{ $ui("Accept") }}</button>
       </template>
       <template v-else-if="snap.state !== 'ended'">
         <button
@@ -35,16 +35,16 @@
           :class="{ 'call-btn--on': snap.muted }"
           data-testid="call-mute"
           @click="call.toggleMute()"
-        >{{ snap.muted ? 'Unmute' : 'Mute' }}</button>
+        >{{ snap.muted ? $ui("Unmute") : $ui("Mute") }}</button>
         <button
           v-if="snap.video && (snap.state === 'in-call' || snap.state === 'connecting')"
           class="call-btn"
           :class="{ 'call-btn--on': snap.cameraOff }"
           data-testid="call-camera"
           @click="call.toggleCamera()"
-        >{{ snap.cameraOff ? 'Camera on' : 'Camera off' }}</button>
+        >{{ snap.cameraOff ? $ui("Camera on") : $ui("Camera off") }}</button>
         <button class="call-btn call-btn--decline" data-testid="call-hangup" @click="call.end()">
-          {{ snap.state === 'outgoing-ringing' ? 'Cancel' : 'Hang up' }}
+          {{ snap.state === 'outgoing-ringing' ? $ui("Cancel") : $ui("Hang up") }}
         </button>
       </template>
     </div>

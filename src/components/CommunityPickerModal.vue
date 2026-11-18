@@ -3,7 +3,7 @@
     <transition name="picker-fade">
       <div v-if="modelValue" class="cpm-backdrop" @click.self="$emit('update:modelValue', false)">
         <transition name="picker-slide">
-          <div v-if="modelValue" class="cpm-sheet" role="dialog" aria-modal="true" aria-label="Select a community">
+          <div v-if="modelValue" class="cpm-sheet" role="dialog" aria-modal="true" :aria-label="$ui('Select a community')">
 
             <!-- Header -->
             <div class="cpm-header">
@@ -17,11 +17,11 @@
                     </svg>
                   </div>
                   <div>
-                    <p class="cpm-title">{{ title || 'Select Community' }}</p>
-                    <p class="cpm-subtitle">{{ filtered.length }} available</p>
+                    <p class="cpm-title">{{ title || $ui("Select Community") }}</p>
+                    <p class="cpm-subtitle">{{ filtered.length }} {{ $ui("available") }}</p>
                   </div>
                 </div>
-                <button class="cpm-close" @click="$emit('update:modelValue', false)" aria-label="Close">
+                <button class="cpm-close" @click="$emit('update:modelValue', false)" :aria-label="$ui('Close')">
                   <svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                 </button>
               </div>
@@ -36,13 +36,13 @@
                   ref="searchInput"
                   v-model="query"
                   class="cpm-search"
-                  placeholder="Search communities…"
+                  :placeholder="$ui('Search communities…')"
                   autocomplete="off"
                   spellcheck="false"
                   @focus="searchFocused = true"
                   @blur="searchFocused = false"
                 />
-                <button v-if="query" class="cpm-search-clear" @click="query = ''" aria-label="Clear">
+                <button v-if="query" class="cpm-search-clear" @click="query = ''" :aria-label="$ui('Clear')">
                   <svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                 </button>
               </div>
@@ -59,8 +59,8 @@
                     <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
                   </svg>
                 </div>
-                <p class="cpm-empty-title">No results</p>
-                <p class="cpm-empty-sub">No communities match "{{ query }}"</p>
+                <p class="cpm-empty-title">{{ $ui("No results") }}</p>
+                <p class="cpm-empty-sub">{{ $ui("No communities match \"") }}{{ query }}"</p>
               </div>
 
               <button
@@ -81,13 +81,11 @@
                   <span class="cpm-item-meta">
                     <span class="cpm-item-id">c/{{ c.id }}</span>
                     <span class="cpm-dot">·</span>
-                    <span>{{ (c.memberCount ?? 0).toLocaleString() }} member{{ c.memberCount !== 1 ? 's' : '' }}</span>
+                    <span>{{ $count((c.memberCount ?? 0), 'member') }}</span>
                     <template v-if="c.isPrivate">
                       <span class="cpm-dot">·</span>
                       <span class="cpm-badge-private">
-                        <svg viewBox="0 0 24 24" fill="none" width="9" height="9"><rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path d="M7 11V7a5 5 0 0110 0v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                        Private
-                      </span>
+                        <svg viewBox="0 0 24 24" fill="none" width="9" height="9"><rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path d="M7 11V7a5 5 0 0110 0v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> {{ $ui("Private") }} </span>
                     </template>
                   </span>
                 </span>

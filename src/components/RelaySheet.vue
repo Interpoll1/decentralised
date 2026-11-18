@@ -18,11 +18,11 @@
                   </svg>
                 </div>
                 <div>
-                  <DialogTitle class="rs-title">Network</DialogTitle>
-                  <DialogDescription id="rs-subtitle" class="rs-subtitle">{{ activeRelay?.label || 'No relay selected' }}</DialogDescription>
+                  <DialogTitle class="rs-title">{{ $ui("Network") }}</DialogTitle>
+                  <DialogDescription id="rs-subtitle" class="rs-subtitle">{{ activeRelay?.label || $ui("No relay selected") }}</DialogDescription>
                 </div>
               </div>
-              <DialogClose class="rs-close" aria-label="Close">
+              <DialogClose class="rs-close" :aria-label="$ui('Close')">
                 <svg viewBox="0 0 24 24" fill="none" width="18" height="18">
                   <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                 </svg>
@@ -35,8 +35,8 @@
                 <svg viewBox="0 0 24 24" fill="none" width="16" height="16">
                   <path d="M12 22s8-4.5 8-11V5l-8-3-8 3v6c0 6.5 8 11 8 11z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
                 </svg>
-                <span>Anonymity</span>
-                <span class="rs-toggle-state">{{ anonymityOn ? 'ON' : 'OFF' }}</span>
+                <span>{{ $ui("Anonymity") }}</span>
+                <span class="rs-toggle-state">{{ anonymityOn ? $ui("ON") : $ui("OFF") }}</span>
               </button>
 
               <button class="rs-toggle-pill" :class="{ active: myRelayOn }" @click="toggleMyRelay">
@@ -44,13 +44,13 @@
                   <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="1.8"/>
                   <path d="M7 11V7a5 5 0 0110 0v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
                 </svg>
-                <span>My Relay</span>
-                <span class="rs-toggle-state">{{ myRelayOn ? 'ON' : 'OFF' }}</span>
+                <span>{{ $ui("My Relay") }}</span>
+                <span class="rs-toggle-state">{{ myRelayOn ? $ui("ON") : $ui("OFF") }}</span>
               </button>
             </div>
 
             <!-- Relay list -->
-            <p class="rs-section-label">Relay servers</p>
+            <p class="rs-section-label">{{ $ui("Relay servers") }}</p>
             <div class="rs-relay-list">
               <button
                 v-for="relay in relays"
@@ -81,14 +81,14 @@
                 <span class="rs-relay-info">
                   <span class="rs-relay-name">{{ shortenUrl(relay.ws) }}</span>
                   <span class="rs-relay-tags">
-                    <span v-if="relay.isTor"              class="rs-tag rs-tag--onion">Onion</span>
-                    <span v-if="relay.source==='discovered'" class="rs-tag rs-tag--disc">Discovered</span>
-                    <span v-if="relay.trusted"             class="rs-tag rs-tag--trusted">Trusted</span>
+                    <span v-if="relay.isTor"              class="rs-tag rs-tag--onion">{{ $ui("Onion") }}</span>
+                    <span v-if="relay.source==='discovered'" class="rs-tag rs-tag--disc">{{ $ui("Discovered") }}</span>
+                    <span v-if="relay.trusted"             class="rs-tag rs-tag--trusted">{{ $ui("Trusted") }}</span>
                   </span>
                 </span>
 
                 <span class="rs-relay-status-dot" :class="statusDot(relay)" aria-hidden="true"></span>
-                <span v-if="relay.id === activeRelayId" class="rs-relay-check" aria-label="Active">
+                <span v-if="relay.id === activeRelayId" class="rs-relay-check" :aria-label="$ui('Active')">
                   <svg viewBox="0 0 24 24" fill="none" width="16" height="16">
                     <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
                   </svg>
@@ -98,15 +98,11 @@
               <button class="rs-add-relay" @click="goNetwork">
                 <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
                   <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                </svg>
-                Add relay
-              </button>
+                </svg> {{ $ui("Add relay") }} </button>
             </div>
 
             <!-- Footer link -->
-            <button class="rs-full-settings" @click="goNetwork">
-              Full network settings →
-            </button>
+            <button class="rs-full-settings" @click="goNetwork"> {{ $ui("Full network settings →") }} </button>
 
       </DialogContent>
     </DialogPortal>

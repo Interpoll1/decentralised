@@ -12,18 +12,18 @@
 
     <div class="gmb-row">
       <div class="gmb-bubble" :class="{ deleted: item.deleted }">
-        <div v-if="item.forwarded && !item.deleted" class="gmb-forwarded">Forwarded</div>
+        <div v-if="item.forwarded && !item.deleted" class="gmb-forwarded">{{ $ui("Forwarded") }}</div>
         <button v-if="item.reply && !item.deleted" class="gmb-quote" :class="{ missing: item.reply.missing }" @click.stop="emit('jump', item.reply.messageId)">
           <span v-if="!item.reply.missing" class="gmb-quote-name">{{ item.reply.senderName }}</span>
           <span class="gmb-quote-text">{{ item.reply.text }}</span>
         </button>
 
-        <p v-if="item.deleted" class="gmb-text gmb-deleted">This message was deleted</p>
+        <p v-if="item.deleted" class="gmb-text gmb-deleted">{{ $ui("This message was deleted") }}</p>
         <template v-else>
           <GroupMediaView v-if="item.media" :media="item.media" @open="url => emit('openMedia', url)" />
           <div v-if="item.poll" class="gmb-poll">
             <div class="gmb-poll-q">{{ item.poll.question }}</div>
-            <div class="gmb-poll-hint">{{ item.poll.multi ? 'Select one or more' : 'Select one' }}</div>
+            <div class="gmb-poll-hint">{{ item.poll.multi ? $ui("Select one or more") : $ui("Select one") }}</div>
             <button
               v-for="(opt, i) in item.poll.options"
               :key="i"
@@ -43,8 +43,8 @@
         </template>
 
         <div class="gmb-meta">
-          <span v-if="item.pinned" class="gmb-pin">Pinned</span>
-          <span v-if="item.edited && !item.deleted" class="gmb-edited">edited</span>
+          <span v-if="item.pinned" class="gmb-pin">{{ $ui("Pinned") }}</span>
+          <span v-if="item.edited && !item.deleted" class="gmb-edited">{{ $ui("edited") }}</span>
           <span class="gmb-time" :title="new Date(item.timestamp).toLocaleString()">{{ time }}</span>
           <span v-if="mine" class="gmb-status" :class="statusClass" :title="statusTitle" :aria-label="statusTitle">
             <svg v-if="statusIcon === '!'" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="7"/><path d="M8 4v5M8 11.2v.6" stroke="var(--app-bg-base)" stroke-width="1.8" stroke-linecap="round"/></svg>
@@ -56,13 +56,13 @@
       </div>
 
       <div class="gmb-actions">
-        <button class="gmb-act" title="React" aria-label="React" @click.stop="emit('reactPicker', $event)">
+        <button class="gmb-act" :title="$ui('React')" :aria-label="$ui('React')" @click.stop="emit('reactPicker', $event)">
           <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.8"/><path d="M8.5 14c.9 1.3 2.1 2 3.5 2s2.6-.7 3.5-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="9.3" cy="9.8" r="1.1" fill="currentColor"/><circle cx="14.7" cy="9.8" r="1.1" fill="currentColor"/></svg>
         </button>
-        <button class="gmb-act" title="Reply" aria-label="Reply" @click.stop="emit('reply')">
+        <button class="gmb-act" :title="$ui('Reply')" :aria-label="$ui('Reply')" @click.stop="emit('reply')">
           <svg viewBox="0 0 24 24" fill="none"><path d="M10 8L5 12.5l5 4.5M5.5 12.5H14a5 5 0 015 5V19" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <button class="gmb-act" title="More" aria-label="More actions" @click.stop="emit('menu', $event)">
+        <button class="gmb-act" :title="$ui('More')" :aria-label="$ui('More actions')" @click.stop="emit('menu', $event)">
           <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>
         </button>
       </div>

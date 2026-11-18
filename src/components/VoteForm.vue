@@ -5,20 +5,15 @@
       <div class="flex">
         <ion-icon :icon="warningOutline" class="text-yellow-400 text-2xl mr-3"></ion-icon>
         <div>
-          <h3 class="text-sm font-medium">Already Voted</h3>
-          <p class="mt-1 text-sm opacity-80">
-            You've already voted on this poll from this device.
-            Each device can only vote once to ensure fair results.
-          </p>
+          <h3 class="text-sm font-medium">{{ $ui("Already Voted") }}</h3>
+          <p class="mt-1 text-sm opacity-80"> {{ $ui("You've already voted on this poll from this device. Each device can only vote once to ensure fair results.") }} </p>
           <ion-button 
             size="small" 
             fill="outline" 
             color="warning"
             class="mt-2"
             @click="viewMyReceipt"
-          >
-            View My Receipt
-          </ion-button>
+          > {{ $ui("View My Receipt") }} </ion-button>
         </div>
       </div>
     </div>
@@ -38,9 +33,7 @@
       <div class="mt-4 info-notice">
         <p class="text-xs">
           <ion-icon :icon="informationCircle" class="align-middle"></ion-icon>
-          <strong>One Vote Per Device:</strong> Your device fingerprint will be recorded
-          to prevent duplicate votes. You'll receive a 12-word receipt verification code to verify your vote later.
-        </p>
+          <strong>{{ $ui("One Vote Per Device:") }}</strong> {{ $ui("Your device fingerprint will be recorded to prevent duplicate votes. You'll receive a 12-word receipt verification code to verify your vote later.") }} </p>
       </div>
 
       <ion-button
@@ -50,13 +43,14 @@
         class="mt-4"
       >
         <ion-spinner v-if="isSubmitting" name="crescent" class="mr-2"></ion-spinner>
-        {{ isSubmitting ? 'Submitting...' : 'Cast Vote' }}
+        {{ isSubmitting ? $ui("Submitting...") : $ui("Cast Vote") }}
       </ion-button>
     </ion-card-content>
   </ion-card>
 </template>
 
 <script setup lang="ts">
+import { ui } from "../i18n";
 import { ref, onMounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import {
@@ -150,7 +144,7 @@ const submitVote = async () => {
     if (props.requiresInviteCode) {
       if (!inviteCode) {
         const toast = await toastController.create({
-          message: 'An invite code is required to vote in this poll',
+          message: ui("An invite code is required to vote in this poll"),
           duration: 3000,
           color: 'danger'
         });
@@ -162,7 +156,7 @@ const submitVote = async () => {
     // Double-check vote eligibility
     if (await VoteTrackerService.hasVoted(props.poll.id)) {
       const toast = await toastController.create({
-        message: 'You have already voted on this poll',
+        message: ui("You have already voted on this poll"),
         duration: 3000,
         color: 'danger'
       });
@@ -176,7 +170,7 @@ const submitVote = async () => {
     if (!authorization.allowed) {
       if (authorization.requiresAuth) {
         const toast = await toastController.create({
-          message: 'Sign in is required before voting on this poll',
+          message: ui("Sign in is required before voting on this poll"),
           duration: 3000,
           color: 'warning'
         });
@@ -278,7 +272,7 @@ const submitVote = async () => {
     })();
 
     const toast = await toastController.create({
-      message: 'Vote recorded. Network sync will continue in the background.',
+      message: ui("Vote recorded. Network sync will continue in the background."),
       duration: 3000,
       color: 'success'
     });

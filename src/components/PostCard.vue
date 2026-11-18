@@ -4,7 +4,7 @@
     <!-- Flagged overlay -->
     <div v-if="flagged && filterAction === 'blur' && !revealed" class="post-flagged-overlay" @click.stop="revealed = true">
       <ion-icon :icon="warningOutline"></ion-icon>
-      <span>Post hidden by word filter — tap to reveal</span>
+      <span>{{ $ui("Post hidden by word filter — tap to reveal") }}</span>
     </div>
 
     <div class="post-inner" @click="$emit('click')" :class="{ 'content-blurred': flagged && filterAction === 'blur' && !revealed }">
@@ -16,7 +16,7 @@
           <div class="post-meta-text">
             <div class="post-meta-row">
               <span class="post-author">{{ authorDisplayName }}</span>
-              <span class="post-identity-badge" :class="authorIdentityClass">{{ authorIdentityLabel }}</span>
+              <span class="post-identity-badge" :class="authorIdentityClass">{{ $ui(authorIdentityLabel) }}</span>
               <span class="post-sep">·</span>
               <span class="post-time">{{ formatTime(post.createdAt) }}</span>
             </div>
@@ -39,9 +39,7 @@
                 <svg viewBox="0 0 24 24" fill="none" width="10" height="10">
                   <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="1.8"/>
                   <path d="M7 11V7a5 5 0 0110 0v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                </svg>
-                locked
-              </span>
+                </svg> {{ $ui("locked") }} </span>
             </div>
           </div>
         </div>
@@ -56,7 +54,7 @@
       <div v-if="post.content" class="post-excerpt">
         {{ truncated ? truncateText(post.content, 200) : post.content }}
         <button v-if="post.content.length > 200" class="post-read-more" @click.stop="truncated = !truncated">
-          {{ truncated ? 'Read more' : 'Show less' }}
+          {{ truncated ? $ui("Read more") : $ui("Show less") }}
         </button>
       </div>
 
@@ -100,7 +98,7 @@
             </template>
           </Suspense>
         </template>
-        <span v-if="post.imageIPFS" class="post-media-chip">IPFS</span>
+        <span v-if="post.imageIPFS" class="post-media-chip">{{ $ui("IPFS") }}</span>
       </div>
 
       <ImageLightbox
@@ -117,7 +115,7 @@
           <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
         <code class="post-nostr-id">{{ shortenNostrId(nostrEventId) }}</code>
-        <button class="post-nostr-open" @click.stop="openNostr" title="Open in Nostr client">↗</button>
+        <button class="post-nostr-open" @click.stop="openNostr" :title="$ui('Open in Nostr client')">↗</button>
         <button class="post-nostr-copy" @click.stop="copyNostrId" :title="nostrCopied ? 'Copied!' : 'Copy event ID'">
           <svg v-if="!nostrCopied" viewBox="0 0 24 24" fill="none" width="11" height="11">
             <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.8"/>
@@ -131,8 +129,7 @@
 
       <!-- View count — below content, no icon, subtle -->
       <div v-if="post.viewCount && post.viewCount > 0" class="post-view-count-row">
-        {{ formatViewCount(post.viewCount) }} views
-      </div>
+        {{ formatViewCount(post.viewCount) }} {{ $ui("views") }} </div>
 
       <!-- ── Footer ───────────────────────────────── -->
       <div class="post-footer" @click.stop>
@@ -171,15 +168,15 @@
           </button>
 
           <!-- Share -->
-          <button class="post-action-btn" @click.stop="handleShare" aria-label="Share post">
+          <button class="post-action-btn" @click.stop="handleShare" :aria-label="$ui('Share post')">
             <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
               <path d="M21 12l-7-7v4C7 10 4 15 3 21c2.5-3.5 6-5.1 11-5.1V20l7-8z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
             </svg>
-            <span>Share</span>
+            <span>{{ $ui("Share") }}</span>
           </button>
 
           <!-- Nostr open (compact, in footer too) -->
-          <button v-if="nostrEventId" class="post-action-btn post-action-btn--nostr" @click.stop="openNostr" title="Open in Nostr">
+          <button v-if="nostrEventId" class="post-action-btn post-action-btn--nostr" @click.stop="openNostr" :title="$ui('Open in Nostr')">
             <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
               <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
@@ -192,9 +189,7 @@
             :title="moderationActionTitle"
             @click.stop="$emit('moderation-submit')"
           >
-            <ion-icon slot="start" :icon="shieldCheckmarkOutline"></ion-icon>
-            Filter
-          </ion-button>
+            <ion-icon slot="start" :icon="shieldCheckmarkOutline"></ion-icon> {{ $ui("Filter") }} </ion-button>
         </div>
 
       </div>
@@ -204,6 +199,7 @@
 </template>
 
 <script setup lang="ts">
+import { relativeTime } from "../i18n";
 import { ref, computed, watch } from 'vue';
 import { IonIcon, IonButton } from '@ionic/vue';
 import { peopleOutline, warningOutline, shieldCheckmarkOutline, heart, heartOutline } from 'ionicons/icons';
@@ -288,15 +284,7 @@ const isTimeLocked  = computed(() => !!(props.post as any).resultsLockedUntil &&
 const nostrEventId  = computed(() => (props.post as any).nostrEventId || (props.post as any).eventId || '');
 
 // ── Methods ────────────────────────────────────────────────────────────────
-function formatTime(ts: number): string {
-  const diff = Date.now() - ts;
-  const m = Math.floor(diff / 60000), h = Math.floor(diff / 3600000), d = Math.floor(diff / 86400000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m`;
-  if (h < 24) return `${h}h`;
-  if (d < 7)  return `${d}d`;
-  return new Date(ts).toLocaleDateString();
-}
+function formatTime(ts: number): string { return relativeTime(ts); }
 
 function truncateText(text: string, max: number): string {
   if (text.length <= max) return text;

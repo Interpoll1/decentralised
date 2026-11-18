@@ -18,39 +18,39 @@
             <span class="hdr-name">{{ recipientName }}</span>
             <span class="hdr-status">
               <span class="presence-dot" :class="recipientOnline ? 'presence-dot--online' : 'presence-dot--offline'"></span>
-              {{ recipientOnline ? 'Online' : 'Offline' }}
+              {{ recipientOnline ? $ui("Online") : $ui("Offline") }}
             </span>
           </div>
         </div>
 
         <ion-buttons slot="end">
           <span v-if="!embedded" class="hdr-ws-status" :class="{ 'hdr-ws-status--ok': connected && !chatError }">
-            {{ connected && !chatError ? 'Connected' : chatError ? 'Error' : 'Offline' }}
+            {{ connected && !chatError ? $ui("Connected") : chatError ? $ui("Error") : $ui("Offline") }}
           </span>
           <template v-if="canCall">
-            <button class="header-action-btn" data-testid="call-voice" :disabled="callStore.isActive" @click="callStore.start(recipientId, false)" title="Voice call">
+            <button class="header-action-btn" data-testid="call-voice" :disabled="callStore.isActive" @click="callStore.start(recipientId, false)" :title="$ui('Voice call')">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path d="M22 16.9v3a2 2 0 01-2.2 2 19.8 19.8 0 01-8.6-3.1 19.5 19.5 0 01-6-6A19.8 19.8 0 012.1 4.2 2 2 0 014.1 2h3a2 2 0 012 1.7c.1.9.4 1.8.7 2.7a2 2 0 01-.5 2.1L8 9.8a16 16 0 006 6l1.3-1.3a2 2 0 012.1-.4c.9.3 1.8.6 2.7.7a2 2 0 011.7 2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
-            <button class="header-action-btn" data-testid="call-video" :disabled="callStore.isActive" @click="callStore.start(recipientId, true)" title="Video call">
+            <button class="header-action-btn" data-testid="call-video" :disabled="callStore.isActive" @click="callStore.start(recipientId, true)" :title="$ui('Video call')">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <rect x="2" y="6" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.8"/>
                 <path d="M16 10l6-4v12l-6-4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
               </svg>
             </button>
           </template>
-          <button v-if="embedded" class="header-action-btn" :class="{ 'header-action-btn--on': detailsOpen }" title="Conversation details" aria-label="Conversation details" @click="detailsOpen = !detailsOpen">
+          <button v-if="embedded" class="header-action-btn" :class="{ 'header-action-btn--on': detailsOpen }" :title="$ui('Conversation details')" :aria-label="$ui('Conversation details')" @click="detailsOpen = !detailsOpen">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 11v5M12 8v.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           </button>
-          <button class="header-action-btn sn-btn" @click="showSafetyNumber = true" title="Verify encryption">
+          <button class="header-action-btn sn-btn" @click="showSafetyNumber = true" :title="$ui('Verify encryption')">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
               <path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
               <circle cx="12" cy="16" r="1.5" fill="currentColor"/>
             </svg>
           </button>
-          <button class="header-action-btn danger" @click="confirmDeleteAll" title="Delete all messages">
+          <button class="header-action-btn danger" @click="confirmDeleteAll" :title="$ui('Delete all messages')">
             <svg viewBox="0 0 24 24" fill="none">
               <polyline points="3 6 5 6 21 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
               <path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -79,7 +79,7 @@
               {{ (recipientName || '?').charAt(0).toUpperCase() }}
             </div>
             <p class="empty-name">{{ recipientName }}</p>
-            <p class="empty-hint">Messages are end-to-end encrypted. Say hello!</p>
+            <p class="empty-hint">{{ $ui("Messages are end-to-end encrypted. Say hello!") }}</p>
           </div>
 
           <template v-for="(msg, i) in currentMessages" :key="msg.id">
@@ -95,7 +95,7 @@
                 <div v-if="msg.mediaType === 'image'" class="media-wrap" @click="openLightbox(msg)">
                   <img :src="msg.mediaUrl" class="media-img" loading="lazy" />
                   <div class="media-overlay-btns">
-                    <button class="media-dl-btn" @click.stop="downloadMedia(msg)" title="Download">
+                    <button class="media-dl-btn" @click.stop="downloadMedia(msg)" :title="$ui('Download')">
                       <svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
                   </div>
@@ -124,7 +124,7 @@
                     </div>
                   </div>
                   <div class="media-overlay-btns">
-                    <button class="media-dl-btn" @click.stop="downloadMedia(msg)" title="Download">
+                    <button class="media-dl-btn" @click.stop="downloadMedia(msg)" :title="$ui('Download')">
                       <svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
                   </div>
@@ -133,7 +133,7 @@
                 <a v-else :href="msg.mediaUrl" :download="msg.fileName || msg.message" target="_blank" rel="noopener" class="file-download-link">
                   <span class="file-icon">&#128196;</span>
                   <span class="file-name">{{ msg.fileName || msg.message }}</span>
-                  <span v-if="msg.fileSize" class="file-size">{{ msg.fileSize >= 1048576 ? (msg.fileSize / 1048576).toFixed(1) + ' MB' : (msg.fileSize / 1024).toFixed(1) + ' KB' }}</span>
+                  <span v-if="msg.fileSize" class="file-size">{{ msg.fileSize >= 1048576 ? (msg.fileSize / 1048576).toFixed(1) + $ui(" MB") : (msg.fileSize / 1024).toFixed(1) + $ui(" KB") }}</span>
                 </a>
                 <!-- Upload progress overlay (relay upload) -->
                 <div v-if="msg.uploadProgress != null && msg.uploadProgress != undefined && msg.uploadProgress < 100" class="media-upload-overlay">
@@ -150,7 +150,7 @@
               <div v-else class="message-content media-bubble" style="background:transparent!important;box-shadow:none!important;">
                 <div class="media-decode-err">
                   <svg viewBox="0 0 24 24" fill="none" style="width:22px;height:22px;opacity:.5"><path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm0 6v4m0 4h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-                  <span>Media unavailable</span>
+                  <span>{{ $ui("Media unavailable") }}</span>
                 </div>
               </div>
 
@@ -168,10 +168,8 @@
           <div v-if="lightbox" class="lightbox-backdrop" @click.self="lightbox = null" @keydown.esc="lightbox = null" tabindex="-1">
             <div class="lightbox-inner">
               <button class="lightbox-close" @click="lightbox = null">&#10005;</button>
-              <button class="lightbox-dl" @click="downloadMedia(lightbox)" title="Download">
-                <svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                Download
-              </button>
+              <button class="lightbox-dl" @click="downloadMedia(lightbox)" :title="$ui('Download')">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> {{ $ui("Download") }} </button>
               <img v-if="lightbox.mediaType === 'image'" :src="lightbox.mediaUrl" class="lightbox-media" />
               <video v-else-if="lightbox.mediaType === 'video'" :src="lightbox.mediaUrl" controls autoplay playsinline class="lightbox-media" />
             </div>
@@ -196,11 +194,11 @@
               <div class="p2p-file-info">
                 <span class="p2p-file-name">{{ p2pTransfer.name }}</span>
                 <span class="p2p-file-status">
-                  {{ p2pTransfer.direction === 'sending' ? 'Sending' : 'Receiving' }} · {{ p2pTransfer.progress < 5 && p2pTransfer.direction === 'sending' ? 'Connecting…' : p2pTransfer.progress + '%' }}
+                  {{ p2pTransfer.direction === 'sending' ? $ui("Sending") : $ui("Receiving") }} · {{ p2pTransfer.progress < 5 && p2pTransfer.direction === 'sending' ? $ui("Connecting…") : p2pTransfer.progress + '%' }}
                 </span>
                 <!-- Transport tier badge (ticket-04: tier ordering) -->
                 <span v-if="p2pTransfer.tier" class="p2p-tier-badge" :class="`p2p-tier-badge--${p2pTransfer.tier}`">
-                  {{ p2pTransfer.tier === 'lan' ? '⚡ LAN' : p2pTransfer.tier === 'direct' ? '🔒 Direct' : '☁ Relay' }}
+                  {{ p2pTransfer.tier === 'lan' ? $ui("⚡ LAN") : p2pTransfer.tier === 'direct' ? $ui("🔒 Direct") : $ui("☁ Relay") }}
                 </span>
               </div>
               <span class="p2p-pct">{{ p2pTransfer.progress }}%</span>
@@ -216,11 +214,8 @@
         <!-- Banners -->
         <div v-if="chatError" class="chat-error-banner">{{ chatError }}</div>
         <div v-else-if="recipientKeyMissing" class="chat-warning-banner">
-          {{ recipientName }} hasn't opened the app yet — messages are saved and delivered once they appear.
-        </div>
-        <div v-else-if="!connected && chatReady" class="chat-warning-banner">
-          Offline — messages are queued and sent when connectivity returns.
-        </div>
+          {{ recipientName }} {{ $ui("hasn't opened the app yet — messages are saved and delivered once they appear.") }} </div>
+        <div v-else-if="!connected && chatReady" class="chat-warning-banner"> {{ $ui("Offline — messages are queued and sent when connectivity returns.") }} </div>
 
         <!-- P2P info banner: shown when hovering attach or actively transferring -->
         <div class="p2p-info-banner" :class="{ 'p2p-info-banner--active': showP2PInfo || !!p2pTransfer }">
@@ -228,20 +223,14 @@
             <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/>
             <path d="M12 8h.01M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
           </svg>
-          <span>
-            Image &amp; video transfers are <strong>direct peer-to-peer</strong> — server-free when
-            possible. On the same network a <strong>LAN path</strong> is used; otherwise a relay-free
-            STUN connection is attempted before falling back to a relay.
-            <strong>Both users must be online</strong> at the same time. Unlike text messages, files
-            cannot be queued for offline delivery.
-          </span>
+          <span> {{ $ui("Image & video transfers are") }} <strong>{{ $ui("direct peer-to-peer") }}</strong> {{ $ui("— server-free when possible. On the same network a") }} <strong>{{ $ui("LAN path") }}</strong> {{ $ui("is used; otherwise a relay-free STUN connection is attempted before falling back to a relay.") }} <strong>{{ $ui("Both users must be online") }}</strong> {{ $ui("at the same time. Unlike text messages, files cannot be queued for offline delivery.") }} </span>
         </div>
 
         <!-- Typing indicator above input (presence is shown in header only) -->
         <div class="bottom-status-bar" :class="{ 'bottom-status-bar--visible': isTypingState }">
           <div v-if="isTypingState" class="typing-indicator">
             <span class="typing-dots"><span></span><span></span><span></span></span>
-            <span class="typing-label">{{ recipientName }} is typing…</span>
+            <span class="typing-label">{{ recipientName }} {{ $ui("is typing…") }}</span>
           </div>
         </div>
 
@@ -265,7 +254,7 @@
           </div>
 
           <!-- Attach button — right of input -->
-          <button class="attach-btn" @click="openFilePickerWithPresence()" :disabled="!chatReady" title="Send image or video"
+          <button class="attach-btn" @click="openFilePickerWithPresence()" :disabled="!chatReady" :title="$ui('Send image or video')"
             @mouseenter="showP2PInfo = true" @mouseleave="showP2PInfo = false"
             @focus="showP2PInfo = true"   @blur="showP2PInfo = false">
             <svg viewBox="0 0 24 24" fill="none">
@@ -285,10 +274,10 @@
     </div>
 
     <!-- Desktop workspace only: conversation details (hidden on phones, where this is a routed page) -->
-    <aside v-if="embedded && detailsOpen" class="dm-details" aria-label="Conversation details">
+    <aside v-if="embedded && detailsOpen" class="dm-details" :aria-label="$ui('Conversation details')">
       <header class="dm-details__head">
-        <h3>Conversation details</h3>
-        <button class="dm-details__x" aria-label="Close details" @click="detailsOpen = false">
+        <h3>{{ $ui("Conversation details") }}</h3>
+        <button class="dm-details__x" :aria-label="$ui('Close details')" @click="detailsOpen = false">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         </button>
       </header>
@@ -296,32 +285,32 @@
         <div class="dm-details__avatar" :class="avatarTone(recipientId)">{{ (recipientName || '?').charAt(0).toUpperCase() }}</div>
         <div>
           <p class="dm-details__name">{{ recipientName }}</p>
-          <p class="dm-details__status"><span class="presence-dot" :class="recipientOnline ? 'presence-dot--online' : 'presence-dot--offline'"></span>{{ recipientOnline ? 'Online' : 'Offline' }}</p>
+          <p class="dm-details__status"><span class="presence-dot" :class="recipientOnline ? 'presence-dot--online' : 'presence-dot--offline'"></span>{{ recipientOnline ? $ui("Online") : $ui("Offline") }}</p>
         </div>
       </div>
       <button class="dm-details__row" @click="showSafetyNumber = true">
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-        <span><strong>Encryption</strong><small>Peer-to-peer encrypted</small></span>
+        <span><strong>{{ $ui("Encryption") }}</strong><small>{{ $ui("Peer-to-peer encrypted") }}</small></span>
         <svg class="dm-details__chev" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <section class="dm-details__sec">
-        <p class="dm-details__label">Shared media <span>{{ sharedMedia.length }}</span></p>
+        <p class="dm-details__label">{{ $ui("Shared media") }} <span>{{ sharedMedia.length }}</span></p>
         <div v-if="sharedMedia.length" class="dm-details__grid">
           <button v-for="m in sharedMedia.slice(0, 6)" :key="m.id" class="dm-details__thumb" @click="openLightbox(m)">
             <img v-if="m.mediaType === 'image'" :src="m.mediaUrl" alt="" loading="lazy" />
             <span v-else>▶</span>
           </button>
         </div>
-        <p v-else class="dm-details__empty">Photos and videos you share appear here.</p>
+        <p v-else class="dm-details__empty">{{ $ui("Photos and videos you share appear here.") }}</p>
       </section>
       <button class="dm-details__row" @click="showSafetyNumber = true">
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3.4 8.4-8 11-4.6-2.6-8-6-8-11V5l8-3z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
-        <span><strong>View safety number</strong></span>
+        <span><strong>{{ $ui("View safety number") }}</strong></span>
         <svg class="dm-details__chev" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <button class="dm-details__row dm-details__row--danger" @click="confirmDeleteAll">
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 6h18M19 6l-1 14H6L5 6M9 6V4h6v2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span><strong>Delete all messages</strong></span>
+        <span><strong>{{ $ui("Delete all messages") }}</strong></span>
       </button>
     </aside>
 
@@ -335,36 +324,27 @@
               <path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
               <circle cx="12" cy="16" r="1.5" fill="currentColor"/>
             </svg>
-            <h2 class="sn-title">Safety Number</h2>
+            <h2 class="sn-title">{{ $ui("Safety Number") }}</h2>
           </div>
 
-          <p class="sn-desc">
-            Compare this code with <strong>{{ recipientName }}</strong> in person or
-            over a trusted channel. If it matches on both sides your conversation is
-            end-to-end encrypted and has not been intercepted.
-          </p>
+          <p class="sn-desc"> {{ $ui("Compare this code with") }} <strong>{{ recipientName }}</strong> {{ $ui("in person or over a trusted channel. If it matches on both sides your conversation is end-to-end encrypted and has not been intercepted.") }} </p>
 
           <div v-if="safetyNumberMissing" class="sn-warning">
             <svg viewBox="0 0 24 24" fill="none" width="16" height="16" style="flex-shrink:0">
               <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            {{ recipientName }} has not yet published an identity key.
-            Ask them to open the app and send a message.
-          </div>
+            {{ recipientName }} {{ $ui("has not yet published an identity key. Ask them to open the app and send a message.") }} </div>
 
           <div v-else-if="!safetyNumber" class="sn-loading">
-            <span class="sn-spinner"></span> Computing…
-          </div>
+            <span class="sn-spinner"></span> {{ $ui("Computing…") }} </div>
 
           <div v-else class="sn-number-grid">
             <span v-for="(chunk, i) in safetyNumberChunks" :key="i" class="sn-chunk">{{ chunk }}</span>
           </div>
 
-          <p v-if="safetyNumber" class="sn-footnote">
-            This number changes if either party reinstalls or rotates their keys.
-          </p>
+          <p v-if="safetyNumber" class="sn-footnote"> {{ $ui("This number changes if either party reinstalls or rotates their keys.") }} </p>
 
-          <button class="sn-done-btn" @click="showSafetyNumber = false">Done</button>
+          <button class="sn-done-btn" @click="showSafetyNumber = false">{{ $ui("Done") }}</button>
         </div>
       </div>
     </transition>
@@ -372,6 +352,7 @@
 </template>
 
 <script setup lang="ts">
+import { ui } from "../i18n";
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import {
@@ -1066,12 +1047,12 @@ function avatarTone(id: string) {
 // ── Delete all ─────────────────────────────────────────────────────────────────
 async function confirmDeleteAll() {
   const alert = await alertController.create({
-    header: 'Delete all messages?',
-    message: 'This clears your copy of the conversation. The other person keeps their copy.',
+    header: ui("Delete all messages?"),
+    message: ui("This clears your copy of the conversation. The other person keeps their copy."),
     buttons: [
-      { text: 'Cancel', role: 'cancel' },
+      { text: ui("Cancel"), role: 'cancel' },
       {
-        text: 'Delete', role: 'destructive', cssClass: 'alert-danger',
+        text: ui("Delete"), role: 'destructive', cssClass: 'alert-danger',
         handler: async () => {
           if (!chatService) return;
           const roomId = [myUserId, recipientId.value].sort().join(':');

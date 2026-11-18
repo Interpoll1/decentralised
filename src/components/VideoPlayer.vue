@@ -30,7 +30,7 @@
       </div>
 
       <div class="video-player__overlay">
-        <button class="video-player__play-btn" aria-label="Play video">
+        <button class="video-player__play-btn" :aria-label="$ui('Play video')">
           <svg viewBox="0 0 48 48" fill="none" class="play-icon-svg">
             <circle cx="24" cy="24" r="24" fill="rgba(0,0,0,0.55)" />
             <polygon points="19,14 37,24 19,34" fill="#fff" />
@@ -43,23 +43,20 @@
 
       <div v-if="fileSize" class="video-player__meta">
         <ion-icon :icon="cloudOutline" />
-        {{ formatFileSize(fileSize) }} · IPFS
-      </div>
+        {{ formatFileSize(fileSize) }} {{ $ui("· IPFS") }} </div>
     </div>
 
     <!-- Expanded video player -->
     <div v-else class="video-player__embed">
       <div v-if="isLoading" class="video-player__loading">
         <ion-spinner name="crescent" />
-        <p>Loading from IPFS…</p>
+        <p>{{ $ui("Loading from IPFS…") }}</p>
       </div>
 
       <div v-if="loadError && !isLoading" class="video-player__error">
         <ion-icon :icon="alertCircleOutline" />
         <p>{{ loadError }}</p>
-        <button class="vp-btn vp-btn--outline" @click="tryNextGateway">
-          Try another gateway
-        </button>
+        <button class="vp-btn vp-btn--outline" @click="tryNextGateway"> {{ $ui("Try another gateway") }} </button>
       </div>
 
       <!-- Video element — no native controls -->
@@ -84,9 +81,7 @@
           :key="url"
           :src="url"
           :type="mimeType"
-        />
-        Your browser does not support HTML5 video.
-      </video>
+        /> {{ $ui("Your browser does not support HTML5 video.") }} </video>
 
       <!-- Custom controls -->
       <div v-if="!isLoading && !loadError" class="vp-controls">
@@ -134,7 +129,7 @@
               min="0" max="1" step="0.05"
               :value="isMuted ? 0 : volume"
               @input="onVolumeChange"
-              aria-label="Volume"
+              :aria-label="$ui('Volume')"
             />
 
             <span class="vp-time">{{ formatDuration(currentTime) }} / {{ formatDuration(duration) }}</span>
@@ -142,15 +137,15 @@
 
           <!-- Right: fullscreen + collapse + IPFS -->
           <div class="vp-controls__right">
-            <button class="vp-icon-btn" @click="toggleFullscreen" aria-label="Fullscreen">
+            <button class="vp-icon-btn" @click="toggleFullscreen" :aria-label="$ui('Fullscreen')">
               <svg viewBox="0 0 24 24" fill="currentColor" class="vp-svg-icon">
                 <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
               </svg>
             </button>
 
-            <button class="vp-icon-btn vp-collapse-btn" @click="collapse" aria-label="Collapse">
+            <button class="vp-icon-btn vp-collapse-btn" @click="collapse" :aria-label="$ui('Collapse')">
               <ion-icon :icon="chevronUpOutline" />
-              <span>Collapse</span>
+              <span>{{ $ui("Collapse") }}</span>
             </button>
 
             <a
@@ -158,10 +153,10 @@
               target="_blank"
               rel="noopener"
               class="vp-icon-btn vp-ipfs-link"
-              title="Open on IPFS"
+              :title="$ui('Open on IPFS')"
             >
               <ion-icon :icon="openOutline" />
-              <span>IPFS</span>
+              <span>{{ $ui("IPFS") }}</span>
             </a>
           </div>
         </div>

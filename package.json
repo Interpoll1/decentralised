@@ -27,6 +27,7 @@
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",
     "typecheck": "vue-tsc --noEmit -p tsconfig.app.json",
+    "check:locales": "node tools/check-locales.mjs",
     "verify:build": "node tools/verify-build.mjs"
   },
   "dependencies": {
@@ -63,16 +64,20 @@
     "simple-peer": "^9.11.1",
     "stream-browserify": "^3.0.0",
     "vue": "^3.5.43",
+    "vue-i18n": "11.4.22",
     "vue-router": "^4.2.5",
     "ws": "^8.22.0"
   },
   "devDependencies": {
+    "@babel/parser": "7.29.9",
     "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^6.2.2",
     "@playwright/test": "^1.65.1",
     "@tauri-apps/cli": "^2.12.3",
     "@types/node": "^20.10.0",
     "@vitejs/plugin-vue": "^6.0.0",
+    "@vue/compiler-dom": "3.5.43",
+    "@vue/compiler-sfc": "3.5.43",
     "autoprefixer": "^10.6.1",
     "fake-indexeddb": "6.2.5",
     "postcss": "^8.5.29",

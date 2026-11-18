@@ -7,9 +7,9 @@
             <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
         </ion-buttons>
-        <ion-title>Profile</ion-title>
+        <ion-title>{{ $ui("Profile") }}</ion-title>
         <ion-buttons slot="end">
-          <button class="settings-btn" @click="$router.push('/settings')" title="Settings">
+          <button class="settings-btn" @click="$router.push('/settings')" :title="$ui('Settings')">
             <ion-icon :icon="settingsOutline"></ion-icon>
           </button>
         </ion-buttons>
@@ -42,10 +42,10 @@
           <p class="profile-username">u/{{ userProfile?.customUsername || userProfile?.username }}</p>
 
           <div class="badge-row">
-            <span class="identity-pill" :class="identityBadgeClass">{{ identityBadgeLabel }}</span>
+            <span class="identity-pill" :class="identityBadgeClass">{{ $ui(identityBadgeLabel) }}</span>
             <span class="anon-pill" :class="userProfile?.showRealName ? 'named' : 'anon'">
               <ion-icon :icon="userProfile?.showRealName ? eyeOutline : eyeOffOutline"></ion-icon>
-              {{ userProfile?.showRealName ? 'Visible' : 'Anonymous' }}
+              {{ userProfile?.showRealName ? $ui("Visible") : $ui("Anonymous") }}
             </span>
           </div>
 
@@ -53,22 +53,22 @@
           <div class="stats-strip">
             <div class="stat-item">
               <strong>{{ userProfile?.karma || 0 }}</strong>
-              <span>Karma</span>
+              <span>{{ $ui("Karma") }}</span>
             </div>
             <div class="stat-divider"></div>
             <div class="stat-item">
               <strong>{{ userProfile?.postCount || 0 }}</strong>
-              <span>Posts</span>
+              <span>{{ $ui("Posts") }}</span>
             </div>
             <div class="stat-divider"></div>
             <div class="stat-item">
               <strong>{{ userProfile?.commentCount || 0 }}</strong>
-              <span>Comments</span>
+              <span>{{ $ui("Comments") }}</span>
             </div>
             <div class="stat-divider"></div>
             <div class="stat-item">
               <strong>{{ joinedCommunitiesCount }}</strong>
-              <span>Communities</span>
+              <span>{{ $ui("Communities") }}</span>
             </div>
           </div>
         </div>
@@ -76,38 +76,36 @@
         <!-- ── Edit Profile ───────────────────────── -->
         <div class="profile-card">
           <div class="card-label">
-            <ion-icon :icon="personCircleOutline"></ion-icon>
-            Edit Profile
-          </div>
+            <ion-icon :icon="personCircleOutline"></ion-icon> {{ $ui("Edit Profile") }} </div>
 
           <div class="field-group">
-            <label class="field-label">Custom Username</label>
+            <label class="field-label">{{ $ui("Custom Username") }}</label>
             <div class="field-wrap">
-              <input class="field-native" v-model="customUsername" placeholder="Choose a username" :maxlength="30" />
+              <input class="field-native" v-model="customUsername" :placeholder="$ui('Choose a username')" :maxlength="30" />
             </div>
           </div>
 
           <div class="field-group">
-            <label class="field-label">Display Name</label>
+            <label class="field-label">{{ $ui("Display Name") }}</label>
             <div class="field-wrap">
-              <input class="field-native" v-model="displayName" placeholder="Your display name" />
+              <input class="field-native" v-model="displayName" :placeholder="$ui('Your display name')" />
             </div>
           </div>
 
           <div class="field-group">
-            <label class="field-label">Bio</label>
+            <label class="field-label">{{ $ui("Bio") }}</label>
             <div class="field-wrap">
-              <textarea class="field-native" v-model="bio" placeholder="Tell us about yourself…" rows="3"></textarea>
+              <textarea class="field-native" v-model="bio" :placeholder="$ui('Tell us about yourself…')" rows="3"></textarea>
             </div>
           </div>
 
           <div class="toggle-row">
             <div>
-              <div class="toggle-label">Show username on posts</div>
+              <div class="toggle-label">{{ $ui("Show username on posts") }}</div>
               <div class="toggle-sub">
                 {{ showRealName
-                  ? 'Your custom username will appear on new posts and comments.'
-                  : 'You will appear as a random pseudonym on each post (default).' }}
+                  ? $ui("Your custom username will appear on new posts and comments.")
+                  : $ui("You will appear as a random pseudonym on each post (default).") }}
               </div>
             </div>
             <label class="toggle-switch">
@@ -119,17 +117,15 @@
           <button class="save-btn" @click="saveProfile" :disabled="isSaving">
             <div v-if="isSaving" class="btn-spinner"></div>
             <ion-icon v-else :icon="saveOutline"></ion-icon>
-            {{ isSaving ? 'Saving…' : 'Save Profile' }}
+            {{ isSaving ? $ui("Saving…") : $ui("Save Profile") }}
           </button>
         </div>
 
         <!-- ── Chat Link ──────────────────────────── -->
         <div class="profile-card chat-link-card">
           <div class="card-label">
-            <ion-icon :icon="chatbubbleOutline"></ion-icon>
-            Chat Link
-          </div>
-          <p class="card-sub">Share this link so others can start a direct message with you — no username search needed.</p>
+            <ion-icon :icon="chatbubbleOutline"></ion-icon> {{ $ui("Chat Link") }} </div>
+          <p class="card-sub">{{ $ui("Share this link so others can start a direct message with you — no username search needed.") }}</p>
 
           <div class="chat-link-box">
             <svg viewBox="0 0 24 24" fill="none" class="link-icon">
@@ -141,40 +137,34 @@
 
           <div class="link-actions">
             <button class="pill-btn accent" @click="copyChatLink">
-              <svg viewBox="0 0 24 24" fill="none" width="14" height="14"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-              Copy Link
-            </button>
+              <svg viewBox="0 0 24 24" fill="none" width="14" height="14"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg> {{ $ui("Copy Link") }} </button>
             <button v-if="canShare" class="pill-btn outline" @click="shareChatLink">
-              <svg viewBox="0 0 24 24" fill="none" width="14" height="14"><path d="M21 12l-7-7v4C7 10 4 15 3 21c2.5-3.5 6-5.1 11-5.1V20l7-8z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>
-              Share
-            </button>
+              <svg viewBox="0 0 24 24" fill="none" width="14" height="14"><path d="M21 12l-7-7v4C7 10 4 15 3 21c2.5-3.5 6-5.1 11-5.1V20l7-8z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg> {{ $ui("Share") }} </button>
           </div>
-          <p class="card-hint">Anyone with this link can open a chat with you directly.</p>
+          <p class="card-hint">{{ $ui("Anyone with this link can open a chat with you directly.") }}</p>
         </div>
 
         <!-- ── Account Info ───────────────────────── -->
         <div class="profile-card">
           <div class="card-label">
-            <ion-icon :icon="settingsOutline"></ion-icon>
-            Account Information
-          </div>
+            <ion-icon :icon="settingsOutline"></ion-icon> {{ $ui("Account Information") }} </div>
           <div class="info-table">
             <div class="info-row">
-              <span class="info-key">Device ID</span>
+              <span class="info-key">{{ $ui("Device ID") }}</span>
               <div class="info-val-row">
                 <code class="info-val">{{ deviceId }}</code>
-                <button class="icon-btn" @click="copyDeviceId" title="Copy">
+                <button class="icon-btn" @click="copyDeviceId" :title="$ui('Copy')">
                   <ion-icon :icon="copyOutline"></ion-icon>
                 </button>
               </div>
             </div>
             <div class="info-row">
-              <span class="info-key">Member Since</span>
+              <span class="info-key">{{ $ui("Member Since") }}</span>
               <span class="info-val">{{ formatDate(userProfile?.createdAt) }}</span>
             </div>
             <div class="info-row">
-              <span class="info-key">Total Karma</span>
-              <span class="karma-badge">{{ userProfile?.karma || 0 }} pts</span>
+              <span class="info-key">{{ $ui("Total Karma") }}</span>
+              <span class="karma-badge">{{ userProfile?.karma || 0 }} {{ $ui("pts") }}</span>
             </div>
           </div>
         </div>
@@ -182,29 +172,27 @@
         <!-- ── Activity ───────────────────────────── -->
         <div class="profile-card">
           <div class="card-label">
-            <ion-icon :icon="trophyOutline"></ion-icon>
-            Activity
-          </div>
+            <ion-icon :icon="trophyOutline"></ion-icon> {{ $ui("Activity") }} </div>
           <div class="activity-grid">
             <div class="activity-cell">
               <div class="activity-icon violet"><ion-icon :icon="documentTextOutline"></ion-icon></div>
               <strong>{{ userProfile?.postCount || 0 }}</strong>
-              <span>Posts</span>
+              <span>{{ $ui("Posts") }}</span>
             </div>
             <div class="activity-cell">
               <div class="activity-icon amber"><ion-icon :icon="chatbubbleOutline"></ion-icon></div>
               <strong>{{ userProfile?.commentCount || 0 }}</strong>
-              <span>Comments</span>
+              <span>{{ $ui("Comments") }}</span>
             </div>
             <div class="activity-cell">
               <div class="activity-icon gold"><ion-icon :icon="trophyOutline"></ion-icon></div>
               <strong>{{ userProfile?.karma || 0 }}</strong>
-              <span>Karma</span>
+              <span>{{ $ui("Karma") }}</span>
             </div>
             <div class="activity-cell">
               <div class="activity-icon teal"><ion-icon :icon="peopleOutline"></ion-icon></div>
               <strong>{{ joinedCommunitiesCount }}</strong>
-              <span>Communities</span>
+              <span>{{ $ui("Communities") }}</span>
             </div>
           </div>
         </div>
@@ -445,6 +433,8 @@ ion-content {
 </style>
 
 <script setup lang="ts">
+import { localeDate } from '../i18n';
+import { ui } from "../i18n";
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
@@ -496,10 +486,10 @@ async function copyChatLink() {
   if (!chatLink.value) return;
   try {
     await navigator.clipboard.writeText(chatLink.value);
-    const t = await toastController.create({ message: 'Chat link copied!', duration: 2000, color: 'success' });
+    const t = await toastController.create({ message: ui("Chat link copied!"), duration: 2000, color: 'success' });
     await t.present();
   } catch {
-    const t = await toastController.create({ message: 'Copy failed', duration: 3000, color: 'warning' });
+    const t = await toastController.create({ message: ui("Copy failed"), duration: 3000, color: 'warning' });
     await t.present();
   }
 }
@@ -538,8 +528,8 @@ const identityBadgeClass = computed(() =>
 );
 
 function formatDate(timestamp?: number): string {
-  if (!timestamp) return 'Unknown';
-  return new Date(timestamp).toLocaleDateString('en-US', {
+  if (!timestamp) return ui('Unknown');
+  return localeDate(timestamp, {
     year: 'numeric', month: 'long', day: 'numeric'
   });
 }
@@ -554,7 +544,7 @@ async function handleAvatarSelect(event: Event) {
   if (!file) return;
 
   if (file.size > 10 * 1024 * 1024) {
-    const toast = await toastController.create({ message: 'Image too large (max 10 MB)', duration: 3000 });
+    const toast = await toastController.create({ message: ui("Image too large (max 10 MB)"), duration: 3000 });
     await toast.present();
     return;
   }
@@ -564,7 +554,7 @@ async function handleAvatarSelect(event: Event) {
   reader.onload = (e) => { avatarPreview.value = e.target?.result as string; };
   reader.onerror = async () => {
     avatarFile.value = null;
-    const toast = await toastController.create({ message: 'Failed to read image', duration: 3000 });
+    const toast = await toastController.create({ message: ui("Failed to read image"), duration: 3000 });
     await toast.present();
   };
   reader.readAsDataURL(file);
@@ -607,11 +597,11 @@ async function saveProfile() {
     await UserService.updateProfile(updates);
     avatarFile.value = null;
     avatarPreview.value = null;
-    const toast = await toastController.create({ message: 'Profile updated', duration: 2000 });
+    const toast = await toastController.create({ message: ui("Profile updated"), duration: 2000 });
     await toast.present();
     await loadProfile();
   } catch {
-    const toast = await toastController.create({ message: 'Failed to update profile', duration: 2000 });
+    const toast = await toastController.create({ message: ui("Failed to update profile"), duration: 2000 });
     await toast.present();
   } finally {
     isSaving.value = false;
@@ -621,10 +611,10 @@ async function saveProfile() {
 async function copyDeviceId() {
   try {
     await navigator.clipboard.writeText(deviceId.value);
-    const toast = await toastController.create({ message: 'Device ID copied', duration: 1500 });
+    const toast = await toastController.create({ message: ui("Device ID copied"), duration: 1500 });
     await toast.present();
   } catch {
-    const toast = await toastController.create({ message: 'Could not copy — please copy manually', duration: 2000 });
+    const toast = await toastController.create({ message: ui("Could not copy — please copy manually"), duration: 2000 });
     await toast.present();
   }
 }

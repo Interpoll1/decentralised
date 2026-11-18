@@ -6,7 +6,7 @@
         <header class="bs-bit">
           <div ref="bitWrap" class="bs-bit-wrap" :class="{ jumping }"><BitMascot :size="88" :mood="current.mood" :animated="!jumping" /></div>
           <div class="bs-bubble" :key="step">
-            <p class="bs-bubble__text">{{ current.line }}</p>
+            <p class="bs-bubble__text">{{ $ui(current.line) }}</p>
           </div>
         </header>
 
@@ -16,31 +16,32 @@
 
         <!-- 0 · welcome -->
           <section v-if="step === 0" key="welcome" class="bs-step">
-            <h1 class="bs-title">Let's set you up</h1>
+            <h1 class="bs-title">{{ $ui("Let's set you up") }}</h1>
+            <LanguagePicker compact />
             <ul class="bs-list">
-              <li><b>Spaces</b> — pick communities for your feed</li>
-              <li><b>Private key</b> — the only thing that proves you're you</li>
-              <li><b>Relay</b> — choose how you connect to the network</li>
+              <li><b>{{ $ui("Spaces") }}</b> {{ $ui("— pick communities for your feed") }}</li>
+              <li><b>{{ $ui("Private key") }}</b> {{ $ui("— the only thing that proves you're you") }}</li>
+              <li><b>{{ $ui("Relay") }}</b> {{ $ui("— choose how you connect to the network") }}</li>
             </ul>
-            <p class="bs-note">About a minute. No email, no phone, no account.</p>
-            <button v-if="!restoring && !recoveringName" class="bs-link bs-restore-link" @click="restoring = true">I already have a recovery phrase</button>
-            <button v-if="!restoring && !recoveringName" class="bs-link bs-restore-link" @click="recoveringName = true">I lost my key — recover my username</button>
+            <p class="bs-note">{{ $ui("About a minute. No email, no phone, no account.") }}</p>
+            <button v-if="!restoring && !recoveringName" class="bs-link bs-restore-link" @click="restoring = true">{{ $ui("I already have a recovery phrase") }}</button>
+            <button v-if="!restoring && !recoveringName" class="bs-link bs-restore-link" @click="recoveringName = true">{{ $ui("I lost my key — recover my username") }}</button>
             <div v-if="recoveringName" class="bs-restore">
               <RecoverNameForm />
-              <button class="bs-link" @click="recoveringName = false">Close</button>
+              <button class="bs-link" @click="recoveringName = false">{{ $ui("Close") }}</button>
             </div>
-            <div v-else class="bs-restore">
+            <div v-else-if="restoring" class="bs-restore">
               <RestoreKeyForm :warn-replace="false" @restored="onRestored" />
-              <button class="bs-link" @click="restoring = false">Cancel</button>
+              <button class="bs-link" @click="restoring = false">{{ $ui("Cancel") }}</button>
             </div>
           </section>
 
           <!-- 1 · spaces -->
           <section v-else-if="step === 1" key="spaces" class="bs-step">
-            <h1 class="bs-title">Pick spaces to follow</h1>
-            <p class="bs-sub">Your feed shows posts from spaces you join. You can change this any time.</p>
-            <p v-if="loadingSpaces" class="bs-note">Loading spaces…</p>
-            <p v-else-if="spacesError" class="bs-error">{{ spacesError }} <button class="bs-link" @click="loadSpaces">Retry</button></p>
+            <h1 class="bs-title">{{ $ui("Pick spaces to follow") }}</h1>
+            <p class="bs-sub">{{ $ui("Your feed shows posts from spaces you join. You can change this any time.") }}</p>
+            <p v-if="loadingSpaces" class="bs-note">{{ $ui("Loading spaces…") }}</p>
+            <p v-else-if="spacesError" class="bs-error">{{ spacesError }} <button class="bs-link" @click="loadSpaces">{{ $ui("Retry") }}</button></p>
             <div v-else class="bs-grid">
               <button
                 v-for="c in spaces" :key="c.id" class="bs-card" :class="{ on: picked.has(c.id) }"
@@ -58,40 +59,40 @@
 
           <!-- 2 · private key -->
           <section v-else-if="step === 2" key="key" class="bs-step">
-            <h1 class="bs-title">Your private key</h1>
-            <p class="bs-sub">It was created on this device. Nobody — including us — can recover it for you. Save the 24-word phrase somewhere safe.</p>
+            <h1 class="bs-title">{{ $ui("Your private key") }}</h1>
+            <p class="bs-sub">{{ $ui("It was created on this device. Nobody — including us — can recover it for you. Save the 24-word phrase somewhere safe.") }}</p>
             <div class="bs-key">
               <div class="bs-key__row">
-                <span class="bs-key__label">Public ID</span>
+                <span class="bs-key__label">{{ $ui("Public ID") }}</span>
                 <code>{{ shortPubkey || '…' }}</code>
               </div>
               <div class="bs-phrase" :class="{ hidden: !showPhrase }">
                 <template v-if="showPhrase"><span v-for="(w, i) in words" :key="i"><i>{{ i + 1 }}</i>{{ w }}</span></template>
-                <button v-else class="bs-btn" @click="revealPhrase">Show recovery phrase</button>
+                <button v-else class="bs-btn" @click="revealPhrase">{{ $ui("Show recovery phrase") }}</button>
               </div>
               <div v-if="showPhrase" class="bs-key__actions">
-                <button class="bs-btn" @click="copyPhrase">{{ copied ? 'Copied' : 'Copy' }}</button>
-                <button class="bs-btn" @click="downloadPhrase">Download .txt</button>
+                <button class="bs-btn" @click="copyPhrase">{{ copied ? $ui("Copied") : $ui("Copy") }}</button>
+                <button class="bs-btn" @click="downloadPhrase">{{ $ui("Download .txt") }}</button>
               </div>
             </div>
             <label class="bs-check">
               <input type="checkbox" v-model="savedKey" />
-              <span>I saved my recovery phrase</span>
+              <span>{{ $ui("I saved my recovery phrase") }}</span>
             </label>
           </section>
 
           <!-- 3 · relay -->
           <section v-else-if="step === 3" key="relay" class="bs-step">
-            <h1 class="bs-title">How do you want to connect?</h1>
+            <h1 class="bs-title">{{ $ui("How do you want to connect?") }}</h1>
             <div class="bs-options">
               <button class="bs-option" :class="{ on: relayChoice === 'default' }" @click="relayChoice = 'default'">
-                <strong>Interpoll public relay</strong><small>interpoll.endless.social — open, works out of the box</small>
+                <strong>{{ $ui("Interpoll public relay") }}</strong><small>{{ $ui("interpoll.endless.social — open, works out of the box") }}</small>
               </button>
               <button class="bs-option" :class="{ on: relayChoice === 'community' }" @click="relayChoice = 'community'">
-                <strong>A relay I trust</strong><small>Paste the address of a community or self-hosted relay</small>
+                <strong>{{ $ui("A relay I trust") }}</strong><small>{{ $ui("Paste the address of a community or self-hosted relay") }}</small>
               </button>
               <button class="bs-option" :class="{ on: relayChoice === 'private' }" @click="relayChoice = 'private'">
-                <strong>Private mode</strong><small>Route through Tor-friendly settings; slower, harder to trace</small>
+                <strong>{{ $ui("Private mode") }}</strong><small>{{ $ui("Route through Tor-friendly settings; slower, harder to trace") }}</small>
               </button>
             </div>
             <input
@@ -103,17 +104,17 @@
 
           <!-- 4 · feed filter -->
           <section v-else-if="step === 4" key="filter" class="bs-step">
-            <h1 class="bs-title">Want your feed a little calmer?</h1>
-            <p class="bs-sub">I can quietly hide posts a moderation service has already flagged. It only checks a hash of the post text — never your username or profile. You can change this later in Settings → General.</p>
+            <h1 class="bs-title">{{ $ui("Want your feed a little calmer?") }}</h1>
+            <p class="bs-sub">{{ $ui("I can quietly hide posts a moderation service has already flagged. It only checks a hash of the post text — never your username or profile. You can change this later in Settings → General.") }}</p>
             <div class="bs-options">
               <button class="bs-option" :class="{ on: filterChoice === 'default' }" @click="filterChoice = 'default'">
-                <strong>Use the built-in filter <em class="bs-tag">Recommended</em></strong><small>Best for most people. One tap, no setup.</small>
+                <strong>{{ $ui("Use the built-in filter") }} <em class="bs-tag">{{ $ui("Recommended") }}</em></strong><small>{{ $ui("Best for most people. One tap, no setup.") }}</small>
               </button>
               <button class="bs-option" :class="{ on: filterChoice === 'custom' }" @click="filterChoice = 'custom'">
-                <strong>I have my own moderation service</strong><small>Paste its address and I'll use that instead.</small>
+                <strong>{{ $ui("I have my own moderation service") }}</strong><small>{{ $ui("Paste its address and I'll use that instead.") }}</small>
               </button>
               <button class="bs-option" :class="{ on: filterChoice === 'none' }" @click="filterChoice = 'none'">
-                <strong>No thanks, show everything</strong><small>Nothing is hidden.</small>
+                <strong>{{ $ui("No thanks, show everything") }}</strong><small>{{ $ui("Nothing is hidden.") }}</small>
               </button>
             </div>
             <input v-if="filterChoice === 'custom'" v-model="filterUrl" class="bs-input" type="url" inputmode="url" placeholder="https://moderation.example.com" autocomplete="off" />
@@ -122,20 +123,20 @@
 
           <!-- 5 · done -->
           <section v-else key="done" class="bs-step">
-            <h1 class="bs-title">You're all set</h1>
+            <h1 class="bs-title">{{ $ui("You're all set") }}</h1>
             <ul class="bs-list">
-              <li>{{ picked.size }} {{ picked.size === 1 ? 'space' : 'spaces' }} joined</li>
-              <li>{{ savedKey ? 'Recovery phrase saved' : 'Recovery phrase not saved — you can back it up in Settings' }}</li>
-              <li>Connected via {{ relayLabel }}</li>
-              <li>{{ filterChoice === 'none' ? 'Feed filter off' : 'Feed filter on' }}</li>
+              <li>{{ picked.size }} {{ picked.size === 1 ? 'space' : 'spaces' }} {{ $ui("joined") }}</li>
+              <li>{{ savedKey ? $ui("Recovery phrase saved") : $ui("Recovery phrase not saved — you can back it up in Settings") }}</li>
+              <li>{{ $ui("Connected via") }} {{ relayLabel }}</li>
+              <li>{{ filterChoice === 'none' ? $ui("Feed filter off") : $ui("Feed filter on") }}</li>
             </ul>
-            <p class="bs-note">Next I'll show you around the app.</p>
+            <p class="bs-note">{{ $ui("Next I'll show you around the app.") }}</p>
           </section>
 
         <nav class="bs-nav">
-          <button v-if="step > 0 && step < STEPS.length - 1" class="bs-btn" @click="step--">Back</button>
+          <button v-if="step > 0 && step < STEPS.length - 1" class="bs-btn" @click="step--">{{ $ui("Back") }}</button>
           <span class="bs-spacer" />
-          <button v-if="canSkip" class="bs-btn bs-btn--ghost" @click="skipStep">Skip</button>
+          <button v-if="canSkip" class="bs-btn bs-btn--ghost" @click="skipStep">{{ $ui("Skip") }}</button>
           <button class="bs-btn bs-btn--primary" :disabled="busy || !canContinue" @click="next">{{ nextLabel }}</button>
         </nav>
       </div>
@@ -144,6 +145,7 @@
 </template>
 
 <script setup lang="ts">
+import LanguagePicker from '../components/LanguagePicker.vue';
 import { computed, onMounted, ref } from 'vue';
 import { IonPage, IonContent } from '@ionic/vue';
 import { useRouter } from 'vue-router';

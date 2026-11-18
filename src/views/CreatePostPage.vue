@@ -7,11 +7,11 @@
             <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
         </ion-buttons>
-        <ion-title>Create Post</ion-title>
+        <ion-title>{{ $ui("Create Post") }}</ion-title>
         <ion-buttons slot="end">
           <button class="submit-btn" @click="submitPost" :disabled="!canSubmit || isSubmitting">
             <div v-if="isSubmitting" class="btn-spinner"></div>
-            {{ isSubmitting ? 'Posting…' : 'Post' }}
+            {{ isSubmitting ? $ui("Posting…") : $ui("Post") }}
           </button>
           <HoneypotField v-model="gateHoneypot" />
         </ion-buttons>
@@ -22,21 +22,19 @@
       <div class="create-page">
 
         <div v-if="isSubmittingSlow" class="slow-banner">
-          <ion-icon :icon="timeOutline"></ion-icon>
-          Still publishing to the network — this can take a few extra seconds on a slow relay.
-        </div>
+          <ion-icon :icon="timeOutline"></ion-icon> {{ $ui("Still publishing to the network — this can take a few extra seconds on a slow relay.") }} </div>
 
         <div class="create-hero">
-          <p class="hero-label">New post</p>
-          <h1 class="hero-title">Publish to your community</h1>
-          <p class="hero-sub">Draft a post with a clear title, optional context, and an image preview before broadcasting it to peers.</p>
+          <p class="hero-label">{{ $ui("New post") }}</p>
+          <h1 class="hero-title">{{ $ui("Publish to your community") }}</h1>
+          <p class="hero-sub">{{ $ui("Draft a post with a clear title, optional context, and an image preview before broadcasting it to peers.") }}</p>
         </div>
 
         <div class="form-card">
 
           <!-- Community -->
           <div class="field-group">
-            <label class="field-label">Community</label>
+            <label class="field-label">{{ $ui("Community") }}</label>
             <button class="community-picker" @click="pickerOpen = true">
               <span v-if="selectedCommunityObj" class="picker-avatar-wrap">
                 <span class="picker-mini-avatar" :class="avatarTone(selectedCommunityObj.id)">
@@ -44,7 +42,7 @@
                 </span>
               </span>
               <span :class="selectedCommunityObj ? 'picker-selected' : 'picker-placeholder'">
-                {{ selectedCommunityObj ? selectedCommunityObj.displayName : 'Select a community' }}
+                {{ selectedCommunityObj ? selectedCommunityObj.displayName : $ui("Select a community") }}
               </span>
               <ion-icon :icon="chevronDownOutline"></ion-icon>
             </button>
@@ -55,24 +53,24 @@
             v-model="pickerOpen"
             :communities="joinedCommunities"
             :selected="selectedCommunityObj"
-            title="Post to…"
+            :title="$ui('Post to…')"
             @pick="c => { selectedCommunity = c.id; selectedCommunityObj = c }"
           />
 
           <!-- Title -->
           <div class="field-group">
-            <label class="field-label">Title <span class="required">*</span></label>
+            <label class="field-label">{{ $ui("Title") }} <span class="required">*</span></label>
             <div class="field-wrap">
-              <input class="field-native" v-model="title" type="text" placeholder="An interesting title…" :maxlength="300" />
+              <input class="field-native" v-model="title" type="text" :placeholder="$ui('An interesting title…')" :maxlength="300" />
             </div>
             <p class="field-count">{{ title.length }}/300</p>
           </div>
 
           <!-- Content -->
           <div class="field-group">
-            <label class="field-label">Text <span class="optional">optional</span></label>
+            <label class="field-label">{{ $ui("Text") }} <span class="optional">{{ $ui("optional") }}</span></label>
             <div class="field-wrap">
-              <textarea class="field-native" v-model="content" placeholder="What's on your mind?" :maxlength="10000" rows="6"></textarea>
+              <textarea class="field-native" v-model="content" :placeholder="$ui('What\'s on your mind?')" :maxlength="10000" rows="6"></textarea>
             </div>
             <p class="field-count">{{ content.length }}/10,000</p>
           </div>
@@ -83,18 +81,18 @@
               <div class="media-header-left">
                 <div class="media-icon-wrap img-icon"><ion-icon :icon="imageOutline"></ion-icon></div>
                 <div>
-                  <p class="media-title">Images <span class="optional">optional · up to {{ MAX_IMAGES }}</span></p>
-                  <p class="media-sub">Originals stay at full quality on your device</p>
+                  <p class="media-title">{{ $ui("Images") }} <span class="optional">{{ $ui("optional · up to") }} {{ MAX_IMAGES }}</span></p>
+                  <p class="media-sub">{{ $ui("Originals stay at full quality on your device") }}</p>
                 </div>
               </div>
               <button v-if="images.length < MAX_IMAGES" class="pill-btn accent-sm" @click="selectImage">
-                <ion-icon :icon="imageOutline"></ion-icon> {{ images.length ? `Add more (${images.length}/${MAX_IMAGES})` : 'Add Images' }}
+                <ion-icon :icon="imageOutline"></ion-icon> {{ images.length ? `Add more (${images.length}/${MAX_IMAGES})` : $ui("Add Images") }}
               </button>
             </div>
             <div v-if="images.length" class="preview-grid">
               <div v-for="(img, i) in images" :key="img.preview" class="preview-wrap">
                 <img :src="img.preview" class="image-preview" :alt="title" />
-                <button class="remove-btn" @click="removeImage(i)" title="Remove">
+                <button class="remove-btn" @click="removeImage(i)" :title="$ui('Remove')">
                   <ion-icon :icon="closeCircle"></ion-icon>
                 </button>
                 <div class="image-badges">
@@ -110,8 +108,8 @@
               <div class="media-header-left">
                 <div class="media-icon-wrap vid-icon"><ion-icon :icon="videocamOutline"></ion-icon></div>
                 <div>
-                  <p class="media-title">Video <span class="optional">optional</span></p>
-                  <p class="media-sub">Compressed in-browser, uploaded to IPFS via Filebase · max 30 MB</p>
+                  <p class="media-title">{{ $ui("Video") }} <span class="optional">{{ $ui("optional") }}</span></p>
+                  <p class="media-sub">{{ $ui("Compressed in-browser, uploaded to IPFS via Filebase · max 30 MB") }}</p>
                 </div>
               </div>
               <button class="chevron-btn" type="button">
@@ -122,7 +120,7 @@
               <VideoUploader @uploaded="onVideoUploaded" @cleared="onVideoCleared" />
               <div v-if="videoCID" class="video-attached">
                 <ion-icon :icon="videocamOutline"></ion-icon>
-                <span>Video attached · {{ (videoSize / 1024 / 1024).toFixed(1) }} MB · {{ Math.round(videoDuration) }}s</span>
+                <span>{{ $ui("Video attached ·") }} {{ (videoSize / 1024 / 1024).toFixed(1) }} {{ $ui("MB ·") }} {{ Math.round(videoDuration) }}s</span>
               </div>
             </div>
           </div>
@@ -130,7 +128,7 @@
           <!-- Image info -->
           <div v-if="images.length" class="info-box">
             <ion-icon :icon="informationCircle"></ion-icon>
-            <p>Image is kept at its original resolution and quality on your device. A sharp preview (up to 900 px) is synced over GunDB so other peers can see it in the feed.</p>
+            <p>{{ $ui("Image is kept at its original resolution and quality on your device. A sharp preview (up to 900 px) is synced over GunDB so other peers can see it in the feed.") }}</p>
           </div>
 
         </div>
@@ -265,6 +263,7 @@ ion-content { --background: transparent; }
 </style>
 
 <script setup lang="ts">
+import { formatUi, ui } from "../i18n";
 import { ref, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { onMounted } from 'vue';
@@ -439,14 +438,14 @@ const submitPost = async () => {
 
   const titleCheck = checkContent(title.value.trim(), 'title');
   if (!titleCheck.ok) {
-    const toast = await toastController.create({ message: `Title: ${titleCheck.reason}`, duration: 2500, color: 'warning' });
+    const toast = await toastController.create({ message: formatUi("Title: {p0}", { p0: titleCheck.reason }), duration: 2500, color: 'warning' });
     await toast.present();
     return;
   }
   if (content.value.trim()) {
     const bodyCheck = checkContent(content.value.trim(), 'body');
     if (!bodyCheck.ok) {
-      const toast = await toastController.create({ message: `Content: ${bodyCheck.reason}`, duration: 2500, color: 'warning' });
+      const toast = await toastController.create({ message: formatUi("Content: {p0}", { p0: bodyCheck.reason }), duration: 2500, color: 'warning' });
       await toast.present();
       return;
     }
@@ -472,7 +471,7 @@ const submitPost = async () => {
     });
 
     const toast = await toastController.create({
-      message: 'Post created successfully',
+      message: ui("Post created successfully"),
       duration: 2000,
       color: 'success'
     });

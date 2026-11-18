@@ -15,6 +15,7 @@ import '@ionic/vue/css/display.css';
 import './style.css';
 import './theme-graphite.css';
 import { initializeTheme } from './services/themeService';
+import { initializeLanguage, languagePlugin } from './i18n';
 import App from './App.vue';
 import router from './router';
 import { recordError, reportFatal } from './utils/errorReporting';
@@ -106,7 +107,9 @@ if (!localStorage.getItem('interpoll_migration_v2')) {
 installToastDefaults();
 
 initializeTheme();
+initializeLanguage();
 const app = createApp(App)
+  .use(languagePlugin)
   .use(IonicVue)
   .use(createPinia())
   .use(router);

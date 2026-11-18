@@ -10,9 +10,7 @@
             <svg viewBox="0 0 24 24" fill="none" width="16" height="16">
               <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" stroke="currentColor" stroke-width="1.8"/>
             </svg>
-          </span>
-          Vote Receipt
-        </ion-title>
+          </span> {{ $ui("Vote Receipt") }} </ion-title>
       </ion-toolbar>
     </ion-header>
 
@@ -31,13 +29,13 @@
           </div>
 
           <div class="rp-lookup-copy">
-            <h2 class="rp-lookup-title">Verify a receipt</h2>
-            <p class="rp-lookup-sub">Enter your 12-word verification phrase or paste the verification code to look up your receipt on the chain.</p>
+            <h2 class="rp-lookup-title">{{ $ui("Verify a receipt") }}</h2>
+            <p class="rp-lookup-sub">{{ $ui("Enter your 12-word verification phrase or paste the verification code to look up your receipt on the chain.") }}</p>
           </div>
 
           <!-- Phrase / code input -->
           <div class="rp-input-group">
-            <label class="rp-label">Verification phrase or code</label>
+            <label class="rp-label">{{ $ui("Verification phrase or code") }}</label>
             <textarea
               v-model="lookupInput"
               class="rp-textarea"
@@ -50,7 +48,7 @@
               @keydown.ctrl.enter="doLookup"
               @keydown.meta.enter="doLookup"
             ></textarea>
-            <p class="rp-input-hint">12 words separated by spaces, or a hex verification code.</p>
+            <p class="rp-input-hint">{{ $ui("12 words separated by spaces, or a hex verification code.") }}</p>
           </div>
 
           <p v-if="lookupError" class="rp-lookup-error">{{ lookupError }}</p>
@@ -59,9 +57,7 @@
             <svg viewBox="0 0 24 24" fill="none" width="15" height="15">
               <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="1.8"/>
               <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-            </svg>
-            Look up receipt
-          </button>
+            </svg> {{ $ui("Look up receipt") }} </button>
         </div>
 
         <!-- ── Loading ───────────────────────────── -->
@@ -69,7 +65,7 @@
           <div class="rp-loading-dots">
             <span></span><span></span><span></span>
           </div>
-          <p>Searching chain blocks…</p>
+          <p>{{ $ui("Searching chain blocks…") }}</p>
         </div>
 
         <!-- ── Receipt ───────────────────────────── -->
@@ -80,9 +76,7 @@
             <svg viewBox="0 0 24 24" fill="none" width="13" height="13">
               <path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
               <path d="M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Look up another receipt
-          </button>
+            </svg> {{ $ui("Look up another receipt") }} </button>
         </div>
 
         <!-- ── Not found ─────────────────────────── -->
@@ -92,10 +86,10 @@
             <path d="M21 21l-4.35-4.35M8 11h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
           </svg>
           <div>
-            <strong>Receipt not found</strong>
-            <p>No matching block found for this phrase or code. Check the words are correct and in order.</p>
+            <strong>{{ $ui("Receipt not found") }}</strong>
+            <p>{{ $ui("No matching block found for this phrase or code. Check the words are correct and in order.") }}</p>
           </div>
-          <button class="rp-retry-btn" @click="resetLookup">Try again</button>
+          <button class="rp-retry-btn" @click="resetLookup">{{ $ui("Try again") }}</button>
         </div>
 
         <!-- ── Info footer ────────────────────────── -->
@@ -104,17 +98,11 @@
             <svg viewBox="0 0 24 24" fill="none" width="14" height="14" style="flex-shrink:0;color:var(--app-text-subtle)">
               <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8"/>
               <path d="M12 8v4m0 4h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-            </svg>
-            Receipts are verified against the local chain — no server request is made.
-            Your verification phrase is never transmitted.
-          </div>
+            </svg> {{ $ui("Receipts are verified against the local chain — no server request is made. Your verification phrase is never transmitted.") }} </div>
           <div class="rp-info-row">
             <svg viewBox="0 0 24 24" fill="none" width="14" height="14" style="flex-shrink:0;color:var(--app-text-subtle)">
               <path d="M12 22s8-4.5 8-11V5l-8-3-8 3v6c0 6.5 8 11 8 11z" stroke="currentColor" stroke-width="1.8"/>
-            </svg>
-            Each receipt contains a Schnorr signature verified against the block's public key.
-            Tampering with a block invalidates its signature.
-          </div>
+            </svg> {{ $ui("Each receipt contains a Schnorr signature verified against the block's public key. Tampering with a block invalidates its signature.") }} </div>
         </div>
 
       </div>

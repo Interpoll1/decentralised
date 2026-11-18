@@ -5,7 +5,7 @@
         <ion-buttons slot="start">
           <ion-back-button default-href="/home"></ion-back-button>
         </ion-buttons>
-        <ion-title>{{ userProfile?.displayName || 'User Profile' }}</ion-title>
+        <ion-title>{{ userProfile?.displayName || $ui("User Profile") }}</ion-title>
       </ion-toolbar>
     </ion-header>
 
@@ -17,7 +17,7 @@
 
       <!-- Unknown user: report it here instead of bouncing to the feed -->
       <div v-else-if="notFound" class="empty-state">
-        <p>User not found.</p>
+        <p>{{ $ui("User not found.") }}</p>
       </div>
 
       <template v-else>
@@ -36,22 +36,20 @@
           @click="startChat"
           :disabled="!ownUserId || !userProfile?.publicKey"
         >
-          <ion-icon slot="start" :icon="chatbubbleOutline"></ion-icon>
-          Message
-        </ion-button>
+          <ion-icon slot="start" :icon="chatbubbleOutline"></ion-icon> {{ $ui("Message") }} </ion-button>
 
         <div class="stats-row">
           <div class="stat">
             <strong>{{ userProfile?.karma || 0 }}</strong>
-            <span>Karma</span>
+            <span>{{ $ui("Karma") }}</span>
           </div>
           <div class="stat">
             <strong>{{ userProfile?.postCount || 0 }}</strong>
-            <span>Posts</span>
+            <span>{{ $ui("Posts") }}</span>
           </div>
           <div class="stat">
             <strong>{{ userProfile?.commentCount || 0 }}</strong>
-            <span>Comments</span>
+            <span>{{ $ui("Comments") }}</span>
           </div>
         </div>
 
@@ -64,12 +62,12 @@
 
       <!-- User's Posts -->
       <div class="section">
-        <p class="section-title">Recent Posts</p>
+        <p class="section-title">{{ $ui("Recent Posts") }}</p>
         <div v-if="loadingPosts" class="loading">
           <ion-spinner></ion-spinner>
         </div>
         <div v-else-if="userPosts.length === 0" class="empty-state">
-          <p>No posts yet</p>
+          <p>{{ $ui("No posts yet") }}</p>
         </div>
         <div v-else class="posts-list">
           <PostCard
@@ -85,12 +83,12 @@
 
       <!-- User's Comments -->
       <div class="section">
-        <p class="section-title">Recent Comments</p>
+        <p class="section-title">{{ $ui("Recent Comments") }}</p>
         <div v-if="loadingComments" class="loading">
           <ion-spinner></ion-spinner>
         </div>
         <div v-else-if="userComments.length === 0" class="empty-state">
-          <p>No comments yet</p>
+          <p>{{ $ui("No comments yet") }}</p>
         </div>
         <div v-else class="comments-list">
           <!-- postId/communityId are required: CommentCard derives the author's
@@ -112,6 +110,7 @@
 </template>
 
 <script setup lang="ts">
+import { ui } from "../i18n";
 import { ref, computed, onMounted } from 'vue';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRouter, useRoute } from 'vue-router';
@@ -211,7 +210,7 @@ const loadUserComments = async () => {
 const startChat = async () => {
   if (!userProfile.value?.publicKey) {
     const toast = await toastController.create({
-      message: 'Unable to start chat. User public key not available.',
+      message: ui("Unable to start chat. User public key not available."),
       duration: 2000,
       color: 'warning',
     });

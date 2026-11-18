@@ -5,7 +5,7 @@
         <ion-buttons slot="start">
           <ion-back-button :default-href="post?.communityId ? `/community/${post.communityId}` : '/home'"></ion-back-button>
         </ion-buttons>
-        <ion-title>Post</ion-title>
+        <ion-title>{{ $ui("Post") }}</ion-title>
         <ion-buttons slot="end">
           <ion-button @click="refreshPost">
             <ion-icon :icon="refreshOutline"></ion-icon>
@@ -21,14 +21,14 @@
       <!-- Loading -->
       <div v-if="isLoading" class="loading-container">
         <ion-spinner></ion-spinner>
-        <p>Loading post...</p>
+        <p>{{ $ui("Loading post...") }}</p>
       </div>
 
       <!-- Post Not Found -->
       <div v-else-if="!post" class="empty-state">
         <ion-icon :icon="alertCircleOutline" size="large"></ion-icon>
-        <p>Post not found</p>
-        <ion-button @click="$router.push('/home')">Go Home</ion-button>
+        <p>{{ $ui("Post not found") }}</p>
+        <ion-button @click="$router.push('/home')">{{ $ui("Go Home") }}</ion-button>
       </div>
 
       <!-- Post Content -->
@@ -131,16 +131,15 @@
 
                 <div class="stat-item score">
                   <ion-icon :icon="trendingUpOutline"></ion-icon>
-                  <span>Score: {{ post.score }}</span>
+                  <span>{{ $ui("Score:") }} {{ post.score }}</span>
                 </div>
                 <span v-if="post.viewCount && post.viewCount > 0" class="detail-view-count">
-                  {{ post.viewCount >= 1_000_000 ? (post.viewCount/1_000_000).toFixed(1)+'M' : post.viewCount >= 1000 ? (post.viewCount/1000).toFixed(1)+'K' : post.viewCount }} views
-                </span>
+                  {{ post.viewCount >= 1_000_000 ? (post.viewCount/1_000_000).toFixed(1)+'M' : post.viewCount >= 1000 ? (post.viewCount/1000).toFixed(1)+'K' : post.viewCount }} {{ $ui("views") }} </span>
               </div>
 
               <button class="action-button share" @click="sharePost">
                 <ion-icon :icon="shareSocialOutline"></ion-icon>
-                <span>Share</span>
+                <span>{{ $ui("Share") }}</span>
               </button>
             </div>
           </div>
@@ -156,25 +155,21 @@
             class="section-tab"
             :class="{ active: activeSection === 'comments' }"
             @click="activeSection = 'comments'"
-          >
-            Comments ({{ allComments.length }})
+          > {{ $ui("Comments (") }}{{ allComments.length }})
           </button>
           <button
             v-if="relatedPosts.length > 0"
             class="section-tab"
             :class="{ active: activeSection === 'related' }"
             @click="activeSection = 'related'"
-          >
-            Related ({{ relatedPosts.length }})
+          > {{ $ui("Related (") }}{{ relatedPosts.length }})
           </button>
           <button
             v-if="recentPosts.length > 0"
             class="section-tab"
             :class="{ active: activeSection === 'recent' }"
             @click="activeSection = 'recent'"
-          >
-            Recent
-          </button>
+          > {{ $ui("Recent") }} </button>
         </div>
 
         <!-- Comments Section -->
@@ -187,7 +182,7 @@
               </div>
               <input
                 v-model="newCommentText"
-                placeholder="Add a comment…"
+                :placeholder="$ui('Add a comment…')"
                 class="comment-input"
                 @keydown.enter.ctrl="submitComment"
                 @keydown.enter.meta="submitComment"
@@ -224,8 +219,8 @@
           <!-- Empty Comments State -->
           <div v-else class="empty-comments">
             <ion-icon :icon="chatbubbleOutline" size="large"></ion-icon>
-            <p>No comments yet</p>
-            <p class="subtitle">Be the first to comment!</p>
+            <p>{{ $ui("No comments yet") }}</p>
+            <p class="subtitle">{{ $ui("Be the first to comment!") }}</p>
           </div>
         </div>
 
@@ -280,6 +275,7 @@
 </template>
 
 <script setup lang="ts">
+import { relativeTime, ui } from "../i18n";
 import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { trackDetailView } from '../services/viewTrackingService';
 import BurstOverlay     from '../components/BurstOverlay.vue';
@@ -582,17 +578,7 @@ const selfAvatarTone = computed(() => {
   return SELF_TONES[code % SELF_TONES.length];
 });
 
-function formatTime(timestamp: number): string {
-  const diff = Date.now() - timestamp;
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days < 7) return `${days}d ago`;
-  return new Date(timestamp).toLocaleDateString();
-}
+function formatTime(timestamp: number): string { return relativeTime(timestamp); }
 
 function formatNumber(num: number | undefined | null): string {
   const n = num ?? 0;
@@ -686,7 +672,7 @@ async function submitComment() {
     });
     newCommentText.value = '';
     gateReset();
-    (await toastController.create({ message: 'Comment posted', duration: 2000 })).present();
+    (await toastController.create({ message: ui("Comment posted"), duration: 2000 })).present();
     // No reload: the store already holds the comment and the live subscription
     // delivers the graph's copy. The old reload restarted the thread load and
     // cancelled the in-flight one, so a fresh comment could vanish on screen.
@@ -749,7 +735,7 @@ async function loadPost() {
 
 async function refreshPost() {
   await loadPost();
-  (await toastController.create({ message: 'Post refreshed', duration: 1500 })).present();
+  (await toastController.create({ message: ui("Post refreshed"), duration: 1500 })).present();
 }
 
 let unsubscribeVotes: (() => void) | null = null;

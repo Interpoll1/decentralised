@@ -5,7 +5,7 @@
         <ion-buttons slot="start">
           <ion-back-button default-href="/settings"></ion-back-button>
         </ion-buttons>
-        <ion-title>Set Username</ion-title>
+        <ion-title>{{ $ui("Set Username") }}</ion-title>
       </ion-toolbar>
     </ion-header>
 
@@ -15,19 +15,15 @@
       <section class="step" v-if="step === 'input'">
         <div class="step-header">
           <ion-icon :icon="personOutline" class="step-icon" />
-          <h2>Choose a username</h2>
-          <p class="step-desc">
-            Usernames can be claimed without verification, but a
-            <strong>trust issuer</strong> endorsement makes your identity
-            provably yours and raises your rate limits.
-          </p>
+          <h2>{{ $ui("Choose a username") }}</h2>
+          <p class="step-desc"> {{ $ui("Usernames can be claimed without verification, but a") }} <strong>{{ $ui("trust issuer") }}</strong> {{ $ui("endorsement makes your identity provably yours and raises your rate limits.") }} </p>
         </div>
 
         <ion-item class="username-field">
-          <ion-label position="stacked">Username</ion-label>
+          <ion-label position="stacked">{{ $ui("Username") }}</ion-label>
           <ion-input
             v-model="username"
-            placeholder="e.g. alice"
+            :placeholder="$ui('e.g. alice')"
             :maxlength="32"
             autocomplete="off"
             @ion-input="onUsernameInput"
@@ -35,20 +31,20 @@
         </ion-item>
 
         <p class="field-hint" :class="{ error: usernameError }">
-          {{ usernameError || '3–32 chars, letters / numbers / _ . -' }}
+          {{ usernameError || $ui("3–32 chars, letters / numbers / _ . -") }}
         </p>
 
         <!-- Trust issuer selector -->
         <div class="issuer-section">
           <div class="issuer-header">
-            <span>Trust issuer <span class="optional">(optional)</span></span>
+            <span>{{ $ui("Trust issuer") }} <span class="optional">{{ $ui("(optional)") }}</span></span>
             <ion-button
               fill="clear"
               size="small"
               class="custom-issuer-toggle"
               @click="showCustomIssuerMenu = !showCustomIssuerMenu"
             >
-              {{ showCustomIssuerMenu ? 'Hide custom' : 'Add custom' }}
+              {{ showCustomIssuerMenu ? $ui("Hide custom") : $ui("Add custom") }}
             </ion-button>
             <ion-icon
               :icon="helpCircleOutline"
@@ -59,7 +55,7 @@
 
           <div v-if="showCustomIssuerMenu" class="custom-issuer-menu">
             <ion-item class="custom-field">
-              <ion-label position="stacked">Issuer endpoint</ion-label>
+              <ion-label position="stacked">{{ $ui("Issuer endpoint") }}</ion-label>
               <ion-input
                 v-model="customIssuerEndpoint"
                 placeholder="https://interpoll.endless.social/trust"
@@ -67,10 +63,10 @@
               />
             </ion-item>
             <ion-item class="custom-field">
-              <ion-label position="stacked">Issuer contact (optional)</ion-label>
+              <ion-label position="stacked">{{ $ui("Issuer contact (optional)") }}</ion-label>
               <ion-input
                 v-model="customIssuerContact"
-                placeholder="admin@example.com"
+                :placeholder="$ui('admin@example.com')"
                 autocomplete="off"
               />
             </ion-item>
@@ -79,18 +75,15 @@
               :disabled="addingCustomIssuer || !customIssuerEndpoint.trim()"
               @click="addCustomIssuer"
             >
-              {{ addingCustomIssuer ? 'Adding…' : 'Save custom issuer' }}
+              {{ addingCustomIssuer ? $ui("Adding…") : $ui("Save custom issuer") }}
             </ion-button>
             <p v-if="customIssuerError" class="field-hint error">{{ customIssuerError }}</p>
           </div>
 
           <div v-if="loadingIssuers" class="loading-row">
-            <ion-spinner name="dots" /> Loading issuers…
-          </div>
+            <ion-spinner name="dots" /> {{ $ui("Loading issuers…") }} </div>
 
-          <div v-else-if="issuers.length === 0" class="no-issuers">
-            No trust issuers configured. Username will be unverified.
-          </div>
+          <div v-else-if="issuers.length === 0" class="no-issuers"> {{ $ui("No trust issuers configured. Username will be unverified.") }} </div>
 
           <div v-else class="issuer-list">
             <div
@@ -99,10 +92,8 @@
               @click="selectedIssuer = null"
             >
               <div class="issuer-name">
-                <ion-icon :icon="warningOutline" class="unverified-icon" />
-                No issuer — unverified
-              </div>
-              <p class="issuer-desc">Lower rate limits. Username is first-come, first-served with no cryptographic proof.</p>
+                <ion-icon :icon="warningOutline" class="unverified-icon" /> {{ $ui("No issuer — unverified") }} </div>
+              <p class="issuer-desc">{{ $ui("Lower rate limits. Username is first-come, first-served with no cryptographic proof.") }}</p>
             </div>
 
             <div
@@ -116,10 +107,7 @@
                 <ion-icon :icon="shieldCheckmarkOutline" class="verified-icon" />
                 {{ issuer.contact }}
               </div>
-              <p class="issuer-desc">
-                Verified by <strong>{{ issuer.domain }}</strong>.
-                Requires ~15 s PoW. Unlocks full rate limits.
-              </p>
+              <p class="issuer-desc"> {{ $ui("Verified by") }} <strong>{{ issuer.domain }}</strong>{{ $ui(". Requires ~15 s PoW. Unlocks full rate limits.") }} </p>
             </div>
           </div>
         </div>
@@ -130,7 +118,7 @@
           :disabled="!canProceed"
           @click="proceed"
         >
-          {{ selectedIssuer ? 'Continue to verification' : 'Claim unverified username' }}
+          {{ selectedIssuer ? $ui("Continue to verification") : $ui("Claim unverified username") }}
         </ion-button>
       </section>
 
@@ -139,12 +127,9 @@
         <div class="pow-anim">
           <ion-spinner name="crescent" class="pow-spinner" />
         </div>
-        <h2>Solving challenge…</h2>
-        <p class="step-desc">
-          Your device is proving work to <strong>{{ selectedIssuer?.contact }}</strong>.
-          This takes ~15 seconds and verifies you're human.
-        </p>
-        <p class="pow-progress">Nonce: {{ powNonce.toLocaleString() }}</p>
+        <h2>{{ $ui("Solving challenge…") }}</h2>
+        <p class="step-desc"> {{ $ui("Your device is proving work to") }} <strong>{{ selectedIssuer?.contact }}</strong>{{ $ui(". This takes ~15 seconds and verifies you're human.") }} </p>
+        <p class="pow-progress">{{ $ui("Nonce:") }} {{ powNonce.toLocaleString() }}</p>
         <p v-if="powError" class="error-text">{{ powError }}</p>
       </section>
 
@@ -154,40 +139,29 @@
         <!-- Verified outcome -->
         <template v-if="claimedVerified">
           <ion-icon :icon="shieldCheckmarkOutline" class="done-icon done-verified" />
-          <h2>Verified!</h2>
+          <h2>{{ $ui("Verified!") }}</h2>
           <p class="step-desc">
-            <strong>{{ username }}</strong> is cryptographically verified by
-            <strong>{{ selectedIssuer?.contact }}</strong>.
-            Other users will see a green shield next to your name.
-          </p>
+            <strong>{{ username }}</strong> {{ $ui("is cryptographically verified by") }} <strong>{{ selectedIssuer?.contact }}</strong>{{ $ui(". Other users will see a green shield next to your name.") }} </p>
         </template>
 
         <!-- Unverified outcome - be explicit -->
         <template v-else>
           <ion-icon :icon="warningOutline" class="done-icon done-unverified" />
-          <h2>Username claimed <span class="unverified-label">(unverified)</span></h2>
+          <h2>{{ $ui("Username claimed") }} <span class="unverified-label">{{ $ui("(unverified)") }}</span></h2>
           <p class="step-desc">
-            <strong>{{ username }}</strong> is saved, but marked
-            <strong>unverified</strong> — other users will see an amber ⚠ badge.
-            No trust issuer endorsed this claim.
-          </p>
-          <p class="step-desc hint">
-            To get a green ✓ shield and higher rate limits, add a trust issuer
-            and re-claim with verification.
-          </p>
+            <strong>{{ username }}</strong> {{ $ui("is saved, but marked") }} <strong>{{ $ui("unverified") }}</strong> {{ $ui("— other users will see an amber ⚠ badge. No trust issuer endorsed this claim.") }} </p>
+          <p class="step-desc hint"> {{ $ui("To get a green ✓ shield and higher rate limits, add a trust issuer and re-claim with verification.") }} </p>
         </template>
 
         <!-- Preview what others see -->
         <div class="badge-preview">
-          <span class="preview-label">How others see you:</span>
+          <span class="preview-label">{{ $ui("How others see you:") }}</span>
           <UserIdentityBadge :username="username" :preloadedTrust="previewTrust" />
         </div>
 
-        <p class="step-desc hint">
-          Lose your device and this name is gone — unless you set up recovery.
-        </p>
-        <ion-button expand="block" fill="outline" @click="$router.replace('/settings#name-recovery')">Set up name recovery</ion-button>
-        <ion-button expand="block" @click="$router.back()">Done</ion-button>
+        <p class="step-desc hint"> {{ $ui("Lose your device and this name is gone — unless you set up recovery.") }} </p>
+        <ion-button expand="block" fill="outline" @click="$router.replace('/settings#name-recovery')">{{ $ui("Set up name recovery") }}</ion-button>
+        <ion-button expand="block" @click="$router.back()">{{ $ui("Done") }}</ion-button>
       </section>
 
     </ion-content>
@@ -204,6 +178,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatUi } from "../i18n";
 import { ref, computed, onMounted } from 'vue';
 import 'vue-router';
 import {
@@ -292,7 +267,7 @@ async function addCustomIssuer() {
     if (selected) selectedIssuer.value = selected;
     showCustomIssuerMenu.value = false;
     const toast = await toastController.create({
-      message: `Added issuer ${issuer.domain}`,
+      message: formatUi("Added issuer {p0}", { p0: issuer.domain }),
       duration: 1800,
       color: 'success',
     });

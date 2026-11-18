@@ -7,7 +7,7 @@
             <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
         </ion-buttons>
-        <ion-title>Resilience Center</ion-title>
+        <ion-title>{{ $ui("Resilience Center") }}</ion-title>
       </ion-toolbar>
     </ion-header>
 
@@ -22,31 +22,23 @@
               <ion-icon :icon="analyticsOutline"></ion-icon>
             </div>
             <div>
-              <h2 class="hero-title">Network Resilience</h2>
-              <p class="hero-sub">Monitor relay health, rotate servers instantly, and back up your local state. Interpoll keeps running even when individual nodes go offline.</p>
+              <h2 class="hero-title">{{ $ui("Network Resilience") }}</h2>
+              <p class="hero-sub">{{ $ui("Monitor relay health, rotate servers instantly, and back up your local state. Interpoll keeps running even when individual nodes go offline.") }}</p>
             </div>
           </div>
           <div class="quick-actions">
             <button class="qa-btn primary" :disabled="scanning" @click="scanAllRelays">
               <ion-icon :icon="analyticsOutline"></ion-icon>
-              {{ scanning ? 'Scanning…' : 'Scan Relays' }}
+              {{ scanning ? $ui("Scanning…") : $ui("Scan Relays") }}
             </button>
             <button class="qa-btn" :disabled="scanning || relays.length === 0" @click="switchToBestRelay">
-              <ion-icon :icon="swapHorizontalOutline"></ion-icon>
-              Best Relay
-            </button>
+              <ion-icon :icon="swapHorizontalOutline"></ion-icon> {{ $ui("Best Relay") }} </button>
             <button class="qa-btn" :disabled="exporting" @click="exportSnapshot">
-              <ion-icon :icon="downloadOutline"></ion-icon>
-              Backup
-            </button>
+              <ion-icon :icon="downloadOutline"></ion-icon> {{ $ui("Backup") }} </button>
             <button class="qa-btn" :disabled="sharing" @click="shareWithPeers">
-              <ion-icon :icon="sendOutline"></ion-icon>
-              Share
-            </button>
+              <ion-icon :icon="sendOutline"></ion-icon> {{ $ui("Share") }} </button>
             <button class="qa-btn" :disabled="probeResults.length === 0" @click="copyRelayReport">
-              <ion-icon :icon="copyOutline"></ion-icon>
-              Copy Report
-            </button>
+              <ion-icon :icon="copyOutline"></ion-icon> {{ $ui("Copy Report") }} </button>
           </div>
         </div>
 
@@ -55,38 +47,37 @@
           <div class="card-head">
             <div class="card-head-icon accent-teal"><ion-icon :icon="analyticsOutline"></ion-icon></div>
             <div class="card-head-text">
-              <h3>Network Status</h3>
-              <p>Live WebSocket health, peer reachability, and censorship signals across configured relays.</p>
+              <h3>{{ $ui("Network Status") }}</h3>
+              <p>{{ $ui("Live WebSocket health, peer reachability, and censorship signals across configured relays.") }}</p>
             </div>
             <div class="card-head-badges">
-              <span class="status-pill" :class="wsConnected ? 'pill-ok' : 'pill-err'">{{ wsConnected ? 'Connected' : 'Disconnected' }}</span>
+              <span class="status-pill" :class="wsConnected ? 'pill-ok' : 'pill-err'">{{ wsConnected ? $ui("Connected") : $ui("Disconnected") }}</span>
               <span v-if="isTor" class="status-pill pill-dark">
-                <ion-icon :icon="fingerPrintOutline"></ion-icon> Tor
-              </span>
+                <ion-icon :icon="fingerPrintOutline"></ion-icon> {{ $ui("Tor") }} </span>
             </div>
           </div>
 
           <div class="status-strip">
             <div class="strip-item">
               <span class="s-dot" :class="wsConnected ? 'dot-ok' : 'dot-err'"></span>
-              <span>{{ peerCount }} relay peer{{ peerCount !== 1 ? 's' : '' }}</span>
+              <span>{{ $count(peerCount, 'relay peer') }}</span>
             </div>
             <div class="strip-item">
               <span class="s-dot" :class="gunConnectedCount > 0 ? 'dot-ok' : 'dot-err'"></span>
-              <span>{{ gunConnectedCount }} sync peer{{ gunConnectedCount !== 1 ? 's' : '' }}</span>
+              <span>{{ $count(gunConnectedCount, 'sync peer') }}</span>
             </div>
-            <span v-if="lastScanAt" class="strip-time">Last scan: {{ lastScanAt }}</span>
+            <span v-if="lastScanAt" class="strip-time">{{ $ui("Last scan:") }} {{ lastScanAt }}</span>
           </div>
 
           <div v-if="wsRegistrationRejected" class="info-box info-warn">
             <ion-icon :icon="lockClosedOutline"></ion-icon>
-            <span>Connected to the relay but peer list requires sign-in. You're syncing over {{ gunConnectedCount }} Gun peer{{ gunConnectedCount !== 1 ? 's' : '' }} — sign in to appear in the relay peer network.</span>
+            <span>{{ $ui("Connected to the relay but peer list requires sign-in. You're syncing over") }} {{ $count(gunConnectedCount, 'Gun peer') }} {{ $ui("— sign in to appear in the relay peer network.") }}</span>
           </div>
 
           <button class="block-btn accent" :disabled="scanning" @click="scanAllRelays">
             <div v-if="scanning" class="btn-spinner"></div>
             <ion-icon v-else :icon="analyticsOutline"></ion-icon>
-            {{ scanning ? 'Scanning…' : 'Scan All Relays' }}
+            {{ scanning ? $ui("Scanning…") : $ui("Scan All Relays") }}
           </button>
 
           <!-- Probe results -->
@@ -94,7 +85,7 @@
             <table class="probe-table">
               <thead>
                 <tr>
-                  <th>Relay</th><th>WS</th><th>Gun</th><th>API</th><th>Latency</th><th>Status</th>
+                  <th>{{ $ui("Relay") }}</th><th>{{ $ui("WS") }}</th><th>{{ $ui("Gun") }}</th><th>{{ $ui("API") }}</th><th>{{ $ui("Latency") }}</th><th>{{ $ui("Status") }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -118,9 +109,9 @@
           <!-- Censorship -->
           <div v-if="censorship" class="info-box" :class="censorship.blocked.length || censorship.torRequired.length ? 'info-warn' : 'info-ok'">
             <ion-icon :icon="censorship.blocked.length ? warningOutline : censorship.torRequired.length ? lockClosedOutline : checkmarkCircleOutline"></ion-icon>
-            <span v-if="censorship.blocked.length">{{ censorship.blocked.length }} relay(s) appear blocked from your network.</span>
-            <span v-else-if="censorship.torRequired.length">{{ censorship.torRequired.length }} relay(s) require Tor to reach.</span>
-            <span v-else>No censorship detected — all relays reachable.</span>
+            <span v-if="censorship.blocked.length">{{ censorship.blocked.length }} {{ $ui("relay(s) appear blocked from your network.") }}</span>
+            <span v-else-if="censorship.torRequired.length">{{ censorship.torRequired.length }} {{ $ui("relay(s) require Tor to reach.") }}</span>
+            <span v-else>{{ $ui("No censorship detected — all relays reachable.") }}</span>
           </div>
         </div>
 
@@ -129,8 +120,8 @@
           <div class="card-head">
             <div class="card-head-icon accent-violet"><ion-icon :icon="radioOutline"></ion-icon></div>
             <div class="card-head-text">
-              <h3>Fallback Rendezvous</h3>
-              <p>When every relay is blocked, nodes derive the same time-rotating rendezvous point and reconverge — a deterministic, signature-verified fallback for network self-healing under censorship.</p>
+              <h3>{{ $ui("Fallback Rendezvous") }}</h3>
+              <p>{{ $ui("When every relay is blocked, nodes derive the same time-rotating rendezvous point and reconverge — a deterministic, signature-verified fallback for network self-healing under censorship.") }}</p>
             </div>
             <span class="status-pill" :class="tierColor === 'success' ? 'pill-ok' : tierColor === 'warning' ? 'pill-warn' : 'pill-err'">
               {{ tierLabels[resilience.tier] }}
@@ -140,19 +131,19 @@
           <div class="status-strip">
             <div class="strip-item">
               <span class="s-dot" :class="resilience.blackout ? 'dot-err' : 'dot-ok'"></span>
-              <span>{{ resilience.blackout ? 'Blackout detected' : 'Connectivity OK' }}</span>
+              <span>{{ resilience.blackout ? $ui("Blackout detected") : $ui("Connectivity OK") }}</span>
             </div>
             <div class="strip-item">
               <span class="s-dot" :class="resilience.rendezvousActive ? 'dot-ok' : 'dot-idle'"></span>
-              <span>Rendezvous {{ resilience.rendezvousActive ? 'active' : 'idle' }}</span>
+              <span>{{ $ui("Rendezvous") }} {{ resilience.rendezvousActive ? 'active' : 'idle' }}</span>
             </div>
-            <span class="strip-time">Last reconverge: {{ lastRendezvousDisplay }}</span>
+            <span class="strip-time">{{ $ui("Last reconverge:") }} {{ lastRendezvousDisplay }}</span>
           </div>
 
           <div class="toggle-row">
             <div>
-              <div class="toggle-label">Auto-escalate on blackout</div>
-              <div class="toggle-sub">Publish/subscribe to rendezvous automatically when isolated</div>
+              <div class="toggle-label">{{ $ui("Auto-escalate on blackout") }}</div>
+              <div class="toggle-sub">{{ $ui("Publish/subscribe to rendezvous automatically when isolated") }}</div>
             </div>
             <label class="toggle-switch">
               <input type="checkbox" :checked="resilience.autoEnabled" @change="toggleRendezvousAuto(($event.target as HTMLInputElement).checked)" />
@@ -162,8 +153,8 @@
 
           <div v-if="isDevBuild" class="toggle-row">
             <div>
-              <div class="toggle-label">Dev: allow insecure endpoints</div>
-              <div class="toggle-sub">Accept ws://localhost so two local profiles can reconverge</div>
+              <div class="toggle-label">{{ $ui("Dev: allow insecure endpoints") }}</div>
+              <div class="toggle-sub">{{ $ui("Accept ws://localhost so two local profiles can reconverge") }}</div>
             </div>
             <label class="toggle-switch">
               <input type="checkbox" :checked="insecureDiscovery" @change="toggleInsecureDiscovery(($event.target as HTMLInputElement).checked)" />
@@ -174,15 +165,15 @@
           <div class="button-row">
             <button class="block-btn accent flex1" :disabled="rendezvousBusy" @click="triggerRendezvous">
               <div v-if="rendezvousBusy" class="btn-spinner"></div>
-              {{ resilience.rendezvousActive ? 'Re-broadcast' : 'Reconnect via rendezvous' }}
+              {{ resilience.rendezvousActive ? $ui("Re-broadcast") : $ui("Reconnect via rendezvous") }}
             </button>
-            <button v-if="resilience.rendezvousActive" class="pill-btn outline" @click="stopRendezvous">Stop</button>
+            <button v-if="resilience.rendezvousActive" class="pill-btn outline" @click="stopRendezvous">{{ $ui("Stop") }}</button>
           </div>
 
           <div v-if="resilience.reputation.length" class="mt-12">
-            <p class="subsection-title"><ion-icon :icon="pulseOutline"></ion-icon> Endpoint Reputation</p>
+            <p class="subsection-title"><ion-icon :icon="pulseOutline"></ion-icon> {{ $ui("Endpoint Reputation") }}</p>
             <table class="probe-table">
-              <thead><tr><th>Endpoint</th><th title="Recency-weighted">Score</th><th>OK</th><th>Fail</th></tr></thead>
+              <thead><tr><th>{{ $ui("Endpoint") }}</th><th :title="$ui('Recency-weighted')">{{ $ui("Score") }}</th><th>{{ $ui("OK") }}</th><th>{{ $ui("Fail") }}</th></tr></thead>
               <tbody>
                 <tr v-for="rep in resilience.reputation" :key="rep.id">
                   <td class="mono truncate-cell">{{ rep.id }}</td>
@@ -197,7 +188,7 @@
               </tbody>
             </table>
           </div>
-          <p v-else class="helper-text mt-8">No reputation data yet — scan relays to start scoring endpoint reliability.</p>
+          <p v-else class="helper-text mt-8">{{ $ui("No reputation data yet — scan relays to start scoring endpoint reliability.") }}</p>
         </div>
 
         <!-- 3. Relay Management -->
@@ -205,8 +196,8 @@
           <div class="card-head">
             <div class="card-head-icon accent-blue"><ion-icon :icon="swapHorizontalOutline"></ion-icon></div>
             <div class="card-head-text">
-              <h3>Relay Management</h3>
-              <p>Add fallback relays, probe individual endpoints, and switch instantly when performance drops.</p>
+              <h3>{{ $ui("Relay Management") }}</h3>
+              <p>{{ $ui("Add fallback relays, probe individual endpoints, and switch instantly when performance drops.") }}</p>
             </div>
           </div>
 
@@ -217,24 +208,24 @@
                 <div>
                   <div class="relay-name-row">
                     <span class="relay-name">{{ relay.label }}</span>
-                    <span v-if="relay.isTor" class="status-pill pill-dark"><ion-icon :icon="lockClosedOutline"></ion-icon> Tor</span>
+                    <span v-if="relay.isTor" class="status-pill pill-dark"><ion-icon :icon="lockClosedOutline"></ion-icon> {{ $ui("Tor") }}</span>
                     <span class="overall-pill" :class="statusColor(relay.status) === 'success' ? 'pill-ok' : statusColor(relay.status) === 'warning' ? 'pill-warn' : 'pill-err'">{{ relay.status }}</span>
-                    <span v-if="activeRelay?.id === relay.id" class="active-tag">Active</span>
+                    <span v-if="activeRelay?.id === relay.id" class="active-tag">{{ $ui("Active") }}</span>
                   </div>
                   <div class="relay-url">{{ relay.ws }}</div>
-                  <div class="relay-priority">Priority: {{ relay.priority }}</div>
+                  <div class="relay-priority">{{ $ui("Priority:") }} {{ relay.priority }}</div>
                 </div>
               </div>
               <div class="relay-row-actions">
-                <button v-if="activeRelay?.id !== relay.id" class="pill-btn outline sm" @click="switchRelay(relay.id)">Switch</button>
-                <button class="icon-btn" @click="probeSingle(relay)" title="Probe"><ion-icon :icon="refreshOutline"></ion-icon></button>
-                <button v-if="relays.length > 1" class="icon-btn danger" @click="removeRelay(relay.id)" title="Remove"><ion-icon :icon="trashOutline"></ion-icon></button>
+                <button v-if="activeRelay?.id !== relay.id" class="pill-btn outline sm" @click="switchRelay(relay.id)">{{ $ui("Switch") }}</button>
+                <button class="icon-btn" @click="probeSingle(relay)" :title="$ui('Probe')"><ion-icon :icon="refreshOutline"></ion-icon></button>
+                <button v-if="relays.length > 1" class="icon-btn danger" @click="removeRelay(relay.id)" :title="$ui('Remove')"><ion-icon :icon="trashOutline"></ion-icon></button>
               </div>
             </div>
           </div>
 
           <div class="toggle-row mt-12">
-            <div class="toggle-label">Auto-failover to next relay</div>
+            <div class="toggle-label">{{ $ui("Auto-failover to next relay") }}</div>
             <label class="toggle-switch">
               <input type="checkbox" v-model="autoFailoverEnabled" />
               <span class="toggle-track"></span>
@@ -243,31 +234,31 @@
 
           <!-- Add Relay form -->
           <div class="inset-panel mt-12">
-            <p class="subsection-title">Add Relay</p>
+            <p class="subsection-title">{{ $ui("Add Relay") }}</p>
             <div class="field-group">
-              <label class="field-label">Label</label>
-              <div class="field-wrap"><input class="field-native" v-model="newRelay.label" placeholder="My relay" /></div>
+              <label class="field-label">{{ $ui("Label") }}</label>
+              <div class="field-wrap"><input class="field-native" v-model="newRelay.label" :placeholder="$ui('My relay')" /></div>
             </div>
             <div class="field-group">
-              <label class="field-label">WebSocket URL</label>
+              <label class="field-label">{{ $ui("WebSocket URL") }}</label>
               <div class="field-wrap"><input class="field-native mono-sm" v-model="newRelay.ws" placeholder="wss://..." /></div>
             </div>
             <div class="field-group">
-              <label class="field-label">Gun URL</label>
+              <label class="field-label">{{ $ui("Gun URL") }}</label>
               <div class="field-wrap"><input class="field-native mono-sm" v-model="newRelay.gun" placeholder="https://..." /></div>
             </div>
             <div class="field-group">
-              <label class="field-label">API URL</label>
+              <label class="field-label">{{ $ui("API URL") }}</label>
               <div class="field-wrap"><input class="field-native mono-sm" v-model="newRelay.api" placeholder="https://..." /></div>
             </div>
             <div class="toggle-row">
-              <div class="toggle-label">Tor (.onion) relay</div>
+              <div class="toggle-label">{{ $ui("Tor (.onion) relay") }}</div>
               <label class="toggle-switch">
                 <input type="checkbox" v-model="newRelay.isTor" />
                 <span class="toggle-track"></span>
               </label>
             </div>
-            <button class="block-btn accent mt-12" :disabled="!canAddRelay" @click="addRelay">Add Relay</button>
+            <button class="block-btn accent mt-12" :disabled="!canAddRelay" @click="addRelay">{{ $ui("Add Relay") }}</button>
           </div>
         </div>
 
@@ -276,10 +267,10 @@
           <div class="card-head">
             <div class="card-head-icon accent-teal"><ion-icon :icon="serverOutline"></ion-icon></div>
             <div class="card-head-text">
-              <h3>GunDB Relay Network</h3>
-              <p>Gun connects to all peers simultaneously. Data syncs across all relays — the more peers, the more resilient the network.</p>
+              <h3>{{ $ui("GunDB Relay Network") }}</h3>
+              <p>{{ $ui("Gun connects to all peers simultaneously. Data syncs across all relays — the more peers, the more resilient the network.") }}</p>
             </div>
-            <span class="count-badge">{{ gunConnectedCount }}/{{ gunPeerUrls.length }} live<span v-if="gunAvgLatency != null"> · {{ gunAvgLatency }}ms</span></span>
+            <span class="count-badge">{{ gunConnectedCount }}/{{ gunPeerUrls.length }} {{ $ui("live") }}<span v-if="gunAvgLatency != null"> · {{ gunAvgLatency }}{{ $ui("ms") }}</span></span>
           </div>
 
           <div class="gun-relay-grid">
@@ -287,25 +278,25 @@
               <div class="gun-relay-header">
                 <span class="s-dot" :class="peer.connected ? 'dot-ok' : 'dot-idle'"></span>
                 <strong class="gun-relay-name">{{ labelForGunUrl(peer.url) }}</strong>
-                <span v-if="peer.latencyMs != null" class="latency-tag">{{ peer.latencyMs }}ms</span>
-                <button v-if="gunPeerUrls.length > 1" class="icon-btn danger sm" @click="removeGunPeer(peer.url)" title="Remove"><ion-icon :icon="trashOutline"></ion-icon></button>
+                <span v-if="peer.latencyMs != null" class="latency-tag">{{ peer.latencyMs }}{{ $ui("ms") }}</span>
+                <button v-if="gunPeerUrls.length > 1" class="icon-btn danger sm" @click="removeGunPeer(peer.url)" :title="$ui('Remove')"><ion-icon :icon="trashOutline"></ion-icon></button>
               </div>
               <div class="gun-relay-url">{{ peer.url }}</div>
               <div class="gun-relay-status" :class="peer.connected ? 'status-ok' : 'status-idle'">
-                {{ peer.connected ? '● Connected' : '○ Connecting…' }}
+                {{ peer.connected ? $ui("● Connected") : $ui("○ Connecting…") }}
               </div>
             </div>
           </div>
 
           <div v-if="gunStartupProbeRunning" class="info-box info-info">
             <div class="btn-spinner"></div>
-            <span>Probing all relays in background…</span>
+            <span>{{ $ui("Probing all relays in background…") }}</span>
           </div>
 
           <!-- Gun scan results -->
           <div v-if="gunScanResults.length" class="probe-table-wrap mt-12">
             <table class="probe-table">
-              <thead><tr><th>Relay</th><th>Reachable</th><th>Latency</th></tr></thead>
+              <thead><tr><th>{{ $ui("Relay") }}</th><th>{{ $ui("Reachable") }}</th><th>{{ $ui("Latency") }}</th></tr></thead>
               <tbody>
                 <tr v-for="r in gunScanResults" :key="r.url">
                   <td class="mono">{{ labelForGunUrl(r.url) }}</td>
@@ -317,25 +308,25 @@
           </div>
 
           <div class="inset-panel mt-12">
-            <p class="subsection-title">Add Gun Peer</p>
+            <p class="subsection-title">{{ $ui("Add Gun Peer") }}</p>
             <div class="inline-add">
               <div class="field-wrap flex1">
                 <select class="field-native" v-model="selectedGunPreset">
-                  <option value="">— pick a preset —</option>
+                  <option value="">{{ $ui("— pick a preset —") }}</option>
                   <option v-for="p in availableGunPresets" :key="p.url" :value="p.url">{{ p.label }}</option>
                 </select>
               </div>
-              <button class="pill-btn accent" :disabled="!selectedGunPreset" @click="addGunPeerFromPreset">Add</button>
+              <button class="pill-btn accent" :disabled="!selectedGunPreset" @click="addGunPeerFromPreset">{{ $ui("Add") }}</button>
             </div>
             <div class="inline-add mt-8">
               <div class="field-wrap flex1">
                 <input class="field-native mono-sm" v-model="newGunPeerUrl" placeholder="https://your-relay.example.com/gun" @keyup.enter="addGunPeerFromInput" />
               </div>
-              <button class="pill-btn accent" :disabled="!newGunPeerUrl.trim()" @click="addGunPeerFromInput">Add</button>
+              <button class="pill-btn accent" :disabled="!newGunPeerUrl.trim()" @click="addGunPeerFromInput">{{ $ui("Add") }}</button>
             </div>
           </div>
 
-          <button class="pill-btn outline mt-12" @click="resetGunPeers">Reset to defaults</button>
+          <button class="pill-btn outline mt-12" @click="resetGunPeers">{{ $ui("Reset to defaults") }}</button>
         </div>
 
         <!-- 5. Snapshot Manager -->
@@ -343,47 +334,47 @@
           <div class="card-head">
             <div class="card-head-icon accent-green"><ion-icon :icon="downloadOutline"></ion-icon></div>
             <div class="card-head-text">
-              <h3>Snapshot Manager</h3>
-              <p>Export encrypted local state backups, import trusted snapshots, and share state for fast peer recovery.</p>
+              <h3>{{ $ui("Snapshot Manager") }}</h3>
+              <p>{{ $ui("Export encrypted local state backups, import trusted snapshots, and share state for fast peer recovery.") }}</p>
             </div>
           </div>
 
-          <p class="subsection-title">Export</p>
+          <p class="subsection-title">{{ $ui("Export") }}</p>
           <button class="block-btn accent" :disabled="exporting" @click="exportSnapshot">
             <div v-if="exporting" class="btn-spinner"></div>
             <ion-icon v-else :icon="downloadOutline"></ion-icon>
-            {{ exporting ? 'Exporting…' : 'Export Full Snapshot' }}
+            {{ exporting ? $ui("Exporting…") : $ui("Export Full Snapshot") }}
           </button>
 
-          <p class="subsection-title mt-16">Import</p>
+          <p class="subsection-title mt-16">{{ $ui("Import") }}</p>
           <div class="info-box info-warn">
             <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
-            <span>Only import snapshots from sources you trust. A malicious snapshot could inject harmful content into your local data.</span>
+            <span>{{ $ui("Only import snapshots from sources you trust. A malicious snapshot could inject harmful content into your local data.") }}</span>
           </div>
           <input ref="fileInputRef" type="file" accept=".json" style="display:none" @change="handleFileSelect" />
           <button class="block-btn outline mt-8" :disabled="importing" @click="triggerFileInput">
             <ion-icon :icon="cloudUploadOutline"></ion-icon>
-            {{ importing ? 'Importing…' : 'Import Snapshot File' }}
+            {{ importing ? $ui("Importing…") : $ui("Import Snapshot File") }}
           </button>
           <div v-if="importProgress" class="progress-wrap mt-8">
             <div class="progress-bar"><div class="progress-fill ok" :style="{ width: importProgress.percent + '%' }"></div></div>
             <p class="helper-text">{{ importProgress.phase }} — {{ importProgress.current }}/{{ importProgress.total }}</p>
           </div>
 
-          <p class="subsection-title mt-16">P2P Share</p>
+          <p class="subsection-title mt-16">{{ $ui("P2P Share") }}</p>
           <button class="block-btn outline" :disabled="sharing" @click="shareWithPeers">
             <div v-if="sharing" class="btn-spinner"></div>
             <ion-icon v-else :icon="sendOutline"></ion-icon>
-            {{ sharing ? 'Sharing…' : 'Share with Peers' }}
+            {{ sharing ? $ui("Sharing…") : $ui("Share with Peers") }}
           </button>
           <div v-if="incomingOffer" class="info-box info-info mt-8">
             <ion-icon :icon="downloadOutline"></ion-icon>
             <div>
-              <p class="toggle-label">Incoming Snapshot Offer</p>
-              <p class="helper-text">{{ incomingOffer.meta.communityCount }} communities · {{ incomingOffer.meta.postCount }} posts · Block #{{ incomingOffer.meta.blockHeight }}</p>
+              <p class="toggle-label">{{ $ui("Incoming Snapshot Offer") }}</p>
+              <p class="helper-text">{{ incomingOffer.meta.communityCount }} {{ $ui("communities ·") }} {{ incomingOffer.meta.postCount }} {{ $ui("posts · Block #") }}{{ incomingOffer.meta.blockHeight }}</p>
               <div class="button-row mt-8">
-                <button class="pill-btn accent" @click="acceptOffer">Accept</button>
-                <button class="pill-btn outline" @click="rejectOffer">Reject</button>
+                <button class="pill-btn accent" @click="acceptOffer">{{ $ui("Accept") }}</button>
+                <button class="pill-btn outline" @click="rejectOffer">{{ $ui("Reject") }}</button>
               </div>
             </div>
           </div>
@@ -398,25 +389,25 @@
           <div class="card-head">
             <div class="card-head-icon accent-violet"><ion-icon :icon="pulseOutline"></ion-icon></div>
             <div class="card-head-text">
-              <h3>Peer-to-Peer Mesh</h3>
-              <p>Direct browser-to-browser connections that survive relay outages using WebRTC DataChannels.</p>
+              <h3>{{ $ui("Peer-to-Peer Mesh") }}</h3>
+              <p>{{ $ui("Direct browser-to-browser connections that survive relay outages using WebRTC DataChannels.") }}</p>
             </div>
           </div>
           <P2PManualSignal />
           <div class="inset-panel mt-12">
-            <p class="subsection-title">NAT Traversal (ICE / TURN)</p>
-            <p class="helper-text">Using {{ iceServerCount }} ICE server{{ iceServerCount !== 1 ? 's' : '' }} ({{ turnActive ? 'incl. your TURN' : 'diverse public STUN' }}). Add a TURN server for symmetric NAT / strict firewall environments.</p>
+            <p class="subsection-title">{{ $ui("NAT Traversal (ICE / TURN)") }}</p>
+            <p class="helper-text">{{ $ui("Using") }} {{ $count(iceServerCount, 'ICE server') }} ({{ turnActive ? $ui("incl. your TURN") : $ui("diverse public STUN") }}{{ $ui("). Add a TURN server for symmetric NAT / strict firewall environments.") }}</p>
             <div class="field-group mt-8">
-              <label class="field-label">TURN URL</label>
-              <div class="field-wrap"><input class="field-native mono-sm" v-model="turnUrl" placeholder="turn:turn.example.com:3478" /></div>
+              <label class="field-label">{{ $ui("TURN URL") }}</label>
+              <div class="field-wrap"><input class="field-native mono-sm" v-model="turnUrl" :placeholder="$ui('turn:turn.example.com:3478')" /></div>
             </div>
             <div class="button-row mt-8">
-              <div class="field-wrap flex1"><input class="field-native" v-model="turnUsername" placeholder="Username (optional)" /></div>
-              <div class="field-wrap flex1"><input class="field-native" v-model="turnCredential" type="password" placeholder="Credential (optional)" /></div>
+              <div class="field-wrap flex1"><input class="field-native" v-model="turnUsername" :placeholder="$ui('Username (optional)')" /></div>
+              <div class="field-wrap flex1"><input class="field-native" v-model="turnCredential" type="password" :placeholder="$ui('Credential (optional)')" /></div>
             </div>
             <div class="button-row mt-8">
-              <button class="pill-btn accent" :disabled="!turnUrl.trim()" @click="saveTurn">Save TURN</button>
-              <button class="pill-btn outline" @click="resetTurn">Reset to STUN</button>
+              <button class="pill-btn accent" :disabled="!turnUrl.trim()" @click="saveTurn">{{ $ui("Save TURN") }}</button>
+              <button class="pill-btn outline" @click="resetTurn">{{ $ui("Reset to STUN") }}</button>
             </div>
           </div>
         </div>
@@ -426,15 +417,15 @@
           <div class="card-head">
             <div class="card-head-icon accent-amber"><ion-icon :icon="terminalOutline"></ion-icon></div>
             <div class="card-head-text">
-              <h3>Advanced Tools</h3>
-              <p>Relay-assisted peer sync and command-line Tor peer operations.</p>
+              <h3>{{ $ui("Advanced Tools") }}</h3>
+              <p>{{ $ui("Relay-assisted peer sync and command-line Tor peer operations.") }}</p>
             </div>
           </div>
 
           <div class="toggle-row">
             <div>
-              <div class="toggle-label">Peer Snapshot Sync</div>
-              <div class="toggle-sub">Enable relay-mediated peer-to-peer snapshot sharing (experimental)</div>
+              <div class="toggle-label">{{ $ui("Peer Snapshot Sync") }}</div>
+              <div class="toggle-sub">{{ $ui("Enable relay-mediated peer-to-peer snapshot sharing (experimental)") }}</div>
             </div>
             <label class="toggle-switch">
               <input type="checkbox" v-model="webrtcEnabled" />
@@ -444,11 +435,11 @@
 
           <div class="code-card mt-12">
             <div class="code-card-header">
-              <div class="code-card-title"><ion-icon :icon="terminalOutline"></ion-icon> Tor headless peer command</div>
-              <button class="pill-btn outline sm" @click="copyTorPeerCommand"><ion-icon :icon="copyOutline"></ion-icon> Copy</button>
+              <div class="code-card-title"><ion-icon :icon="terminalOutline"></ion-icon> {{ $ui("Tor headless peer command") }}</div>
+              <button class="pill-btn outline sm" @click="copyTorPeerCommand"><ion-icon :icon="copyOutline"></ion-icon> {{ $ui("Copy") }}</button>
             </div>
             <code class="code-block">node peer.js --proxy socks5h://127.0.0.1:9050</code>
-            <p class="helper-text mt-8">Use only when running a dedicated relay peer through Tor.</p>
+            <p class="helper-text mt-8">{{ $ui("Use only when running a dedicated relay peer through Tor.") }}</p>
           </div>
         </div>
 
@@ -456,7 +447,7 @@
         <div class="r-card">
           <div class="card-head">
             <div class="card-head-icon accent-blue"><ion-icon :icon="hardwareChipOutline"></ion-icon></div>
-            <div class="card-head-text"><h3>Guides</h3></div>
+            <div class="card-head-text"><h3>{{ $ui("Guides") }}</h3></div>
           </div>
 
           <div v-for="guide in guides" :key="guide.id" class="guide-item">
@@ -482,6 +473,7 @@
 </template>
 
 <script setup lang="ts">
+import { ui, formatUi } from "../i18n";
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
@@ -690,12 +682,12 @@ function refreshGunStatus() {
 async function addGunPeerFromInput() {
   const url = newGunPeerUrl.value.trim();
   if (!isValidGunUrl(url)) {
-    await showToast('Invalid Gun relay URL');
+    await showToast(ui("Invalid Gun relay URL"));
     return;
   }
   const current = config.getGunPeers();
   if (current.includes(url)) {
-    await showToast('Already in list');
+    await showToast(ui("Already in list"));
     return;
   }
   const updated = [...current, url];
@@ -703,7 +695,7 @@ async function addGunPeerFromInput() {
   GunService.addPeerDynamic(url);
   newGunPeerUrl.value = '';
   refreshGunStatus();
-  await showToast(`Added ${labelForGunUrl(url)}`);
+  await showToast(formatUi("Added {p0}", { p0: labelForGunUrl(url) }));
 }
 
 async function addGunPeerFromPreset() {
@@ -715,27 +707,27 @@ async function addGunPeerFromPreset() {
   GunService.addPeerDynamic(url);
   selectedGunPreset.value = '';
   refreshGunStatus();
-  await showToast(`Added ${labelForGunUrl(url)}`);
+  await showToast(formatUi("Added {p0}", { p0: labelForGunUrl(url) }));
 }
 
 async function removeGunPeer(url: string) {
   const current = config.getGunPeers();
   if (current.length <= 1) {
-    await showToast('Cannot remove last Gun relay');
+    await showToast(ui("Cannot remove last Gun relay"));
     return;
   }
   const updated = current.filter(u => u !== url);
   config.setGunPeers(updated);
   GunService.reconnect(updated);
   refreshGunStatus();
-  await showToast('Relay removed');
+  await showToast(ui("Relay removed"));
 }
 
 async function resetGunPeers() {
   config.resetGunPeers();
   GunService.reconnect(DEFAULT_GUN_PEERS);
   refreshGunStatus();
-  await showToast('Gun peers reset to defaults');
+  await showToast(ui("Gun peers reset to defaults"));
 }
 
 
@@ -816,7 +808,7 @@ async function scanAllRelays() {
     probeResults.value = results;
     censorship.value = RelayHealthService.detectCensorship(results, relays.value);
     lastScanAt.value = new Date().toLocaleString();
-    await showToast(`Scanned ${results.length} relay(s)`);
+    await showToast(formatUi("Scanned {p0} relay(s)", { p0: results.length }));
   } catch (e: unknown) {
     await showToast(e instanceof Error ? e.message : 'Scan failed');
   } finally {
@@ -833,12 +825,12 @@ async function switchToBestRelay() {
     lastScanAt.value = new Date().toLocaleString();
     const best = bestRelayFromResults(results);
     if (!best) {
-      await showToast('No reachable relay available');
+      await showToast(ui("No reachable relay available"));
       return;
     }
     await RelayManager.switchToRelay(best.relayId);
     refreshStatus();
-    await showToast(`Switched to ${relayLabelById(best.relayId)}`);
+    await showToast(formatUi("Switched to {p0}", { p0: relayLabelById(best.relayId) }));
   } catch (e: unknown) {
     await showToast(e instanceof Error ? e.message : 'Could not pick relay');
   } finally {
@@ -850,7 +842,7 @@ async function switchRelay(id: string) {
   try {
     await RelayManager.switchToRelay(id);
     refreshStatus();
-    await showToast('Switched relay');
+    await showToast(ui("Switched relay"));
   } catch (e: unknown) {
     await showToast(e instanceof Error ? e.message : 'Switch failed');
   }
@@ -860,7 +852,7 @@ async function probeSingle(relay: RelayEndpoint) {
   try {
     await RelayManager.probeRelay(relay);
     refreshStatus();
-    await showToast(`${relay.label}: probed`);
+    await showToast(formatUi("{p0}: probed", { p0: relay.label }));
   } catch (e: unknown) {
     await showToast(e instanceof Error ? e.message : 'Probe failed');
   }
@@ -868,7 +860,7 @@ async function probeSingle(relay: RelayEndpoint) {
 
 async function removeRelay(id: string) {
   if (activeRelay.value?.id === id) {
-    await showToast('Cannot remove the active relay — switch first.');
+    await showToast(ui("Cannot remove the active relay — switch first."));
     return;
   }
   RelayManager.removeRelay(id);
@@ -898,7 +890,7 @@ async function exportSnapshot() {
   try {
     const snapshot = await SnapshotService.export();
     SnapshotService.downloadSnapshot(snapshot);
-    await showToast('Snapshot exported');
+    await showToast(ui("Snapshot exported"));
   } catch (e: unknown) {
     await showToast(e instanceof Error ? e.message : 'Export failed');
   } finally {
@@ -922,7 +914,7 @@ async function handleFileSelect(event: Event) {
       importProgress.value = { phase: String(phase), current, total, percent: total > 0 ? Math.round((current / total) * 100) : 0 };
     });
     const { blocks, posts, communities, comments, users, events } = result.imported;
-    await showToast(`Imported ${posts} posts, ${communities} communities, ${blocks} blocks, ${comments} comments, ${users} users, ${events} events`);
+    await showToast(formatUi("Imported {p0} posts, {p1} communities, {p2} blocks, {p3} comments, {p4} users, {p5} events", { p0: posts, p1: communities, p2: blocks, p3: comments, p4: users, p5: events }));
   } catch (e: unknown) {
     await showToast(e instanceof Error ? e.message : 'Import failed');
   } finally {
@@ -937,7 +929,7 @@ async function shareWithPeers() {
   try {
     const snapshot = await SnapshotService.export();
     await SnapshotSyncService.offerSnapshot(snapshot);
-    await showToast('Snapshot offered to peers');
+    await showToast(ui("Snapshot offered to peers"));
   } catch (e: unknown) {
     await showToast(e instanceof Error ? e.message : 'Share failed');
   } finally {
@@ -963,7 +955,7 @@ function buildRelayReport(): string {
 async function copyRelayReport() {
   try {
     await navigator.clipboard.writeText(buildRelayReport());
-    await showToast('Relay report copied');
+    await showToast(ui("Relay report copied"));
   } catch (e: unknown) {
     await showToast(e instanceof Error ? e.message : 'Copy failed');
   }
@@ -972,7 +964,7 @@ async function copyRelayReport() {
 async function copyTorPeerCommand() {
   try {
     await navigator.clipboard.writeText('node peer.js --proxy socks5h://127.0.0.1:9050');
-    await showToast('Tor command copied');
+    await showToast(ui("Tor command copied"));
   } catch (e: unknown) {
     await showToast(e instanceof Error ? e.message : 'Copy failed');
   }
@@ -1023,7 +1015,7 @@ function registerSyncCallbacks() {
         };
       });
       importProgress.value = null;
-      await showToast('Snapshot received and imported from peer');
+      await showToast(ui("Snapshot received and imported from peer"));
     } catch (e: unknown) {
       importProgress.value = null;
       await showToast(e instanceof Error ? e.message : 'Import of received snapshot failed');

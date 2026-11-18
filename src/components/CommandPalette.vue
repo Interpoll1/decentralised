@@ -5,7 +5,7 @@
       class="command-palette"
       role="dialog"
       aria-modal="true"
-      aria-label="Command palette"
+      :aria-label="$ui('Command palette')"
       @click.stop
       @keydown.tab.prevent="trapFocus"
     >
@@ -14,7 +14,7 @@
         v-model="query"
         class="command-search"
         type="text"
-        placeholder="Search commands..."
+        :placeholder="$ui('Search commands...')"
         autocomplete="off"
         @keydown.down.prevent="moveSelection(1)"
         @keydown.up.prevent="moveSelection(-1)"
@@ -30,11 +30,11 @@
           :class="{ selected: index === selectedIndex }"
           @click="runCommand(command)"
         >
-          <div class="command-label">{{ command.label }}</div>
+          <div class="command-label">{{ $ui(command.label) }}</div>
           <div class="command-hint">{{ command.hint }}</div>
         </button>
       </div>
-      <div v-else class="empty-state">No matching commands</div>
+      <div v-else class="empty-state">{{ $ui("No matching commands") }}</div>
     </div>
   </div>
 </template>

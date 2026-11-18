@@ -3,14 +3,13 @@
     <canvas ref="canvasRef" class="ip-canvas" />
     <div class="ip-content">
       <BitMascot :size="64" mood="wave" class="ip-bit" />
-      <div class="ip-logo">Interpoll</div>
-      <div class="ip-tag">peer-to-peer · decentralized</div>
+      <div class="ip-logo">{{ $ui("Interpoll") }}</div>
+      <div class="ip-tag">{{ $ui("peer-to-peer · decentralized") }}</div>
       <div class="ip-bar-wrap"><div class="ip-bar" /></div>
       <div class="ip-tip" :key="tipIdx">{{ TIPS[tipIdx] }}</div>
       <div class="ip-status-wrap">
         <div class="ip-dot" />
-        <div class="ip-status">
-          Connecting peers<span class="ip-d">.</span><span class="ip-d">.</span><span class="ip-d">.</span>
+        <div class="ip-status"> {{ $ui("Connecting peers") }}<span class="ip-d">.</span><span class="ip-d">.</span><span class="ip-d">.</span>
         </div>
       </div>
     </div>

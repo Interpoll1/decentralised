@@ -1,15 +1,15 @@
 <template>
   <div class="gp">
     <section v-if="store.isOwner && store.pendingJoins.length" class="gp-section">
-      <h3 class="gp-h">Waiting to join <span class="gp-count">{{ store.pendingJoins.length }}</span></h3>
+      <h3 class="gp-h">{{ $ui("Waiting to join") }} <span class="gp-count">{{ store.pendingJoins.length }}</span></h3>
       <div v-for="req in store.pendingJoins" :key="req.id" class="gp-row">
         <ChatAvatar :name="req.name" :seed="req.binding.accountId" size="lg" />
         <div class="gp-info">
-          <span class="gp-name">{{ req.name || 'Unnamed' }}</span>
+          <span class="gp-name">{{ req.name || $ui("Unnamed") }}</span>
           <span class="gp-sub">{{ req.binding.accountId.slice(0, 12) }}… · {{ ago(req.ts) }}</span>
         </div>
-        <button class="gp-btn gp-btn--ok" :disabled="busy === req.id" @click="act(req.id, () => store.approveJoin(req))">Approve</button>
-        <button class="gp-btn" :disabled="busy === req.id" @click="act(req.id, () => store.declineJoin(req))">Decline</button>
+        <button class="gp-btn gp-btn--ok" :disabled="busy === req.id" @click="act(req.id, () => store.approveJoin(req))">{{ $ui("Approve") }}</button>
+        <button class="gp-btn" :disabled="busy === req.id" @click="act(req.id, () => store.declineJoin(req))">{{ $ui("Decline") }}</button>
       </div>
     </section>
 
@@ -18,18 +18,18 @@
       <div v-for="m in accounts" :key="m.accountId" class="gp-row">
         <ChatAvatar :name="store.displayName(m.accountId)" :seed="m.accountId" size="lg" :online="store.onlineAccounts.has(m.accountId)" />
         <div class="gp-info">
-          <span class="gp-name">{{ m.isSelf ? `${store.me.name || 'You'} (you)` : store.displayName(m.accountId) }}</span>
+          <span class="gp-name">{{ m.isSelf ? `${store.me.name || $ui("You")} (you)` : store.displayName(m.accountId) }}</span>
           <span class="gp-sub">
-            {{ store.onlineAccounts.has(m.accountId) ? 'online' : 'offline' }}<template v-if="m.devices > 1"> · {{ m.devices }} devices</template>
+            {{ store.onlineAccounts.has(m.accountId) ? 'online' : 'offline' }}<template v-if="m.devices > 1"> · {{ $count(m.devices, 'device') }}</template>
           </span>
         </div>
-        <span v-if="m.isOwner" class="gp-badge">Created the group</span>
-        <button v-else-if="store.isOwner && !m.isSelf" class="gp-btn gp-btn--danger" :disabled="busy === m.accountId" @click="remove(m.accountId)">Remove</button>
+        <span v-if="m.isOwner" class="gp-badge">{{ $ui("Created the group") }}</span>
+        <button v-else-if="store.isOwner && !m.isSelf" class="gp-btn gp-btn--danger" :disabled="busy === m.accountId" @click="remove(m.accountId)">{{ $ui("Remove") }}</button>
       </div>
     </section>
 
-    <p v-if="store.isOwner" class="gp-note">Members chat directly, even while you are offline. Your device is needed only to admit or remove members.</p>
-    <p v-else class="gp-note">Members chat directly with each other. New members are admitted by the creator's device when it is online.</p>
+    <p v-if="store.isOwner" class="gp-note">{{ $ui("Members chat directly, even while you are offline. Your device is needed only to admit or remove members.") }}</p>
+    <p v-else class="gp-note">{{ $ui("Members chat directly with each other. New members are admitted by the creator's device when it is online.") }}</p>
   </div>
 </template>
 

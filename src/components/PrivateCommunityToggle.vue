@@ -3,8 +3,8 @@
     <ion-item lines="none">
       <ion-icon :icon="lockClosedOutline" slot="start" class="toggle-icon"></ion-icon>
       <ion-label>
-        <h3>Private Community</h3>
-        <p>Encrypt all content — only members with the key can read</p>
+        <h3>{{ $ui("Private Community") }}</h3>
+        <p>{{ $ui("Encrypt all content — only members with the key can read") }}</p>
       </ion-label>
       <ion-toggle v-model="isPrivate" slot="end"></ion-toggle>
     </ion-item>
@@ -12,16 +12,16 @@
     <div v-if="isPrivate" class="encryption-options">
       <ion-segment v-model="method">
         <ion-segment-button value="invite">
-          <ion-label>Invite Link</ion-label>
+          <ion-label>{{ $ui("Invite Link") }}</ion-label>
         </ion-segment-button>
         <ion-segment-button value="password">
-          <ion-label>Password</ion-label>
+          <ion-label>{{ $ui("Password") }}</ion-label>
         </ion-segment-button>
       </ion-segment>
 
       <div v-if="method === 'invite'" class="method-info">
         <ion-icon :icon="linkOutline"></ion-icon>
-        <p>A unique encryption key will be generated. Share the invite link to give access.</p>
+        <p>{{ $ui("A unique encryption key will be generated. Share the invite link to give access.") }}</p>
       </div>
 
       <div v-if="method === 'password'" class="method-info">
@@ -30,14 +30,12 @@
           type="password"
           label="Password"
           label-placement="stacked"
-          placeholder="Min 12 characters"
+          :placeholder="$ui('Min 12 characters')"
           :counter="true"
           :maxlength="128"
           :minlength="MIN_PASSWORD_LENGTH"
         ></ion-input>
-        <p v-if="password.length > 0 && password.length < MIN_PASSWORD_LENGTH" class="password-warning">
-          Password must be at least 12 characters
-        </p>
+        <p v-if="password.length > 0 && password.length < MIN_PASSWORD_LENGTH" class="password-warning"> {{ $ui("Password must be at least 12 characters") }} </p>
       </div>
     </div>
   </div>

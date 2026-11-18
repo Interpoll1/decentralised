@@ -1,24 +1,24 @@
 <template>
   <div class="rp">
     <div class="rp-head">
-      <span class="rp-label">Recovery phrase</span>
-      <span class="rp-state" :class="{ ok: saved }">{{ saved ? 'Marked as saved' : 'Not backed up yet' }}</span>
+      <span class="rp-label">{{ $ui("Recovery phrase") }}</span>
+      <span class="rp-state" :class="{ ok: saved }">{{ saved ? $ui("Marked as saved") : $ui("Not backed up yet") }}</span>
     </div>
-    <p class="rp-note">24 words that restore this identity on any device. Anyone who has them can act as you — keep them offline.</p>
+    <p class="rp-note">{{ $ui("24 words that restore this identity on any device. Anyone who has them can act as you — keep them offline.") }}</p>
 
-    <button v-if="!words.length" class="rp-btn" :disabled="busy" @click="reveal">{{ busy ? 'Loading…' : 'Show recovery phrase' }}</button>
+    <button v-if="!words.length" class="rp-btn" :disabled="busy" @click="reveal">{{ busy ? $ui("Loading…") : $ui("Show recovery phrase") }}</button>
     <template v-else>
       <div class="rp-words"><span v-for="(w, i) in words" :key="i"><i>{{ i + 1 }}</i>{{ w }}</span></div>
       <div class="rp-actions">
-        <button class="rp-btn" @click="copy">{{ copied ? 'Copied' : 'Copy' }}</button>
-        <button class="rp-btn" @click="download">Download .txt</button>
-        <button class="rp-btn" @click="hide">Hide</button>
+        <button class="rp-btn" @click="copy">{{ copied ? $ui("Copied") : $ui("Copy") }}</button>
+        <button class="rp-btn" @click="download">{{ $ui("Download .txt") }}</button>
+        <button class="rp-btn" @click="hide">{{ $ui("Hide") }}</button>
       </div>
     </template>
 
     <label class="rp-check">
       <input type="checkbox" :checked="saved" @change="setSaved(($event.target as HTMLInputElement).checked)" />
-      <span>I've saved my recovery phrase somewhere safe</span>
+      <span>{{ $ui("I've saved my recovery phrase somewhere safe") }}</span>
     </label>
     <p v-if="error" class="rp-error">{{ error }}</p>
   </div>

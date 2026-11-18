@@ -1,11 +1,11 @@
 <template>
-  <aside class="ri" aria-label="Room intelligence">
-    <h2 class="ri-title">Room intelligence</h2>
+  <aside class="ri" :aria-label="$ui('Room intelligence')">
+    <h2 class="ri-title">{{ $ui("Room intelligence") }}</h2>
 
     <section class="ri-card">
       <header class="ri-head">
-        <h3>Live peers</h3>
-        <span class="ri-count"><i class="ri-pulse"></i>{{ online.length }} online</span>
+        <h3>{{ $ui("Live peers") }}</h3>
+        <span class="ri-count"><i class="ri-pulse"></i>{{ online.length }} {{ $ui("online") }}</span>
       </header>
       <ul class="ri-peers">
         <li v-for="p in shownPeers" :key="p.id" :title="p.name">
@@ -17,27 +17,27 @@
       <p class="ri-health" :class="{ 'ri-health--warn': !linkUp || offline > 0 }">
         <i class="ri-dot"></i>
         <span>{{ healthText }}</span>
-        <strong>{{ linkUp ? (offline > 0 ? 'Partial' : 'Healthy') : 'Offline' }}</strong>
+        <strong>{{ linkUp ? (offline > 0 ? $ui("Partial") : $ui("Healthy")) : $ui("Offline") }}</strong>
       </p>
     </section>
 
     <section class="ri-card">
       <header class="ri-head">
-        <h3>Pinned</h3>
+        <h3>{{ $ui("Pinned") }}</h3>
         <span v-if="pinned.length" class="ri-count">{{ pinned.length }}</span>
       </header>
       <ul v-if="pinned.length" class="ri-pins">
         <li v-for="m in pinned.slice(0, 3)" :key="m.id">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5zM12 14v6" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/></svg>
-          <span><strong>{{ m.senderId === store.me.id ? 'You' : m.senderName }}</strong>{{ previewText(m) }}</span>
+          <span><strong>{{ m.senderId === store.me.id ? $ui("You") : m.senderName }}</strong>{{ previewText(m) }}</span>
         </li>
       </ul>
-      <p v-else class="ri-empty">Nothing pinned yet. Pin a message from its menu to keep it handy.</p>
+      <p v-else class="ri-empty">{{ $ui("Nothing pinned yet. Pin a message from its menu to keep it handy.") }}</p>
     </section>
 
     <section class="ri-card">
       <header class="ri-head">
-        <h3>Shared files</h3>
+        <h3>{{ $ui("Shared files") }}</h3>
         <span class="ri-count">{{ files.length }} {{ files.length === 1 ? 'file' : 'files' }}</span>
       </header>
       <ul v-if="files.length" class="ri-files">
@@ -48,19 +48,19 @@
           <span class="ri-file__text"><strong>{{ f.name }}</strong><small>{{ f.size }}</small></span>
         </li>
       </ul>
-      <p v-else class="ri-empty">Photos, documents and voice notes shared here will be listed.</p>
+      <p v-else class="ri-empty">{{ $ui("Photos, documents and voice notes shared here will be listed.") }}</p>
     </section>
 
     <section class="ri-card">
-      <header class="ri-head"><h3>Relay path</h3></header>
-      <div class="ri-path" aria-label="You to relay to peers">
-        <span class="ri-node"><i><svg viewBox="0 0 24 24" fill="none"><rect x="5" y="3" width="14" height="18" rx="2.5" stroke="currentColor" stroke-width="1.7"/><path d="M11 18h2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></i>You</span>
+      <header class="ri-head"><h3>{{ $ui("Relay path") }}</h3></header>
+      <div class="ri-path" :aria-label="$ui('You to relay to peers')">
+        <span class="ri-node"><i><svg viewBox="0 0 24 24" fill="none"><rect x="5" y="3" width="14" height="18" rx="2.5" stroke="currentColor" stroke-width="1.7"/><path d="M11 18h2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></i>{{ $ui("You") }}</span>
         <span class="ri-link" :class="{ 'ri-link--down': !linkUp }"></span>
-        <span class="ri-node"><i><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="6" rx="1.5" stroke="currentColor" stroke-width="1.7"/><rect x="3" y="14" width="18" height="6" rx="1.5" stroke="currentColor" stroke-width="1.7"/></svg></i>Relay</span>
+        <span class="ri-node"><i><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="6" rx="1.5" stroke="currentColor" stroke-width="1.7"/><rect x="3" y="14" width="18" height="6" rx="1.5" stroke="currentColor" stroke-width="1.7"/></svg></i>{{ $ui("Relay") }}</span>
         <span class="ri-link" :class="{ 'ri-link--down': !linkUp }"></span>
-        <span class="ri-node"><i><svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="9" r="3" stroke="currentColor" stroke-width="1.7"/><path d="M3.5 19c.7-3 2.9-4.5 5.5-4.5s4.8 1.5 5.5 4.5M16 6.8a3 3 0 010 5.4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></i>Peers</span>
+        <span class="ri-node"><i><svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="9" r="3" stroke="currentColor" stroke-width="1.7"/><path d="M3.5 19c.7-3 2.9-4.5 5.5-4.5s4.8 1.5 5.5 4.5M16 6.8a3 3 0 010 5.4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></i>{{ $ui("Peers") }}</span>
       </div>
-      <p class="ri-e2e"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>End-to-end encrypted · {{ relayName }}</p>
+      <p class="ri-e2e"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>{{ $ui("End-to-end encrypted ·") }} {{ relayName }}</p>
     </section>
   </aside>
 </template>

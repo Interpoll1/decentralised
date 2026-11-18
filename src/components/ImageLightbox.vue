@@ -7,10 +7,10 @@
       aria-modal="true"
       @click="$emit('close')"
     >
-      <button class="lb-close" aria-label="Close" @click.stop="$emit('close')">✕</button>
-      <button v-if="srcs.length > 1" class="lb-nav lb-prev" aria-label="Previous" @click.stop="step(-1)">‹</button>
+      <button class="lb-close" :aria-label="$ui('Close')" @click.stop="$emit('close')">✕</button>
+      <button v-if="srcs.length > 1" class="lb-nav lb-prev" :aria-label="$ui('Previous')" @click.stop="step(-1)">‹</button>
       <img :src="srcs[index]" :alt="alt" class="lb-img" @click.stop />
-      <button v-if="srcs.length > 1" class="lb-nav lb-next" aria-label="Next" @click.stop="step(1)">›</button>
+      <button v-if="srcs.length > 1" class="lb-nav lb-next" :aria-label="$ui('Next')" @click.stop="step(1)">›</button>
       <span v-if="srcs.length > 1" class="lb-count">{{ index + 1 }} / {{ srcs.length }}</span>
     </div>
   </Teleport>

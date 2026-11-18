@@ -1,21 +1,15 @@
 <template>
   <form class="rn" @submit.prevent="submit">
-    <p class="rn-note">
-      Lost your key? Enter your username and the <b>name recovery phrase</b> you saved when you set up recovery
-      (not your identity phrase). The name moves to this device after a waiting period, and the current holder can cancel it.
-    </p>
-    <label class="rn-label" for="rn-name">Username</label>
-    <input id="rn-name" v-model="username" class="rn-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="your-name" />
-    <label class="rn-label" for="rn-phrase">Name recovery phrase (24 words)</label>
-    <textarea id="rn-phrase" v-model="phrase" class="rn-input" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="word1 word2 word3 …" />
-    <p class="rn-count" :class="{ ok: wordCount === 24 }">{{ wordCount }} / 24 words</p>
+    <p class="rn-note"> {{ $ui("Lost your key? Enter your username and the") }} <b>{{ $ui("name recovery phrase") }}</b> {{ $ui("you saved when you set up recovery (not your identity phrase). The name moves to this device after a waiting period, and the current holder can cancel it.") }} </p>
+    <label class="rn-label" for="rn-name">{{ $ui("Username") }}</label>
+    <input id="rn-name" v-model="username" class="rn-input" autocomplete="off" autocapitalize="off" spellcheck="false" :placeholder="$ui('your-name')" />
+    <label class="rn-label" for="rn-phrase">{{ $ui("Name recovery phrase (24 words)") }}</label>
+    <textarea id="rn-phrase" v-model="phrase" class="rn-input" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" :placeholder="$ui('word1 word2 word3 …')" />
+    <p class="rn-count" :class="{ ok: wordCount === 24 }">{{ wordCount }} {{ $ui("/ 24 words") }}</p>
     <p v-if="error" class="rn-error">{{ error }}</p>
-    <p v-if="done" class="rn-ok">
-      Recovery started. {{ done.days }} {{ done.days === 1 ? 'day' : 'days' }} until <b>{{ username.trim().toLowerCase() }}</b> moves to this device.
-      The current holder can cancel it until then.
-    </p>
+    <p v-if="done" class="rn-ok"> {{ $ui("Recovery started.") }} {{ done.days }} {{ done.days === 1 ? 'day' : 'days' }} {{ $ui("until") }} <b>{{ username.trim().toLowerCase() }}</b> {{ $ui("moves to this device. The current holder can cancel it until then.") }} </p>
     <button class="rn-btn" type="submit" :disabled="busy || !username.trim() || wordCount !== 24 || !!done">
-      {{ busy ? 'Starting…' : 'Start recovery' }}
+      {{ busy ? $ui("Starting…") : $ui("Start recovery") }}
     </button>
   </form>
 </template>

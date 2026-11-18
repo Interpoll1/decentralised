@@ -3,10 +3,10 @@
     <ion-header class="room-header">
       <ion-toolbar>
         <div class="bar">
-          <button v-if="!embedded" class="icon-btn" aria-label="Back" @click="$router.back()">
+          <button v-if="!embedded" class="icon-btn" :aria-label="$ui('Back')" @click="$router.back()">
             <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
-          <button class="bar-identity" :disabled="!ready" aria-label="Group info" @click="openInfo">
+          <button class="bar-identity" :disabled="!ready" :aria-label="$ui('Group info')" @click="openInfo">
             <ChatAvatar :name="roomTitle" :seed="roomId" group size="lg" />
             <span class="bar-text">
               <span class="bar-name">{{ roomTitle }}</span>
@@ -14,31 +14,31 @@
             </span>
           </button>
           <div v-if="embedded && ready" class="sync" :title="`${syncPeers} online · ${syncHealthy ? 'connected to the relay' : 'relay unreachable'}`">
-            <span class="sync-label">Synced across {{ syncPeers }} {{ syncPeers === 1 ? 'peer' : 'peers' }}</span>
+            <span class="sync-label">{{ $ui("Synced across") }} {{ syncPeers }} {{ syncPeers === 1 ? 'peer' : 'peers' }}</span>
             <span class="sync-path">
               <template v-for="(n, i) in syncNodes" :key="n.id">
                 <i v-if="i > 0" class="sync-line"></i>
                 <span class="sync-node"><ChatAvatar :name="n.name" :seed="n.id" size="sm" online /><small>{{ n.name.split(' ')[0] }}</small></span>
               </template>
             </span>
-            <span class="sync-health" :class="{ 'sync-health--bad': !syncHealthy }">{{ syncHealthy ? 'Healthy' : 'Offline' }}</span>
+            <span class="sync-health" :class="{ 'sync-health--bad': !syncHealthy }">{{ syncHealthy ? $ui("Healthy") : $ui("Offline") }}</span>
           </div>
           <template v-if="ready">
-            <button class="icon-btn" :class="{ 'icon-btn--on': searchOpen }" aria-label="Search messages" title="Search messages" @click="toggleSearch">
+            <button class="icon-btn" :class="{ 'icon-btn--on': searchOpen }" :aria-label="$ui('Search messages')" :title="$ui('Search messages')" @click="toggleSearch">
               <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.9"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
             </button>
             <div class="overflow">
-              <button class="icon-btn" aria-label="More options" aria-haspopup="menu" :aria-expanded="overflowOpen" @click="toggleOverflow($event)">
+              <button class="icon-btn" :aria-label="$ui('More options')" aria-haspopup="menu" :aria-expanded="overflowOpen" @click="toggleOverflow($event)">
                 <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5.5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="18.5" r="1.8"/></svg>
                 <span v-if="chatRoomStore.pendingJoins.length" class="dot-badge"></span>
               </button>
               <Teleport to="body">
               <div v-if="overflowOpen" class="pop-backdrop" @click="overflowOpen = false"></div>
               <div v-if="overflowOpen" class="pop" :style="popStyle" role="menu">
-                <button class="pop-item" role="menuitem" @click="openInfo">Group info<span v-if="chatRoomStore.pendingJoins.length" class="pop-count">{{ chatRoomStore.pendingJoins.length }}</span></button>
-                <button class="pop-item" role="menuitem" @click="overflowOpen = false; copyInvite()">Copy invite link</button>
-                <button v-if="chatRoomStore.pinnedMessages.length" class="pop-item" role="menuitem" @click="openInfo">Pinned messages</button>
-                <button class="pop-item pop-item--danger" role="menuitem" @click="overflowOpen = false; confirmLeave()">{{ chatRoomStore.isOwner ? 'Close group' : 'Leave group' }}</button>
+                <button class="pop-item" role="menuitem" @click="openInfo">{{ $ui("Group info") }}<span v-if="chatRoomStore.pendingJoins.length" class="pop-count">{{ chatRoomStore.pendingJoins.length }}</span></button>
+                <button class="pop-item" role="menuitem" @click="overflowOpen = false; copyInvite()">{{ $ui("Copy invite link") }}</button>
+                <button v-if="chatRoomStore.pinnedMessages.length" class="pop-item" role="menuitem" @click="openInfo">{{ $ui("Pinned messages") }}</button>
+                <button class="pop-item pop-item--danger" role="menuitem" @click="overflowOpen = false; confirmLeave()">{{ chatRoomStore.isOwner ? $ui("Close group") : $ui("Leave group") }}</button>
               </div>
               </Teleport>
             </div>
@@ -47,70 +47,69 @@
       </ion-toolbar>
 
       <div v-if="ready && searchOpen" class="strip">
-        <input ref="searchInput" v-model="searchQuery" class="strip-input" placeholder="Search messages" aria-label="Search messages" @keydown.esc="toggleSearch" />
+        <input ref="searchInput" v-model="searchQuery" class="strip-input" :placeholder="$ui('Search messages')" :aria-label="$ui('Search messages')" @keydown.esc="toggleSearch" />
         <span class="strip-meta">{{ searchQuery.trim() ? `${searchResults.length} found` : '' }}</span>
-        <button class="strip-close" @click="toggleSearch">Done</button>
+        <button class="strip-close" @click="toggleSearch">{{ $ui("Done") }}</button>
       </div>
       <button v-else-if="ready && chatRoomStore.isOwner && chatRoomStore.pendingJoins.length" class="strip strip--action" @click="openInfo">
         <span class="strip-text">
-          <strong>{{ chatRoomStore.pendingJoins[0].name || 'Someone' }}</strong>
-          {{ chatRoomStore.pendingJoins.length > 1 ? `and ${chatRoomStore.pendingJoins.length - 1} more want` : 'wants' }} to join
-        </span>
-        <span class="strip-cta">Review</span>
+          <strong>{{ chatRoomStore.pendingJoins[0].name || $ui("Someone") }}</strong>
+          {{ chatRoomStore.pendingJoins.length > 1 ? `and ${chatRoomStore.pendingJoins.length - 1} more want` : 'wants' }} {{ $ui("to join") }} </span>
+        <span class="strip-cta">{{ $ui("Review") }}</span>
       </button>
       <button v-else-if="ready && currentPinned" class="strip strip--pin" @click="cyclePinned">
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5zM12 14v6" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/></svg>
-        <span class="strip-text"><span class="strip-label">Pinned{{ chatRoomStore.pinnedMessages.length > 1 ? ` ${pinnedIndex + 1} of ${chatRoomStore.pinnedMessages.length}` : '' }}</span>{{ previewText(currentPinned) }}</span>
+        <span class="strip-text"><span class="strip-label">{{ $ui("Pinned") }}{{ chatRoomStore.pinnedMessages.length > 1 ? ` ${pinnedIndex + 1} of ${chatRoomStore.pinnedMessages.length}` : '' }}</span>{{ previewText(currentPinned) }}</span>
       </button>
     </ion-header>
 
     <ion-content :scroll-y="false" class="room-content">
       <div v-if="initialLoading" class="state">
         <div class="spinner"></div>
-        <p class="state-sub">Opening the group…</p>
+        <p class="state-sub">{{ $ui("Opening the group…") }}</p>
       </div>
 
       <div v-else-if="chatRoomStore.error" class="state">
-        <p class="state-title">This group couldn't be opened</p>
+        <p class="state-title">{{ $ui("This group couldn't be opened") }}</p>
         <p class="state-sub">{{ chatRoomStore.error }}</p>
-        <button class="btn btn--ghost" @click="initRoom">Try again</button>
+        <button class="btn btn--ghost" @click="initRoom">{{ $ui("Try again") }}</button>
       </div>
 
       <!-- Not a member yet -->
       <div v-else-if="!hasAccess" class="state">
         <ChatAvatar :name="''" :seed="roomId" group size="xl" />
         <template v-if="joinState === 'requested'">
-          <p class="state-title">{{ joinPassword ? 'Checking the password' : 'Request sent' }}</p>
+          <p class="state-title">{{ joinPassword ? $ui("Checking the password") : $ui("Request sent") }}</p>
           <p class="state-sub">
             {{ joinPassword
-              ? 'You\'ll be let in as soon as the group creator\'s device confirms it. If the password is wrong, they can still accept you.'
-              : 'The group creator will see your request. This screen opens the chat once you\'re accepted.' }}
+              ? $ui("You'll be let in as soon as the group creator's device confirms it. If the password is wrong, they can still accept you.")
+              : $ui("The group creator will see your request. This screen opens the chat once you're accepted.") }}
           </p>
           <div class="spinner small"></div>
-          <button v-if="accessMode === 'password'" class="btn btn--ghost" @click="joinState = 'idle'">Try another password</button>
+          <button v-if="accessMode === 'password'" class="btn btn--ghost" @click="joinState = 'idle'">{{ $ui("Try another password") }}</button>
         </template>
         <template v-else>
-          <p class="state-title">You've been invited to a group</p>
+          <p class="state-title">{{ $ui("You've been invited to a group") }}</p>
           <p class="state-sub">
-            {{ accessMode === 'password' ? 'Enter the group password to join.' : 'Ask to join and the group creator will accept you.' }}
+            {{ accessMode === 'password' ? $ui("Enter the group password to join.") : $ui("Ask to join and the group creator will accept you.") }}
           </p>
           <input v-if="accessMode === 'password'" v-model="joinPassword" type="password" class="field join-field"
-            placeholder="Group password" autocomplete="off" @keydown.enter="requestJoin" />
+            :placeholder="$ui('Group password')" autocomplete="off" @keydown.enter="requestJoin" />
           <button class="btn btn--primary" :disabled="joinState === 'sending' || (accessMode === 'password' && !joinPassword)" @click="requestJoin">
-            {{ joinState === 'sending' ? 'Sending…' : accessMode === 'password' ? 'Join group' : 'Ask to join' }}
+            {{ joinState === 'sending' ? $ui("Sending…") : accessMode === 'password' ? $ui("Join group") : $ui("Ask to join") }}
           </button>
-          <button v-if="accessMode !== 'password'" class="btn btn--link" @click="accessMode = 'password'">I have a password</button>
+          <button v-if="accessMode !== 'password'" class="btn btn--link" @click="accessMode = 'password'">{{ $ui("I have a password") }}</button>
           <p v-if="joinError" class="state-sub state-error">{{ joinError }}</p>
         </template>
       </div>
 
       <!-- Search results -->
       <div v-else-if="searchOpen && searchQuery.trim()" class="results">
-        <p v-if="!searchResults.length" class="state-sub results-empty">No messages match “{{ searchQuery.trim() }}”.</p>
+        <p v-if="!searchResults.length" class="state-sub results-empty">{{ $ui("No messages match “") }}{{ searchQuery.trim() }}”.</p>
         <button v-for="m in searchResults" :key="m.id" class="result" @click="jumpTo(m.messageId, true)">
           <ChatAvatar :name="m.senderName" :seed="m.senderId" size="sm" />
           <span class="result-body">
-            <span class="result-head"><strong>{{ m.senderId === currentUserId ? 'You' : m.senderName }}</strong><span>{{ formatDay(m.timestamp) }}, {{ formatClock(m.timestamp) }}</span></span>
+            <span class="result-head"><strong>{{ m.senderId === currentUserId ? $ui("You") : m.senderName }}</strong><span>{{ formatDay(m.timestamp) }}, {{ formatClock(m.timestamp) }}</span></span>
             <span class="result-text">{{ previewText(m) }}</span>
           </span>
         </button>
@@ -118,23 +117,23 @@
 
       <!-- Conversation -->
       <div v-else class="convo" @dragover.prevent="dragOver = true" @dragleave.self="dragOver = false" @drop.prevent="onDrop">
-        <div v-if="dragOver" class="drop">Drop to attach</div>
+        <div v-if="dragOver" class="drop">{{ $ui("Drop to attach") }}</div>
         <div ref="messagesContainer" class="scroller" @scroll="onScroll">
           <div class="column">
             <div v-if="accountCount <= 1" class="intro">
               <ChatAvatar :name="roomTitle" :seed="roomId" group size="xl" />
               <p class="intro-title">{{ roomTitle }}</p>
-              <p class="intro-sub">You're the only one here. Send the invite link to bring people in.</p>
+              <p class="intro-sub">{{ $ui("You're the only one here. Send the invite link to bring people in.") }}</p>
               <div class="intro-actions">
-                <button class="btn btn--primary" @click="copyInvite">Copy invite link</button>
-                <button v-if="canShare" class="btn btn--ghost" @click="shareInviteNative">Share…</button>
+                <button class="btn btn--primary" @click="copyInvite">{{ $ui("Copy invite link") }}</button>
+                <button v-if="canShare" class="btn btn--ghost" @click="shareInviteNative">{{ $ui("Share…") }}</button>
               </div>
             </div>
-            <p v-else-if="chatRoomStore.timeline.length === 0" class="intro-sub intro-sub--quiet">No messages yet. Say hello 👋</p>
+            <p v-else-if="chatRoomStore.timeline.length === 0" class="intro-sub intro-sub--quiet">{{ $ui("No messages yet. Say hello 👋") }}</p>
 
             <template v-for="(item, i) in chatRoomStore.timeline" :key="item.id">
               <div v-if="dayChanged(i)" class="day"><span>{{ formatDay(item.timestamp) }}</span></div>
-              <div v-if="item.id === unreadDividerId" class="unread"><span>Unread messages</span></div>
+              <div v-if="item.id === unreadDividerId" class="unread"><span>{{ $ui("Unread messages") }}</span></div>
               <div class="line" :class="{ 'line--mine': item.senderId === currentUserId, 'line--cont': isGrouped(i) }">
                 <span v-if="item.senderId !== currentUserId" class="line-avatar">
                   <ChatAvatar v-if="showAvatar(i)" :name="item.senderName" :seed="item.senderId" size="sm" />
@@ -159,7 +158,7 @@
             </template>
           </div>
         </div>
-        <button v-if="!atBottom" class="to-bottom" aria-label="Scroll to latest" @click="scrollToBottom(true)">
+        <button v-if="!atBottom" class="to-bottom" :aria-label="$ui('Scroll to latest')" @click="scrollToBottom(true)">
           <svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span v-if="newWhileAway" class="to-bottom-count">{{ newWhileAway }}</span>
         </button>
@@ -175,20 +174,20 @@
         <div v-if="replyTo || editing" class="context">
           <span class="context-bar"></span>
           <span class="context-body">
-            <span class="context-title">{{ editing ? 'Edit message' : `Reply to ${replyTo!.senderId === currentUserId ? 'yourself' : replyTo!.senderName}` }}</span>
+            <span class="context-title">{{ editing ? $ui("Edit message") : `Reply to ${replyTo!.senderId === currentUserId ? 'yourself' : replyTo!.senderName}` }}</span>
             <span class="context-text">{{ previewText((editing || replyTo)!) }}</span>
           </span>
-          <button class="icon-btn icon-btn--sm" aria-label="Cancel" @click="cancelCompose"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+          <button class="icon-btn icon-btn--sm" :aria-label="$ui('Cancel')" @click="cancelCompose"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
         </div>
 
         <div v-if="pendingFile" class="context">
           <img v-if="pendingPreview" :src="pendingPreview" class="context-thumb" alt="" />
           <span v-else class="context-file">📄</span>
           <span class="context-body">
-            <span class="context-title">{{ pendingFile.name || 'Attachment' }}</span>
-            <span class="context-text">{{ formatSize(pendingFile.size) }} · add a caption or just send</span>
+            <span class="context-title">{{ pendingFile.name || $ui("Attachment") }}</span>
+            <span class="context-text">{{ formatSize(pendingFile.size) }} {{ $ui("· add a caption or just send") }}</span>
           </span>
-          <button class="icon-btn icon-btn--sm" aria-label="Remove attachment" @click="clearPendingFile"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+          <button class="icon-btn icon-btn--sm" :aria-label="$ui('Remove attachment')" @click="clearPendingFile"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
         </div>
 
         <div v-if="mentionMatches.length" class="suggest" role="listbox">
@@ -203,34 +202,28 @@
 
         <div class="composer" :class="{ 'composer--rec': recording }">
           <template v-if="recording">
-            <button class="icon-btn" aria-label="Discard recording" @click="stopRecording(false)">
+            <button class="icon-btn" :aria-label="$ui('Discard recording')" @click="stopRecording(false)">
               <svg viewBox="0 0 24 24" fill="none"><path d="M5 7h14M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
-            <span class="rec"><span class="rec-dot"></span>{{ recordClock }}<span class="rec-hint">Recording</span></span>
-            <button class="send" aria-label="Send voice message" @click="stopRecording(true)">
+            <span class="rec"><span class="rec-dot"></span>{{ recordClock }}<span class="rec-hint">{{ $ui("Recording") }}</span></span>
+            <button class="send" :aria-label="$ui('Send voice message')" @click="stopRecording(true)">
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.4 20.4l17.4-7.5c.8-.4.8-1.5 0-1.8L3.4 3.6c-.7-.3-1.4.3-1.2 1l1.6 6.2c.1.4.4.6.8.7L12 12l-7.4.5c-.4.1-.7.3-.8.7l-1.6 6.2c-.2.7.5 1.3 1.2 1z"/></svg>
             </button>
           </template>
           <template v-else>
             <div class="attach">
-              <button class="icon-btn" :class="{ 'icon-btn--on': attachOpen }" aria-label="Attach" aria-haspopup="menu" :aria-expanded="attachOpen" :disabled="!!editing" @click="toggleAttach($event)">
+              <button class="icon-btn" :class="{ 'icon-btn--on': attachOpen }" :aria-label="$ui('Attach')" aria-haspopup="menu" :aria-expanded="attachOpen" :disabled="!!editing" @click="toggleAttach($event)">
                 <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
               </button>
               <Teleport to="body">
               <div v-if="attachOpen" class="pop-backdrop" @click="attachOpen = false"></div>
               <div v-if="attachOpen" class="pop" :style="popStyle" role="menu">
                 <button class="pop-item pop-item--icon" role="menuitem" @click="pickFile('media')">
-                  <span class="pop-ico pop-ico--media"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="10" r="1.6" fill="currentColor"/><path d="M4 17l5-4.5 4 3.5 3-2.5 4 3.5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
-                  Photo or video
-                </button>
+                  <span class="pop-ico pop-ico--media"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="10" r="1.6" fill="currentColor"/><path d="M4 17l5-4.5 4 3.5 3-2.5 4 3.5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span> {{ $ui("Photo or video") }} </button>
                 <button class="pop-item pop-item--icon" role="menuitem" @click="pickFile('file')">
-                  <span class="pop-ico pop-ico--file"><svg viewBox="0 0 24 24" fill="none"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8l-5-5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 3v5h5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
-                  Document
-                </button>
+                  <span class="pop-ico pop-ico--file"><svg viewBox="0 0 24 24" fill="none"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8l-5-5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 3v5h5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span> {{ $ui("Document") }} </button>
                 <button class="pop-item pop-item--icon" role="menuitem" @click="attachOpen = false; openPollComposer()">
-                  <span class="pop-ico pop-ico--poll"><svg viewBox="0 0 24 24" fill="none"><path d="M5 20V11M12 20V4M19 20v-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></span>
-                  Poll
-                </button>
+                  <span class="pop-ico pop-ico--poll"><svg viewBox="0 0 24 24" fill="none"><path d="M5 20V11M12 20V4M19 20v-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></span> {{ $ui("Poll") }} </button>
               </div>
               </Teleport>
             </div>
@@ -248,9 +241,9 @@
                 :disabled="!chatRoomStore.currentRoom"
                 class="message-input"
                 rows="1"
-                aria-label="Message"
+                :aria-label="$ui('Message')"
               />
-              <button class="icon-btn icon-btn--sm" :class="{ 'icon-btn--on': emojiOpen }" aria-label="Emoji" @click="emojiOpen = !emojiOpen; attachOpen = false">
+              <button class="icon-btn icon-btn--sm" :class="{ 'icon-btn--on': emojiOpen }" :aria-label="$ui('Emoji')" @click="emojiOpen = !emojiOpen; attachOpen = false">
                 <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.8"/><path d="M8.5 14c.9 1.3 2.1 2 3.5 2s2.6-.7 3.5-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="9.3" cy="9.8" r="1.1" fill="currentColor"/><circle cx="14.7" cy="9.8" r="1.1" fill="currentColor"/></svg>
               </button>
             </div>
@@ -258,7 +251,7 @@
               <svg v-if="editing" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
               <svg v-else viewBox="0 0 24 24" fill="currentColor"><path d="M3.4 20.4l17.4-7.5c.8-.4.8-1.5 0-1.8L3.4 3.6c-.7-.3-1.4.3-1.2 1l1.6 6.2c.1.4.4.6.8.7L12 12l-7.4.5c-.4.1-.7.3-.8.7l-1.6 6.2c-.2.7.5 1.3 1.2 1z"/></svg>
             </button>
-            <button v-else class="send send--quiet" aria-label="Record voice message" :disabled="!canRecord" @click="startRecording">
+            <button v-else class="send send--quiet" :aria-label="$ui('Record voice message')" :disabled="!canRecord" @click="startRecording">
               <svg viewBox="0 0 24 24" fill="none"><rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" stroke-width="2"/><path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
             </button>
           </template>
@@ -271,7 +264,7 @@
       <div class="menu" :style="menu.style" role="menu" @click.stop>
         <div class="menu-reacts">
           <button v-for="e in QUICK_REACTIONS" :key="e" class="menu-react" :class="{ mine: myReaction(menu.item) === e }" :aria-label="`React ${e}`" @click="react(menu.item, myReaction(menu.item) === e ? '' : e); menu = null">{{ e }}</button>
-          <button class="menu-react menu-react--more" aria-label="More reactions" @click="menu.moreEmoji = !menu.moreEmoji">
+          <button class="menu-react menu-react--more" :aria-label="$ui('More reactions')" @click="menu.moreEmoji = !menu.moreEmoji">
             <svg viewBox="0 0 24 24" fill="none"><path d="M12 6v12M6 12h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           </button>
         </div>
@@ -279,13 +272,13 @@
           <button v-for="e in EMOJI_PICKER" :key="e" class="emoji-cell" @click="react(menu.item, e); menu = null">{{ e }}</button>
         </div>
         <template v-if="!menu.reactOnly && !menu.item.deleted">
-          <button class="menu-item" role="menuitem" @click="startReply(menu.item); menu = null">Reply</button>
-          <button v-if="menu.item.text" class="menu-item" role="menuitem" @click="copyText(menu.item); menu = null">Copy text</button>
-          <button class="menu-item" role="menuitem" @click="openForward(menu.item); menu = null">Forward</button>
-          <button class="menu-item" role="menuitem" @click="togglePin(menu.item); menu = null">{{ menu.item.pinned ? 'Unpin' : 'Pin to top' }}</button>
-          <button v-if="menu.item.senderId === currentUserId && !menu.item.poll && menu.item.status !== 'failed'" class="menu-item" role="menuitem" @click="startEdit(menu.item); menu = null">Edit</button>
-          <button v-if="menu.item.senderId === currentUserId" class="menu-item" role="menuitem" @click="infoFor = menu.item; menu = null">Seen by…</button>
-          <button v-if="menu.item.senderId === currentUserId" class="menu-item menu-item--danger" role="menuitem" @click="confirmDelete(menu.item); menu = null">Delete for everyone</button>
+          <button class="menu-item" role="menuitem" @click="startReply(menu.item); menu = null">{{ $ui("Reply") }}</button>
+          <button v-if="menu.item.text" class="menu-item" role="menuitem" @click="copyText(menu.item); menu = null">{{ $ui("Copy text") }}</button>
+          <button class="menu-item" role="menuitem" @click="openForward(menu.item); menu = null">{{ $ui("Forward") }}</button>
+          <button class="menu-item" role="menuitem" @click="togglePin(menu.item); menu = null">{{ menu.item.pinned ? $ui("Unpin") : $ui("Pin to top") }}</button>
+          <button v-if="menu.item.senderId === currentUserId && !menu.item.poll && menu.item.status !== 'failed'" class="menu-item" role="menuitem" @click="startEdit(menu.item); menu = null">{{ $ui("Edit") }}</button>
+          <button v-if="menu.item.senderId === currentUserId" class="menu-item" role="menuitem" @click="infoFor = menu.item; menu = null">{{ $ui("Seen by…") }}</button>
+          <button v-if="menu.item.senderId === currentUserId" class="menu-item menu-item--danger" role="menuitem" @click="confirmDelete(menu.item); menu = null">{{ $ui("Delete for everyone") }}</button>
         </template>
       </div>
     </div>
@@ -293,18 +286,18 @@
     <!-- Poll composer -->
     <ion-modal :is-open="pollOpen" class="sheet" @didDismiss="pollOpen = false">
       <div class="sheet-body">
-        <h2 class="sheet-title">Create a poll</h2>
-        <label class="label" for="poll-q">Question</label>
-        <input id="poll-q" v-model="pollQuestion" class="field" maxlength="300" placeholder="Ask the group something" />
-        <label class="label">Options</label>
+        <h2 class="sheet-title">{{ $ui("Create a poll") }}</h2>
+        <label class="label" for="poll-q">{{ $ui("Question") }}</label>
+        <input id="poll-q" v-model="pollQuestion" class="field" maxlength="300" :placeholder="$ui('Ask the group something')" />
+        <label class="label">{{ $ui("Options") }}</label>
         <div v-for="(_, i) in pollOptions" :key="i" class="poll-row">
           <input v-model="pollOptions[i]" class="field" maxlength="200" :placeholder="i < 2 ? `Option ${i + 1}` : 'Add another option'" :aria-label="`Option ${i + 1}`" @input="growPollOptions" />
           <button v-if="pollOptions.length > 2 && i < pollOptions.length - 1" class="icon-btn icon-btn--sm" :aria-label="`Remove option ${i + 1}`" @click="pollOptions.splice(i, 1)"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
         </div>
-        <label class="check"><input type="checkbox" v-model="pollMulti" /> Let people pick more than one</label>
+        <label class="check"><input type="checkbox" v-model="pollMulti" /> {{ $ui("Let people pick more than one") }}</label>
         <div class="sheet-actions">
-          <button class="btn btn--ghost" @click="pollOpen = false">Cancel</button>
-          <button class="btn btn--primary" :disabled="!pollValid || isSending" @click="sendPoll">Send poll</button>
+          <button class="btn btn--ghost" @click="pollOpen = false">{{ $ui("Cancel") }}</button>
+          <button class="btn btn--primary" :disabled="!pollValid || isSending" @click="sendPoll">{{ $ui("Send poll") }}</button>
         </div>
       </div>
     </ion-modal>
@@ -312,34 +305,28 @@
     <!-- Group info -->
     <ion-modal :is-open="showMembers" class="sheet sheet--tall" @didDismiss="showMembers = false">
       <div class="sheet-body info">
-        <button class="icon-btn info-close" aria-label="Close" @click="showMembers = false"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+        <button class="icon-btn info-close" :aria-label="$ui('Close')" @click="showMembers = false"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
         <div class="info-top">
           <ChatAvatar :name="roomTitle" :seed="roomId" group size="xl" />
           <h2 class="info-name">{{ roomTitle }}</h2>
-          <p class="info-meta">Group, {{ accountCount }} {{ accountCount === 1 ? 'member' : 'members' }}</p>
+          <p class="info-meta">{{ $ui("Group,") }} {{ accountCount }} {{ accountCount === 1 ? 'member' : 'members' }}</p>
           <p v-if="chatRoomStore.currentRoom?.description" class="info-desc">{{ chatRoomStore.currentRoom.description }}</p>
         </div>
         <div class="info-actions">
           <button class="info-action" @click="copyInvite">
-            <svg viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-            Invite link
-          </button>
+            <svg viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg> {{ $ui("Invite link") }} </button>
           <button v-if="canShare" class="info-action" @click="shareInviteNative">
-            <svg viewBox="0 0 24 24" fill="none"><path d="M12 15V3M8 7l4-4 4 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Share
-          </button>
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 15V3M8 7l4-4 4 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> {{ $ui("Share") }} </button>
           <button class="info-action" @click="showMembers = false; toggleSearch()">
-            <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-            Search
-          </button>
+            <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg> {{ $ui("Search") }} </button>
         </div>
 
         <section v-if="chatRoomStore.pinnedMessages.length" class="info-section">
-          <h3 class="info-h">Pinned</h3>
+          <h3 class="info-h">{{ $ui("Pinned") }}</h3>
           <button v-for="p in chatRoomStore.pinnedMessages" :key="p.id" class="result" @click="showMembers = false; jumpTo(p.messageId)">
             <ChatAvatar :name="p.senderName" :seed="p.senderId" size="sm" />
             <span class="result-body">
-              <span class="result-head"><strong>{{ p.senderId === currentUserId ? 'You' : p.senderName }}</strong><span>{{ formatDay(p.timestamp) }}</span></span>
+              <span class="result-head"><strong>{{ p.senderId === currentUserId ? $ui("You") : p.senderName }}</strong><span>{{ formatDay(p.timestamp) }}</span></span>
               <span class="result-text">{{ previewText(p) }}</span>
             </span>
           </button>
@@ -347,42 +334,43 @@
 
         <GroupMembersPanel />
 
-        <button class="leave" @click="confirmLeave">{{ chatRoomStore.isOwner ? 'Close group' : 'Leave group' }}</button>
+        <button class="leave" @click="confirmLeave">{{ chatRoomStore.isOwner ? $ui("Close group") : $ui("Leave group") }}</button>
       </div>
     </ion-modal>
 
     <!-- Seen by -->
     <ion-modal :is-open="!!infoFor" class="sheet" @didDismiss="infoFor = null">
       <div v-if="infoFor" class="sheet-body">
-        <h2 class="sheet-title">Seen by</h2>
+        <h2 class="sheet-title">{{ $ui("Seen by") }}</h2>
         <p class="quote">{{ previewText(infoFor) }}</p>
-        <p v-if="!infoReaders.length" class="state-sub">Nobody has seen it yet.</p>
+        <p v-if="!infoReaders.length" class="state-sub">{{ $ui("Nobody has seen it yet.") }}</p>
         <div v-for="a in infoReaders" :key="a" class="person"><ChatAvatar :name="chatRoomStore.displayName(a)" :seed="a" size="sm" />{{ chatRoomStore.displayName(a) }}</div>
         <template v-if="infoUnread.length">
-          <h3 class="info-h">Not yet</h3>
+          <h3 class="info-h">{{ $ui("Not yet") }}</h3>
           <div v-for="a in infoUnread" :key="a" class="person person--muted"><ChatAvatar :name="chatRoomStore.displayName(a)" :seed="a" size="sm" />{{ chatRoomStore.displayName(a) }}</div>
         </template>
-        <p class="sheet-foot">Sent {{ new Date(infoFor.timestamp).toLocaleString() }}</p>
+        <p class="sheet-foot">{{ $ui("Sent") }} {{ new Date(infoFor.timestamp).toLocaleString() }}</p>
       </div>
     </ion-modal>
 
     <!-- Forward -->
     <ion-modal :is-open="!!forwarding" class="sheet" @didDismiss="forwarding = null">
       <div class="sheet-body">
-        <h2 class="sheet-title">Forward to</h2>
-        <p v-if="!forwardRooms.length" class="state-sub">You're not in any other groups yet.</p>
+        <h2 class="sheet-title">{{ $ui("Forward to") }}</h2>
+        <p v-if="!forwardRooms.length" class="state-sub">{{ $ui("You're not in any other groups yet.") }}</p>
         <button v-for="r in forwardRooms" :key="r.id" class="result" @click="doForward(r.id)">
           <ChatAvatar :name="r.name" :seed="r.id" group size="sm" />
-          <span class="result-body"><span class="result-head"><strong>{{ r.name }}</strong><span>{{ r.memberCount }} members</span></span></span>
+          <span class="result-body"><span class="result-head"><strong>{{ r.name }}</strong><span>{{ $count(r.memberCount, 'member') }}</span></span></span>
         </button>
       </div>
     </ion-modal>
 
-    <div v-if="lightbox" class="lightbox" role="dialog" aria-label="Image" @click="lightbox = ''"><img :src="lightbox" alt="" /></div>
+    <div v-if="lightbox" class="lightbox" role="dialog" :aria-label="$ui('Image')" @click="lightbox = ''"><img :src="lightbox" alt="" /></div>
   </ion-page>
 </template>
 
 <script setup lang="ts">
+import { ui } from "../i18n";
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import {
@@ -553,7 +541,7 @@ async function jumpTo(messageId: string, closeSearch = false) {
   await nextTick();
   const el = messagesContainer.value?.querySelector(`[data-mid="${CSS.escape(messageId)}"]`);
   if (!el) {
-    const t = await toastController.create({ message: 'That message is not on this device', duration: 1800, position: 'top' });
+    const t = await toastController.create({ message: ui("That message is not on this device"), duration: 1800, position: 'top' });
     return t.present();
   }
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -768,14 +756,14 @@ const togglePin = (item: TimelineItem) => run(() => (item.pinned ? chatRoomStore
 
 async function copyText(item: TimelineItem) {
   await navigator.clipboard.writeText(item.text).catch(() => {});
-  const t = await toastController.create({ message: 'Copied', duration: 1200, position: 'top' });
+  const t = await toastController.create({ message: ui("Copied"), duration: 1200, position: 'top' });
   await t.present();
 }
 async function confirmDelete(item: TimelineItem) {
   const alert = await alertController.create({
-    header: 'Delete message?',
-    message: 'It will be removed for everyone in this group.',
-    buttons: [{ text: 'Cancel', role: 'cancel' }, { text: 'Delete', role: 'destructive' }],
+    header: ui("Delete message?"),
+    message: ui("It will be removed for everyone in this group."),
+    buttons: [{ text: ui("Cancel"), role: 'cancel' }, { text: ui("Delete"), role: 'destructive' }],
   });
   await alert.present();
   const { role } = await alert.onDidDismiss();
@@ -800,7 +788,7 @@ async function doForward(targetRoom: string) {
   if (!item) return;
   await run(async () => {
     await chatRoomStore.forward(targetRoom, { text: item.text, media: item.media });
-    const t = await toastController.create({ message: 'Forwarded', duration: 1400, position: 'top', color: 'success' });
+    const t = await toastController.create({ message: ui("Forwarded"), duration: 1400, position: 'top', color: 'success' });
     await t.present();
   });
 }
@@ -981,7 +969,7 @@ async function confirmLeave() {
   const alert = await alertController.create({
     header: owner ? 'Close group?' : 'Leave group?',
     message: owner ? 'Everyone loses access and the group cannot be reopened.' : 'You will need to be approved again to rejoin.',
-    buttons: [{ text: 'Cancel', role: 'cancel' }, { text: owner ? 'Close' : 'Leave', role: 'destructive' }],
+    buttons: [{ text: ui("Cancel"), role: 'cancel' }, { text: owner ? 'Close' : 'Leave', role: 'destructive' }],
   });
   await alert.present();
   const { role } = await alert.onDidDismiss();
@@ -998,7 +986,7 @@ async function confirmLeave() {
 const showMembers = ref(false);
 async function copyInvite() {
   await navigator.clipboard.writeText(inviteLink.value).catch(() => {});
-  const t = await toastController.create({ message: 'Invite link copied', duration: 1600, position: 'top' });
+  const t = await toastController.create({ message: ui("Invite link copied"), duration: 1600, position: 'top' });
   await t.present();
 }
 

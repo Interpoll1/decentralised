@@ -2,7 +2,7 @@
   <article ref="cardEl" class="poll-card" :data-poll-id="poll.id" :data-category="poll.category || ''" :data-tags="Array.isArray(poll.tags) ? poll.tags.join(',') : (poll.tags || '')">
     <div v-if="flagged && filterAction === 'blur' && !revealed" class="flagged-overlay" @click.stop="revealed = true">
       <ion-icon :icon="warningOutline"></ion-icon>
-      <span>Poll hidden by word filter — tap to reveal</span>
+      <span>{{ $ui("Poll hidden by word filter — tap to reveal") }}</span>
     </div>
 
     <div class="poll-body" @click="$emit('click')" :class="{ 'content-blurred': flagged && filterAction === 'blur' && !revealed }">
@@ -12,7 +12,7 @@
         <div class="poll-header-left">
           <div class="poll-badge">
             <ion-icon :icon="statsChartOutline"></ion-icon>
-            <span>Poll</span>
+            <span>{{ $ui("Poll") }}</span>
           </div>
           <!-- Trust tier badge — replaces blank space next to poll badge -->
           <TrustTierBadge
@@ -24,10 +24,10 @@
         <div class="poll-meta">
           <div class="author-avatar-sm" :title="'u/' + authorDisplayName">{{ authorInitial }}</div>
           <span class="author">u/{{ authorDisplayName }}</span>
-          <span class="identity-badge" :class="authorIdentityClass">{{ authorIdentityLabel }}</span>
+          <span class="identity-badge" :class="authorIdentityClass">{{ $ui(authorIdentityLabel) }}</span>
           <span class="separator">·</span>
           <span class="timestamp">{{ formatTime(poll.createdAt) }}</span>
-          <span v-if="poll.isExpired" class="expired-badge">Ended</span>
+          <span v-if="poll.isExpired" class="expired-badge">{{ $ui("Ended") }}</span>
           <span v-if="flagged && filterAction === 'flag'" class="flag-badge">
             <ion-icon :icon="warningOutline"></ion-icon>
           </span>
@@ -53,7 +53,7 @@
       </div>
 
       <!-- ── Question ─────────────────────────────── -->
-      <h3 class="poll-question">{{ poll.question || 'Untitled Poll' }}</h3>
+      <h3 class="poll-question">{{ poll.question || $ui("Untitled Poll") }}</h3>
       <p v-if="poll.description" class="poll-description">{{ poll.description }}</p>
 
       <!-- ── Options preview ──────────────────────── -->
@@ -74,15 +74,14 @@
           <span class="option-pct">{{ Math.round(getOptionPercent(option)) }}% ({{ option.votes || 0 }})</span>
         </div>
         <div v-if="poll.options.length > 3" class="more-options">
-          +{{ poll.options.length - 3 }} more option{{ poll.options.length - 3 !== 1 ? 's' : '' }}
+          +{{ $count(poll.options.length - 3, 'more option') }}
         </div>
       </div>
-      <div v-else class="no-options"><p>No options available</p></div>
+      <div v-else class="no-options"><p>{{ $ui("No options available") }}</p></div>
 
       <!-- View count — below options, no icon, subtle -->
       <div v-if="poll.viewCount && poll.viewCount > 0" class="poll-view-count-row">
-        {{ formatViewCount(poll.viewCount) }} views
-      </div>
+        {{ formatViewCount(poll.viewCount) }} {{ $ui("views") }} </div>
 
       <!-- ── Footer ─────────────────────────────────── -->
       <div class="poll-footer" @click.stop>
@@ -103,7 +102,7 @@
           <!-- Vote count -->
           <div class="stat-item">
             <ion-icon :icon="peopleOutline"></ion-icon>
-            <span>{{ displayTotal }} vote{{ displayTotal !== 1 ? 's' : '' }}</span>
+            <span>{{ $count(displayTotal, 'vote') }}</span>
           </div>
 
           <!-- Verified count — trust signal -->
@@ -116,7 +115,7 @@
               : verifiedTotal + ' vote(s) cryptographically verified'"
           >
             <ion-icon :icon="verifiedInflated ? warningOutline : shieldCheckmarkOutline"></ion-icon>
-            <span>{{ verifiedTotal }} verified</span>
+            <span>{{ verifiedTotal }} {{ $ui("verified") }}</span>
           </div>
 
           <!-- Time remaining -->
@@ -128,7 +127,7 @@
           <!-- Multiple choice -->
           <div v-if="poll.allowMultipleChoices" class="stat-item">
             <ion-icon :icon="checkmarkDoneOutline"></ion-icon>
-            <span>Multi-choice</span>
+            <span>{{ $ui("Multi-choice") }}</span>
           </div>
 
           <!-- Time-lock indicator -->
@@ -137,7 +136,7 @@
               <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8"/>
               <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
             </svg>
-            <span>Results locked</span>
+            <span>{{ $ui("Results locked") }}</span>
           </div>
 
           <!-- Moderation -->
@@ -146,21 +145,20 @@
             fill="clear" size="small" class="moderation-action"
             :title="moderationActionTitle"
             @click.stop="$emit('moderation-submit')"
-          >
-            Filter <ion-icon slot="end" :icon="shieldCheckmarkOutline"></ion-icon>
+          > {{ $ui("Filter") }} <ion-icon slot="end" :icon="shieldCheckmarkOutline"></ion-icon>
           </ion-button>
         </div>
 
         <div class="poll-actions">
           <!-- Share -->
-          <button class="action-btn" title="Share" @click.stop="handleShare">
+          <button class="action-btn" :title="$ui('Share')" @click.stop="handleShare">
             <svg class="reddit-share-icon" viewBox="0 0 24 24" fill="none">
               <path d="M21 12l-7-7v4C7 10 4 15 3 21c2.5-3.5 6-5.1 11-5.1V20l7-8z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
             </svg>
           </button>
 
           <!-- Nostr share button if event ID exists -->
-          <button v-if="nostrEventId" class="action-btn action-btn--nostr" title="Open in Nostr client" @click.stop="openNostr">
+          <button v-if="nostrEventId" class="action-btn action-btn--nostr" :title="$ui('Open in Nostr client')" @click.stop="openNostr">
             <svg viewBox="0 0 24 24" fill="none" width="15" height="15">
               <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
@@ -175,6 +173,7 @@
 </template>
 
 <script setup lang="ts">
+import { relativeTime, remainingTime } from "../i18n";
 import { ref, computed, watch } from 'vue';
 import { IonIcon, IonButton } from '@ionic/vue';
 import { statsChartOutline, peopleOutline, timeOutline, checkmarkDoneOutline, warningOutline, shieldCheckmarkOutline, heart, heartOutline } from 'ionicons/icons';
@@ -269,15 +268,7 @@ function openNostr() {
   window.open(`https://njump.me/${nostrEventId.value}`, '_blank', 'noopener');
 }
 
-function formatTime(timestamp: number): string {
-  const diff = Date.now() - timestamp;
-  const m = Math.floor(diff / 60000), h = Math.floor(diff / 3600000), d = Math.floor(diff / 86400000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m`;
-  if (h < 24) return `${h}h`;
-  if (d < 7) return `${d}d`;
-  return new Date(timestamp).toLocaleDateString();
-}
+function formatTime(timestamp: number): string { return relativeTime(timestamp); }
 
 function handleShare() {
   const url = props.poll.communityId
@@ -290,15 +281,7 @@ function getOptionPercent(option: { votes: number }): number {
   return results.percent(option as PollOption);
 }
 
-function getTimeRemaining(): string {
-  if (props.poll.isExpired) return 'Ended';
-  const remaining = props.poll.expiresAt - Date.now();
-  const d = Math.floor(remaining / 86400000);
-  const h = Math.floor((remaining % 86400000) / 3600000);
-  if (d > 0) return `${d}d left`;
-  if (h > 0) return `${h}h left`;
-  return 'Ending soon';
-}
+function getTimeRemaining(): string { return remainingTime(props.poll.expiresAt, props.poll.isExpired); }
 function formatViewCount(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
   if (n >= 1_000)     return (n / 1_000).toFixed(1) + 'K';

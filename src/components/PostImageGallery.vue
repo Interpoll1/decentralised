@@ -10,7 +10,7 @@
           loading="lazy"
         />
         <div v-else class="pig-skeleton" :class="{ 'pig-skeleton--failed': failed[i] }">
-          <span v-if="failed[i]" class="pig-retry">Tap to retry</span>
+          <span v-if="failed[i]" class="pig-retry">{{ $ui("Tap to retry") }}</span>
         </div>
         <span v-if="!full && i === shown.length - 1 && extra > 0" class="pig-more">+{{ extra }}</span>
       </div>

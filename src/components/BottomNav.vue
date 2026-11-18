@@ -13,7 +13,7 @@
         }"
         :data-nav-index="index"
         :data-tour="item.id"
-        :aria-label="item.label"
+        :aria-label="$ui(item.label)"
         @click="onItemClick(item)"
         @pointerdown="onPointerDown($event, index)"
         @keydown.alt.left.prevent="nudge(index, -1)"
@@ -37,7 +37,7 @@
             {{ unread > 99 ? '99+' : unread }}
           </span>
         </span>
-        <span class="nav-label">{{ item.label }}</span>
+        <span class="nav-label">{{ $ui(item.label) }}</span>
       </button>
     </div>
 
@@ -46,7 +46,7 @@
       <div v-if="drag.active && draggedItem" class="nav-drag-layer" aria-hidden="true">
         <div class="nav-ghost" :style="ghostStyle">
           <span class="nav-ghost__icon"><NavIcon :id="draggedItem.id" :active="true" /></span>
-          <span class="nav-ghost__label">{{ draggedItem.label }}</span>
+          <span class="nav-ghost__label">{{ $ui(draggedItem.label) }}</span>
         </div>
       </div>
     </Teleport>

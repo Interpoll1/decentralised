@@ -5,21 +5,20 @@
     <div class="rv-status-bar">
       <div class="rv-status-indicator" :class="verified ? 'rv-ok' : 'rv-pending'">
         <span class="rv-status-pulse"></span>
-        <span>{{ verified ? 'CHAIN VERIFIED' : 'VERIFYING…' }}</span>
+        <span>{{ verified ? $ui("CHAIN VERIFIED") : $ui("VERIFYING…") }}</span>
       </div>
       <div class="rv-block-badge">
         <svg viewBox="0 0 24 24" fill="none" width="12" height="12">
           <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" stroke="currentColor" stroke-width="1.8"/>
-        </svg>
-        Block #{{ receipt.blockIndex.toLocaleString() }}
+        </svg> {{ $ui("Block #") }}{{ receipt.blockIndex.toLocaleString() }}
       </div>
     </div>
 
     <!-- ── Mnemonic phrase ─────────────────────────────────────────── -->
     <div class="rv-section rv-mnemonic-section">
       <div class="rv-section-header">
-        <span class="rv-section-label">Verification phrase</span>
-        <span class="rv-section-sub">12 words · save these</span>
+        <span class="rv-section-label">{{ $ui("Verification phrase") }}</span>
+        <span class="rv-section-sub">{{ $ui("12 words · save these") }}</span>
       </div>
       <div class="rv-mnemonic-grid">
         <div
@@ -38,27 +37,27 @@
             <path v-if="wordRevealed" d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
             <path v-else d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 100 6 3 3 0 000-6z" stroke="currentColor" stroke-width="1.8"/>
           </svg>
-          {{ wordRevealed ? 'Hide phrase' : 'Reveal phrase' }}
+          {{ wordRevealed ? $ui("Hide phrase") : $ui("Reveal phrase") }}
         </button>
-        <span class="rv-hint">Share these words to prove you voted — without revealing your identity</span>
+        <span class="rv-hint">{{ $ui("Share these words to prove you voted — without revealing your identity") }}</span>
       </div>
     </div>
 
     <!-- ── Chain proof ─────────────────────────────────────────────── -->
     <div class="rv-section">
       <div class="rv-section-header">
-        <span class="rv-section-label">Chain proof</span>
+        <span class="rv-section-label">{{ $ui("Chain proof") }}</span>
         <div class="rv-sig-badge" :class="verified ? 'rv-sig-ok' : 'rv-sig-pending'">
           <svg viewBox="0 0 24 24" fill="none" width="11" height="11">
             <path d="M12 22s8-4.5 8-11V5l-8-3-8 3v6c0 6.5 8 11 8 11z" stroke="currentColor" stroke-width="1.8"/>
             <path v-if="verified" d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
           </svg>
-          {{ verified ? 'Schnorr ✓' : 'Verifying' }}
+          {{ verified ? $ui("Schnorr ✓") : $ui("Verifying") }}
         </div>
       </div>
       <div class="rv-hash-stack">
         <div class="rv-hash-row">
-          <span class="rv-hash-label">Vote hash</span>
+          <span class="rv-hash-label">{{ $ui("Vote hash") }}</span>
           <code class="rv-hash-val">{{ receipt.voteHash }}</code>
         </div>
         <div class="rv-hash-connector" aria-hidden="true">
@@ -67,20 +66,19 @@
           </svg>
         </div>
         <div class="rv-hash-row">
-          <span class="rv-hash-label">Chain head</span>
+          <span class="rv-hash-label">{{ $ui("Chain head") }}</span>
           <code class="rv-hash-val">{{ receipt.chainHeadHash }}</code>
         </div>
       </div>
-      <div class="rv-timestamp">
-        Recorded {{ formatDate(receipt.timestamp) }}
+      <div class="rv-timestamp"> {{ $ui("Recorded") }} {{ formatDate(receipt.timestamp) }}
       </div>
     </div>
 
     <!-- ── Propagation ──────────────────────────────────────────────── -->
     <div class="rv-section rv-propagation-section">
       <div class="rv-section-header">
-        <span class="rv-section-label">Propagation</span>
-        <span class="rv-propagation-count">{{ propagationPeers }} peers</span>
+        <span class="rv-section-label">{{ $ui("Propagation") }}</span>
+        <span class="rv-propagation-count">{{ $count(propagationPeers, 'peer') }}</span>
       </div>
       <div class="rv-propagation-track">
         <div
@@ -94,18 +92,16 @@
         ></div>
       </div>
       <div class="rv-propagation-labels">
-        <span>{{ propagationPeers }} peers online</span>
-        <span>{{ propagationRelays }} relay{{ propagationRelays !== 1 ? 's' : '' }}</span>
+        <span>{{ propagationPeers }} {{ $ui("peers online") }}</span>
+        <span>{{ $count(propagationRelays, 'relay') }}</span>
       </div>
     </div>
 
     <!-- ── Nostr event ID ───────────────────────────────────────────── -->
     <div class="rv-section rv-nostr-section" v-if="nostrEventId">
       <div class="rv-section-header">
-        <span class="rv-section-label">Nostr event</span>
-        <a class="rv-nostr-link" :href="nostrClientUrl" target="_blank" rel="noopener noreferrer">
-          Open in client ↗
-        </a>
+        <span class="rv-section-label">{{ $ui("Nostr event") }}</span>
+        <a class="rv-nostr-link" :href="nostrClientUrl" target="_blank" rel="noopener noreferrer"> {{ $ui("Open in client ↗") }} </a>
       </div>
       <div class="rv-nostr-row">
         <div class="rv-nostr-icon" aria-hidden="true">
@@ -124,7 +120,7 @@
           </svg>
         </button>
       </div>
-      <p class="rv-nostr-sub">This vote is a Nostr kind-101 event — readable by any compatible client. Your keypair is yours.</p>
+      <p class="rv-nostr-sub">{{ $ui("This vote is a Nostr kind-101 event — readable by any compatible client. Your keypair is yours.") }}</p>
     </div>
 
     <!-- ── Trust tier ───────────────────────────────────────────────── -->
@@ -162,14 +158,12 @@
           <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.8"/>
           <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="1.8"/>
         </svg>
-        {{ phraseCopied ? 'Copied!' : 'Copy phrase' }}
+        {{ phraseCopied ? $ui("Copied!") : $ui("Copy phrase") }}
       </button>
       <button class="rv-btn rv-btn--ghost" @click="shareReceipt">
         <svg viewBox="0 0 24 24" fill="none" width="15" height="15">
           <path d="M21 12l-7-7v4C7 10 4 15 3 21c2.5-3.5 6-5.1 11-5.1V20l7-8z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
-        </svg>
-        Share
-      </button>
+        </svg> {{ $ui("Share") }} </button>
       <button class="rv-btn rv-btn--primary" @click="verifyOnChain">
         <svg viewBox="0 0 24 24" fill="none" width="15" height="15">
           <path d="M12 22s8-4.5 8-11V5l-8-3-8 3v6c0 6.5 8 11 8 11z" stroke="currentColor" stroke-width="1.8"/>
@@ -188,7 +182,7 @@
         </svg>
         {{ verifyResult === 'ok'
           ? `Receipt verified — block #${receipt.blockIndex} · Schnorr signature valid`
-          : 'Signature mismatch — this receipt may have been tampered with'
+          : $ui("Signature mismatch — this receipt may have been tampered with")
         }}
       </div>
     </transition>
@@ -204,12 +198,13 @@
         <circle cx="24" cy="18" r="3" stroke="currentColor" stroke-width="1.5" opacity=".4"/>
       </svg>
     </div>
-    <p class="rv-empty-title">No receipt</p>
-    <p class="rv-empty-sub">Enter your 12-word verification phrase to look up a receipt</p>
+    <p class="rv-empty-title">{{ $ui("No receipt") }}</p>
+    <p class="rv-empty-sub">{{ $ui("Enter your 12-word verification phrase to look up a receipt") }}</p>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ui } from "../i18n";
 import { ref, computed, onMounted } from 'vue';
 import { toastController } from '@ionic/vue';
 import type { Receipt } from '../types/chain';
@@ -298,7 +293,7 @@ async function shareReceipt() {
     if (navigator.share) { await navigator.share({ text }); return; }
   } catch { /* fall through to clipboard */ }
   await navigator.clipboard.writeText(text).catch(() => {});
-  const t = await toastController.create({ message: 'Receipt copied', duration: 1800, position: 'bottom' });
+  const t = await toastController.create({ message: ui("Receipt copied"), duration: 1800, position: 'bottom' });
   await t.present();
 }
 

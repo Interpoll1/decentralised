@@ -5,7 +5,7 @@
         <ion-buttons slot="start">
           <ion-back-button default-href="/home"></ion-back-button>
         </ion-buttons>
-        <ion-title>Results</ion-title>
+        <ion-title>{{ $ui("Results") }}</ion-title>
       </ion-toolbar>
     </ion-header>
 
@@ -13,20 +13,18 @@
       <!-- Loading -->
       <div v-if="isLoading" class="loading-container">
         <ion-spinner></ion-spinner>
-        <p>Loading results...</p>
+        <p>{{ $ui("Loading results...") }}</p>
       </div>
 
       <ion-card v-else-if="poll">
         <ion-card-header>
           <ion-card-title>{{ poll.question }}</ion-card-title>
-          <ion-card-subtitle>
-            Total Votes: {{ totalVotes }}
+          <ion-card-subtitle> {{ $ui("Total Votes:") }} {{ totalVotes }}
             <span v-if="verifiedTotal > 0 && !policyActive" class="verified-note" :class="{ inflated: resultsInflated }">
-              · {{ verifiedTotal }} verified{{ resultsInflated ? ' (reported total exceeds verified)' : '' }}
+              · {{ verifiedTotal }} {{ $ui("verified") }}{{ resultsInflated ? $ui(" (reported total exceeds verified)") : '' }}
             </span>
             <span v-if="policyActive" class="verified-note">
-              · {{ verifiedTrackTotal }} verified / {{ openTrackTotal }} open
-            </span>
+              · {{ verifiedTrackTotal }} {{ $ui("verified /") }} {{ openTrackTotal }} {{ $ui("open") }} </span>
           </ion-card-subtitle>
         </ion-card-header>
 
@@ -44,7 +42,7 @@
                 ></div>
               </div>
               <div class="result-votes">
-                {{ option.votes }} vote{{ option.votes !== 1 ? 's' : '' }}
+                {{ $count(option.votes, 'vote') }}
               </div>
             </div>
           </div>
@@ -53,16 +51,14 @@
             expand="block"
             class="mt-3"
             @click="router.push({ path: `/vote/${route.params.pollId}`, query: poll?.communityId ? { communityId: poll.communityId } : undefined })"
-          >
-            Vote in This Poll
-          </ion-button>
+          > {{ $ui("Vote in This Poll") }} </ion-button>
         </ion-card-content>
       </ion-card>
 
       <!-- Not Found -->
       <div v-else class="empty-state">
-        <p>Poll not found</p>
-        <ion-button @click="$router.push('/home')">Go Home</ion-button>
+        <p>{{ $ui("Poll not found") }}</p>
+        <ion-button @click="$router.push('/home')">{{ $ui("Go Home") }}</ion-button>
       </div>
     </ion-content>
   </ion-page>

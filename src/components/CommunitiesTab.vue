@@ -8,25 +8,23 @@
           class="filter-pill"
           :class="{ active: communityFilter === 'all' }"
           @click="$emit('update:communityFilter', 'all')"
-        >All</button>
+        >{{ $ui("All") }}</button>
         <button
           class="filter-pill"
           :class="{ active: communityFilter === 'joined' }"
           @click="$emit('update:communityFilter', 'joined')"
-        >Joined</button>
+        >{{ $ui("Joined") }}</button>
         <button
           class="filter-pill"
           :class="{ active: communityFilter === 'private' }"
           @click="$emit('update:communityFilter', 'private')"
-        >Private</button>
+        >{{ $ui("Private") }}</button>
       </div>
 
       <button class="new-btn" @click="$router.push('/create-community')">
         <svg viewBox="0 0 16 16" fill="none" width="12" height="12" aria-hidden="true">
           <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-        New community
-      </button>
+        </svg> {{ $ui("New community") }} </button>
     </div>
 
     <!-- Search -->
@@ -39,7 +37,7 @@
         v-model="communitySearchQuery"
         class="search-input"
         type="search"
-        placeholder="Search communities…"
+        :placeholder="$ui('Search communities…')"
         autocomplete="off"
       />
     </div>
@@ -47,14 +45,14 @@
     <!-- Loading -->
     <div v-if="communityStore.isLoading" class="loading-state">
       <div class="spinner"></div>
-      <p>Loading communities…</p>
+      <p>{{ $ui("Loading communities…") }}</p>
     </div>
 
     <template v-else>
 
       <!-- Featured strip: top 3 by member count, only on All tab when not searching -->
       <template v-if="!isSearching && communityFilter === 'all' && featuredCommunities.length > 0">
-        <p class="section-label">Active now</p>
+        <p class="section-label">{{ $ui("Active now") }}</p>
         <div class="featured-grid">
           <div
             v-for="c in featuredCommunities"
@@ -95,8 +93,7 @@
                 <circle cx="14" cy="6" r="2.2" stroke="currentColor" stroke-width="1.3" opacity="0.55"/>
                 <path d="M16.5 14.5a4.5 4.5 0 00-4-2.6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" opacity="0.55"/>
               </svg>
-              {{ formatNumber(c.memberCount ?? 1) }} members
-              <span v-if="communityStore.isJoined(c.id)" class="joined-dot"></span>
+              {{ $count(c.memberCount ?? 1, 'member') }} <span v-if="communityStore.isJoined(c.id)" class="joined-dot"></span>
             </span>
           </div>
         </div>
@@ -107,9 +104,7 @@
         <svg viewBox="0 0 16 16" fill="none" width="12" height="12" aria-hidden="true">
           <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/>
           <path d="M12 12l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-        </svg>
-        Searching {{ allPublicCommunities.length }} public communities
-      </p>
+        </svg> {{ $ui("Searching") }} {{ allPublicCommunities.length }} {{ $ui("public communities") }} </p>
 
       <!-- Section label -->
       <p
@@ -117,7 +112,7 @@
         class="section-label"
         :style="communityFilter === 'all' && featuredCommunities.length > 0 ? 'margin-top:18px' : ''"
       >
-        {{ communityFilter === 'joined' ? 'Your communities' : communityFilter === 'private' ? 'Private communities' : 'All communities' }}
+        {{ communityFilter === 'joined' ? $ui("Your communities") : communityFilter === 'private' ? $ui("Private communities") : $ui("All communities") }}
       </p>
 
       <!-- List -->
@@ -138,9 +133,7 @@
           <svg viewBox="0 0 16 16" fill="none" width="13" height="13" aria-hidden="true">
             <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.4"/>
             <path d="M8 5v3.5m0 2.5h.01" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-          </svg>
-          Communities you haven't joined won't appear in your feed — click one to join.
-        </div>
+          </svg> {{ $ui("Communities you haven't joined won't appear in your feed — click one to join.") }} </div>
       </div>
 
       <!-- Empty states -->
@@ -152,21 +145,21 @@
           </svg>
         </div>
         <template v-if="isSearching">
-          <p class="empty-title">No results for "{{ communitySearchQuery.trim() }}"</p>
-          <p class="empty-sub">Try a different name or <button class="inline-link" @click="$router.push('/create-community')">create one</button>.</p>
+          <p class="empty-title">{{ $ui("No results for \"") }}{{ communitySearchQuery.trim() }}"</p>
+          <p class="empty-sub">{{ $ui("Try a different name or") }} <button class="inline-link" @click="$router.push('/create-community')">{{ $ui("create one") }}</button>.</p>
         </template>
         <template v-else-if="communityFilter === 'joined'">
-          <p class="empty-title">No communities joined yet</p>
-          <p class="empty-sub">Join communities to post and see their content in your feed.</p>
-          <button class="empty-cta" @click="$emit('update:communityFilter', 'all')">Browse all</button>
+          <p class="empty-title">{{ $ui("No communities joined yet") }}</p>
+          <p class="empty-sub">{{ $ui("Join communities to post and see their content in your feed.") }}</p>
+          <button class="empty-cta" @click="$emit('update:communityFilter', 'all')">{{ $ui("Browse all") }}</button>
         </template>
         <template v-else-if="communityFilter === 'private'">
-          <p class="empty-title">No private communities</p>
-          <button class="empty-cta" @click="$emit('update:communityFilter', 'joined')">Show joined</button>
+          <p class="empty-title">{{ $ui("No private communities") }}</p>
+          <button class="empty-cta" @click="$emit('update:communityFilter', 'joined')">{{ $ui("Show joined") }}</button>
         </template>
         <template v-else>
-          <p class="empty-title">No communities yet</p>
-          <button class="empty-cta" @click="$router.push('/create-community')">Create the first one</button>
+          <p class="empty-title">{{ $ui("No communities yet") }}</p>
+          <button class="empty-cta" @click="$router.push('/create-community')">{{ $ui("Create the first one") }}</button>
         </template>
       </div>
 
@@ -289,11 +282,7 @@ function featTone(id: string) {
 function firstChar(c: Community) {
   return (c.displayName || c.name || 'C').charAt(0).toUpperCase();
 }
-function formatNumber(n: number): string {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
-  if (n >= 1_000)     return (n / 1_000).toFixed(1) + 'K';
-  return n.toString();
-}
+
 </script>
 
 <style scoped>

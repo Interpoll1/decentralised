@@ -3,9 +3,9 @@
   <div class="orbit" :class="{ 'orbit--ambient': ambient }">
     <!-- Header -->
     <div v-if="!ambient" class="ob-head">
-      <div class="ob-seg" role="tablist" aria-label="Orbit view">
-        <button class="ob-seg__btn" :class="{ on: view === 'nearby' }" role="tab" :aria-selected="view === 'nearby'" @click="$emit('update:view', 'nearby')">Map</button>
-        <button class="ob-seg__btn" :class="{ on: view === 'spaces' }" role="tab" :aria-selected="view === 'spaces'" @click="$emit('update:view', 'spaces')">Spaces</button>
+      <div class="ob-seg" role="tablist" :aria-label="$ui('Orbit view')">
+        <button class="ob-seg__btn" :class="{ on: view === 'nearby' }" role="tab" :aria-selected="view === 'nearby'" @click="$emit('update:view', 'nearby')">{{ $ui("Map") }}</button>
+        <button class="ob-seg__btn" :class="{ on: view === 'spaces' }" role="tab" :aria-selected="view === 'spaces'" @click="$emit('update:view', 'spaces')">{{ $ui("Spaces") }}</button>
       </div>
     </div>
 

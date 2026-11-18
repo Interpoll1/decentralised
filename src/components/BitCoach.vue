@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <!-- ── First-boot tour: spotlight + Bit's speech bubble ─────────────── -->
-    <div v-if="onTourPage && bit.tourActive && step" class="bc-tour" role="dialog" aria-live="polite" aria-label="Interpoll tour">
+    <div v-if="onTourPage && bit.tourActive && step" class="bc-tour" role="dialog" aria-live="polite" :aria-label="$ui('Interpoll tour')">
       <div v-if="rect" class="bc-ring" :style="ringStyle" />
       <div v-else class="bc-dim" />
 
@@ -9,39 +9,39 @@
         <div class="bc-head">
           <span ref="bubbleBit" :key="bit.tourStepIdx" class="bc-bit" :class="{ 'bc-bit--hidden': !!flight }"><BitMascot :size="40" :mood="step.mood ?? 'idle'" :animated="false" /></span>
           <div class="bc-titles">
-            <strong class="bc-title">{{ step.title }}</strong>
+            <strong class="bc-title">{{ $ui(step.title) }}</strong>
             <span class="bc-count">{{ bit.tourStepIdx + 1 }} / {{ bit.steps.length }}</span>
           </div>
         </div>
-        <p class="bc-body">{{ step.body }}</p>
+        <p class="bc-body">{{ $ui(step.body) }}</p>
         <!-- Looping demo of hold → drag → swap (decorative; the text says the same) -->
         <div v-if="step.id === 'navswap'" class="bc-demo" aria-hidden="true">
           <div class="bc-demo-bar">
-            <div class="bc-demo-tab bc-demo-tab--a" style="--i:0"><NavIcon id="home" /><span>Feed</span></div>
-            <div class="bc-demo-tab" style="--i:1"><NavIcon id="orbit" /><span>Orbit</span></div>
-            <div class="bc-demo-tab bc-demo-tab--b" style="--i:2"><NavIcon id="chat" /><span>Messages</span></div>
-            <div class="bc-demo-tab" style="--i:3"><NavIcon id="create" /><span>Publish</span></div>
+            <div class="bc-demo-tab bc-demo-tab--a" style="--i:0"><NavIcon id="home" /><span>{{ $ui("Feed") }}</span></div>
+            <div class="bc-demo-tab" style="--i:1"><NavIcon id="orbit" /><span>{{ $ui("Orbit") }}</span></div>
+            <div class="bc-demo-tab bc-demo-tab--b" style="--i:2"><NavIcon id="chat" /><span>{{ $ui("Messages") }}</span></div>
+            <div class="bc-demo-tab" style="--i:3"><NavIcon id="create" /><span>{{ $ui("Publish") }}</span></div>
             <span class="bc-demo-finger" />
           </div>
-          <span class="bc-demo-cap">Hold → drag → drop</span>
+          <span class="bc-demo-cap">{{ $ui("Hold → drag → drop") }}</span>
         </div>
-        <p v-if="rect && step.clickToAdvance" class="bc-hint">Try it — click the highlighted item.</p>
+        <p v-if="rect && step.clickToAdvance" class="bc-hint">{{ $ui("Try it — click the highlighted item.") }}</p>
 
         <div class="bc-dots" aria-hidden="true">
           <span v-for="(s, i) in bit.steps" :key="s.id" class="bc-dot" :class="{ on: i <= bit.tourStepIdx }" />
         </div>
 
         <div class="bc-actions">
-          <button class="bc-btn bc-btn--ghost" @click="bit.finishTour()">Skip tour</button>
+          <button class="bc-btn bc-btn--ghost" @click="bit.finishTour()">{{ $ui("Skip tour") }}</button>
           <span class="bc-spacer" />
-          <button v-if="bit.tourStepIdx > 0 && !bit.isLastStep" class="bc-btn" @click="bit.prevStep()">Back</button>
+          <button v-if="bit.tourStepIdx > 0 && !bit.isLastStep" class="bc-btn" @click="bit.prevStep()">{{ $ui("Back") }}</button>
           <template v-if="bit.isLastStep && step.id === 'username'">
-            <button class="bc-btn" @click="bit.finishTour()">Later</button>
-            <button class="bc-btn bc-btn--primary" @click="claimNow(true)">Claim username</button>
+            <button class="bc-btn" @click="bit.finishTour()">{{ $ui("Later") }}</button>
+            <button class="bc-btn bc-btn--primary" @click="claimNow(true)">{{ $ui("Claim username") }}</button>
           </template>
-          <button v-else-if="bit.isLastStep" class="bc-btn bc-btn--primary" @click="bit.finishTour()">Got it</button>
+          <button v-else-if="bit.isLastStep" class="bc-btn bc-btn--primary" @click="bit.finishTour()">{{ $ui("Got it") }}</button>
           <button v-else class="bc-btn bc-btn--primary" @click="bit.nextStep()">
-            {{ step.clickToAdvance && rect ? 'Skip this' : 'Next' }}
+            {{ step.clickToAdvance && rect ? $ui("Skip this") : $ui("Next") }}
           </button>
         </div>
       </div>
@@ -57,7 +57,7 @@
         <div class="bc-reminder__main">
           <p class="bc-reminder__text">{{ bit.reminderLine }}</p>
           <div class="bc-actions">
-            <button class="bc-btn" @click="bit.snoozeReminder()">{{ bit.reminderKind === 'pending' ? "It's me" : 'Later' }}</button>
+            <button class="bc-btn" @click="bit.snoozeReminder()">{{ bit.reminderKind === 'pending' ? $ui("It's me") : $ui("Later") }}</button>
             <button class="bc-btn bc-btn--primary" @click="claimNow(false)">{{ reminderCta }}</button>
           </div>
         </div>

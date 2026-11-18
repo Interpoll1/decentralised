@@ -1,20 +1,18 @@
 <template>
   <form class="rk" @submit.prevent="submit">
-    <label class="rk-label" for="rk-phrase">Recovery phrase (24 words)</label>
+    <label class="rk-label" for="rk-phrase">{{ $ui("Recovery phrase (24 words)") }}</label>
     <textarea
       id="rk-phrase" v-model="phrase" class="rk-input" rows="4" spellcheck="false"
-      autocomplete="off" autocapitalize="off" placeholder="word1 word2 word3 …"
+      autocomplete="off" autocapitalize="off" :placeholder="$ui('word1 word2 word3 …')"
     />
-    <p class="rk-count" :class="{ ok: wordCount === 24 }">{{ wordCount }} / 24 words</p>
-    <p v-if="warnReplace" class="rk-warn">
-      This replaces the identity on this device. If you haven't saved the current phrase, that identity is lost.
-    </p>
+    <p class="rk-count" :class="{ ok: wordCount === 24 }">{{ wordCount }} {{ $ui("/ 24 words") }}</p>
+    <p v-if="warnReplace" class="rk-warn"> {{ $ui("This replaces the identity on this device. If you haven't saved the current phrase, that identity is lost.") }} </p>
     <label v-if="warnReplace" class="rk-check">
-      <input v-model="confirmed" type="checkbox" /> <span>I understand</span>
+      <input v-model="confirmed" type="checkbox" /> <span>{{ $ui("I understand") }}</span>
     </label>
     <p v-if="error" class="rk-error">{{ error }}</p>
     <button class="rk-btn" type="submit" :disabled="busy || wordCount !== 24 || (warnReplace && !confirmed)">
-      {{ busy ? 'Restoring…' : 'Restore identity' }}
+      {{ busy ? $ui("Restoring…") : $ui("Restore identity") }}
     </button>
   </form>
 </template>

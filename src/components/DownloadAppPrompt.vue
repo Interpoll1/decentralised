@@ -1,17 +1,17 @@
 <template>
   <Teleport to="body">
     <transition name="dap-slide">
-      <aside v-if="visible && offer" class="dap" role="dialog" aria-label="Download InterPoll app">
-        <button class="dap__close" type="button" aria-label="Dismiss download prompt" @click="dismiss">&times;</button>
+      <aside v-if="visible && offer" class="dap" role="dialog" :aria-label="$ui('Download InterPoll app')">
+        <button class="dap__close" type="button" :aria-label="$ui('Dismiss download prompt')" @click="dismiss">&times;</button>
         <div class="dap__mark" aria-hidden="true">
           <span class="dap__dot" />
           <i /><i /><i />
         </div>
         <div class="dap__copy">
-          <strong>{{ offer.title }}</strong>
-          <span>{{ offer.body }}</span>
+          <strong>{{ $ui(offer.title) }}</strong>
+          <span>{{ $ui(offer.body) }}</span>
         </div>
-        <button v-if="offer.install" class="dap__cta" type="button" @click="installPwa">Install app</button>
+        <button v-if="offer.install" class="dap__cta" type="button" @click="installPwa">{{ $ui("Install app") }}</button>
         <a
           v-else-if="offer.url"
           class="dap__cta"

@@ -5,7 +5,7 @@
         <ion-buttons slot="start">
           <ion-back-button default-href="/home"></ion-back-button>
         </ion-buttons>
-        <ion-title>{{ displayCommunity?.displayName || 'Community' }}</ion-title>
+        <ion-title>{{ displayCommunity?.displayName || $ui("Community") }}</ion-title>
         <ion-buttons slot="end">
           <ion-button @click="$router.push('/home')">
             <ion-icon :icon="homeOutline"></ion-icon>
@@ -36,7 +36,7 @@
           >
             <ion-spinner v-if="isJoining" slot="start" name="crescent"></ion-spinner>
             <ion-icon v-else slot="start" :icon="isJoined ? checkmarkCircleOutline : addCircleOutline"></ion-icon>
-            {{ isJoining ? 'Joining...' : isJoined ? 'Joined' : 'Join' }}
+            {{ isJoining ? $ui("Joining...") : isJoined ? $ui("Joined") : $ui("Join") }}
           </ion-button>
         </div>
 
@@ -47,18 +47,18 @@
           type="button"
           @click="descriptionExpanded = !descriptionExpanded"
         >
-          {{ descriptionExpanded ? 'Show less' : 'Read more' }}
+          {{ descriptionExpanded ? $ui("Show less") : $ui("Read more") }}
         </button>
         <ConsentBanner />
 
         <div class="community-stats">
           <div class="stat">
             <ion-icon :icon="peopleOutline"></ion-icon>
-            <span>{{ formatNumber(community.memberCount) }} members</span>
+            <span>{{ $count(community.memberCount, 'member') }}</span>
           </div>
           <div class="stat">
             <ion-icon :icon="documentTextOutline"></ion-icon>
-            <span>{{ totalContentCount }} posts & polls</span>
+            <span>{{ totalContentCount }} {{ $ui("posts & polls") }}</span>
           </div>
         </div>
 
@@ -67,25 +67,19 @@
             size="small"
             @click="$router.push(`/community/${communityId}/create-post`)"
           >
-            <ion-icon slot="start" :icon="createOutline"></ion-icon>
-            Create Post
-          </ion-button>
+            <ion-icon slot="start" :icon="createOutline"></ion-icon> {{ $ui("Create Post") }} </ion-button>
           <ion-button
             size="small"
             @click="$router.push(`/create-poll?communityId=${communityId}`)"
           >
-            <ion-icon slot="start" :icon="statsChartOutline"></ion-icon>
-            Create Poll
-          </ion-button>
+            <ion-icon slot="start" :icon="statsChartOutline"></ion-icon> {{ $ui("Create Poll") }} </ion-button>
           <ion-button
             v-if="community?.isEncrypted"
             size="small"
             color="tertiary"
             @click="shareInviteLink"
           >
-            <ion-icon slot="start" :icon="shareSocialOutline"></ion-icon>
-            Share Invite
-          </ion-button>
+            <ion-icon slot="start" :icon="shareSocialOutline"></ion-icon> {{ $ui("Share Invite") }} </ion-button>
         </div>
       </div>
 
@@ -95,40 +89,38 @@
           class="tab-btn"
           :class="{ active: contentFilter === 'all' }"
           @click="contentFilter = 'all'"
-        >All</button>
+        >{{ $ui("All") }}</button>
         <button
           class="tab-btn"
           :class="{ active: contentFilter === 'posts' }"
           @click="contentFilter = 'posts'"
-        >Posts</button>
+        >{{ $ui("Posts") }}</button>
         <button
           class="tab-btn"
           :class="{ active: contentFilter === 'polls' }"
           @click="contentFilter = 'polls'"
-        >Polls</button>
+        >{{ $ui("Polls") }}</button>
       </div>
 
       <!-- Encrypted community hint (shown inline, does not block content feed) -->
       <div v-if="!showBlockingLoader && community?.isEncrypted && !hasAccess" class="locked-hint">
         <ion-icon :icon="lockClosedOutline" size="small"></ion-icon>
-        <span>This community is encrypted.</span>
+        <span>{{ $ui("This community is encrypted.") }}</span>
         <span v-if="community?.encryptionHint" class="encryption-hint">{{ community.encryptionHint }}</span>
         <ion-button size="small" fill="outline" @click="$router.push(`/join/community/${communityId}`)">
-          <ion-icon slot="start" :icon="keyOutline"></ion-icon>
-          Unlock
-        </ion-button>
+          <ion-icon slot="start" :icon="keyOutline"></ion-icon> {{ $ui("Unlock") }} </ion-button>
       </div>
 
       <!-- Loading -->
       <div v-if="showBlockingLoader" class="loading-container">
         <ion-spinner></ion-spinner>
-        <p>Loading content...</p>
+        <p>{{ $ui("Loading content...") }}</p>
       </div>
 
       <div v-else-if="showInlineSyncStatus" class="sync-status">
         <ion-spinner name="dots"></ion-spinner>
         <div class="sync-status-copy">
-          <strong>Showing what is ready.</strong>
+          <strong>{{ $ui("Showing what is ready.") }}</strong>
           <span>{{ syncStatusText }}</span>
         </div>
       </div>
@@ -172,28 +164,25 @@
       <!-- Empty State -->
       <div v-else-if="!showProgressiveSyncState && !hasVisibleContent" class="empty-state">
         <ion-icon :icon="documentTextOutline" size="large"></ion-icon>
-        <p v-if="contentFilter === 'posts'">No posts yet</p>
-        <p v-else-if="contentFilter === 'polls'">No polls yet</p>
-        <p v-else>No content yet</p>
+        <p v-if="contentFilter === 'posts'">{{ $ui("No posts yet") }}</p>
+        <p v-else-if="contentFilter === 'polls'">{{ $ui("No polls yet") }}</p>
+        <p v-else>{{ $ui("No content yet") }}</p>
         <ion-button
           v-if="isJoined && hasAccess"
           @click="contentFilter === 'polls' ? $router.push(`/create-poll?communityId=${communityId}`) : $router.push(`/community/${communityId}/create-post`)"
-        >
-          Create the first {{ contentFilter === 'polls' ? 'poll' : 'post' }}!
+        > {{ $ui("Create the first") }} {{ contentFilter === 'polls' ? 'poll' : 'post' }}!
         </ion-button>
-        <ion-button v-else-if="!isJoined" @click="toggleJoin">
-          Join to create content
-        </ion-button>
+        <ion-button v-else-if="!isJoined" @click="toggleJoin"> {{ $ui("Join to create content") }} </ion-button>
       </div>
 
       <div v-else-if="showHydratingContentState" class="partial-loading-state">
         <ion-spinner name="dots"></ion-spinner>
-        <p>Content is loading. It will appear here as soon as it finishes decrypting.</p>
+        <p>{{ $ui("Content is loading. It will appear here as soon as it finishes decrypting.") }}</p>
       </div>
 
        <!-- Rules Section -->
       <div v-if="hasAccess && (displayCommunity?.rules?.length ?? 0) > 0" class="rules-section">
-        <h3>Community Rules</h3>
+        <h3>{{ $ui("Community Rules") }}</h3>
         <ol class="rules-list">
           <li v-for="(rule, index) in displayCommunity?.rules" :key="index">{{ rule }}</li>
         </ol>
@@ -440,6 +429,7 @@ ion-content {
 </style>
 
 <script setup lang="ts">
+import { ui } from "../i18n";
 import { ref, computed, watchEffect, watch, onUnmounted, defineAsyncComponent } from 'vue';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -802,7 +792,7 @@ async function handleUpvotePoll(poll: Poll) {
   } catch (error) {
     voteVersion.value++;
     console.error('Error upvoting poll:', error);
-    (await toastController.create({ message: 'Failed to upvote poll', duration: 2000 })).present();
+    (await toastController.create({ message: ui("Failed to upvote poll"), duration: 2000 })).present();
   }
 }
 
@@ -828,7 +818,7 @@ async function handleDownvotePoll(poll: Poll) {
   } catch (error) {
     voteVersion.value++;
     console.error('Error downvoting poll:', error);
-    (await toastController.create({ message: 'Failed to downvote poll', duration: 2000 })).present();
+    (await toastController.create({ message: ui("Failed to downvote poll"), duration: 2000 })).present();
   }
 }
 
@@ -872,12 +862,7 @@ function handleDownvote(post: Post) {
   handlePostVote(post, 'down');
 }
 
-function formatNumber(num: number | undefined | null): string {
-  const n = num ?? 0;
-  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
-  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
-  return n.toString();
-}
+
 
 function navigateToPost(post: Post) {
   router.push(`/post/${post.id}`);
@@ -899,7 +884,7 @@ async function toggleJoin() {
     } catch (error) {
       console.error('Error joining community:', error);
       const toast = await toastController.create({
-        message: 'Failed to join community',
+        message: ui("Failed to join community"),
         duration: 2000,
       });
       await toast.present();
@@ -914,7 +899,7 @@ async function shareInviteLink() {
     const storedKey = await KeyVaultService.getKey(communityId.value);
     if (!storedKey) {
       const toast = await toastController.create({
-        message: 'Encryption key not found. Rejoin the community to share invites.',
+        message: ui("Encryption key not found. Rejoin the community to share invites."),
         duration: 3000,
       });
       await toast.present();
@@ -925,14 +910,14 @@ async function shareInviteLink() {
     const link = InviteLinkService.generateInviteLink(communityId.value, 'community', base64Url);
     await InviteLinkService.copyToClipboard(link);
     const toast = await toastController.create({
-      message: 'Invite link copied to clipboard!',
+      message: ui("Invite link copied to clipboard!"),
       duration: 2000,
     });
     await toast.present();
   } catch (error) {
     console.error('Failed to generate invite link:', error);
     const toast = await toastController.create({
-      message: 'Failed to generate invite link',
+      message: ui("Failed to generate invite link"),
       duration: 2000,
     });
     await toast.present();
@@ -1146,7 +1131,7 @@ async function loadCommunityContent() {
 
     if (gen === loadGeneration && loadStates.includes('timed-out')) {
       const toast = await toastController.create({
-        message: 'Content is still syncing in the background.',
+        message: ui("Content is still syncing in the background."),
         duration: 2500,
       });
       await toast.present();
@@ -1154,7 +1139,7 @@ async function loadCommunityContent() {
 
     if (gen === loadGeneration && loadStates.includes('error')) {
       const toast = await toastController.create({
-        message: 'Some content failed to load. The page will keep retrying in the background.',
+        message: ui("Some content failed to load. The page will keep retrying in the background."),
         duration: 2800,
       });
       await toast.present();
@@ -1166,7 +1151,7 @@ async function loadCommunityContent() {
     });
     console.error('Error loading community content:', error);
     const toast = await toastController.create({
-      message: 'Failed to load community content',
+      message: ui("Failed to load community content"),
       duration: 2500,
     });
     await toast.present();

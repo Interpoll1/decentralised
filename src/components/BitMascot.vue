@@ -7,7 +7,7 @@
     :viewBox="`0 0 ${COLS} ${ROWS}`"
     shape-rendering="crispEdges"
     role="img"
-    aria-label="Bit, the Interpoll frog"
+    :aria-label="$ui('Bit, the Interpoll frog')"
   >
     <rect v-for="p in pixels" :key="p.k" :x="p.x" :y="p.y" width="1" height="1" :fill="p.fill" />
   </svg>

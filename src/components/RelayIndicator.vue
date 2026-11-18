@@ -3,7 +3,7 @@
 
     <!-- compact mode: just the status dot (used in mobile header + bottom nav) -->
     <template v-if="compact">
-      <span class="relay-dot" :class="dotClass" aria-label="Relay status"></span>
+      <span class="relay-dot" :class="dotClass" :aria-label="$ui('Relay status')"></span>
     </template>
 
     <!-- full mode: dot + name + meta -->

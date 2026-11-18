@@ -9,7 +9,7 @@
             </svg>
           </button>
         </ion-buttons>
-        <ion-title>Search</ion-title>
+        <ion-title>{{ $ui("Search") }}</ion-title>
       </ion-toolbar>
     </ion-header>
 
@@ -26,7 +26,7 @@
           v-model="searchQuery"
           @input="handleSearch"
           type="search"
-          placeholder="Search posts, polls and spaces..."
+          :placeholder="$ui('Search posts, polls and spaces...')"
           class="search-input"
           autofocus
         />
@@ -35,15 +35,15 @@
       <!-- Filter row 1: type + community -->
       <div class="search-filters">
         <select v-model="filterType" @change="handleFilterChange" class="filter-select">
-          <option value="">All Types</option>
-          <option value="post">Posts</option>
-          <option value="poll">Polls</option>
+          <option value="">{{ $ui("All Types") }}</option>
+          <option value="post">{{ $ui("Posts") }}</option>
+          <option value="poll">{{ $ui("Polls") }}</option>
         </select>
         <input
           v-model="filterCommunity"
           @input="handleFilterChange"
           type="text"
-          placeholder="Community..."
+          :placeholder="$ui('Community...')"
           class="filter-input"
         />
       </div>
@@ -55,7 +55,7 @@
     <div class="results-container">
       <!-- Spaces whose name or description matches -->
       <div v-if="spaceMatches.length" class="space-matches">
-        <h4 class="space-matches__title">Spaces</h4>
+        <h4 class="space-matches__title">{{ $ui("Spaces") }}</h4>
         <button v-for="c in spaceMatches" :key="c.id" class="space-match" @click="router.push(`/community/${c.id}`)">
           <span class="space-match__avatar">{{ (c.displayName || c.name || '?').charAt(0).toUpperCase() }}</span>
           <span class="space-match__info">
@@ -68,7 +68,7 @@
       <!-- Loading -->
       <div v-if="loading" class="loading-state">
         <div class="spinner"></div>
-        <p>Searching...</p>
+        <p>{{ $ui("Searching...") }}</p>
       </div>
 
       <!-- Error -->
@@ -84,8 +84,8 @@
         <svg class="no-results-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
-        <p>No results found for "{{ searchQuery }}"</p>
-        <span class="no-results-hint">Try different keywords or remove filters</span>
+        <p>{{ $ui("No results found for \"") }}{{ searchQuery }}"</p>
+        <span class="no-results-hint">{{ $ui("Try different keywords or remove filters") }}</span>
       </div>
 
       <!-- Results -->
@@ -105,9 +105,8 @@
           </p>
           
           <div class="result-meta">
-            <span class="result-author">by {{ result.author || 'Anonymous' }}</span>
-            <span v-if="result.community" class="result-community">
-              in {{ result.community }}
+            <span class="result-author">{{ $ui("by") }} {{ result.author || $ui("Anonymous") }}</span>
+            <span v-if="result.community" class="result-community"> {{ $ui("in") }} {{ result.community }}
             </span>
             <span class="result-date">{{ formatDate(result.created_at) }}</span>
           </div>
@@ -120,9 +119,7 @@
           @click="goToPreviousPage"
           :disabled="currentPage === 1"
           class="pagination-btn"
-        >
-          Previous
-        </button>
+        > {{ $ui("Previous") }} </button>
 
         <div class="pagination-pages">
           <button
@@ -140,9 +137,7 @@
           @click="goToNextPage"
           :disabled="!hasNextPage"
           class="pagination-btn"
-        >
-          Next
-        </button>
+        > {{ $ui("Next") }} </button>
       </div>
     </div>
       </div>

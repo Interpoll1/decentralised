@@ -6,7 +6,7 @@
     <header class="ct-head">
       <!-- Desktop workspace: title, primary action, Direct / Rooms switch -->
       <div v-if="split" class="ct-top">
-        <h2 class="ct-top__title">Messages</h2>
+        <h2 class="ct-top__title">{{ $ui("Messages") }}</h2>
         <button
           class="ct-newconv"
           data-test="new-menu"
@@ -15,27 +15,27 @@
           @click="composerOpen ? toggleComposer(false) : (newMenuOpen = !newMenuOpen)"
         >
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.5 11.6a8.1 8.1 0 01-.9 3.7 8.2 8.2 0 01-7.3 4.5 8.1 8.1 0 01-3.7-.9L3.5 20.5l1.6-4.9a8.1 8.1 0 01-.9-3.7A8.2 8.2 0 018.7 4.6a8.1 8.1 0 013.6-.9h.5a8.2 8.2 0 017.7 7.7v.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8.6v6M9 11.6h6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
-          {{ composerOpen ? 'Close' : 'New conversation' }}
+          {{ composerOpen ? $ui("Close") : $ui("New conversation") }}
         </button>
       </div>
-      <div v-if="split" class="ct-seg" role="tablist" aria-label="Conversation type">
-        <button role="tab" :aria-selected="tab === 'all'" :class="{ active: tab === 'all' }" @click="tab = 'all'">All</button>
-        <button role="tab" :aria-selected="tab === 'unread'" :class="{ active: tab === 'unread' }" @click="tab = 'unread'">Unread<span v-if="dmUnread + roomUnread" class="ct-seg__badge">{{ dmUnread + roomUnread }}</span></button>
-        <button role="tab" :aria-selected="tab === 'rooms'" :class="{ active: tab === 'rooms' }" @click="tab = 'rooms'">Rooms<span v-if="roomUnread" class="ct-seg__badge">{{ roomUnread }}</span></button>
+      <div v-if="split" class="ct-seg" role="tablist" :aria-label="$ui('Conversation type')">
+        <button role="tab" :aria-selected="tab === 'all'" :class="{ active: tab === 'all' }" @click="tab = 'all'">{{ $ui("All") }}</button>
+        <button role="tab" :aria-selected="tab === 'unread'" :class="{ active: tab === 'unread' }" @click="tab = 'unread'">{{ $ui("Unread") }}<span v-if="dmUnread + roomUnread" class="ct-seg__badge">{{ dmUnread + roomUnread }}</span></button>
+        <button role="tab" :aria-selected="tab === 'rooms'" :class="{ active: tab === 'rooms' }" @click="tab = 'rooms'">{{ $ui("Rooms") }}<span v-if="roomUnread" class="ct-seg__badge">{{ roomUnread }}</span></button>
       </div>
       <div class="ct-search" role="search">
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
         <input
           v-model="query"
           class="ct-search__input"
-          placeholder="Search by message or name"
-          aria-label="Search by message or name"
+          :placeholder="$ui('Search by message or name')"
+          :aria-label="$ui('Search by message or name')"
           enterkeyhint="search"
           autocomplete="off"
           autocapitalize="off"
           spellcheck="false"
         />
-        <button v-if="query" class="link-clear" aria-label="Clear search" @click="query = ''">
+        <button v-if="query" class="link-clear" :aria-label="$ui('Clear search')" @click="query = ''">
           <svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         </button>
       </div>
@@ -54,21 +54,21 @@
           <path d="M12 8.6v6M9 11.6h6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
         </svg>
         <svg v-else class="ct-new__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
-        <span class="ct-new__label">{{ composerOpen ? 'Close' : 'New' }}</span>
+        <span class="ct-new__label">{{ composerOpen ? $ui("Close") : $ui("New") }}</span>
       </button>
       <div v-if="newMenuOpen" class="ct-menu-backdrop" @click="newMenuOpen = false"></div>
       <div v-if="newMenuOpen" class="ct-menu" role="menu">
         <button class="ct-menu__item" role="menuitem" data-test="new-group" @click="newMenuOpen = false; createOpen = true">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="3.2" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 19c.7-3 2.9-4.6 5.5-4.6s4.8 1.6 5.5 4.6M18 8v6M15 11h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          <span><strong>New group</strong><small>Chat with several people</small></span>
+          <span><strong>{{ $ui("New group") }}</strong><small>{{ $ui("Chat with several people") }}</small></span>
         </button>
         <button class="ct-menu__item" role="menuitem" @click="newMenuOpen = false; toggleComposer(true)">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          <span><strong>Open a link</strong><small>Someone's chat link or a group invite</small></span>
+          <span><strong>{{ $ui("Open a link") }}</strong><small>{{ $ui("Someone's chat link or a group invite") }}</small></span>
         </button>
         <button class="ct-menu__item" role="menuitem" @click="newMenuOpen = false; copyMyLink()">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 15V3M8 7l4-4 4 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span><strong>Copy my invite link</strong><small>Anyone with it can message you</small></span>
+          <span><strong>{{ $ui("Copy my invite link") }}</strong><small>{{ $ui("Anyone with it can message you") }}</small></span>
         </button>
       </div>
     </header>
@@ -77,7 +77,7 @@
     <!-- New chat: paste a link someone shared, or share your own -->
     <Transition name="ct-slide">
       <section v-if="composerOpen" class="ct-composer">
-        <label class="ct-composer__label" for="ct-link">Paste a chat link or group invite someone shared with you</label>
+        <label class="ct-composer__label" for="ct-link">{{ $ui("Paste a chat link or group invite someone shared with you") }}</label>
         <div class="link-input-wrap" :class="{ focused: linkFocused, error: linkError }">
           <svg viewBox="0 0 24 24" fill="none" class="link-prefix-icon" aria-hidden="true"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
           <input
@@ -85,7 +85,7 @@
             ref="linkEl"
             v-model="inviteLinkInput"
             class="link-input"
-            placeholder="Paste a link here…"
+            :placeholder="$ui('Paste a link here…')"
             autocomplete="off"
             spellcheck="false"
             @focus="linkFocused = true; linkError = ''"
@@ -93,7 +93,7 @@
             @keydown.enter="openFromLink"
             @paste="onLinkPaste"
           />
-          <button v-if="inviteLinkInput" class="link-clear" aria-label="Clear" @click="inviteLinkInput = ''; linkError = ''">
+          <button v-if="inviteLinkInput" class="link-clear" :aria-label="$ui('Clear')" @click="inviteLinkInput = ''; linkError = ''">
             <svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           </button>
         </div>
@@ -101,12 +101,10 @@
         <div class="ct-composer__actions">
           <button class="open-btn" :disabled="!inviteLinkInput.trim() || openingLink" @click="openFromLink">
             <span v-if="openingLink" class="mini-spinner"></span>
-            <span v-else>Open chat</span>
+            <span v-else>{{ $ui("Open chat") }}</span>
           </button>
           <button class="ct-linkbtn" @click="router.push('/profile')">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="18" cy="5" r="3" stroke="currentColor" stroke-width="1.8"/><circle cx="6" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="19" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51L8.59 10.49" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-            Share my link
-          </button>
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="18" cy="5" r="3" stroke="currentColor" stroke-width="1.8"/><circle cx="6" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="19" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51L8.59 10.49" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg> {{ $ui("Share my link") }} </button>
         </div>
       </section>
     </Transition>
@@ -146,9 +144,9 @@
           <div class="ct-row__bottom">
             <span class="ct-row__preview" :class="{ 'ct-row__preview--empty': !row.preview }">
               <template v-if="row.preview"><span class="ct-row__you">{{ row.sender }}:</span> {{ row.preview }}</template>
-              <template v-else>{{ row.memberCount === 1 ? 'Only you so far — invite people' : 'No messages yet' }}</template>
+              <template v-else>{{ row.memberCount === 1 ? $ui("Only you so far — invite people") : $ui("No messages yet") }}</template>
             </span>
-            <span v-if="row.mentions" class="ct-row__badge ct-row__badge--mention" title="You were mentioned">@</span>
+            <span v-if="row.mentions" class="ct-row__badge ct-row__badge--mention" :title="$ui('You were mentioned')">@</span>
             <span v-if="row.unread > 0" class="ct-row__badge">{{ row.unread > 99 ? '99+' : row.unread }}</span>
           </div>
         </div>
@@ -179,13 +177,13 @@
                 enterkeyhint="done"
                 autocomplete="off"
                 spellcheck="false"
-                aria-label="Chat name"
+                :aria-label="$ui('Chat name')"
                 @keydown="onEditKey($event, chat)"
               />
-              <button type="button" class="ct-edit__btn ct-edit__btn--ok" aria-label="Save name" @click.stop="commitEdit(chat)">
+              <button type="button" class="ct-edit__btn ct-edit__btn--ok" :aria-label="$ui('Save name')" @click.stop="commitEdit(chat)">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
               </button>
-              <button type="button" class="ct-edit__btn" aria-label="Cancel" @click.stop="cancelEdit">
+              <button type="button" class="ct-edit__btn" :aria-label="$ui('Cancel')" @click.stop="cancelEdit">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
               </button>
             </div>
@@ -195,7 +193,7 @@
                 type="button"
                 class="ct-row__edit"
                 :aria-label="`Rename ${displayName(chat)}`"
-                title="Rename"
+                :title="$ui('Rename')"
                 @click.stop="startEdit(chat)"
                 @keydown.stop
               >
@@ -206,9 +204,9 @@
           </div>
           <div class="ct-row__bottom">
             <span class="ct-row__preview" :class="{ 'ct-row__preview--empty': !previewShown(chat) }">
-              <span v-if="previewMine(chat)" class="ct-row__you">You:</span><template v-for="(p, i) in previewParts(chat)" :key="i"><mark v-if="p.hit" class="ct-hit">{{ p.t }}</mark><template v-else>{{ p.t }}</template></template><template v-if="!previewShown(chat)">No messages yet</template>
+              <span v-if="previewMine(chat)" class="ct-row__you">{{ $ui("You:") }}</span><template v-for="(p, i) in previewParts(chat)" :key="i"><mark v-if="p.hit" class="ct-hit">{{ p.t }}</mark><template v-else>{{ p.t }}</template></template><template v-if="!previewShown(chat)">{{ $ui("No messages yet") }}</template>
             </span>
-            <span v-if="matchCount(chat) > 1" class="ct-row__matches">{{ matchCount(chat) > 99 ? '99+' : matchCount(chat) }} matches</span>
+            <span v-if="matchCount(chat) > 1" class="ct-row__matches">{{ matchCount(chat) > 99 ? '99+' : matchCount(chat) }} {{ $ui("matches") }}</span>
             <span v-if="chat.unreadCount > 0" class="ct-row__badge">{{ chat.unreadCount > 99 ? '99+' : chat.unreadCount }}</span>
           </div>
         </div>
@@ -216,8 +214,8 @@
       </template>
     </ul>
 
-    <p v-else-if="split && !trimmed && (chatList.length || groupRooms.length)" class="ct-nomatch">{{ tab === 'rooms' ? 'No rooms yet — start one with New conversation.' : tab === 'unread' ? 'You\'re all caught up.' : 'No conversations yet — open someone\'s chat link.' }}</p>
-    <p v-else-if="trimmed && (chatList.length || groupRooms.length)" class="ct-nomatch">{{ searchPending ? 'Searching messages…' : `No chats or messages match “${trimmed}”.` }}</p>
+    <p v-else-if="split && !trimmed && (chatList.length || groupRooms.length)" class="ct-nomatch">{{ tab === 'rooms' ? $ui("No rooms yet — start one with New conversation.") : tab === 'unread' ? $ui("You're all caught up.") : $ui("No conversations yet — open someone's chat link.") }}</p>
+    <p v-else-if="trimmed && (chatList.length || groupRooms.length)" class="ct-nomatch">{{ searchPending ? $ui("Searching messages…") : `No chats or messages match “${trimmed}”.` }}</p>
 
     <!-- Loading: skeleton in the same surface so the layout doesn't jump -->
     <div v-else-if="loading" class="ct-list ct-skel" aria-hidden="true">
@@ -230,11 +228,11 @@
     <!-- Empty -->
     <div v-else class="ct-empty">
       <BitMascot :size="72" mood="sleepy" class="ct-empty__bit" />
-      <p class="ct-empty__title">No chats yet</p>
-      <p class="ct-empty__sub">Start a group, or paste a link someone shared with you. Share your own link so people can message you directly.</p>
+      <p class="ct-empty__title">{{ $ui("No chats yet") }}</p>
+      <p class="ct-empty__sub">{{ $ui("Start a group, or paste a link someone shared with you. Share your own link so people can message you directly.") }}</p>
       <div class="ct-empty__ctas">
-        <button class="open-btn ct-empty__cta" @click="createOpen = true">New group</button>
-        <button class="ct-linkbtn" @click="toggleComposer(true)">Open a link</button>
+        <button class="open-btn ct-empty__cta" @click="createOpen = true">{{ $ui("New group") }}</button>
+        <button class="ct-linkbtn" @click="toggleComposer(true)">{{ $ui("Open a link") }}</button>
       </div>
     </div>
 
@@ -246,8 +244,8 @@
       <ChatView v-else-if="selectedDm" :key="selectedDm.id" :user-id="selectedDm.id" :name="selectedDm.name" embedded />
       <div v-else class="ct-stage__empty">
         <BitMascot :size="72" mood="sleepy" />
-        <p class="ct-empty__title">Pick a conversation</p>
-        <p class="ct-empty__sub">Choose a chat or room on the left to read it here, or start a new conversation.</p>
+        <p class="ct-empty__title">{{ $ui("Pick a conversation") }}</p>
+        <p class="ct-empty__sub">{{ $ui("Choose a chat or room on the left to read it here, or start a new conversation.") }}</p>
       </div>
     </section>
     <RoomIntelligence v-if="split && selectedRoomId" class="ct-intel" />
