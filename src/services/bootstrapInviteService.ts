@@ -275,7 +275,7 @@ export class BootstrapInviteService {
             ? (signatureRaw as Record<string, unknown>).keyId as string
             : undefined,
           signedFields: Array.isArray((signatureRaw as Record<string, unknown>).signedFields)
-            ? (signatureRaw as Record<string, unknown>).signedFields
+            ? ((signatureRaw as Record<string, unknown>).signedFields as unknown[])
               .filter((field): field is string => typeof field === 'string')
             : undefined,
         }

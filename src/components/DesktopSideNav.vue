@@ -9,7 +9,7 @@
           <path d="M12 8V16M8.5 10.5L12 12.5L15.5 10.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </span>
-      <span class="side-nav-brand-name">Interpoll</span>
+      <span class="side-nav-brand-name">{{ $ui("Interpoll") }}</span>
     </div>
 
     <!-- Collapse toggle -->
@@ -18,13 +18,13 @@
         <path v-if="!isCollapsed" d="M11 19l-7-7 7-7M18 19l-7-7 7-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
         <path v-else              d="M13 5l7 7-7 7M6 5l7 7-7 7"  stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
-      <span v-if="!isCollapsed">Collapse</span>
+      <span v-if="!isCollapsed">{{ $ui("Collapse") }}</span>
     </button>
 
     <!-- Primary nav -->
     <button class="side-nav-item" :class="{ active: activeTab === 'home' }" @click="goTab('home')">
       <ion-icon :icon="activeTab === 'home' ? home : homeOutline"></ion-icon>
-      <span>Feed</span>
+      <span>{{ $ui("Feed") }}</span>
     </button>
     <button class="side-nav-item" :class="{ active: activeTab === 'orbit' }" @click="goTab('orbit')">
       <svg class="nav-svg-icon" viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden="true">
@@ -32,26 +32,26 @@
         <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.8" stroke-dasharray="2 3"/>
         <circle cx="19" cy="9" r="1.6" fill="currentColor"/><circle cx="6" cy="17" r="1.3" fill="currentColor"/>
       </svg>
-      <span>Orbit</span>
+      <span>{{ $ui("Orbit") }}</span>
     </button>
     <button class="side-nav-item" :class="{ active: activeTab === 'chat' }" @click="goTab('chat')">
       <ion-icon :icon="activeTab === 'chat' ? chatbubble : chatbubbleOutline"></ion-icon>
-      <span>Messages</span>
+      <span>{{ $ui("Messages") }}</span>
     </button>
     <button class="side-nav-item" :class="{ active: activeTab === 'create' }" @click="goTab('create')">
       <ion-icon :icon="activeTab === 'create' ? addCircle : addCircleOutline"></ion-icon>
-      <span>Publish</span>
+      <span>{{ $ui("Publish") }}</span>
     </button>
 
     <div class="side-nav-divider"></div>
 
     <!-- Browse scope -->
-    <p class="side-nav-section-label">Browse</p>
+    <p class="side-nav-section-label">{{ $ui("Browse") }}</p>
     <button class="side-nav-item side-nav-util" :class="{ active: activeTab === 'home' && selectedScope === 'mine' }"  @click="goScope('mine')">
       <svg class="nav-svg-icon" viewBox="0 0 24 24" fill="none" width="18" height="18">
         <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
-      <span>My Spaces</span>
+      <span>{{ $ui("My Spaces") }}</span>
     </button>
     <button class="side-nav-item side-nav-util" :class="{ active: activeTab === 'home' && selectedScope === 'relay' }" @click="goScope('relay')">
       <svg class="nav-svg-icon" viewBox="0 0 24 24" fill="none" width="18" height="18">
@@ -59,21 +59,21 @@
         <path d="M12 2a10 10 0 100 20A10 10 0 0012 2z" stroke="currentColor" stroke-width="1.8"/>
         <path d="M2 12h20M12 2c-3 3-4.5 6.5-4.5 10S9 19 12 22c3-3 4.5-6.5 4.5-10S15 5 12 2z" stroke="currentColor" stroke-width="1.8"/>
       </svg>
-      <span>This Relay</span>
+      <span>{{ $ui("This Relay") }}</span>
     </button>
     <button class="side-nav-item side-nav-util" :class="{ active: activeTab === 'home' && selectedScope === 'explore' }" @click="goScope('explore')">
       <svg class="nav-svg-icon" viewBox="0 0 24 24" fill="none" width="18" height="18">
         <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="1.8"/>
         <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
       </svg>
-      <span>Explore</span>
+      <span>{{ $ui("Explore") }}</span>
     </button>
 
     <div class="side-nav-divider"></div>
 
     <!-- Categories — collapsible -->
     <button class="side-nav-section-toggle" @click="categoriesOpen = !categoriesOpen">
-      <p class="side-nav-section-label" style="margin:0">Categories</p>
+      <p class="side-nav-section-label" style="margin:0">{{ $ui("Categories") }}</p>
       <svg viewBox="0 0 24 24" fill="none" width="12" height="12" :style="categoriesOpen ? 'transform:rotate(180deg)' : ''">
         <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
@@ -89,7 +89,7 @@
         :title="cat.label"
       >
         <ion-icon :icon="cat.icon" :class="'tone-' + cat.id" style="font-size:15px;flex-shrink:0"></ion-icon>
-        <span>{{ cat.label }}</span>
+        <span>{{ $ui(cat.label) }}</span>
       </button>
     </template>
 
@@ -98,23 +98,23 @@
     <!-- Utility -->
     <button class="side-nav-item side-nav-util" @click="$router.push('/search')">
       <ion-icon :icon="searchOutline"></ion-icon>
-      <span>Search</span>
+      <span>{{ $ui("Search") }}</span>
     </button>
     <button class="side-nav-item side-nav-util" @click="$router.push('/profile')">
       <ion-icon :icon="personCircleOutline"></ion-icon>
-      <span>Identity</span>
+      <span>{{ $ui("Identity") }}</span>
     </button>
     <button class="side-nav-item side-nav-util" @click="$router.push('/settings')">
       <ion-icon :icon="settingsOutline"></ion-icon>
-      <span>Settings</span>
+      <span>{{ $ui("Settings") }}</span>
     </button>
     <button class="side-nav-item side-nav-util" @click="$router.push('/chain-explorer')">
       <ion-icon :icon="cube"></ion-icon>
-      <span>Chain Explorer</span>
+      <span>{{ $ui("Chain Explorer") }}</span>
     </button>
     <button class="side-nav-item side-nav-util" @click="$router.push('/resilience')">
       <ion-icon :icon="shieldOutline"></ion-icon>
-      <span>Resilience Center</span>
+      <span>{{ $ui("Resilience Center") }}</span>
     </button>
 
     <div class="side-nav-divider"></div>

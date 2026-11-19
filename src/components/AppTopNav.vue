@@ -1,41 +1,39 @@
 <template>
   <header class="atn" role="banner">
     <div class="atn-inner">
-      <button class="atn-brand" aria-label="Interpoll home" @click="go('home')">
-        <span class="atn-name">Interpoll</span>
+      <button class="atn-brand" :aria-label="$ui('Interpoll home')" @click="go('home')">
+        <span class="atn-name">{{ $ui("Interpoll") }}</span>
       </button>
 
-      <nav class="atn-tabs" aria-label="Primary">
+      <nav class="atn-tabs" :aria-label="$ui('Primary')">
         <button v-for="t in tabs" :key="t.id" class="atn-tab" :class="{ active: active === t.id }" :data-tour="t.tour" @click="go(t.id)">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" v-html="t.icon"></svg>
-          <span>{{ t.label }}</span>
+          <span>{{ $ui(t.label) }}</span>
           <span v-if="t.id === 'chat' && (totalUnread ?? 0) > 0" class="atn-badge">{{ (totalUnread ?? 0) > 99 ? '99+' : totalUnread }}</span>
         </button>
       </nav>
 
       <form class="atn-search" data-tour="search" role="search" @submit.prevent="submitSearch">
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-        <input v-model="query" type="search" placeholder="Search Interpoll" aria-label="Search Interpoll" autocomplete="off" spellcheck="false" enterkeyhint="search" @focus="onSearchFocus" @input="onSearchInput" />
+        <input v-model="query" type="search" :placeholder="$ui('Search Interpoll')" :aria-label="$ui('Search Interpoll')" autocomplete="off" spellcheck="false" enterkeyhint="search" @focus="onSearchFocus" @input="onSearchInput" />
       </form>
 
       <div class="atn-actions">
         <button class="atn-publish" @click="go('create')">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
-          Publish
-        </button>
-        <button class="atn-icon atn-relay" data-tour="relay" aria-label="Relay & network" title="Relay & network" @click="emit('open-relay')">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg> {{ $ui("Publish") }} </button>
+        <button class="atn-icon atn-relay" data-tour="relay" :aria-label="$ui('Relay & network')" :title="$ui('Relay & network')" @click="emit('open-relay')">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 20v-8M8.5 16.5C7 15.2 6 13.2 6 11a6 6 0 0112 0c0 2.2-1 4.2-2.5 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>
           <RelayIndicator :compact="true" class="atn-live" />
         </button>
         <div class="atn-me">
-          <button class="atn-avatar" data-tour="profile" aria-haspopup="menu" :aria-expanded="menuOpen" aria-label="Account menu" @click="menuOpen = !menuOpen">
+          <button class="atn-avatar" data-tour="profile" aria-haspopup="menu" :aria-expanded="menuOpen" :aria-label="$ui('Account menu')" @click="menuOpen = !menuOpen">
             {{ initial }}
           </button>
           <template v-if="menuOpen">
             <div class="atn-backdrop" @click="menuOpen = false"></div>
             <div class="atn-menu" role="menu">
               <button v-for="m in menuItems" :key="m.label" class="atn-menu__item" role="menuitem" @click="pick(m.run)">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" v-html="m.icon"></svg>{{ m.label }}
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" v-html="m.icon"></svg>{{ $ui(m.label) }}
               </button>
             </div>
           </template>
@@ -151,7 +149,7 @@ const menuItems = computed(() => {
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Grand+Hotel&display=swap');
+
 /* Desktop only — phones keep the Ionic header and bottom nav. */
 .atn { display: none; }
 
@@ -184,7 +182,7 @@ const menuItems = computed(() => {
 .atn-tab.active { color: var(--app-accent); background: rgba(var(--app-accent-rgb), 0.1); }
 .atn-badge {
   min-width: 17px; height: 17px; padding: 0 5px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center;
-  background: var(--app-accent); color: #04120a; font-size: 10.5px; font-weight: 800;
+  background: var(--app-accent); color: var(--app-on-accent); font-size: 10.5px; font-weight: 800;
 }
 
 .atn-search {
@@ -201,7 +199,7 @@ const menuItems = computed(() => {
 .atn-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 .atn-publish {
   display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border: none; border-radius: 9px; cursor: pointer;
-  background: var(--app-accent); color: #04120a; font: inherit; font-size: 13.5px; font-weight: 700; transition: filter 120ms, transform 120ms;
+  background: var(--app-accent); color: var(--app-on-accent); font: inherit; font-size: 13.5px; font-weight: 700; transition: filter 120ms, transform 120ms;
 }
 .atn-publish svg { width: 15px; height: 15px; }
 .atn-publish:hover { filter: brightness(1.08); }

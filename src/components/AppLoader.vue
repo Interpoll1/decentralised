@@ -3,14 +3,13 @@
     <canvas ref="canvasRef" class="ip-canvas" />
     <div class="ip-content">
       <BitMascot :size="64" mood="wave" class="ip-bit" />
-      <div class="ip-logo">Interpoll</div>
-      <div class="ip-tag">peer-to-peer · decentralized</div>
+      <div class="ip-logo">{{ $ui("Interpoll") }}</div>
+      <div class="ip-tag">{{ $ui("peer-to-peer · decentralized") }}</div>
       <div class="ip-bar-wrap"><div class="ip-bar" /></div>
-      <div class="ip-tip" :key="tipIdx">{{ TIPS[tipIdx] }}</div>
+      <div class="ip-tip" :key="tipIdx">{{ $ui(TIPS[tipIdx]) }}</div>
       <div class="ip-status-wrap">
         <div class="ip-dot" />
-        <div class="ip-status">
-          Connecting peers<span class="ip-d">.</span><span class="ip-d">.</span><span class="ip-d">.</span>
+        <div class="ip-status"> {{ $ui("Connecting peers") }}<span class="ip-d">.</span><span class="ip-d">.</span><span class="ip-d">.</span>
         </div>
       </div>
     </div>
@@ -165,7 +164,7 @@ onUnmounted(() => {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: radial-gradient(ellipse at 50% 40%, #131313 0%, #0a0a0a 55%, #030303 100%);
+  background: var(--app-bg-base);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -181,6 +180,9 @@ onUnmounted(() => {
 
 .ip-bit { margin: 0 auto 14px; }
 .ip-content {
+  width: 100%;
+  box-sizing: border-box;
+  padding-inline: 20px;
   position: relative;
   z-index: 2;
   display: flex;
@@ -194,17 +196,20 @@ onUnmounted(() => {
   font-size: 80px;
   line-height: 1;
   margin-bottom: 6px;
-  background: linear-gradient(160deg, #fff 0%, rgba(225, 225, 225, 0.85) 60%, rgba(230, 230, 230, 0.7) 100%);
+  background: var(--app-text);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 .ip-tag {
+  max-width: 100%;
+  text-align: center;
+  overflow-wrap: anywhere;
   font-family: 'Cormorant Garamond', serif;
   font-size: 20px;
   font-style: italic;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--app-text-muted);
   letter-spacing: 0.12em;
   margin-bottom: 28px;
 }
@@ -212,7 +217,7 @@ onUnmounted(() => {
 .ip-bar-wrap {
   width: 130px;
   height: 1.5px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--app-border);
   border-radius: 99px;
   overflow: hidden;
   margin-bottom: 12px;
@@ -244,7 +249,7 @@ onUnmounted(() => {
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: #e6e6e6;
+  background: var(--app-accent);
   animation: ping 1.4s ease-in-out infinite;
   flex-shrink: 0;
 }
@@ -258,7 +263,7 @@ onUnmounted(() => {
   font-family: 'Cormorant Garamond', serif;
   font-size: 20px;
   font-style: italic;
-  color: rgba(255, 255, 255, 0.28);
+  color: var(--app-text-muted);
   letter-spacing: 0.1em;
 }
 
@@ -282,7 +287,7 @@ onUnmounted(() => {
   font-size: 18px;
   font-style: italic;
   line-height: 1.35;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--app-text-muted);
   animation: tipIn 0.6s ease both;
 }
 @keyframes tipIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }

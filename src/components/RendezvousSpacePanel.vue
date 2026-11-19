@@ -11,8 +11,8 @@
           </svg>
         </div>
         <div>
-          <strong class="rsp-toggle-title">Dark mode (rendezvous address)</strong>
-          <p class="rsp-toggle-sub">Not listed anywhere — only findable via seed phrase</p>
+          <strong class="rsp-toggle-title">{{ $ui("Dark mode (rendezvous address)") }}</strong>
+          <p class="rsp-toggle-sub">{{ $ui("Not listed anywhere — only findable via seed phrase") }}</p>
         </div>
       </div>
       <label class="rsp-switch" @click.stop>
@@ -27,27 +27,20 @@
 
         <!-- How it works -->
         <div class="rsp-info">
-          <p>
-            Instead of a URL, this space is published to a <strong>rotating Gun soul address</strong> derived from a secret seed.
-            The address changes every 6 hours via a deterministic algorithm — the same technique used by resilient peer-to-peer networks to survive censorship.
-          </p>
-          <p>
-            Anyone who knows the seed can find the space by deriving the current address. Nobody else can discover it — not search engines, not relay indexes, not the relay operator.
-          </p>
+          <p> {{ $ui("Instead of a URL, this space is published to a") }} <strong>{{ $ui("rotating Gun soul address") }}</strong> {{ $ui("derived from a secret seed. The address changes every 6 hours via a deterministic algorithm — the same technique used by resilient peer-to-peer networks to survive censorship.") }} </p>
+          <p> {{ $ui("Anyone who knows the seed can find the space by deriving the current address. Nobody else can discover it — not search engines, not relay indexes, not the relay operator.") }} </p>
         </div>
 
         <!-- Seed display -->
         <div class="rsp-seed-section">
           <div class="rsp-seed-header">
-            <span class="rsp-seed-label">Space seed phrase</span>
+            <span class="rsp-seed-label">{{ $ui("Space seed phrase") }}</span>
             <div class="rsp-seed-actions">
-              <button class="rsp-action-btn" @click="regenerateSeed" title="Generate new seed">
+              <button class="rsp-action-btn" @click="regenerateSeed" :title="$ui('Generate new seed')">
                 <svg viewBox="0 0 24 24" fill="none" width="13" height="13">
                   <path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                   <path d="M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                Regenerate
-              </button>
+                </svg> {{ $ui("Regenerate") }} </button>
               <button class="rsp-action-btn" @click="copySeed" :class="{ 'rsp-action-btn--ok': seedCopied }">
                 <svg v-if="!seedCopied" viewBox="0 0 24 24" fill="none" width="13" height="13">
                   <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.8"/>
@@ -56,7 +49,7 @@
                 <svg v-else viewBox="0 0 24 24" fill="none" width="13" height="13">
                   <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
-                {{ seedCopied ? 'Copied!' : 'Copy' }}
+                {{ seedCopied ? $ui("Copied!") : $ui("Copy") }}
               </button>
             </div>
           </div>
@@ -72,8 +65,8 @@
         <!-- Current epoch soul -->
         <div class="rsp-soul-section">
           <div class="rsp-soul-header">
-            <span class="rsp-seed-label">Current Gun soul</span>
-            <span class="rsp-epoch-badge">Rotates in {{ timeToNextEpoch }}</span>
+            <span class="rsp-seed-label">{{ $ui("Current Gun soul") }}</span>
+            <span class="rsp-epoch-badge">{{ $ui("Rotates in") }} {{ timeToNextEpoch }}</span>
           </div>
           <div class="rsp-soul-row">
             <code class="rsp-soul-addr">{{ currentSoul }}</code>
@@ -84,26 +77,22 @@
               </svg>
             </button>
           </div>
-          <p class="rsp-soul-hint">This address rotates automatically. Members only need the seed — not this address — to rejoin after rotation.</p>
+          <p class="rsp-soul-hint">{{ $ui("This address rotates automatically. Members only need the seed — not this address — to rejoin after rotation.") }}</p>
         </div>
 
         <!-- Share options -->
         <div class="rsp-share-section">
-          <span class="rsp-seed-label">Share this space</span>
+          <span class="rsp-seed-label">{{ $ui("Share this space") }}</span>
           <div class="rsp-share-row">
             <button class="rsp-share-btn" @click="shareViaNativeShare">
               <svg viewBox="0 0 24 24" fill="none" width="15" height="15">
                 <path d="M21 12l-7-7v4C7 10 4 15 3 21c2.5-3.5 6-5.1 11-5.1V20l7-8z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
-              </svg>
-              Share seed
-            </button>
+              </svg> {{ $ui("Share seed") }} </button>
             <button class="rsp-share-btn" @click="copyJoinUrl">
               <svg viewBox="0 0 24 24" fill="none" width="15" height="15">
                 <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
                 <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-              </svg>
-              Copy join link
-            </button>
+              </svg> {{ $ui("Copy join link") }} </button>
           </div>
         </div>
 
@@ -112,10 +101,7 @@
           <svg viewBox="0 0 24 24" fill="none" width="14" height="14" style="flex-shrink:0">
             <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
           </svg>
-          <span>
-            Save this seed phrase. It cannot be recovered — there is no central server that stores it.
-            Losing the seed means permanently losing access to this space and all its content.
-          </span>
+          <span> {{ $ui("Save this seed phrase. It cannot be recovered — there is no central server that stores it. Losing the seed means permanently losing access to this space and all its content.") }} </span>
         </div>
 
       </div>
@@ -124,11 +110,12 @@
 </template>
 
 <script setup lang="ts">
+import { ui } from "../i18n";
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { toastController } from '@ionic/vue';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
-import { RENDEZVOUS_SECRET, EPOCH_MS, currentEpoch, rendezvousSoul } from '../utils/rendezvous';
+import { EPOCH_MS, currentEpoch } from '../utils/rendezvous';
 
 // ── props / emits ─────────────────────────────────────────────────────────
 defineProps<{ communityName?: string }>();
@@ -236,7 +223,7 @@ async function copySeed() {
 
 async function copySoul() {
   await navigator.clipboard.writeText(currentSoul.value).catch(() => {});
-  const t = await toastController.create({ message: 'Soul address copied', duration: 1800, position: 'bottom' });
+  const t = await toastController.create({ message: ui("Soul address copied"), duration: 1800, position: 'bottom' });
   await t.present();
 }
 
@@ -245,7 +232,7 @@ async function copyJoinUrl() {
   // access logs, Referer headers and CDN analytics.
   const url = `${window.location.origin}/join/rendezvous#${encodeURIComponent(seedPhrase.value)}`;
   await navigator.clipboard.writeText(url).catch(() => {});
-  const t = await toastController.create({ message: 'Join link copied', duration: 1800, position: 'bottom' });
+  const t = await toastController.create({ message: ui("Join link copied"), duration: 1800, position: 'bottom' });
   await t.present();
 }
 
@@ -260,7 +247,7 @@ async function shareViaNativeShare() {
     if (navigator.share) { await navigator.share({ text }); return; }
   } catch { /* fall through */ }
   await navigator.clipboard.writeText(text).catch(() => {});
-  const t = await toastController.create({ message: 'Seed share text copied', duration: 1800, position: 'bottom' });
+  const t = await toastController.create({ message: ui("Seed share text copied"), duration: 1800, position: 'bottom' });
   await t.present();
 }
 </script>

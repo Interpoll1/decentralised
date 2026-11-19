@@ -10,9 +10,7 @@
           <svg viewBox="0 0 24 24" fill="none" width="16" height="16">
             <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2"
                   stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          Back
-        </button>
+          </svg> {{ $ui("Back") }} </button>
 
         <div class="ct-picker-head">
           <div class="ct-ph-icon" :class="pickerMode === 'post' ? 'ct-ph-icon--post' : 'ct-ph-icon--poll'">
@@ -29,9 +27,9 @@
           </div>
           <div>
             <h2 class="ct-ph-title">
-              {{ pickerMode === 'post' ? 'Post to…' : 'Poll in…' }}
+              {{ pickerMode === 'post' ? $ui("Post to…") : $ui("Poll in…") }}
             </h2>
-            <p class="ct-ph-sub">Pick a community</p>
+            <p class="ct-ph-sub">{{ $ui("Pick a community") }}</p>
           </div>
         </div>
 
@@ -46,7 +44,7 @@
             ref="searchEl"
             v-model="searchQuery"
             class="ct-search-input"
-            placeholder="Search communities…"
+            :placeholder="$ui('Search communities…')"
             autocomplete="off"
             spellcheck="false"
             @focus="searchFocused = true"
@@ -63,14 +61,14 @@
         <!-- List -->
         <div class="ct-list">
           <div v-if="filteredCommunities.length === 0" class="ct-list-empty">
-            <p v-if="searchQuery">No communities match "{{ searchQuery }}"</p>
+            <p v-if="searchQuery">{{ $ui("No communities match \"") }}{{ searchQuery }}"</p>
             <template v-else>
-              <p>No communities available yet.</p>
+              <p>{{ $ui("No communities available yet.") }}</p>
               <button
                 class="ct-empty-btn"
                 @click="pickerMode === 'poll' ? $router.push('/create-poll') : $router.push('/communities')"
               >
-                {{ pickerMode === 'poll' ? 'Create a poll anyway' : 'Browse Communities' }}
+                {{ pickerMode === 'poll' ? $ui("Create a poll anyway") : $ui("Browse Communities") }}
               </button>
             </template>
           </div>
@@ -88,8 +86,7 @@
               <span class="ct-row-meta">
                 c/{{ c.id }}
                 <span class="ct-dot">·</span>
-                {{ (c.memberCount ?? 0).toLocaleString() }} members
-              </span>
+                {{ $count((c.memberCount ?? 0), 'member') }} </span>
             </span>
             <svg class="ct-row-arrow" viewBox="0 0 24 24" fill="none" width="14" height="14">
               <path d="M9 18l6-6-6-6" stroke="currentColor"
@@ -104,8 +101,8 @@
       <div v-else key="home" class="ct-view">
 
         <div class="ct-hero">
-          <p class="ct-eyebrow">Create</p>
-          <h2 class="ct-title">What are you putting out there?</h2>
+          <p class="ct-eyebrow">{{ $ui("Create") }}</p>
+          <h2 class="ct-title">{{ $ui("What are you putting out there?") }}</h2>
         </div>
 
         <!-- Action rows grouped in a single glass list -->
@@ -124,8 +121,8 @@
               </svg>
             </span>
             <span class="ct-action-text">
-              <span class="ct-action-name">Community</span>
-              <span class="ct-action-desc">Build a space around a topic</span>
+              <span class="ct-action-name">{{ $ui("Community") }}</span>
+              <span class="ct-action-desc">{{ $ui("Build a space around a topic") }}</span>
             </span>
             <svg class="ct-action-arrow" viewBox="0 0 24 24" fill="none" width="15" height="15">
               <path d="M9 18l6-6-6-6" stroke="currentColor"
@@ -145,8 +142,8 @@
               </svg>
             </span>
             <span class="ct-action-text">
-              <span class="ct-action-name">Post</span>
-              <span class="ct-action-desc">Share text, images or a video</span>
+              <span class="ct-action-name">{{ $ui("Post") }}</span>
+              <span class="ct-action-desc">{{ $ui("Share text, images or a video") }}</span>
             </span>
             <svg class="ct-action-arrow" viewBox="0 0 24 24" fill="none" width="15" height="15">
               <path d="M9 18l6-6-6-6" stroke="currentColor"
@@ -163,8 +160,8 @@
               </svg>
             </span>
             <span class="ct-action-text">
-              <span class="ct-action-name">Poll</span>
-              <span class="ct-action-desc">Ask the community a question</span>
+              <span class="ct-action-name">{{ $ui("Poll") }}</span>
+              <span class="ct-action-desc">{{ $ui("Ask the community a question") }}</span>
             </span>
             <svg class="ct-action-arrow" viewBox="0 0 24 24" fill="none" width="15" height="15">
               <path d="M9 18l6-6-6-6" stroke="currentColor"
@@ -176,7 +173,7 @@
 
         <!-- Quick-post chips -->
         <template v-if="joinedCommunities.length > 0">
-          <p class="ct-section-label">Quick post to</p>
+          <p class="ct-section-label">{{ $ui("Quick post to") }}</p>
           <div class="ct-chips">
             <button
               v-for="c in joinedCommunities.slice(0, 10)"
@@ -188,17 +185,13 @@
               <span class="ct-chip-name">{{ c.displayName || c.name }}</span>
             </button>
           </div>
-          <p class="ct-hint">
-            Showing joined only ·
-            <span class="ct-link" @click="$router.push('/communities')">Browse all →</span>
+          <p class="ct-hint"> {{ $ui("Showing joined only ·") }} <span class="ct-link" @click="$router.push('/communities')">{{ $ui("Browse all →") }}</span>
           </p>
         </template>
 
         <div v-else class="ct-empty">
-          <p class="ct-empty-text">You haven't joined any communities yet.</p>
-          <button class="ct-empty-btn" @click="$router.push('/communities')">
-            Browse Communities
-          </button>
+          <p class="ct-empty-text">{{ $ui("You haven't joined any communities yet.") }}</p>
+          <button class="ct-empty-btn" @click="$router.push('/communities')"> {{ $ui("Browse Communities") }} </button>
         </div>
 
       </div>

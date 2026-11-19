@@ -5,7 +5,7 @@
         <ion-buttons slot="start">
           <ion-back-button default-href="/home"></ion-back-button>
         </ion-buttons>
-        <ion-title>{{ userProfile?.displayName || 'User Profile' }}</ion-title>
+        <ion-title>{{ userProfile?.displayName || $ui("User Profile") }}</ion-title>
       </ion-toolbar>
     </ion-header>
 
@@ -17,7 +17,7 @@
 
       <!-- Unknown user: report it here instead of bouncing to the feed -->
       <div v-else-if="notFound" class="empty-state">
-        <p>User not found.</p>
+        <p>{{ $ui("User not found.") }}</p>
       </div>
 
       <template v-else>
@@ -34,24 +34,22 @@
           v-if="!isOwnProfile"
           class="chat-button"
           @click="startChat"
-          :disabled="!chatPublicKey"
+          :disabled="!ownUserId || !userProfile?.publicKey"
         >
-          <ion-icon slot="start" :icon="chatbubbleOutline"></ion-icon>
-          Message
-        </ion-button>
+          <ion-icon slot="start" :icon="chatbubbleOutline"></ion-icon> {{ $ui("Message") }} </ion-button>
 
         <div class="stats-row">
           <div class="stat">
             <strong>{{ userProfile?.karma || 0 }}</strong>
-            <span>Karma</span>
+            <span>{{ $ui("Karma") }}</span>
           </div>
           <div class="stat">
             <strong>{{ userProfile?.postCount || 0 }}</strong>
-            <span>Posts</span>
+            <span>{{ $ui("Posts") }}</span>
           </div>
           <div class="stat">
             <strong>{{ userProfile?.commentCount || 0 }}</strong>
-            <span>Comments</span>
+            <span>{{ $ui("Comments") }}</span>
           </div>
         </div>
 
@@ -64,12 +62,12 @@
 
       <!-- User's Posts -->
       <div class="section">
-        <p class="section-title">Recent Posts</p>
+        <p class="section-title">{{ $ui("Recent Posts") }}</p>
         <div v-if="loadingPosts" class="loading">
           <ion-spinner></ion-spinner>
         </div>
         <div v-else-if="userPosts.length === 0" class="empty-state">
-          <p>No posts yet</p>
+          <p>{{ $ui("No posts yet") }}</p>
         </div>
         <div v-else class="posts-list">
           <PostCard
@@ -85,12 +83,12 @@
 
       <!-- User's Comments -->
       <div class="section">
-        <p class="section-title">Recent Comments</p>
+        <p class="section-title">{{ $ui("Recent Comments") }}</p>
         <div v-if="loadingComments" class="loading">
           <ion-spinner></ion-spinner>
         </div>
         <div v-else-if="userComments.length === 0" class="empty-state">
-          <p>No comments yet</p>
+          <p>{{ $ui("No comments yet") }}</p>
         </div>
         <div v-else class="comments-list">
           <!-- postId/communityId are required: CommentCard derives the author's
@@ -112,6 +110,7 @@
 </template>
 
 <script setup lang="ts">
+import { ui } from "../i18n";
 import { ref, computed, onMounted } from 'vue';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRouter, useRoute } from 'vue-router';
@@ -123,10 +122,10 @@ import {
 import { personCircleOutline, chatbubbleOutline } from 'ionicons/icons';
 import PostCard from '../components/PostCard.vue';
 import CommentCard from '../components/CommentCard.vue';
-import { useChat } from '../composables/useChat';
+import '../composables/useChat';
 import { UserService } from '../services/userService';
 import { TrustService } from '../services/trustService';
-import config from '@/config';
+import '@/config';
 import { chatPath } from '../utils/privateRoute';
 
 const router = useRouter();
@@ -138,13 +137,13 @@ const route = useRoute();
 const routeUserId = (route.params.userId as string) || '';
 const routeUsername = (route.params.username as string) || '';
 const userId = ref(routeUserId);
-const currentUserId = ref('current-user-id'); // chat composable identity (unchanged)
+ // chat composable identity (unchanged)
 const ownUserId = ref('');
 
-const WS_URL = config.relay.websocket;
+
 
 // Chat composable
-const { publicKey: chatPublicKey } = useChat(WS_URL, currentUserId.value);
+
 
 // User profile data
 const userProfile = ref<any>(null);
@@ -211,7 +210,7 @@ const loadUserComments = async () => {
 const startChat = async () => {
   if (!userProfile.value?.publicKey) {
     const toast = await toastController.create({
-      message: 'Unable to start chat. User public key not available.',
+      message: ui("Unable to start chat. User public key not available."),
       duration: 2000,
       color: 'warning',
     });

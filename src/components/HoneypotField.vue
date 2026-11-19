@@ -5,9 +5,7 @@
     a meaningless name so browser autofill never touches it.
   -->
   <div class="hp-field" aria-hidden="true">
-    <label>
-      Leave this empty
-      <input
+    <label> {{ $ui("Leave this empty") }} <input
         type="text"
         name="ip_extra_ref"
         tabindex="-1"

@@ -61,7 +61,7 @@ export class CryptoService {
     return bytesToHex(sha256(seed)).substring(0, 32);
   }
 
-  // ── Identity backup: private key ↔ BIP-39 recovery phrase ──────────────────
+  // в”Ђв”Ђ Identity backup: private key в†” BIP-39 recovery phrase в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   // A Schnorr private key is 32 bytes (256 bits) of entropy, which maps to a
   // 24-word BIP-39 phrase. Distinct from the 12-word receipt codes above.
 
@@ -96,7 +96,7 @@ export class CryptoService {
   }
 
   // Generate browser fingerprint (anonymous)
-  static async generateFingerprint(): Promise {
+  static async generateFingerprint(): Promise<string> {
     const data = [
       navigator.userAgent,
       navigator.language,

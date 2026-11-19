@@ -5,8 +5,8 @@
       <span>{{ label }}</span>
     </div>
     <div v-else-if="state === 'error'" class="gm-placeholder gm-error">
-      <span>⚠ {{ label }} unavailable</span>
-      <button class="gm-retry" @click.stop="load">Retry</button>
+      <span>⚠ {{ label }} {{ $ui("unavailable") }}</span>
+      <button class="gm-retry" @click.stop="load">{{ $ui("Retry") }}</button>
     </div>
     <template v-else>
       <img v-if="kind === 'image'" :src="url" :alt="media.mediaName" class="gm-img" @click.stop="emit('open', url)" />
@@ -15,7 +15,7 @@
       <a v-else :href="url" :download="media.mediaName || 'file'" class="gm-file" @click.stop>
         <span class="gm-file-icon">📄</span>
         <span class="gm-file-info">
-          <span class="gm-file-name">{{ media.mediaName || 'File' }}</span>
+          <span class="gm-file-name">{{ media.mediaName || $ui("File") }}</span>
           <span class="gm-file-size">{{ size }}</span>
         </span>
       </a>

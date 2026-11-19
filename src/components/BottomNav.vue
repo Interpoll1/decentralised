@@ -13,7 +13,7 @@
         }"
         :data-nav-index="index"
         :data-tour="item.id"
-        :aria-label="item.label"
+        :aria-label="$ui(item.label)"
         @click="onItemClick(item)"
         @pointerdown="onPointerDown($event, index)"
         @keydown.alt.left.prevent="nudge(index, -1)"
@@ -37,7 +37,7 @@
             {{ unread > 99 ? '99+' : unread }}
           </span>
         </span>
-        <span class="nav-label">{{ item.label }}</span>
+        <span class="nav-label">{{ $ui(item.label) }}</span>
       </button>
     </div>
 
@@ -46,7 +46,7 @@
       <div v-if="drag.active && draggedItem" class="nav-drag-layer" aria-hidden="true">
         <div class="nav-ghost" :style="ghostStyle">
           <span class="nav-ghost__icon"><NavIcon :id="draggedItem.id" :active="true" /></span>
-          <span class="nav-ghost__label">{{ draggedItem.label }}</span>
+          <span class="nav-ghost__label">{{ $ui(draggedItem.label) }}</span>
         </div>
       </div>
     </Teleport>
@@ -148,9 +148,7 @@ function lift() {
   buzz(15);
 }
 
-function inside(x: number, y: number, r: DOMRect, pad = 0) {
-  return x >= r.left - pad && x <= r.right + pad && y >= r.top - pad && y <= r.bottom + pad;
-}
+
 
 /** Which bar slot is under the finger (or -1). */
 function hitSlot(x: number, y: number): number {
@@ -287,7 +285,7 @@ ion-footer.bottom-nav-footer.footer-hidden { max-height: 0; overflow: hidden; ma
   position: relative; flex-shrink: 0;
   width: 30px; height: 30px; border-radius: 50%;
   display: grid; place-items: center;
-  background: var(--app-accent); color: #04120a;
+  background: var(--app-accent); color: var(--app-on-accent);
   box-shadow: 0 0 12px rgba(var(--app-accent-rgb), 0.35);
   transition: transform 140ms;
 }

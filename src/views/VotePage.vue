@@ -5,7 +5,7 @@
         <ion-buttons slot="start">
           <ion-back-button default-href="/home"></ion-back-button>
         </ion-buttons>
-        <ion-title>Cast Your Vote</ion-title>
+        <ion-title>{{ $ui("Cast Your Vote") }}</ion-title>
       </ion-toolbar>
     </ion-header>
 
@@ -13,26 +13,24 @@
       <!-- Loading State -->
       <div v-if="isLoading" class="flex flex-col items-center justify-center py-12">
         <ion-spinner></ion-spinner>
-        <p class="mt-4 text-gray-600">Loading poll...</p>
+        <p class="mt-4 text-gray-600">{{ $ui("Loading poll...") }}</p>
       </div>
 
       <!-- Error State -->
       <div v-else-if="!displayPoll" class="flex flex-col items-center justify-center py-12">
         <ion-icon :icon="alertCircle" size="large" color="danger"></ion-icon>
-        <p class="mt-4 text-gray-600">Poll not found</p>
-        <ion-button class="mt-4" @click="router.push('/home')">
-          Go Back Home
-        </ion-button>
+        <p class="mt-4 text-gray-600">{{ $ui("Poll not found") }}</p>
+        <ion-button class="mt-4" @click="router.push('/home')"> {{ $ui("Go Back Home") }} </ion-button>
       </div>
 
       <!-- Vote Form -->
       <div v-else-if="displayPoll">
         <div v-if="displayPoll.isPrivate" class="mb-4 space-y-2">
           <ion-item>
-            <ion-label position="stacked">Invite Code</ion-label>
+            <ion-label position="stacked">{{ $ui("Invite Code") }}</ion-label>
             <ion-input
               v-model="inviteCode"
-              placeholder="Enter your unique invite code"
+              :placeholder="$ui('Enter your unique invite code')"
             ></ion-input>
           </ion-item>
         </div>

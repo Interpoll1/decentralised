@@ -1,0 +1,61 @@
+name: Validate InterPoll
+on:
+  pull_request:
+  push:
+    branches: [master]
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check:locales
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:coordination
+      - run: npm run test:coordination-v2
+      - run: npm ci --prefix tools/coordination-pilot
+      - run: npm run test:coordination-pilot
+      - run: npm ci --prefix community-relay/kit
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:poll-first-use
+      - run: npm run build
+      - run: npm run test:production
+      - run: npm run verify:build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: interpoll-web-${{ github.sha }}
+          path: dist/
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
+      - run: npm ci
+      - run: npm run cap:sync
+      - run: npm run verify:build
+      - run: bash gradlew assembleDebug --no-daemon
+        working-directory: android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: interpoll-android-debug-${{ github.sha }}
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            dist/build-info.json

@@ -32,6 +32,7 @@ import CallOverlay from './components/CallOverlay.vue';
 import BitCoach from './components/BitCoach.vue';
 import DownloadAppPrompt from './components/DownloadAppPrompt.vue';
 import AuroraBackground from './components/AuroraBackground.vue';
+import { syncNativeTheme } from './native/themeChrome';
 
 const chainStore = useChainStore();
 const router = useRouter();
@@ -46,9 +47,10 @@ let themeObserver: MutationObserver | null = null;
 
 function syncSystemChrome() {
   const dark = document.documentElement.classList.contains('dark');
-  const color = dark ? '#07110b' : '#eef6f0';
+  const color = dark ? '#232a31' : '#e7e9ec';
   document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute('content', color);
   document.documentElement.style.setProperty('--system-chrome-color', color);
+  void syncNativeTheme(dark);
 }
 
 function isTypingTarget(event: KeyboardEvent): boolean {
@@ -99,15 +101,6 @@ function pageTransition(baseEl: HTMLElement, opts: { direction?: string }) {
 }
 
 onMounted(async () => {
-  // Dark/glass is the default theme. Apply it unless the user has
-  // explicitly chosen light mode. Also normalise any missing/unknown
-  // value so future reads are always 'dark' | 'light'.
-  const storedTheme = localStorage.getItem('theme');
-  if (storedTheme !== 'light') {
-    document.documentElement?.classList.add('dark');
-    document.body?.classList.add('dark');
-    if (!storedTheme) localStorage.setItem('theme', 'dark');
-  }
   syncSystemChrome();
   themeObserver = new MutationObserver(syncSystemChrome);
   themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });

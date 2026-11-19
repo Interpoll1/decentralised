@@ -7,7 +7,7 @@
             <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
         </ion-buttons>
-        <ion-title>Settings</ion-title>
+        <ion-title>{{ $ui("Settings") }}</ion-title>
       </ion-toolbar>
 
 
@@ -17,7 +17,7 @@
           class="settings-tab" :class="{ active: activeTab === tab.id }"
           @click="activeTab = tab.id">
           <ion-icon :icon="tab.icon"></ion-icon>
-          <span>{{ tab.label }}</span>
+          <span>{{ $ui(tab.label) }}</span>
         </button>
       </div>
     </ion-header>
@@ -28,6 +28,7 @@
 
         <!-- ══════════════════════ GENERAL TAB ══════════════════════ -->
         <div v-if="activeTab === 'general'">
+          <div class="settings-card"><LanguagePicker /></div>
 
           <!-- Account card -->
           <div class="settings-card">
@@ -36,42 +37,38 @@
                 <ion-icon :icon="personCircleOutline"></ion-icon>
               </div>
               <div>
-                <h3>Account</h3>
-                <p>Your identity on Interpoll</p>
+                <h3>{{ $ui("Account") }}</h3>
+                <p>{{ $ui("Your identity on Interpoll") }}</p>
               </div>
             </div>
             <div class="info-table">
               <div class="info-row">
-                <span class="info-key">Device ID</span>
+                <span class="info-key">{{ $ui("Device ID") }}</span>
                 <code class="info-val mono-sm">{{ fullDeviceId }}</code>
               </div>
               <div class="info-row">
-                <span class="info-key">Username</span>
+                <span class="info-key">{{ $ui("Username") }}</span>
                 <div class="info-val flex-end">
                   <UserIdentityBadge v-if="userProfile"
                     :username="userProfile.customUsername || userProfile.username"
                     :pubkey="publicKeyHex" />
                   <button class="pill-btn accent" @click="$router.push('/claim-username')">
-                    {{ userProfile?.customUsername ? 'Change' : 'Set username' }}
+                    {{ userProfile?.customUsername ? $ui("Change") : $ui("Set username") }}
                   </button>
                 </div>
               </div>
               <div class="info-row">
-                <span class="info-key">Karma</span>
+                <span class="info-key">{{ $ui("Karma") }}</span>
                 <span class="karma-badge">{{ userProfile?.karma || 0 }}</span>
               </div>
             </div>
             <button class="block-btn outline mt-12" @click="showRestore = !showRestore">
-              {{ showRestore ? "Cancel restore" : "Restore identity from recovery phrase" }}
+              {{ showRestore ? $ui("Cancel restore") : $ui("Restore identity from recovery phrase") }}
             </button>
             <div v-if="showRestore" class="mt-12"><RestoreKeyForm @restored="onIdentityRestored" /></div>
-            <button class="block-btn outline mt-12" @click="replayBitTour">
-              Replay Bit's tour
-            </button>
+            <button class="block-btn outline mt-12" @click="replayBitTour"> {{ $ui("Replay Bit's tour") }} </button>
             <button class="block-btn outline mt-12" @click="$router.push('/profile')">
-              <ion-icon :icon="personCircleOutline"></ion-icon>
-              Edit Profile
-            </button>
+              <ion-icon :icon="personCircleOutline"></ion-icon> {{ $ui("Edit Profile") }} </button>
           </div>
 
           <!-- Name recovery (IPP-10) -->
@@ -86,34 +83,32 @@
                 <ion-icon :icon="keyOutline"></ion-icon>
               </div>
               <div>
-                <h3>Cryptographic Identity</h3>
-                <p>Schnorr / secp256k1 keypair for signing events</p>
+                <h3>{{ $ui("Cryptographic Identity") }}</h3>
+                <p>{{ $ui("Schnorr / secp256k1 keypair for signing events") }}</p>
               </div>
             </div>
             <div class="key-block">
               <div class="key-row">
-                <span class="key-label">Public Key</span>
+                <span class="key-label">{{ $ui("Public Key") }}</span>
                 <div class="key-value-row">
                   <code class="key-val">{{ publicKeyHex }}</code>
-                  <button class="icon-btn" @click="copyPublicKey" title="Copy"><ion-icon :icon="copyOutline"></ion-icon></button>
+                  <button class="icon-btn" @click="copyPublicKey" :title="$ui('Copy')"><ion-icon :icon="copyOutline"></ion-icon></button>
                 </div>
               </div>
               <div class="key-row">
-                <span class="key-label">Private Key</span>
+                <span class="key-label">{{ $ui("Private Key") }}</span>
                 <div v-if="!showPrivateKey" class="key-value-row">
                   <code class="key-val muted">•••• hidden ••••</code>
-                  <button class="icon-btn warning" @click="revealPrivateKey" title="Reveal"><ion-icon :icon="eyeOutline"></ion-icon></button>
+                  <button class="icon-btn warning" @click="revealPrivateKey" :title="$ui('Reveal')"><ion-icon :icon="eyeOutline"></ion-icon></button>
                 </div>
                 <div v-else class="key-value-row">
                   <code class="key-val danger">{{ privateKeyHex }}</code>
-                  <button class="icon-btn" @click="copyPrivateKey" title="Copy"><ion-icon :icon="copyOutline"></ion-icon></button>
+                  <button class="icon-btn" @click="copyPrivateKey" :title="$ui('Copy')"><ion-icon :icon="copyOutline"></ion-icon></button>
                 </div>
               </div>
               <RecoveryPhrasePanel />
               <div v-if="showPrivateKey" class="alert-box warning">
-                <ion-icon :icon="warningOutline"></ion-icon>
-                Never share your private key. Anyone with it can sign events as you.
-              </div>
+                <ion-icon :icon="warningOutline"></ion-icon> {{ $ui("Never share your private key. Anyone with it can sign events as you.") }} </div>
             </div>
           </div>
 
@@ -123,24 +118,17 @@
               <div class="card-heading-icon accent-blue">
                 <ion-icon :icon="colorPaletteOutline"></ion-icon>
               </div>
-              <div><h3>Appearance</h3></div>
+              <div><h3>{{ $ui("Appearance") }}</h3></div>
             </div>
             <div class="toggle-row">
               <div>
-                <div class="toggle-label">Dark mode</div>
-                <div class="toggle-sub">Currently the only available theme</div>
+                <div class="toggle-label">{{ $ui("Dark mode") }}</div>
+                <div class="toggle-sub">{{ isDarkMode ? $ui("Dark graphite") : $ui("Light graphite") }}</div>
               </div>
-              <label class="toggle-switch toggle-switch--locked" title="Dark mode is always on">
-                <input type="checkbox" checked disabled />
+              <label class="toggle-switch theme-toggle">
+                <input type="checkbox" role="switch" :aria-label="$ui('Dark mode')" :checked="isDarkMode" @change="onThemeChange" />
                 <span class="toggle-track"></span>
               </label>
-            </div>
-            <div class="theme-coming-soon">
-              <svg viewBox="0 0 16 16" fill="none" width="13" height="13" aria-hidden="true">
-                <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4"/>
-                <path d="M8 5v3.5m0 2.5h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              </svg>
-              Light mode is coming in a future update
             </div>
           </div>
 
@@ -150,13 +138,13 @@
               <div class="card-heading-icon accent-teal">
                 <ion-icon :icon="notificationsOutline"></ion-icon>
               </div>
-              <div><h3>Navigation &amp; notifications</h3></div>
+              <div><h3>{{ $ui("Navigation & notifications") }}</h3></div>
             </div>
 
             <div class="toggle-row">
               <div>
-                <div class="toggle-label">Show bottom bar</div>
-                <div class="toggle-sub">Mobile only. Turn off to hide the tab bar on the home feed.</div>
+                <div class="toggle-label">{{ $ui("Show bottom bar") }}</div>
+                <div class="toggle-sub">{{ $ui("Mobile only. Turn off to hide the tab bar on the home feed.") }}</div>
               </div>
               <label class="toggle-switch">
                 <input type="checkbox" :checked="navStore.enabled" @change="navStore.setEnabled(($event.target as HTMLInputElement).checked)" />
@@ -166,25 +154,19 @@
 
             <div class="toggle-row">
               <div>
-                <div class="toggle-label">Bottom bar items</div>
-                <div class="toggle-sub">
-                  Mobile: hold a tab and drag it onto another to swap places. The first tab is
-                  where the app opens.
-                </div>
+                <div class="toggle-label">{{ $ui("Bottom bar items") }}</div>
+                <div class="toggle-sub"> {{ $ui("Mobile: hold a tab and drag it onto another to swap places. The first tab is where the app opens.") }} </div>
               </div>
               <div class="settings-inline-actions">
-                <button v-if="isMobileViewport" class="settings-inline-btn" :disabled="!navStore.enabled" @click="replayNavTip">Show me how</button>
-                <button class="settings-inline-btn" :disabled="!navStore.enabled" @click="navStore.reset()">Reset</button>
+                <button v-if="isMobileViewport" class="settings-inline-btn" :disabled="!navStore.enabled" @click="replayNavTip">{{ $ui("Show me how") }}</button>
+                <button class="settings-inline-btn" :disabled="!navStore.enabled" @click="navStore.reset()">{{ $ui("Reset") }}</button>
               </div>
             </div>
 
             <div class="toggle-row">
               <div>
-                <div class="toggle-label">Background push</div>
-                <div class="toggle-sub">
-                  Get message notifications when the app is closed. Needs the relay's
-                  Firebase setup — see docs/push-notifications.md.
-                </div>
+                <div class="toggle-label">{{ $ui("Background push") }}</div>
+                <div class="toggle-sub"> {{ $ui("Get message notifications when the app is closed. Needs the relay's Firebase setup — see docs/push-notifications.md.") }} </div>
               </div>
               <label class="toggle-switch">
                 <input type="checkbox" :checked="pushEnabled" @change="togglePush(($event.target as HTMLInputElement).checked)" />
@@ -194,20 +176,14 @@
 
             <div class="toggle-row toggle-row-stacked">
               <div>
-                <div class="toggle-label">Email me when push can't reach me</div>
-                <div class="toggle-sub">
-                  A fallback for the web app or a device with push switched off. The relay
-                  emails you at most once every 15 minutes, and the mail says only that a
-                  message arrived — never its contents or who sent it.
-                  <strong>This ties your identity key to a real address on the relay</strong>,
-                  so leave it off if you rely on being anonymous.
-                </div>
+                <div class="toggle-label">{{ $ui("Email me when push can't reach me") }}</div>
+                <div class="toggle-sub"> {{ $ui("A fallback for the web app or a device with push switched off. The relay emails you at most once every 15 minutes, and the mail says only that a message arrived — never its contents or who sent it.") }} <strong>{{ $ui("This ties your identity key to a real address on the relay") }}</strong>{{ $ui(", so leave it off if you rely on being anonymous.") }} </div>
                 <div class="email-notify-row">
                   <input
                     v-model="emailNotifyAddress"
                     type="email"
                     class="settings-input"
-                    placeholder="you@example.com"
+                    :placeholder="$ui('you@example.com')"
                     autocomplete="email"
                     :disabled="emailNotifyBusy"
                   />
@@ -215,13 +191,13 @@
                     class="settings-inline-btn"
                     :disabled="emailNotifyBusy || !emailNotifyAddress.trim()"
                     @click="saveEmailNotifications"
-                  >Save</button>
+                  >{{ $ui("Save") }}</button>
                   <button
                     v-if="emailNotifyRegistered"
                     class="settings-inline-btn"
                     :disabled="emailNotifyBusy"
                     @click="clearEmailNotifications"
-                  >Turn off</button>
+                  >{{ $ui("Turn off") }}</button>
                 </div>
                 <div v-if="emailNotifyStatus" class="email-notify-status" :class="{ 'is-error': emailNotifyError }">
                   {{ emailNotifyStatus }}
@@ -237,34 +213,34 @@
                 <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
               </div>
               <div>
-                <h3>Home Feed Moderation</h3>
-                <p>Use a moderation API to filter your feed</p>
+                <h3>{{ $ui("Home Feed Moderation") }}</h3>
+                <p>{{ $ui("Use a moderation API to filter your feed") }}</p>
               </div>
             </div>
             <div class="toggle-row">
-              <div><div class="toggle-label">Moderate home feed</div></div>
+              <div><div class="toggle-label">{{ $ui("Moderate home feed") }}</div></div>
               <label class="toggle-switch">
                 <input type="checkbox" v-model="modSettings.moderateHomeFeed" @change="saveModerationSettings" />
                 <span class="toggle-track"></span>
               </label>
             </div>
             <div class="field-group mt-12">
-              <label class="field-label">API Provider</label>
+              <label class="field-label">{{ $ui("API Provider") }}</label>
               <div class="field-wrap">
                 <select class="field-native" v-model="modSettings.moderationProvider" @change="onModerationProviderChange">
-                  <option value="interpoll">InterPoll default API</option>
-                  <option value="custom">Custom API</option>
+                  <option value="interpoll">{{ $ui("InterPoll default API") }}</option>
+                  <option value="custom">{{ $ui("Custom API") }}</option>
                 </select>
               </div>
             </div>
             <div v-if="modSettings.moderationProvider === 'custom'" class="field-group mt-8">
-              <label class="field-label">Custom API URL</label>
+              <label class="field-label">{{ $ui("Custom API URL") }}</label>
               <div class="field-wrap">
                 <input class="field-native" v-model="modSettings.moderationApiBaseUrl"
                   placeholder="https://example.com/moderation" @blur="saveModerationSettings" />
               </div>
             </div>
-            <p class="helper-text mt-8">Default: {{ moderationDefaultApiUrl }}</p>
+            <p class="helper-text mt-8">{{ $ui("Default:") }} {{ moderationDefaultApiUrl }}</p>
           </div>
 
         </div>
@@ -278,17 +254,17 @@
                 <ion-icon :icon="rocketOutline"></ion-icon>
               </div>
               <div>
-                <h3>Feed Mode</h3>
-                <p>Chronological or personalised ranking</p>
+                <h3>{{ $ui("Feed Mode") }}</h3>
+                <p>{{ $ui("Chronological or personalised ranking") }}</p>
               </div>
             </div>
             <div class="seg-pills">
               <button class="seg-pill" :class="{ active: feedPreferences.mode === 'for-you' }"
-                @click="onFeedModeChange({ detail: { value: 'for-you' } })">For You</button>
+                @click="onFeedModeChange({ detail: { value: 'for-you' } })">{{ $ui("For You") }}</button>
               <button class="seg-pill" :class="{ active: feedPreferences.mode === 'latest' }"
-                @click="onFeedModeChange({ detail: { value: 'latest' } })">Latest</button>
+                @click="onFeedModeChange({ detail: { value: 'latest' } })">{{ $ui("Latest") }}</button>
             </div>
-            <p class="helper-text mt-8">For You uses keyword and community preferences plus engagement/freshness scoring. Latest is purely chronological.</p>
+            <p class="helper-text mt-8">{{ $ui("For You uses keyword and community preferences plus engagement/freshness scoring. Latest is purely chronological.") }}</p>
           </div>
 
           <div class="settings-card">
@@ -296,17 +272,17 @@
               <div class="card-heading-icon accent-teal">
                 <ion-icon :icon="optionsOutline"></ion-icon>
               </div>
-              <div><h3>Content Types</h3><p>What appears in your feed</p></div>
+              <div><h3>{{ $ui("Content Types") }}</h3><p>{{ $ui("What appears in your feed") }}</p></div>
             </div>
             <div class="toggle-row">
-              <div class="toggle-label">Show posts</div>
+              <div class="toggle-label">{{ $ui("Show posts") }}</div>
               <label class="toggle-switch">
                 <input type="checkbox" :checked="feedPreferences.showPosts" @change="onFeedPostsToggle" />
                 <span class="toggle-track"></span>
               </label>
             </div>
             <div class="toggle-row mt-8">
-              <div class="toggle-label">Show polls</div>
+              <div class="toggle-label">{{ $ui("Show polls") }}</div>
               <label class="toggle-switch">
                 <input type="checkbox" :checked="feedPreferences.showPolls" @change="onFeedPollsToggle" />
                 <span class="toggle-track"></span>
@@ -319,7 +295,7 @@
               <div class="card-heading-icon accent-green">
                 <ion-icon :icon="addCircleOutline"></ion-icon>
               </div>
-              <div><h3>Include Keywords</h3><p>Boost content containing these words</p></div>
+              <div><h3>{{ $ui("Include Keywords") }}</h3><p>{{ $ui("Boost content containing these words") }}</p></div>
             </div>
             <div class="chip-list" v-if="feedPreferences.includeKeywords.length">
               <button class="kw-chip include" v-for="kw in feedPreferences.includeKeywords" :key="kw"
@@ -328,10 +304,10 @@
             <div class="inline-add mt-8">
               <div class="field-wrap flex1">
                 <input class="field-native" v-model="newFeedIncludeKeyword"
-                  placeholder="Add keyword…" @keyup.enter="addFeedIncludeKeyword" />
+                  :placeholder="$ui('Add keyword…')" @keyup.enter="addFeedIncludeKeyword" />
               </div>
               <button class="pill-btn accent" @click="addFeedIncludeKeyword"
-                :disabled="!newFeedIncludeKeyword.trim()">Add</button>
+                :disabled="!newFeedIncludeKeyword.trim()">{{ $ui("Add") }}</button>
             </div>
           </div>
 
@@ -340,7 +316,7 @@
               <div class="card-heading-icon accent-amber">
                 <ion-icon :icon="removeCircleOutline"></ion-icon>
               </div>
-              <div><h3>Exclude Keywords</h3><p>Demote content with these words</p></div>
+              <div><h3>{{ $ui("Exclude Keywords") }}</h3><p>{{ $ui("Demote content with these words") }}</p></div>
             </div>
             <div class="chip-list" v-if="feedPreferences.excludeKeywords.length">
               <button class="kw-chip exclude" v-for="kw in feedPreferences.excludeKeywords" :key="kw"
@@ -349,10 +325,10 @@
             <div class="inline-add mt-8">
               <div class="field-wrap flex1">
                 <input class="field-native" v-model="newFeedExcludeKeyword"
-                  placeholder="Add keyword…" @keyup.enter="addFeedExcludeKeyword" />
+                  :placeholder="$ui('Add keyword…')" @keyup.enter="addFeedExcludeKeyword" />
               </div>
               <button class="pill-btn accent" @click="addFeedExcludeKeyword"
-                :disabled="!newFeedExcludeKeyword.trim()">Add</button>
+                :disabled="!newFeedExcludeKeyword.trim()">{{ $ui("Add") }}</button>
             </div>
           </div>
 
@@ -361,9 +337,9 @@
               <div class="card-heading-icon accent-blue">
                 <ion-icon :icon="peopleOutline"></ion-icon>
               </div>
-              <div><h3>Community Preferences</h3><p>Favourite = boost, Muted = hidden</p></div>
+              <div><h3>{{ $ui("Community Preferences") }}</h3><p>{{ $ui("Favourite = boost, Muted = hidden") }}</p></div>
             </div>
-            <div v-if="communityStore.isLoading" class="helper-text">Loading…</div>
+            <div v-if="communityStore.isLoading" class="helper-text">{{ $ui("Loading…") }}</div>
             <div v-else-if="feedCommunities.length > 0" class="community-pref-list">
               <div v-for="community in feedCommunities" :key="community.id" class="community-pref-row">
                 <div>
@@ -372,13 +348,13 @@
                 </div>
                 <div class="pref-btns">
                   <button class="pref-btn" :class="{ active: isFavoriteCommunity(community.id) }"
-                    @click="toggleFavoriteCommunityPreference(community.id)">★ Fav</button>
+                    @click="toggleFavoriteCommunityPreference(community.id)">{{ $ui("★ Fav") }}</button>
                   <button class="pref-btn mute" :class="{ active: isMutedCommunity(community.id) }"
-                    @click="toggleMutedCommunityPreference(community.id)">Mute</button>
+                    @click="toggleMutedCommunityPreference(community.id)">{{ $ui("Mute") }}</button>
                 </div>
               </div>
             </div>
-            <p v-else class="helper-text">No communities loaded yet.</p>
+            <p v-else class="helper-text">{{ $ui("No communities loaded yet.") }}</p>
           </div>
 
           <div class="settings-card">
@@ -386,17 +362,17 @@
               <div class="card-heading-icon accent-violet">
                 <ion-icon :icon="analyticsOutline"></ion-icon>
               </div>
-              <div><h3>Ranking Weights</h3><p>Tweak what matters in your feed</p></div>
+              <div><h3>{{ $ui("Ranking Weights") }}</h3><p>{{ $ui("Tweak what matters in your feed") }}</p></div>
             </div>
             <div class="range-row" v-for="(weight, key) in feedPreferences.rankingWeights" :key="key">
               <div class="range-header">
-                <span>{{ { freshness: 'Freshness', engagement: 'Engagement', keywords: 'Keywords', community: 'Community affinity' }[key] }}</span>
+                <span>{{ { freshness: $ui("Freshness"), engagement: $ui("Engagement"), keywords: $ui("Keywords"), community: $ui("Community affinity") }[key] }}</span>
                 <strong class="range-val">{{ formatWeight(weight) }}</strong>
               </div>
               <ion-range :min="0" :max="1" :step="0.05" :value="weight"
                 @ionChange="(ev) => onFeedWeightChange(key, ev)" :pin="true"></ion-range>
             </div>
-            <button class="block-btn outline mt-12" @click="resetFeedPreferencesToDefaults">Reset Feed Preferences</button>
+            <button class="block-btn outline mt-12" @click="resetFeedPreferencesToDefaults">{{ $ui("Reset Feed Preferences") }}</button>
           </div>
         </div>
 
@@ -407,18 +383,18 @@
               <div class="card-heading-icon accent-amber">
                 <ion-icon :icon="personOutline"></ion-icon>
               </div>
-              <div><h3>Karma Filter</h3><p>Hide posts from low-rep users</p></div>
+              <div><h3>{{ $ui("Karma Filter") }}</h3><p>{{ $ui("Hide posts from low-rep users") }}</p></div>
             </div>
             <div class="range-row">
               <div class="range-header">
-                <span>Min karma</span>
-                <strong class="range-val">{{ modSettings.minUserKarma <= -1000 ? 'Off' : modSettings.minUserKarma }}</strong>
+                <span>{{ $ui("Min karma") }}</span>
+                <strong class="range-val">{{ modSettings.minUserKarma <= -1000 ? $ui("Off") : modSettings.minUserKarma }}</strong>
               </div>
               <ion-range :min="-100" :max="100" :step="5"
                 :value="modSettings.minUserKarma <= -1000 ? -100 : modSettings.minUserKarma"
                 @ionChange="onKarmaRangeChange" :pin="true"></ion-range>
             </div>
-            <p class="helper-text">Drag to −100 to disable.</p>
+            <p class="helper-text">{{ $ui("Drag to −100 to disable.") }}</p>
           </div>
 
           <div class="settings-card">
@@ -426,17 +402,17 @@
               <div class="card-heading-icon accent-rose">
                 <ion-icon :icon="arrowDownOutline"></ion-icon>
               </div>
-              <div><h3>Score Filter</h3><p>Hide heavily downvoted content</p></div>
+              <div><h3>{{ $ui("Score Filter") }}</h3><p>{{ $ui("Hide heavily downvoted content") }}</p></div>
             </div>
             <div class="range-row">
               <div class="range-header">
-                <span>Min score</span>
+                <span>{{ $ui("Min score") }}</span>
                 <strong class="range-val">{{ modSettings.minContentScore }}</strong>
               </div>
               <ion-range :min="-50" :max="50" :step="1" v-model="modSettings.minContentScore"
                 @ionKnobMoveEnd="saveModerationSettings" :pin="true"></ion-range>
             </div>
-            <p class="helper-text">Posts with net score below this are hidden.</p>
+            <p class="helper-text">{{ $ui("Posts with net score below this are hidden.") }}</p>
           </div>
 
           <div class="settings-card">
@@ -444,23 +420,21 @@
               <div class="card-heading-icon accent-rose">
                 <ion-icon :icon="chatbubbleOutline"></ion-icon>
               </div>
-              <div><h3>Word Filter</h3><p>Hide or blur content with flagged words</p></div>
+              <div><h3>{{ $ui("Word Filter") }}</h3><p>{{ $ui("Hide or blur content with flagged words") }}</p></div>
             </div>
             <div class="field-group">
-              <label class="field-label">Filter Action</label>
+              <label class="field-label">{{ $ui("Filter Action") }}</label>
               <div class="seg-pills">
                 <button class="seg-pill" :class="{ active: modSettings.wordFilterAction === 'blur' }"
-                  @click="modSettings.wordFilterAction = 'blur'; saveModerationSettings()">Blur</button>
+                  @click="modSettings.wordFilterAction = 'blur'; saveModerationSettings()">{{ $ui("Blur") }}</button>
                 <button class="seg-pill" :class="{ active: modSettings.wordFilterAction === 'hide' }"
-                  @click="modSettings.wordFilterAction = 'hide'; saveModerationSettings()">Hide</button>
+                  @click="modSettings.wordFilterAction = 'hide'; saveModerationSettings()">{{ $ui("Hide") }}</button>
                 <button class="seg-pill" :class="{ active: modSettings.wordFilterAction === 'flag' }"
-                  @click="modSettings.wordFilterAction = 'flag'; saveModerationSettings()">Flag</button>
+                  @click="modSettings.wordFilterAction = 'flag'; saveModerationSettings()">{{ $ui("Flag") }}</button>
               </div>
             </div>
             <button class="block-btn outline danger mt-12" @click="resetModerationDefaults">
-              <ion-icon :icon="refreshOutline"></ion-icon>
-              Reset Moderation to Defaults
-            </button>
+              <ion-icon :icon="refreshOutline"></ion-icon> {{ $ui("Reset Moderation to Defaults") }} </button>
           </div>
         </div>
 
@@ -471,42 +445,42 @@
               <div class="card-heading-icon accent-violet">
                 <ion-icon :icon="keyOutline"></ion-icon>
               </div>
-              <div><h3>Clear app cache</h3><p>Stuck on an old version? This drops cached app files and reloads. Your keys, chats and settings are kept.</p></div>
+              <div><h3>{{ $ui("Clear app cache") }}</h3><p>{{ $ui("Stuck on an old version? This drops cached app files and reloads. Your keys, chats and settings are kept.") }}</p></div>
             </div>
-            <button class="field-native" style="cursor:pointer;font-weight:600" @click="uncache()">Clear cache &amp; reload</button>
+            <button class="field-native" style="cursor:pointer;font-weight:600" @click="uncache()">{{ $ui("Clear cache & reload") }}</button>
           </div>
           <div class="settings-card">
             <div class="card-heading">
               <div class="card-heading-icon accent-violet">
                 <ion-icon :icon="keyOutline"></ion-icon>
               </div>
-              <div><h3>Moderation API</h3><p>Authenticate and enable click-to-submit from Home feed</p></div>
+              <div><h3>{{ $ui("Moderation API") }}</h3><p>{{ $ui("Authenticate and enable click-to-submit from Home feed") }}</p></div>
             </div>
             <div class="field-group">
-              <label class="field-label">Provider</label>
+              <label class="field-label">{{ $ui("Provider") }}</label>
               <div class="field-wrap">
                 <select class="field-native" v-model="modSettings.moderationProvider" @change="saveModerationSettings">
-                  <option value="interpoll">Interpoll Moderation API</option>
-                  <option value="custom">Custom API</option>
+                  <option value="interpoll">{{ $ui("Interpoll Moderation API") }}</option>
+                  <option value="custom">{{ $ui("Custom API") }}</option>
                 </select>
               </div>
             </div>
             <div class="field-group mt-8">
-              <label class="field-label">API Base URL</label>
+              <label class="field-label">{{ $ui("API Base URL") }}</label>
               <div class="field-wrap">
                 <input class="field-native mono-sm" v-model="modSettings.moderationApiBaseUrl"
-                  @blur="saveModerationSettings" placeholder="https://interpoll.endless.sbs/moderation" />
+                  @blur="saveModerationSettings" placeholder="https://interpoll.endless.social/moderation" />
               </div>
             </div>
             <div class="field-group mt-8">
-              <label class="field-label">API Key</label>
+              <label class="field-label">{{ $ui("API Key") }}</label>
               <div class="field-wrap">
-                <input class="field-native mono-sm" type="password" v-model="moderationApiKeyInput" placeholder="mod_sk_..." />
+                <input class="field-native mono-sm" type="password" v-model="moderationApiKeyInput" :placeholder="$ui('mod_sk_...')" />
               </div>
             </div>
             <div class="button-row mt-12">
-              <button class="pill-btn accent" @click="authenticateModerationApi">Authenticate</button>
-              <button class="pill-btn outline" @click="clearModerationApiAuth">Clear Auth</button>
+              <button class="pill-btn accent" @click="authenticateModerationApi">{{ $ui("Authenticate") }}</button>
+              <button class="pill-btn outline" @click="clearModerationApiAuth">{{ $ui("Clear Auth") }}</button>
             </div>
             <p class="helper-text mt-8">{{ moderationAuthMessage }}</p>
           </div>
@@ -516,15 +490,15 @@
               <div class="card-heading-icon accent-teal">
                 <ion-icon :icon="fingerPrintOutline"></ion-icon>
               </div>
-              <div><h3>Manual Hash Submission</h3><p>SHA-256 of post body sent to moderation API on click</p></div>
+              <div><h3>{{ $ui("Manual Hash Submission") }}</h3><p>{{ $ui("SHA-256 of post body sent to moderation API on click") }}</p></div>
             </div>
             <div class="toggle-row">
               <div>
-                <div class="toggle-label">Click post to submit hash</div>
-                <div class="toggle-sub">No author fields included — content hash only</div>
+                <div class="toggle-label">{{ $ui("Click post to submit hash") }}</div>
+                <div class="toggle-sub">{{ $ui("No author fields included — content hash only") }}</div>
               </div>
               <label class="toggle-switch">
-                <input type="checkbox" v-model="modSettings.moderationClickToSubmit" @change="saveModerationSettings" />
+                <input type="checkbox" v-model="modSettings.moderateHomeFeed" @change="saveModerationSettings" />
                 <span class="toggle-track"></span>
               </label>
             </div>
@@ -539,22 +513,22 @@
             <div class="banner-left">
               <div class="banner-dot" :class="networkStatus.gunConnected ? 'dot-ok' : 'dot-warn'"></div>
               <div>
-                <div class="banner-title">{{ networkStatus.gunConnected ? 'Decentralised Network Active' : 'Network Degraded' }}</div>
-                <div class="banner-sub">{{ networkStatus.gunConnectedCount }} peer{{ networkStatus.gunConnectedCount !== 1 ? 's' : '' }} connected · {{ networkStatus.gunAvgLatencyMs != null ? networkStatus.gunAvgLatencyMs + 'ms avg' : 'measuring…' }}</div>
+                <div class="banner-title">{{ networkStatus.gunConnected ? $ui("Decentralised Network Active") : $ui("Network Degraded") }}</div>
+                <div class="banner-sub">{{ $count(networkStatus.gunConnectedCount, 'peer') }} {{ $ui("connected ·") }} {{ networkStatus.gunAvgLatencyMs != null ? networkStatus.gunAvgLatencyMs + $ui("ms avg") : 'measuring…' }}</div>
               </div>
             </div>
             <div class="banner-metrics">
               <div class="bmetric">
                 <span>{{ networkStatus.peerCount }}</span>
-                <small>Relay peers</small>
+                <small>{{ $ui("Relay peers") }}</small>
               </div>
               <div class="bmetric">
                 <span>{{ networkStatus.gunConnectedCount }}/{{ networkStatus.gunPeerCount }}</span>
-                <small>DB relays</small>
+                <small>{{ $ui("DB relays") }}</small>
               </div>
               <div class="bmetric" :class="networkStatus.chainValid ? 'ok' : 'danger'">
                 <span>{{ networkStatus.chainValid ? '✓' : '✗' }}</span>
-                <small>Chain</small>
+                <small>{{ $ui("Chain") }}</small>
               </div>
             </div>
           </div>
@@ -566,17 +540,17 @@
                 <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
               </div>
               <div>
-                <h3>Privacy &amp; Tor</h3>
-                <p>Restrict network features that may leak your IP or device fingerprint. Enable this when routing traffic through Tor or a VPN for enhanced anonymity.</p>
+                <h3>{{ $ui("Privacy & Tor") }}</h3>
+                <p>{{ $ui("Restrict network features that may leak your IP or device fingerprint. Enable this when routing traffic through Tor or a VPN for enhanced anonymity.") }}</p>
               </div>
               <span class="status-pill" :class="anonymityMode ? 'pill-ok' : 'pill-off'">
-                {{ anonymityMode ? 'Anonymity ON' : 'OFF' }}
+                {{ anonymityMode ? $ui("Anonymity ON") : $ui("OFF") }}
               </span>
             </div>
             <div class="toggle-row">
               <div>
-                <div class="toggle-label">Anonymity (Tor) Mode</div>
-                <div class="toggle-sub">Disables WebRTC, prefers .onion relays</div>
+                <div class="toggle-label">{{ $ui("Anonymity (Tor) Mode") }}</div>
+                <div class="toggle-sub">{{ $ui("Disables WebRTC, prefers .onion relays") }}</div>
               </div>
               <label class="toggle-switch">
                 <input type="checkbox" v-model="anonymityMode" @change="onAnonymityToggle" />
@@ -585,17 +559,17 @@
             </div>
             <div class="alert-box info mt-12">
               <ion-icon :icon="informationCircleOutline"></ion-icon>
-              <span>Web applications cannot route their own TCP traffic through Tor. To use Interpoll over Tor, open it in <a href="https://www.torproject.org" target="_blank" class="link">Tor Browser</a>, or proxy this browser's traffic through <a href="https://orbot.app" target="_blank" class="link">Orbot</a>.</span>
+              <span>{{ $ui("Web applications cannot route their own TCP traffic through Tor. To use Interpoll over Tor, open it in") }} <a href="https://www.torproject.org" target="_blank" class="link">{{ $ui("Tor Browser") }}</a>{{ $ui(", or proxy this browser's traffic through") }} <a href="https://orbot.app" target="_blank" class="link">{{ $ui("Orbot") }}</a>.</span>
             </div>
             <div v-if="anonymityMode" class="mt-12">
               <div class="status-row" :class="activeRelayIsOnion ? 'row-ok' : 'row-warn'">
                 <ion-icon :icon="activeRelayIsOnion ? lockClosedOutline : warningOutline"></ion-icon>
-                <span v-if="activeRelayIsOnion">Active relay is a <code>.onion</code> address — routing via Tor hidden service.</span>
-                <span v-else>Active relay is <strong>clearnet</strong> — add a <code>.onion</code> relay below for hidden-service routing.</span>
+                <span v-if="activeRelayIsOnion">{{ $ui("Active relay is a") }} <code>.onion</code> {{ $ui("address — routing via Tor hidden service.") }}</span>
+                <span v-else>{{ $ui("Active relay is") }} <strong>{{ $ui("clearnet") }}</strong> {{ $ui("— add a") }} <code>.onion</code> {{ $ui("relay below for hidden-service routing.") }}</span>
               </div>
               <button class="pill-btn outline mt-8" :disabled="torChecking" @click="checkTorStatus">
                 <ion-icon :icon="refreshOutline"></ion-icon>
-                {{ torChecking ? 'Checking…' : 'Check Tor status' }}
+                {{ torChecking ? $ui("Checking…") : $ui("Check Tor status") }}
               </button>
               <div v-if="torStatus.checked" class="alert-box mt-8"
                 :class="torStatus.isTor === true ? 'info' : torStatus.isTor === false ? 'warning' : ''">
@@ -611,14 +585,14 @@
                 <ion-icon :icon="serverOutline"></ion-icon>
               </div>
               <div>
-                <h3>Relay Peers</h3>
-                <p>GunDB relay servers that sync data across the network. Connecting to multiple peers ensures continuity if any single server becomes unavailable.</p>
+                <h3>{{ $ui("Relay Peers") }}</h3>
+                <p>{{ $ui("GunDB relay servers that sync data across the network. Connecting to multiple peers ensures continuity if any single server becomes unavailable.") }}</p>
               </div>
               <span class="count-badge">{{ networkStatus.gunConnectedCount }}/{{ gunPeersList.length }}</span>
             </div>
 
             <div class="peer-health-list">
-              <div v-for="peer in gunPeersDetail.length ? gunPeersDetail : gunPeersList.map(u => ({ url: u, connected: false }))"
+              <div v-for="peer in gunPeersDetail.length ? gunPeersDetail : gunPeersList.map(u => ({ url: u, connected: false, latencyMs: undefined }))"
                 :key="peer.url" class="peer-health-row">
                 <div class="peer-health-left">
                   <span class="health-dot" :class="peer.connected ? 'dot-ok' : 'dot-off'"></span>
@@ -628,11 +602,11 @@
                   </div>
                 </div>
                 <div class="peer-health-right">
-                  <span v-if="peer.latencyMs != null" class="latency-badge">{{ peer.latencyMs }}ms</span>
+                  <span v-if="peer.latencyMs != null" class="latency-badge">{{ peer.latencyMs }}{{ $ui("ms") }}</span>
                   <span class="status-chip" :class="peer.connected ? 'chip-ok' : 'chip-off'">
-                    {{ peer.connected ? 'Live' : 'Connecting…' }}
+                    {{ peer.connected ? $ui("Live") : $ui("Connecting…") }}
                   </span>
-                  <button v-if="gunPeersList.length > 1" class="icon-btn danger" @click="removeGunPeer(peer.url)" title="Remove">
+                  <button v-if="gunPeersList.length > 1" class="icon-btn danger" @click="removeGunPeer(peer.url)" :title="$ui('Remove')">
                     <ion-icon :icon="trashOutline"></ion-icon>
                   </button>
                 </div>
@@ -641,56 +615,54 @@
 
             <!-- Add preset -->
             <div v-if="availableGunPresets.length" class="field-group mt-12">
-              <label class="field-label">Add from presets</label>
+              <label class="field-label">{{ $ui("Add from presets") }}</label>
               <div class="inline-add">
                 <div class="field-wrap flex1">
                   <select class="field-native" v-model="selectedGunPreset">
-                    <option value="">— choose a preset —</option>
+                    <option value="">{{ $ui("— choose a preset —") }}</option>
                     <option v-for="p in availableGunPresets" :key="p.url" :value="p.url">{{ p.label }}</option>
                   </select>
                 </div>
-                <button class="pill-btn accent" :disabled="!selectedGunPreset" @click="addGunPeerFromPreset">Add</button>
+                <button class="pill-btn accent" :disabled="!selectedGunPreset" @click="addGunPeerFromPreset">{{ $ui("Add") }}</button>
               </div>
             </div>
 
             <!-- Add custom -->
             <div class="field-group mt-8">
-              <label class="field-label">Add custom relay URL</label>
+              <label class="field-label">{{ $ui("Add custom relay URL") }}</label>
               <div class="inline-add">
                 <div class="field-wrap flex1">
                   <input class="field-native mono-sm" v-model="newGunPeerUrl"
                     placeholder="https://your-relay.example.com/gun"
                     @keyup.enter="addGunPeerFromInput" />
                 </div>
-                <button class="pill-btn accent" :disabled="!newGunPeerUrl.trim()" @click="addGunPeerFromInput">Add</button>
+                <button class="pill-btn accent" :disabled="!newGunPeerUrl.trim()" @click="addGunPeerFromInput">{{ $ui("Add") }}</button>
               </div>
             </div>
-            <button class="pill-btn outline mt-8" @click="resetGunPeersToDefaults">Reset to defaults</button>
+            <button class="pill-btn outline mt-8" @click="resetGunPeersToDefaults">{{ $ui("Reset to defaults") }}</button>
           </div>
 
           <!-- Run a Relay Node -->
           <div class="settings-card decentralised-feature">
             <div class="decentral-badge">
-              <ion-icon :icon="globeOutline"></ion-icon>
-              DECENTRALISED
-            </div>
+              <ion-icon :icon="globeOutline"></ion-icon> {{ $ui("DECENTRALISED") }} </div>
             <div class="card-heading">
               <div class="card-heading-icon accent-violet">
                 <ion-icon :icon="cloudUploadOutline"></ion-icon>
               </div>
               <div>
-                <h3>Run a Relay Node</h3>
-                <p>Contribute to the network by hosting a GunDB relay. Each additional node improves data availability and reduces latency for all users. Choose the setup path that suits your environment.</p>
+                <h3>{{ $ui("Run a Relay Node") }}</h3>
+                <p>{{ $ui("Contribute to the network by hosting a GunDB relay. Each additional node improves data availability and reduces latency for all users. Choose the setup path that suits your environment.") }}</p>
               </div>
             </div>
 
             <div class="relay-options">
               <div class="relay-option">
                 <div class="relay-option-header">
-                  <span class="relay-difficulty easy">Easy</span>
-                  <span class="relay-option-name">Browser Tab</span>
+                  <span class="relay-difficulty easy">{{ $ui("Easy") }}</span>
+                  <span class="relay-option-name">{{ $ui("Browser Tab") }}</span>
                 </div>
-                <p class="relay-option-desc">Runs a relay directly in this browser tab via a WebSocket bridge. Automatically receives a public <code>wss://…/tunnel/…/gun</code> URL — no server or port-forwarding required. Stops when the tab closes.</p>
+                <p class="relay-option-desc">{{ $ui("Runs a relay directly in this browser tab via a WebSocket bridge. Automatically receives a public") }} <code>wss://…/tunnel/…/gun</code> {{ $ui("URL — no server or port-forwarding required. Stops when the tab closes.") }}</p>
                 <template v-if="browserRelay.active">
                   <div class="code-block-copy">
                     <code class="code-text">{{ browserRelay.publicUrl }}</code>
@@ -698,14 +670,12 @@
                       {{ copied === 'tab' ? '✓' : '⎘' }}
                     </button>
                   </div>
-                  <p class="relay-option-desc" style="margin-top:6px;font-size:11.5px">
-                    Running · serving {{ browserRelay.peersServed }} peer{{ browserRelay.peersServed === 1 ? '' : 's' }}. Others can add this URL as a GunDB relay.
-                  </p>
-                  <button class="pill-btn" @click="stopBrowserRelay">Stop Browser Relay</button>
+                  <p class="relay-option-desc" style="margin-top:6px;font-size:11.5px"> {{ $ui("Running · serving") }} {{ browserRelay.peersServed }} {{ $ui("peer") }}{{ browserRelay.peersServed === 1 ? '' : 's' }}{{ $ui(". Others can add this URL as a GunDB relay.") }} </p>
+                  <button class="pill-btn" @click="stopBrowserRelay">{{ $ui("Stop Browser Relay") }}</button>
                 </template>
                 <template v-else>
                   <button class="pill-btn accent" :disabled="browserRelayStarting" @click="startBrowserRelay">
-                    {{ browserRelayStarting ? 'Starting…' : 'Enable Browser Relay' }}
+                    {{ browserRelayStarting ? $ui("Starting…") : $ui("Enable Browser Relay") }}
                   </button>
                 </template>
                 <p v-if="browserRelay.error" class="relay-option-desc" style="margin-top:6px;font-size:11.5px;color:var(--app-danger, #ef4444)">{{ browserRelay.error }}</p>
@@ -713,10 +683,10 @@
 
               <div class="relay-option">
                 <div class="relay-option-header">
-                  <span class="relay-difficulty medium">Medium</span>
-                  <span class="relay-option-name">Home Server</span>
+                  <span class="relay-difficulty medium">{{ $ui("Medium") }}</span>
+                  <span class="relay-option-name">{{ $ui("Home Server") }}</span>
                 </div>
-                <p class="relay-option-desc">Deploys a GunDB relay on a Raspberry Pi or spare Linux/Windows/Mac machine. The installer prints the relay URL when done.</p>
+                <p class="relay-option-desc">{{ $ui("Deploys a GunDB relay on a Raspberry Pi or spare Linux/Windows/Mac machine. The installer prints the relay URL when done.") }}</p>
                 <div class="os-tabs">
                   <button v-for="os in ['Linux / Pi', 'macOS', 'Windows']" :key="os"
                     class="os-tab" :class="{ active: homeOs === os }"
@@ -728,16 +698,16 @@
                     {{ copied === 'home' ? '✓' : '⎘' }}
                   </button>
                 </div>
-                <p v-if="homeOs === 'Windows'" class="relay-option-desc" style="margin-top:6px;font-size:11.5px">Run in <strong>PowerShell as Administrator</strong>.</p>
-                <p v-else class="relay-option-desc" style="margin-top:6px;font-size:11.5px">Run in a terminal on the target machine.</p>
+                <p v-if="homeOs === 'Windows'" class="relay-option-desc" style="margin-top:6px;font-size:11.5px">{{ $ui("Run in") }} <strong>{{ $ui("PowerShell as Administrator") }}</strong>.</p>
+                <p v-else class="relay-option-desc" style="margin-top:6px;font-size:11.5px">{{ $ui("Run in a terminal on the target machine.") }}</p>
               </div>
 
               <div class="relay-option">
                 <div class="relay-option-header">
-                  <span class="relay-difficulty advanced">Technical</span>
-                  <span class="relay-option-name">Cloud VPS</span>
+                  <span class="relay-difficulty advanced">{{ $ui("Technical") }}</span>
+                  <span class="relay-option-name">{{ $ui("Cloud VPS") }}</span>
                 </div>
-                <p class="relay-option-desc">Provisions a production-grade relay on any VPS with a domain name. SSH into your server first, then run:</p>
+                <p class="relay-option-desc">{{ $ui("Provisions a production-grade relay on any VPS with a domain name. SSH into your server first, then run:") }}</p>
                 <div class="os-tabs">
                   <button v-for="os in ['Linux (bash)', 'macOS (zsh)']" :key="os"
                     class="os-tab" :class="{ active: vpsOs === os }"
@@ -749,7 +719,7 @@
                     {{ copied === 'vps' ? '✓' : '⎘' }}
                   </button>
                 </div>
-                <p class="relay-option-desc" style="margin-top:6px;font-size:11.5px">Replace <code>yourdomain.com</code> with your actual domain. Handles Docker, Caddy + TLS automatically.</p>
+                <p class="relay-option-desc" style="margin-top:6px;font-size:11.5px">{{ $ui("Replace") }} <code>yourdomain.com</code> {{ $ui("with your actual domain. Handles Docker, Caddy + TLS automatically.") }}</p>
               </div>
             </div>
           </div>
@@ -760,26 +730,24 @@
               <div class="card-heading-icon accent-blue">
                 <ion-icon :icon="constructOutline"></ion-icon>
               </div>
-              <div><h3>Relay Configuration</h3><p>Change the servers your node connects to</p></div>
-              <span v-if="hasCustomRelay" class="status-pill pill-warn">Custom</span>
+              <div><h3>{{ $ui("Relay Configuration") }}</h3><p>{{ $ui("Change the servers your node connects to") }}</p></div>
+              <span v-if="hasCustomRelay" class="status-pill pill-warn">{{ $ui("Custom") }}</span>
             </div>
             <div class="field-group">
-              <label class="field-label">WebSocket Relay</label>
+              <label class="field-label">{{ $ui("WebSocket Relay") }}</label>
               <div class="field-wrap"><input class="field-native mono-sm" v-model="editRelay.websocket" placeholder="ws://localhost:8080" /></div>
             </div>
             <div class="field-group mt-8">
-              <label class="field-label">GunDB Relay</label>
+              <label class="field-label">{{ $ui("GunDB Relay") }}</label>
               <div class="field-wrap"><input class="field-native mono-sm" v-model="editRelay.gun" placeholder="http://localhost:8765/gun" /></div>
             </div>
             <div class="field-group mt-8">
-              <label class="field-label">API Server</label>
+              <label class="field-label">{{ $ui("API Server") }}</label>
               <div class="field-wrap"><input class="field-native mono-sm" v-model="editRelay.api" placeholder="http://localhost:8080" /></div>
             </div>
             <button class="block-btn accent mt-12" @click="applyRelayConfig">
-              <ion-icon :icon="swapHorizontalOutline"></ion-icon>
-              Apply &amp; Reconnect
-            </button>
-            <button v-if="hasCustomRelay" class="block-btn outline mt-8" @click="resetRelayConfig">Reset to Defaults</button>
+              <ion-icon :icon="swapHorizontalOutline"></ion-icon> {{ $ui("Apply & Reconnect") }} </button>
+            <button v-if="hasCustomRelay" class="block-btn outline mt-8" @click="resetRelayConfig">{{ $ui("Reset to Defaults") }}</button>
           </div>
 
           <!-- Bootstrap Recovery -->
@@ -789,25 +757,21 @@
                 <ion-icon :icon="refreshOutline"></ion-icon>
               </div>
               <div>
-                <h3>Bootstrap Recovery</h3>
-                <p>Re-establish network connectivity when primary relays are unreachable. Discover active peers via the Gun mesh, or exchange signed invite bundles out-of-band to restore access.</p>
+                <h3>{{ $ui("Bootstrap Recovery") }}</h3>
+                <p>{{ $ui("Re-establish network connectivity when primary relays are unreachable. Discover active peers via the Gun mesh, or exchange signed invite bundles out-of-band to restore access.") }}</p>
               </div>
             </div>
             <div class="button-row">
               <button class="pill-btn outline" :disabled="bootstrapDiscovering" @click="discoverBootstrapFromGun">
                 <ion-icon :icon="refreshOutline"></ion-icon>
-                {{ bootstrapDiscovering ? 'Discovering…' : 'Discover from Gun' }}
+                {{ bootstrapDiscovering ? $ui("Discovering…") : $ui("Discover from Gun") }}
               </button>
               <button class="pill-btn outline" @click="generateBootstrapInvite">
-                <ion-icon :icon="downloadOutline"></ion-icon>
-                Generate Invite
-              </button>
+                <ion-icon :icon="downloadOutline"></ion-icon> {{ $ui("Generate Invite") }} </button>
               <button class="pill-btn outline" :disabled="!generatedBootstrapInvite" @click="copyGeneratedBootstrapInvite">
-                <ion-icon :icon="copyOutline"></ion-icon>
-                Copy Invite
-              </button>
+                <ion-icon :icon="copyOutline"></ion-icon> {{ $ui("Copy Invite") }} </button>
             </div>
-            <p class="helper-text mt-8">Imported endpoints are validated before connecting — no silent relay switching occurs.</p>
+            <p class="helper-text mt-8">{{ $ui("Imported endpoints are validated before connecting — no silent relay switching occurs.") }}</p>
           </div>
 
           <!-- Connected Peers & Your Node -->
@@ -816,12 +780,12 @@
               <div class="card-heading-icon accent-teal">
                 <ion-icon :icon="peopleOutline"></ion-icon>
               </div>
-              <div><h3>Connected Peers</h3><p>Peers sharing relay addresses automatically</p></div>
+              <div><h3>{{ $ui("Connected Peers") }}</h3><p>{{ $ui("Peers sharing relay addresses automatically") }}</p></div>
               <button class="icon-btn" @click="refreshNetwork"><ion-icon :icon="refreshOutline"></ion-icon></button>
             </div>
             <div v-if="peerList.length === 0" class="empty-peers">
               <ion-icon :icon="globeOutline"></ion-icon>
-              <p>No peers connected yet</p>
+              <p>{{ $ui("No peers connected yet") }}</p>
             </div>
             <div v-else class="peer-health-list">
               <div v-for="peer in peerList" :key="peer.peerId" class="peer-health-row">
@@ -837,11 +801,11 @@
             </div>
             <div class="info-table mt-12">
               <div class="info-row">
-                <span class="info-key">Your Peer ID</span>
+                <span class="info-key">{{ $ui("Your Peer ID") }}</span>
                 <code class="info-val mono-sm">{{ myPeerId }}</code>
               </div>
               <div class="info-row">
-                <span class="info-key">Device ID</span>
+                <span class="info-key">{{ $ui("Device ID") }}</span>
                 <code class="info-val mono-sm">{{ fullDeviceId }}</code>
               </div>
             </div>
@@ -857,7 +821,7 @@
               <div class="card-heading-icon accent-blue">
                 <ion-icon :icon="serverOutline"></ion-icon>
               </div>
-              <div><h3>Storage Usage</h3><p>Local device storage</p></div>
+              <div><h3>{{ $ui("Storage Usage") }}</h3><p>{{ $ui("Local device storage") }}</p></div>
             </div>
             <div class="storage-ring-row">
               <div class="storage-ring">
@@ -873,20 +837,18 @@
               </div>
               <div class="storage-stats">
                 <div class="storage-stat-row">
-                  <span>Used</span><strong>{{ storageStats.used.toFixed(1) }} MB</strong>
+                  <span>{{ $ui("Used") }}</span><strong>{{ storageStats.used.toFixed(1) }} {{ $ui("MB") }}</strong>
                 </div>
                 <div class="storage-stat-row">
-                  <span>Available</span><strong>{{ storageStats.quota.toFixed(0) }} MB</strong>
+                  <span>{{ $ui("Available") }}</span><strong>{{ storageStats.quota.toFixed(0) }} {{ $ui("MB") }}</strong>
                 </div>
                 <div class="storage-stat-row">
-                  <span>Pinned images</span><strong>{{ storageStats.pinnedItems }}</strong>
+                  <span>{{ $ui("Pinned images") }}</span><strong>{{ storageStats.pinnedItems }}</strong>
                 </div>
               </div>
             </div>
             <button class="pill-btn outline mt-12" @click="refreshStorageStats">
-              <ion-icon :icon="refreshOutline"></ion-icon>
-              Refresh Stats
-            </button>
+              <ion-icon :icon="refreshOutline"></ion-icon> {{ $ui("Refresh Stats") }} </button>
           </div>
 
           <!-- Data Versions -->
@@ -895,14 +857,14 @@
               <div class="card-heading-icon accent-violet">
                 <ion-icon :icon="layersOutline"></ion-icon>
               </div>
-              <div><h3>Data Versions</h3><p>Which GunDB data versions to display</p></div>
+              <div><h3>{{ $ui("Data Versions") }}</h3><p>{{ $ui("Which GunDB data versions to display") }}</p></div>
             </div>
-            <div v-if="isProbing" class="helper-text">Probing available versions…</div>
+            <div v-if="isProbing" class="helper-text">{{ $ui("Probing available versions…") }}</div>
             <template v-else>
               <div v-for="version in availableVersions" :key="version" class="toggle-row">
                 <div>
                   <div class="toggle-label">{{ version === currentNamespace ? `${version} (current)` : `${version} (legacy)` }}</div>
-                  <div class="toggle-sub">{{ version === currentNamespace ? 'Default namespace' : 'Legacy posts from before migration' }}</div>
+                  <div class="toggle-sub">{{ version === currentNamespace ? $ui("Default namespace") : $ui("Legacy posts from before migration") }}</div>
                 </div>
                 <label class="toggle-switch">
                   <input type="checkbox" :checked="versionToggles[version]" @change="toggleVersion(version)" />
@@ -910,7 +872,7 @@
                 </label>
               </div>
             </template>
-            <p class="helper-text mt-8">Legacy posts were created before the namespace migration. Changes take effect on next page load.</p>
+            <p class="helper-text mt-8">{{ $ui("Legacy posts were created before the namespace migration. Changes take effect on next page load.") }}</p>
           </div>
 
           <!-- Storage Policy -->
@@ -919,9 +881,9 @@
               <div class="card-heading-icon accent-teal">
                 <ion-icon :icon="cloudOutline"></ion-icon>
               </div>
-              <div><h3>Storage Policy</h3><p>Control what gets stored locally</p></div>
+              <div><h3>{{ $ui("Storage Policy") }}</h3><p>{{ $ui("Control what gets stored locally") }}</p></div>
             </div>
-            <div class="toggle-row" v-for="(label, key) in { alwaysStoreMyPosts: 'Always store my posts', storeUpvotedPosts: 'Store posts I upvoted', storeMyCommunities: 'Store my communities', cachePopularPosts: 'Cache popular posts (100+ upvotes)', autoDeleteOldContent: 'Auto-delete old cached content' }" :key="key">
+            <div class="toggle-row" v-for="(label, key) in { myPosts: 'Always store my posts', myUpvotes: 'Store posts I upvoted', myCommunities: 'Store my communities', popularPosts: 'Cache popular posts (100+ upvotes)', autoPruneOldContent: 'Auto-delete old cached content' }" :key="key">
               <div class="toggle-label">{{ label }}</div>
               <label class="toggle-switch">
                 <input type="checkbox" v-model="policy[key]" @change="savePolicy" />
@@ -929,24 +891,24 @@
               </label>
             </div>
             <div class="field-group mt-12">
-              <label class="field-label">Keep recent posts</label>
+              <label class="field-label">{{ $ui("Keep recent posts") }}</label>
               <div class="field-wrap">
-                <select class="field-native" v-model="policy.keepRecentPostCount" @change="savePolicy">
-                  <option :value="25">Last 25</option>
-                  <option :value="50">Last 50</option>
-                  <option :value="100">Last 100</option>
-                  <option :value="250">Last 250</option>
+                <select class="field-native" v-model="policy.recentPosts" @change="savePolicy">
+                  <option :value="25">{{ $ui("Last 25") }}</option>
+                  <option :value="50">{{ $ui("Last 50") }}</option>
+                  <option :value="100">{{ $ui("Last 100") }}</option>
+                  <option :value="250">{{ $ui("Last 250") }}</option>
                 </select>
               </div>
             </div>
             <div class="field-group mt-8">
-              <label class="field-label">Max storage (MB)</label>
+              <label class="field-label">{{ $ui("Max storage (MB)") }}</label>
               <div class="field-wrap">
                 <select class="field-native" v-model="policy.maxStorageMB" @change="savePolicy">
-                  <option :value="50">50 MB</option>
-                  <option :value="100">100 MB</option>
-                  <option :value="250">250 MB</option>
-                  <option :value="500">500 MB</option>
+                  <option :value="50">{{ $ui("50 MB") }}</option>
+                  <option :value="100">{{ $ui("100 MB") }}</option>
+                  <option :value="250">{{ $ui("250 MB") }}</option>
+                  <option :value="500">{{ $ui("500 MB") }}</option>
                 </select>
               </div>
             </div>
@@ -958,26 +920,18 @@
               <div class="card-heading-icon accent-green">
                 <ion-icon :icon="downloadOutline"></ion-icon>
               </div>
-              <div><h3>Backup &amp; Restore</h3><p>Export or import all local data</p></div>
+              <div><h3>{{ $ui("Backup & Restore") }}</h3><p>{{ $ui("Export or import all local data") }}</p></div>
             </div>
             <div class="button-row">
               <button class="pill-btn accent" @click="exportData">
-                <ion-icon :icon="downloadOutline"></ion-icon>
-                Export
-              </button>
+                <ion-icon :icon="downloadOutline"></ion-icon> {{ $ui("Export") }} </button>
               <button class="pill-btn outline" @click="importData">
-                <ion-icon :icon="cloudUploadOutline"></ion-icon>
-                Import
-              </button>
+                <ion-icon :icon="cloudUploadOutline"></ion-icon> {{ $ui("Import") }} </button>
             </div>
             <button class="block-btn outline danger mt-12" @click="pruneOldContent">
-              <ion-icon :icon="trashOutline"></ion-icon>
-              Clean Up Old Content
-            </button>
+              <ion-icon :icon="trashOutline"></ion-icon> {{ $ui("Clean Up Old Content") }} </button>
             <button class="block-btn outline danger mt-8" @click="confirmClearAll">
-              <ion-icon :icon="warningOutline"></ion-icon>
-              Clear All Data
-            </button>
+              <ion-icon :icon="warningOutline"></ion-icon> {{ $ui("Clear All Data") }} </button>
             <input ref="importFileInput" type="file" accept=".json" class="hidden" @change="handleImportFile" />
           </div>
 
@@ -987,15 +941,15 @@
               <div class="card-heading-icon accent-blue">
                 <ion-icon :icon="informationCircleOutline"></ion-icon>
               </div>
-              <div><h3>About this Build</h3></div>
+              <div><h3>{{ $ui("About this Build") }}</h3></div>
             </div>
             <div class="info-table">
               <div class="info-row">
-                <span class="info-key">Build Hash</span>
+                <span class="info-key">{{ $ui("Build Hash") }}</span>
                 <code class="info-val mono-sm">{{ buildHash }}</code>
               </div>
               <div class="info-row">
-                <span class="info-key">Built at</span>
+                <span class="info-key">{{ $ui("Built at") }}</span>
                 <span class="info-val">{{ formatBuildTime }}</span>
               </div>
             </div>
@@ -1010,6 +964,10 @@
 
 
 <style scoped>
+.toggle-switch.theme-toggle { width: 48px; height: 44px; }
+.toggle-switch.theme-toggle input { display: block; position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; z-index: 1; cursor: pointer; }
+.toggle-switch.theme-toggle .toggle-track { top: 10px; bottom: 10px; }
+.toggle-switch.theme-toggle input:focus-visible + .toggle-track { outline: 2px solid var(--app-accent); outline-offset: 3px; }
 /* ── Global resets ──────────────────────────── */
 ion-header::after { display: none !important; }
 ion-toolbar { --border-width: 0 !important; }
@@ -1050,7 +1008,7 @@ ion-content {
   scrollbar-width: none;
   gap: 4px;
   padding: 10px 14px;
-  background: rgba(26, 26, 26, 0.55);
+  background: var(--app-bg-base);
   border-bottom: 1px solid rgba(230, 230, 230, 0.12);
   justify-content: center;
 }
@@ -1083,8 +1041,8 @@ ion-content {
   background: rgba(255,255,255,0.06);
 }
 .settings-tab.active {
-  color: #f0f0f0;
-  background: rgba(230, 230, 230,0.18);
+  color: var(--app-on-accent);
+  background: var(--app-accent);
   border-color: rgba(230, 230, 230,0.35);
 }
 
@@ -1100,8 +1058,8 @@ ion-content {
 /* ── Cards ──────────────────────────────────── */
 .settings-card {
   border-radius: 18px;
-  background: rgba(22, 22, 22, 0.55);
-  border: 1px solid rgba(230, 230, 230, 0.15);
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   padding: 18px 20px;
   position: relative;
   overflow: hidden;
@@ -1110,7 +1068,7 @@ ion-content {
 }
 .settings-card.danger-zone {
   border-color: rgba(239,68,68,0.18);
-  background: rgba(30, 10, 20, 0.55);
+  background: var(--app-surface);
 }
 .settings-card.decentralised-feature {
   border-color: rgba(230, 230, 230,0.30);
@@ -1227,12 +1185,12 @@ ion-content {
 .toggle-switch input { opacity: 0; width: 0; height: 0; }
 .toggle-track {
   position: absolute; inset: 0; border-radius: 999px;
-  background: rgba(255,255,255,0.12);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: var(--app-border-strong);
+  border: 1px solid var(--app-border-strong);
   cursor: pointer;
   transition: background 200ms ease;
 }
-.toggle-switch input:checked + .toggle-track { background: #e6e6e6; border-color: #e6e6e6; }
+.toggle-switch input:checked + .toggle-track { background: var(--app-accent); border-color: var(--app-accent); }
 .toggle-track::after {
   content: ''; position: absolute; top: 3px; left: 3px;
   width: 18px; height: 18px; border-radius: 50%;
@@ -1303,14 +1261,14 @@ select.field-native option { background: #242424; color: #fff; }
 }
 .block-btn.accent {
   background: var(--app-accent);
-  color: #111214; box-shadow: 0 6px 20px rgba(230, 230, 230,0.35);
+  color: var(--app-on-accent); box-shadow: 0 6px 20px rgba(230, 230, 230,0.35);
 }
 .block-btn.outline {
   background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.1);
+  border: 1px solid var(--app-border-strong);
   color: var(--app-text-muted);
 }
-.block-btn.danger { color: #ef4444; border-color: rgba(239,68,68,0.25); }
+.block-btn.danger { color: var(--app-danger); border-color: rgba(239,68,68,0.25); }
 .block-btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
 .block-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -1323,11 +1281,11 @@ select.field-native option { background: #242424; color: #fff; }
 }
 .pill-btn.accent {
   background: var(--app-accent);
-  color: #111214; box-shadow: 0 4px 14px rgba(230, 230, 230,0.35);
+  color: var(--app-on-accent); box-shadow: 0 4px 14px rgba(230, 230, 230,0.35);
 }
 .pill-btn.outline {
   background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.1);
+  border: 1px solid var(--app-border-strong);
   color: var(--app-text-muted);
 }
 .pill-btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
@@ -1341,8 +1299,8 @@ select.field-native option { background: #242424; color: #fff; }
   font-size: 16px; transition: background 160ms ease, color 160ms ease;
 }
 .icon-btn:hover { background: rgba(255,255,255,0.1); color: var(--app-text); }
-.icon-btn.warning { color: #fbbf24; }
-.icon-btn.danger { color: #ef4444; background: rgba(239,68,68,0.1); }
+.icon-btn.warning { color: var(--app-warning); }
+.icon-btn.danger { color: var(--app-danger); background: rgba(239,68,68,0.1); }
 
 .button-row {
   display: flex; flex-wrap: wrap; gap: 8px;
@@ -1368,7 +1326,7 @@ select.field-native option { background: #242424; color: #fff; }
 .seg-pill:hover { color: var(--app-text); }
 .seg-pill.active {
   background: var(--app-accent);
-  color: #111214; box-shadow: 0 2px 10px rgba(230, 230, 230,0.35);
+  color: var(--app-on-accent); box-shadow: 0 2px 10px rgba(230, 230, 230,0.35);
 }
 
 /* ── Keyword chips ──────────────────────────── */
@@ -1378,8 +1336,8 @@ select.field-native option { background: #242424; color: #fff; }
   font-size: 12.5px; font-weight: 600; cursor: pointer;
   transition: opacity 160ms;
 }
-.kw-chip.include { background: rgba(52,211,153,0.12); color: #34d399; border: 1px solid rgba(52,211,153,0.25); }
-.kw-chip.exclude { background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.25); }
+.kw-chip.include { background: rgba(52,211,153,0.12); color: var(--app-success); border: 1px solid rgba(52,211,153,0.25); }
+.kw-chip.exclude { background: rgba(251,191,36,0.12); color: var(--app-warning); border: 1px solid rgba(251,191,36,0.25); }
 .kw-chip:hover { opacity: 0.7; }
 
 /* ── Karma badge ────────────────────────────── */
@@ -1387,7 +1345,7 @@ select.field-native option { background: #242424; color: #fff; }
   padding: 4px 12px; border-radius: 999px;
   background: linear-gradient(135deg, rgba(230, 230, 230,0.15), rgba(230, 230, 230,0.15));
   border: 1px solid rgba(230, 230, 230,0.25);
-  color: #e6e6e6; font-weight: 700; font-size: 13px;
+  color: var(--app-accent); font-weight: 700; font-size: 13px;
 }
 
 /* ── Key block ──────────────────────────────── */
@@ -1406,7 +1364,7 @@ select.field-native option { background: #242424; color: #fff; }
   word-break: break-all; color: var(--app-text);
 }
 .key-val.muted { color: var(--app-text-subtle); }
-.key-val.danger { color: #ef4444; }
+.key-val.danger { color: var(--app-danger); }
 
 /* ── Alert boxes ────────────────────────────── */
 .alert-box {
@@ -1418,14 +1376,14 @@ select.field-native option { background: #242424; color: #fff; }
 .alert-box.info {
   background: rgba(230, 230, 230,0.08);
   border: 1px solid rgba(230, 230, 230,0.2);
-  color: #e6e6e6;
+  color: var(--app-accent);
 }
 .alert-box.warning {
   background: rgba(251,191,36,0.08);
   border: 1px solid rgba(251,191,36,0.2);
-  color: #fbbf24;
+  color: var(--app-warning);
 }
-.link { color: #e6e6e6; text-decoration: none; }
+.link { color: var(--app-accent); text-decoration: none; }
 .link:hover { text-decoration: underline; }
 
 /* ── Status pills / chips ───────────────────── */
@@ -1435,15 +1393,15 @@ select.field-native option { background: #242424; color: #fff; }
   text-transform: uppercase; letter-spacing: 0.06em;
   align-self: flex-start; flex-shrink: 0;
 }
-.pill-ok { background: rgba(52,211,153,0.12); color: #34d399; border: 1px solid rgba(52,211,153,0.25); }
+.pill-ok { background: rgba(52,211,153,0.12); color: var(--app-success); border: 1px solid rgba(52,211,153,0.25); }
 .pill-off { background: rgba(255,255,255,0.06); color: var(--app-text-muted); border: 1px solid rgba(255,255,255,0.09); }
-.pill-warn { background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.2); }
+.pill-warn { background: rgba(251,191,36,0.12); color: var(--app-warning); border: 1px solid rgba(251,191,36,0.2); }
 
 .count-badge {
   padding: 4px 10px; border-radius: 999px;
   background: rgba(230, 230, 230,0.12);
   border: 1px solid rgba(230, 230, 230,0.2);
-  color: #e6e6e6; font-size: 12px; font-weight: 700;
+  color: var(--app-accent); font-size: 12px; font-weight: 700;
   align-self: flex-start; flex-shrink: 0;
 }
 
@@ -1451,15 +1409,15 @@ select.field-native option { background: #242424; color: #fff; }
   padding: 3px 8px; border-radius: 999px;
   font-size: 11px; font-weight: 700;
 }
-.chip-ok { background: rgba(52,211,153,0.12); color: #34d399; }
+.chip-ok { background: rgba(52,211,153,0.12); color: var(--app-success); }
 .chip-off { background: rgba(255,255,255,0.06); color: var(--app-text-muted); }
 
 .status-row {
   display: flex; align-items: flex-start; gap: 8px;
   padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.5;
 }
-.row-ok { background: rgba(52,211,153,0.08); color: #34d399; border: 1px solid rgba(52,211,153,0.2); }
-.row-warn { background: rgba(251,191,36,0.08); color: #fbbf24; border: 1px solid rgba(251,191,36,0.2); }
+.row-ok { background: rgba(52,211,153,0.08); color: var(--app-success); border: 1px solid rgba(52,211,153,0.2); }
+.row-warn { background: rgba(251,191,36,0.08); color: var(--app-warning); border: 1px solid rgba(251,191,36,0.2); }
 .status-row ion-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
 code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0.07); padding: 1px 5px; border-radius: 4px; }
 
@@ -1494,8 +1452,8 @@ code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0
 .bmetric { text-align: center; }
 .bmetric span { display: block; font-size: 20px; font-weight: 800; letter-spacing: -0.03em; color: var(--app-text); }
 .bmetric small { font-size: 10.5px; color: var(--app-text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
-.bmetric.ok span { color: #34d399; }
-.bmetric.danger span { color: #ef4444; }
+.bmetric.ok span { color: var(--app-success); }
+.bmetric.danger span { color: var(--app-danger); }
 
 /* ── Peer health list ───────────────────────── */
 .peer-health-list { display: flex; flex-direction: column; gap: 8px; }
@@ -1531,7 +1489,7 @@ code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0
   padding: 4px 10px; border-radius: 999px;
   background: linear-gradient(135deg, rgba(230, 230, 230,0.2), rgba(230, 230, 230,0.2));
   border: 1px solid rgba(230, 230, 230,0.3);
-  color: #e6e6e6; font-size: 9.5px; font-weight: 800;
+  color: var(--app-accent); font-size: 9.5px; font-weight: 800;
   letter-spacing: 0.1em; text-transform: uppercase;
   margin-bottom: 14px;
 }
@@ -1549,15 +1507,15 @@ code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0
   padding: 3px 8px; border-radius: 999px;
   font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
 }
-.relay-difficulty.easy { background: rgba(52,211,153,0.12); color: #34d399; border: 1px solid rgba(52,211,153,0.25); }
-.relay-difficulty.medium { background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.25); }
+.relay-difficulty.easy { background: rgba(52,211,153,0.12); color: var(--app-success); border: 1px solid rgba(52,211,153,0.25); }
+.relay-difficulty.medium { background: rgba(251,191,36,0.12); color: var(--app-warning); border: 1px solid rgba(251,191,36,0.25); }
 .relay-difficulty.advanced { background: rgba(239,68,68,0.12); color: #f87171; border: 1px solid rgba(239,68,68,0.25); }
 .relay-option-name { font-size: 14px; font-weight: 700; color: var(--app-text); }
 .relay-option-desc { font-size: 13px; color: var(--app-text-muted); line-height: 1.55; margin: 0 0 12px; }
 .code-block {
   font-family: monospace; font-size: 12px;
-  background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
-  padding: 10px 14px; border-radius: 10px; color: #e6e6e6;
+  background: var(--app-item-surface); border: 1px solid var(--app-border-strong);
+  padding: 10px 14px; border-radius: 10px; color: var(--app-accent);
   word-break: break-all;
 }
 
@@ -1567,29 +1525,29 @@ code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0
 }
 .os-tab {
   padding: 4px 12px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
-  border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03);
+  border: 1px solid var(--app-border-strong); background: rgba(255,255,255,0.03);
   color: rgba(255,255,255,0.45); cursor: pointer; transition: all 130ms;
   font-family: inherit;
 }
 .os-tab:hover { color: var(--app-text); background: rgba(255,255,255,0.07); }
-.os-tab.active { background: rgba(230, 230, 230,0.15); border-color: rgba(230, 230, 230,0.4); color: #e6e6e6; }
+.os-tab.active { background: rgba(230, 230, 230,0.15); border-color: rgba(230, 230, 230,0.4); color: var(--app-accent); }
 
 .code-block-copy {
   display: flex; align-items: center; gap: 8px;
-  background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
+  background: var(--app-item-surface); border: 1px solid var(--app-border-strong);
   padding: 10px 14px; border-radius: 10px;
 }
 .code-text {
   flex: 1; font-family: monospace; font-size: 12px;
-  color: #e6e6e6; word-break: break-all;
+  color: var(--app-accent); word-break: break-all;
 }
 .copy-btn {
   flex-shrink: 0; background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.1); border-radius: 6px;
-  color: rgba(255,255,255,0.55); font-size: 14px; cursor: pointer;
+  border: 1px solid var(--app-border-strong); border-radius: 6px;
+  color: var(--app-text-muted); font-size: 14px; cursor: pointer;
   padding: 3px 8px; transition: all 120ms; font-family: inherit;
 }
-.copy-btn:hover { background: rgba(230, 230, 230,0.15); color: #e6e6e6; }
+.copy-btn:hover { background: rgba(230, 230, 230,0.15); color: var(--app-accent); }
 
 /* ── Range rows ─────────────────────────────── */
 .range-row { padding: 6px 0; }
@@ -1608,12 +1566,12 @@ code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0
 .community-id-text { font-size: 11.5px; color: var(--app-text-subtle); margin-top: 2px; }
 .pref-btns { display: flex; gap: 6px; }
 .pref-btn {
-  padding: 5px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.1);
+  padding: 5px 10px; border-radius: 999px; border: 1px solid var(--app-border-strong);
   background: rgba(255,255,255,0.05); color: var(--app-text-muted);
   font-size: 12px; font-weight: 600; cursor: pointer;
   transition: all 160ms ease;
 }
-.pref-btn.active { background: rgba(230, 230, 230,0.15); color: #e6e6e6; border-color: rgba(230, 230, 230,0.3); }
+.pref-btn.active { background: rgba(230, 230, 230,0.15); color: var(--app-accent); border-color: rgba(230, 230, 230,0.3); }
 .pref-btn.mute.active { background: rgba(255,255,255,0.08); color: var(--app-text); border-color: rgba(255,255,255,0.15); }
 
 /* ── Storage ring ───────────────────────────── */
@@ -1645,6 +1603,8 @@ code { font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0
 </style>
 
 <script setup lang="ts">
+import { formatUi, ui } from "../i18n";
+import LanguagePicker from '../components/LanguagePicker.vue';
 import { uncache } from '../utils/uncache';
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
@@ -1660,73 +1620,8 @@ import {
   getEmailNotificationAddress, registerEmailNotifications, unregisterEmailNotifications,
 } from '../native/emailNotifications';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
-import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonContent,
-  IonButtons,
-  IonBackButton,
-  IonCard,
-  IonCardHeader,
-  IonCardTitle,
-  IonCardSubtitle,
-  IonCardContent,
-  IonList,
-  IonItem,
-  IonLabel,
-  IonToggle,
-  IonSelect,
-  IonSelectOption,
-  IonButton,
-  IonIcon,
-  IonBadge,
-  IonSegment,
-  IonSegmentButton,
-  IonRange,
-  IonChip,
-  IonInput,
-  IonSpinner,
-  IonText,
-  alertController,
-  toastController,
-  onIonViewWillEnter
-} from '@ionic/vue';
-import {
-  refreshOutline,
-  downloadOutline,
-  cloudUploadOutline,
-  trashOutline,
-  warningOutline,
-  personCircleOutline,
-  globeOutline,
-  swapHorizontalOutline,
-  serverOutline,
-  copyOutline,
-  eyeOutline,
-  closeCircleOutline,
-  checkmarkCircleOutline,
-  addOutline,
-  lockClosedOutline,
-  shieldCheckmarkOutline
-,
-  rocketOutline,
-  keyOutline,
-  colorPaletteOutline,
-  analyticsOutline,
-  layersOutline,
-  cloudOutline,
-  constructOutline,
-  fingerPrintOutline,
-  addCircleOutline,
-  removeCircleOutline,
-  arrowDownOutline,
-  optionsOutline,
-  informationCircleOutline,
-  chatbubbleOutline,
-  personOutline,
-  notificationsOutline} from 'ionicons/icons';
+import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons, IonIcon, IonRange, alertController, toastController, onIonViewWillEnter } from '@ionic/vue';
+import { peopleOutline, refreshOutline, downloadOutline, cloudUploadOutline, trashOutline, warningOutline, personCircleOutline, globeOutline, swapHorizontalOutline, serverOutline, copyOutline, eyeOutline, lockClosedOutline, shieldCheckmarkOutline, rocketOutline, keyOutline, colorPaletteOutline, analyticsOutline, layersOutline, cloudOutline, constructOutline, fingerPrintOutline, addCircleOutline, removeCircleOutline, arrowDownOutline, optionsOutline, informationCircleOutline, chatbubbleOutline, personOutline, notificationsOutline } from 'ionicons/icons';
 import { PinningService } from '../services/pinningService';
 import { StorageManager } from '../services/storageManager';
 import { UserService } from '../services/userService';
@@ -1744,7 +1639,7 @@ import { BootstrapInviteService, type BootstrapEndpoint } from '../services/boot
 import { useChainStore } from '../stores/chainStore';
 import { useCommunityStore } from '../stores/communityStore';
 import config from '../config';
-import { ModerationService, moderationVersion, MODERATION_API_DEFAULT_BASE_URL, type ModerationSettings, type WordCategory } from '../services/moderationService';
+import { ModerationService, MODERATION_API_DEFAULT_BASE_URL, type ModerationSettings } from '../services/moderationService';
 import { getEnabledVersions, setEnabledVersions, probeForVersions, availableVersions, type DataVersion } from '../utils/dataVersionSettings';
 import { GUN_NAMESPACE } from '../services/gunService';
 import { useFeedPreferences } from '../composables/useFeedPreferences';
@@ -1752,6 +1647,7 @@ import type { FeedMode, FeedRankingWeights } from '../services/feedPreferencesSe
 import { BUILD_HASH, BUILD_TIME } from '../utils/buildHash';
 import UserIdentityBadge from '../components/UserIdentityBadge.vue';
 import { GUN_RELAY_PRESETS, isValidGunUrl, labelForGunUrl, DEFAULT_GUN_PEERS } from '../services/gunRelayPresets';
+import { appTheme, setTheme } from '../services/themeService';
 
 const chainStore = useChainStore();
 const communityStore = useCommunityStore();
@@ -1867,7 +1763,10 @@ const policy = ref({
   autoPruneOldContent: true
 });
 
-const isDarkMode = ref(true);
+const isDarkMode = computed(() => appTheme.value === 'dark');
+function onThemeChange(event: Event) {
+  setTheme((event.target as HTMLInputElement).checked ? 'dark' : 'light');
+}
 const userProfile = ref<any>(null);
 const deviceId = ref('');
 const buildHash = BUILD_HASH;
@@ -1895,12 +1794,7 @@ const feedCommunities = computed(() =>
   [...communityStore.communities].sort((a, b) => a.displayName.localeCompare(b.displayName)),
 );
 
-function versionLabel(ver: string): string {
-  if (ver === currentNamespace) return '(current)';
-  const verNum = parseInt(ver.replace('v', ''), 10);
-  const curNum = parseInt(currentNamespace.replace('v', ''), 10);
-  return verNum > curNum ? '(newer)' : '(legacy)';
-}
+
 
 function initVersionToggles() {
   const enabled = getEnabledVersions();
@@ -1911,13 +1805,7 @@ function initVersionToggles() {
   versionToggles.value = toggles;
 }
 
-function onToggleVersion(ver: string, ev: CustomEvent) {
-  versionToggles.value = {
-    ...versionToggles.value,
-    [ver]: ev.detail.checked,
-  };
-  syncDataVersions();
-}
+
 
 // Called by the plain checkbox in the template: flip this version's flag.
 function toggleVersion(ver: string) {
@@ -1940,14 +1828,14 @@ async function syncDataVersions() {
   versionToggles.value = synced;
 
   const toast = await toastController.create({
-    message: `Showing ${actual.join(' + ')} posts — reload to apply`,
+    message: formatUi("Showing {p0} posts — reload to apply", { p0: actual.join(' + ') }),
     duration: 2000,
     color: 'success',
   });
   await toast.present();
 }
 
-function onFeedModeChange(ev: CustomEvent) {
+function onFeedModeChange(ev: { detail: { value: string } }) {
   const mode = ev.detail.value;
   if (mode === 'latest' || mode === 'for-you') {
     setFeedMode(mode as FeedMode);
@@ -1976,13 +1864,13 @@ function removeFeedExcludeKeyword(keyword: string) {
   removeExcludeKeyword(keyword);
 }
 
-function onFeedPostsToggle(ev: CustomEvent) {
-  const checked = Boolean(ev.detail.checked);
+function onFeedPostsToggle(ev: Event) {
+  const checked = (ev.target as HTMLInputElement).checked;
   setContentTypeVisibility(checked, feedPreferences.value.showPolls);
 }
 
-function onFeedPollsToggle(ev: CustomEvent) {
-  const checked = Boolean(ev.detail.checked);
+function onFeedPollsToggle(ev: Event) {
+  const checked = (ev.target as HTMLInputElement).checked;
   setContentTypeVisibility(feedPreferences.value.showPosts, checked);
 }
 
@@ -2014,12 +1902,12 @@ function toggleFavoriteCommunityPreference(communityId: string) {
 
 async function resetFeedPreferencesToDefaults() {
   const alert = await alertController.create({
-    header: 'Reset feed preferences?',
-    message: 'This will reset keywords, community preferences, and ranking weights.',
+    header: ui("Reset feed preferences?"),
+    message: ui("This will reset keywords, community preferences, and ranking weights."),
     buttons: [
-      { text: 'Cancel', role: 'cancel' },
+      { text: ui("Cancel"), role: 'cancel' },
       {
-        text: 'Reset',
+        text: ui("Reset"),
         role: 'destructive',
         handler: async () => {
           resetFeedPreferences();
@@ -2038,34 +1926,16 @@ async function resetFeedPreferencesToDefaults() {
 
 // Moderation state
 const modSettings = ref<ModerationSettings>(ModerationService.getSettings());
-const newBlockedWord = ref('');
-const newAllowedWord = ref('');
-const testText = ref('');
+
+
+
 const moderationApiKeyInput = ref('');
 const moderationAuthMessage = ref('Not authenticated.');
 const moderationDefaultApiUrl = MODERATION_API_DEFAULT_BASE_URL;
 
-const wordCategories = computed(() => {
-  const list = ModerationService.getDefaultWordList();
-  const cats: { id: WordCategory; label: string; count: number }[] = [
-    { id: 'profanity', label: 'Profanity', count: 0 },
-    { id: 'slurs', label: 'Slurs & hate speech', count: 0 },
-    { id: 'sexual', label: 'Sexual content', count: 0 },
-    { id: 'threats', label: 'Threats & violence', count: 0 },
-    { id: 'spam', label: 'Spam phrases', count: 0 },
-    { id: 'drugs', label: 'Drug references', count: 0 },
-  ];
-  for (const entry of list) {
-    const cat = cats.find(c => c.id === entry.category);
-    if (cat) cat.count++;
-  }
-  return cats;
-});
 
-const testResult = computed(() => {
-  moderationVersion.value; // re-evaluate when settings change
-  return ModerationService.checkContent(testText.value);
-});
+
+
 
 function onKarmaRangeChange(ev: CustomEvent) {
   const val = ev.detail.value as number;
@@ -2090,44 +1960,15 @@ function onModerationProviderChange() {
   saveModerationSettings();
 }
 
-function toggleCategory(catId: WordCategory, ev: CustomEvent) {
-  const enabled = ev.detail.checked;
-  const disabled = [...modSettings.value.disabledCategories];
-  if (enabled) {
-    const idx = disabled.indexOf(catId);
-    if (idx !== -1) disabled.splice(idx, 1);
-  } else {
-    if (!disabled.includes(catId)) disabled.push(catId);
-  }
-  modSettings.value.disabledCategories = disabled;
-  saveModerationSettings();
-}
 
-function addCustomBlocked() {
-  const w = newBlockedWord.value.trim().toLowerCase();
-  if (!w || modSettings.value.customBlockedWords.includes(w)) return;
-  modSettings.value.customBlockedWords.push(w);
-  newBlockedWord.value = '';
-  saveModerationSettings();
-}
 
-function removeCustomBlocked(w: string) {
-  modSettings.value.customBlockedWords = modSettings.value.customBlockedWords.filter(x => x !== w);
-  saveModerationSettings();
-}
 
-function addCustomAllowed() {
-  const w = newAllowedWord.value.trim().toLowerCase();
-  if (!w || modSettings.value.customAllowedWords.includes(w)) return;
-  modSettings.value.customAllowedWords.push(w);
-  newAllowedWord.value = '';
-  saveModerationSettings();
-}
 
-function removeCustomAllowed(w: string) {
-  modSettings.value.customAllowedWords = modSettings.value.customAllowedWords.filter(x => x !== w);
-  saveModerationSettings();
-}
+
+
+
+
+
 
 async function resetModerationDefaults() {
   const defaults = ModerationService.getDefaultSettings();
@@ -2136,7 +1977,7 @@ async function resetModerationDefaults() {
   moderationApiKeyInput.value = '';
   moderationAuthMessage.value = 'Not authenticated.';
   const toast = await toastController.create({
-    message: 'Moderation settings reset to defaults',
+    message: ui("Moderation settings reset to defaults"),
     duration: 1500,
     color: 'success'
   });
@@ -2164,7 +2005,7 @@ async function clearModerationApiAuth() {
   moderationApiKeyInput.value = '';
   moderationAuthMessage.value = 'Not authenticated.';
   const toast = await toastController.create({
-    message: 'Moderation API authentication cleared',
+    message: ui("Moderation API authentication cleared"),
     duration: 1800,
     color: 'success',
   });
@@ -2190,33 +2031,16 @@ const networkStatus = ref({
   chainValid: true
 });
 
-const connectionStatusClass = computed(() => {
-  if (networkStatus.value.wsConnected && networkStatus.value.gunConnected) return 'connected';
-  if (networkStatus.value.wsConnected || networkStatus.value.gunConnected) return 'partial';
-  return '';
-});
 
-const connectionStatusLabel = computed(() => {
-  if (networkStatus.value.wsConnected && networkStatus.value.gunConnected) {
-    const gunPeers = networkStatus.value.gunConnectedCount || networkStatus.value.gunPeerCount;
-    const latency = networkStatus.value.gunAvgLatencyMs;
-    const latencyStr = latency ? ` · ${latency}ms` : '';
-    return `Connected · ${gunPeers} DB peer${gunPeers !== 1 ? 's' : ''}${latencyStr}`;
-  }
-  if (networkStatus.value.wsConnected) return 'WS Only';
-  if (networkStatus.value.gunConnected) {
-    const gunPeers = networkStatus.value.gunConnectedCount || networkStatus.value.gunPeerCount;
-    return `DB Only · ${gunPeers} peer${gunPeers !== 1 ? 's' : ''}`;
-  }
-  return 'Disconnected';
-});
+
+
 
 const peerList = ref<Array<{ peerId: string; relayUrl: string; gunPeers: string[]; joinedAt: number }>>([]);
 const myPeerId = ref('');
 const knownServers = ref<KnownServer[]>([]);
-const bootstrapInviteInput = ref('');
+
 const generatedBootstrapInvite = ref('');
-const bootstrapImporting = ref(false);
+
 const bootstrapDiscovering = ref(false);
 
 // Gun multi-relay peers management
@@ -2235,13 +2059,13 @@ function refreshGunPeers() {
 async function addGunPeer(url: string) {
   const trimmed = url.trim();
   if (!isValidGunUrl(trimmed)) {
-    const toast = await toastController.create({ message: 'Invalid Gun relay URL', duration: 2000, color: 'warning' });
+    const toast = await toastController.create({ message: ui("Invalid Gun relay URL"), duration: 2000, color: 'warning' });
     await toast.present();
     return;
   }
   const current = config.getGunPeers();
   if (current.includes(trimmed)) {
-    const toast = await toastController.create({ message: 'Relay already in list', duration: 1800, color: 'medium' });
+    const toast = await toastController.create({ message: ui("Relay already in list"), duration: 1800, color: 'medium' });
     await toast.present();
     return;
   }
@@ -2249,14 +2073,14 @@ async function addGunPeer(url: string) {
   config.setGunPeers(updated);
   GunService.addPeerDynamic(trimmed);
   refreshGunPeers();
-  const toast = await toastController.create({ message: `Added ${labelForGunUrl(trimmed)}`, duration: 2000, color: 'success' });
+  const toast = await toastController.create({ message: formatUi("Added {p0}", { p0: labelForGunUrl(trimmed) }), duration: 2000, color: 'success' });
   await toast.present();
 }
 
 async function removeGunPeer(url: string) {
   const current = config.getGunPeers();
   if (current.length <= 1) {
-    const toast = await toastController.create({ message: 'Cannot remove last Gun relay', duration: 2000, color: 'warning' });
+    const toast = await toastController.create({ message: ui("Cannot remove last Gun relay"), duration: 2000, color: 'warning' });
     await toast.present();
     return;
   }
@@ -2264,7 +2088,7 @@ async function removeGunPeer(url: string) {
   config.setGunPeers(updated);
   GunService.reconnect(updated);
   refreshGunPeers();
-  const toast = await toastController.create({ message: 'Relay removed', duration: 1600, color: 'medium' });
+  const toast = await toastController.create({ message: ui("Relay removed"), duration: 1600, color: 'medium' });
   await toast.present();
 }
 
@@ -2283,7 +2107,7 @@ async function resetGunPeersToDefaults() {
   config.resetGunPeers();
   GunService.reconnect(DEFAULT_GUN_PEERS);
   refreshGunPeers();
-  const toast = await toastController.create({ message: 'Gun peers reset to defaults', duration: 2000, color: 'success' });
+  const toast = await toastController.create({ message: ui("Gun peers reset to defaults"), duration: 2000, color: 'success' });
   await toast.present();
 }
 
@@ -2304,14 +2128,14 @@ const vpsOs   = ref('Linux (bash)');
 const copied  = ref<'home' | 'vps' | 'tab' | null>(null);
 
 const HOME_CMDS: Record<string, string> = {
-  'Linux / Pi': 'curl -sSL https://interpoll.endless.sbs/install.sh | bash',
-  'macOS':      'curl -sSL https://interpoll.endless.sbs/install.sh | bash',
-  'Windows':    "irm https://interpoll.endless.sbs/install.ps1 | iex",
+  'Linux / Pi': 'curl -sSL https://interpoll.endless.social/install.sh | bash',
+  'macOS':      'curl -sSL https://interpoll.endless.social/install.sh | bash',
+  'Windows':    "irm https://interpoll.endless.social/install.ps1 | iex",
 };
 // vps.sh runs on the (Linux) server either way; the tab only reflects the shell you SSH from.
 const VPS_CMDS: Record<string, string> = {
-  'Linux (bash)': 'curl -sSL https://interpoll.endless.sbs/vps.sh | sudo bash -s yourdomain.com',
-  'macOS (zsh)':  'curl -sSL https://interpoll.endless.sbs/vps.sh | sudo bash -s yourdomain.com',
+  'Linux (bash)': 'curl -sSL https://interpoll.endless.social/vps.sh | sudo bash -s yourdomain.com',
+  'macOS (zsh)':  'curl -sSL https://interpoll.endless.social/vps.sh | sudo bash -s yourdomain.com',
 };
 const homeCmd = computed(() => HOME_CMDS[homeOs.value] ?? HOME_CMDS['Linux / Pi']);
 const vpsCmd  = computed(() => VPS_CMDS[vpsOs.value]  ?? VPS_CMDS['Linux (bash)']);
@@ -2409,7 +2233,7 @@ async function onAnonymityToggle() {
     MeshService.initialize();
     torStatus.value = { checked: false, isTor: null, note: '' };
     const toast = await toastController.create({
-      message: 'Anonymity Mode off — peer mesh re-enabled.',
+      message: ui("Anonymity Mode off — peer mesh re-enabled."),
       duration: 2500,
       color: 'medium',
     });
@@ -2466,13 +2290,9 @@ const fullDeviceId = computed(() => {
   return deviceId.value || '';
 });
 
-function isConfiguredServer(wsUrl: string): boolean {
-  return config.relay.websocket === wsUrl;
-}
 
-function isCurrentlyConnectedServer(wsUrl: string): boolean {
-  return networkStatus.value.wsConnected && networkStatus.value.connectedWsUrl === wsUrl;
-}
+
+
 
 function shortenUrl(url: string): string {
   try {
@@ -2483,14 +2303,7 @@ function shortenUrl(url: string): string {
   }
 }
 
-function escapeHtml(value: string): string {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+
 
 function endpointToKnownServer(
   endpoint: BootstrapEndpoint,
@@ -2527,15 +2340,7 @@ function seedRelayList(endpoint: BootstrapEndpoint): void {
   });
 }
 
-function uniqueBootstrapEndpoints(endpoints: Array<BootstrapEndpoint | undefined>): BootstrapEndpoint[] {
-  const deduped = new Map<string, BootstrapEndpoint>();
-  for (const endpoint of endpoints) {
-    if (!endpoint) continue;
-    const key = `${endpoint.websocket}|${endpoint.gun}|${endpoint.api}`;
-    if (!deduped.has(key)) deduped.set(key, endpoint);
-  }
-  return Array.from(deduped.values());
-}
+
 
 function estimateLocalPostCount(): number {
   try {
@@ -2613,14 +2418,14 @@ async function copyGeneratedBootstrapInvite() {
   try {
     await navigator.clipboard.writeText(generatedBootstrapInvite.value);
     const toast = await toastController.create({
-      message: 'Bootstrap invite copied',
+      message: ui("Bootstrap invite copied"),
       duration: 1600,
       color: 'success',
     });
     await toast.present();
   } catch {
     const toast = await toastController.create({
-      message: 'Clipboard unavailable',
+      message: ui("Clipboard unavailable"),
       duration: 2000,
       color: 'warning',
     });
@@ -2637,136 +2442,7 @@ async function seedCandidate(
   if (options.refresh !== false) refreshNetwork();
 }
 
-async function importBootstrapInvite() {
-  bootstrapImporting.value = true;
-  try {
-    const artifact = BootstrapInviteService.parseInvite(bootstrapInviteInput.value);
-    const candidateEndpoints = uniqueBootstrapEndpoints([
-      artifact.handoff?.connectedServer,
-      artifact.endpoint,
-    ]);
-    if (candidateEndpoints.length === 0) {
-      throw new Error('Bootstrap invite does not contain any valid endpoint');
-    }
 
-    const validatedCandidates = candidateEndpoints.map((endpoint) => ({
-      endpoint,
-      validation: BootstrapInviteService.validateEndpoint(endpoint),
-    }));
-    const validCandidateEndpoints = validatedCandidates
-      .filter((entry) => entry.validation.valid)
-      .map((entry) => entry.endpoint);
-    if (validCandidateEndpoints.length === 0) {
-      const firstInvalidReason = validatedCandidates.find((entry) => !entry.validation.valid)?.validation.errors[0];
-      throw new Error(firstInvalidReason || 'Bootstrap invite endpoints are invalid');
-    }
-    const candidateProbeResults = await Promise.all(
-      validCandidateEndpoints.map(async (endpoint) => ({
-        endpoint,
-        probe: await probeCandidate(endpoint),
-      })),
-    );
-    const selectedProbeResult = candidateProbeResults.find((result) => result.probe.overall === 'online')
-      ?? candidateProbeResults.find((result) => result.probe.overall === 'degraded')
-      ?? candidateProbeResults[0];
-    const primaryEndpoint = selectedProbeResult.endpoint;
-    const probe = selectedProbeResult.probe;
-    const switchDisabled = probe.overall === 'offline';
-    const hasSignatureMetadata = Boolean(artifact.signature?.alg && artifact.signature?.sig);
-    const signatureLabel = hasSignatureMetadata ? 'present' : 'none';
-    const sourcePeerLabel = escapeHtml(artifact.handoff?.sourcePeerId || artifact.meta?.createdBy || 'unknown');
-    const status = artifact.handoff?.status;
-    const connectedServerLabel = escapeHtml(artifact.handoff?.connectedServer?.websocket || artifact.endpoint.websocket);
-    const message = [
-      `Probe: ${probe.overall}`,
-      `WS: ${probe.ws.reachable ? 'ok' : 'fail'} · Gun: ${probe.gun.reachable ? 'ok' : 'fail'} · API: ${probe.api.reachable ? 'ok' : 'fail'}`,
-      `Signature metadata: ${signatureLabel}`,
-      `From peer: ${sourcePeerLabel}`,
-      `Connected server: ${connectedServerLabel}`,
-      ...(status
-        ? [`Shared status: posts ${status.postCount} · polls ${status.pollCount} · chain ${status.blockHeight} · peers ${status.peerCount}`]
-        : []),
-      'Choose how to proceed:',
-    ].join('\n');
-
-    const alert = await alertController.create({
-      header: 'Bootstrap invite imported',
-      message,
-      buttons: [
-        { text: 'Cancel', role: 'cancel' },
-        {
-          text: 'Seed only',
-          handler: async () => {
-            try {
-              for (const endpoint of validCandidateEndpoints) {
-                await seedCandidate(endpoint, {
-                  addedBy: 'bootstrap-invite',
-                  source: 'local',
-                  signatureValid: false,
-                  refresh: false,
-                });
-              }
-              refreshNetwork();
-              const toast = await toastController.create({
-                message: `Seeded ${validCandidateEndpoints.length} endpoint(s) from invite`,
-                duration: 2000,
-                color: 'success',
-              });
-              await toast.present();
-              return true;
-            } catch (e) {
-              const toast = await toastController.create({
-                message: e instanceof Error ? e.message : 'Seeding failed',
-                duration: 2200,
-                color: 'danger',
-              });
-              await toast.present();
-              return false;
-            }
-          },
-        },
-        ...(!switchDisabled
-          ? [{
-              text: 'Seed + Switch',
-              handler: async () => {
-                try {
-                  for (const endpoint of validCandidateEndpoints) {
-                    await seedCandidate(endpoint, {
-                      addedBy: 'bootstrap-invite',
-                      source: 'local',
-                      signatureValid: false,
-                      refresh: false,
-                    });
-                  }
-                  await applyRelayCandidate(primaryEndpoint, false);
-                } catch (e) {
-                  const toast = await toastController.create({
-                    message: e instanceof Error ? e.message : 'Switch failed',
-                    duration: 2200,
-                    color: 'danger',
-                  });
-                  await toast.present();
-                  return false;
-                }
-                return true;
-              },
-            }]
-          : []),
-      ],
-    });
-    await alert.present();
-    await alert.onDidDismiss();
-  } catch (error) {
-    const toast = await toastController.create({
-      message: error instanceof Error ? error.message : 'Invite import failed',
-      duration: 2500,
-      color: 'danger',
-    });
-    await toast.present();
-  } finally {
-    bootstrapImporting.value = false;
-  }
-}
 
 async function discoverBootstrapFromGun() {
   bootstrapDiscovering.value = true;
@@ -2774,7 +2450,7 @@ async function discoverBootstrapFromGun() {
     const discovered = await BootstrapInviteService.discoverFromGun();
     if (discovered.length === 0) {
       const toast = await toastController.create({
-        message: 'No Gun bootstrap endpoints discovered',
+        message: ui("No Gun bootstrap endpoints discovered"),
         duration: 2200,
       });
       await toast.present();
@@ -2791,7 +2467,7 @@ async function discoverBootstrapFromGun() {
     }
     refreshNetwork();
     const toast = await toastController.create({
-      message: `Discovered and seeded ${discovered.length} endpoint(s) from Gun`,
+      message: formatUi("Discovered and seeded {p0} endpoint(s) from Gun", { p0: discovered.length }),
       duration: 2400,
       color: 'success',
     });
@@ -2825,7 +2501,7 @@ async function applyRelayCandidate(endpoint: BootstrapEndpoint, requireProbe = t
     const proceed = probe.overall !== 'offline';
     if (!proceed) {
       const toast = await toastController.create({
-        message: 'Candidate endpoints are offline. Switch aborted.',
+        message: ui("Candidate endpoints are offline. Switch aborted."),
         duration: 2400,
         color: 'danger',
       });
@@ -2887,7 +2563,7 @@ async function applyRelayConfig() {
 
   if (!endpoint.websocket || !endpoint.gun || !endpoint.api) {
     const toast = await toastController.create({
-      message: 'All relay fields are required',
+      message: ui("All relay fields are required"),
       duration: 2000,
       color: 'warning',
     });
@@ -2905,7 +2581,7 @@ async function applyRelayConfig() {
     refresh: false,
   });
   const toast = await toastController.create({
-    message: 'Relay configuration updated, reconnecting...',
+    message: ui("Relay configuration updated, reconnecting..."),
     duration: 2000,
     color: 'success',
   });
@@ -2926,7 +2602,7 @@ async function resetRelayConfig() {
   GunService.reconnect();
 
   const toast = await toastController.create({
-    message: 'Relay reset to defaults, reconnecting...',
+    message: ui("Relay reset to defaults, reconnecting..."),
     duration: 2000,
     color: 'success'
   });
@@ -2935,73 +2611,7 @@ async function resetRelayConfig() {
   refreshNetwork();
 }
 
-async function probeAndSwitchToServer(server: KnownServer) {
-  const endpoint: BootstrapEndpoint = {
-    websocket: server.websocket,
-    gun: server.gun,
-    api: server.api,
-    label: shortenUrl(server.websocket),
-  };
-  let probe: Awaited<ReturnType<typeof probeCandidate>>;
-  try {
-    probe = await probeCandidate(endpoint);
-  } catch (error) {
-    const toast = await toastController.create({
-      message: error instanceof Error ? error.message : 'Probe failed',
-      duration: 2200,
-      color: 'danger',
-    });
-    await toast.present();
-    return;
-  }
 
-  if (probe.overall === 'offline') {
-    const toast = await toastController.create({
-      message: 'Candidate endpoints are offline. Switch blocked.',
-      duration: 2400,
-      color: 'danger',
-    });
-    await toast.present();
-    return;
-  }
-
-  const alert = await alertController.create({
-    header: `Switch to ${escapeHtml(shortenUrl(server.websocket))}?`,
-    message: [
-      `Probe: ${probe.overall}`,
-      `WS: ${probe.ws.reachable ? 'ok' : 'fail'} · Gun: ${probe.gun.reachable ? 'ok' : 'fail'} · API: ${probe.api.reachable ? 'ok' : 'fail'}`,
-      'You must confirm before switching.',
-    ].join('\n'),
-    buttons: [
-      { text: 'Cancel', role: 'cancel' },
-      {
-        text: 'Switch',
-        handler: async () => {
-          try {
-            const applied = await applyRelayCandidate(endpoint, false);
-            if (!applied) return false;
-            const toast = await toastController.create({
-              message: `Switching to ${shortenUrl(server.websocket)}...`,
-              duration: 2000,
-              color: 'success',
-            });
-            await toast.present();
-          } catch (e) {
-            const toast = await toastController.create({
-              message: e instanceof Error ? e.message : 'Switch failed',
-              duration: 2200,
-              color: 'danger',
-            });
-            await toast.present();
-            return false;
-          }
-          return true;
-        },
-      },
-    ],
-  });
-  await alert.present();
-}
 
 function formatPeerTime(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -3012,14 +2622,7 @@ function formatPeerTime(timestamp: number): string {
   return `${hours}h ago`;
 }
 
-function formatServerTtl(server: KnownServer): string {
-  if (typeof server.expiresAt !== 'number') return 'TTL n/a';
-  const expiresAt = server.expiresAt;
-  const msLeft = expiresAt - Date.now();
-  if (msLeft <= 0) return 'expired';
-  const minutesLeft = Math.ceil(msLeft / 60_000);
-  return `TTL ${minutesLeft}m`;
-}
+
 
 async function revealPrivateKey() {
   const keyPair = await KeyService.getKeyPair();
@@ -3031,7 +2634,7 @@ async function copyPublicKey() {
   try {
     await navigator.clipboard.writeText(publicKeyHex.value);
     const toast = await toastController.create({
-      message: 'Public key copied',
+      message: ui("Public key copied"),
       duration: 1500,
       color: 'success',
     });
@@ -3043,7 +2646,7 @@ async function copyPrivateKey() {
   try {
     await navigator.clipboard.writeText(privateKeyHex.value);
     const toast = await toastController.create({
-      message: 'Private key copied — keep it safe!',
+      message: ui("Private key copied — keep it safe!"),
       duration: 2000,
       color: 'warning',
     });
@@ -3083,18 +2686,6 @@ onMounted(async () => {
     // Key generation failed silently
   }
 
-  // Reflect the actual stored theme — dark/glass is the default.
-  const storedTheme = localStorage.getItem('theme');
-  const prefersDark = storedTheme !== 'light';
-  isDarkMode.value = prefersDark;
-  if (prefersDark) {
-    document.documentElement.classList.add('dark');
-    document.body.classList.add('dark');
-    if (!storedTheme) localStorage.setItem('theme', 'dark');
-  } else {
-    document.documentElement.classList.remove('dark');
-    document.body.classList.remove('dark');
-  }
 
   // Load moderation settings (may have migrated legacy minUserKarma)
   modSettings.value = ModerationService.getSettings();
@@ -3126,26 +2717,14 @@ const savePolicy = async () => {
   await PinningService.setPolicy(policy.value);
 
   const toast = await toastController.create({
-    message: 'Policy saved',
+    message: ui("Policy saved"),
     duration: 1500,
     color: 'success'
   });
   await toast.present();
 };
 
-const toggleDarkMode = () => {
-  // isDarkMode.value is already updated by the v-model before this fires,
-  // so true = user just switched TO dark, false = user just switched TO light.
-  if (isDarkMode.value) {
-    document.documentElement.classList.add('dark');
-    document.body.classList.add('dark');
-    localStorage.setItem('theme', 'dark');
-  } else {
-    document.documentElement.classList.remove('dark');
-    document.body.classList.remove('dark');
-    localStorage.setItem('theme', 'light');
-  }
-};
+
 
 const exportData = async () => {
   try {
@@ -3159,14 +2738,14 @@ const exportData = async () => {
     URL.revokeObjectURL(url);
 
     const toast = await toastController.create({
-      message: 'Data exported successfully',
+      message: ui("Data exported successfully"),
       duration: 2000,
       color: 'success'
     });
     await toast.present();
   } catch (_error) {
     const toast = await toastController.create({
-      message: 'Export failed',
+      message: ui("Export failed"),
       duration: 2000,
       color: 'danger'
     });
@@ -3191,7 +2770,7 @@ const handleImportFile = async (event: Event) => {
     await StorageManager.importData(data);
 
     const toast = await toastController.create({
-      message: 'Data imported successfully',
+      message: ui("Data imported successfully"),
       duration: 2000,
       color: 'success'
     });
@@ -3200,7 +2779,7 @@ const handleImportFile = async (event: Event) => {
     await refreshStorageStats();
   } catch (_error) {
     const toast = await toastController.create({
-      message: 'Import failed',
+      message: ui("Import failed"),
       duration: 2000,
       color: 'danger'
     });
@@ -3212,12 +2791,12 @@ const handleImportFile = async (event: Event) => {
 
 const pruneOldContent = async () => {
   const alert = await alertController.create({
-    header: 'Clean Up Storage',
-    message: 'This will remove old cached content. Your posts and important data will be kept.',
+    header: ui("Clean Up Storage"),
+    message: ui("This will remove old cached content. Your posts and important data will be kept."),
     buttons: [
-      { text: 'Cancel', role: 'cancel' },
+      { text: ui("Cancel"), role: 'cancel' },
       {
-        text: 'Clean Up',
+        text: ui("Clean Up"),
         handler: async () => {
           const result = await StorageManager.pruneOldData();
 
@@ -3239,12 +2818,12 @@ const pruneOldContent = async () => {
 
 const confirmClearAll = async () => {
   const alert = await alertController.create({
-    header: 'Clear All Data',
-    message: 'This will delete EVERYTHING from local storage. This cannot be undone!',
+    header: ui("Clear All Data"),
+    message: ui("This will delete EVERYTHING from local storage. This cannot be undone!"),
     buttons: [
-      { text: 'Cancel', role: 'cancel' },
+      { text: ui("Cancel"), role: 'cancel' },
       {
-        text: 'Clear All',
+        text: ui("Clear All"),
         role: 'destructive',
         handler: async () => {
           await StorageManager.clearAll();

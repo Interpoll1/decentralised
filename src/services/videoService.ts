@@ -628,9 +628,7 @@ function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<R
   return fetch(url, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(timer));
 }
 
-function dataUrlToBlob(dataUrl: string): Promise<Blob> {
-  return fetch(dataUrl).then(r => r.blob());
-}
+
 
 function uploadWithProgress(
   url: string,

@@ -1,21 +1,15 @@
 <template>
   <form class="rn" @submit.prevent="submit">
-    <p class="rn-note">
-      Lost your key? Enter your username and the <b>name recovery phrase</b> you saved when you set up recovery
-      (not your identity phrase). The name moves to this device after a waiting period, and the current holder can cancel it.
-    </p>
-    <label class="rn-label" for="rn-name">Username</label>
-    <input id="rn-name" v-model="username" class="rn-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="your-name" />
-    <label class="rn-label" for="rn-phrase">Name recovery phrase (24 words)</label>
-    <textarea id="rn-phrase" v-model="phrase" class="rn-input" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="word1 word2 word3 …" />
-    <p class="rn-count" :class="{ ok: wordCount === 24 }">{{ wordCount }} / 24 words</p>
+    <p class="rn-note"> {{ $ui("Lost your key? Enter your username and the") }} <b>{{ $ui("name recovery phrase") }}</b> {{ $ui("you saved when you set up recovery (not your identity phrase). The name moves to this device after a waiting period, and the current holder can cancel it.") }} </p>
+    <label class="rn-label" for="rn-name">{{ $ui("Username") }}</label>
+    <input id="rn-name" v-model="username" class="rn-input" autocomplete="off" autocapitalize="off" spellcheck="false" :placeholder="$ui('your-name')" />
+    <label class="rn-label" for="rn-phrase">{{ $ui("Name recovery phrase (24 words)") }}</label>
+    <textarea id="rn-phrase" v-model="phrase" class="rn-input" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" :placeholder="$ui('word1 word2 word3 …')" />
+    <p class="rn-count" :class="{ ok: wordCount === 24 }">{{ wordCount }} {{ $ui("/ 24 words") }}</p>
     <p v-if="error" class="rn-error">{{ error }}</p>
-    <p v-if="done" class="rn-ok">
-      Recovery started. {{ done.days }} {{ done.days === 1 ? 'day' : 'days' }} until <b>{{ username.trim().toLowerCase() }}</b> moves to this device.
-      The current holder can cancel it until then.
-    </p>
+    <p v-if="done" class="rn-ok"> {{ $ui("Recovery started.") }} {{ done.days }} {{ done.days === 1 ? 'day' : 'days' }} {{ $ui("until") }} <b>{{ username.trim().toLowerCase() }}</b> {{ $ui("moves to this device. The current holder can cancel it until then.") }} </p>
     <button class="rn-btn" type="submit" :disabled="busy || !username.trim() || wordCount !== 24 || !!done">
-      {{ busy ? 'Starting…' : 'Start recovery' }}
+      {{ busy ? $ui("Starting…") : $ui("Start recovery") }}
     </button>
   </form>
 </template>
@@ -50,14 +44,14 @@ async function submit() {
 
 <style scoped>
 .rn { display: flex; flex-direction: column; gap: 10px; font-family: 'Inter', system-ui, sans-serif; }
-.rn-note { margin: 0; font-size: 13.5px; line-height: 1.5; color: #b4bbb4; }
-.rn-label { font-size: 13.5px; color: #b4bbb4; }
-.rn-input { width: 100%; box-sizing: border-box; padding: 10px 12px; font: 14px var(--font-mono, monospace); color: #fff; background: #000; border: 1px solid #1d231d; border-radius: 6px; outline: none; resize: vertical; }
-.rn-input:focus { border-color: #3dff7a; }
-.rn-count { margin: 0; font-size: 12.5px; color: #8c948c; }
-.rn-count.ok { color: #3dff7a; }
-.rn-error { margin: 0; font-size: 13.5px; color: #ff8a8a; }
-.rn-ok { margin: 0; font-size: 13.5px; line-height: 1.5; color: #3dff7a; }
-.rn-btn { align-self: flex-start; font: inherit; font-size: 14px; font-weight: 500; padding: 9px 16px; border-radius: 6px; cursor: pointer; background: #3dff7a; color: #000; border: 1px solid #3dff7a; }
+.rn-note { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--app-text-muted); }
+.rn-label { font-size: 13.5px; color: var(--app-text-muted); }
+.rn-input { width: 100%; box-sizing: border-box; padding: 10px 12px; font: 14px var(--font-mono, monospace); color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 6px; outline: none; resize: vertical; }
+.rn-input:focus { border-color: var(--app-accent); }
+.rn-count { margin: 0; font-size: 12.5px; color: var(--app-text-muted); }
+.rn-count.ok { color: var(--app-accent); }
+.rn-error { margin: 0; font-size: 13.5px; color: var(--app-danger); }
+.rn-ok { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--app-accent); }
+.rn-btn { align-self: flex-start; font: inherit; font-size: 14px; font-weight: 500; padding: 9px 16px; border-radius: 6px; cursor: pointer; background: var(--app-accent); color: var(--app-on-accent); border: 1px solid var(--app-accent); }
 .rn-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 </style>

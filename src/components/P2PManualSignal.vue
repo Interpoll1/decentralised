@@ -1,50 +1,40 @@
 <template>
   <div>
     <div class="flex items-center justify-between mb-2">
-      <ion-toggle v-model="meshEnabled">Peer-to-peer mesh</ion-toggle>
+      <ion-toggle v-model="meshEnabled">{{ $ui("Peer-to-peer mesh") }}</ion-toggle>
       <ion-badge :color="peerCount > 0 ? 'success' : 'medium'">
-        {{ peerCount }} peer{{ peerCount === 1 ? '' : 's' }}
+        {{ peerCount }} {{ $ui("peer") }}{{ peerCount === 1 ? '' : 's' }}
       </ion-badge>
     </div>
-    <p class="text-xs opacity-60 mb-3">
-      Connects you directly to other users so polls, posts and votes keep syncing even when
-      the WebSocket and GunDB relays are unreachable. Connections form automatically while a
-      relay is up; use manual exchange below for a total blackout.
-    </p>
+    <p class="text-xs opacity-60 mb-3"> {{ $ui("Connects you directly to other users so polls, posts and votes keep syncing even when the WebSocket and GunDB relays are unreachable. Connections form automatically while a relay is up; use manual exchange below for a total blackout.") }} </p>
 
     <div class="manual-signal glass-inset p-3">
-      <h4 class="font-semibold mb-2 text-sm">Manual connection (offline)</h4>
+      <h4 class="font-semibold mb-2 text-sm">{{ $ui("Manual connection (offline)") }}</h4>
 
       <!-- Step A: start an offer -->
-      <ion-button size="small" fill="outline" :disabled="busy" @click="startOffer">
-        1 · Create invite
-      </ion-button>
-      <ion-button size="small" fill="clear" :disabled="busy" @click="reset">Reset</ion-button>
+      <ion-button size="small" fill="outline" :disabled="busy" @click="startOffer"> {{ $ui("1 · Create invite") }} </ion-button>
+      <ion-button size="small" fill="clear" :disabled="busy" @click="reset">{{ $ui("Reset") }}</ion-button>
 
       <template v-if="offerText">
-        <p class="text-xs opacity-70 mt-2">Send this invite to your peer:</p>
+        <p class="text-xs opacity-70 mt-2">{{ $ui("Send this invite to your peer:") }}</p>
         <textarea class="signal-box" readonly :value="offerText"></textarea>
-        <ion-button size="small" fill="outline" @click="copy(offerText)">Copy invite</ion-button>
+        <ion-button size="small" fill="outline" @click="copy(offerText)">{{ $ui("Copy invite") }}</ion-button>
 
-        <p class="text-xs opacity-70 mt-3">Paste their reply here, then complete:</p>
-        <textarea class="signal-box" v-model="answerInput" placeholder="Paste reply bundle…"></textarea>
-        <ion-button size="small" color="success" :disabled="busy || !answerInput" @click="completeOffer">
-          3 · Complete connection
-        </ion-button>
+        <p class="text-xs opacity-70 mt-3">{{ $ui("Paste their reply here, then complete:") }}</p>
+        <textarea class="signal-box" v-model="answerInput" :placeholder="$ui('Paste reply bundle…')"></textarea>
+        <ion-button size="small" color="success" :disabled="busy || !answerInput" @click="completeOffer"> {{ $ui("3 · Complete connection") }} </ion-button>
       </template>
 
       <!-- Step B: respond to an offer -->
       <div class="mt-4 pt-3 border-t border-gray-600/30">
-        <p class="text-xs opacity-70">Received an invite instead? Paste it to generate a reply:</p>
-        <textarea class="signal-box" v-model="incomingOffer" placeholder="Paste invite bundle…"></textarea>
-        <ion-button size="small" fill="outline" :disabled="busy || !incomingOffer" @click="generateAnswer">
-          2 · Generate reply
-        </ion-button>
+        <p class="text-xs opacity-70">{{ $ui("Received an invite instead? Paste it to generate a reply:") }}</p>
+        <textarea class="signal-box" v-model="incomingOffer" :placeholder="$ui('Paste invite bundle…')"></textarea>
+        <ion-button size="small" fill="outline" :disabled="busy || !incomingOffer" @click="generateAnswer"> {{ $ui("2 · Generate reply") }} </ion-button>
 
         <template v-if="generatedAnswer">
-          <p class="text-xs opacity-70 mt-2">Send this reply back to them:</p>
+          <p class="text-xs opacity-70 mt-2">{{ $ui("Send this reply back to them:") }}</p>
           <textarea class="signal-box" readonly :value="generatedAnswer"></textarea>
-          <ion-button size="small" fill="outline" @click="copy(generatedAnswer)">Copy reply</ion-button>
+          <ion-button size="small" fill="outline" @click="copy(generatedAnswer)">{{ $ui("Copy reply") }}</ion-button>
         </template>
       </div>
 

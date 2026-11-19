@@ -2,8 +2,9 @@ import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { ChainBlock, Receipt, Vote, ChainPollSnapshot } from '../types/chain';
 import type { StoredEncryptionKey } from '../types/encryption';
 import type { StoredComment, StoredChatMessage } from '../types/social';
+import type { OutboxEntry } from '../types/outbox';
 
-interface VotingChainDB extends DBSchema {
+export interface VotingChainDB extends DBSchema {
   blocks: {
     key: number;
     value: ChainBlock;
@@ -42,7 +43,7 @@ interface VotingChainDB extends DBSchema {
     indexes: { 'by-room': string };
   };
   'vote-index': {
-    // Compound key: [pollId, deviceId] — one entry per (poll, device) pair.
+    // Compound key: [pollId, deviceId] вЂ” one entry per (poll, device) pair.
     // This makes duplicate-vote checks O(1) instead of O(n chain blocks).
     key: [string, string];
     value: { pollId: string; deviceId: string; timestamp: number };
@@ -51,11 +52,36 @@ interface VotingChainDB extends DBSchema {
 
 // How long to wait for IndexedDB to open before assuming it is blocked and
 // falling back to the in-memory store. On some mobile browsers (notably iOS
-// Safari in Private mode) `openDB` never resolves or rejects — it just hangs,
+// Safari in Private mode) `openDB` never resolves or rejects вЂ” it just hangs,
 // which surfaces to the user as the whole app "freezing" on load.
 const IDB_OPEN_TIMEOUT_MS = 4_000;
 
 export class StorageService {
+  static async saveOutboxEntry(entry: OutboxEntry): Promise<void> {
+    const db = await this.getDB();
+    await db.put('metadata', structuredClone(entry), `gun-outbox:v1:${entry.id}`);
+  }
+
+  static async getOutboxEntry(id: string): Promise<OutboxEntry | undefined> {
+    return this.getMetadata(`gun-outbox:v1:${id}`);
+  }
+
+  static async getAllOutboxEntries(): Promise<OutboxEntry[]> {
+    const db = await this.getDB();
+    const tx = db.transaction('metadata', 'readonly');
+    const store = tx.objectStore('metadata');
+    const keys = await store.getAllKeys();
+    const entries = await Promise.all(keys.filter(key => String(key).startsWith('gun-outbox:v1:'))
+      .map(key => store.get(key)));
+    await tx.done;
+    return entries;
+  }
+
+  static async deleteOutboxEntry(id: string): Promise<void> {
+    const db = await this.getDB();
+    await db.delete('metadata', `gun-outbox:v1:${id}`);
+  }
+
   /** Cross-context commit boundary. Never publish crypto backed only by RAM. */
   static async compareAndSwapMetadata(
     entries: { key: string; before: unknown; after: unknown }[],
@@ -128,8 +154,8 @@ export class StorageService {
         // NOTE: keep DB_VERSION >= any version ever shipped. A lower requested
         // version makes `openDB` reject with a VersionError and silently drop
         // the app into the volatile in-memory fallback ("data will not
-        // persist"). The upgrade handler below is idempotent — it only creates
-        // stores that are missing — so bumping this is always safe.
+        // persist"). The upgrade handler below is idempotent вЂ” it only creates
+        // stores that are missing вЂ” so bumping this is always safe.
         const open = openDB('interpoll-db', 5, {
           upgrade(db) {
             const has = (name: string) => db.objectStoreNames.contains(name as never);
@@ -168,7 +194,7 @@ export class StorageService {
               chatStore.createIndex('by-room', 'roomId');
             }
             if (!has('vote-index')) {
-              // O(1) duplicate-vote index — compound key [pollId, deviceId].
+              // O(1) duplicate-vote index вЂ” compound key [pollId, deviceId].
               // One entry per (poll, device) pair so hasVoted() is a single IDB
               // key lookup instead of a full chain scan.
               db.createObjectStore('vote-index', { keyPath: ['pollId', 'deviceId'] });
@@ -184,27 +210,27 @@ export class StorageService {
         ]);
         return db;
       } catch (err) {
-        console.warn('[Storage] IndexedDB unavailable — using in-memory fallback (data will not persist):', err);
+        console.warn('[Storage] IndexedDB unavailable вЂ” using in-memory fallback (data will not persist):', err);
       }
     } else {
-      console.warn('[Storage] IndexedDB not present — using in-memory fallback (data will not persist)');
+      console.warn('[Storage] IndexedDB not present вЂ” using in-memory fallback (data will not persist)');
     }
     this.usingMemoryFallback = true;
     return createInMemoryDB();
   }
 
   // Block operations
-  static async saveBlock(block: ChainBlock): Promise {
+  static async saveBlock(block: ChainBlock): Promise<void> {
     const db = await this.getDB();
     await db.put('blocks', block);
   }
 
-  static async getBlock(index: number): Promise {
+  static async getBlock(index: number): Promise<ChainBlock | undefined> {
     const db = await this.getDB();
     return db.get('blocks', index);
   }
 
-  static async getLatestBlock(): Promise {
+  static async getLatestBlock(): Promise<ChainBlock | undefined> {
     const db = await this.getDB();
     const tx = db.transaction('blocks', 'readonly');
     const store = tx.objectStore('blocks');
@@ -212,24 +238,24 @@ export class StorageService {
     return cursor?.value;
   }
 
-  static async getAllBlocks(): Promise {
+  static async getAllBlocks(): Promise<ChainBlock[]> {
     const db = await this.getDB();
     return db.getAll('blocks');
   }
 
   // Vote operations
-  static async saveVote(vote: Vote): Promise {
+  static async saveVote(vote: Vote): Promise<void> {
     const db = await this.getDB();
     await db.put('votes', vote);
   }
 
-  static async getVotesByPoll(pollId: string): Promise {
+  static async getVotesByPoll(pollId: string): Promise<Vote[]> {
     const db = await this.getDB();
     return db.getAllFromIndex('votes', 'by-poll', pollId);
   }
 
   // Receipt operations
-  static async saveReceipt(receipt: Receipt): Promise {
+  static async saveReceipt(receipt: Receipt): Promise<void> {
     const db = await this.getDB();
     const normalizedReceipt: Receipt = {
       ...receipt,
@@ -239,7 +265,7 @@ export class StorageService {
     await db.put('receipts', normalizedReceipt);
   }
 
-  static async getReceipt(verificationCode: string): Promise {
+  static async getReceipt(verificationCode: string): Promise<Receipt | undefined> {
     const db = await this.getDB();
     const receipt = await db.get('receipts', verificationCode);
     if (!receipt) return undefined;
@@ -250,7 +276,7 @@ export class StorageService {
     };
   }
 
-  static async getAllReceipts(): Promise {
+  static async getAllReceipts(): Promise<Receipt[]> {
     const db = await this.getDB();
     const receipts = await db.getAll('receipts');
     return receipts.map((receipt: Receipt) => ({
@@ -261,25 +287,25 @@ export class StorageService {
   }
 
   // Poll operations
-  static async savePoll(poll: ChainPollSnapshot): Promise {
+  static async savePoll(poll: ChainPollSnapshot): Promise<void> {
     const db = await this.getDB();
     await db.put('polls', poll);
   }
 
-  static async getPoll(id: string): Promise {
+  static async getPoll(id: string): Promise<ChainPollSnapshot | undefined> {
     const db = await this.getDB();
     return db.get('polls', id);
   }
 
-  static async getAllPolls(): Promise {
+  static async getAllPolls(): Promise<ChainPollSnapshot[]> {
     const db = await this.getDB();
     return db.getAll('polls');
   }
 
-  // ── Comment mirror ──────────────────────────────────────────────────────────
+  // в”Ђв”Ђ Comment mirror в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   // The local copy of a comment is what the author (and any reader who has seen
   // it once) renders from. Gun is the replication layer, not the source of truth
-  // for display — it holds nothing across a reload.
+  // for display вЂ” it holds nothing across a reload.
 
   static async saveComment(comment: StoredComment): Promise<void> {
     const db = await this.getDB();
@@ -317,7 +343,7 @@ export class StorageService {
 
   /**
    * Cap the comment mirror, dropping the oldest rows first. Comments this
-   * device authored are never pruned — they may still be the only copy in
+   * device authored are never pruned вЂ” they may still be the only copy in
    * existence if no relay ever confirmed them.
    */
   static async pruneComments(maxRows = 5_000): Promise<number> {
@@ -334,7 +360,7 @@ export class StorageService {
     return excess;
   }
 
-  // ── Chat message mirror ─────────────────────────────────────────────────────
+  // в”Ђв”Ђ Chat message mirror в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
   static async saveChatMessage(message: StoredChatMessage): Promise<void> {
     await this.saveChatMessages([message]);
@@ -401,7 +427,7 @@ export class StorageService {
       if (messages.length <= maxPerRoom) continue;
       messages.sort((a, b) => a.timestamp - b.timestamp || a.seq - b.seq);
       for (const message of messages.slice(0, messages.length - maxPerRoom)) {
-        // An unsent message is still only held here — never prune it away.
+        // An unsent message is still only held here вЂ” never prune it away.
         if (message.outgoing && message.syncStatus !== 'confirmed' && message.syncStatus !== 'published') continue;
         await db.delete('chat-messages', message.id);
         removed++;
@@ -411,21 +437,21 @@ export class StorageService {
   }
 
   // Metadata operations
-  static async setMetadata(key: string, value: any): Promise {
+  static async setMetadata(key: string, value: any): Promise<void> {
     const db = await this.getDB();
     await db.put('metadata', value, key);
   }
 
-  static async getMetadata(key: string): Promise {
+  static async getMetadata(key: string): Promise<any> {
     const db = await this.getDB();
     return db.get('metadata', key);
   }
 
-  // ── Vote-index operations (O(1) duplicate-vote check) ────────────────────────
+  // в”Ђв”Ђ Vote-index operations (O(1) duplicate-vote check) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
   /**
    * Returns true if this device has already submitted a vote for this poll.
-   * O(1) — single IDB key lookup on the compound [pollId, deviceId] index.
+   * O(1) вЂ” single IDB key lookup on the compound [pollId, deviceId] index.
    */
   static async hasVoted(pollId: string, deviceId: string): Promise<boolean> {
     const db = await this.getDB();
@@ -442,9 +468,9 @@ export class StorageService {
     await db.put('vote-index', { pollId, deviceId, timestamp: Date.now() });
   }
 
-  // ── Utility ────────────────────────────────────────────────────────────────
+  // в”Ђв”Ђ Utility в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
-  static async clearAll(): Promise {
+  static async clearAll(): Promise<void> {
     const db = await this.getDB();
     const tx = db.transaction(
       ['blocks', 'votes', 'receipts', 'polls', 'metadata', 'encryption-keys', 'comments', 'chat-messages', 'vote-index'],
@@ -518,7 +544,7 @@ export class StorageService {
  * Minimal in-memory stand-in for the subset of the `idb` API that
  * `StorageService` uses. Activated only when IndexedDB is missing, throws, or
  * hangs (e.g. iOS Safari Private mode). Keeps the app functional for the
- * session — data simply does not persist across reloads.
+ * session вЂ” data simply does not persist across reloads.
  */
 function createInMemoryDB(): IDBPDatabase {
   const stores: Record<string, Map<any, any>> = {
@@ -543,7 +569,7 @@ function createInMemoryDB(): IDBPDatabase {
     'encryption-keys': 'id',
     comments: 'id',
     'chat-messages': 'id',
-    // vote-index uses compound key [pollId, deviceId] — handled specially below
+    // vote-index uses compound key [pollId, deviceId] вЂ” handled specially below
     'vote-index': null,
   };
   const indexes: Record<string, Record<string, string>> = {

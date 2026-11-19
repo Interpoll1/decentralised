@@ -19,8 +19,8 @@
               <path d="M24 2v44M2 24h44" stroke="currentColor" stroke-width="1.5" opacity="0.3"/>
             </svg>
           </div>
-          <h1 class="ob-heading">How do you want to connect?</h1>
-          <p class="ob-sub">Choose a relay to browse content from. You can add more later.</p>
+          <h1 class="ob-heading">{{ $ui("How do you want to connect?") }}</h1>
+          <p class="ob-sub">{{ $ui("Choose a relay to browse content from. You can add more later.") }}</p>
 
           <div class="ob-option-list">
             <button class="ob-option" :class="{ active: relayChoice === 'default' }" @click="relayChoice = 'default'">
@@ -32,8 +32,8 @@
                 </svg>
               </span>
               <div class="ob-option-body">
-                <strong>InterPoll public relay</strong>
-                <span>interpoll2.endless.sbs — open, censorship-resistant</span>
+                <strong>{{ $ui("InterPoll public relay") }}</strong>
+                <span>{{ $ui("interpoll2.endless.social — open, censorship-resistant") }}</span>
               </div>
               <span class="ob-option-check" v-if="relayChoice === 'default'">✓</span>
             </button>
@@ -46,8 +46,8 @@
                 </svg>
               </span>
               <div class="ob-option-body">
-                <strong>Community relay</strong>
-                <span>Paste a relay URL or scan a QR code</span>
+                <strong>{{ $ui("Community relay") }}</strong>
+                <span>{{ $ui("Paste a relay URL or scan a QR code") }}</span>
               </div>
               <span class="ob-option-check" v-if="relayChoice === 'community'">✓</span>
             </button>
@@ -72,8 +72,8 @@
                 </svg>
               </span>
               <div class="ob-option-body">
-                <strong>Private only</strong>
-                <span>No central relay — P2P and local peers only</span>
+                <strong>{{ $ui("Private only") }}</strong>
+                <span>{{ $ui("No central relay — P2P and local peers only") }}</span>
               </div>
               <span class="ob-option-check" v-if="relayChoice === 'private'">✓</span>
             </button>
@@ -90,13 +90,13 @@
               <path d="M32 28c4 0 8 3 8 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
             </svg>
           </div>
-          <h1 class="ob-heading">Pick spaces to follow</h1>
-          <p class="ob-sub">Your feed shows posts only from spaces you join. You can explore more anytime.</p>
+          <h1 class="ob-heading">{{ $ui("Pick spaces to follow") }}</h1>
+          <p class="ob-sub">{{ $ui("Your feed shows posts only from spaces you join. You can explore more anytime.") }}</p>
 
           <!-- Loading -->
           <div v-if="loadingCommunities" class="ob-loading">
             <div class="ob-spinner"></div>
-            <span>Loading spaces from relay…</span>
+            <span>{{ $ui("Loading spaces from relay…") }}</span>
           </div>
 
           <!-- Load error with retry -->
@@ -107,7 +107,7 @@
             </svg>
             <div>
               <p>{{ communityLoadError }}</p>
-              <button class="ob-retry-btn" @click="loadCommunities">Retry</button>
+              <button class="ob-retry-btn" @click="loadCommunities">{{ $ui("Retry") }}</button>
             </div>
           </div>
 
@@ -117,8 +117,8 @@
               <circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="1.5" opacity="0.3"/>
               <path d="M16 24h16M24 16v16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/>
             </svg>
-            <p>No public spaces found on this relay yet.</p>
-            <p class="ob-empty-sub">You can explore and join spaces after setup.</p>
+            <p>{{ $ui("No public spaces found on this relay yet.") }}</p>
+            <p class="ob-empty-sub">{{ $ui("You can explore and join spaces after setup.") }}</p>
           </div>
 
           <!-- Community grid -->
@@ -141,8 +141,7 @@
 
           <!-- Selection count -->
           <p v-if="selectedCommunityIds.size > 0" class="ob-selection-count">
-            {{ selectedCommunityIds.size }} space{{ selectedCommunityIds.size !== 1 ? 's' : '' }} selected
-          </p>
+            {{ $count(selectedCommunityIds.size, 'space') }} {{ $ui("selected") }} </p>
         </div>
 
         <!-- ── STEP 2: Identity ──────────────────────────────────────── -->
@@ -153,8 +152,8 @@
               <path d="M8 42c0-9 7.2-16 16-16s16 7 16 16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
             </svg>
           </div>
-          <h1 class="ob-heading">Your identity</h1>
-          <p class="ob-sub">InterPoll uses cryptographic keys — no email or phone needed. Your key is stored locally only.</p>
+          <h1 class="ob-heading">{{ $ui("Your identity") }}</h1>
+          <p class="ob-sub">{{ $ui("InterPoll uses cryptographic keys — no email or phone needed. Your key is stored locally only.") }}</p>
 
           <div class="ob-identity-card">
             <div class="ob-identity-row">
@@ -165,10 +164,10 @@
                 </svg>
               </div>
               <div class="ob-identity-info">
-                <span class="ob-identity-label">Anonymous keypair</span>
-                <span class="ob-identity-value">{{ shortPubkey || 'Generating…' }}</span>
+                <span class="ob-identity-label">{{ $ui("Anonymous keypair") }}</span>
+                <span class="ob-identity-value">{{ shortPubkey || $ui("Generating…") }}</span>
               </div>
-              <span class="ob-identity-badge">Local only</span>
+              <span class="ob-identity-badge">{{ $ui("Local only") }}</span>
             </div>
           </div>
 
@@ -176,21 +175,19 @@
             <svg viewBox="0 0 24 24" fill="none" width="16" height="16" style="flex-shrink:0">
               <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8"/>
               <path d="M12 8v4m0 4h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-            </svg>
-            Anonymous browsing works without any account. You can claim a username in Settings later.
-          </div>
+            </svg> {{ $ui("Anonymous browsing works without any account. You can claim a username in Settings later.") }} </div>
         </div>
         </transition>
 
         <!-- ── Navigation ─────────────────────────────────────────────── -->
         <div class="ob-nav">
-          <button v-if="step > 0" class="ob-btn-secondary" @click="step--">Back</button>
+          <button v-if="step > 0" class="ob-btn-secondary" @click="step--">{{ $ui("Back") }}</button>
           <span v-else></span>
 
           <div class="ob-nav-right">
-            <button v-if="step < 2" class="ob-btn-ghost" @click="skip">Skip</button>
+            <button v-if="step < 2" class="ob-btn-ghost" @click="skip">{{ $ui("Skip") }}</button>
             <button class="ob-btn-primary" :disabled="saving" @click="validateAndNext">
-              {{ step === 2 ? (saving ? 'Starting…' : 'Enter Interpoll') : 'Continue' }}
+              {{ step === 2 ? (saving ? $ui("Starting…") : $ui("Enter Interpoll")) : $ui("Continue") }}
             </button>
           </div>
         </div>
@@ -256,6 +253,8 @@ async function loadCommunities() {
       .slice(0, 16)
       .map((c: any): Community => ({
         id:          String(c.id),
+        creatorId: String(c.creatorId || ''),
+        createdAt: Number(c.createdAt) || 0,
         name:        String(c.name || c.id),
         displayName: String(c.displayName || c.name || c.id),
         description: c.description ?? '',
@@ -443,7 +442,7 @@ onMounted(async () => {
 }
 .ob-option-icon--public    { background: rgba(var(--app-accent-rgb), 0.15); color: var(--app-accent-bright); }
 .ob-option-icon--community { background: rgba(52, 211, 153, 0.15); color: var(--app-success, #34d399); }
-.ob-option-icon--private   { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+.ob-option-icon--private   { background: rgba(251, 191, 36, 0.15); color: var(--app-warning); }
 .ob-option-body { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
 .ob-option-body strong { font-size: 14px; font-weight: 700; color: var(--app-text); }
 .ob-option-body span   { font-size: 12px; color: var(--app-text-muted); }
@@ -521,12 +520,12 @@ onMounted(async () => {
   display: flex; align-items: center; justify-content: center;
   font-size: 12px; font-weight: 800; flex-shrink: 0;
 }
-.tone-tech      { background: rgba(230, 230, 230, 0.2); color: #e6e6e6; }
-.tone-politics  { background: rgba(251, 113, 133, 0.2); color: #fb7185; }
-.tone-science   { background: rgba(56,  189, 248, 0.2); color: #38bdf8; }
-.tone-gaming    { background: rgba(74,  222, 128, 0.2); color: #4ade80; }
-.tone-sports    { background: rgba(45,  212, 191, 0.2); color: #2dd4bf; }
-.tone-music     { background: rgba(230, 230, 230, 0.2); color: #e6e6e6; }
+.tone-tech      { background: rgba(230, 230, 230, 0.2); color: var(--app-accent); }
+.tone-politics  { background: rgba(251, 113, 133, 0.2); color: var(--app-accent); }
+.tone-science   { background: rgba(56,  189, 248, 0.2); color: var(--app-accent); }
+.tone-gaming    { background: rgba(74,  222, 128, 0.2); color: var(--app-accent); }
+.tone-sports    { background: rgba(45,  212, 191, 0.2); color: var(--app-accent); }
+.tone-music     { background: rgba(230, 230, 230, 0.2); color: var(--app-accent); }
 .tone-general   { background: rgba(var(--app-accent-rgb), 0.15); color: var(--app-accent-bright); }
 
 .ob-community-count { font-size: 11px; color: var(--app-text-subtle); }
@@ -570,7 +569,7 @@ onMounted(async () => {
 .ob-btn-primary {
   padding: 12px 24px;
   background: var(--app-accent);
-  color: #111214; border: none; border-radius: 12px;
+  color: var(--app-on-accent); border: none; border-radius: 12px;
   font-size: 15px; font-weight: 700; cursor: pointer;
   transition: opacity 0.15s;
   box-shadow: 0 8px 20px rgba(var(--app-accent-rgb), 0.28);

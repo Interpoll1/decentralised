@@ -5,8 +5,8 @@
     <!-- Explore spaces -->
     <section class="ars-section">
       <header class="ars-header">
-        <h2>Explore spaces</h2>
-        <button class="ars-link" @click="router.push('/home?tab=orbit&view=spaces')">See all</button>
+        <h2>{{ $ui("Explore spaces") }}</h2>
+        <button class="ars-link" @click="router.push('/home?tab=orbit&view=spaces')">{{ $ui("See all") }}</button>
       </header>
       <div class="ars-list">
         <button
@@ -29,15 +29,15 @@
           </span>
           <svg class="ars-chev" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <p v-if="!communities.length" class="ars-empty">No spaces yet — create the first one.</p>
+        <p v-if="!communities.length" class="ars-empty">{{ $ui("No spaces yet — create the first one.") }}</p>
       </div>
     </section>
 
     <!-- Topics gaining momentum -->
     <section class="ars-section">
       <header class="ars-header">
-        <h2>Topics gaining momentum</h2>
-        <span class="ars-pill">This week <svg viewBox="0 0 24 24" fill="none" width="11" height="11" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <h2>{{ $ui("Topics gaining momentum") }}</h2>
+        <span class="ars-pill">{{ $ui("This week") }} <svg viewBox="0 0 24 24" fill="none" width="11" height="11" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
       </header>
       <div v-if="trendingLoaded" class="ars-list">
         <button
@@ -48,11 +48,11 @@
         >
           <span class="ars-rank">{{ i + 1 }}</span>
           <ion-icon v-if="row.icon" :icon="row.icon" :class="row.tone" class="ars-topic__icon"></ion-icon>
-          <span class="ars-topic__label">{{ row.label }}</span>
+          <span class="ars-topic__label">{{ row.tag ? row.label : $ui(row.label) }}</span>
           <span v-if="row.posts" class="ars-topic__count">{{ row.posts }} {{ row.posts === '1' ? 'post' : 'posts' }}</span>
           <svg class="ars-chev" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <p v-if="!trendingCategories.length" class="ars-empty">Topics appear once posts are categorised.</p>
+        <p v-if="!trendingCategories.length" class="ars-empty">{{ $ui("Topics appear once posts are categorised.") }}</p>
       </div>
       <div v-else class="ars-skeleton">
         <div v-for="i in 4" :key="i" class="ars-skeleton-row"></div>
@@ -63,9 +63,9 @@
     <section class="ars-section ars-about">
       <div class="ars-about-row">
         <div class="ars-about-text">
-          <h2>Interpoll</h2>
-          <p>A peer-to-peer network built on GunDB. Content syncs across all peers — no central server required.</p>
-          <button class="ars-link ars-about-link" @click="router.push('/resilience')">Learn more →</button>
+          <h2>{{ $ui("Interpoll") }}</h2>
+          <p>{{ $ui("A peer-to-peer network built on GunDB. Content syncs across all peers — no central server required.") }}</p>
+          <button class="ars-link ars-about-link" @click="router.push('/resilience')">{{ $ui("Learn more →") }}</button>
         </div>
         <BitMascot :size="56" :mood="bitMood" :title="bit.hasUsername === false ? 'Claim a username' : ''" :style="bit.hasUsername === false ? 'cursor:pointer' : ''" @click="onBitClick" />
       </div>

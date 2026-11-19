@@ -2,60 +2,57 @@
   <ion-card class="glass-card" :key="`chain-status-${chainStore.chainHead?.index || 0}`">
     <ion-card-header>
       <ion-card-title class="flex items-center justify-between">
-        <span class="text-lg font-bold">Chain Status</span>
+        <span class="text-lg font-bold">{{ $ui("Chain Status") }}</span>
         <ion-badge
           :color="overallStatusColor"
           class="px-3 py-1 rounded-full text-[10px] uppercase tracking-wider"
           :key="`ws-${chainStore.isWebSocketConnected}-gun-${gunConnected}`"
         >
-          {{ overallStatusLabel }}
+          {{ $ui(overallStatusLabel) }}
         </ion-badge>
       </ion-card-title>
     </ion-card-header>
     <ion-card-content>
       <div class="space-y-3">
         <div class="flex justify-between items-center">
-          <span class="text-sm font-medium opacity-80">Network Mode:</span>
-          <ion-badge color="primary">
-            Hybrid P2P (WebSocket + Broadcast)
-          </ion-badge>
+          <span class="text-sm font-medium opacity-80">{{ $ui("Network Mode:") }}</span>
+          <ion-badge color="primary"> {{ $ui("Hybrid P2P (WebSocket + Broadcast)") }} </ion-badge>
         </div>
 
         <div class="flex justify-between items-center">
-          <span class="text-sm font-medium opacity-80">WebSocket:</span>
+          <span class="text-sm font-medium opacity-80">{{ $ui("WebSocket:") }}</span>
           <div class="flex items-center gap-2">
             <div
               class="w-2 h-2 rounded-full"
               :class="chainStore.isWebSocketConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'"
             ></div>
             <span class="text-xs font-semibold">
-              {{ chainStore.isWebSocketConnected ? 'Connected' : 'Disconnected' }}
+              {{ chainStore.isWebSocketConnected ? $ui("Connected") : $ui("Disconnected") }}
             </span>
           </div>
         </div>
 
         <div class="flex justify-between items-center">
-          <span class="text-sm font-medium opacity-80">GunDB:</span>
+          <span class="text-sm font-medium opacity-80">{{ $ui("GunDB:") }}</span>
           <div class="flex items-center gap-2">
             <div
               class="w-2 h-2 rounded-full"
               :class="gunConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'"
             ></div>
             <span class="text-xs font-semibold">
-              {{ gunConnected ? 'Connected' : 'Disconnected' }}
+              {{ gunConnected ? $ui("Connected") : $ui("Disconnected") }}
             </span>
           </div>
         </div>
 
         <div class="flex justify-between items-center">
-          <span class="text-sm font-medium opacity-80">Chain Height:</span>
+          <span class="text-sm font-medium opacity-80">{{ $ui("Chain Height:") }}</span>
           <ion-badge :color="chainStore.chainValid ? 'success' : 'danger'">
-            {{ chainStore.latestBlock?.index ?? 0 }} blocks
-          </ion-badge>
+            {{ chainStore.latestBlock?.index ?? 0 }} {{ $ui("blocks") }} </ion-badge>
         </div>
 
         <div class="flex justify-between items-center">
-          <span class="text-sm font-medium opacity-80">Chain Valid:</span>
+          <span class="text-sm font-medium opacity-80">{{ $ui("Chain Valid:") }}</span>
           <ion-icon
             :icon="chainStore.chainValid ? checkmarkCircle : closeCircle"
             :color="chainStore.chainValid ? 'success' : 'danger'"
@@ -64,16 +61,15 @@
         </div>
 
         <div class="flex flex-col gap-1" v-if="chainStore.chainHead">
-          <span class="text-sm font-medium opacity-80">Latest Hash:</span>
+          <span class="text-sm font-medium opacity-80">{{ $ui("Latest Hash:") }}</span>
           <code class="text-[10px] font-mono opacity-70 bg-black/10 dark:bg-white/10 px-2 py-1 rounded break-all leading-relaxed select-all">
             {{ chainStore.chainHead.hash }}
           </code>
         </div>
 
         <div class="rounded p-3 mt-3 border border-primary/10 bg-primary/5">
-          <p class="text-xs text-primary font-semibold">
-            interpoll Network<br/>
-            <span class="opacity-70 font-normal">Cross-Device &middot; Cross-Browser &middot; Persistent Storage</span>
+          <p class="text-xs text-primary font-semibold"> {{ $ui("interpoll Network") }}<br/>
+            <span class="opacity-70 font-normal">{{ $ui("Cross-Device · Cross-Browser · Persistent Storage") }}</span>
           </p>
         </div>
 
@@ -85,10 +81,10 @@
           class="font-bold ion-margin-top shadow-sm"
         >
           <ion-icon slot="start" :icon="shield"></ion-icon>
-          {{ chainStore.isValidating ? 'Validating...' : 'Validate Chain' }}
+          {{ chainStore.isValidating ? $ui("Validating...") : $ui("Validate Chain") }}
         </ion-button>
 
-        <p class="text-[10px] text-center opacity-40 mt-4 mb-1 uppercase tracking-tight">Danger Zone</p>
+        <p class="text-[10px] text-center opacity-40 mt-4 mb-1 uppercase tracking-tight">{{ $ui("Danger Zone") }}</p>
         <ion-button
           expand="block"
           size="small"
@@ -97,15 +93,14 @@
           @click="handleResetChain"
           class="opacity-80 hover:opacity-100 font-semibold"
         >
-          <ion-icon slot="start" :icon="warningOutline"></ion-icon>
-          Reset Local Chain
-        </ion-button>
+          <ion-icon slot="start" :icon="warningOutline"></ion-icon> {{ $ui("Reset Local Chain") }} </ion-button>
       </div>
     </ion-card-content>
   </ion-card>
 </template>
 
 <script setup lang="ts">
+import { ui } from "../i18n";
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue';
 import {
   IonCard,
@@ -160,13 +155,13 @@ const handleValidateChain = async () => {
 
 const handleResetChain = async () => {
   const alert = await alertController.create({
-    header: 'Reset Local Chain',
+    header: ui("Reset Local Chain"),
     message:
-      'This will clear all local blocks, votes, and receipts, then create a fresh genesis block. This cannot be undone.',
+      ui("This will clear all local blocks, votes, and receipts, then create a fresh genesis block. This cannot be undone."),
     buttons: [
-      { text: 'Cancel', role: 'cancel' },
+      { text: ui("Cancel"), role: 'cancel' },
       {
-        text: 'Reset',
+        text: ui("Reset"),
         role: 'destructive',
         handler: async () => {
           await chainStore.resetChain();

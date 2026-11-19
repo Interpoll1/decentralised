@@ -23,16 +23,16 @@ import { fileURLToPath } from 'url';
 import { RateLimiter } from './rate-limiter.js';
 console.log('WSS Initialized, this is @thegoodduck and @theendless11, built with love ❤️');
 // ─── Config ──────────────────────────────────────────────────────────────────
-// This peer is made to be run absolutely headlessly without the usual client hosted at endless.sbs so yup btw i added the log 2026-04-10 12:52 whilst at school.
+// This peer is made to be run absolutely headlessly without the usual client hosted at endless.social so yup btw i added the log 2026-04-10 12:52 whilst at school.
 const args = process.argv.slice(2);
 function flag(name, fallback) {
   const i = args.indexOf(name);
   return i !== -1 && args[i + 1] ? args[i + 1] : fallback;
 }
 
-const WS_URL    = flag('--ws',    'wss://interpoll.endless.sbs');
-const GUN_URL   = flag('--gun',   'https://interpoll2.endless.sbs/gun');
-const API_URL   = flag('--api',   'https://interpoll.endless.sbs');
+const WS_URL    = flag('--ws',    'wss://interpoll.endless.social');
+const GUN_URL   = flag('--gun',   'https://interpoll2.endless.social/gun');
+const API_URL   = flag('--api',   'https://interpoll.endless.social');
 const DATA_DIR  = flag('--data',  path.join(path.dirname(fileURLToPath(import.meta.url)), 'peer-data'));
 const PROXY_URL = flag('--proxy', '');
 

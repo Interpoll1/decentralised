@@ -6,7 +6,7 @@
         <ion-buttons slot="start">
           <ion-back-button :default-href="poll?.communityId ? `/community/${poll.communityId}` : '/home'"></ion-back-button>
         </ion-buttons>
-        <ion-title>Poll</ion-title>
+        <ion-title>{{ $ui("Poll") }}</ion-title>
         <ion-buttons slot="end" v-if="poll && isAuthor && poll.isPrivate">
           <ion-button @click="loadInviteCodes">
             <ion-icon :icon="shareOutline"></ion-icon>
@@ -20,14 +20,14 @@
       <!-- Loading -->
       <div v-if="isLoading" class="loading-container">
         <ion-spinner></ion-spinner>
-        <p>Loading poll...</p>
+        <p>{{ $ui("Loading poll...") }}</p>
       </div>
 
       <!-- Poll Not Found -->
       <div v-else-if="!poll" class="empty-state">
         <ion-icon :icon="alertCircleOutline" size="large"></ion-icon>
-        <p>Poll not found</p>
-        <ion-button @click="$router.push('/home')">Go Home</ion-button>
+        <p>{{ $ui("Poll not found") }}</p>
+        <ion-button @click="$router.push('/home')">{{ $ui("Go Home") }}</ion-button>
       </div>
 
       <!-- Poll Content -->
@@ -37,14 +37,14 @@
           <div class="poll-meta">
             <ion-chip>
               <ion-icon :icon="statsChartOutline"></ion-icon>
-              <ion-label>Poll</ion-label>
+              <ion-label>{{ $ui("Poll") }}</ion-label>
             </ion-chip>
             <ion-chip v-if="poll.isPrivate" color="warning">
               <ion-icon :icon="lockClosedOutline"></ion-icon>
-              <ion-label>Private</ion-label>
+              <ion-label>{{ $ui("Private") }}</ion-label>
             </ion-chip>
             <ion-chip v-if="poll.isExpired" color="danger">
-              <ion-label>Ended</ion-label>
+              <ion-label>{{ $ui("Ended") }}</ion-label>
             </ion-chip>
             <ion-chip v-else color="success">
               <ion-icon :icon="timeOutline"></ion-icon>
@@ -52,10 +52,9 @@
             </ion-chip>
           </div>
           <h1 class="poll-title">{{ poll.question }}</h1>
-          <p class="poll-author">
-            Posted by u/{{ pollAuthorDisplayName }}
+          <p class="poll-author"> {{ $ui("Posted by u/") }}{{ pollAuthorDisplayName }}
             <span v-if="poll.authorShowRealName" class="identity-badge" :class="pollAuthorIdentityClass">
-              {{ pollAuthorIdentityLabel }}
+              {{ $ui(pollAuthorIdentityLabel) }}
             </span>
             • {{ formatTime(poll.createdAt) }}
           </p>
@@ -70,7 +69,7 @@
               <ion-icon :icon="peopleOutline" color="primary"></ion-icon>
               <div>
                 <strong>{{ actualTotalVotes }}</strong>
-                <span>Total Votes</span>
+                <span>{{ $ui("Total Votes") }}</span>
                 <span
                   v-if="verifiedTotal > 0"
                   class="verified-note"
@@ -80,22 +79,21 @@
                     : verifiedTotal + ' vote(s) cryptographically verified from signed events'"
                 >
                   <ion-icon :icon="resultsInflated ? warningOutline : shieldCheckmarkOutline"></ion-icon>
-                  {{ verifiedTotal }} verified
-                </span>
+                  {{ verifiedTotal }} {{ $ui("verified") }} </span>
               </div>
             </div>
             <div class="stat-item">
               <ion-icon :icon="timeOutline" color="secondary"></ion-icon>
               <div>
-                <strong>{{ poll.isExpired ? 'Ended' : getTimeRemaining() }}</strong>
-                <span>Time Left</span>
+                <strong>{{ poll.isExpired ? $ui("Ended") : getTimeRemaining() }}</strong>
+                <span>{{ $ui("Time Left") }}</span>
               </div>
             </div>
             <div v-if="poll.viewCount && poll.viewCount > 0" class="stat-item">
               <ion-icon :icon="eyeOutline" color="tertiary"></ion-icon>
               <div>
                 <strong>{{ poll.viewCount >= 1_000_000 ? (poll.viewCount / 1_000_000).toFixed(1) + 'M' : poll.viewCount >= 1000 ? (poll.viewCount / 1000).toFixed(1) + 'K' : poll.viewCount }}</strong>
-                <span>Views</span>
+                <span>{{ $ui("Views") }}</span>
               </div>
             </div>
           </div>
@@ -105,14 +103,14 @@
         <!-- Invite Code Management (author of private poll) -->
         <div v-if="poll.isPrivate && isAuthor" class="section">
           <div class="section-header">
-            <h3 class="section-title">Invite Links</h3>
-            <ion-badge color="warning">{{ inviteCodes.length }} codes</ion-badge>
+            <h3 class="section-title">{{ $ui("Invite Links") }}</h3>
+            <ion-badge color="warning">{{ inviteCodes.length }} {{ $ui("codes") }}</ion-badge>
           </div>
-          <p class="section-subtitle">Share these unique links — each can only be used once</p>
+          <p class="section-subtitle">{{ $ui("Share these unique links — each can only be used once") }}</p>
 
           <div v-if="inviteCodes.length === 0" class="empty-codes">
             <ion-spinner v-if="isLoadingCodes"></ion-spinner>
-            <p v-else>No invite codes found</p>
+            <p v-else>{{ $ui("No invite codes found") }}</p>
           </div>
 
           <div v-else class="invite-code-list">
@@ -125,7 +123,7 @@
               <div class="code-info">
                 <code class="code-value">{{ entry.code }}</code>
                 <ion-badge :color="entry.used ? 'medium' : 'success'" class="code-status">
-                  {{ entry.used ? 'Used' : 'Available' }}
+                  {{ entry.used ? $ui("Used") : $ui("Available") }}
                 </ion-badge>
               </div>
               <ion-button
@@ -140,9 +138,7 @@
           </div>
 
           <ion-button expand="block" fill="outline" @click="copyAllLinks" class="mt-3">
-            <ion-icon slot="start" :icon="copyOutline"></ion-icon>
-            Copy All Available Links
-          </ion-button>
+            <ion-icon slot="start" :icon="copyOutline"></ion-icon> {{ $ui("Copy All Available Links") }} </ion-button>
           <div class="separator"></div>
         </div>
 
@@ -151,16 +147,14 @@
           <div class="private-notice">
             <ion-icon :icon="lockClosedOutline" color="warning"></ion-icon>
             <div>
-              <h3>Private Poll</h3>
-              <p>This poll requires an invite code to vote. Use the unique link you were given.</p>
+              <h3>{{ $ui("Private Poll") }}</h3>
+              <p>{{ $ui("This poll requires an invite code to vote. Use the unique link you were given.") }}</p>
               <ion-button
                 size="small"
                 fill="outline"
                 @click="openInviteCodePage()"
                 class="mt-2"
-              >
-                Enter Invite Code
-              </ion-button>
+              > {{ $ui("Enter Invite Code") }} </ion-button>
             </div>
           </div>
           <div class="separator"></div>
@@ -168,22 +162,20 @@
 
         <!-- Voting Card (public polls only) -->
         <div v-if="!poll.isPrivate && !hasVoted && !poll.isExpired" class="section">
-          <h3 class="section-title">Cast Your Vote</h3>
-          <p v-if="poll.allowMultipleChoices" class="section-subtitle">
-            You can select multiple options
-          </p>
+          <h3 class="section-title">{{ $ui("Cast Your Vote") }}</h3>
+          <p v-if="poll.allowMultipleChoices" class="section-subtitle"> {{ $ui("You can select multiple options") }} </p>
 
           <!-- Multiple Choice (Checkboxes) -->
           <ion-list v-if="poll.allowMultipleChoices && poll.options && poll.options.length > 0">
             <ion-item v-for="(option, index) in poll.options" :key="`option-${index}-${option.id}`">
               <ion-checkbox
-                v-model="selectedOptions"
+                :checked="selectedOptions.includes(option.id)"
                 :value="option.id"
-                slot="start"
-              ></ion-checkbox>
-              <ion-label>
-                <h3>{{ option.text }}</h3>
-              </ion-label>
+                @ionChange="toggleOption(option.id, $event.detail.checked)"
+                label-placement="end"
+                justify="start"
+                class="poll-option-control"
+              >{{ option.text }}</ion-checkbox>
             </ion-item>
           </ion-list>
 
@@ -193,17 +185,16 @@
               <ion-item v-for="(option, index) in poll.options" :key="`option-${index}-${option.id}`">
                 <ion-radio
                   :value="option.id"
-                  slot="start"
-                ></ion-radio>
-                <ion-label>
-                  <h3>{{ option.text }}</h3>
-                </ion-label>
+                  label-placement="end"
+                  justify="start"
+                  class="poll-option-control"
+                >{{ option.text }}</ion-radio>
               </ion-item>
             </ion-list>
           </ion-radio-group>
 
           <div v-else class="empty-options">
-            <p>No options available for this poll</p>
+            <p>{{ $ui("No options available for this poll") }}</p>
           </div>
 
           <ion-button
@@ -214,7 +205,7 @@
           >
             <ion-spinner v-if="isSubmitting" name="crescent" slot="start"></ion-spinner>
             <ion-icon v-else slot="start" :icon="checkmarkCircleOutline"></ion-icon>
-            {{ isSubmitting ? 'Submitting...' : 'Submit Vote' }}
+            {{ isSubmitting ? $ui("Submitting...") : $ui("Submit Vote") }}
           </ion-button>
           <div class="separator"></div>
         </div>
@@ -223,18 +214,18 @@
         <div v-else-if="hasVoted && !poll.isExpired" class="section">
           <div class="voted-message">
             <ion-icon :icon="checkmarkCircleOutline" color="success"></ion-icon>
-            <p>You've already voted in this poll!</p>
+            <p>{{ $ui("You've already voted in this poll!") }}</p>
           </div>
           <div class="separator"></div>
         </div>
 
         <!-- Poll Results -->
         <div class="section">
-          <h3 class="section-title">Results</h3>
+          <h3 class="section-title">{{ $ui("Results") }}</h3>
 
           <div v-if="!poll.showResultsBeforeVoting && !hasVoted && !poll.isExpired" class="results-hidden">
             <ion-icon :icon="eyeOffOutline" size="large"></ion-icon>
-            <p>Results are hidden until you vote</p>
+            <p>{{ $ui("Results are hidden until you vote") }}</p>
           </div>
 
           <!-- Single-track results (no Sybil policy) -->
@@ -255,7 +246,7 @@
                 ></div>
               </div>
               <div class="result-votes">
-                {{ option.votes }} vote{{ option.votes !== 1 ? 's' : '' }}
+                {{ $count(option.votes, 'vote') }}
               </div>
             </div>
           </div>
@@ -264,18 +255,15 @@
           <div v-else class="poll-results">
             <div class="policy-banner">
               <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
-              <span>
-                The creator requires <strong>{{ tierLabel }}</strong> to count as verified.
-                {{ policyIsGate
-                  ? 'Unverified votes are shown separately and kept out of the verified result.'
-                  : 'Verified and open votes are tallied separately below.' }}
+              <span> {{ $ui("The creator requires") }} <strong>{{ $ui(tierLabel) }}</strong> {{ $ui("to count as verified.") }} {{ policyIsGate
+                  ? $ui("Unverified votes are shown separately and kept out of the verified result.")
+                  : $ui("Verified and open votes are tallied separately below.") }}
               </span>
             </div>
 
             <div class="result-track">
               <div class="track-title verified">
-                <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
-                Verified · {{ verifiedTrackTotal }} vote{{ verifiedTrackTotal !== 1 ? 's' : '' }}
+                <ion-icon :icon="shieldCheckmarkOutline"></ion-icon> {{ $ui("Verified ·") }} {{ $count(verifiedTrackTotal, 'vote') }}
               </div>
               <div v-for="option in verifiedSorted" :key="`v-${option.id}`" class="result-item">
                 <div class="result-header">
@@ -285,15 +273,14 @@
                 <div class="result-bar">
                   <div class="result-fill" :style="{ width: `${verifiedPct(option)}%` }"></div>
                 </div>
-                <div class="result-votes">{{ verifiedCount(option) }} vote{{ verifiedCount(option) !== 1 ? 's' : '' }}</div>
+                <div class="result-votes">{{ $count(verifiedCount(option), 'vote') }}</div>
               </div>
-              <p v-if="verifiedTrackTotal === 0" class="track-empty">No verified votes yet.</p>
+              <p v-if="verifiedTrackTotal === 0" class="track-empty">{{ $ui("No verified votes yet.") }}</p>
             </div>
 
             <div class="result-track open">
-              <div class="track-title">
-                Open · {{ openTrackTotal }} vote{{ openTrackTotal !== 1 ? 's' : '' }}
-                <span class="track-note">(unverified — anyone)</span>
+              <div class="track-title"> {{ $ui("Open ·") }} {{ $count(openTrackTotal, 'vote') }}
+                <span class="track-note">{{ $ui("(unverified — anyone)") }}</span>
               </div>
               <div v-for="option in openSorted" :key="`o-${option.id}`" class="result-item">
                 <div class="result-header">
@@ -303,9 +290,9 @@
                 <div class="result-bar">
                   <div class="result-fill open" :style="{ width: `${openPct(option)}%` }"></div>
                 </div>
-                <div class="result-votes">{{ openCount(option) }} vote{{ openCount(option) !== 1 ? 's' : '' }}</div>
+                <div class="result-votes">{{ $count(openCount(option), 'vote') }}</div>
               </div>
-              <p v-if="openTrackTotal === 0" class="track-empty">No open votes yet.</p>
+              <p v-if="openTrackTotal === 0" class="track-empty">{{ $ui("No open votes yet.") }}</p>
             </div>
           </div>
         </div>
@@ -315,35 +302,11 @@
   </ion-page>
 </template>
 <script setup lang="ts">
+import { relativeTime, ui, formatUi, remainingTime } from "../i18n";
 import { ref, computed, onMounted, watch } from 'vue';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRoute, useRouter } from 'vue-router';
-import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonContent,
-  IonButtons,
-  IonBackButton,
-  IonCard,
-  IonCardHeader,
-  IonCardTitle,
-  IonCardSubtitle,
-  IonCardContent,
-  IonList,
-  IonItem,
-  IonLabel,
-  IonCheckbox,
-  IonRadio,
-  IonRadioGroup,
-  IonButton,
-  IonIcon,
-  IonChip,
-  IonBadge,
-  IonSpinner,
-  toastController
-} from '@ionic/vue';
+import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons, IonBackButton, IonList, IonItem, IonLabel, IonCheckbox, IonRadio, IonRadioGroup, IonButton, IonIcon, IonChip, IonBadge, IonSpinner, toastController } from '@ionic/vue';
 import {
   statsChartOutline,
   timeOutline,
@@ -443,6 +406,11 @@ const canSubmitVote = computed(() => {
   return selectedOption.value !== '';
 });
 
+function toggleOption(optionId: string, checked: boolean) {
+  selectedOptions.value = selectedOptions.value.filter(id => id !== optionId);
+  if (checked) selectedOptions.value.push(optionId);
+}
+
 // Verified results (CRITICAL-2): the displayed total and result bars are anchored
 // to the signature-verified tally, not the forgeable Gun counts. See
 // useVerifiedPollResults. `actualTotalVotes` collapses to the verified floor when
@@ -469,39 +437,9 @@ const openCount = (o: PollOption) => results.open.count(o);
 const verifiedPct = (o: PollOption) => Math.round(results.verified.percent(o));
 const openPct = (o: PollOption) => Math.round(results.open.percent(o));
 
-function formatTime(timestamp: number): string {
-  const now = Date.now();
-  const diff = now - timestamp;
+function formatTime(timestamp: number): string { return relativeTime(timestamp); }
 
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days < 7) return `${days}d ago`;
-
-  return new Date(timestamp).toLocaleDateString();
-}
-
-function getTimeRemaining(): string {
-  if (!poll.value || poll.value.isExpired) {
-    return 'Ended';
-  }
-
-  const now = Date.now();
-  const remaining = poll.value.expiresAt - now;
-
-  const days = Math.floor(remaining / 86400000);
-  const hours = Math.floor((remaining % 86400000) / 3600000);
-  const minutes = Math.floor((remaining % 3600000) / 60000);
-
-  if (days > 0) return `${days}d ${hours}h left`;
-  if (hours > 0) return `${hours}h ${minutes}m left`;
-  if (minutes > 0) return `${minutes}m left`;
-  return 'Ending soon';
-}
+function getTimeRemaining(): string { return poll.value ? remainingTime(poll.value.expiresAt, poll.value.isExpired) : ui('Ended'); }
 
 watch(
   () => [poll.value?.authorId, poll.value?.authorShowRealName] as const,
@@ -559,7 +497,7 @@ async function submitVote() {
     const authorization = await AuditService.authorizeVote(poll.value.id, deviceId, !!poll.value.requireLogin)
     if (!authorization.allowed) {
       if (authorization.requiresAuth) {
-        await presentToast('Sign in is required before voting on this poll', 3000)
+        await presentToast(ui("Sign in is required before voting on this poll"), 3000)
         AuditService.saveReturnUrl(route.fullPath)
         AuditService.startOAuthLogin('google')
         return
@@ -570,7 +508,7 @@ async function submitVote() {
     }
 
     const optionIds = poll.value.allowMultipleChoices
-      ? selectedOptions.value
+      ? [...selectedOptions.value]
       : [selectedOption.value]
 
     const choiceText = optionIds
@@ -696,12 +634,12 @@ async function submitVote() {
       }, 3000)
     })()
 
-    await presentToast('Vote recorded. Network sync will continue in the background.')
+    await presentToast(ui("Vote recorded. Network sync will continue in the background."))
     void router.push(receiptPath(receipt.verificationCode))
 
   } catch (error) {
     console.error('Vote error:', error);
-    await presentToast('Failed to submit vote')
+    await presentToast(ui("Failed to submit vote"))
   } finally {
     isSubmitting.value = false
   }
@@ -809,7 +747,7 @@ async function copyInviteLink(code: string) {
   try {
     await navigator.clipboard.writeText(link);
     const toast = await toastController.create({
-      message: 'Invite link copied',
+      message: ui("Invite link copied"),
       duration: 1500,
     });
     await toast.present();
@@ -828,7 +766,7 @@ async function copyAllLinks() {
 
   if (availableCodes.length === 0) {
     const toast = await toastController.create({
-      message: 'No available codes left',
+      message: ui("No available codes left"),
       duration: 2000,
     });
     await toast.present();
@@ -848,13 +786,13 @@ async function copyAllLinks() {
   try {
     await navigator.clipboard.writeText(links);
     const toast = await toastController.create({
-      message: `${availableCodes.length} invite links copied`,
+      message: formatUi("{p0} invite links copied", { p0: availableCodes.length }),
       duration: 2000,
     });
     await toast.present();
   } catch {
     const toast = await toastController.create({
-      message: 'Failed to copy links',
+      message: ui("Failed to copy links"),
       duration: 2000,
     });
     await toast.present();
@@ -881,6 +819,15 @@ watch(
 
 
 <style scoped>
+.poll-option-control {
+  width: 100%;
+  min-height: 48px;
+}
+
+.poll-option-control::part(label) {
+  white-space: normal;
+}
+
 .loading-container,
 .empty-state {
   display: flex;

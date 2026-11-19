@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 #
-# Build the frontend and deploy it to endless.sbs over FTP.
+# Build and deploy the InterPoll SPA to an explicitly configured destination.
 #
 #   ./deploy-ftp.sh              build + upload
 #   ./deploy-ftp.sh --no-build   upload the existing dist/ as-is
 #   ./deploy-ftp.sh --dry-run    show what would change, upload nothing
 #
 # Credentials can be overridden from the environment:
-#   FTP_HOST REMOTE_DIR       (optional, have defaults)
-#   FTP_USER FTP_PASS         (required - never commit these)
+#   FTP_HOST REMOTE_DIR       (required, explicit SPA destination)
+#   FTP_USER FTP_PASS         (required - never commit credentials)
 #
 set -euo pipefail
 
@@ -21,10 +21,8 @@ if [ -f "$_ENV_FILE" ]; then
   FTP_USER="${_U:-$FTP_USER}"; FTP_PASS="${_P:-$FTP_PASS}"
 fi
 
-FTP_HOST="${FTP_HOST:-185.232.14.177}"
-FTP_USER="${FTP_USER:?set FTP_USER}"
-FTP_PASS="${FTP_PASS:?set FTP_PASS}"
-REMOTE_DIR="${REMOTE_DIR:-/domains/endless.sbs/public_html}"
+export FTP_HOST FTP_USER FTP_PASS REMOTE_DIR
+node "$(dirname "${BASH_SOURCE[0]}")/tools/check-deploy-env.mjs"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIST="$ROOT/dist"
@@ -51,6 +49,7 @@ fi
 
 [ -f "$DIST/index.html" ]  || { echo "no $DIST/index.html — build first" >&2; exit 1; }
 [ -d "$DIST/assets2" ]     || { echo "no $DIST/assets2 — build output looks wrong" >&2; exit 1; }
+node "$ROOT/tools/verify-build.mjs" "$DIST"
 
 echo "==> deploying $DIST  ->  ftp://$FTP_HOST$REMOTE_DIR"
 [ -n "$DRY" ] && echo "    (dry run — nothing will be written)"
@@ -59,8 +58,8 @@ echo "==> deploying $DIST  ->  ftp://$FTP_HOST$REMOTE_DIR"
 #
 # Two passes, deliberately:
 #
-#  1. assets2/ is mirrored WITH --delete, so stale hashed chunks from previous
-#     builds are removed and the directory exactly matches this build.
+#  1. assets2/ is uploaded without deleting old hashed chunks. Browsers with a
+#     cached entry page can still finish loading their previous build.
 #  2. everything else is mirrored WITHOUT --delete. The web root also holds
 #     unrelated content (blog .html files, .htaccess, .env, favicons), and a
 #     --delete pass there would wipe it.
@@ -74,12 +73,14 @@ else
   PUT_INDEX='put -O "'"$REMOTE_DIR"'" index.html'
 fi
 
-lftp -u "$FTP_USER,$FTP_PASS" "$FTP_HOST" <<LFTP
-set ssl:verify-certificate no
+# Keep the password out of process arguments (lftp's documented --env-password option).
+LFTP_PASSWORD="$FTP_PASS" lftp --norc --env-password --user "$FTP_USER" "$FTP_HOST" <<LFTP
+set ssl:verify-certificate yes
 set net:timeout 20
 set net:max-retries 3
 set net:reconnect-interval-base 5
-set ftp:ssl-force false
+set ftp:ssl-force true
+set ftp:ssl-protect-data true
 set mirror:parallel-transfer-count 4
 set xfer:clobber on
 set cmd:fail-exit yes
@@ -89,7 +90,7 @@ lcd "$DIST"
 cd "$REMOTE_DIR"
 
 echo ">>> assets2 (replaced)"
-mirror -R $DRY --delete --verbose=1 --parallel=4 assets2 assets2
+mirror -R $DRY --verbose=1 --parallel=4 assets2 assets2
 
 echo ">>> other build files"
 mirror -R $DRY --verbose=1 --parallel=4 \
@@ -103,4 +104,4 @@ $PUT_INDEX
 bye
 LFTP
 
-echo "==> done: https://endless.sbs/"
+echo "==> done: InterPoll SPA uploaded to the configured destination"

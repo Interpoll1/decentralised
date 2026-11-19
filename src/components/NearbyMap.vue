@@ -2,7 +2,7 @@
   <Teleport to="body" :disabled="!full">
   <div class="nm-wrap" :class="{ 'nm-wrap--full': full }">
     <div
-      ref="el" class="nm" role="application" aria-label="Map of people, meetups and spaces nearby"
+      ref="el" class="nm" role="application" :aria-label="$ui('Map of people, meetups and spaces nearby')"
       @pointerdown="onDown" @pointermove="onMove" @pointerup="onUp" @pointercancel="onUp" @wheel.prevent="onWheel" @dblclick.prevent="zoom(1)"
     >
       <!-- Tiles (OpenStreetMap). Without them a plain grid is drawn. -->
@@ -22,7 +22,7 @@
         <circle v-for="c in clusters.filter(c => c.areaR > 5)" :key="'a' + c.id" :cx="c.x" :cy="c.y" :r="c.areaR" class="nm-area" />
       </svg>
 
-      <span v-if="meShown" class="nm-me" :style="{ left: me.x + 'px', top: me.y + 'px' }"><i></i><b>You</b></span>
+      <span v-if="meShown" class="nm-me" :style="{ left: me.x + 'px', top: me.y + 'px' }"><i></i><b>{{ $ui("You") }}</b></span>
 
       <button
         v-for="c in clusters" :key="c.id" class="nm-pin" :class="[`nm-pin--${c.kind}`, { sel: selected?.id === c.id }]"
@@ -30,21 +30,21 @@
       >{{ c.items.length > 1 ? c.items.length : c.glyph }}</button>
 
       <div v-if="stats?.length" class="nm-stats" @pointerdown.stop>
-        <span v-for="t in stats" :key="t.label"><i :style="{ background: t.color }"></i><b>{{ t.n }}{{ t.of != null ? '/' + t.of : '' }}</b> {{ t.label }}</span>
+        <span v-for="t in stats" :key="t.label"><i :style="{ background: t.color }"></i><b>{{ t.n }}{{ t.of != null ? '/' + t.of : '' }}</b> {{ $ui(t.label) }}</span>
       </div>
       <div class="nm-ctl" @pointerdown.stop>
-        <button aria-label="Zoom in" :disabled="z >= maxZoom" @click="zoom(1)">+</button>
-        <button aria-label="Zoom out" :disabled="z <= minZoom" @click="zoom(-1)">−</button>
-        <button aria-label="Re-centre" @click="reset">⌖</button>
+        <button :aria-label="$ui('Zoom in')" :disabled="z >= maxZoom" @click="zoom(1)">+</button>
+        <button :aria-label="$ui('Zoom out')" :disabled="z <= minZoom" @click="zoom(-1)">−</button>
+        <button :aria-label="$ui('Re-centre')" @click="reset">⌖</button>
         <button :aria-label="full ? 'Exit full screen' : 'Full screen'" @click="full = !full">{{ full ? '✕' : '⛶' }}</button>
       </div>
       <div class="nm-attr">
-        <template v-if="tiles && !tilesFailed">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a></template>
-        <template v-else>Dot map · no tiles loaded</template>
+        <template v-if="tiles && !tilesFailed">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">{{ $ui("OpenStreetMap") }}</a></template>
+        <template v-else>{{ $ui("Dot map · no tiles loaded") }}</template>
       </div>
     </div>
 
-    <label class="nm-opt"><input type="checkbox" :checked="tiles" @change="$emit('tiles', ($event.target as HTMLInputElement).checked)" /> Street map tiles <small>(loaded from OpenStreetMap — it can see the area you view). Off = private dot map.</small></label>
+    <label class="nm-opt"><input type="checkbox" :checked="tiles" @change="$emit('tiles', ($event.target as HTMLInputElement).checked)" /> {{ $ui("Street map tiles") }} <small>{{ $ui("(loaded from OpenStreetMap — it can see the area you view). Off = private dot map.") }}</small></label>
 
     <div v-if="selected" class="nm-sheet">
       <div v-for="it in selected.items" :key="it.key" class="nm-row">
@@ -52,12 +52,12 @@
           <b>{{ it.title }}</b>
           <small>{{ it.sub }}</small>
         </span>
-        <button v-if="it.kind === 'person'" class="nm-btn" @click="$emit('message', it.id)">Message</button>
-        <button v-else-if="it.kind === 'meetup'" class="nm-btn" @click="$emit('message', it.id)">Message host</button>
-        <button v-else class="nm-btn" @click="$emit('openSpace', it.id)">Open</button>
-        <button v-if="it.kind === 'person'" class="nm-x" aria-label="Hide this person" @click="$emit('hide', it.id, it.title)">✕</button>
+        <button v-if="it.kind === 'person'" class="nm-btn" @click="$emit('message', it.id)">{{ $ui("Message") }}</button>
+        <button v-else-if="it.kind === 'meetup'" class="nm-btn" @click="$emit('message', it.id)">{{ $ui("Message host") }}</button>
+        <button v-else class="nm-btn" @click="$emit('openSpace', it.id)">{{ $ui("Open") }}</button>
+        <button v-if="it.kind === 'person'" class="nm-x" :aria-label="$ui('Hide this person')" @click="$emit('hide', it.id, it.title)">✕</button>
       </div>
-      <button class="nm-close" @click="selected = null">Close</button>
+      <button class="nm-close" @click="selected = null">{{ $ui("Close") }}</button>
     </div>
   </div>
   </Teleport>
@@ -318,7 +318,7 @@ watch(() => [props.me?.lat, props.me?.lon, props.radiusKm, props.myPrec], () => 
 
 .nm-pin {
   position: absolute; transform: translate(-50%, -50%); min-width: 30px; height: 30px; padding: 0 6px; border-radius: 50%; cursor: pointer;
-  display: grid; place-items: center; font: inherit; font-size: 12px; font-weight: 800; color: #04120a;
+  display: grid; place-items: center; font: inherit; font-size: 12px; font-weight: 800; color: var(--app-on-accent);
   background: var(--app-accent); border: 2px solid #04120a; box-shadow: 0 2px 10px rgba(0,0,0,.5);
 }
 .nm-pin.sel { box-shadow: 0 0 0 4px rgba(var(--app-accent-rgb), .35), 0 2px 10px rgba(0,0,0,.5); }

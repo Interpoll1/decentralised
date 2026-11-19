@@ -7,11 +7,11 @@
             <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
         </ion-buttons>
-        <ion-title>Create Poll</ion-title>
+        <ion-title>{{ $ui("Create Poll") }}</ion-title>
         <ion-buttons slot="end">
           <button class="submit-btn" @click="createPoll" :disabled="!isValid || isSubmitting">
             <div v-if="isSubmitting" class="btn-spinner"></div>
-            {{ isSubmitting ? 'Posting…' : 'Post' }}
+            {{ isSubmitting ? $ui("Posting…") : $ui("Post") }}
           </button>
           <HoneypotField v-model="gateHoneypot" />
         </ion-buttons>
@@ -23,21 +23,19 @@
       <div class="create-page">
 
         <div v-if="isSubmittingSlow" class="slow-banner">
-          <ion-icon :icon="timeOutline"></ion-icon>
-          Still publishing to the network — this can take a few extra seconds on a slow relay.
-        </div>
+          <ion-icon :icon="timeOutline"></ion-icon> {{ $ui("Still publishing to the network — this can take a few extra seconds on a slow relay.") }} </div>
 
         <div class="create-hero">
-          <p class="hero-label">New poll</p>
-          <h1 class="hero-title">Ask your community</h1>
-          <p class="hero-sub">Create a structured question with up to 10 options, optional vote verification, and privacy controls.</p>
+          <p class="hero-label">{{ $ui("New poll") }}</p>
+          <h1 class="hero-title">{{ $ui("Ask your community") }}</h1>
+          <p class="hero-sub">{{ $ui("Create a structured question with up to 10 options, optional vote verification, and privacy controls.") }}</p>
         </div>
 
         <div class="form-card">
 
           <!-- Community picker -->
           <div class="field-group">
-            <label class="field-label">Community</label>
+            <label class="field-label">{{ $ui("Community") }}</label>
             <button class="community-picker" @click="showCommunityPicker">
               <span class="picker-avatar-wrap" v-if="selectedCommunity">
                 <span class="picker-mini-avatar" :class="avatarTone(selectedCommunity.id)">
@@ -45,7 +43,7 @@
                 </span>
               </span>
               <span :class="selectedCommunity ? 'picker-selected' : 'picker-placeholder'">
-                {{ selectedCommunity ? selectedCommunity.displayName : 'Select a community' }}
+                {{ selectedCommunity ? selectedCommunity.displayName : $ui("Select a community") }}
               </span>
               <ion-icon :icon="chevronDownOutline"></ion-icon>
             </button>
@@ -56,24 +54,24 @@
             v-model="pickerOpen"
             :communities="joinedCommunities"
             :selected="selectedCommunity"
-            title="Post poll to…"
+            :title="$ui('Post poll to…')"
             @pick="c => selectedCommunity = c"
           />
 
           <!-- Question -->
           <div class="field-group">
-            <label class="field-label">Question <span class="required">*</span></label>
+            <label class="field-label">{{ $ui("Question") }} <span class="required">*</span></label>
             <div class="field-wrap">
-              <input class="field-native" v-model="question" placeholder="What would you like to ask?" :maxlength="200" />
+              <input class="field-native" v-model="question" :placeholder="$ui('What would you like to ask?')" :maxlength="200" />
             </div>
             <p class="field-count">{{ question.length }}/200</p>
           </div>
 
           <!-- Description -->
           <div class="field-group">
-            <label class="field-label">Description <span class="optional">optional</span></label>
+            <label class="field-label">{{ $ui("Description") }} <span class="optional">{{ $ui("optional") }}</span></label>
             <div class="field-wrap">
-              <textarea class="field-native" v-model="description" placeholder="Add more context to your poll…" rows="3" :maxlength="500"></textarea>
+              <textarea class="field-native" v-model="description" :placeholder="$ui('Add more context to your poll…')" rows="3" :maxlength="500"></textarea>
             </div>
             <p class="field-count">{{ description.length }}/500</p>
           </div>
@@ -83,9 +81,7 @@
         <!-- Options card -->
         <div class="form-card">
           <div class="card-section-label">
-            <ion-icon :icon="listOutline"></ion-icon>
-            Poll Options
-            <span class="count-chip">{{ options.length }}/10</span>
+            <ion-icon :icon="listOutline"></ion-icon> {{ $ui("Poll Options") }} <span class="count-chip">{{ options.length }}/10</span>
           </div>
 
           <div class="options-list">
@@ -94,35 +90,31 @@
               <div class="field-wrap flex1">
                 <input class="field-native" v-model="options[index].text" :placeholder="`Option ${index + 1}`" :maxlength="100" />
               </div>
-              <button v-if="options.length > 2" class="icon-btn danger" @click="removeOption(index)" title="Remove">
+              <button v-if="options.length > 2" class="icon-btn danger" @click="removeOption(index)" :title="$ui('Remove')">
                 <ion-icon :icon="closeCircleOutline"></ion-icon>
               </button>
             </div>
           </div>
 
           <button class="add-option-btn" @click="addOption" :disabled="options.length >= 10">
-            <svg viewBox="0 0 24 24" fill="none" width="15" height="15"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
-            Add Option
-          </button>
+            <svg viewBox="0 0 24 24" fill="none" width="15" height="15"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg> {{ $ui("Add Option") }} </button>
         </div>
 
         <!-- Settings card -->
         <div class="form-card">
           <div class="card-section-label">
-            <ion-icon :icon="settingsOutline"></ion-icon>
-            Settings
-          </div>
+            <ion-icon :icon="settingsOutline"></ion-icon> {{ $ui("Settings") }} </div>
 
           <!-- Duration -->
           <div class="field-group">
-            <label class="field-label">Duration</label>
+            <label class="field-label">{{ $ui("Duration") }}</label>
             <div class="field-wrap select-wrap">
               <select class="field-native" v-model="duration">
-                <option value="1">1 Day</option>
-                <option value="3">3 Days</option>
-                <option value="7">7 Days</option>
-                <option value="14">14 Days</option>
-                <option value="30">30 Days</option>
+                <option value="1">{{ $ui("1 Day") }}</option>
+                <option value="3">{{ $ui("3 Days") }}</option>
+                <option value="7">{{ $ui("7 Days") }}</option>
+                <option value="14">{{ $ui("14 Days") }}</option>
+                <option value="30">{{ $ui("30 Days") }}</option>
               </select>
               <svg class="select-chevron" viewBox="0 0 24 24" fill="none">
                 <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -133,8 +125,8 @@
           <!-- Toggles -->
           <div class="toggle-row">
             <div>
-              <div class="toggle-label">Allow multiple choices</div>
-              <div class="toggle-sub">Voters can select more than one option</div>
+              <div class="toggle-label">{{ $ui("Allow multiple choices") }}</div>
+              <div class="toggle-sub">{{ $ui("Voters can select more than one option") }}</div>
             </div>
             <label class="toggle-switch">
               <input type="checkbox" v-model="allowMultipleChoices" />
@@ -144,8 +136,8 @@
 
           <div class="toggle-row">
             <div>
-              <div class="toggle-label">Show results before voting</div>
-              <div class="toggle-sub">Voters see the current results before casting a vote</div>
+              <div class="toggle-label">{{ $ui("Show results before voting") }}</div>
+              <div class="toggle-sub">{{ $ui("Voters see the current results before casting a vote") }}</div>
             </div>
             <label class="toggle-switch">
               <input type="checkbox" v-model="showResultsBeforeVoting" />
@@ -155,8 +147,8 @@
 
           <div class="toggle-row">
             <div>
-              <div class="toggle-label">Private poll</div>
-              <div class="toggle-sub">Only people with an invite code can vote</div>
+              <div class="toggle-label">{{ $ui("Private poll") }}</div>
+              <div class="toggle-sub">{{ $ui("Only people with an invite code can vote") }}</div>
             </div>
             <label class="toggle-switch">
               <input type="checkbox" v-model="isPrivate" />
@@ -166,11 +158,11 @@
 
           <div v-if="isPrivate" class="info-box">
             <ion-icon :icon="lockClosedOutline"></ion-icon>
-            <p>Each invite code can be used once. You will receive the codes after creating the poll.</p>
+            <p>{{ $ui("Each invite code can be used once. You will receive the codes after creating the poll.") }}</p>
           </div>
 
           <div v-if="isPrivate" class="field-group">
-            <label class="field-label">Number of invite codes</label>
+            <label class="field-label">{{ $ui("Number of invite codes") }}</label>
             <div class="field-wrap">
               <input class="field-native" type="number" v-model.number="inviteCodeCount" min="1" max="200" placeholder="20" />
             </div>
@@ -180,18 +172,16 @@
         <!-- Verification card -->
         <div class="form-card">
           <div class="card-section-label">
-            <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
-            Vote Verification
-          </div>
+            <ion-icon :icon="shieldCheckmarkOutline"></ion-icon> {{ $ui("Vote Verification") }} </div>
 
           <div class="field-group">
-            <label class="field-label">Verification tier</label>
+            <label class="field-label">{{ $ui("Verification tier") }}</label>
             <div class="field-wrap select-wrap">
               <select class="field-native" v-model="requiredTier">
-                <option value="open">Open — anyone (no verification)</option>
-                <option value="pow">Proof-of-work — costs each voter some CPU</option>
-                <option value="relay">Relay-attested — one device / login</option>
-                <option value="issuer">Verified identity — issuer-certified</option>
+                <option value="open">{{ $ui("Open — anyone (no verification)") }}</option>
+                <option value="pow">{{ $ui("Proof-of-work — costs each voter some CPU") }}</option>
+                <option value="relay">{{ $ui("Relay-attested — one device / login") }}</option>
+                <option value="issuer">{{ $ui("Verified identity — issuer-certified") }}</option>
               </select>
               <svg class="select-chevron" viewBox="0 0 24 24" fill="none">
                 <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -201,8 +191,8 @@
 
           <div v-if="requiredTier !== 'open'" class="toggle-row">
             <div>
-              <div class="toggle-label">Exclude unverified votes from main result</div>
-              <div class="toggle-sub">Unverified votes are still counted in a separate "Open" tally</div>
+              <div class="toggle-label">{{ $ui("Exclude unverified votes from main result") }}</div>
+              <div class="toggle-sub">{{ $ui("Unverified votes are still counted in a separate \"Open\" tally") }}</div>
             </div>
             <label class="toggle-switch">
               <input type="checkbox" v-model="gateSubTierVotes" />
@@ -212,7 +202,7 @@
 
           <div v-if="requiredTier !== 'open'" class="info-box">
             <ion-icon :icon="informationCircleOutline"></ion-icon>
-            <p>Anyone can still vote without verifying — those votes appear in a separate "Open" result{{ gateSubTierVotes ? ', kept out of the main "Verified" tally' : ' alongside the "Verified" tally' }}.</p>
+            <p>{{ $ui("Anyone can still vote without verifying — those votes appear in a separate \"Open\" result") }}{{ gateSubTierVotes ? $ui(", kept out of the main \"Verified\" tally") : $ui(" alongside the \"Verified\" tally") }}.</p>
           </div>
         </div>
 
@@ -243,7 +233,7 @@ ion-content { --background: transparent; }
 .submit-btn {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 7px 18px; border-radius: 999px; border: none;
-  background: #3dff7a !important; color: #04120a !important;
+  background: var(--app-accent) !important; color: var(--app-on-accent) !important;
   font-size: 13.5px; font-weight: 700; cursor: pointer;
   box-shadow: 0 0 14px rgba(61, 255, 122, .3);
   transition: opacity 160ms, transform 160ms; margin-right: 8px;
@@ -337,6 +327,7 @@ ion-content { --background: transparent; }
 </style>
 
 <script setup lang="ts">
+import { ui, formatUi } from "../i18n";
 import { ref, computed, watch, onMounted } from 'vue';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -344,22 +335,11 @@ import { useRoute, useRouter } from 'vue-router';
 // Accept communityId from both /community/:id/create-poll route params
 // and legacy ?communityId query usage
 const props = defineProps<{ communityId?: string }>();
-import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonContent,
-  IonButtons,
-  IonButton,
-  IonIcon,
-  alertController,
-  toastController
-} from '@ionic/vue';
+import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons, IonIcon, alertController, toastController } from '@ionic/vue';
 import CommunityPickerModal from '../components/CommunityPickerModal.vue';
 import HoneypotField from '../components/HoneypotField.vue';
 import { useHumanGate } from '../composables/useHumanGate';
-import { chevronDownOutline, addCircleOutline, closeCircleOutline, timeOutline, listOutline, settingsOutline, shieldCheckmarkOutline, lockClosedOutline, informationCircleOutline } from 'ionicons/icons';
+import { chevronDownOutline, closeCircleOutline, timeOutline, listOutline, settingsOutline, shieldCheckmarkOutline, lockClosedOutline, informationCircleOutline } from 'ionicons/icons';
 import { useCommunityStore } from '../stores/communityStore';
 import { usePollStore } from '../stores/pollStore';
 import { Community } from '../services/communityService';
@@ -473,7 +453,7 @@ const joinedCommunities = computed(() => {
 async function showCommunityPicker() {
   if (communityStore.communities.length === 0) {
     const toast = await toastController.create({
-      message: 'Loading communities, please wait…',
+      message: ui("Loading communities, please wait…"),
       duration: 2000,
       color: 'medium',
     });
@@ -525,7 +505,7 @@ async function createPoll() {
       validOptionCount: options.value.filter(opt => opt.text.trim().length > 0).length,
     });
     const toast = await toastController.create({
-      message: 'Please select a community, add a question, and provide at least two options.',
+      message: ui("Please select a community, add a question, and provide at least two options."),
       duration: 2500,
       color: 'warning',
     });
@@ -544,7 +524,7 @@ async function createPoll() {
     // Spam check — question
     const qCheck = checkContent(question.value.trim(), 'title');
     if (!qCheck.ok) {
-      const toast = await toastController.create({ message: `Question: ${qCheck.reason}`, duration: 2500, color: 'warning' });
+      const toast = await toastController.create({ message: formatUi("Question: {p0}", { p0: qCheck.reason }), duration: 2500, color: 'warning' });
       await toast.present();
       isSubmitting.value = false;
       return;
@@ -555,7 +535,7 @@ async function createPoll() {
     for (const opt of validOptions) {
       const oCheck = checkOption(opt);
       if (!oCheck.ok) {
-        const toast = await toastController.create({ message: `Option "${opt.slice(0, 20)}": ${oCheck.reason}`, duration: 2500, color: 'warning' });
+        const toast = await toastController.create({ message: formatUi("Option \"{p0}\": {p1}", { p0: opt.slice(0, 20), p1: oCheck.reason }), duration: 2500, color: 'warning' });
         await toast.present();
         isSubmitting.value = false;
         return;
@@ -605,14 +585,14 @@ async function createPoll() {
           await navigator.clipboard.writeText(sampleLink);
         }
         const toast = await toastController.create({
-          message: 'Private poll link copied to clipboard',
+          message: ui("Private poll link copied to clipboard"),
           duration: 2500,
           color: 'success'
         });
         await toast.present();
       } catch (e) {
         const toast = await toastController.create({
-          message: `Private poll link: ${sampleLink}`,
+          message: formatUi("Private poll link: {p0}", { p0: sampleLink }),
           duration: 4000,
           color: 'medium'
         });
@@ -626,11 +606,11 @@ async function createPoll() {
       const linksList = codes.map((code) => buildVoteLink(code)).join('\n');
 
       const alert = await alertController.create({
-        header: 'Invite Codes',
+        header: ui("Invite Codes"),
         message: codesList,
         buttons: [
           {
-            text: 'Copy all links',
+            text: ui("Copy all links"),
             handler: async () => {
               if (navigator.clipboard?.writeText) {
                 await navigator.clipboard.writeText(linksList);
@@ -638,7 +618,7 @@ async function createPoll() {
             },
           },
           {
-            text: 'Close',
+            text: ui("Close"),
             role: 'cancel',
           },
         ],
@@ -647,14 +627,14 @@ async function createPoll() {
       await alert.present();
     } else if (poll.relayConfirmed === false) {
       const toast = await toastController.create({
-        message: 'Poll saved — the relay hasn\'t confirmed it yet, so publishing will keep retrying in the background.',
+        message: ui("Poll saved — the relay hasn't confirmed it yet, so publishing will keep retrying in the background."),
         duration: 4000,
         color: 'warning'
       });
       await toast.present();
     } else {
       const toast = await toastController.create({
-        message: 'Poll created successfully',
+        message: ui("Poll created successfully"),
         duration: 2000,
         color: 'success'
       });
@@ -680,7 +660,7 @@ async function createPoll() {
     console.error('Error creating poll:', error);
     
     const toast = await toastController.create({
-      message: `Failed to create poll: ${error instanceof Error ? error.message : String(error)}`,
+      message: formatUi("Failed to create poll: {p0}", { p0: error instanceof Error ? error.message : String(error) }),
       duration: 4000,
       color: 'danger'
     });
@@ -718,7 +698,7 @@ onMounted(async () => {
     await communityStore.loadCommunities();
   }
   if (joinedCommunities.value.length === 0 && communityStore.communities.length > 0) {
-    await communityStore.syncJoinedFromRelay?.().catch(() => {});
+    await communityStore.syncJoinedPrivateCommunitiesFromKeys().catch(() => {});
   }
 });
 </script>

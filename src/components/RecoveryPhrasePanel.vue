@@ -1,24 +1,24 @@
 <template>
   <div class="rp">
     <div class="rp-head">
-      <span class="rp-label">Recovery phrase</span>
-      <span class="rp-state" :class="{ ok: saved }">{{ saved ? 'Marked as saved' : 'Not backed up yet' }}</span>
+      <span class="rp-label">{{ $ui("Recovery phrase") }}</span>
+      <span class="rp-state" :class="{ ok: saved }">{{ saved ? $ui("Marked as saved") : $ui("Not backed up yet") }}</span>
     </div>
-    <p class="rp-note">24 words that restore this identity on any device. Anyone who has them can act as you — keep them offline.</p>
+    <p class="rp-note">{{ $ui("24 words that restore this identity on any device. Anyone who has them can act as you — keep them offline.") }}</p>
 
-    <button v-if="!words.length" class="rp-btn" :disabled="busy" @click="reveal">{{ busy ? 'Loading…' : 'Show recovery phrase' }}</button>
+    <button v-if="!words.length" class="rp-btn" :disabled="busy" @click="reveal">{{ busy ? $ui("Loading…") : $ui("Show recovery phrase") }}</button>
     <template v-else>
       <div class="rp-words"><span v-for="(w, i) in words" :key="i"><i>{{ i + 1 }}</i>{{ w }}</span></div>
       <div class="rp-actions">
-        <button class="rp-btn" @click="copy">{{ copied ? 'Copied' : 'Copy' }}</button>
-        <button class="rp-btn" @click="download">Download .txt</button>
-        <button class="rp-btn" @click="hide">Hide</button>
+        <button class="rp-btn" @click="copy">{{ copied ? $ui("Copied") : $ui("Copy") }}</button>
+        <button class="rp-btn" @click="download">{{ $ui("Download .txt") }}</button>
+        <button class="rp-btn" @click="hide">{{ $ui("Hide") }}</button>
       </div>
     </template>
 
     <label class="rp-check">
       <input type="checkbox" :checked="saved" @change="setSaved(($event.target as HTMLInputElement).checked)" />
-      <span>I've saved my recovery phrase somewhere safe</span>
+      <span>{{ $ui("I've saved my recovery phrase somewhere safe") }}</span>
     </label>
     <p v-if="error" class="rp-error">{{ error }}</p>
   </div>
@@ -64,17 +64,17 @@ function download() {
 <style scoped>
 .rp { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; font-family: 'Inter', system-ui, sans-serif; }
 .rp-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-.rp-label { font-size: 13.5px; color: #b4bbb4; }
-.rp-state { font-size: 12.5px; color: #ffd84a; }
-.rp-state.ok { color: #3dff7a; }
-.rp-note { margin: 0; font-size: 13px; line-height: 1.5; color: #8c948c; }
+.rp-label { font-size: 13.5px; color: var(--app-text-muted); }
+.rp-state { font-size: 12.5px; color: var(--app-warning); }
+.rp-state.ok { color: var(--app-accent); }
+.rp-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--app-text-muted); }
 .rp-words { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; }
-.rp-words span { padding: 7px 9px; border: 1px solid #1d231d; border-radius: 5px; font: 13px var(--font-mono, monospace); }
-.rp-words i { font-style: normal; color: #8c948c; margin-right: 8px; }
+.rp-words span { padding: 7px 9px; border: 1px solid var(--app-border); border-radius: 5px; font: 13px var(--font-mono, monospace); }
+.rp-words i { font-style: normal; color: var(--app-text-muted); margin-right: 8px; }
 .rp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.rp-btn { font: inherit; font-size: 13.5px; font-weight: 500; padding: 8px 14px; border-radius: 6px; cursor: pointer; color: #fff; background: #000; border: 1px solid #1d231d; align-self: flex-start; }
-.rp-btn:hover { border-color: #3dff7a; }
-.rp-check { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: #c9d1c9; cursor: pointer; }
-.rp-check input { accent-color: #3dff7a; }
-.rp-error { margin: 0; font-size: 13px; color: #ff8a8a; }
+.rp-btn { font: inherit; font-size: 13.5px; font-weight: 500; padding: 8px 14px; border-radius: 6px; cursor: pointer; color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-border); align-self: flex-start; }
+.rp-btn:hover { border-color: var(--app-accent); }
+.rp-check { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--app-text-muted); cursor: pointer; }
+.rp-check input { accent-color: var(--app-accent); }
+.rp-error { margin: 0; font-size: 13px; color: var(--app-danger); }
 </style>

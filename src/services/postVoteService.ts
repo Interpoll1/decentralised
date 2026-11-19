@@ -113,28 +113,7 @@ export class PostVoteService {
    * first touch. `voteBaselineAt` is the guard: once present the baseline is
    * never rewritten, so later mirror-writes of `upvotes` cannot disturb it.
    */
-  private static async ensureBaseline(postId: string): Promise<{ up: number; down: number }> {
-    const post: any = await gunOnce(postNode(postId), READ_TIMEOUT_MS);
-    if (!post) return { up: 0, down: 0 };
 
-    if (post.voteBaselineAt) {
-      return {
-        up: Number(post.voteBaselineUp) || 0,
-        down: Number(post.voteBaselineDown) || 0,
-      };
-    }
-
-    const baseline = {
-      up: Number(post.upvotes) || 0,
-      down: Number(post.downvotes) || 0,
-    };
-    await gunPut(postNode(postId), {
-      voteBaselineUp: baseline.up,
-      voteBaselineDown: baseline.down,
-      voteBaselineAt: Date.now(),
-    });
-    return baseline;
-  }
 
   private static async readBaseline(postId: string): Promise<{ up: number; down: number }> {
     const post: any = await gunOnce(postNode(postId), READ_TIMEOUT_MS);

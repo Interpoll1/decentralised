@@ -10,7 +10,7 @@
           loading="lazy"
         />
         <div v-else class="pig-skeleton" :class="{ 'pig-skeleton--failed': failed[i] }">
-          <span v-if="failed[i]" class="pig-retry">Tap to retry</span>
+          <span v-if="failed[i]" class="pig-retry">{{ $ui("Tap to retry") }}</span>
         </div>
         <span v-if="!full && i === shown.length - 1 && extra > 0" class="pig-more">+{{ extra }}</span>
       </div>
@@ -101,7 +101,7 @@ watch(() => [props.cids.join(','), props.full], load, { immediate: true });
 .pig-img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .pig--n1 .pig-img { height: auto; max-height: 520px; object-fit: contain; }
 .pig-skeleton--failed { animation: none; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-.pig-retry { font-size: 12.5px; color: #3dff7a; border: 1px solid #2a312a; border-radius: 5px; padding: 4px 10px; }
+.pig-retry { font-size: 12.5px; color: var(--app-accent); border: 1px solid #2a312a; border-radius: 5px; padding: 4px 10px; }
 .pig-skeleton { width: 100%; height: 100%; min-height: 120px; animation: pig-pulse 1.4s ease-in-out infinite; background: rgba(255, 255, 255, 0.05); }
 .pig-more {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;

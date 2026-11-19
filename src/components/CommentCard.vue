@@ -8,7 +8,7 @@
       <!-- Flagged overlay -->
       <div v-if="flagged && filterAction === 'blur' && !revealed" class="flagged-overlay" @click.stop="revealed = true">
         <ion-icon :icon="warningOutline"></ion-icon>
-        <span>Hidden by word filter — tap to reveal</span>
+        <span>{{ $ui("Hidden by word filter — tap to reveal") }}</span>
       </div>
 
       <div :class="{ 'content-blurred': flagged && filterAction === 'blur' && !revealed }">
@@ -19,14 +19,14 @@
 
           <div class="cc-meta">
             <span class="author-name">{{ displayName }}</span>
-            <span class="identity-badge" :class="authorIdentityClass">{{ authorIdentityLabel }}</span>
-            <button v-if="canInviteAuthor" class="invite-btn" @click.stop="sendInviteToCommentAuthor">Chat</button>
+            <span class="identity-badge" :class="authorIdentityClass">{{ $ui(authorIdentityLabel) }}</span>
+            <button v-if="canInviteAuthor" class="invite-btn" @click.stop="sendInviteToCommentAuthor">{{ $ui("Chat") }}</button>
           </div>
 
           <span class="cc-time">{{ formatTime(comment.createdAt) }}</span>
-          <span v-if="comment.edited" class="edited-label">edited</span>
+          <span v-if="comment.edited" class="edited-label">{{ $ui("edited") }}</span>
           <span v-if="syncState && syncState !== 'confirmed'" class="sync-label" :class="syncState">
-            {{ syncState === 'failed' ? 'not synced' : 'sending…' }}
+            {{ syncState === 'failed' ? $ui("not synced") : 'sending…' }}
           </span>
           <span v-if="flagged && filterAction === 'flag'" class="flag-badge">
             <ion-icon :icon="warningOutline"></ion-icon>
@@ -58,21 +58,18 @@
           {{ formatNumber(comment.downvotes) }}
         </button>
         <button class="ca-btn reply-btn" @click="toggleReply">
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
-          Reply
-        </button>
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg> {{ $ui("Reply") }} </button>
         <span class="ca-score">{{ comment.score > 0 ? '+' : '' }}{{ comment.score }}</span>
       </div>
 
       <!-- Reply form -->
       <div v-if="showReplyForm" class="reply-form">
-        <ion-textarea v-model="replyText" placeholder="Write a reply…" :auto-grow="true" :rows="2" class="reply-textarea"></ion-textarea>
+        <ion-textarea v-model="replyText" :placeholder="$ui('Write a reply…')" :auto-grow="true" :rows="2" class="reply-textarea"></ion-textarea>
         <HoneypotField v-model="gateHoneypot" />
         <div class="reply-actions">
           <ion-button size="small" @click="submitReply" :disabled="!replyText.trim()">
-            <ion-icon slot="start" :icon="sendOutline"></ion-icon>Reply
-          </ion-button>
-          <ion-button size="small" fill="clear" @click="cancelReply">Cancel</ion-button>
+            <ion-icon slot="start" :icon="sendOutline"></ion-icon>{{ $ui("Reply") }} </ion-button>
+          <ion-button size="small" fill="clear" @click="cancelReply">{{ $ui("Cancel") }}</ion-button>
         </div>
       </div>
     </div>
@@ -96,6 +93,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatUi, ui } from "../i18n";
 import { ref, computed, watch, onMounted } from 'vue';
 import HoneypotField from './HoneypotField.vue';
 import { useHumanGate } from '../composables/useHumanGate';
@@ -115,14 +113,14 @@ import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 import { checkContent } from '../utils/contentGuard';
 import { useBurst } from '../composables/useBurst';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   comment: Comment;
   postId: string;
   communityId: string;
   depth?: number;
   flagged?: boolean;
   filterAction?: FilterAction;
-}>();
+}>(), { depth: 0 });
 const emit = defineEmits(['upvote', 'downvote']);
 
 const commentStore  = useCommentStore();
@@ -207,10 +205,10 @@ async function sendInviteToCommentAuthor() {
   if (!canInviteAuthor.value) return;
   try {
     await ChatInviteService.sendInvite(props.comment.authorId);
-    const t = await toastController.create({ message: `Chat invite sent`, duration: 2200, color: 'success' });
+    const t = await toastController.create({ message: formatUi("Chat invite sent", {  }), duration: 2200, color: 'success' });
     await t.present();
   } catch {
-    const t = await toastController.create({ message: 'Failed to send invite', duration: 2200, color: 'danger' });
+    const t = await toastController.create({ message: ui("Failed to send invite"), duration: 2200, color: 'danger' });
     await t.present();
   }
 }

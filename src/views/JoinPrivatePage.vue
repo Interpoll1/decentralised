@@ -5,7 +5,7 @@
         <ion-buttons slot="start">
           <ion-back-button default-href="/home"></ion-back-button>
         </ion-buttons>
-        <ion-title>Join Space</ion-title>
+        <ion-title>{{ $ui("Join Space") }}</ion-title>
       </ion-toolbar>
     </ion-header>
 
@@ -22,9 +22,7 @@
             <svg viewBox="0 0 24 24" fill="none" width="15" height="15">
               <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
               <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-            </svg>
-            Invite link
-          </button>
+            </svg> {{ $ui("Invite link") }} </button>
           <button
             class="join-mode-tab"
             :class="{ active: mode === 'rendezvous' }"
@@ -33,9 +31,7 @@
             <svg viewBox="0 0 24 24" fill="none" width="15" height="15">
               <path d="M12 22s8-4.5 8-11V5l-8-3-8 3v6c0 6.5 8 11 8 11z" stroke="currentColor" stroke-width="1.8"/>
               <circle cx="12" cy="12" r="2.5" stroke="currentColor" stroke-width="1.8"/>
-            </svg>
-            Seed phrase
-          </button>
+            </svg> {{ $ui("Seed phrase") }} </button>
         </div>
 
         <!-- ── INVITE LINK MODE ───────────────────── -->
@@ -47,11 +43,11 @@
                 <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
               </svg>
             </div>
-            <h2 class="join-card-title">Join via invite link</h2>
-            <p class="join-card-sub">Paste the full invite URL you received, or scan the QR code.</p>
+            <h2 class="join-card-title">{{ $ui("Join via invite link") }}</h2>
+            <p class="join-card-sub">{{ $ui("Paste the full invite URL you received, or scan the QR code.") }}</p>
 
             <div class="join-field-group">
-              <label class="join-label">Invite URL</label>
+              <label class="join-label">{{ $ui("Invite URL") }}</label>
               <div class="join-input-wrap">
                 <input
                   v-model="inviteUrl"
@@ -61,7 +57,7 @@
                   autocomplete="off"
                   @keydown.enter="joinViaLink"
                 />
-                <button v-if="canScanQr" class="join-scan-btn" @click="scanQr" title="Scan QR code">
+                <button v-if="canScanQr" class="join-scan-btn" @click="scanQr" :title="$ui('Scan QR code')">
                   <svg viewBox="0 0 24 24" fill="none" width="16" height="16">
                     <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.8"/>
                     <rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.8"/>
@@ -78,7 +74,7 @@
               <div class="join-preview-avatar">{{ preloadedCommunity.displayName?.charAt(0)?.toUpperCase() }}</div>
               <div class="join-preview-info">
                 <strong>{{ preloadedCommunity.displayName }}</strong>
-                <span>{{ preloadedCommunity.memberCount || 0 }} members</span>
+                <span>{{ $count(preloadedCommunity.memberCount || 0, 'member') }}</span>
               </div>
               <div class="join-preview-lock" v-if="preloadedCommunity.isPrivate">
                 <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
@@ -94,7 +90,7 @@
               @click="joinViaLink"
             >
               <ion-spinner v-if="joiningLink" name="crescent" style="width:16px;height:16px"></ion-spinner>
-              {{ joiningLink ? 'Joining…' : 'Join space' }}
+              {{ joiningLink ? $ui("Joining…") : $ui("Join space") }}
             </button>
           </div>
         </template>
@@ -108,14 +104,11 @@
                 <circle cx="12" cy="12" r="2.5" stroke="currentColor" stroke-width="1.8"/>
               </svg>
             </div>
-            <h2 class="join-card-title">Join a dark space</h2>
-            <p class="join-card-sub">
-              Enter the 8-word seed phrase shared with you. The space is not listed anywhere —
-              the seed is the only way to find it.
-            </p>
+            <h2 class="join-card-title">{{ $ui("Join a dark space") }}</h2>
+            <p class="join-card-sub"> {{ $ui("Enter the 8-word seed phrase shared with you. The space is not listed anywhere — the seed is the only way to find it.") }} </p>
 
             <!-- Word inputs -->
-            <div class="join-label">Seed phrase <span class="join-label-sub">(8 words)</span></div>
+            <div class="join-label">{{ $ui("Seed phrase") }} <span class="join-label-sub">{{ $ui("(8 words)") }}</span></div>
             <div class="rz-word-grid">
               <div v-for="n in 8" :key="n" class="rz-word-cell">
                 <span class="rz-word-num">{{ n }}</span>
@@ -139,20 +132,18 @@
               <svg viewBox="0 0 24 24" fill="none" width="13" height="13">
                 <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.8"/>
                 <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="1.8"/>
-              </svg>
-              Paste full phrase
-            </button>
+              </svg> {{ $ui("Paste full phrase") }} </button>
 
             <p v-if="seedError" class="join-error">{{ seedError }}</p>
 
             <!-- Derived soul preview -->
             <div v-if="derivedSoul" class="rz-soul-preview">
               <div class="rz-soul-preview-header">
-                <span class="rz-soul-label">Resolved soul address</span>
-                <span class="rz-epoch-tag">Epoch {{ currentEpochNum }}</span>
+                <span class="rz-soul-label">{{ $ui("Resolved soul address") }}</span>
+                <span class="rz-epoch-tag">{{ $ui("Epoch") }} {{ currentEpochNum }}</span>
               </div>
               <code class="rz-soul-code">{{ derivedSoul }}</code>
-              <p class="rz-soul-hint">Looking for this space in the Gun mesh…</p>
+              <p class="rz-soul-hint">{{ $ui("Looking for this space in the Gun mesh…") }}</p>
             </div>
 
             <!-- Found space preview -->
@@ -163,8 +154,8 @@
                 </svg>
               </div>
               <div class="join-preview-info">
-                <strong>{{ foundSpace.displayName || 'Dark space' }}</strong>
-                <span>Found via rendezvous — not listed on any relay</span>
+                <strong>{{ foundSpace.displayName || $ui("Dark space") }}</strong>
+                <span>{{ $ui("Found via rendezvous — not listed on any relay") }}</span>
               </div>
             </div>
 
@@ -176,8 +167,8 @@
                 <path d="M8 11h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
               </svg>
               <div>
-                <strong>Space not found in this epoch</strong>
-                <p>The address rotates every 6 hours. If the space was recently created try again in a few minutes. Make sure the phrase is correct.</p>
+                <strong>{{ $ui("Space not found in this epoch") }}</strong>
+                <p>{{ $ui("The address rotates every 6 hours. If the space was recently created try again in a few minutes. Make sure the phrase is correct.") }}</p>
               </div>
             </div>
 
@@ -187,16 +178,13 @@
               @click="joinViaRendezvous"
             >
               <ion-spinner v-if="joiningRendezvous" name="crescent" style="width:16px;height:16px"></ion-spinner>
-              {{ joiningRendezvous ? 'Searching…' : 'Find & join space' }}
+              {{ joiningRendezvous ? $ui("Searching…") : $ui("Find & join space") }}
             </button>
 
             <p class="rz-privacy-note">
               <svg viewBox="0 0 24 24" fill="none" width="13" height="13" style="flex-shrink:0">
                 <path d="M12 22s8-4.5 8-11V5l-8-3-8 3v6c0 6.5 8 11 8 11z" stroke="currentColor" stroke-width="1.8"/>
-              </svg>
-              Your search happens locally — no relay sees your seed phrase.
-              The soul address is computed on your device and looked up directly in the Gun mesh.
-            </p>
+              </svg> {{ $ui("Your search happens locally — no relay sees your seed phrase. The soul address is computed on your device and looked up directly in the Gun mesh.") }} </p>
           </div>
         </template>
 
@@ -207,7 +195,7 @@
               <path d="M22 11.08V12a10 10 0 11-5.93-9.14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
               <path d="M22 4L12 14.01l-3-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            <span>Joined! Redirecting…</span>
+            <span>{{ $ui("Joined! Redirecting…") }}</span>
           </div>
         </transition>
 
@@ -217,11 +205,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue';
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonButtons, IonBackButton, IonSpinner, toastController,
-} from '@ionic/vue';
+import { ref, computed, onMounted } from 'vue';
+import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons, IonBackButton, IonSpinner } from '@ionic/vue';
 import { useRouter, useRoute } from 'vue-router';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
@@ -229,7 +214,7 @@ import { replaceAddressBar } from '../utils/privateRoute';
 import { GunService } from '../services/gunService';
 import { CommunityService } from '../services/communityService';
 import { useQrScan } from '../composables/useQrScan';
-import { currentEpoch, EPOCH_MS } from '../utils/rendezvous';
+import { currentEpoch } from '../utils/rendezvous';
 
 const router = useRouter();
 const route  = useRoute();
@@ -401,7 +386,7 @@ async function joinViaRendezvous() {
       // Gun lookup with 6-second timeout
       space = await new Promise<any>((resolve) => {
         const timeout = setTimeout(() => resolve(null), 6000);
-        GunService.gun
+        GunService.getGun()
           ?.get(`interpoll-rendezvous:${soul}`)
           .get('community')
           .once((data: any) => {
@@ -423,10 +408,7 @@ async function joinViaRendezvous() {
     foundSpace.value = space;
 
     // Join by community ID extracted from Gun data
-    await CommunityService.joinCommunity(space.id, {
-      rendezvousSeed: seedPhrase.value,
-      soul:           derivedSoul.value,
-    });
+    await CommunityService.joinCommunity(space.id, { memberCount: Number(space.memberCount) || 0 });
 
     joined.value = true;
     setTimeout(() => router.replace(`/community/${space.id}`), 1200);
@@ -547,7 +529,7 @@ async function joinViaRendezvous() {
 .join-preview-avatar {
   width: 36px; height: 36px; border-radius: 10px;
   background: var(--app-accent);
-  color: #111214; font-size: 14px; font-weight: 800;
+  color: var(--app-on-accent); font-size: 14px; font-weight: 800;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
@@ -649,7 +631,7 @@ async function joinViaRendezvous() {
 }
 .join-btn--primary {
   background: var(--app-accent);
-  color: #111214;
+  color: var(--app-on-accent);
   box-shadow: 0 8px 20px rgba(var(--app-accent-rgb),0.28);
 }
 .join-btn--primary:hover:not(:disabled) { opacity: 0.92; }

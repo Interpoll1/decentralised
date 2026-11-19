@@ -5,7 +5,7 @@
         <ion-buttons slot="start">
           <ion-back-button default-href="/home"></ion-back-button>
         </ion-buttons>
-        <ion-title>Network</ion-title>
+        <ion-title>{{ $ui("Network") }}</ion-title>
         <ion-buttons slot="end">
           <ion-button fill="clear" @click="refreshAll" :disabled="probing">
             <ion-icon :icon="refreshOutline"></ion-icon>
@@ -22,23 +22,23 @@
           <div class="np-summary-row">
             <div class="np-summary-stat">
               <span class="np-stat-val" :class="gunPeers > 0 ? 'stat-ok' : 'stat-warn'">{{ gunPeers }}</span>
-              <span class="np-stat-label">Gun peers</span>
+              <span class="np-stat-label">{{ $ui("Gun peers") }}</span>
             </div>
             <div class="np-summary-stat">
               <span class="np-stat-val" :class="activeRelay?.status === 'online' ? 'stat-ok' : 'stat-warn'">
                 {{ activeRelay?.status === 'online' ? '●' : activeRelay?.status === 'offline' ? '✕' : '○' }}
               </span>
-              <span class="np-stat-label">Relay</span>
+              <span class="np-stat-label">{{ $ui("Relay") }}</span>
             </div>
             <div class="np-summary-stat">
               <span class="np-stat-val" :class="anonymityOn ? 'stat-ok' : 'stat-muted'">
-                {{ anonymityOn ? 'ON' : 'OFF' }}
+                {{ anonymityOn ? $ui("ON") : $ui("OFF") }}
               </span>
-              <span class="np-stat-label">Anonymity</span>
+              <span class="np-stat-label">{{ $ui("Anonymity") }}</span>
             </div>
             <div class="np-summary-stat">
               <span class="np-stat-val stat-muted">{{ rtcPeerCount }}</span>
-              <span class="np-stat-label">P2P peers</span>
+              <span class="np-stat-label">{{ $ui("P2P peers") }}</span>
             </div>
           </div>
         </div>
@@ -52,8 +52,8 @@
               </svg>
             </div>
             <div>
-              <h3 class="np-section-title">Anonymity mode</h3>
-              <p class="np-section-sub">Disables WebRTC (prevents IP leaks) — use inside Tor Browser for full protection.</p>
+              <h3 class="np-section-title">{{ $ui("Anonymity mode") }}</h3>
+              <p class="np-section-sub">{{ $ui("Disables WebRTC (prevents IP leaks) — use inside Tor Browser for full protection.") }}</p>
             </div>
             <button
               class="np-toggle"
@@ -69,7 +69,7 @@
 
         <!-- ── Active relay ───────────────────────────────── -->
         <section class="np-section surface-card">
-          <h3 class="np-section-title np-section-title--plain">Active relay</h3>
+          <h3 class="np-section-title np-section-title--plain">{{ $ui("Active relay") }}</h3>
           <div v-if="activeRelay" class="np-active-relay">
             <div class="np-relay-card np-relay-card--active">
               <div class="np-relay-type-badge" :class="relayTypeBadgeClass(activeRelay)">
@@ -81,19 +81,19 @@
                 <span class="np-relay-status-pill" :class="statusPillClass(activeRelay.status)">
                   {{ activeRelay.status }}
                 </span>
-                <span v-if="activeRelay.latencyMs" class="np-relay-latency">{{ activeRelay.latencyMs }}ms</span>
+                <span v-if="activeRelay.latencyMs" class="np-relay-latency">{{ activeRelay.latencyMs }}{{ $ui("ms") }}</span>
               </div>
             </div>
           </div>
-          <div v-else class="np-empty-note">No active relay — add one below.</div>
+          <div v-else class="np-empty-note">{{ $ui("No active relay — add one below.") }}</div>
         </section>
 
         <!-- ── All relays ─────────────────────────────────── -->
         <section class="np-section surface-card">
           <div class="np-section-header-plain">
-            <h3 class="np-section-title np-section-title--plain">Relay servers</h3>
+            <h3 class="np-section-title np-section-title--plain">{{ $ui("Relay servers") }}</h3>
             <button class="np-btn-add" @click="showAddRelay = !showAddRelay">
-              {{ showAddRelay ? 'Cancel' : '+ Add relay' }}
+              {{ showAddRelay ? $ui("Cancel") : $ui("+ Add relay") }}
             </button>
           </div>
 
@@ -107,9 +107,9 @@
               autocomplete="off"
               @keydown.enter="addRelay"
             />
-            <p class="np-hint">Enter the base URL of the relay. Gun endpoint at /gun, API at /api will be inferred.</p>
+            <p class="np-hint">{{ $ui("Enter the base URL of the relay. Gun endpoint at /gun, API at /api will be inferred.") }}</p>
             <p v-if="addError" class="np-error">{{ addError }}</p>
-            <button class="np-btn-primary" :disabled="!newRelayUrl.trim()" @click="addRelay">Connect</button>
+            <button class="np-btn-primary" :disabled="!newRelayUrl.trim()" @click="addRelay">{{ $ui("Connect") }}</button>
           </div>
 
           <!-- Relay cards -->
@@ -128,7 +128,7 @@
                     <span class="np-tag np-tag--type" :class="'np-tag--' + relayTypeLabel(relay).toLowerCase()">
                       {{ relayTypeLabel(relay) }}
                     </span>
-                    <span v-if="relay.latencyMs" class="np-tag np-tag--latency">{{ relay.latencyMs }}ms</span>
+                    <span v-if="relay.latencyMs" class="np-tag np-tag--latency">{{ relay.latencyMs }}{{ $ui("ms") }}</span>
                   </span>
                 </div>
               </div>
@@ -140,14 +140,14 @@
                   :disabled="switching === relay.id"
                   @click="switchTo(relay.id)"
                 >
-                  {{ switching === relay.id ? '…' : 'Use' }}
+                  {{ switching === relay.id ? '…' : $ui("Use") }}
                 </button>
-                <span v-else class="np-active-label">Active</span>
+                <span v-else class="np-active-label">{{ $ui("Active") }}</span>
                 <button
                   v-if="relays.length > 1"
                   class="np-btn-sm np-btn-sm--ghost"
                   @click="removeRelay(relay.id)"
-                  aria-label="Remove relay"
+                  :aria-label="$ui('Remove relay')"
                 >✕</button>
               </div>
             </div>
@@ -156,20 +156,20 @@
 
         <!-- ── Gun peers ──────────────────────────────────── -->
         <section class="np-section surface-card">
-          <h3 class="np-section-title np-section-title--plain">Gun mesh peers</h3>
-          <p class="np-section-hint">Gun is the decentralised sync layer. Peers share data directly.</p>
+          <h3 class="np-section-title np-section-title--plain">{{ $ui("Gun mesh peers") }}</h3>
+          <p class="np-section-hint">{{ $ui("Gun is the decentralised sync layer. Peers share data directly.") }}</p>
 
           <div class="np-peer-list">
             <div v-for="peer in peerHealth" :key="peer.url" class="np-peer-row">
               <span class="np-peer-dot" :class="peer.connected ? 'dot--online' : 'dot--offline'"></span>
               <span class="np-peer-url">{{ trimPeerUrl(peer.url) }}</span>
               <span class="np-peer-meta">
-                <span v-if="peer.connected" class="np-peer-tag np-peer-tag--live">live</span>
+                <span v-if="peer.connected" class="np-peer-tag np-peer-tag--live">{{ $ui("live") }}</span>
                 <span v-else-if="peer.failures > 2" class="np-peer-tag np-peer-tag--fail">{{ peer.failures }}✗</span>
-                <span v-else class="np-peer-tag np-peer-tag--idle">idle</span>
+                <span v-else class="np-peer-tag np-peer-tag--idle">{{ $ui("idle") }}</span>
               </span>
             </div>
-            <div v-if="!peerHealth.length" class="np-empty-note">No Gun peers yet.</div>
+            <div v-if="!peerHealth.length" class="np-empty-note">{{ $ui("No Gun peers yet.") }}</div>
           </div>
 
           <!-- Add Gun peer -->
@@ -182,19 +182,19 @@
               autocomplete="off"
               @keydown.enter="addGunPeer"
             />
-            <button class="np-btn-primary" :disabled="!newGunPeer.trim()" @click="addGunPeer">Add peer</button>
+            <button class="np-btn-primary" :disabled="!newGunPeer.trim()" @click="addGunPeer">{{ $ui("Add peer") }}</button>
           </div>
           <p v-if="gunPeerError" class="np-error">{{ gunPeerError }}</p>
         </section>
 
         <!-- ── Transport strategy ─────────────────────────── -->
         <section class="np-section surface-card">
-          <h3 class="np-section-title np-section-title--plain">Transport strategy</h3>
+          <h3 class="np-section-title np-section-title--plain">{{ $ui("Transport strategy") }}</h3>
 
           <div class="np-toggle-row">
             <div class="np-toggle-info">
-              <strong>Auto-failover</strong>
-              <p>Switch to another relay automatically if the active one drops.</p>
+              <strong>{{ $ui("Auto-failover") }}</strong>
+              <p>{{ $ui("Switch to another relay automatically if the active one drops.") }}</p>
             </div>
             <button
               class="np-toggle"
@@ -207,8 +207,8 @@
 
           <div class="np-toggle-row">
             <div class="np-toggle-info">
-              <strong>Prefer decentralised</strong>
-              <p>Prioritise peer-discovered relays over configured servers.</p>
+              <strong>{{ $ui("Prefer decentralised") }}</strong>
+              <p>{{ $ui("Prioritise peer-discovered relays over configured servers.") }}</p>
             </div>
             <button
               class="np-toggle"
@@ -221,8 +221,8 @@
 
           <div class="np-toggle-row">
             <div class="np-toggle-info">
-              <strong>Allow discovered auto-switch</strong>
-              <p>Let the app switch to relays found via peer discovery.</p>
+              <strong>{{ $ui("Allow discovered auto-switch") }}</strong>
+              <p>{{ $ui("Let the app switch to relays found via peer discovery.") }}</p>
             </div>
             <button
               class="np-toggle"
@@ -236,8 +236,8 @@
 
         <!-- ── Advanced: Wire filter ──────────────────────── -->
         <section class="np-section surface-card">
-          <h3 class="np-section-title np-section-title--plain">Wire filter mode</h3>
-          <p class="np-section-hint">Controls how out-of-namespace Gun messages are handled over the P2P bridge.</p>
+          <h3 class="np-section-title np-section-title--plain">{{ $ui("Wire filter mode") }}</h3>
+          <p class="np-section-hint">{{ $ui("Controls how out-of-namespace Gun messages are handled over the P2P bridge.") }}</p>
           <div class="np-radio-group">
             <label v-for="mode in ['off','log','enforce']" :key="mode" class="np-radio-row">
               <input type="radio" name="wirefilter" :value="mode" v-model="wireFilter" @change="saveWireFilter" />
@@ -251,12 +251,8 @@
 
         <!-- ── Resilience / chain links ───────────────────── -->
         <div class="np-link-row">
-          <button class="np-nav-link" @click="router.push('/resilience')">
-            Resilience Center →
-          </button>
-          <button class="np-nav-link" @click="router.push('/chain-explorer')">
-            Chain Explorer →
-          </button>
+          <button class="np-nav-link" @click="router.push('/resilience')"> {{ $ui("Resilience Center →") }} </button>
+          <button class="np-nav-link" @click="router.push('/chain-explorer')"> {{ $ui("Chain Explorer →") }} </button>
         </div>
 
       </div>
@@ -265,7 +261,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonButtons, IonButton, IonIcon, IonBackButton,
@@ -273,7 +269,7 @@ import {
 import { refreshOutline } from 'ionicons/icons';
 import { useRouter } from 'vue-router';
 import { RelayManager, type RelayEndpoint, type TransportStrategySettings } from '../services/relayManager';
-import { GunService } from '../services/gunService';
+import { getPeerHealthReport } from '../services/gunService';
 import config from '../config';
 
 const router = useRouter();
@@ -314,7 +310,7 @@ function refresh() {
 
 function pollPeers() {
   try {
-    const health = GunService.getPeerHealthReport();
+    const health = getPeerHealthReport();
     peerHealth.value  = health;
     gunPeers.value    = health.filter(p => p.connected).length;
   } catch { /* non-fatal */ }

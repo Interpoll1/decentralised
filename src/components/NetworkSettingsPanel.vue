@@ -1,6 +1,6 @@
 <template>
   <div class="net-settings">
-    <h2 class="section-title">Network &amp; Decentralisation</h2>
+    <h2 class="section-title">{{ $ui("Network & Decentralisation") }}</h2>
 
     <!-- ── Connection summary bar ─────────────────────────────────────── -->
     <div class="status-bar">
@@ -8,7 +8,7 @@
       <span class="status-text">
         {{ gunConnected
           ? `Gun mesh — ${gunPeerCount} peer${gunPeerCount !== 1 ? 's' : ''} connected`
-          : 'Gun mesh — disconnected' }}
+          : $ui("Gun mesh — disconnected") }}
       </span>
       <span v-if="rtcPeers.length" class="badge-rtc">{{ rtcPeers.length }} P2P</span>
     </div>
@@ -21,32 +21,29 @@
         class="tab-btn"
         :class="{ active: activeTab === t.id }"
         @click="activeTab = t.id"
-      >{{ t.label }}</button>
+      >{{ $ui(t.label) }}</button>
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════
          TAB: Relay Peers
     ══════════════════════════════════════════════════════════════════ -->
     <section v-show="activeTab === 'peers'" class="tab-content">
-      <p class="hint">
-        Connect to multiple Gun relay peers for resilience. Data syncs across
-        all connected peers automatically — no single point of failure.
-      </p>
+      <p class="hint"> {{ $ui("Connect to multiple Gun relay peers for resilience. Data syncs across all connected peers automatically — no single point of failure.") }} </p>
 
       <!-- Tier toggles -->
       <div class="tier-row">
         <label class="toggle-row">
           <div>
-            <strong>Private relay</strong>
-            <p class="sub">Your VPS (interpoll2.endless.sbs) — fastest, most trusted</p>
+            <strong>{{ $ui("Private relay") }}</strong>
+            <p class="sub">{{ $ui("Your VPS (interpoll2.endless.social) — fastest, most trusted") }}</p>
           </div>
           <input type="checkbox" v-model="prefs.usePrivate" @change="savePrefs" />
         </label>
 
         <label class="toggle-row">
           <div>
-            <strong>Public relays</strong>
-            <p class="sub">gun-manhattan, us-east.gun.eco — open community nodes</p>
+            <strong>{{ $ui("Public relays") }}</strong>
+            <p class="sub">{{ $ui("gun-manhattan, us-east.gun.eco — open community nodes") }}</p>
           </div>
           <input type="checkbox" v-model="prefs.usePublic" @change="savePrefs" />
         </label>
@@ -61,17 +58,17 @@
         >
           <span class="peer-dot" :class="peerDotClass(peer)" />
           <span class="peer-url" :title="peer.url">{{ trimUrl(peer.url) }}</span>
-          <span v-if="peer.connected" class="peer-tag online-tag">live</span>
+          <span v-if="peer.connected" class="peer-tag online-tag">{{ $ui("live") }}</span>
           <span v-else-if="peer.failures > 2" class="peer-tag fail-tag">{{ peer.failures }}✗</span>
-          <span v-else class="peer-tag gray-tag">idle</span>
+          <span v-else class="peer-tag gray-tag">{{ $ui("idle") }}</span>
           <button
             v-if="isUserPeer(peer.url)"
             class="btn-remove"
-            title="Remove peer"
+            :title="$ui('Remove peer')"
             @click="removePeer(peer.url)"
           >✕</button>
         </div>
-        <p v-if="!peerHealth.length" class="no-peers">No peers configured yet.</p>
+        <p v-if="!peerHealth.length" class="no-peers">{{ $ui("No peers configured yet.") }}</p>
       </div>
 
       <!-- Add custom peer -->
@@ -82,17 +79,15 @@
           placeholder="https://community-relay.example.com/gun"
           @keydown.enter="addPeer"
         />
-        <button class="btn-primary" :disabled="!validNewPeer" @click="addPeer">
-          Add
-        </button>
+        <button class="btn-primary" :disabled="!validNewPeer" @click="addPeer"> {{ $ui("Add") }} </button>
       </div>
       <p v-if="addPeerError" class="err-msg">{{ addPeerError }}</p>
 
       <!-- AXE mesh toggle -->
       <label class="toggle-row mt">
         <div>
-          <strong>AXE peer mesh</strong>
-          <p class="sub">Lets Gun peers relay to each other — better resilience, small extra traffic</p>
+          <strong>{{ $ui("AXE peer mesh") }}</strong>
+          <p class="sub">{{ $ui("Lets Gun peers relay to each other — better resilience, small extra traffic") }}</p>
         </div>
         <input type="checkbox" v-model="prefs.axeEnabled" @change="savePrefs" />
       </label>
@@ -100,21 +95,15 @@
       <!-- SW tab relay -->
       <label class="toggle-row">
         <div>
-          <strong>Tab relay (ServiceWorker)</strong>
-          <p class="sub">Open browser tabs relay Gun data to other tabs on this device — HTTPS only</p>
+          <strong>{{ $ui("Tab relay (ServiceWorker)") }}</strong>
+          <p class="sub">{{ $ui("Open browser tabs relay Gun data to other tabs on this device — HTTPS only") }}</p>
         </div>
         <input type="checkbox" v-model="prefs.swRelayEnabled" @change="savePrefs" />
       </label>
 
       <details class="learn-more">
-        <summary>Run your own community relay</summary>
-        <p>
-          Anyone can host a Gun relay with a single Docker command. It syncs posts,
-          polls, and community data. It cannot read encrypted content or modify votes.
-          <br /><br />
-          See the <strong>community-relay/README.md</strong> in the repo for a
-          one-command Docker Compose setup. Share your URL above once it's running.
-        </p>
+        <summary>{{ $ui("Run your own community relay") }}</summary>
+        <p> {{ $ui("Anyone can host a Gun relay with a single Docker command. It syncs posts, polls, and community data. It cannot read encrypted content or modify votes.") }} <br /><br /> {{ $ui("See the") }} <strong>{{ $ui("community-relay/README.md") }}</strong> {{ $ui("in the repo for a one-command Docker Compose setup. Share your URL above once it's running.") }} </p>
       </details>
     </section>
 
@@ -122,38 +111,28 @@
          TAB: Direct P2P
     ══════════════════════════════════════════════════════════════════ -->
     <section v-show="activeTab === 'p2p'" class="tab-content">
-      <p class="hint">
-        Direct browser-to-browser connections for faster sync and snapshot transfers.
-        Requires WebRTC (all modern browsers). Encrypted end-to-end by WebRTC DTLS.
-      </p>
+      <p class="hint"> {{ $ui("Direct browser-to-browser connections for faster sync and snapshot transfers. Requires WebRTC (all modern browsers). Encrypted end-to-end by WebRTC DTLS.") }} </p>
 
       <label class="toggle-row">
         <div>
-          <strong>Enable WebRTC P2P</strong>
-          <p class="sub">Form direct connections to other online users automatically</p>
+          <strong>{{ $ui("Enable WebRTC P2P") }}</strong>
+          <p class="sub">{{ $ui("Form direct connections to other online users automatically") }}</p>
         </div>
         <input type="checkbox" v-model="rtcEnabled" @change="toggleRtc" />
       </label>
 
       <!-- Signaling mode info -->
       <div v-if="rtcEnabled" class="info-box">
-        <strong>Signaling</strong>: Uses GunDB (primary) with WS relay as fallback.
-        No relay server needed once a Gun peer is reachable.
-      </div>
+        <strong>{{ $ui("Signaling") }}</strong>{{ $ui(": Uses GunDB (primary) with WS relay as fallback. No relay server needed once a Gun peer is reachable.") }} </div>
 
       <!-- Connected peers -->
       <div v-if="rtcEnabled && rtcPeers.length" class="chip-row">
         <span v-for="p in rtcPeers" :key="p" class="peer-chip">{{ p.slice(0, 12) }}…</span>
       </div>
-      <p v-if="rtcEnabled && !rtcPeers.length" class="hint muted">
-        No direct peers yet — they appear as other users come online.
-      </p>
+      <p v-if="rtcEnabled && !rtcPeers.length" class="hint muted"> {{ $ui("No direct peers yet — they appear as other users come online.") }} </p>
 
       <!-- NAT warning -->
-      <div v-if="rtcEnabled" class="warn-box">
-        Users behind strict NAT (some mobile networks, corporate firewalls) may not
-        be able to form direct connections. They automatically use the Gun relay instead.
-        For full coverage, add a TURN server in <code>webrtcService.ts → STUN_SERVERS</code>.
+      <div v-if="rtcEnabled" class="warn-box"> {{ $ui("Users behind strict NAT (some mobile networks, corporate firewalls) may not be able to form direct connections. They automatically use the Gun relay instead. For full coverage, add a TURN server in") }} <code>webrtcService.ts → STUN_SERVERS</code>.
       </div>
     </section>
 
@@ -161,70 +140,54 @@
          TAB: Search
     ══════════════════════════════════════════════════════════════════ -->
     <section v-show="activeTab === 'search'" class="tab-content">
-      <p class="hint">
-        Search uses a local Flexsearch index built from content synced to your device.
-        The index grows as new posts arrive from peers — no server needed.
-      </p>
+      <p class="hint"> {{ $ui("Search uses a local Flexsearch index built from content synced to your device. The index grows as new posts arrive from peers — no server needed.") }} </p>
 
       <div class="stat-grid">
         <div class="stat-card">
           <div class="stat-val">{{ docCount.toLocaleString() }}</div>
-          <div class="stat-label">Indexed documents</div>
+          <div class="stat-label">{{ $ui("Indexed documents") }}</div>
         </div>
         <div class="stat-card">
           <div class="stat-val" :class="lastSource === 'local' ? 'green' : 'amber'">
             {{ lastSource || '—' }}
           </div>
-          <div class="stat-label">Last search source</div>
+          <div class="stat-label">{{ $ui("Last search source") }}</div>
         </div>
       </div>
 
       <p class="hint" :class="docCount === 0 ? 'warn' : ''">
-        <template v-if="docCount === 0">
-          Index is empty — results will appear as Gun syncs posts to your device.
-          If you just installed the app, try loading a few posts first.
-        </template>
-        <template v-else>
-          Index is populated. New content is indexed automatically when it arrives.
-        </template>
+        <template v-if="docCount === 0"> {{ $ui("Index is empty — results will appear as Gun syncs posts to your device. If you just installed the app, try loading a few posts first.") }} </template>
+        <template v-else> {{ $ui("Index is populated. New content is indexed automatically when it arrives.") }} </template>
       </p>
 
-      <button class="btn-secondary" @click="clearSearchCache">Clear result cache</button>
-      <p class="hint muted">Clears the 60-second query cache. Does not remove indexed documents.</p>
+      <button class="btn-secondary" @click="clearSearchCache">{{ $ui("Clear result cache") }}</button>
+      <p class="hint muted">{{ $ui("Clears the 60-second query cache. Does not remove indexed documents.") }}</p>
     </section>
 
     <!-- ══════════════════════════════════════════════════════════════════
          TAB: PoW
     ══════════════════════════════════════════════════════════════════ -->
     <section v-show="activeTab === 'pow'" class="tab-content">
-      <p class="hint">
-        Proof-of-Work deters spam by requiring a small amount of computation
-        before posting. The relay server verifies each proof.
-      </p>
+      <p class="hint"> {{ $ui("Proof-of-Work deters spam by requiring a small amount of computation before posting. The relay server verifies each proof.") }} </p>
 
       <div class="stat-grid">
         <div class="stat-card">
           <div class="stat-val" :class="wsConnected ? 'green' : 'amber'">
-            {{ wsConnected ? 'Server' : 'Client' }}
+            {{ wsConnected ? $ui("Server") : $ui("Client") }}
           </div>
-          <div class="stat-label">PoW challenge source</div>
+          <div class="stat-label">{{ $ui("PoW challenge source") }}</div>
         </div>
         <div class="stat-card">
-          <div class="stat-val">16 bits</div>
-          <div class="stat-label">Difficulty (client mode)</div>
+          <div class="stat-val">{{ $ui("16 bits") }}</div>
+          <div class="stat-label">{{ $ui("Difficulty (client mode)") }}</div>
         </div>
       </div>
 
       <div class="info-box">
         <template v-if="wsConnected">
-          <strong>Server mode:</strong> The relay issues a unique challenge per post.
-          This is the default and most secure mode.
-        </template>
+          <strong>{{ $ui("Server mode:") }}</strong> {{ $ui("The relay issues a unique challenge per post. This is the default and most secure mode.") }} </template>
         <template v-else>
-          <strong>Offline mode:</strong> The relay is unreachable, so challenges are
-          generated locally using a deterministic formula (contentHash + 30s window).
-          The relay will verify the proof when you reconnect.
-        </template>
+          <strong>{{ $ui("Offline mode:") }}</strong> {{ $ui("The relay is unreachable, so challenges are generated locally using a deterministic formula (contentHash + 30s window). The relay will verify the proof when you reconnect.") }} </template>
       </div>
     </section>
 
@@ -232,13 +195,10 @@
          TAB: Discovery
     ══════════════════════════════════════════════════════════════════ -->
     <section v-show="activeTab === 'discovery'" class="tab-content">
-      <p class="hint">
-        Announce this node so others can discover it via the Gun mesh.
-        Only your relay URLs and capabilities are published — no personal data.
-      </p>
+      <p class="hint"> {{ $ui("Announce this node so others can discover it via the Gun mesh. Only your relay URLs and capabilities are published — no personal data.") }} </p>
 
       <button class="btn-primary" :disabled="announcing" @click="announceNode">
-        {{ announcing ? 'Announcing…' : 'Announce This Node' }}
+        {{ announcing ? $ui("Announcing…") : $ui("Announce This Node") }}
       </button>
 
       <div v-if="announceResult" class="result-box" :class="announceResult.ok ? 'ok' : 'err'">
@@ -247,16 +207,14 @@
 
       <!-- Discovered peers table -->
       <div v-if="discoveredPeers.length" class="mt">
-        <h4 class="sub-heading">Discovered peers ({{ discoveredPeers.length }})</h4>
+        <h4 class="sub-heading">{{ $ui("Discovered peers (") }}{{ discoveredPeers.length }})</h4>
         <div v-for="peer in discoveredPeers" :key="peer.nodeId" class="disc-row">
           <span class="disc-node">{{ peer.nodeId.slice(0, 16) }}…</span>
           <span class="disc-caps">{{ peer.capabilities.join(', ') }}</span>
-          <button class="btn-small" @click="addDiscoveredPeer(peer.gun)">
-            + Add relay
-          </button>
+          <button class="btn-small" @click="addDiscoveredPeer(peer.gun)"> {{ $ui("+ Add relay") }} </button>
         </div>
       </div>
-      <p v-else class="hint muted">No peers discovered yet. They appear as nodes announce themselves.</p>
+      <p v-else class="hint muted">{{ $ui("No peers discovered yet. They appear as nodes announce themselves.") }}</p>
     </section>
   </div>
 </template>

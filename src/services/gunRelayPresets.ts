@@ -5,13 +5,13 @@ export interface GunRelayPreset {
 
 /** Verified-working public Gun relay peers (WebSocket-confirmed) */
 export const GUN_RELAY_PRESETS: GunRelayPreset[] = [
-  { label: 'InterPoll Primary', url: 'https://interpoll2.endless.sbs/gun' },
+  { label: 'InterPoll Primary', url: 'https://interpoll2.endless.social/gun' },
   { label: 'Relay Peer OOO', url: 'https://relay.peer.ooo/gun' },
 ];
 
 /** Peers enabled by default */
 export const DEFAULT_GUN_PEERS: string[] = [
-  'https://interpoll2.endless.sbs/gun',
+  'https://interpoll2.endless.social/gun',
   'https://relay.peer.ooo/gun',
 ];
 

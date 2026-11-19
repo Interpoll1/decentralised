@@ -3,10 +3,10 @@
     <ion-header :class="{ 'header-hidden': isHeaderHidden }">
       <ion-toolbar>
         <ion-buttons slot="start">
-          <div class="logo-title" role="button" tabindex="0" style="cursor:pointer" @click="activeTab = 'home'" @keydown.enter="activeTab = 'home'">Interpoll</div>
+          <div class="logo-title" role="button" tabindex="0" style="cursor:pointer" @click="activeTab = 'home'" @keydown.enter="activeTab = 'home'">{{ $ui("Interpoll") }}</div>
         </ion-buttons>
         <ion-buttons slot="end" class="header-util-buttons">
-          <ion-button v-if="canScanQr" @click="scanQr()" aria-label="Scan QR code">
+          <ion-button v-if="canScanQr" @click="scanQr()" :aria-label="$ui('Scan QR code')">
             <ion-icon :icon="qrCodeOutline"></ion-icon>
           </ion-button>
           <ion-button data-tour="search" @click="$router.push('/search')">
@@ -16,7 +16,7 @@
             <ion-icon :icon="personCircleOutline"></ion-icon>
           </ion-button>
           <!-- Resilience Center — mobile only, side nav shows it on desktop -->
-          <ion-button class="resilience-header-btn" @click="$router.push('/resilience')" aria-label="Resilience Center">
+          <ion-button class="resilience-header-btn" @click="$router.push('/resilience')" :aria-label="$ui('Resilience Center')">
             <svg viewBox="0 0 24 24" fill="none" style="flex-shrink:0;width:21px;height:21px">
               <path d="M12 21C12 21 3 15 3 9a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 6-9 12-9 12z"
                 stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
@@ -25,7 +25,7 @@
             </svg>
           </ion-button>
           <!-- Relay status — tap to open relay sheet -->
-          <ion-button class="relay-header-btn" @click="relaySheetOpen = true" aria-label="Relay status">
+          <ion-button class="relay-header-btn" @click="relaySheetOpen = true" :aria-label="$ui('Relay status')">
             <svg viewBox="0 0 24 24" fill="none" style="flex-shrink:0;width:20px;height:20px">
               <!-- broadcast tower -->
               <path d="M12 20v-8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -57,21 +57,21 @@
             <!-- Tutorial card -->
             <section v-if="tutorialVisible" class="tutorial-card surface-card">
               <div class="tutorial-card__header">
-                <span class="tutorial-card__eyebrow">Quick tour</span>
-                <button class="tutorial-card__dismiss" @click="skipTutorial">Skip</button>
+                <span class="tutorial-card__eyebrow">{{ $ui("Quick tour") }}</span>
+                <button class="tutorial-card__dismiss" @click="skipTutorial">{{ $ui("Skip") }}</button>
               </div>
               <div class="tutorial-card__body">
-                <p class="tutorial-card__step">Step {{ tutorialStep + 1 }} of {{ tutorialSteps.length }}</p>
-                <h3>{{ currentTutorialStep.title }}</h3>
-                <p>{{ currentTutorialStep.body }}</p>
+                <p class="tutorial-card__step">{{ $ui("Step") }} {{ tutorialStep + 1 }} {{ $ui("of") }} {{ tutorialSteps.length }}</p>
+                <h3>{{ $ui(currentTutorialStep.title) }}</h3>
+                <p>{{ $ui(currentTutorialStep.body) }}</p>
                 <ul class="tutorial-card__list">
                   <li v-for="item in currentTutorialStep.bullets" :key="item">{{ item }}</li>
                 </ul>
               </div>
               <div class="tutorial-card__actions">
-                <button class="tutorial-card__secondary" @click="previousTutorialStep">Back</button>
+                <button class="tutorial-card__secondary" @click="previousTutorialStep">{{ $ui("Back") }}</button>
                 <button class="tutorial-card__primary" @click="nextTutorialStep">
-                  {{ tutorialStep === tutorialSteps.length - 1 ? 'Finish' : 'Next' }}
+                  {{ tutorialStep === tutorialSteps.length - 1 ? $ui("Finish") : $ui("Next") }}
                 </button>
               </div>
             </section>
@@ -79,26 +79,24 @@
             <!-- Desktop heading + composer -->
             <div class="net-head">
               <div class="net-head__text">
-                <h1>Your network</h1>
-                <p>What's moving across this relay</p>
+                <h1>{{ $ui("Your network") }}</h1>
+                <p>{{ $ui("What's moving across this relay") }}</p>
               </div>
-              <div class="net-seg" role="tablist" aria-label="Feed order">
-                <button role="tab" :aria-selected="feedMode === 'for-you'" :class="{ active: feedMode === 'for-you' }" @click="setFeedMode('for-you')">Relevant</button>
-                <button role="tab" :aria-selected="feedMode === 'latest'" :class="{ active: feedMode === 'latest' }" @click="setFeedMode('latest')">Recent</button>
+              <div class="net-seg" role="tablist" :aria-label="$ui('Feed order')">
+                <button role="tab" :aria-selected="feedMode === 'for-you'" :class="{ active: feedMode === 'for-you' }" @click="setFeedMode('for-you')">{{ $ui("Relevant") }}</button>
+                <button role="tab" :aria-selected="feedMode === 'latest'" :class="{ active: feedMode === 'latest' }" @click="setFeedMode('latest')">{{ $ui("Recent") }}</button>
               </div>
             </div>
             <div class="net-composer">
               <span class="net-composer__avatar" aria-hidden="true">{{ meInitial }}</span>
-              <button class="net-composer__input" @click="showPostOptions()">Share something with the network…</button>
-              <button class="net-composer__tool" aria-label="Post with an image" title="Post with an image" @click="showPostOptions()">
+              <button class="net-composer__input" @click="showPostOptions()">{{ $ui("Share something with the network…") }}</button>
+              <button class="net-composer__tool" :aria-label="$ui('Post with an image')" :title="$ui('Post with an image')" @click="showPostOptions()">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="10" r="1.6" fill="currentColor"/><path d="M4 17l5-4.5 4 3.5 3-2.5 4 3.5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
               </button>
               <button class="net-composer__tool net-composer__tool--text" @click="showPollOptions()">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 20V11M12 20V4M19 20v-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>Poll
-              </button>
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 20V11M12 20V4M19 20v-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>{{ $ui("Poll") }} </button>
               <button class="net-composer__publish" @click="showPostOptions()">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3.4 20.4l17.4-7.5c.8-.4.8-1.5 0-1.8L3.4 3.6c-.7-.3-1.4.3-1.2 1l1.6 6.2c.1.4.4.6.8.7L12 12l-7.4.5c-.4.1-.7.3-.8.7l-1.6 6.2c-.2.7.5 1.3 1.2 1z" fill="currentColor"/></svg>Publish
-              </button>
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3.4 20.4l17.4-7.5c.8-.4.8-1.5 0-1.8L3.4 3.6c-.7-.3-1.4.3-1.2 1l1.6 6.2c.1.4.4.6.8.7L12 12l-7.4.5c-.4.1-.7.3-.8.7l-1.6 6.2c-.2.7.5 1.3 1.2 1z" fill="currentColor"/></svg>{{ $ui("Publish") }} </button>
             </div>
 
             <!-- Feed toolbar: pill row on mobile, split tabs on desktop -->
@@ -106,35 +104,27 @@
               <!-- Mobile row 1: scope + mode pills -->
               <div class="feed-pills-row" data-tour="feed-scopes">
                 <button class="scope-pill" :class="{ active: feedScope === 'mine' }"  @click="setScope('mine')">
-                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
-                  Mine
-                </button>
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg> {{ $ui("Mine") }} </button>
                 <button class="scope-pill" :class="{ active: feedScope === 'relay' }" @click="setScope('relay')">
-                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20" stroke="currentColor" stroke-width="2"/></svg>
-                  Relay
-                </button>
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20" stroke="currentColor" stroke-width="2"/></svg> {{ $ui("Relay") }} </button>
                 <button class="scope-pill" :class="{ active: feedScope === 'explore' }" @click="setScope('explore')">
-                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                  Explore
-                </button>
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> {{ $ui("Explore") }} </button>
                 <button class="scope-pill" :class="{ active: feedScope === 'nearby' }" @click="setScope('nearby')">
-                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none"><path d="M12 22s7-6.2 7-12a7 7 0 10-14 0c0 5.8 7 12 7 12z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.5" stroke="currentColor" stroke-width="2"/></svg>
-                  Nearby
-                </button>
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none"><path d="M12 22s7-6.2 7-12a7 7 0 10-14 0c0 5.8 7 12 7 12z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.5" stroke="currentColor" stroke-width="2"/></svg> {{ $ui("Nearby") }} </button>
                 <span class="feed-pills-divider"></span>
-                <button class="scope-pill" :class="{ active: feedMode === 'for-you' }" @click="setFeedMode('for-you')">✦ For You</button>
-                <button class="scope-pill" :class="{ active: feedMode === 'latest' }"  @click="setFeedMode('latest')">Latest</button>
+                <button class="scope-pill" :class="{ active: feedMode === 'for-you' }" @click="setFeedMode('for-you')">{{ $ui("✦ For You") }}</button>
+                <button class="scope-pill" :class="{ active: feedMode === 'latest' }"  @click="setFeedMode('latest')">{{ $ui("Latest") }}</button>
               </div>
               <!-- Mobile row 2: category pills -->
               <div class="feed-pills-row feed-cat-pills-row">
-                <button class="scope-pill" :class="{ active: selectedCategory === 'all' }" @click="selectCategory('all')">All</button>
+                <button class="scope-pill" :class="{ active: selectedCategory === 'all' }" @click="selectCategory('all')">{{ $ui("All") }}</button>
                 <button
                   v-for="cat in VISIBLE_CATEGORIES"
                   :key="'mp-' + cat.id"
                   class="scope-pill"
                   :class="{ active: selectedCategory === cat.id }"
                   @click="selectCategory(cat.id)"
-                >{{ cat.label }}</button>
+                >{{ $ui(cat.label) }}</button>
               </div>
             </div>
 
@@ -143,31 +133,27 @@
               <div class="feed-toolbar-row">
                 <div class="feed-scope-tabs" data-tour="feed-scopes">
                   <button class="scope-tab" :class="{ active: feedScope === 'mine' }"  @click="setScope('mine')">
-                    <ion-icon :icon="bookmarkOutline"></ion-icon> My Spaces
-                  </button>
+                    <ion-icon :icon="bookmarkOutline"></ion-icon> {{ $ui("My Spaces") }} </button>
                   <button class="scope-tab" :class="{ active: feedScope === 'relay' }" @click="setScope('relay')">
-                    <ion-icon :icon="globeOutline"></ion-icon> This Relay
-                  </button>
+                    <ion-icon :icon="globeOutline"></ion-icon> {{ $ui("This Relay") }} </button>
                   <button class="scope-tab" :class="{ active: feedScope === 'explore' }" @click="setScope('explore')">
-                    <ion-icon :icon="ellipseOutline"></ion-icon> Explore
-                  </button>
+                    <ion-icon :icon="ellipseOutline"></ion-icon> {{ $ui("Explore") }} </button>
                   <button class="scope-tab" :class="{ active: feedScope === 'nearby' }" @click="setScope('nearby')">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true"><path d="M12 22s7-6.2 7-12a7 7 0 10-14 0c0 5.8 7 12 7 12z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.5" stroke="currentColor" stroke-width="2"/></svg> Nearby
-                  </button>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true"><path d="M12 22s7-6.2 7-12a7 7 0 10-14 0c0 5.8 7 12 7 12z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.5" stroke="currentColor" stroke-width="2"/></svg> {{ $ui("Nearby") }} </button>
                 </div>
               </div>
             </div>
 
             <!-- Category chips — desktop only (the left rail now shows relay pulse instead) -->
-            <div class="desktop-cat-strip" role="group" aria-label="Categories">
-              <button class="tag-chip" :class="{ active: selectedCategory === 'all' }" @click="selectCategory('all')">All</button>
+            <div class="desktop-cat-strip" role="group" :aria-label="$ui('Categories')">
+              <button class="tag-chip" :class="{ active: selectedCategory === 'all' }" @click="selectCategory('all')">{{ $ui("All") }}</button>
               <button
                 v-for="cat in VISIBLE_CATEGORIES"
                 :key="'dc-' + cat.id"
                 class="tag-chip"
                 :class="{ active: selectedCategory === cat.id }"
                 @click="selectCategory(selectedCategory === cat.id ? 'all' : cat.id)"
-              >{{ cat.label }}</button>
+              >{{ $ui(cat.label) }}</button>
             </div>
 
             <!-- Tag strip — desktop only -->
@@ -202,14 +188,14 @@
                   class="feed-cat-pill"
                   :class="{ active: selectedCategory === 'all' }"
                   @click="selectCategory('all')"
-                >All</button>
+                >{{ $ui("All") }}</button>
                 <button
                   v-for="cat in (showMoreCategories ? VISIBLE_CATEGORIES : VISIBLE_CATEGORIES.slice(0, 5))"
                   :key="'mob-' + cat.id"
                   class="feed-cat-pill"
                   :class="{ active: selectedCategory === cat.id }"
                   @click="selectCategory(cat.id)"
-                >{{ cat.label }}</button>
+                >{{ $ui(cat.label) }}</button>
                 <button class="feed-cat-pill feed-cat-more" @click="showMoreCategories = !showMoreCategories">
                   <ion-icon :icon="chevronDownOutline" :style="showMoreCategories ? 'transform:rotate(180deg)' : ''"></ion-icon>
                 </button>
@@ -221,43 +207,40 @@
             <!-- "My Spaces" empty hint -->
             <div v-if="feedScope === 'mine' && joinedCommunityIds.size === 0" class="scope-hint surface-card">
               <ion-icon :icon="bookmarkOutline" size="large"></ion-icon>
-              <p>You haven't joined any spaces yet.</p>
-              <p class="subtitle">Join spaces in the <button class="inline-link" @click="openSpaces()">Spaces</button> list in Orbit — your feed will be scoped to them.</p>
+              <p>{{ $ui("You haven't joined any spaces yet.") }}</p>
+              <p class="subtitle">{{ $ui("Join spaces in the") }} <button class="inline-link" @click="openSpaces()">{{ $ui("Spaces") }}</button> {{ $ui("list in Orbit — your feed will be scoped to them.") }}</p>
             </div>
 
             <!-- "Nearby" needs opt-in -->
             <div v-if="feedScope === 'nearby' && !nearby.prefs.enabled" class="scope-hint surface-card">
-              <p>Nearby is off.</p>
-              <p class="subtitle">Turn it on in <button class="inline-link" @click="router.push({ path: '/home', query: { tab: 'orbit', view: 'nearby' } })">Orbit → Nearby</button> to see posts and polls from people around you. You choose how rough your area is.</p>
+              <p>{{ $ui("Nearby is off.") }}</p>
+              <p class="subtitle">{{ $ui("Turn it on in") }} <button class="inline-link" @click="router.push({ path: '/home', query: { tab: 'orbit', view: 'nearby' } })">{{ $ui("Orbit → Nearby") }}</button> {{ $ui("to see posts and polls from people around you. You choose how rough your area is.") }}</p>
             </div>
             <div v-else-if="feedScope === 'nearby' && nearby.prefs.enabled && nearby.people.value.length === 0" class="scope-hint surface-card">
-              <p>No one nearby yet.</p>
-              <p class="subtitle">Posts from people within {{ nearby.prefs.radius }} km show up here. Try a wider radius in <button class="inline-link" @click="router.push({ path: '/home', query: { tab: 'orbit', view: 'nearby' } })">Orbit → Nearby</button>.</p>
+              <p>{{ $ui("No one nearby yet.") }}</p>
+              <p class="subtitle">{{ $ui("Posts from people within") }} {{ nearby.prefs.radius }} {{ $ui("km show up here. Try a wider radius in") }} <button class="inline-link" @click="router.push({ path: '/home', query: { tab: 'orbit', view: 'nearby' } })">{{ $ui("Orbit → Nearby") }}</button>.</p>
             </div>
 
             <!-- Active tag filter pill -->
             <div v-if="activeTagFilter" class="active-tag-filter-row">
               <span class="active-tag-label">#{{ activeTagFilter }}</span>
-              <button class="active-tag-clear" @click="activeTagFilter = null">✕ Clear</button>
+              <button class="active-tag-clear" @click="activeTagFilter = null">{{ $ui("✕ Clear") }}</button>
             </div>
 
             <!-- Active category filter pill -->
             <div v-if="selectedCategory && selectedCategory !== 'all'" class="active-tag-filter-row">
               <span class="active-tag-label">{{ CATEGORY_MAP.get(selectedCategory)?.label ?? selectedCategory }}</span>
-              <button class="active-tag-clear" @click="selectCategory('all')">✕ Clear</button>
+              <button class="active-tag-clear" @click="selectCategory('all')">{{ $ui("✕ Clear") }}</button>
             </div>
 
             <div v-if="isLoadingPosts" class="loading-container">
               <ion-spinner></ion-spinner>
-              <p>Loading content…</p>
+              <p>{{ $ui("Loading content…") }}</p>
             </div>
 
             <div v-else-if="combinedFeed.length > 0" ref="feedListEl" class="feed-list">
               <div v-if="newContentCount > 0" class="new-content-banner" @click="flushNewContent">
-                ↑ {{ newContentCount }} new
-                {{ postStore.newPostCount > 0 && pollStore.newPollCount > 0 ? 'posts & polls' : postStore.newPostCount > 0 ? 'posts' : 'polls' }}
-                — tap to show
-              </div>
+                ↑ {{ newContentCount }} {{ $ui("new") }} {{ postStore.newPostCount > 0 && pollStore.newPollCount > 0 ? $ui("posts & polls") : postStore.newPostCount > 0 ? 'posts' : 'polls' }} {{ $ui("— tap to show") }} </div>
 
               <template v-for="item in combinedFeed" :key="`${item.type}-${item.data.id}`">
                 <PostCard
@@ -303,34 +286,26 @@
 
             <div v-else-if="activeTagFilter || (selectedCategory && selectedCategory !== 'all')" class="empty-state empty-state--home">
               <BitMascot :size="64" mood="sleepy" />
-              <p>Nothing in {{ activeTagFilter ? '#' + activeTagFilter : (CATEGORY_MAP.get(selectedCategory)?.label ?? selectedCategory) }} yet</p>
-              <p class="subtitle">No live posts match this {{ activeTagFilter ? 'tag' : 'category' }} right now. Be the first to post one.</p>
+              <p>{{ $ui("Nothing in") }} {{ activeTagFilter ? '#' + activeTagFilter : (CATEGORY_MAP.get(selectedCategory)?.label ?? selectedCategory) }} {{ $ui("yet") }}</p>
+              <p class="subtitle">{{ $ui("No live posts match this") }} {{ activeTagFilter ? 'tag' : 'category' }} {{ $ui("right now. Be the first to post one.") }}</p>
               <div class="empty-state__actions">
-                <button class="empty-state-btn empty-state-btn--primary" @click="activeTagFilter = null; selectCategory('all')">Show everything</button>
-                <button class="empty-state-btn empty-state-btn--ghost" @click="activeTab = 'create'">Create a post</button>
+                <button class="empty-state-btn empty-state-btn--primary" @click="activeTagFilter = null; selectCategory('all')">{{ $ui("Show everything") }}</button>
+                <button class="empty-state-btn empty-state-btn--ghost" @click="activeTab = 'create'">{{ $ui("Create a post") }}</button>
               </div>
             </div>
 
             <div v-else class="empty-state empty-state--home">
               <ion-icon :icon="documentTextOutline" size="large"></ion-icon>
-              <p>No content yet</p>
+              <p>{{ $ui("No content yet") }}</p>
               <p class="subtitle">
-                <template v-if="feedScope === 'mine'">
-                  Join spaces below, or switch to <button class="inline-link" @click="setScope('relay')">This Relay</button> to browse everything.
-                </template>
-                <template v-else>
-                  Content syncs from peers and can take 5–10 seconds on first visit.
-                </template>
+                <template v-if="feedScope === 'mine'"> {{ $ui("Join spaces below, or switch to") }} <button class="inline-link" @click="setScope('relay')">{{ $ui("This Relay") }}</button> {{ $ui("to browse everything.") }} </template>
+                <template v-else> {{ $ui("Content syncs from peers and can take 5–10 seconds on first visit.") }} </template>
               </p>
               <div class="empty-state__actions">
                 <button class="empty-state-btn empty-state-btn--primary" @click="openSpaces()">
-                  <ion-icon :icon="peopleOutline"></ion-icon>
-                  Browse Spaces
-                </button>
+                  <ion-icon :icon="peopleOutline"></ion-icon> {{ $ui("Browse Spaces") }} </button>
                 <button class="empty-state-btn empty-state-btn--ghost" @click="activeTab = 'create'">
-                  <ion-icon :icon="addCircleOutline"></ion-icon>
-                  Create the first poll
-                </button>
+                  <ion-icon :icon="addCircleOutline"></ion-icon> {{ $ui("Create the first poll") }} </button>
               </div>
             </div>
           </div>
@@ -342,7 +317,7 @@
             :communityFilter="communityFilter"
             :view="orbitView"
             @update:view="orbitView = $event"
-            @update:communityFilter="communityFilter = $event"
+            @update:communityFilter="setCommunityFilter"
           />
 
           <!-- PUBLISH TAB (was Create) -->
@@ -392,23 +367,23 @@
               <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
             </div>
             <div class="moderation-onboarding-card__hero-copy">
-              <p class="moderation-onboarding-card__eyebrow">Optional feed cleanup</p>
-              <h2>Want Home to feel a little calmer?</h2>
-              <p>We can quietly hide posts that a moderation service has already flagged. It checks only the post text hash — not your username or profile.</p>
+              <p class="moderation-onboarding-card__eyebrow">{{ $ui("Optional feed cleanup") }}</p>
+              <h2>{{ $ui("Want Home to feel a little calmer?") }}</h2>
+              <p>{{ $ui("We can quietly hide posts that a moderation service has already flagged. It checks only the post text hash — not your username or profile.") }}</p>
             </div>
           </div>
           <div class="moderation-onboarding-card__highlights">
             <div class="moderation-onboarding-card__highlight">
               <ion-icon :icon="sparklesOutline"></ion-icon>
-              <span>Cleaner feed</span>
+              <span>{{ $ui("Cleaner feed") }}</span>
             </div>
             <div class="moderation-onboarding-card__highlight">
               <ion-icon :icon="eyeOffOutline"></ion-icon>
-              <span>Hide unwanted posts before they appear</span>
+              <span>{{ $ui("Hide unwanted posts before they appear") }}</span>
             </div>
             <div class="moderation-onboarding-card__highlight">
               <ion-icon :icon="linkOutline"></ion-icon>
-              <span>Switch off anytime in Settings</span>
+              <span>{{ $ui("Switch off anytime in Settings") }}</span>
             </div>
           </div>
           <div class="moderation-onboarding-card__choices">
@@ -417,41 +392,41 @@
               :class="{ active: moderationChoice === 'default' }"
               @click="moderationChoice = 'default'"
             >
-              <span class="moderation-choice__tag">Recommended</span>
-              <strong>Use the built-in filter</strong>
-              <span>Best for most people. One tap, no setup.</span>
+              <span class="moderation-choice__tag">{{ $ui("Recommended") }}</span>
+              <strong>{{ $ui("Use the built-in filter") }}</strong>
+              <span>{{ $ui("Best for most people. One tap, no setup.") }}</span>
             </button>
             <button
               class="moderation-choice"
               :class="{ active: moderationChoice === 'custom' }"
               @click="moderationChoice = 'custom'"
             >
-              <span class="moderation-choice__tag moderation-choice__tag--soft">Advanced</span>
-              <strong>I already have my own moderation service</strong>
-              <span>Paste the address below and we&apos;ll use that instead.</span>
+              <span class="moderation-choice__tag moderation-choice__tag--soft">{{ $ui("Advanced") }}</span>
+              <strong>{{ $ui("I already have my own moderation service") }}</strong>
+              <span>{{ $ui("Paste the address below and we'll use that instead.") }}</span>
             </button>
           </div>
           <div v-if="moderationChoice === 'custom'" class="moderation-onboarding-card__custom">
-            <label for="moderation-api-url">Moderation API address</label>
+            <label for="moderation-api-url">{{ $ui("Moderation API address") }}</label>
             <input
               id="moderation-api-url"
               ref="moderationCustomApiInput"
               v-model="moderationCustomApiUrl"
               type="url"
               inputmode="url"
-              placeholder="https://interpoll.endless.sbs/moderation"
+              placeholder="https://interpoll.endless.social/moderation"
               @input="moderationCustomApiError = ''"
             >
-            <p class="moderation-onboarding-card__hint">This should be the base address of your moderation API.</p>
+            <p class="moderation-onboarding-card__hint">{{ $ui("This should be the base address of your moderation API.") }}</p>
             <p v-if="moderationCustomApiError" class="moderation-onboarding-card__error">{{ moderationCustomApiError }}</p>
           </div>
           <div class="moderation-onboarding-card__actions">
-            <button class="moderation-onboarding-card__secondary" @click="skipModerationOnboarding">No thanks, show everything</button>
+            <button class="moderation-onboarding-card__secondary" @click="skipModerationOnboarding">{{ $ui("No thanks, show everything") }}</button>
             <button class="moderation-onboarding-card__primary" :disabled="moderationSaving" @click="confirmModerationOnboarding">
-              {{ moderationSaving ? 'Saving…' : moderationChoice === 'custom' ? 'Use this address' : 'Turn on feed filter' }}
+              {{ moderationSaving ? $ui("Saving…") : moderationChoice === 'custom' ? $ui("Use this address") : $ui("Turn on feed filter") }}
             </button>
           </div>
-          <p class="moderation-onboarding-card__footer">You can change this later in <strong>Settings → General</strong>.</p>
+          <p class="moderation-onboarding-card__footer">{{ $ui("You can change this later in") }} <strong>{{ $ui("Settings → General") }}</strong>.</p>
         </section>
       </div>
     </ion-modal>
@@ -471,35 +446,21 @@
 </template>
 
 <script setup lang="ts">
+import { ui } from "../i18n";
 import BitMascot from '../components/BitMascot.vue';
 import { useBitStore } from '../stores/bitStore';
 import { ref, shallowRef, computed, onMounted, onUnmounted, watch, nextTick, defineAsyncComponent } from 'vue';
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonBadge,
-  IonButtons, IonButton, IonIcon, IonModal, IonSpinner,
-  IonInfiniteScroll, IonInfiniteScrollContent,
-  actionSheetController, toastController,
-} from '@ionic/vue';
-import {
-  cube, personCircleOutline, settingsOutline, addCircleOutline, addOutline,
-  earthOutline, peopleOutline, home, homeOutline, documentTextOutline,
-  chevronForwardOutline, chevronDownOutline, people, addCircle, statsChartOutline,
-  searchOutline, chatbubble, chatbubbleOutline, bookmarkOutline, globeOutline,
-  shieldCheckmarkOutline, sparklesOutline, eyeOffOutline, linkOutline,
-  codeSlashOutline, gameControllerOutline, flaskOutline, businessOutline,
-  logoBitcoin, trophyOutline, ellipsisHorizontalOutline, lockClosedOutline,
-  qrCodeOutline, tvOutline, happyOutline, chatbubblesOutline, cashOutline,
-  heartOutline, schoolOutline, locationOutline, ellipseOutline,
-} from 'ionicons/icons';
+import { IonPage, IonHeader, IonToolbar, IonContent, IonButtons, IonButton, IonIcon, IonModal, IonSpinner, IonInfiniteScroll, IonInfiniteScrollContent, actionSheetController, toastController } from '@ionic/vue';
+import { personCircleOutline, addCircleOutline, peopleOutline, documentTextOutline, chevronDownOutline, searchOutline, bookmarkOutline, globeOutline, shieldCheckmarkOutline, sparklesOutline, eyeOffOutline, linkOutline, qrCodeOutline, ellipseOutline } from 'ionicons/icons';
 
 // Inline telescope icon SVG path as a fallback (not in all ionicons builds)
-const telescopeOutline = 'M21.03 3.03a1 1 0 00-1.42 0L16 6.64l-1.29-1.29a1 1 0 00-1.42 1.42L14.58 8l-3.29 3.29-1.29-1.3A1 1 0 008.58 11.4l1.3 1.3-5.3 5.3H3a1 1 0 000 2h18a1 1 0 000-2h-1.59l-2-2 1.3-1.3a1 1 0 00-1.42-1.41l-1.29 1.29L12.71 11l3.29-3.29 1.3 1.3a1 1 0 001.41-1.42L17.42 6.3l3.61-3.61a1 1 0 000-1.66z';
+
 
 import { useQrScan } from '../composables/useQrScan';
 import { useRoute, useRouter } from 'vue-router';
 import { useChainStore } from '../stores/chainStore';
 import { useCommunityStore } from '../stores/communityStore';
-import type { Community } from '../services/communityService';
+
 import { usePostStore } from '../stores/postStore';
 import { usePollStore } from '../stores/pollStore';
 
@@ -544,7 +505,7 @@ const postStore      = usePostStore();
 const bitStore       = useBitStore();
 const pollStore      = usePollStore();
 
-const FEED_DEBUG      = localStorage.getItem('interpoll_feed_debug') === 'true';
+
 const HOME_GUN_FEED_ENABLED         = localStorage.getItem('interpoll_home_gun_feed') !== 'false';
 const HOME_GUN_FEED_MAX_COMMUNITIES = 8;
 
@@ -571,7 +532,10 @@ const activeTab          = ref<string>(initialTab());
 const orbitView          = ref<'map' | 'spaces' | 'nearby'>(route.query.view === 'spaces' || route.query.tab === 'communities' ? 'spaces' : 'nearby');
 function openSpaces() { orbitView.value = 'spaces'; activeTab.value = 'orbit'; }
 watch(() => route.query.view, (v) => { if (route.name === 'Home' && (v === 'spaces' || v === 'map' || v === 'nearby')) orbitView.value = v === 'map' ? 'nearby' : v; });
-const communityFilter    = ref('all');
+const communityFilter = ref<'all' | 'private' | 'joined'>('all');
+function setCommunityFilter(value: string) {
+  if (value === 'all' || value === 'private' || value === 'joined') communityFilter.value = value;
+}
 const isLoadingPosts     = ref(false);
 const voteVersion        = ref(0);
 const isHeaderHidden     = ref(false);
@@ -594,11 +558,7 @@ function setScope(s: FeedScope) {
   feedScope.value = s;
   void router.push({ query: { ...route.query, scope: s, tab: 'home' } });
 }
-function setScopeAndHome(s: FeedScope) {
-  feedScope.value = s;
-  activeTab.value = 'home';
-  void router.push({ query: { ...route.query, scope: s, tab: undefined } });
-}
+
 
 // Sync scope from URL (e.g. when the top nav pushes ?scope=)
 watch(
@@ -654,12 +614,7 @@ const {
   tutorialVisible, tutorialStep, currentTutorialStep, TUTORIAL_STEPS: tutorialSteps,
   skipTutorial, previousTutorialStep, nextTutorialStep,
 } = tutorial;
-const {
-  moderationOnboardingOpen, moderationOnboardingReady, moderationChoice, moderationCustomApiUrl,
-  moderationCustomApiInput, moderationCustomApiError, moderationSaving,
-  skipModerationOnboarding, handleModerationModalDismiss, confirmModerationOnboarding,
-  maybeShowOnboarding,
-} = moderation;
+const { moderationOnboardingOpen, moderationChoice, moderationCustomApiUrl, moderationCustomApiError, moderationSaving, skipModerationOnboarding, handleModerationModalDismiss, confirmModerationOnboarding, maybeShowOnboarding } = moderation;
 
 // ── Chat lazy init ─────────────────────────────────────────────────────────
 const gunListeners: Array<() => void> = [];
@@ -696,7 +651,7 @@ function selectChat(chat: any)        { ensureChat()?.markChatOpened(chat); }
 function startChatWithUser(user: any) { ensureChat()?.startChatWithUser(user); }
 function clearUserSearch()            { ensureChat()?.clearUserSearch(); userSearchQuery.value = ''; }
 async function handleUserSearch()     { await ensureChat()?.handleUserSearch(); }
-async function loadChatList()         { await ensureChat()?.loadChatList(); }
+
 /** Message search for the chat list. Answers can arrive out of order, so only the newest request may set the result. */
 async function onChatSearch(query: string) {
   const seq = ++chatSearchSeq;
@@ -746,7 +701,7 @@ function categoryFromRoute(): string {
 const selectedCategory = ref<string>(categoryFromRoute());
 
 watch(selectedCategory, (cat) => {
-  if (cat !== 'all') void pollStore.loadAllCommunityPolls?.();
+  if (cat !== 'all') pollStore.resetVisibleCount();
 });
 watch(() => route.query.category, () => {
   const cat = categoryFromRoute();
@@ -759,12 +714,10 @@ import { observePost, isAlreadyTracked, setOnViewConfirmed, getViewedIds } from 
 const { ALL_CATEGORIES, recordEngagement, recentTags, isUserTag, loadTrendingTags, topCategories } = useCategories();
 const { triggerBurst } = useBurst();
 const VISIBLE_CATEGORIES = ALL_CATEGORIES;
-const feedCategories = computed(() =>
-  showMoreCategories.value ? VISIBLE_CATEGORIES : VISIBLE_CATEGORIES.slice(0, 6)
-);
 
-const sidebarCatsOpen     = ref(true);
-const sidebarCatsExpanded = ref(false);
+
+
+
 const mobileShowTags   = ref(false);
 const trendingTagChips = ref<Array<{ tag: string; count: number }>>([]);
 
@@ -822,14 +775,7 @@ function itemMatchesTag(item: { type: string; data: any }, tag: string): boolean
 }
 
 // ── Feed computation with scope filtering ──────────────────────────────────
-function itemMatchesScope(item: { type: string; data: any }): boolean {
-  if (feedScope.value === 'relay' || feedScope.value === 'explore') return true;
-  if (feedScope.value === 'nearby') return nearby.nearbyAuthorIds.value.has(item.data.authorId);
-  // 'mine' — show only items from joined communities
-  const communityId = item.data.communityId;
-  if (!communityId) return false;
-  return joinedCommunityIds.value.has(communityId);
-}
+
 
 function itemMatchesCategory(item: { type: string; data: any }): boolean {
   if (selectedCategory.value === 'all') return true;
@@ -999,7 +945,7 @@ function getPollModerationText(poll: Poll): string {
 function getPostModerationText(post: Post): string {
   return [post.title, post.content].filter(Boolean).join(' ');
 }
-function ensureInitialFeedVisible(reason: string) {
+function ensureInitialFeedVisible(_reason: string) {
   if (combinedFeed.value.length > 0) return;
   postStore.resetVisibleCount?.();
   pollStore.resetVisibleCount?.();
@@ -1028,7 +974,7 @@ async function handlePostVote(post: Post, direction: 'up' | 'down') {
     await presentVoteToast(current === direction ? (direction === 'up' ? 'Liked' : 'Disliked') : 'Removed', version);
   } catch {
     voteVersion.value++;
-    (await toastController.create({ message: 'Failed to vote', duration: 2000 })).present();
+    (await toastController.create({ message: ui("Failed to vote"), duration: 2000 })).present();
   }
 }
 const handleUpvote   = (post: Post) => { triggerBurst('heart');   handlePostVote(post, 'up'); };
@@ -1045,7 +991,7 @@ async function handleUpvotePoll(poll: Poll) {
     await presentVoteToast(wasActive ? 'Like removed' : 'Liked', version);
   } catch {
     voteVersion.value++;
-    (await toastController.create({ message: 'Failed to upvote poll', duration: 2000 })).present();
+    (await toastController.create({ message: ui("Failed to upvote poll"), duration: 2000 })).present();
   }
 }
 async function handleDownvotePoll(poll: Poll) {
@@ -1059,7 +1005,7 @@ async function handleDownvotePoll(poll: Poll) {
     await presentVoteToast(wasActive ? 'Dislike removed' : 'Disliked', version);
   } catch {
     voteVersion.value++;
-    (await toastController.create({ message: 'Failed to downvote poll', duration: 2000 })).present();
+    (await toastController.create({ message: ui("Failed to downvote poll"), duration: 2000 })).present();
   }
 }
 
@@ -1131,11 +1077,11 @@ async function showPostOptions() {
   const joined = communityStore.communities.filter((c: any) => communityStore.isJoined(c.id));
   const list = joined.length > 0 ? joined : communityStore.communities;
   const actionSheet = await actionSheetController.create({
-    header: 'Create a post in…',
-    buttons: list.slice(0, 8).map((c: any) => ({
+    header: ui("Create a post in…"),
+    buttons: [{ text: ui("Cancel"), role: 'cancel' }, ...list.slice(0, 8).map((c: any) => ({
       text: c.displayName,
       handler: () => { router.push(`/community/${c.id}/create-post`); },
-    })).concat([{ text: 'Cancel', role: 'cancel' }]),
+    }))],
   });
   await actionSheet.present();
 }
@@ -1143,11 +1089,11 @@ async function showPollOptions() {
   const joined = communityStore.communities.filter((c: any) => communityStore.isJoined(c.id));
   const list = joined.length > 0 ? joined : communityStore.communities;
   const actionSheet = await actionSheetController.create({
-    header: 'Create a poll in…',
-    buttons: list.slice(0, 8).map((c: any) => ({
+    header: ui("Create a poll in…"),
+    buttons: [{ text: ui("Cancel"), role: 'cancel' }, ...list.slice(0, 8).map((c: any) => ({
       text: c.displayName,
       handler: () => { router.push(`/community/${c.id}/create-poll`); },
-    })).concat([{ text: 'Cancel', role: 'cancel' }]),
+    }))],
   });
   await actionSheet.present();
 }
@@ -1180,22 +1126,10 @@ async function tryRecoverEmptyFeedFromGun() {
 }
 
 // ── Community display helpers ──────────────────────────────────────────────
-function communityBadge(community: Community | null | undefined) {
-  if (!community) return null;
-  if ((community as any).isPrivate) return { label: 'Private', tone: 'private' };
-  const cat = String((community as any).category || (community as any).tags?.[0] || '').toLowerCase();
-  if (cat.includes('nsfw') || (community as any).nsfw) return { label: 'NSFW', tone: 'nsfw' };
-  if (cat.includes('politic')) return { label: 'Politics', tone: 'politics' };
-  if (cat.includes('tech') || cat.includes('programming')) return { label: 'Tech', tone: 'tech' };
-  if (cat) return { label: cat.charAt(0).toUpperCase() + cat.slice(1), tone: 'general' };
-  return { label: 'General', tone: 'general' };
-}
-function communityAvatarTone(community: Community | null | undefined): string {
-  const badge = communityBadge(community);
-  return badge ? `tone-${badge.tone}` : 'tone-general';
-}
 
-const sidebarCommunities = computed(() => communityStore.communities);
+
+
+
 
 // ── Trending categories ────────────────────────────────────────────────────
 import { CATEGORY_MAP } from '../composables/useCategories';
@@ -1254,7 +1188,7 @@ onMounted(async () => {
 
   // Record engagement when a card is dwelled on — feed personalisation learns
   // from what you actually read, not just what you upvote.
-  setOnViewConfirmed((id, type, el) => {
+  setOnViewConfirmed((_id, _type, el) => {
     const article = el as HTMLElement;
     const category = article.dataset.category || undefined;
     const tagsRaw  = article.dataset.tags || '';
@@ -1792,7 +1726,7 @@ if (typeof window !== 'undefined') {
     padding: 6px 14px; border: none; border-radius: 8px; background: none; cursor: pointer;
     font: inherit; font-size: 12.5px; font-weight: 650; color: var(--app-text-muted); transition: background 120ms, color 120ms;
   }
-  .net-seg button.active { background: var(--app-accent); color: #04120a; }
+  .net-seg button.active { background: var(--app-accent); color: var(--app-on-accent); }
   .net-seg button:not(.active):hover { color: var(--app-text); }
 
   .net-composer {
@@ -1818,7 +1752,7 @@ if (typeof window !== 'undefined') {
   .net-composer__tool:hover { background: rgba(255,255,255,0.06); color: var(--app-text); }
   .net-composer__publish {
     display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border: none; border-radius: 9px; cursor: pointer;
-    background: var(--app-accent); color: #04120a; font: inherit; font-size: 13px; font-weight: 700; transition: filter 120ms;
+    background: var(--app-accent); color: var(--app-on-accent); font: inherit; font-size: 13px; font-weight: 700; transition: filter 120ms;
   }
   .net-composer__publish svg { width: 14px; height: 14px; }
   .net-composer__publish:hover { filter: brightness(1.08); }

@@ -29,6 +29,7 @@ interface UseSearchReturn {
   searchPage: (query: string, page: number, options?: SearchOptions) => Promise<void>;
   nextPage: (query: string, options?: SearchOptions) => Promise<void>;
   previousPage: (query: string, options?: SearchOptions) => Promise<void>;
+  browseCategory: (category: string, options?: SearchOptions) => Promise<void>;
   clearResults: () => void;
   indexContent: (type: 'post' | 'poll', id: string, data: any) => Promise<void>;
   // New additions

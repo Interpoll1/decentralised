@@ -71,47 +71,45 @@ export async function encryptAndUpload(file: File, authToken: string): Promise<M
 }
 
 /**
- * Decrypted media is memoised per media id for the life of the tab (and concurrent callers share one
- * download). Re-opening a chat used to re-download and re-decrypt every image and create a fresh blob
- * URL each time. Only the CIPHERTEXT is persisted across sessions (Cache Storage) — never plaintext.
+ * Only ciphertext is cached. Every render authenticates the supplied descriptor and key again,
+ * then creates an independently owned object URL. A caller can revoke its URL without breaking
+ * another view, and a warm cache cannot bypass AES-GCM authentication of changed metadata.
  */
-const decrypted = new Map<string, Promise<string>>();
 const CIPHER_CACHE = 'interpoll-dm-media-v1';
 
 async function fetchCiphertext(url: string, authToken: string): Promise<ArrayBuffer> {
+  // Partition persistent ciphertext by authorization context without storing the token itself.
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify([url, authToken])));
+  const partition = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+  const cacheKey = `${url}?cacheContext=${partition}`;
   let cache: Cache | null = null;
   try { cache = typeof caches !== 'undefined' ? await caches.open(CIPHER_CACHE) : null; } catch { cache = null; }
   try {
-    const hit = await cache?.match(url);
+    const hit = await cache?.match(cacheKey);
     if (hit) return await hit.arrayBuffer();
   } catch { /* fall through to network */ }
   const res = await fetch(url, { headers: { Authorization: `Bearer ${authToken}` } });
   if (!res.ok) throw new Error(`Media fetch failed: ${res.status}`);
-  void cache?.put(url, res.clone()).catch(() => {});
+  void cache?.put(cacheKey, res.clone()).catch(() => {});
   return await res.arrayBuffer();
 }
 
 /** Authenticate before rendering; sender preview must not delete recipient media. */
-export function fetchAndDecrypt(meta: MediaMeta, authToken: string): Promise<string> {
-  const id = meta.mediaId;
-  let p = decrypted.get(id);
-  if (!p) {
-    p = fetchAndDecryptUncached(meta, authToken);
-    decrypted.set(id, p);
-    p.catch(() => { if (decrypted.get(id) === p) decrypted.delete(id); });   // failures are retried next time
-  }
-  return p;
-}
-
-async function fetchAndDecryptUncached(meta: MediaMeta, authToken: string): Promise<string> {
+export async function fetchAndDecrypt(meta: MediaMeta, authToken: string): Promise<string> {
+  // Snapshot untrusted mutable input before any asynchronous work.
+  meta = { ...meta };
+  if (typeof meta.mediaId !== 'string' || !meta.mediaId || typeof meta.mediaKey !== 'string'
+    || typeof meta.mediaIV !== 'string') throw new Error('Unsupported or malformed media descriptor');
+  const additionalData = aad(meta);
   const ciphertext = await fetchCiphertext(`${RELAY_BASE}/api/chat-media/${encodeURIComponent(meta.mediaId)}`, authToken);
   const rawKey = Uint8Array.from(atob(meta.mediaKey), c => c.charCodeAt(0));
   const iv     = Uint8Array.from(atob(meta.mediaIV),  c => c.charCodeAt(0));
+  if (rawKey.byteLength !== 32 || iv.byteLength !== 12) throw new Error('Invalid media key or IV');
 
   const cryptoKey = await crypto.subtle.importKey(
     'raw', rawKey, { name: 'AES-GCM' }, false, ['decrypt']
   );
-  const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv, additionalData: aad(meta) }, cryptoKey, ciphertext);
+  const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv, additionalData }, cryptoKey, ciphertext);
   if (plaintext.byteLength !== meta.mediaSize) throw new Error('Media size mismatch');
 
   return URL.createObjectURL(new Blob([plaintext], { type: meta.mediaType }));

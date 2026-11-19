@@ -9,7 +9,7 @@ import crypto from 'crypto';
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
-const DEFAULT_ORIGINS = ['http://localhost:5173', 'https://endless.sbs'];
+const DEFAULT_ORIGINS = ['http://localhost:5173', 'https://endless.social'];
 
 export const ALLOWED_ORIGINS = (() => {
   const env = process.env.ALLOWED_ORIGINS;

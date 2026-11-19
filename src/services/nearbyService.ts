@@ -381,7 +381,7 @@ export class NearbyService {
     let ok = true;
     for (const it of items) {
       const stamp = await this.stampFor(it.key, pub);
-      const rec = { ...it.rec, created: stamp.created, pn: stamp.pn };
+      const rec: Record<string, unknown> = { ...it.rec, created: stamp.created, pn: stamp.pn };
       const json = JSON.stringify(await this.sign(rec));
       for (const l of levelsFrom(it.prec)) {
         const cell = cellFor(Number(rec.lat), Number(rec.lon), l).key;

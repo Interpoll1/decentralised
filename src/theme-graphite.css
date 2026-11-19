@@ -1,0 +1,181 @@
+@font-face { font-family: 'Grand Hotel'; src: url('/fonts/grand-hotel/GrandHotel-Regular.ttf') format('truetype'); font-style: normal; font-weight: 400; font-display: swap; }
+/* Pavlo's approved light graphite palette; a quiet dark counterpart is opt-in. */
+:root {
+  color-scheme: light;
+  --system-chrome-color: #e7e9ec;
+  --app-bg-deep: #e7e9ec;
+  --app-bg-base: #e7e9ec;
+  --app-bg-elevated: #ffffff;
+  --app-surface: #f7f8f9;
+  --app-surface-strong: #ffffff;
+  --app-surface-hover: #edf0f2;
+  --app-border: #ccd2d8;
+  --app-border-strong: #8b969f;
+  --app-border-accent: #17664b;
+  --app-text: #232a31;
+  --app-text-muted: #505d69;
+  --app-text-subtle: #5c6873;
+  --app-accent: #17664b;
+  --app-accent-bright: #17664b;
+  --app-accent-rgb: 23, 102, 75;
+  --app-accent-subtle: #dce9e3;
+  --app-on-accent: #ffffff;
+  --app-brand: #17664b;
+  --app-success: #17664b;
+  --app-success-rgb: 23, 102, 75;
+  --app-warning: #8a5b0d;
+  --app-warning-rgb: 138, 91, 13;
+  --app-danger: #ae4141;
+  --app-danger-rgb: 174, 65, 65;
+  --app-shadow-sm: 0 2px 8px rgb(35 42 49 / 5%);
+  --app-shadow-md: 0 6px 20px rgb(35 42 49 / 7%);
+  --app-shadow-lg: 0 16px 40px rgb(35 42 49 / 13%);
+  --app-shadow-inset: none;
+  --app-focus-ring: 0 0 0 3px rgb(23 102 75 / 28%);
+  --app-radius-lg: 16px;
+  --app-radius-md: 12px;
+  --app-radius-sm: 8px;
+  --app-grid-color: transparent;
+  --app-noise-opacity: 0;
+  --app-ambient-spot-1: transparent;
+  --app-ambient-spot-2: transparent;
+  --app-ambient-spot-3: transparent;
+  --app-ambient-spot-4: transparent;
+  --app-surface-tint-top: transparent;
+  --app-surface-tint-bottom: transparent;
+  --app-surface-tint-top-hover: transparent;
+  --app-surface-tint-bottom-hover: transparent;
+  --app-pill-surface: #e2e6ea;
+  --app-item-surface: #edf0f2;
+  --app-search-surface: #e2e6ea;
+  --app-heading-start: var(--app-text);
+  --app-heading-end: var(--app-text);
+  --glass-blur: 0px;
+  --glass-saturation: 1;
+  --glass-item-blur: 0px;
+  --glass-item-saturation: 1;
+  --toolbar-blur: 0px;
+  --toolbar-saturation: 1;
+  --glass-border: var(--app-border);
+  --glass-border-top: var(--app-border);
+  --glass-border-bottom: var(--app-border);
+  --glass-shadow: var(--app-shadow-sm);
+  --glass-highlight: none;
+  --glass-inner-glow: none;
+  --aurora-base-bg: var(--app-bg-base);
+  --aurora-orb1-opacity: 0;
+  --aurora-orb2-opacity: 0;
+  --aurora-orb3-opacity: 0;
+}
+
+html.dark, body.dark {
+  color-scheme: dark;
+  --system-chrome-color: #232a31;
+  --app-bg-deep: #232a31;
+  --app-bg-base: #232a31;
+  --app-bg-elevated: #323c45;
+  --app-surface: #2b343d;
+  --app-surface-strong: #323c45;
+  --app-surface-hover: #39444e;
+  --app-border: #4a5662;
+  --app-border-strong: #788794;
+  --app-border-accent: #a0cbb9;
+  --app-text: #edf0f2;
+  --app-text-muted: #bac4cd;
+  --app-text-subtle: #aebbc6;
+  --app-accent: #a0cbb9;
+  --app-accent-bright: #a0cbb9;
+  --app-accent-rgb: 160, 203, 185;
+  --app-accent-subtle: #354b44;
+  --app-on-accent: #172b23;
+  --app-brand: #a0cbb9;
+  --app-success: #a0cbb9;
+  --app-success-rgb: 160, 203, 185;
+  --app-warning: #e4c17a;
+  --app-warning-rgb: 228, 193, 122;
+  --app-danger: #edabab;
+  --app-danger-rgb: 237, 171, 171;
+  --app-shadow-sm: 0 2px 8px rgb(0 0 0 / 10%);
+  --app-shadow-md: 0 6px 20px rgb(0 0 0 / 14%);
+  --app-shadow-lg: 0 16px 40px rgb(0 0 0 / 24%);
+  --app-shadow-inset: none;
+  --app-focus-ring: 0 0 0 3px rgb(160 203 185 / 38%);
+  --app-grid-color: transparent;
+  --app-noise-opacity: 0;
+  --app-ambient-spot-1: transparent;
+  --app-ambient-spot-2: transparent;
+  --app-ambient-spot-3: transparent;
+  --app-ambient-spot-4: transparent;
+  --app-surface-tint-top: transparent;
+  --app-surface-tint-bottom: transparent;
+  --app-surface-tint-top-hover: transparent;
+  --app-surface-tint-bottom-hover: transparent;
+  --app-pill-surface: #39444e;
+  --app-item-surface: #323c45;
+  --app-search-surface: #323c45;
+  --app-heading-start: var(--app-text);
+  --app-heading-end: var(--app-text);
+  --glass-blur: 0px;
+  --glass-item-blur: 0px;
+  --toolbar-blur: 0px;
+  --glass-border-top: var(--app-border);
+  --glass-border-bottom: var(--app-border);
+  --glass-inner-glow: none;
+  --aurora-base-bg: var(--app-bg-base);
+}
+
+/* Ionic controls and overlays use the same roles as the native HTML controls. */
+html, body, html.dark, body.dark, ion-app {
+  --ion-background-color: var(--app-bg-base);
+  --ion-card-background: var(--app-surface);
+  --ion-item-background: var(--app-surface);
+  --ion-text-color: var(--app-text);
+  --ion-toolbar-background: var(--app-bg-base);
+  --ion-tab-bar-background: var(--app-bg-base);
+  --ion-color-primary: var(--app-accent);
+  --ion-color-primary-rgb: var(--app-accent-rgb);
+  --ion-color-primary-contrast: var(--app-on-accent);
+  --ion-color-primary-shade: var(--app-accent);
+  --ion-color-primary-tint: var(--app-accent-bright);
+  --ion-color-secondary: var(--app-accent);
+  --ion-color-secondary-contrast: var(--app-on-accent);
+  --ion-color-success: var(--app-success);
+  --ion-color-medium: var(--app-text-muted);
+  --ion-color-step-50: var(--app-surface);
+  --ion-color-step-100: var(--app-item-surface);
+  --ion-color-step-150: var(--app-border);
+  --ion-color-step-400: var(--app-text-subtle);
+  --ion-color-step-500: var(--app-text-muted);
+  --ion-color-step-600: var(--app-text-muted);
+  --ion-color-step-700: var(--app-text);
+  --ion-color-step-900: var(--app-text);
+}
+
+html, body { background: var(--app-bg-base); color: var(--app-text); }
+html ion-app { background: var(--app-bg-base) !important; }
+.interpoll-aurora { display: none; }
+::selection { background: var(--app-accent-subtle); color: var(--app-text); }
+input, textarea { caret-color: var(--app-accent); }
+html :focus-visible { outline: 2px solid var(--app-accent); outline-offset: 3px; }
+html :is(input, textarea, select) { color: var(--app-text); color-scheme: inherit; }
+html :is(input, textarea)::placeholder { color: var(--app-text-subtle); opacity: 1; }
+html select option { color: var(--app-text); background: var(--app-surface-strong); font-size: 14px; }
+html :is(.atn-publish, .pill-btn.accent, .block-btn.primary, .arm-connect-btn, .ars-create-cta,
+  .create-btn, .send-button, .btn-primary, .primary-btn) {
+  background: var(--app-accent); color: var(--app-on-accent);
+}
+html .card-heading-icon { background: var(--app-accent-subtle); color: var(--app-accent); }
+html .atn-avatar { background: var(--app-accent-subtle); color: var(--app-accent); }
+html .atn-search { background: var(--app-search-surface); }
+html .atn-badge { color: var(--app-on-accent); }
+html .feed-cat-pill.active { background: var(--app-text); color: var(--app-bg-elevated); }
+html :is(.post-card, .poll-card, .comment-card) { color: var(--app-text); }
+html .post-actions :is(button, a) { color: var(--app-text-muted); }
+html .post-actions :is(button, a).active { color: var(--app-accent); }
+html ion-toolbar { --background: var(--app-bg-base); --color: var(--app-text); }
+html :is(ion-alert, ion-popover, ion-action-sheet) { --background: var(--app-surface-strong); --color: var(--app-text); }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

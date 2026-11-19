@@ -1,10 +1,10 @@
 <template>
-  <aside class="rps" aria-label="Relay pulse">
+  <aside class="rps" :aria-label="$ui('Relay pulse')">
     <div class="rps-sticky">
     <section class="rps-card">
       <header class="rps-head">
         <span class="rps-beat"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h4l2-6 4 12 2-6h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-        <h2>Relay pulse</h2>
+        <h2>{{ $ui("Relay pulse") }}</h2>
       </header>
 
       <button class="rps-relay" @click="$emit('open-relay')">
@@ -18,15 +18,15 @@
       </button>
 
       <dl class="rps-stats">
-        <div><dt><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="3" stroke="currentColor" stroke-width="1.7"/><path d="M3.5 19c.7-3 2.9-4.5 5.5-4.5s4.8 1.5 5.5 4.5M16 6.8a3 3 0 010 5.4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></dt><dd>{{ peers }}</dd><dd class="rps-stats__k">peers</dd></div>
-        <div><dt><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12a8 8 0 0113.7-5.6L20 8.5M20 4v4.5h-4.5M20 12a8 8 0 01-13.7 5.6L4 15.5M4 20v-4.5h4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></dt><dd>{{ synced }}</dd><dd class="rps-stats__k">synced</dd></div>
-        <div><dt><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M13 3L5 14h6l-1 7 8-11h-6l1-7z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></dt><dd>{{ latency == null ? '—' : `${latency} ms` }}</dd><dd class="rps-stats__k">latency</dd></div>
+        <div><dt><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="3" stroke="currentColor" stroke-width="1.7"/><path d="M3.5 19c.7-3 2.9-4.5 5.5-4.5s4.8 1.5 5.5 4.5M16 6.8a3 3 0 010 5.4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></dt><dd>{{ peers }}</dd><dd class="rps-stats__k">{{ $ui("peers") }}</dd></div>
+        <div><dt><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12a8 8 0 0113.7-5.6L20 8.5M20 4v4.5h-4.5M20 12a8 8 0 01-13.7 5.6L4 15.5M4 20v-4.5h4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></dt><dd>{{ synced }}</dd><dd class="rps-stats__k">{{ $ui("synced") }}</dd></div>
+        <div><dt><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M13 3L5 14h6l-1 7 8-11h-6l1-7z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></dt><dd>{{ latency == null ? '—' : `${latency} ms` }}</dd><dd class="rps-stats__k">{{ $ui("latency") }}</dd></div>
       </dl>
 
       <hr class="rps-sep" />
       <header class="rps-head rps-head--sub">
-        <h2>Recent activity</h2>
-        <button class="rps-link" @click="router.push('/resilience')">See all</button>
+        <h2>{{ $ui("Recent activity") }}</h2>
+        <button class="rps-link" @click="router.push('/resilience')">{{ $ui("See all") }}</button>
       </header>
       <ol v-if="activity.length" class="rps-feed">
         <li v-for="a in activity" :key="a.id">
@@ -35,7 +35,7 @@
           <span class="rps-feed__body"><strong>{{ a.label }}</strong><small>{{ a.detail }}</small></span>
         </li>
       </ol>
-      <p v-else class="rps-empty">Nothing synced yet — content shows up here as peers deliver it.</p>
+      <p v-else class="rps-empty">{{ $ui("Nothing synced yet — content shows up here as peers deliver it.") }}</p>
     </section>
 
     <section class="rps-card rps-health" :class="`rps-health--${status}`" role="button" tabindex="0" @click="router.push('/resilience')" @keydown.enter="router.push('/resilience')">
@@ -43,7 +43,7 @@
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.6-7 10-7 10z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
       </span>
       <div>
-        <p class="rps-health__title">Resilience status · <strong>{{ statusTitle }}</strong></p>
+        <p class="rps-health__title">{{ $ui("Resilience status ·") }} <strong>{{ statusTitle }}</strong></p>
         <p class="rps-health__sub">{{ healthCopy }}</p>
       </div>
       <svg class="rps-health__chev" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>

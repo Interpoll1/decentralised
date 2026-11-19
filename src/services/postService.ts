@@ -1,10 +1,10 @@
 import { GunService, GUN_NAMESPACE } from './gunService';
 import { PostVoteService, type PostTally } from './postVoteService';
-import { IPFSService } from './ipfsService';
+import './ipfsService';
 import { CryptoService } from './cryptoService';
 import { KeyService } from './keyService';
 import { StorageService } from './storageService';
-import { isVersionEnabled } from '../utils/dataVersionSettings';
+import '../utils/dataVersionSettings';
 import { EncryptionService } from './encryptionService';
 import { KeyVaultService } from './keyVaultService';
 import config from '../config';
@@ -660,7 +660,7 @@ export class PostService {
       // `content` — only the newly written fields. Merge immediately without a
       // full re-fetch so the category badge appears within 1-3s of categorisation.
       if (data && typeof data === 'object' && data.category && !data.title) {
-        const normalized = normalizeGunPost(data);
+        normalizeGunPost(data);
         // Emit as a minimal post-like object; postStore.processIncomingPost will
         // merge it with the existing post via postsMap.value.set(id, withKnownTally(post)).
         // We need to deliver the full existing post merged with the new fields, so

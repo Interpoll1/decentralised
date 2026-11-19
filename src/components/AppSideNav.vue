@@ -9,7 +9,7 @@
           <path d="M12 8V16M8.5 10.5L12 12.5L15.5 10.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </span>
-      <span class="asn-brand-name">Interpoll</span>
+      <span class="asn-brand-name">{{ $ui("Interpoll") }}</span>
     </div>
 
     <!-- Primary nav -->
@@ -19,7 +19,7 @@
         <path v-else d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H5a1 1 0 01-1-1V9.5z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
         <path v-if="activeRoute!=='home'" d="M9 21V13h6v8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
       </svg>
-      <span>Feed</span>
+      <span>{{ $ui("Feed") }}</span>
     </button>
 
     <button class="asn-item" data-tour="orbit" :class="{ active: activeRoute === 'orbit' }" @click="go('orbit')">
@@ -28,7 +28,7 @@
         <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.7" stroke-dasharray="2 3"/>
         <circle cx="19" cy="9" r="1.6" fill="currentColor"/><circle cx="6" cy="17" r="1.3" fill="currentColor"/>
       </svg>
-      <span>Orbit</span>
+      <span>{{ $ui("Orbit") }}</span>
     </button>
 
     <button class="asn-item" data-tour="chat" :class="{ active: activeRoute === 'chat' }" @click="go('chat')">
@@ -36,7 +36,7 @@
         <path v-if="activeRoute==='chat'" d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" fill="currentColor"/>
         <path v-else d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
       </svg>
-      <span>Messages</span>
+      <span>{{ $ui("Messages") }}</span>
       <span v-if="totalUnread > 0" class="asn-badge">{{ totalUnread > 99 ? '99+' : totalUnread }}</span>
     </button>
 
@@ -46,14 +46,14 @@
         <circle v-else cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.7"/>
         <path d="M12 8v8M8 12h8" :stroke="activeRoute==='create' ? 'white' : 'currentColor'" stroke-width="1.8" stroke-linecap="round"/>
       </svg>
-      <span>Publish</span>
+      <span>{{ $ui("Publish") }}</span>
     </button>
 
     <div class="asn-divider"></div>
 
     <!-- Categories -->
     <button class="asn-section-toggle" @click="catsOpen = !catsOpen">
-      <span class="asn-section-label">Categories</span>
+      <span class="asn-section-label">{{ $ui("Categories") }}</span>
       <svg viewBox="0 0 24 24" fill="none" width="12" height="12"
            :style="catsOpen ? 'transform:rotate(180deg)' : ''" style="transition:transform 0.2s;flex-shrink:0">
         <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -68,14 +68,14 @@
         @click="selectCat(cat.id)"
       >
         <ion-icon :icon="cat.icon" :class="'tone-' + cat.id"></ion-icon>
-        <span>{{ cat.label }}</span>
+        <span>{{ $ui(cat.label) }}</span>
       </button>
       <button class="asn-category asn-cats-more" @click="catsExpanded = !catsExpanded">
         <svg viewBox="0 0 24 24" fill="none" width="14" height="14" style="flex-shrink:0;opacity:0.5">
           <path v-if="catsExpanded" d="M18 15l-6-6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
           <path v-else d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        <span style="opacity:0.6;font-size:12px">{{ catsExpanded ? 'Show less' : `+${categories.length - 5} more` }}</span>
+        <span style="opacity:0.6;font-size:12px">{{ catsExpanded ? $ui("Show less") : `+${categories.length - 5} more` }}</span>
       </button>
     </template>
 
@@ -89,41 +89,41 @@
         <rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.7"/>
         <path d="M14 14h2v2h-2zM18 14h3M14 18h3M18 18h3v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
       </svg>
-      <span>Scan QR</span>
+      <span>{{ $ui("Scan QR") }}</span>
     </button>
     <button class="asn-item asn-util" :class="{ active: activeRoute==='search' }" @click="router.push('/search')">
       <svg class="asn-icon" viewBox="0 0 24 24" fill="none">
         <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="1.7"/>
         <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
       </svg>
-      <span>Search</span>
+      <span>{{ $ui("Search") }}</span>
     </button>
     <button class="asn-item asn-util" data-tour="profile" :class="{ active: activeRoute==='profile' }" @click="router.push('/profile')">
       <svg class="asn-icon" viewBox="0 0 24 24" fill="none">
         <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.7"/>
         <path d="M4 20c0-4 3.58-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
       </svg>
-      <span>Identity</span>
+      <span>{{ $ui("Identity") }}</span>
     </button>
     <button class="asn-item asn-util" data-tour="settings" :class="{ active: activeRoute==='settings' }" @click="router.push('/settings')">
       <svg class="asn-icon" viewBox="0 0 24 24" fill="none">
         <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/>
         <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" stroke-width="1.7"/>
       </svg>
-      <span>Settings</span>
+      <span>{{ $ui("Settings") }}</span>
     </button>
     <button class="asn-item asn-util" :class="{ active: activeRoute==='chain' }" @click="router.push('/chain-explorer')">
       <svg class="asn-icon" viewBox="0 0 24 24" fill="none">
         <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
         <path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
       </svg>
-      <span>Chain Explorer</span>
+      <span>{{ $ui("Chain Explorer") }}</span>
     </button>
     <button class="asn-item asn-util" :class="{ active: activeRoute==='resilience' }" @click="router.push('/resilience')">
       <svg class="asn-icon" viewBox="0 0 24 24" fill="none">
         <path d="M12 2l8 3v6c0 5-3.4 8.4-8 11-4.6-2.6-8-6-8-11V5l8-3z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
       </svg>
-      <span>Resilience Center</span>
+      <span>{{ $ui("Resilience Center") }}</span>
     </button>
 
     <div class="asn-divider"></div>
@@ -138,11 +138,11 @@ import RelayIndicator from './RelayIndicator.vue';
 import { useCategories } from '../composables/useCategories';
 import { useQrScan } from '../composables/useQrScan';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   totalUnread?: number;
   activeTab?: string;          // for HomePage two-way binding
   activeCategory?: string;
-}>();
+}>(), { totalUnread: 0 });
 
 const emit = defineEmits<{
   (e: 'update:activeTab', v: string): void;
@@ -258,7 +258,7 @@ function selectCat(id: string) {
   display: flex; align-items: center; justify-content: center;
   background: var(--app-accent);
   border-radius: 8px;
-  color: #111214;
+  color: var(--app-on-accent);
   flex-shrink: 0;
 }
 .asn-brand-name {
@@ -300,7 +300,7 @@ function selectCat(id: string) {
 .asn-badge {
   margin-left: auto;
   background: var(--app-accent);
-  color: #111214;
+  color: var(--app-on-accent);
   font-size: 10px; font-weight: 700;
   padding: 1px 6px;
   border-radius: 999px;

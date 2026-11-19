@@ -54,7 +54,7 @@ export function useQrScan() {
     return false;
   }
 
-  async function scan(): Promise<void> {
+  async function scanValue(navigate: boolean): Promise<string | undefined> {
     if (!isSupported) {
       await toast('QR scanning is only available in the app', 'warning');
       return;
@@ -83,9 +83,10 @@ export function useQrScan() {
         return;
       }
 
-      if (!routeScanned(value)) {
+      if (navigate && !routeScanned(value)) {
         await toast('This QR code isn’t an InterPoll invite', 'warning');
       }
+      return value;
     } catch (err) {
       const msg = (err as Error)?.message ?? '';
       if (/cancel/i.test(msg)) return; // user dismissed the scanner
@@ -93,5 +94,7 @@ export function useQrScan() {
     }
   }
 
-  return { isSupported, scan, routeScanned };
+  async function scan(): Promise<void> { await scanValue(true); }
+  const scanRaw = () => scanValue(false);
+  return { isSupported, scan, scanRaw, routeScanned };
 }

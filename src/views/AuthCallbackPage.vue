@@ -3,7 +3,7 @@
     <ion-content class="ion-padding">
       <div class="callback-container">
         <ion-spinner></ion-spinner>
-        <p>Signing you in...</p>
+        <p>{{ $ui("Signing you in...") }}</p>
       </div>
     </ion-content>
   </ion-page>

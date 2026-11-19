@@ -1,12 +1,12 @@
 <template>
-  <section v-if="visible" class="apk-card surface-card" aria-label="Get the Android app">
+  <section v-if="visible" class="apk-card surface-card" :aria-label="$ui('Get the Android app')">
     <div class="apk-card__copy">
-      <p class="apk-card__title">Get InterPoll for Android</p>
-      <p class="apk-card__body">Install the app for faster loading and notifications.</p>
+      <p class="apk-card__title">{{ $ui("Get InterPoll for Android") }}</p>
+      <p class="apk-card__body">{{ $ui("Install the app for faster loading and notifications.") }}</p>
     </div>
     <div class="apk-card__actions">
-      <a class="apk-card__download" :href="apkUrl" download>Download APK</a>
-      <button class="apk-card__dismiss" @click="dismiss">Not now</button>
+      <a class="apk-card__download" :href="apkUrl" download>{{ $ui("Download APK") }}</a>
+      <button class="apk-card__dismiss" @click="dismiss">{{ $ui("Not now") }}</button>
     </div>
   </section>
 </template>

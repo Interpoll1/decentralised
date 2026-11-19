@@ -23,7 +23,7 @@
   >
     <ion-icon :icon="warningOutline" class="badge-icon unverified-icon" />
     <span class="badge-username">{{ displayName }}</span>
-    <span class="badge-label">unverified</span>
+    <span class="badge-label">{{ $ui("unverified") }}</span>
   </span>
 </template>
 

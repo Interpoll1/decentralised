@@ -5,7 +5,7 @@
         <ion-buttons slot="start">
           <ion-back-button default-href="/home"></ion-back-button>
         </ion-buttons>
-        <ion-title>Chain Explorer</ion-title>
+        <ion-title>{{ $ui("Chain Explorer") }}</ion-title>
       </ion-toolbar>
     </ion-header>
 
@@ -13,10 +13,8 @@
       <DesktopPageShell>
       <ion-card>
         <ion-card-header>
-          <ion-card-title>Blockchain Blocks</ion-card-title>
-          <ion-card-subtitle>
-            Showing {{ visibleBlocks.length }} of {{ chainStore.blocks.length }} blocks
-          </ion-card-subtitle>
+          <ion-card-title>{{ $ui("Blockchain Blocks") }}</ion-card-title>
+          <ion-card-subtitle> {{ $ui("Showing") }} {{ visibleBlocks.length }} {{ $ui("of") }} {{ chainStore.blocks.length }} {{ $ui("blocks") }} </ion-card-subtitle>
         </ion-card-header>
 
         <ion-card-content>
@@ -28,7 +26,7 @@
             >
               <div class="block-header">
                 <div class="block-header-left">
-                  <ion-badge color="primary">Block #{{ block.index }}</ion-badge>
+                  <ion-badge color="primary">{{ $ui("Block #") }}{{ block.index }}</ion-badge>
                   <ion-badge
                     v-if="block.actionType"
                     :color="actionBadgeColor(block.actionType)"
@@ -48,35 +46,35 @@
 
               <div class="block-hashes">
                 <div class="hash-row">
-                  <span class="hash-label">Previous Hash:</span>
+                  <span class="hash-label">{{ $ui("Previous Hash:") }}</span>
                   <code class="hash-value">
                     {{ fullHash(block.previousHash) }}
                   </code>
                 </div>
 
                 <div class="hash-row">
-                  <span class="hash-label">Current Hash:</span>
+                  <span class="hash-label">{{ $ui("Current Hash:") }}</span>
                   <code class="hash-value">
                     {{ fullHash(block.currentHash) }}
                   </code>
                 </div>
 
                 <div class="hash-row">
-                  <span class="hash-label">Data Hash:</span>
+                  <span class="hash-label">{{ $ui("Data Hash:") }}</span>
                   <code class="hash-value">
                     {{ fullHash(block.voteHash) }}
                   </code>
                 </div>
 
                 <div class="hash-row" v-if="block.pubkey">
-                  <span class="hash-label">Signer:</span>
+                  <span class="hash-label">{{ $ui("Signer:") }}</span>
                   <code class="hash-value signer-value">
                     {{ block.pubkey }}
                   </code>
                 </div>
 
                 <div class="hash-row">
-                  <span class="hash-label">Signature:</span>
+                  <span class="hash-label">{{ $ui("Signature:") }}</span>
                   <code class="hash-value">
                     {{ fullHash(block.signature) }}
                   </code>
@@ -86,7 +84,7 @@
               <div class="block-validity">
                 <template v-if="block.index === 0">
                   <ion-icon :icon="shieldCheckmarkOutline" color="primary"></ion-icon>
-                  <span class="validity-label">Genesis Block</span>
+                  <span class="validity-label">{{ $ui("Genesis Block") }}</span>
                 </template>
                 <template v-else-if="block.pubkey">
                   <ion-icon
@@ -94,21 +92,19 @@
                     :color="verificationStatus[block.index] ? 'success' : 'danger'"
                   ></ion-icon>
                   <span class="validity-label" :class="verificationStatus[block.index] ? 'sig-verified' : 'sig-invalid'">
-                    {{ verificationStatus[block.index] ? 'Schnorr Verified' : 'Signature Invalid' }}
+                    {{ verificationStatus[block.index] ? $ui("Schnorr Verified") : $ui("Signature Invalid") }}
                   </span>
                 </template>
                 <template v-else>
                   <ion-icon :icon="informationCircleOutline" color="medium"></ion-icon>
-                  <span class="validity-label">Legacy (no signature)</span>
+                  <span class="validity-label">{{ $ui("Legacy (no signature)") }}</span>
                 </template>
               </div>
             </div>
           </div>
 
           <div v-if="hasMoreBlocks" class="load-more-row">
-            <ion-button fill="outline" size="small" @click="loadMoreBlocks">
-              Load {{ Math.min(LOAD_BATCH_SIZE, chainStore.blocks.length - visibleBlocks.length) }} more blocks
-            </ion-button>
+            <ion-button fill="outline" size="small" @click="loadMoreBlocks"> {{ $ui("Load") }} {{ Math.min(LOAD_BATCH_SIZE, chainStore.blocks.length - visibleBlocks.length) }} {{ $ui("more blocks") }} </ion-button>
           </div>
         </ion-card-content>
       </ion-card>

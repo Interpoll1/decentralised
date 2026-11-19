@@ -101,7 +101,10 @@ class LRUCache {
   }
 
   set(key: string, data: SearchResponse): void {
-    if (this.map.size >= MAX_CACHE) this.map.delete(this.map.keys().next().value);
+    if (this.map.size >= MAX_CACHE) {
+      const oldest = this.map.keys().next().value;
+      if (oldest !== undefined) this.map.delete(oldest);
+    }
     this.map.set(key, { data, ts: Date.now() });
   }
 
@@ -112,7 +115,7 @@ class LRUCache {
 
 export class SearchService {
   private static index: any | null = null;
-  private static indexReady = false;
+
   private static initPromise: Promise<void> | null = null;
 
   /** Master doc store — source of truth for persistence. Parallel to Flexsearch. */
@@ -148,7 +151,7 @@ export class SearchService {
     } catch (e) {
       console.warn('[Search] Could not load index from IDB:', e);
     }
-    this.indexReady = true;
+
   }
 
   // ── Indexing ───────────────────────────────────────────────────────────────

@@ -39,7 +39,7 @@
     <div class="community-info">
       <div class="name-row">
         <span class="community-name">{{ community.displayName || community.name }}</span>
-        <span v-if="community.isPrivate" class="badge badge--private">Private</span>
+        <span v-if="community.isPrivate" class="badge badge--private">{{ $ui("Private") }}</span>
         <span v-else-if="community.category" class="badge badge--cat">{{ community.category }}</span>
       </div>
       <p v-if="truncatedDescription" class="community-desc">{{ truncatedDescription }}</p>
@@ -52,7 +52,7 @@
             <circle cx="14" cy="6" r="2.2" stroke="currentColor" stroke-width="1.3" opacity="0.6"/>
             <path d="M16.5 14.5a4.5 4.5 0 00-4-2.6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" opacity="0.6"/>
           </svg>
-          <span class="meta-label">{{ formatNumber(community.memberCount ?? 1) }} members</span>
+          <span class="meta-label">{{ $count(community.memberCount ?? 1, 'member') }}</span>
         </span>
         <span class="meta-sep">·</span>
         <span class="meta-stat">
@@ -61,7 +61,7 @@
             <path d="M2 3.5A1.5 1.5 0 013.5 2h11A1.5 1.5 0 0116 3.5v8A1.5 1.5 0 0114.5 13H10l-4 3v-3H3.5A1.5 1.5 0 012 11.5v-8z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
             <path d="M5.5 7h7M5.5 9.5h4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
           </svg>
-          <span class="meta-label">{{ formatNumber(community.postCount ?? 0) }} posts</span>
+          <span class="meta-label">{{ $count(community.postCount ?? 0, 'post') }}</span>
         </span>
       </div>
     </div>
@@ -71,7 +71,7 @@
       <svg v-if="isJoined" viewBox="0 0 12 12" fill="none" width="10" height="10" aria-hidden="true">
         <path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
-      {{ isJoined ? 'Joined' : 'Join' }}
+      {{ isJoined ? $ui("Joined") : $ui("Join") }}
     </div>
 
   </div>
@@ -100,11 +100,7 @@ const truncatedDescription = computed(() => {
   return d.length <= 72 ? d : d.substring(0, 72) + '…';
 });
 
-function formatNumber(n: number): string {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
-  if (n >= 1_000)     return (n / 1_000).toFixed(1) + 'K';
-  return n.toString();
-}
+
 </script>
 
 <style scoped>

@@ -161,6 +161,7 @@ export class MemoryWatchdogService {
   }
 
   private static doCleanup(level: CleanupLevel): void {
+    if (level === 'none') return;
     GunService.evictCache(level);
 
     for (const cb of this.cleanupCallbacks) {

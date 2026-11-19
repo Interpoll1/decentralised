@@ -9,7 +9,7 @@
             </svg>
           </button>
         </ion-buttons>
-        <ion-title>Search</ion-title>
+        <ion-title>{{ $ui("Search") }}</ion-title>
       </ion-toolbar>
     </ion-header>
 
@@ -26,7 +26,7 @@
           v-model="searchQuery"
           @input="handleSearch"
           type="search"
-          placeholder="Search posts, polls and spaces..."
+          :placeholder="$ui('Search posts, polls and spaces...')"
           class="search-input"
           autofocus
         />
@@ -35,15 +35,15 @@
       <!-- Filter row 1: type + community -->
       <div class="search-filters">
         <select v-model="filterType" @change="handleFilterChange" class="filter-select">
-          <option value="">All Types</option>
-          <option value="post">Posts</option>
-          <option value="poll">Polls</option>
+          <option value="">{{ $ui("All Types") }}</option>
+          <option value="post">{{ $ui("Posts") }}</option>
+          <option value="poll">{{ $ui("Polls") }}</option>
         </select>
         <input
           v-model="filterCommunity"
           @input="handleFilterChange"
           type="text"
-          placeholder="Community..."
+          :placeholder="$ui('Community...')"
           class="filter-input"
         />
       </div>
@@ -55,7 +55,7 @@
     <div class="results-container">
       <!-- Spaces whose name or description matches -->
       <div v-if="spaceMatches.length" class="space-matches">
-        <h4 class="space-matches__title">Spaces</h4>
+        <h4 class="space-matches__title">{{ $ui("Spaces") }}</h4>
         <button v-for="c in spaceMatches" :key="c.id" class="space-match" @click="router.push(`/community/${c.id}`)">
           <span class="space-match__avatar">{{ (c.displayName || c.name || '?').charAt(0).toUpperCase() }}</span>
           <span class="space-match__info">
@@ -68,7 +68,7 @@
       <!-- Loading -->
       <div v-if="loading" class="loading-state">
         <div class="spinner"></div>
-        <p>Searching...</p>
+        <p>{{ $ui("Searching...") }}</p>
       </div>
 
       <!-- Error -->
@@ -84,8 +84,8 @@
         <svg class="no-results-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
-        <p>No results found for "{{ searchQuery }}"</p>
-        <span class="no-results-hint">Try different keywords or remove filters</span>
+        <p>{{ $ui("No results found for \"") }}{{ searchQuery }}"</p>
+        <span class="no-results-hint">{{ $ui("Try different keywords or remove filters") }}</span>
       </div>
 
       <!-- Results -->
@@ -98,16 +98,15 @@
         >
 
           
-          <h3 class="result-title">{{ result.title || result.question }}</h3>
+          <h3 class="result-title">{{ result.title }}</h3>
           
           <p class="result-content">
-            {{ truncate(result.content || result.description || '', 150) }}
+            {{ truncate(result.content || '', 150) }}
           </p>
           
           <div class="result-meta">
-            <span class="result-author">by {{ result.author || 'Anonymous' }}</span>
-            <span v-if="result.community" class="result-community">
-              in {{ result.community }}
+            <span class="result-author">{{ $ui("by") }} {{ result.author || $ui("Anonymous") }}</span>
+            <span v-if="result.community" class="result-community"> {{ $ui("in") }} {{ result.community }}
             </span>
             <span class="result-date">{{ formatDate(result.created_at) }}</span>
           </div>
@@ -120,9 +119,7 @@
           @click="goToPreviousPage"
           :disabled="currentPage === 1"
           class="pagination-btn"
-        >
-          Previous
-        </button>
+        > {{ $ui("Previous") }} </button>
 
         <div class="pagination-pages">
           <button
@@ -140,9 +137,7 @@
           @click="goToNextPage"
           :disabled="!hasNextPage"
           class="pagination-btn"
-        >
-          Next
-        </button>
+        > {{ $ui("Next") }} </button>
       </div>
     </div>
       </div>
@@ -401,7 +396,7 @@ ion-content { --background: transparent; }
 .space-matches__title { margin: 0 0 2px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--app-text-muted, #9aa39e); }
 .space-match { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; text-align: left; cursor: pointer; border-radius: 12px; font: inherit; color: inherit; background: rgba(255,255,255,0.03); border: 1px solid #2b332f; }
 .space-match:hover { border-color: rgba(61,255,122,.45); }
-.space-match__avatar { width: 38px; height: 38px; flex-shrink: 0; display: grid; place-items: center; border-radius: 10px; font-weight: 700; color: #3dff7a; background: #0b1a12; border: 1px solid #1d6b3a; }
+.space-match__avatar { width: 38px; height: 38px; flex-shrink: 0; display: grid; place-items: center; border-radius: 10px; font-weight: 700; color: var(--app-accent); background: #0b1a12; border: 1px solid #1d6b3a; }
 .space-match__info { display: flex; flex-direction: column; min-width: 0; }
 .space-match__info b { font-size: 14px; }
 .space-match__info small { font-size: 12px; color: var(--app-text-muted, #9aa39e); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -460,7 +455,7 @@ ion-content { --background: transparent; }
 .page-btn.active {
   background: var(--app-accent);
   border-color: transparent;
-  color: #111214;
+  color: var(--app-on-accent);
   box-shadow: 0 4px 14px rgba(230, 230, 230,0.35);
 }
 .page-btn.ellipsis {
@@ -532,19 +527,13 @@ ion-content {
 import { ref, computed, watch } from 'vue';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRouter, useRoute } from 'vue-router';
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonButtons, IonBackButton, IonSearchbar, IonSegment,
-  IonSegmentButton, IonLabel, IonSpinner, IonIcon,
-  IonCard, IonCardHeader, IonCardTitle, IonCardContent,
-  IonBadge, IonButton
-} from '@ionic/vue';
+import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons } from '@ionic/vue';
 import { useSearch } from '../composables/useSearch';
 import SearchService from '../services/searchService';
 import { useCommunityStore } from '../stores/communityStore';
 import { usePostStore } from '../stores/postStore';
 import { usePollStore } from '../stores/pollStore';
-import { ALL_CATEGORIES } from '../composables/useCategories';
+import '../composables/useCategories';
 
 const router  = useRouter();
 const route   = useRoute();
@@ -584,7 +573,7 @@ const spaceMatches = computed(() => {
 });
 const filterType      = ref<'post' | 'poll' | ''>('');
 const filterCommunity = ref('');
-const filterCategory  = ref('');
+
 const debounceTimer   = ref<number | null>(null);
 
 const hasNextPage = computed(() => currentPage.value * perPage.value < total.value);

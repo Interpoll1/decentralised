@@ -20,11 +20,8 @@
       />
       <ion-icon :icon="cloudUploadOutline" class="video-uploader__icon" />
       <p class="video-uploader__label">
-        <strong>Drop video here</strong> or click to browse
-      </p>
-      <p class="video-uploader__hint">
-        MP4, WebM, OGG, MOV · Auto-compressed to H.264 · Max 30 MB after compression
-      </p>
+        <strong>{{ $ui("Drop video here") }}</strong> {{ $ui("or click to browse") }} </p>
+      <p class="video-uploader__hint"> {{ $ui("MP4, WebM, OGG, MOV · Auto-compressed to H.264 · Max 30 MB after compression") }} </p>
     </div>
 
     <!-- File selected, not yet uploading -->
@@ -42,12 +39,8 @@
       </div>
       <div class="video-uploader__preview-actions">
         <ion-button size="small" @click="startUpload">
-          <ion-icon slot="start" :icon="cloudUploadOutline" />
-          Upload
-        </ion-button>
-        <ion-button size="small" fill="clear" @click="clearSelection">
-          Change
-        </ion-button>
+          <ion-icon slot="start" :icon="cloudUploadOutline" /> {{ $ui("Upload") }} </ion-button>
+        <ion-button size="small" fill="clear" @click="clearSelection"> {{ $ui("Change") }} </ion-button>
       </div>
     </div>
 
@@ -73,16 +66,14 @@
         {{ progress.message }}
       </p>
       <p class="video-uploader__progress-pct">{{ progress.percent }}%</p>
-      <p v-if="progress.stage === 'compressing'" class="video-uploader__progress-hint">
-        Compressing in your browser — this may take a moment for large files
-      </p>
+      <p v-if="progress.stage === 'compressing'" class="video-uploader__progress-hint"> {{ $ui("Compressing in your browser — this may take a moment for large files") }} </p>
     </div>
 
     <!-- Error state -->
     <div v-if="error" class="video-uploader__error">
       <ion-icon :icon="alertCircleOutline" />
       <p>{{ error }}</p>
-      <ion-button size="small" fill="outline" @click="reset">Try again</ion-button>
+      <ion-button size="small" fill="outline" @click="reset">{{ $ui("Try again") }}</ion-button>
     </div>
 
     <!-- Success state -->
@@ -92,28 +83,23 @@
         <ion-icon v-else :icon="checkmarkCircleOutline" />
       </div>
       <div class="video-uploader__success-info">
-        <p><strong>Video uploaded</strong></p>
+        <p><strong>{{ $ui("Video uploaded") }}</strong></p>
         <p class="video-uploader__cid">{{ meta.cid.slice(0, 24) }}…</p>
         <p>{{ formatFileSize(meta.size) }} · {{ formatDuration(meta.duration) }}</p>
       </div>
-      <ion-button size="small" fill="clear" color="danger" @click="reset">Remove</ion-button>
+      <ion-button size="small" fill="clear" color="danger" @click="reset">{{ $ui("Remove") }}</ion-button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onBeforeUnmount } from 'vue';
+import { ref, onBeforeUnmount } from 'vue';
 import { IonIcon, IonButton } from '@ionic/vue';
 import {
   cloudUploadOutline, videocamOutline, alertCircleOutline, checkmarkCircleOutline,
   settingsOutline, linkOutline,
 } from 'ionicons/icons';
-import {
-  uploadVideo, validateVideoFile, getVideoDuration,
-  formatFileSize, formatDuration,
-  VIDEO_MAX_SIZE_BYTES, VIDEO_MAX_DURATION_S,
-  type VideoMeta, type VideoUploadProgress,
-} from '../services/videoService';
+import { uploadVideo, validateVideoFile, getVideoDuration, formatFileSize, formatDuration, type VideoMeta, type VideoUploadProgress } from '../services/videoService';
 
 // ── Props & emits ─────────────────────────────────────────────────────────────
 
@@ -124,8 +110,8 @@ const emit = defineEmits<{
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const MAX_SIZE_MB      = Math.round(VIDEO_MAX_SIZE_BYTES / 1024 / 1024);
-const MAX_DURATION_MIN = Math.round(VIDEO_MAX_DURATION_S / 60);
+
+
 
 // ── State ─────────────────────────────────────────────────────────────────────
 

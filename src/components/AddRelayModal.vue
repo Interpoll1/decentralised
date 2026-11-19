@@ -18,11 +18,11 @@
                   </svg>
                 </div>
                 <div>
-                  <DialogTitle class="arm-title">Add relay</DialogTitle>
-                  <DialogDescription id="arm-subtitle" class="arm-subtitle">Connect to another relay server or peer</DialogDescription>
+                  <DialogTitle class="arm-title">{{ $ui("Add relay") }}</DialogTitle>
+                  <DialogDescription id="arm-subtitle" class="arm-subtitle">{{ $ui("Connect to another relay server or peer") }}</DialogDescription>
                 </div>
               </div>
-              <DialogClose class="arm-close" aria-label="Close">
+              <DialogClose class="arm-close" :aria-label="$ui('Close')">
                 <svg viewBox="0 0 24 24" fill="none" width="18" height="18">
                   <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                 </svg>
@@ -31,7 +31,7 @@
 
             <!-- URL input -->
             <div class="arm-section">
-              <label class="arm-label" for="arm-url-input">Relay URL</label>
+              <label class="arm-label" for="arm-url-input">{{ $ui("Relay URL") }}</label>
               <div class="arm-input-row">
                 <input
                   id="arm-url-input"
@@ -53,8 +53,8 @@
                   class="arm-qr-btn"
                   :disabled="connecting"
                   @click="scanQr"
-                  title="Scan relay QR code"
-                  aria-label="Scan QR code"
+                  :title="$ui('Scan relay QR code')"
+                  :aria-label="$ui('Scan QR code')"
                 >
                   <svg viewBox="0 0 24 24" fill="none" width="18" height="18">
                     <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.8"/>
@@ -64,7 +64,7 @@
                   </svg>
                 </button>
                 <!-- Paste from clipboard -->
-                <button class="arm-paste-btn" :disabled="connecting" @click="pasteFromClipboard" title="Paste URL" aria-label="Paste from clipboard">
+                <button class="arm-paste-btn" :disabled="connecting" @click="pasteFromClipboard" :title="$ui('Paste URL')" :aria-label="$ui('Paste from clipboard')">
                   <svg viewBox="0 0 24 24" fill="none" width="18" height="18">
                     <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.8"/>
                     <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="1.8"/>
@@ -72,13 +72,13 @@
                 </button>
               </div>
               <p v-if="inputError" class="arm-error" role="alert">{{ inputError }}</p>
-              <p class="arm-hint">Enter the base URL of the relay. The Gun and API endpoints will be inferred automatically.</p>
+              <p class="arm-hint">{{ $ui("Enter the base URL of the relay. The Gun and API endpoints will be inferred automatically.") }}</p>
             </div>
 
             <!-- Probe status while connecting -->
             <div v-if="probing" class="arm-probe-row">
               <div class="arm-probe-spinner"></div>
-              <span>Checking relay…</span>
+              <span>{{ $ui("Checking relay…") }}</span>
             </div>
 
             <!-- Connect button -->
@@ -91,12 +91,12 @@
                 <path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
               <div v-else class="arm-btn-spinner"></div>
-              {{ connecting ? 'Connecting…' : 'Connect to relay' }}
+              {{ connecting ? $ui("Connecting…") : $ui("Connect to relay") }}
             </button>
 
             <!-- ── Presets ──────────────────────────────────────────── -->
             <div class="arm-section">
-              <p class="arm-label">Known public relays</p>
+              <p class="arm-label">{{ $ui("Known public relays") }}</p>
               <div class="arm-preset-list">
                 <button
                   v-for="p in PRESETS"
@@ -113,15 +113,15 @@
                       <span>{{ p.description }}</span>
                     </div>
                   </div>
-                  <span v-if="isConnected(p.url)" class="arm-preset-tag arm-preset-tag--connected">Connected</span>
-                  <span v-else class="arm-preset-tag">Add</span>
+                  <span v-if="isConnected(p.url)" class="arm-preset-tag arm-preset-tag--connected">{{ $ui("Connected") }}</span>
+                  <span v-else class="arm-preset-tag">{{ $ui("Add") }}</span>
                 </button>
               </div>
             </div>
 
             <!-- ── Discovered peers ────────────────────────────────── -->
             <div v-if="discoveredRelays.length > 0" class="arm-section">
-              <p class="arm-label">Discovered from peers</p>
+              <p class="arm-label">{{ $ui("Discovered from peers") }}</p>
               <div class="arm-discovered-list">
                 <button
                   v-for="r in discoveredRelays"
@@ -138,7 +138,7 @@
                       <span>{{ r.ws }}</span>
                     </div>
                   </div>
-                  <span class="arm-preset-tag arm-preset-tag--disc">Discovered</span>
+                  <span class="arm-preset-tag arm-preset-tag--disc">{{ $ui("Discovered") }}</span>
                 </button>
               </div>
             </div>
@@ -160,7 +160,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted } from 'vue';
+import { ui } from "../i18n";
+import { ref, watch, nextTick } from 'vue';
 import { toastController } from '@ionic/vue';
 import {
   DialogRoot, DialogPortal, DialogOverlay, DialogContent,
@@ -175,7 +176,7 @@ const emit   = defineEmits<{
   connected: [relay: RelayEndpoint];
 }>();
 
-const { isSupported: canScan, scan: doScan } = useQrScan();
+const { isSupported: canScan, scanRaw: doScan } = useQrScan();
 
 // ── State ──────────────────────────────────────────────────────────────────
 const urlInput      = ref('');
@@ -189,9 +190,9 @@ const discoveredRelays = ref<RelayEndpoint[]>([]);
 // ── Presets ────────────────────────────────────────────────────────────────
 const PRESETS = [
   {
-    url:         'https://interpoll2.endless.sbs',
+    url:         'https://interpoll2.endless.social',
     label:       'InterPoll public relay',
-    description: 'interpoll2.endless.sbs — the default open relay',
+    description: 'interpoll2.endless.social — the default open relay',
   },
   // Add more known community relays here as they are established
 ];
@@ -303,7 +304,7 @@ async function connect() {
   if (!reachable) {
     // Warn but don't block — relay might not have /api/health yet
     const toast = await toastController.create({
-      message:  'Could not reach this relay. Adding anyway — it may connect later.',
+      message:  ui("Could not reach this relay. Adding anyway — it may connect later."),
       duration: 3500,
       position: 'bottom',
       color:    'warning',
@@ -325,7 +326,9 @@ async function connect() {
     });
 
     successMessage.value = `Connected to ${shortenUrl(base)}`;
-    emit('connected', relay);
+    const endpoint = RelayManager.getRelayList().find(item => item.id === relay);
+    if (!endpoint) throw new Error('Relay was not saved');
+    emit('connected', endpoint);
 
     setTimeout(close, 1400);
   } catch (e) {
@@ -459,7 +462,7 @@ async function connect() {
   width: calc(100% - 36px); margin: 0 18px 4px;
   padding: 13px; border-radius: 12px; border: none;
   background: var(--app-accent);
-  color: #111214; font-size: 15px; font-weight: 700; cursor: pointer;
+  color: var(--app-on-accent); font-size: 15px; font-weight: 700; cursor: pointer;
   box-shadow: 0 8px 20px rgba(var(--app-accent-rgb, 255 63 49), 0.28);
   transition: opacity 0.15s;
 }

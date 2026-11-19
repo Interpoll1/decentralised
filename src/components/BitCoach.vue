@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <!-- ── First-boot tour: spotlight + Bit's speech bubble ─────────────── -->
-    <div v-if="bit.tourActive && step" class="bc-tour" role="dialog" aria-live="polite" aria-label="Interpoll tour">
+    <div v-if="onTourPage && bit.tourActive && step" class="bc-tour" role="dialog" aria-live="polite" :aria-label="$ui('Interpoll tour')">
       <div v-if="rect" class="bc-ring" :style="ringStyle" />
       <div v-else class="bc-dim" />
 
@@ -9,46 +9,46 @@
         <div class="bc-head">
           <span ref="bubbleBit" :key="bit.tourStepIdx" class="bc-bit" :class="{ 'bc-bit--hidden': !!flight }"><BitMascot :size="40" :mood="step.mood ?? 'idle'" :animated="false" /></span>
           <div class="bc-titles">
-            <strong class="bc-title">{{ step.title }}</strong>
+            <strong class="bc-title">{{ $ui(step.title) }}</strong>
             <span class="bc-count">{{ bit.tourStepIdx + 1 }} / {{ bit.steps.length }}</span>
           </div>
         </div>
-        <p class="bc-body">{{ step.body }}</p>
+        <p class="bc-body">{{ $ui(step.body) }}</p>
         <!-- Looping demo of hold → drag → swap (decorative; the text says the same) -->
         <div v-if="step.id === 'navswap'" class="bc-demo" aria-hidden="true">
           <div class="bc-demo-bar">
-            <div class="bc-demo-tab bc-demo-tab--a" style="--i:0"><NavIcon id="home" /><span>Feed</span></div>
-            <div class="bc-demo-tab" style="--i:1"><NavIcon id="orbit" /><span>Orbit</span></div>
-            <div class="bc-demo-tab bc-demo-tab--b" style="--i:2"><NavIcon id="chat" /><span>Messages</span></div>
-            <div class="bc-demo-tab" style="--i:3"><NavIcon id="create" /><span>Publish</span></div>
+            <div class="bc-demo-tab bc-demo-tab--a" style="--i:0"><NavIcon id="home" /><span>{{ $ui("Feed") }}</span></div>
+            <div class="bc-demo-tab" style="--i:1"><NavIcon id="orbit" /><span>{{ $ui("Orbit") }}</span></div>
+            <div class="bc-demo-tab bc-demo-tab--b" style="--i:2"><NavIcon id="chat" /><span>{{ $ui("Messages") }}</span></div>
+            <div class="bc-demo-tab" style="--i:3"><NavIcon id="create" /><span>{{ $ui("Publish") }}</span></div>
             <span class="bc-demo-finger" />
           </div>
-          <span class="bc-demo-cap">Hold → drag → drop</span>
+          <span class="bc-demo-cap">{{ $ui("Hold → drag → drop") }}</span>
         </div>
-        <p v-if="rect && step.clickToAdvance" class="bc-hint">Try it — click the highlighted item.</p>
+        <p v-if="rect && step.clickToAdvance" class="bc-hint">{{ $ui("Try it — click the highlighted item.") }}</p>
 
         <div class="bc-dots" aria-hidden="true">
           <span v-for="(s, i) in bit.steps" :key="s.id" class="bc-dot" :class="{ on: i <= bit.tourStepIdx }" />
         </div>
 
         <div class="bc-actions">
-          <button class="bc-btn bc-btn--ghost" @click="bit.finishTour()">Skip tour</button>
+          <button class="bc-btn bc-btn--ghost" @click="bit.finishTour()">{{ $ui("Skip tour") }}</button>
           <span class="bc-spacer" />
-          <button v-if="bit.tourStepIdx > 0 && !bit.isLastStep" class="bc-btn" @click="bit.prevStep()">Back</button>
+          <button v-if="bit.tourStepIdx > 0 && !bit.isLastStep" class="bc-btn" @click="bit.prevStep()">{{ $ui("Back") }}</button>
           <template v-if="bit.isLastStep && step.id === 'username'">
-            <button class="bc-btn" @click="bit.finishTour()">Later</button>
-            <button class="bc-btn bc-btn--primary" @click="claimNow(true)">Claim username</button>
+            <button class="bc-btn" @click="bit.finishTour()">{{ $ui("Later") }}</button>
+            <button class="bc-btn bc-btn--primary" @click="claimNow(true)">{{ $ui("Claim username") }}</button>
           </template>
-          <button v-else-if="bit.isLastStep" class="bc-btn bc-btn--primary" @click="bit.finishTour()">Got it</button>
+          <button v-else-if="bit.isLastStep" class="bc-btn bc-btn--primary" @click="bit.finishTour()">{{ $ui("Got it") }}</button>
           <button v-else class="bc-btn bc-btn--primary" @click="bit.nextStep()">
-            {{ step.clickToAdvance && rect ? 'Skip this' : 'Next' }}
+            {{ step.clickToAdvance && rect ? $ui("Skip this") : $ui("Next") }}
           </button>
         </div>
       </div>
     </div>
 
     <!-- Bit mid-leap from the setup wizard to the tour bubble -->
-    <div v-if="flight" ref="flyEl" class="bc-fly" :style="{ left: flight.x + 'px', top: flight.y + 'px', width: flight.w + 'px' }"><BitMascot :size="flight.w" mood="happy" :animated="false" /></div>
+    <div v-if="onTourPage && flight" ref="flyEl" class="bc-fly" :style="{ left: flight.x + 'px', top: flight.y + 'px', width: flight.w + 'px' }"><BitMascot :size="flight.w" mood="happy" :animated="false" /></div>
 
     <!-- ── Username reminder: Bit pops up in the corner ─────────────────── -->
     <transition name="bc-pop">
@@ -57,7 +57,7 @@
         <div class="bc-reminder__main">
           <p class="bc-reminder__text">{{ bit.reminderLine }}</p>
           <div class="bc-actions">
-            <button class="bc-btn" @click="bit.snoozeReminder()">{{ bit.reminderKind === 'pending' ? "It's me" : 'Later' }}</button>
+            <button class="bc-btn" @click="bit.snoozeReminder()">{{ bit.reminderKind === 'pending' ? $ui("It's me") : $ui("Later") }}</button>
             <button class="bc-btn bc-btn--primary" @click="claimNow(false)">{{ reminderCta }}</button>
           </div>
         </div>
@@ -78,6 +78,7 @@ const route  = useRoute();
 const router = useRouter();
 
 const step = computed(() => bit.currentStep);
+const onTourPage = computed(() => route.name === 'Home');
 
 // Bit leaps in from the setup wizard: start rect handed over via sessionStorage.
 const flight = ref<{ x: number; y: number; w: number } | null>(null);
@@ -160,12 +161,12 @@ const bubbleStyle = computed(() => {
 // Interactive: clicking the highlighted element advances the tour (the click itself is not blocked).
 function onDocClick(e: MouseEvent) {
   const s = step.value;
-  if (!bit.tourActive || !s?.clickToAdvance || !s.target) return;
+  if (!onTourPage.value || !bit.tourActive || !s?.clickToAdvance || !s.target) return;
   const t = e.target as Element | null;
   if (t?.closest(`[data-tour="${s.target}"]`)) window.setTimeout(() => bit.nextStep(), 250);
 }
 function onKey(e: KeyboardEvent) {
-  if (bit.tourActive && e.key === 'Escape') bit.finishTour();
+  if (onTourPage.value && bit.tourActive && e.key === 'Escape') bit.finishTour();
 }
 
 const reminderCta = computed(() => bit.reminderKind === 'pending' ? 'Review' : bit.reminderKind === 'recovery' ? 'Set up recovery' : 'Claim username');
@@ -195,13 +196,21 @@ watch(() => bit.reminderOpen, (open) => {
   if (open) autoHide = window.setTimeout(() => bit.reminderOpen && bit.snoozeReminder(), 20_000);
 });
 // Landing on the claim page (or finishing it) closes any open reminder.
+let tourTimer: number | undefined;
+function scheduleTour(delay: number) {
+  window.clearTimeout(tourTimer);
+  if (!onTourPage.value || bit.tourDone || bit.tourActive) return;
+  takeFlight();
+  tourTimer = window.setTimeout(() => {
+    if (onTourPage.value && !bit.tourDone && !bit.tourActive) bit.startTour();
+  }, delay);
+}
+
 watch(() => route.path, () => {
   if (bit.reminderOpen && onQuietPage()) bit.acceptReminder();
   // Setup wizard finished → hand over to the tour once the feed has painted.
-  if (!bit.tourDone && !bit.tourActive && route.path.startsWith('/home')) {
-    takeFlight(); // Bit hangs in mid-air until the tour bubble is ready to catch him
-    window.setTimeout(() => { if (!bit.tourDone && !bit.tourActive && !onQuietPage()) bit.startTour(); }, 1200);
-  }
+  scheduleTour(1200);
+  if (!onTourPage.value) flight.value = null;
 });
 
 onMounted(() => {
@@ -210,19 +219,14 @@ onMounted(() => {
   raf = requestAnimationFrame(track);
 
   void bit.refreshUsername();
-  if (!bit.tourDone) takeFlight();
-  if (!bit.tourDone) {
-    // Wait for the feed to paint so the nav targets exist.
-    window.setTimeout(() => {
-      if (!bit.tourDone && !bit.tourActive && !onQuietPage()) bit.startTour();
-    }, 1500);
-  }
+  // The tour teaches Home's controls. Shared content stays immediately usable.
+  scheduleTour(1500);
   tick = window.setInterval(checkReminder, 15_000);
 
   // Accounts that finished the tour before the bottom-bar step existed see just that step once.
   if (bit.tourDone) {
     window.setTimeout(() => {
-      if (bit.shouldOfferNavTour() && !bit.tourActive && !onQuietPage() && findTarget('bottom-nav')) bit.startNavTour();
+      if (onTourPage.value && bit.shouldOfferNavTour() && !bit.tourActive && findTarget('bottom-nav')) bit.startNavTour();
     }, 3000);
   }
 });
@@ -232,25 +236,26 @@ onUnmounted(() => {
   cancelAnimationFrame(raf);
   window.clearInterval(tick);
   window.clearTimeout(autoHide);
+  window.clearTimeout(tourTimer);
 });
 </script>
 
 <style scoped>
 .bc-tour { position: fixed; inset: 0; z-index: 2147483600; pointer-events: none; }
-.bc-dim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.78); }
+.bc-dim { position: absolute; inset: 0; background: rgba(20, 28, 36, 0.42); }
 .bc-ring {
-  position: absolute; border-radius: 8px; border: 1px solid #3dff7a;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.78), 0 0 0 3px rgba(61, 255, 122, 0.25);
+  position: absolute; border-radius: 8px; border: 1px solid var(--app-accent);
+  box-shadow: 0 0 0 9999px rgba(20, 28, 36, 0.42), 0 0 0 3px rgba(var(--app-accent-rgb), 0.25);
   transition: left 220ms cubic-bezier(.16, 1, .3, 1), top 220ms cubic-bezier(.16, 1, .3, 1),
               width 220ms cubic-bezier(.16, 1, .3, 1), height 220ms cubic-bezier(.16, 1, .3, 1);
   animation: bc-pulse 1.8s ease-in-out infinite;
 }
-@keyframes bc-pulse { 50% { box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.78), 0 0 0 7px rgba(61, 255, 122, 0.12); } }
+@keyframes bc-pulse { 50% { box-shadow: 0 0 0 9999px rgba(20, 28, 36, 0.42), 0 0 0 7px rgba(var(--app-accent-rgb), 0.12); } }
 
 .bc-bubble, .bc-reminder {
   position: absolute; pointer-events: auto;
-  background: #050605; color: #fff;
-  border: 1px solid #3dff7a; border-radius: 8px;
+  background: var(--app-surface-strong); color: var(--app-text);
+  border: 1px solid var(--app-accent); border-radius: 8px;
   padding: 14px 16px;
   font-family: 'Inter', system-ui, sans-serif;
 }
@@ -266,25 +271,25 @@ onUnmounted(() => {
 .bc-head { display: flex; align-items: center; gap: 12px; }
 .bc-titles { display: flex; flex-direction: column; min-width: 0; }
 .bc-title { font-size: 16px; font-weight: 500; line-height: 1.25; }
-.bc-count { font-size: 12px; color: #6b736b; font-family: var(--font-mono, monospace); }
-.bc-body { margin: 10px 0 0; font-size: 14px; line-height: 1.5; color: #c9d1c9; }
-.bc-hint { margin: 8px 0 0; font-size: 12.5px; color: #3dff7a; }
+.bc-count { font-size: 12px; color: var(--app-text-subtle); font-family: var(--font-mono, monospace); }
+.bc-body { margin: 10px 0 0; font-size: 14px; line-height: 1.5; color: var(--app-text-muted); }
+.bc-hint { margin: 8px 0 0; font-size: 12.5px; color: var(--app-accent); }
 .bc-dots { display: flex; gap: 4px; margin-top: 12px; }
-.bc-dot { width: 14px; height: 3px; background: #1d231d; border-radius: 2px; }
-.bc-dot.on { background: #3dff7a; }
+.bc-dot { width: 14px; height: 3px; background: var(--app-border); border-radius: 2px; }
+.bc-dot.on { background: var(--app-accent); }
 
 .bc-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
 .bc-spacer { flex: 1; }
 .bc-btn {
   font: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
-  padding: 7px 12px; border-radius: 5px; background: transparent; color: #fff;
-  border: 1px solid #2a312a; box-shadow: none;
+  min-height: 44px; padding: 7px 12px; border-radius: 5px; background: transparent; color: var(--app-text);
+  border: 1px solid var(--app-border); box-shadow: none;
 }
-.bc-btn:hover { border-color: #3dff7a; }
-.bc-btn--ghost { border-color: transparent; color: #6b736b; padding-left: 0; }
-.bc-btn--ghost:hover { color: #fff; border-color: transparent; }
-.bc-btn--primary { background: #3dff7a; border-color: #3dff7a; color: #000; }
-.bc-btn--primary:hover { background: #5cff8f; }
+.bc-btn:hover { border-color: var(--app-accent); }
+.bc-btn--ghost { border-color: transparent; color: var(--app-text-subtle); padding-left: 0; }
+.bc-btn--ghost:hover { color: var(--app-text); border-color: transparent; }
+.bc-btn--primary { background: var(--app-accent); border-color: var(--app-accent); color: var(--app-on-accent); }
+.bc-btn--primary:hover { background: var(--app-accent-bright); }
 
 .bc-reminder {
   position: fixed; right: 20px; bottom: 20px; width: min(340px, calc(100vw - 24px));
@@ -305,15 +310,15 @@ onUnmounted(() => {
 }
 
 .bc-demo { margin: 10px 0 4px; }
-.bc-demo-bar { position: relative; height: 52px; border-radius: 12px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); overflow: hidden; }
-.bc-demo-tab { position: absolute; top: 0; bottom: 0; left: calc(var(--i) * 25%); width: 25%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 9px; font-weight: 600; color: rgba(255,255,255,.55); }
+.bc-demo-bar { position: relative; height: 52px; border-radius: 12px; background: var(--app-item-surface); border: 1px solid var(--app-border); overflow: hidden; }
+.bc-demo-tab { position: absolute; top: 0; bottom: 0; left: calc(var(--i) * 25%); width: 25%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 9px; font-weight: 600; color: var(--app-text-muted); }
 .bc-demo-tab :deep(svg) { width: 20px; height: 20px; }
-.bc-demo-tab--a { animation: bc-a 3.6s ease-in-out infinite; z-index: 2; color: #fff; }
+.bc-demo-tab--a { animation: bc-a 3.6s ease-in-out infinite; z-index: 2; color: var(--app-text); }
 .bc-demo-tab--b { animation: bc-b 3.6s ease-in-out infinite; }
-.bc-demo-finger { position: absolute; top: 22px; left: 12%; width: 18px; height: 18px; margin-left: -9px; border-radius: 50%; background: rgba(255,255,255,.55); box-shadow: 0 0 0 6px rgba(255,255,255,.12); animation: bc-f 3.6s ease-in-out infinite; z-index: 3; }
+.bc-demo-finger { position: absolute; top: 22px; left: 12%; width: 18px; height: 18px; margin-left: -9px; border-radius: 50%; background: var(--app-text-muted); box-shadow: 0 0 0 6px rgba(255,255,255,.12); animation: bc-f 3.6s ease-in-out infinite; z-index: 3; }
 @keyframes bc-a { 0%,25% { transform: translateX(0) scale(1); } 35% { transform: translateX(0) scale(1.15); } 70%,100% { transform: translateX(200%) scale(1); } }
 @keyframes bc-b { 0%,35% { transform: translateX(0); } 70%,100% { transform: translateX(-200%); } }
 @keyframes bc-f { 0% { left: 12%; opacity: 0; } 10% { opacity: 1; } 25%,35% { left: 12%; } 70%,90% { left: 62%; opacity: 1; } 100% { left: 62%; opacity: 0; } }
-.bc-demo-cap { display: block; margin-top: 6px; text-align: center; font-size: 11px; color: rgba(255,255,255,.55); }
+.bc-demo-cap { display: block; margin-top: 6px; text-align: center; font-size: 11px; color: var(--app-text-muted); }
 @media (prefers-reduced-motion: reduce) { .bc-demo-tab--a, .bc-demo-tab--b, .bc-demo-finger { animation: none; } }
 </style>

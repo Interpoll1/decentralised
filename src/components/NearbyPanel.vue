@@ -1,53 +1,50 @@
 <template>
-  <section class="nb" aria-label="Nearby">
+  <section class="nb" :aria-label="$ui('Nearby')">
     <!-- ── Setup / consent ─────────────────────────────────────────────── -->
     <div v-if="!nb.prefs.enabled || editing" class="nb-card">
-      <p class="nb-title">{{ nb.prefs.enabled ? 'Nearby settings' : 'Find people near you' }}</p>
-      <p v-if="!nb.prefs.enabled" class="nb-lead">
-        See who's around, join local spaces and meetups. It's <b>off until you turn it on</b>, shares only a rough <b>area</b> (never your exact spot),
-        expires on its own, and you can switch it off and wipe it any time.
-      </p>
+      <p class="nb-title">{{ nb.prefs.enabled ? $ui("Nearby settings") : $ui("Find people near you") }}</p>
+      <p v-if="!nb.prefs.enabled" class="nb-lead"> {{ $ui("See who's around, join local spaces and meetups. It's") }} <b>{{ $ui("off until you turn it on") }}</b>{{ $ui(", shares only a rough") }} <b>{{ $ui("area") }}</b> {{ $ui("(never your exact spot), expires on its own, and you can switch it off and wipe it any time.") }} </p>
 
-      <p class="nb-label">How precise should your area be?</p>
-      <div class="nb-chips" role="radiogroup" aria-label="Area size">
+      <p class="nb-label">{{ $ui("How precise should your area be?") }}</p>
+      <div class="nb-chips" role="radiogroup" :aria-label="$ui('Area size')">
         <button v-for="o in PREC_OPTS" :key="o.km" class="nb-chip" :class="{ on: form.precision === o.km }" role="radio" :aria-checked="form.precision === o.km" @click="form.precision = o.km">
-          <b>{{ o.km }} km</b><small>{{ o.name }}</small>
+          <b>{{ o.km }} {{ $ui("km") }}</b><small>{{ o.name }}</small>
         </button>
       </div>
-      <p class="nb-hint">Others only ever see "within {{ form.precision }} km" of a point — never a pin on a street.</p>
+      <p class="nb-hint">{{ $ui("Others only ever see \"within") }} {{ form.precision }} {{ $ui("km\" of a point — never a pin on a street.") }}</p>
 
-      <p class="nb-label">Where do we get your location?</p>
-      <div class="nb-opts" role="radiogroup" aria-label="Location source">
-        <label class="nb-opt" :class="{ on: form.source === 'gps' }"><input v-model="form.source" type="radio" value="gps" /><span><b>GPS</b><small>Most accurate. Your browser will ask permission.</small></span></label>
-        <label class="nb-opt" :class="{ on: form.source === 'ip' }"><input v-model="form.source" type="radio" value="ip" /><span><b>Approximate</b><small>City-level from your network address. No prompt; uses a lookup service.</small></span></label>
-        <label class="nb-opt" :class="{ on: form.source === 'manual' }"><input v-model="form.source" type="radio" value="manual" /><span><b>A city I choose</b><small>Most private — nothing is detected.</small></span></label>
+      <p class="nb-label">{{ $ui("Where do we get your location?") }}</p>
+      <div class="nb-opts" role="radiogroup" :aria-label="$ui('Location source')">
+        <label class="nb-opt" :class="{ on: form.source === 'gps' }"><input v-model="form.source" type="radio" value="gps" /><span><b>{{ $ui("GPS") }}</b><small>{{ $ui("Most accurate. Your browser will ask permission.") }}</small></span></label>
+        <label class="nb-opt" :class="{ on: form.source === 'ip' }"><input v-model="form.source" type="radio" value="ip" /><span><b>{{ $ui("Approximate") }}</b><small>{{ $ui("City-level from your network address. No prompt; uses a lookup service.") }}</small></span></label>
+        <label class="nb-opt" :class="{ on: form.source === 'manual' }"><input v-model="form.source" type="radio" value="manual" /><span><b>{{ $ui("A city I choose") }}</b><small>{{ $ui("Most private — nothing is detected.") }}</small></span></label>
       </div>
       <div v-if="form.source === 'manual'" class="nb-city">
         <div class="nb-row">
-          <input v-model="cityQuery" class="nb-input" placeholder="Search a city or town" aria-label="City" @keydown.enter.prevent="searchCity" />
-          <button class="nb-btn" :disabled="searching" @click="searchCity">{{ searching ? '…' : 'Search' }}</button>
+          <input v-model="cityQuery" class="nb-input" :placeholder="$ui('Search a city or town')" :aria-label="$ui('City')" @keydown.enter.prevent="searchCity" />
+          <button class="nb-btn" :disabled="searching" @click="searchCity">{{ searching ? '…' : $ui("Search") }}</button>
         </div>
         <ul v-if="cityResults.length" class="nb-results">
           <li v-for="r in cityResults" :key="r.label"><button :class="{ on: form.manual?.label === r.label }" @click="form.manual = { lat: r.lat, lon: r.lon, label: r.label }">{{ r.label }}</button></li>
         </ul>
-        <p v-if="form.manual" class="nb-hint">Using <b>{{ form.manual.label }}</b></p>
+        <p v-if="form.manual" class="nb-hint">{{ $ui("Using") }} <b>{{ form.manual.label }}</b></p>
         <p v-if="cityError" class="nb-err">{{ cityError }}</p>
       </div>
 
-      <p class="nb-label">Who can see you?</p>
-      <div class="nb-opts" role="radiogroup" aria-label="Visibility">
-        <label class="nb-opt" :class="{ on: form.visibility === 'everyone' }"><input v-model="form.visibility" type="radio" value="everyone" /><span><b>Everyone nearby</b><small>Your name and rough area show up for people within range.</small></span></label>
-        <label class="nb-opt" :class="{ on: form.visibility === 'contacts' }"><input v-model="form.visibility" type="radio" value="contacts" /><span><b>Only people I've messaged</b><small>Sealed per contact — nobody else can read it, not even that it's you.</small></span></label>
-        <label class="nb-opt" :class="{ on: form.visibility === 'off' }"><input v-model="form.visibility" type="radio" value="off" /><span><b>No one — I just want to look</b><small>You can see others; nothing about you is shared.</small></span></label>
+      <p class="nb-label">{{ $ui("Who can see you?") }}</p>
+      <div class="nb-opts" role="radiogroup" :aria-label="$ui('Visibility')">
+        <label class="nb-opt" :class="{ on: form.visibility === 'everyone' }"><input v-model="form.visibility" type="radio" value="everyone" /><span><b>{{ $ui("Everyone nearby") }}</b><small>{{ $ui("Your name and rough area show up for people within range.") }}</small></span></label>
+        <label class="nb-opt" :class="{ on: form.visibility === 'contacts' }"><input v-model="form.visibility" type="radio" value="contacts" /><span><b>{{ $ui("Only people I've messaged") }}</b><small>{{ $ui("Sealed per contact — nobody else can read it, not even that it's you.") }}</small></span></label>
+        <label class="nb-opt" :class="{ on: form.visibility === 'off' }"><input v-model="form.visibility" type="radio" value="off" /><span><b>{{ $ui("No one — I just want to look") }}</b><small>{{ $ui("You can see others; nothing about you is shared.") }}</small></span></label>
       </div>
 
-      <label v-if="nb.prefs.enabled" class="nb-opt nb-opt--plain"><input type="checkbox" :checked="nb.prefs.detectedOnly" @change="nb.applySettings({ detectedOnly: ($event.target as HTMLInputElement).checked })" /><span><b>Only people whose location was detected</b><small>Hides anyone who typed in a city by hand (their location can't be checked).</small></span></label>
+      <label v-if="nb.prefs.enabled" class="nb-opt nb-opt--plain"><input type="checkbox" :checked="nb.prefs.detectedOnly" @change="nb.applySettings({ detectedOnly: ($event.target as HTMLInputElement).checked })" /><span><b>{{ $ui("Only people whose location was detected") }}</b><small>{{ $ui("Hides anyone who typed in a city by hand (their location can't be checked).") }}</small></span></label>
 
       <p v-if="nb.errorText.value" class="nb-err">{{ nb.errorText.value }}</p>
       <div class="nb-row nb-row--end">
-        <button v-if="editing" class="nb-btn nb-btn--ghost" @click="editing = false">Cancel</button>
+        <button v-if="editing" class="nb-btn nb-btn--ghost" @click="editing = false">{{ $ui("Cancel") }}</button>
         <button class="nb-btn nb-btn--primary" :disabled="busy || (form.source === 'manual' && !form.manual)" @click="save">
-          {{ busy ? 'Working…' : nb.prefs.enabled ? 'Save' : 'Turn on Nearby' }}
+          {{ busy ? $ui("Working…") : nb.prefs.enabled ? $ui("Save") : $ui("Turn on Nearby") }}
         </button>
       </div>
     </div>
@@ -63,24 +60,24 @@
           </div>
         </div>
         <div class="nb-row">
-          <button class="nb-btn nb-btn--ghost" @click="refresh">Refresh</button>
-          <button class="nb-btn nb-btn--ghost" @click="openSettings">Settings</button>
+          <button class="nb-btn nb-btn--ghost" @click="refresh">{{ $ui("Refresh") }}</button>
+          <button class="nb-btn nb-btn--ghost" @click="openSettings">{{ $ui("Settings") }}</button>
         </div>
       </div>
       <p v-if="nb.status.value === 'denied' || nb.status.value === 'error'" class="nb-err nb-err--card">{{ nb.errorText.value }}</p>
-      <p v-if="widened" class="nb-note">Your location is only accurate to about {{ nb.publishedPrecision.value }} km right now, so your shared area was widened from {{ nb.prefs.precision }} km to {{ nb.publishedPrecision.value }} km.</p>
-      <p v-if="nb.publishError.value" class="nb-err nb-err--card">Couldn't publish your location: {{ nb.publishError.value }}</p>
+      <p v-if="widened" class="nb-note">{{ $ui("Your location is only accurate to about") }} {{ nb.publishedPrecision.value }} {{ $ui("km right now, so your shared area was widened from") }} {{ nb.prefs.precision }} {{ $ui("km to") }} {{ nb.publishedPrecision.value }} {{ $ui("km.") }}</p>
+      <p v-if="nb.publishError.value" class="nb-err nb-err--card">{{ $ui("Couldn't publish your location:") }} {{ nb.publishError.value }}</p>
 
       <div class="nb-bar">
-        <div class="nb-chips nb-chips--tight" role="radiogroup" aria-label="Radius">
+        <div class="nb-chips nb-chips--tight" role="radiogroup" :aria-label="$ui('Radius')">
           <button v-for="r in RADII" :key="r" class="nb-chip nb-chip--sm" :class="{ on: nb.prefs.radius === r }" role="radio" :aria-checked="nb.prefs.radius === r" @click="nb.applySettings({ radius: r })">{{ RADIUS_LABEL(r) }}</button>
         </div>
-        <button class="nb-btn nb-btn--ghost" @click="router.push({ path: '/home', query: { scope: 'nearby' } })">Nearby posts →</button>
+        <button class="nb-btn nb-btn--ghost" @click="router.push({ path: '/home', query: { scope: 'nearby' } })">{{ $ui("Nearby posts →") }}</button>
       </div>
 
       <div class="nb-seg" role="tablist">
         <button v-for="t in TABS" :key="t.id" role="tab" :aria-selected="tab === t.id" :class="{ on: tab === t.id }" @click="tab = t.id">
-          {{ t.label }}<span v-if="counts[t.id]" class="nb-count">{{ counts[t.id] }}</span>
+          {{ $ui(t.label) }}<span v-if="counts[t.id]" class="nb-count">{{ counts[t.id] }}</span>
         </button>
       </div>
 
@@ -95,69 +92,69 @@
       <!-- People -->
       <div v-else-if="tab === 'people'" class="nb-card nb-list">
         <p v-if="!nb.people.value.length" class="nb-empty">
-          {{ nb.status.value === 'locating' ? 'Finding your area…' : `No one ${nb.prefs.radius >= 20000 ? 'anywhere' : 'within ' + RADIUS_LABEL(nb.prefs.radius)} yet. Try a wider radius — people appear as they turn Nearby on.` }}
+          {{ nb.status.value === 'locating' ? $ui("Finding your area…") : `No one ${nb.prefs.radius >= 20000 ? 'anywhere' : $ui("within ") + RADIUS_LABEL(nb.prefs.radius)} yet. Try a wider radius — people appear as they turn Nearby on.` }}
         </p>
         <div v-for="p in nb.people.value" :key="p.id" class="nb-person">
           <span class="nb-avatar">{{ (p.name || '?').charAt(0).toUpperCase() }}</span>
           <span class="nb-person__info">
-            <b>{{ p.name }} <em v-if="p.viaContacts" class="nb-tag">contact</em></b>
+            <b>{{ p.name }} <em v-if="p.viaContacts" class="nb-tag">{{ $ui("contact") }}</em></b>
             <small>{{ distance(p) }} · {{ timeAgo(p.at) }} · {{ srcLabel(p.src) }}</small>
           </span>
-          <button class="nb-btn" @click="router.push(`/chat/${p.id}`)">Message</button>
-          <button class="nb-icon" aria-label="Hide this person" title="Hide" @click="hide(p.id, p.name)">✕</button>
+          <button class="nb-btn" @click="router.push(`/chat/${p.id}`)">{{ $ui("Message") }}</button>
+          <button class="nb-icon" :aria-label="$ui('Hide this person')" :title="$ui('Hide')" @click="hide(p.id, p.name)">✕</button>
         </div>
         <details v-if="nb.prefs.blocked.length" class="nb-hidden">
-          <summary>Hidden people ({{ nb.prefs.blocked.length }})</summary>
-          <div v-for="id in nb.prefs.blocked" :key="id" class="nb-row nb-hidden__row"><code>{{ id.slice(0, 10) }}…</code><button class="nb-btn nb-btn--ghost" @click="nb.unblock(id)">Unhide</button></div>
+          <summary>{{ $ui("Hidden people (") }}{{ nb.prefs.blocked.length }})</summary>
+          <div v-for="id in nb.prefs.blocked" :key="id" class="nb-row nb-hidden__row"><code>{{ id.slice(0, 10) }}…</code><button class="nb-btn nb-btn--ghost" @click="nb.unblock(id)">{{ $ui("Unhide") }}</button></div>
         </details>
       </div>
 
       <!-- Meetups -->
       <div v-else-if="tab === 'meetups'" class="nb-card nb-list">
-        <p v-if="!nb.meetups.value.length && !hosting" class="nb-empty">No meetups within {{ nb.prefs.radius }} km yet. Be the first to host one.</p>
+        <p v-if="!nb.meetups.value.length && !hosting" class="nb-empty">{{ $ui("No meetups within") }} {{ nb.prefs.radius }} {{ $ui("km yet. Be the first to host one.") }}</p>
         <div v-for="m in nb.meetups.value" :key="m.hostId + m.id" class="nb-meetup">
           <div class="nb-date"><b>{{ dayNum(m.when) }}</b><small>{{ monthName(m.when) }}</small></div>
           <div class="nb-meetup__info">
             <b>{{ m.title }}</b>
-            <small>{{ timeOfDay(m.when) }} · {{ m.place || 'Place TBA' }}</small>
-            <small>Hosted by {{ m.hostName }} · {{ distance(m) }}</small>
+            <small>{{ timeOfDay(m.when) }} · {{ m.place || $ui("Place TBA") }}</small>
+            <small>{{ $ui("Hosted by") }} {{ m.hostName }} · {{ distance(m) }}</small>
             <p v-if="m.desc">{{ m.desc }}</p>
           </div>
-          <button v-if="m.hostId === nb.myId.value" class="nb-btn nb-btn--ghost" @click="cancelMeetup(m.id)">Cancel</button>
-          <button v-else class="nb-btn" @click="router.push(`/chat/${m.hostId}`)">Message host</button>
+          <button v-if="m.hostId === nb.myId.value" class="nb-btn nb-btn--ghost" @click="cancelMeetup(m.id)">{{ $ui("Cancel") }}</button>
+          <button v-else class="nb-btn" @click="router.push(`/chat/${m.hostId}`)">{{ $ui("Message host") }}</button>
         </div>
-        <button v-if="!hosting" class="nb-btn nb-btn--primary nb-wide" @click="hosting = true">Host a meetup</button>
+        <button v-if="!hosting" class="nb-btn nb-btn--primary nb-wide" @click="hosting = true">{{ $ui("Host a meetup") }}</button>
         <form v-else class="nb-form" @submit.prevent="host">
-          <input v-model="mForm.title" class="nb-input" maxlength="80" placeholder="Title (e.g. Saturday chess in the park)" required />
+          <input v-model="mForm.title" class="nb-input" maxlength="80" :placeholder="$ui('Title (e.g. Saturday chess in the park)')" required />
           <div class="nb-row">
             <input v-model="mForm.when" class="nb-input" type="datetime-local" required :min="minWhen" />
-            <input v-model="mForm.place" class="nb-input" maxlength="80" placeholder="Place (public spot)" />
+            <input v-model="mForm.place" class="nb-input" maxlength="80" :placeholder="$ui('Place (public spot)')" />
           </div>
-          <textarea v-model="mForm.desc" class="nb-input" rows="2" maxlength="300" placeholder="Details (optional)"></textarea>
-          <p class="nb-hint">Shown to everyone within range. Pick a public place and don't share a home address.</p>
-          <div class="nb-row nb-row--end"><button type="button" class="nb-btn nb-btn--ghost" @click="hosting = false">Cancel</button><button class="nb-btn nb-btn--primary" :disabled="busy">Publish meetup</button></div>
+          <textarea v-model="mForm.desc" class="nb-input" rows="2" maxlength="300" :placeholder="$ui('Details (optional)')"></textarea>
+          <p class="nb-hint">{{ $ui("Shown to everyone within range. Pick a public place and don't share a home address.") }}</p>
+          <div class="nb-row nb-row--end"><button type="button" class="nb-btn nb-btn--ghost" @click="hosting = false">{{ $ui("Cancel") }}</button><button class="nb-btn nb-btn--primary" :disabled="busy">{{ $ui("Publish meetup") }}</button></div>
         </form>
       </div>
 
       <!-- Local spaces -->
       <div v-else class="nb-card nb-list">
-        <p v-if="!nb.spaces.value.length && !makingSpace" class="nb-empty">No local spaces within {{ nb.prefs.radius }} km yet.</p>
+        <p v-if="!nb.spaces.value.length && !makingSpace" class="nb-empty">{{ $ui("No local spaces within") }} {{ nb.prefs.radius }} {{ $ui("km yet.") }}</p>
         <div v-for="s in nb.spaces.value" :key="s.id" class="nb-person">
           <span class="nb-avatar nb-avatar--sq">{{ s.name.charAt(0).toUpperCase() }}</span>
-          <span class="nb-person__info"><b>{{ s.name }}</b><small>{{ s.desc || 'Local space' }} · {{ distance(s) }}</small></span>
-          <button class="nb-btn" @click="router.push(`/community/${s.id}`)">Open</button>
+          <span class="nb-person__info"><b>{{ s.name }}</b><small>{{ s.desc || $ui("Local space") }} · {{ distance(s) }}</small></span>
+          <button class="nb-btn" @click="router.push(`/community/${s.id}`)">{{ $ui("Open") }}</button>
         </div>
-        <button v-if="!makingSpace" class="nb-btn nb-btn--primary nb-wide" @click="startSpace">Create a local space</button>
+        <button v-if="!makingSpace" class="nb-btn nb-btn--primary nb-wide" @click="startSpace">{{ $ui("Create a local space") }}</button>
         <form v-else class="nb-form" @submit.prevent="makeSpace">
-          <input v-model="sForm.name" class="nb-input" maxlength="40" placeholder="Name (e.g. Brooklyn Runners)" required />
-          <input v-model="sForm.desc" class="nb-input" maxlength="200" placeholder="What's it about?" />
-          <p class="nb-hint">Anyone within range can find it. Spaces are public.</p>
+          <input v-model="sForm.name" class="nb-input" maxlength="40" :placeholder="$ui('Name (e.g. Brooklyn Runners)')" required />
+          <input v-model="sForm.desc" class="nb-input" maxlength="200" :placeholder="$ui('What\'s it about?')" />
+          <p class="nb-hint">{{ $ui("Anyone within range can find it. Spaces are public.") }}</p>
           <p v-if="spaceError" class="nb-err">{{ spaceError }}</p>
-          <div class="nb-row nb-row--end"><button type="button" class="nb-btn nb-btn--ghost" @click="makingSpace = false">Cancel</button><button class="nb-btn nb-btn--primary" :disabled="busy">Create space</button></div>
+          <div class="nb-row nb-row--end"><button type="button" class="nb-btn nb-btn--ghost" @click="makingSpace = false">{{ $ui("Cancel") }}</button><button class="nb-btn nb-btn--primary" :disabled="busy">{{ $ui("Create space") }}</button></div>
         </form>
       </div>
 
-      <button class="nb-off" @click="turnOff">Turn off Nearby &amp; delete my location data</button>
+      <button class="nb-off" @click="turnOff">{{ $ui("Turn off Nearby & delete my location data") }}</button>
     </template>
   </section>
 </template>
@@ -351,7 +348,7 @@ textarea.nb-input { resize: vertical; }
 }
 .nb-btn:hover:not(:disabled) { border-color: var(--app-border-strong); }
 .nb-btn:disabled { opacity: .5; cursor: default; }
-.nb-btn--primary { background: var(--app-accent); border-color: var(--app-accent); color: #04120a; }
+.nb-btn--primary { background: var(--app-accent); border-color: var(--app-accent); color: var(--app-on-accent); }
 .nb-btn--ghost { background: none; }
 .nb-wide { width: 100%; margin-top: 10px; padding: 10px; }
 .nb-icon { width: 28px; height: 28px; flex-shrink: 0; cursor: pointer; border-radius: 8px; border: none; background: none; color: var(--app-text-subtle); font-size: 12px; }
@@ -371,7 +368,7 @@ textarea.nb-input { resize: vertical; }
 .nb-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .nb-seg { display: inline-flex; align-self: flex-start; padding: 3px; gap: 2px; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--app-border); }
 .nb-seg button { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border: none; border-radius: 8px; background: none; cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 650; color: var(--app-text-muted); }
-.nb-seg button.on { background: var(--app-accent); color: #04120a; }
+.nb-seg button.on { background: var(--app-accent); color: var(--app-on-accent); }
 .nb-count { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; background: rgba(0,0,0,.25); }
 
 .nb-list { display: flex; flex-direction: column; gap: 4px; padding: 10px; }

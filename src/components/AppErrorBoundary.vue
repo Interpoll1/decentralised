@@ -3,26 +3,21 @@
   <div v-else class="app-error" role="alert">
     <div class="app-error__card">
       <div class="app-error__icon" aria-hidden="true">⚠️</div>
-      <h1 class="app-error__title">Something went wrong</h1>
-      <p class="app-error__body">
-        The app hit an unexpected error. Reloading usually fixes it. If it keeps
-        happening, resetting local data clears cached content and starts fresh.
-      </p>
+      <h1 class="app-error__title">{{ $ui("Something went wrong") }}</h1>
+      <p class="app-error__body"> {{ $ui("The app hit an unexpected error. Reloading usually fixes it. If it keeps happening, resetting local data clears cached content and starts fresh.") }} </p>
 
       <div class="app-error__actions">
-        <button class="app-error__btn app-error__btn--primary" @click="reload">
-          Reload
-        </button>
+        <button class="app-error__btn app-error__btn--primary" @click="reload"> {{ $ui("Reload") }} </button>
         <button class="app-error__btn" :disabled="resetting" @click="reset">
-          {{ resetting ? 'Resetting…' : 'Reset local data' }}
+          {{ resetting ? $ui("Resetting…") : $ui("Reset local data") }}
         </button>
       </div>
 
       <details class="app-error__details">
-        <summary>Technical details</summary>
+        <summary>{{ $ui("Technical details") }}</summary>
         <pre class="app-error__pre">{{ detailsText }}</pre>
         <button class="app-error__btn app-error__btn--ghost" @click="copyDetails">
-          {{ copied ? 'Copied' : 'Copy details' }}
+          {{ copied ? $ui("Copied") : $ui("Copy details") }}
         </button>
       </details>
     </div>

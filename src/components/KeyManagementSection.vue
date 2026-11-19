@@ -2,16 +2,11 @@
   <div class="key-management">
     <div class="section-header">
       <h3>
-        <ion-icon :icon="keyOutline"></ion-icon>
-        Encryption Keys
-      </h3>
-      <span class="key-count">{{ keys.length }} key{{ keys.length !== 1 ? 's' : '' }}</span>
+        <ion-icon :icon="keyOutline"></ion-icon> {{ $ui("Encryption Keys") }} </h3>
+      <span class="key-count">{{ $count(keys.length, 'key') }}</span>
     </div>
 
-    <p class="section-description">
-      These keys give you access to encrypted communities and chat rooms.
-      <strong>Back them up</strong> — if you lose them, you lose access.
-    </p>
+    <p class="section-description"> {{ $ui("These keys give you access to encrypted communities and chat rooms.") }} <strong>{{ $ui("Back them up") }}</strong> {{ $ui("— if you lose them, you lose access.") }} </p>
 
     <!-- Key list -->
     <div v-if="keys.length > 0" class="key-list">
@@ -32,20 +27,16 @@
 
     <div v-else class="empty-state">
       <ion-icon :icon="lockOpenOutline"></ion-icon>
-      <p>No encryption keys stored yet.</p>
-      <p class="hint">Join an encrypted community or chat room to store a key here.</p>
+      <p>{{ $ui("No encryption keys stored yet.") }}</p>
+      <p class="hint">{{ $ui("Join an encrypted community or chat room to store a key here.") }}</p>
     </div>
 
     <!-- Actions -->
     <div class="key-actions">
       <ion-button expand="block" fill="outline" size="small" @click="exportKeys" :disabled="keys.length === 0">
-        <ion-icon :icon="downloadOutline" slot="start"></ion-icon>
-        Export Keys
-      </ion-button>
+        <ion-icon :icon="downloadOutline" slot="start"></ion-icon> {{ $ui("Export Keys") }} </ion-button>
       <ion-button expand="block" fill="outline" size="small" @click="triggerImport">
-        <ion-icon :icon="cloudUploadOutline" slot="start"></ion-icon>
-        Import Keys
-      </ion-button>
+        <ion-icon :icon="cloudUploadOutline" slot="start"></ion-icon> {{ $ui("Import Keys") }} </ion-button>
       <input ref="fileInput" type="file" accept=".json" style="display: none" @change="handleImport" />
     </div>
 
@@ -61,6 +52,7 @@
 </template>
 
 <script setup lang="ts">
+import { ui } from "../i18n";
 import { ref, computed, onMounted } from 'vue';
 import { IonIcon, IonButton, IonAlert, toastController } from '@ionic/vue';
 import {
@@ -92,8 +84,8 @@ const deleteAlertButtons = computed(() => [
   },
 ]);
 
-async function showToast(message: string) {
-  const toast = await toastController.create({ message, duration: 3000 });
+async function showToast(message: string, color?: 'success' | 'warning') {
+  const toast = await toastController.create({ message, duration: 3000, color });
   await toast.present();
 }
 
@@ -107,7 +99,7 @@ async function loadKeys() {
   } catch (err) {
     console.error('Failed to load keys:', err);
     keys.value = [];
-    await showToast('Failed to load encryption keys.');
+    await showToast(ui("Failed to load encryption keys."));
   }
 }
 
@@ -126,7 +118,7 @@ async function deleteKey(id: string) {
     await loadKeys();
   } catch (err) {
     console.error('Failed to delete key:', err);
-    await showToast('Failed to delete key.');
+    await showToast(ui("Failed to delete key."));
   }
 }
 
@@ -144,7 +136,7 @@ async function exportKeys() {
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   } catch (err) {
     console.error('Failed to export keys:', err);
-    await showToast('Failed to export keys.');
+    await showToast(ui("Failed to export keys."));
   }
 }
 
@@ -169,7 +161,7 @@ async function handleImport(event: Event) {
     );
   } catch (err) {
     console.error('Failed to import keys:', err);
-    await showToast('Import failed — the file may be invalid or corrupt.');
+    await showToast(ui("Import failed — the file may be invalid or corrupt."));
   } finally {
     input.value = '';
   }

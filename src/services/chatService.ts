@@ -21,12 +21,35 @@
  *    - Layer 4: stale-check timer (catches crash/network-drop)
  */
 
-import { GunService, GUN_NAMESPACE } from './gunService';
+/**
+ * Direct messages — Signal Protocol encrypted, relay-WS primary, Gun fallback.
+ *
+ * WHAT CHANGED FROM THE PREVIOUS VERSION:
+ *
+ * 1. Encryption: RSA/AES hybrid → Signal double-ratchet (signalProtocol.ts)
+ *    - Every message gets a fresh key derived from the ratchet chain
+ *    - Relay sees only opaque ciphertext, sender id, recipient id
+ *    - Forward secrecy: past messages safe even if keys leak today
+ *    - Break-in recovery: session self-heals within ~50 messages after compromise
+ *
+ * 2. Live delivery: Gun .map().on() → relay WS primary
+ *    - sendMessage() pushes a 'chat-message' frame via WS immediately after Gun put
+ *    - Recipient's handleWsMessage fires onMessage directly — no Gun round-trip
+ *    - Gun .map().on() kept as fallback with self-healing reattach timer
+ *
+ * 3. Presence: 4-layer system
+ *    - Layer 1: Gun .on() (fast when healthy)
+ *    - Layer 2: gunOnce immediate read
+ *    - Layer 3: relay ping-peer poll every 15s (authoritative)
+ *    - Layer 4: stale-check timer (catches crash/network-drop)
+ */
+import { GunService } from './gunService';
 import { StorageService } from './storageService';
 import { BoundedMap, BoundedSet } from '../utils/boundedMap';
 import { gunPut, gunOnce, gunReadChildren, toGunRecord } from '../utils/gunAsync';
 import config from '../config';
 import { encryptAndUpload, fetchAndDecrypt } from './chatMediaService';
+import { ChatMediaPreviews } from '../utils/chatMediaPreviews';
 import { RECEIPT_PREFIX, envelopeDigest } from './dmDelivery';
 import {DMEpochError,readEpoch,verifyEpoch} from './dmSessionEpoch';
 import {ReceiveFailure,protocolEnvelope,receiveFingerprint,acceptanceKey,enqueuePending,removePending,pendingEntries,MAX_PENDING,MAX_ENVELOPE_BYTES,type ReceiveResult,type ReceiveCommit} from './dmReceiveState';
@@ -37,13 +60,7 @@ function chatRelayBase(): string {
   const ws = config.relay.websocket; // e.g. wss://interpoll.endless.sbs
   return ws.replace(/^wss:\/\//, 'https://').replace(/^ws:\/\//, 'http://').replace(/\/$/, '');
 }
-import {
-  SignalSession, SignalPublicBundle, SignalEnvelope,
-  SIGNAL_WIRE_VERSION, getOrCreateIdentityBundle, getOrCreateAuthenticatedIdentityBundle,
-  getSafetyNumber,
-  loadOrCreateOPKPool, generateOPKBatch,
-  getOPKPoolSize, OPK_POOL_SIZE, OPK_POOL_LOW_WATER,
-} from './signalProtocol';
+import { SignalSession, SignalPublicBundle, SignalEnvelope, SIGNAL_WIRE_VERSION, getOrCreateIdentityBundle, getOrCreateAuthenticatedIdentityBundle, generateOPKBatch, getOPKPoolSize, OPK_POOL_SIZE, OPK_POOL_LOW_WATER } from './signalProtocol';
 import { compareMessages } from '../utils/messageOrder';
 import type { StoredChatMessage, SyncStatus } from '../types/social';
 
@@ -155,6 +172,7 @@ function seenIds(userId: string): BoundedSet<string> {
   return _seenIds.get(userId)!;
 }
 
+const mediaPreviews = new ChatMediaPreviews();
 async function toChatMessage(row: StoredChatMessage): Promise<ChatMessage> {
   let mediaUrl: string|undefined, mediaType: 'image'|'video'|'file'|undefined;
   let fileName: string|undefined, fileSize: number|undefined;
@@ -169,6 +187,9 @@ async function toChatMessage(row: StoredChatMessage): Promise<ChatMessage> {
         fileName = f.media.mediaName; fileSize = f.media.mediaSize;
         mediaType = f.media.mediaType?.startsWith('video') ? 'video' : f.media.mediaType?.startsWith('image') ? 'image' : 'file';
         mediaUrl = await fetchAndDecrypt(f.media, row.outgoing ? row.senderId : row.recipientId || '');
+        // Re-authenticate first, then retain one display URL per exact message envelope.
+        // Repeated history hydration must not leak a fresh blob URL for the same attachment.
+        mediaUrl = mediaPreviews.retain(row.outgoing ? row.senderId : row.recipientId || '', row.id, row.text, mediaUrl);
       } else if (f._url && f.url) {
         // Large file: relay-hosted persistent URL
         mediaUrl  = f.url;
@@ -182,6 +203,7 @@ async function toChatMessage(row: StoredChatMessage): Promise<ChatMessage> {
         const buf    = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++) buf[i] = binary.charCodeAt(i);
         mediaUrl  = URL.createObjectURL(new Blob([buf], { type: f.mime || 'application/octet-stream' }));
+        mediaUrl = mediaPreviews.retain(row.outgoing ? row.senderId : row.recipientId || '', row.id, row.text, mediaUrl);
         mediaType = f.mime?.startsWith('video') ? 'video' : f.mime?.startsWith('image') ? 'image' : 'file';
         fileName  = f.name; fileSize = f.size; displayText = f.name;
       } else {
@@ -521,9 +543,7 @@ class ChatService {
     return GunService.getGun().get('chats').get(roomId);
   }
 
-  private messageSoul(roomId: string, msgId: string) {
-    return `${GUN_NAMESPACE}/chats/${roomId}/${msgId}`;
-  }
+
 
   private indexRoom(roomId: string, ...ids: string[]) {
     try {
@@ -730,7 +750,7 @@ class ChatService {
     });
   }
 
-  private subscribeToReadReceipts(roomId: string, recipientId: string): void {
+  private subscribeToReadReceipts(roomId: string, _recipientId: string): void {
     // Receipts are delivered purely via WS (chat-read-receipt frames from the relay).
     // No Gun listeners needed — they were the source of timing bugs and false positives.
     // The WS handler in handleWsMessage case 'chat-read-receipt' calls onReadReceipt.
@@ -1194,7 +1214,7 @@ class ChatService {
     if (this.presenceSubs.has(peerId)) return;
     let lastOnline: boolean | null = null;
     let lastTs           = 0;
-    let _offlineDebounce = 0;
+    let _offlineDebounce: number | null = null;
 
     const emit = (online: boolean, ts: number) => {
       lastTs = Math.max(lastTs, ts);

@@ -6,7 +6,7 @@
         <header class="bs-bit">
           <div ref="bitWrap" class="bs-bit-wrap" :class="{ jumping }"><BitMascot :size="88" :mood="current.mood" :animated="!jumping" /></div>
           <div class="bs-bubble" :key="step">
-            <p class="bs-bubble__text">{{ current.line }}</p>
+            <p class="bs-bubble__text">{{ $ui(current.line) }}</p>
           </div>
         </header>
 
@@ -16,31 +16,32 @@
 
         <!-- 0 · welcome -->
           <section v-if="step === 0" key="welcome" class="bs-step">
-            <h1 class="bs-title">Let's set you up</h1>
+            <h1 class="bs-title">{{ $ui("Let's set you up") }}</h1>
+            <LanguagePicker compact />
             <ul class="bs-list">
-              <li><b>Spaces</b> — pick communities for your feed</li>
-              <li><b>Private key</b> — the only thing that proves you're you</li>
-              <li><b>Relay</b> — choose how you connect to the network</li>
+              <li><b>{{ $ui("Spaces") }}</b> {{ $ui("— pick communities for your feed") }}</li>
+              <li><b>{{ $ui("Private key") }}</b> {{ $ui("— the only thing that proves you're you") }}</li>
+              <li><b>{{ $ui("Relay") }}</b> {{ $ui("— choose how you connect to the network") }}</li>
             </ul>
-            <p class="bs-note">About a minute. No email, no phone, no account.</p>
-            <button v-if="!restoring && !recoveringName" class="bs-link bs-restore-link" @click="restoring = true">I already have a recovery phrase</button>
-            <button v-if="!restoring && !recoveringName" class="bs-link bs-restore-link" @click="recoveringName = true">I lost my key — recover my username</button>
+            <p class="bs-note">{{ $ui("About a minute. No email, no phone, no account.") }}</p>
+            <button v-if="!restoring && !recoveringName" class="bs-link bs-restore-link" @click="restoring = true">{{ $ui("I already have a recovery phrase") }}</button>
+            <button v-if="!restoring && !recoveringName" class="bs-link bs-restore-link" @click="recoveringName = true">{{ $ui("I lost my key — recover my username") }}</button>
             <div v-if="recoveringName" class="bs-restore">
               <RecoverNameForm />
-              <button class="bs-link" @click="recoveringName = false">Close</button>
+              <button class="bs-link" @click="recoveringName = false">{{ $ui("Close") }}</button>
             </div>
-            <div v-else class="bs-restore">
+            <div v-else-if="restoring" class="bs-restore">
               <RestoreKeyForm :warn-replace="false" @restored="onRestored" />
-              <button class="bs-link" @click="restoring = false">Cancel</button>
+              <button class="bs-link" @click="restoring = false">{{ $ui("Cancel") }}</button>
             </div>
           </section>
 
           <!-- 1 · spaces -->
           <section v-else-if="step === 1" key="spaces" class="bs-step">
-            <h1 class="bs-title">Pick spaces to follow</h1>
-            <p class="bs-sub">Your feed shows posts from spaces you join. You can change this any time.</p>
-            <p v-if="loadingSpaces" class="bs-note">Loading spaces…</p>
-            <p v-else-if="spacesError" class="bs-error">{{ spacesError }} <button class="bs-link" @click="loadSpaces">Retry</button></p>
+            <h1 class="bs-title">{{ $ui("Pick spaces to follow") }}</h1>
+            <p class="bs-sub">{{ $ui("Your feed shows posts from spaces you join. You can change this any time.") }}</p>
+            <p v-if="loadingSpaces" class="bs-note">{{ $ui("Loading spaces…") }}</p>
+            <p v-else-if="spacesError" class="bs-error">{{ spacesError }} <button class="bs-link" @click="loadSpaces">{{ $ui("Retry") }}</button></p>
             <div v-else class="bs-grid">
               <button
                 v-for="c in spaces" :key="c.id" class="bs-card" :class="{ on: picked.has(c.id) }"
@@ -58,40 +59,40 @@
 
           <!-- 2 · private key -->
           <section v-else-if="step === 2" key="key" class="bs-step">
-            <h1 class="bs-title">Your private key</h1>
-            <p class="bs-sub">It was created on this device. Nobody — including us — can recover it for you. Save the 24-word phrase somewhere safe.</p>
+            <h1 class="bs-title">{{ $ui("Your private key") }}</h1>
+            <p class="bs-sub">{{ $ui("It was created on this device. Nobody — including us — can recover it for you. Save the 24-word phrase somewhere safe.") }}</p>
             <div class="bs-key">
               <div class="bs-key__row">
-                <span class="bs-key__label">Public ID</span>
+                <span class="bs-key__label">{{ $ui("Public ID") }}</span>
                 <code>{{ shortPubkey || '…' }}</code>
               </div>
               <div class="bs-phrase" :class="{ hidden: !showPhrase }">
                 <template v-if="showPhrase"><span v-for="(w, i) in words" :key="i"><i>{{ i + 1 }}</i>{{ w }}</span></template>
-                <button v-else class="bs-btn" @click="revealPhrase">Show recovery phrase</button>
+                <button v-else class="bs-btn" @click="revealPhrase">{{ $ui("Show recovery phrase") }}</button>
               </div>
               <div v-if="showPhrase" class="bs-key__actions">
-                <button class="bs-btn" @click="copyPhrase">{{ copied ? 'Copied' : 'Copy' }}</button>
-                <button class="bs-btn" @click="downloadPhrase">Download .txt</button>
+                <button class="bs-btn" @click="copyPhrase">{{ copied ? $ui("Copied") : $ui("Copy") }}</button>
+                <button class="bs-btn" @click="downloadPhrase">{{ $ui("Download .txt") }}</button>
               </div>
             </div>
             <label class="bs-check">
               <input type="checkbox" v-model="savedKey" />
-              <span>I saved my recovery phrase</span>
+              <span>{{ $ui("I saved my recovery phrase") }}</span>
             </label>
           </section>
 
           <!-- 3 · relay -->
           <section v-else-if="step === 3" key="relay" class="bs-step">
-            <h1 class="bs-title">How do you want to connect?</h1>
+            <h1 class="bs-title">{{ $ui("How do you want to connect?") }}</h1>
             <div class="bs-options">
               <button class="bs-option" :class="{ on: relayChoice === 'default' }" @click="relayChoice = 'default'">
-                <strong>Interpoll public relay</strong><small>interpoll.endless.sbs — open, works out of the box</small>
+                <strong>{{ $ui("Interpoll public relay") }}</strong><small>{{ $ui("interpoll.endless.social — open, works out of the box") }}</small>
               </button>
               <button class="bs-option" :class="{ on: relayChoice === 'community' }" @click="relayChoice = 'community'">
-                <strong>A relay I trust</strong><small>Paste the address of a community or self-hosted relay</small>
+                <strong>{{ $ui("A relay I trust") }}</strong><small>{{ $ui("Paste the address of a community or self-hosted relay") }}</small>
               </button>
               <button class="bs-option" :class="{ on: relayChoice === 'private' }" @click="relayChoice = 'private'">
-                <strong>Private mode</strong><small>Route through Tor-friendly settings; slower, harder to trace</small>
+                <strong>{{ $ui("Private mode") }}</strong><small>{{ $ui("Route through Tor-friendly settings; slower, harder to trace") }}</small>
               </button>
             </div>
             <input
@@ -103,17 +104,17 @@
 
           <!-- 4 · feed filter -->
           <section v-else-if="step === 4" key="filter" class="bs-step">
-            <h1 class="bs-title">Want your feed a little calmer?</h1>
-            <p class="bs-sub">I can quietly hide posts a moderation service has already flagged. It only checks a hash of the post text — never your username or profile. You can change this later in Settings → General.</p>
+            <h1 class="bs-title">{{ $ui("Want your feed a little calmer?") }}</h1>
+            <p class="bs-sub">{{ $ui("I can quietly hide posts a moderation service has already flagged. It only checks a hash of the post text — never your username or profile. You can change this later in Settings → General.") }}</p>
             <div class="bs-options">
               <button class="bs-option" :class="{ on: filterChoice === 'default' }" @click="filterChoice = 'default'">
-                <strong>Use the built-in filter <em class="bs-tag">Recommended</em></strong><small>Best for most people. One tap, no setup.</small>
+                <strong>{{ $ui("Use the built-in filter") }} <em class="bs-tag">{{ $ui("Recommended") }}</em></strong><small>{{ $ui("Best for most people. One tap, no setup.") }}</small>
               </button>
               <button class="bs-option" :class="{ on: filterChoice === 'custom' }" @click="filterChoice = 'custom'">
-                <strong>I have my own moderation service</strong><small>Paste its address and I'll use that instead.</small>
+                <strong>{{ $ui("I have my own moderation service") }}</strong><small>{{ $ui("Paste its address and I'll use that instead.") }}</small>
               </button>
               <button class="bs-option" :class="{ on: filterChoice === 'none' }" @click="filterChoice = 'none'">
-                <strong>No thanks, show everything</strong><small>Nothing is hidden.</small>
+                <strong>{{ $ui("No thanks, show everything") }}</strong><small>{{ $ui("Nothing is hidden.") }}</small>
               </button>
             </div>
             <input v-if="filterChoice === 'custom'" v-model="filterUrl" class="bs-input" type="url" inputmode="url" placeholder="https://moderation.example.com" autocomplete="off" />
@@ -122,21 +123,21 @@
 
           <!-- 5 · done -->
           <section v-else key="done" class="bs-step">
-            <h1 class="bs-title">You're all set</h1>
+            <h1 class="bs-title">{{ $ui("You're all set") }}</h1>
             <ul class="bs-list">
-              <li>{{ picked.size }} {{ picked.size === 1 ? 'space' : 'spaces' }} joined</li>
-              <li>{{ savedKey ? 'Recovery phrase saved' : 'Recovery phrase not saved — you can back it up in Settings' }}</li>
-              <li>Connected via {{ relayLabel }}</li>
-              <li>{{ filterChoice === 'none' ? 'Feed filter off' : 'Feed filter on' }}</li>
+              <li>{{ $count(picked.size, 'space') }} {{ $ui("joined") }}</li>
+              <li>{{ savedKey ? $ui("Recovery phrase saved") : $ui("Recovery phrase not saved — you can back it up in Settings") }}</li>
+              <li>{{ $ui("Connected via") }} {{ relayChoice === 'community' ? relayLabel : $ui(relayLabel) }}</li>
+              <li>{{ filterChoice === 'none' ? $ui("Feed filter off") : $ui("Feed filter on") }}</li>
             </ul>
-            <p class="bs-note">Next I'll show you around the app.</p>
+            <p class="bs-note">{{ $ui("Next I'll show you around the app.") }}</p>
           </section>
 
         <nav class="bs-nav">
-          <button v-if="step > 0 && step < STEPS.length - 1" class="bs-btn" @click="step--">Back</button>
+          <button v-if="step > 0 && step < STEPS.length - 1" class="bs-btn" @click="step--">{{ $ui("Back") }}</button>
           <span class="bs-spacer" />
-          <button v-if="canSkip" class="bs-btn bs-btn--ghost" @click="skipStep">Skip</button>
-          <button class="bs-btn bs-btn--primary" :disabled="busy || !canContinue" @click="next">{{ nextLabel }}</button>
+          <button v-if="canSkip" class="bs-btn bs-btn--ghost" @click="skipStep">{{ $ui("Skip") }}</button>
+          <button class="bs-btn bs-btn--primary" :disabled="busy || !canContinue" @click="next">{{ $ui(nextLabel) }}</button>
         </nav>
       </div>
     </ion-content>
@@ -144,6 +145,7 @@
 </template>
 
 <script setup lang="ts">
+import LanguagePicker from '../components/LanguagePicker.vue';
 import { computed, onMounted, ref } from 'vue';
 import { IonPage, IonContent } from '@ionic/vue';
 import { useRouter } from 'vue-router';
@@ -336,71 +338,71 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.bs-page, .bs-content { --background: #000; }
+.bs-page, .bs-content { --background: var(--app-surface); }
 .bs-shell {
   min-height: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px;
   max-width: 640px; margin: 0 auto; padding: 32px 20px calc(24px + env(safe-area-inset-bottom));
-  color: #fff; font-family: 'Inter', system-ui, sans-serif;
+  color: var(--app-text); font-family: 'Inter', system-ui, sans-serif;
 }
 .bs-bit { display: flex; align-items: center; gap: 16px; }
 .bs-bit-wrap.jumping { animation: bs-leap 320ms cubic-bezier(.3,0,.6,1) forwards; }
 @keyframes bs-leap { 0% { transform: translateY(0); } 55% { transform: translateY(-34px); } 100% { transform: translateY(-14px); } }
-.bs-bubble { position: relative; flex: 1; border: 1px solid #3dff7a; border-radius: 8px; padding: 12px 14px; background: #050605; }
-.bs-bubble::before { content: ''; position: absolute; left: -7px; top: 50%; width: 12px; height: 12px; margin-top: -6px; background: #050605; border-left: 1px solid #3dff7a; border-bottom: 1px solid #3dff7a; transform: rotate(45deg); }
+.bs-bubble { position: relative; flex: 1; border: 1px solid var(--app-accent); border-radius: 8px; padding: 12px 14px; background: var(--app-surface); }
+.bs-bubble::before { content: ''; position: absolute; left: -7px; top: 50%; width: 12px; height: 12px; margin-top: -6px; background: var(--app-surface); border-left: 1px solid var(--app-accent); border-bottom: 1px solid var(--app-accent); transform: rotate(45deg); }
 .bs-bubble__text { margin: 0; font-size: 15px; line-height: 1.45; }
 .bs-dots { display: flex; gap: 6px; }
-.bs-dot { flex: 1; height: 3px; border-radius: 2px; background: #1d231d; }
-.bs-dot.on { background: #3dff7a; }
+.bs-dot { flex: 1; height: 3px; border-radius: 2px; background: var(--app-border); }
+.bs-dot.on { background: var(--app-accent); }
 .bs-step { flex: 1; display: flex; flex-direction: column; gap: 14px; }
 .bs-title { margin: 8px 0 0; font-size: 28px; font-weight: 500; letter-spacing: 0.005em; }
-.bs-sub, .bs-note { margin: 0; color: #a3aaa3; font-size: 14.5px; line-height: 1.55; }
-.bs-note { color: #6b736b; font-size: 13.5px; }
-.bs-error { margin: 0; color: #ff8a8a; font-size: 14px; }
+.bs-sub, .bs-note { margin: 0; color: var(--app-text-muted); font-size: 14.5px; line-height: 1.55; }
+.bs-note { color: var(--app-text-subtle); font-size: 13.5px; }
+.bs-error { margin: 0; color: var(--app-danger); font-size: 14px; }
 .bs-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
-.bs-list li { padding: 12px 14px; border: 1px solid #161a16; border-radius: 7px; background: #050605; color: #c9d1c9; font-size: 14.5px; }
-.bs-list b { color: #3dff7a; font-weight: 500; }
+.bs-list li { padding: 12px 14px; border: 1px solid var(--app-border); border-radius: 7px; background: var(--app-surface); color: var(--app-text-muted); font-size: 14.5px; }
+.bs-list b { color: var(--app-accent); font-weight: 500; }
 
 .bs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
-.bs-card { display: flex; align-items: center; gap: 12px; padding: 12px; text-align: left; font: inherit; color: inherit; cursor: pointer; background: #050605; border: 1px solid #161a16; border-radius: 7px; }
-.bs-card:hover { border-color: #2a312a; }
-.bs-card.on { border-color: #3dff7a; }
-.bs-card__avatar { width: 36px; height: 36px; flex-shrink: 0; display: grid; place-items: center; background: #1b1c1e; border-radius: 6px; font-weight: 500; }
+.bs-card { display: flex; align-items: center; gap: 12px; padding: 12px; text-align: left; font: inherit; color: inherit; cursor: pointer; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 7px; }
+.bs-card:hover { border-color: var(--app-border-strong); }
+.bs-card.on { border-color: var(--app-accent); }
+.bs-card__avatar { width: 36px; height: 36px; flex-shrink: 0; display: grid; place-items: center; background: var(--app-item-surface); border-radius: 6px; font-weight: 500; }
 .bs-card__body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .bs-card__body strong { font-weight: 500; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bs-card__body small { color: #6b736b; font-size: 12.5px; }
-.bs-card__check { width: 18px; color: #3dff7a; }
+.bs-card__body small { color: var(--app-text-subtle); font-size: 12.5px; }
+.bs-card__check { width: 18px; color: var(--app-accent); }
 
-.bs-key { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid #161a16; border-radius: 7px; background: #050605; }
+.bs-key { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid var(--app-border); border-radius: 7px; background: var(--app-surface); }
 .bs-key__row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13.5px; }
-.bs-key__label { color: #6b736b; }
-.bs-key code { font-family: var(--font-mono, monospace); color: #c9d1c9; }
+.bs-key__label { color: var(--app-text-subtle); }
+.bs-key code { font-family: var(--font-mono, monospace); color: var(--app-text-muted); }
 .bs-phrase { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; }
 .bs-phrase.hidden { display: flex; }
-.bs-phrase span { padding: 8px 10px; border: 1px solid #1d231d; border-radius: 5px; font-family: var(--font-mono, monospace); font-size: 13px; }
-.bs-phrase i { font-style: normal; color: #6b736b; margin-right: 8px; }
+.bs-phrase span { padding: 8px 10px; border: 1px solid var(--app-border); border-radius: 5px; font-family: var(--font-mono, monospace); font-size: 13px; }
+.bs-phrase i { font-style: normal; color: var(--app-text-subtle); margin-right: 8px; }
 .bs-key__actions { display: flex; gap: 8px; }
 .bs-check { display: flex; align-items: center; gap: 10px; font-size: 14.5px; cursor: pointer; }
-.bs-check input { width: 18px; height: 18px; accent-color: #3dff7a; }
+.bs-check input { width: 18px; height: 18px; accent-color: var(--app-accent); }
 
 .bs-options { display: flex; flex-direction: column; gap: 10px; }
-.bs-option { display: flex; flex-direction: column; gap: 3px; padding: 14px; text-align: left; font: inherit; color: inherit; cursor: pointer; background: #050605; border: 1px solid #161a16; border-radius: 7px; }
-.bs-option.on { border-color: #3dff7a; }
+.bs-option { display: flex; flex-direction: column; gap: 3px; padding: 14px; text-align: left; font: inherit; color: inherit; cursor: pointer; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 7px; }
+.bs-option.on { border-color: var(--app-accent); }
 .bs-option strong { font-weight: 500; font-size: 15px; }
-.bs-option small { color: #6b736b; font-size: 13px; }
-.bs-input { padding: 11px 12px; font: inherit; color: #fff; background: #050605; border: 1px solid #2a312a; border-radius: 6px; outline: none; }
-.bs-input:focus { border-color: #3dff7a; }
+.bs-option small { color: var(--app-text-subtle); font-size: 13px; }
+.bs-input { padding: 11px 12px; font: inherit; color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-border-strong); border-radius: 6px; outline: none; }
+.bs-input:focus { border-color: var(--app-accent); }
 
 .bs-nav { display: flex; align-items: center; gap: 8px; padding-top: 8px; }
 .bs-spacer { flex: 1; }
-.bs-btn { font: inherit; font-size: 14px; font-weight: 500; padding: 10px 16px; border-radius: 6px; cursor: pointer; color: #fff; background: transparent; border: 1px solid #2a312a; }
-.bs-btn:hover { border-color: #3dff7a; }
-.bs-btn--ghost { border-color: transparent; color: #6b736b; }
-.bs-btn--primary { background: #3dff7a; border-color: #3dff7a; color: #000; }
+.bs-btn { font: inherit; font-size: 14px; font-weight: 500; padding: 10px 16px; border-radius: 6px; cursor: pointer; color: var(--app-text); background: transparent; border: 1px solid var(--app-border-strong); }
+.bs-btn:hover { border-color: var(--app-accent); }
+.bs-btn--ghost { border-color: transparent; color: var(--app-text-subtle); }
+.bs-btn--primary { background: var(--app-accent); border-color: var(--app-accent); color: var(--app-on-accent); }
 .bs-btn--primary:disabled { opacity: 0.35; cursor: not-allowed; }
 .bs-restore-link { align-self: flex-start; padding: 0; }
-.bs-restore { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid #161a16; border-radius: 7px; background: #050605; }
-.bs-tag { font-style: normal; font-weight: 400; font-size: 11.5px; margin-left: 8px; padding: 2px 7px; border-radius: 5px; background: #1b1c1e; color: #3dff7a; }
-.bs-link { background: none; border: 0; color: #3dff7a; text-decoration: underline; cursor: pointer; font: inherit; }
+.bs-restore { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--app-border); border-radius: 7px; background: var(--app-surface); }
+.bs-tag { font-style: normal; font-weight: 400; font-size: 11.5px; margin-left: 8px; padding: 2px 7px; border-radius: 5px; background: var(--app-item-surface); color: var(--app-accent); }
+.bs-link { background: none; border: 0; color: var(--app-accent); text-decoration: underline; cursor: pointer; font: inherit; }
 
 @keyframes bs-in { from { opacity: 0; } to { opacity: 1; } }
 .bs-step { animation: bs-in 160ms ease; }

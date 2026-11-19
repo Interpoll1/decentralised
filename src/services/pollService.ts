@@ -10,8 +10,9 @@ import config from '../config';
 import { AuditService } from './auditService';
 import type { Poll, PollOption, VoteTrustPolicy } from '../types/poll';
 import { BoundedMap } from '../utils/boundedMap';
+import { verifyPollSignature } from '../utils/pollSignature';
 
-// Re-exported for backward compatibility — `src/types/poll.ts` is now the
+// Re-exported for backward compatibility вЂ” `src/types/poll.ts` is now the
 // single source of truth for these types; import from there in new code.
 export type { Poll, PollOption };
 
@@ -29,7 +30,7 @@ const LOCAL_POLLS_META_KEY = 'interpoll-local-polls-v1';
 const LOCAL_POLLS_TOMBSTONES_META_KEY = 'interpoll-local-polls-tombstones-v1';
 const LOCAL_POLL_BACKUP_TTL_MS = 30 * 60 * 1000;
 // Scalar metadata that a partially-replicated root poll node may be missing.
-// `options` is deliberately excluded — it is a Gun reference resolved separately.
+// `options` is deliberately excluded вЂ” it is a Gun reference resolved separately.
 const PARTIAL_HEAL_FIELDS = [
   'question', 'description', 'communityId', 'authorId', 'authorName',
   'authorShowRealName', 'authorPubkey', 'contentSignature',
@@ -52,7 +53,7 @@ type LocalPollBackupEntry = {
 type LocalPollBackupMap = Record<string, LocalPollBackupEntry>;
 
 const POLL_DEBUG_KEY = 'interpoll_poll_debug';
-type PollDebugCategory = 'create' | 'writes' | 'index' | 'ui' | 'all';
+type PollDebugCategory = 'vote' | 'create' | 'writes' | 'index' | 'ui' | 'all';
 
 function getPollDebugCategories(): Set<string> {
   try {
@@ -92,7 +93,7 @@ function logPollDebug(category: PollDebugCategory, message: string, meta?: Recor
 // maybeIndexNode), so anything that reaches the graph is indexed regardless of
 // whether the author was signed in. The old client-side POST to /api/index could
 // never have worked: that endpoint requires a shared secret a browser cannot hold,
-// so every call returned 401 into a swallowed warning — and it paid for a
+// so every call returned 401 into a swallowed warning вЂ” and it paid for a
 // proof-of-work seal on the publish path to do it.
 
 export class PollService {
@@ -103,7 +104,7 @@ export class PollService {
   /**
    * Ask the relay's DB mirror whether a poll actually reached it. Gun put acks
    * fire once local storage accepts the write and read-backs are served from
-   * the local graph, so neither proves the relay holds the data — only an
+   * the local graph, so neither proves the relay holds the data вЂ” only an
    * independent read like this can. Returns true (relay has it), false
    * (endpoint reachable but poll absent after retries), or null when the
    * endpoint is unreachable/has no DB (inconclusive).
@@ -127,7 +128,7 @@ export class PollService {
         const timer = setTimeout(() => controller.abort(), 3000);
         try {
           const res = await fetch(`${base}/db/soul?soul=${soul}`, { signal: controller.signal });
-          if (res.ok) return 'found';       // 200 — relay has it
+          if (res.ok) return 'found';       // 200 вЂ” relay has it
           if (res.status === 404) { endpointReachable = true; return 'absent'; }
           return 'unreachable';
         } catch {
@@ -154,10 +155,10 @@ export class PollService {
   private static readonly REPUBLISH_MAX_ATTEMPTS = 5;
   private static readonly REPUBLISH_INTERVAL_MS = 120_000;
 
-  /** Gun-shaped shell + options map for (re)writing a poll — redacts encrypted polls exactly like createPoll. */
+  /** Gun-shaped shell + options map for (re)writing a poll вЂ” redacts encrypted polls exactly like createPoll. */
   private static toGunPollRecord(poll: Poll): { record: Record<string, unknown>; optionsMap: Record<string, any> } {
     const persistedOptions = poll.isEncrypted
-      ? poll.options.map((option) => ({ ...option, text: '🔒 Encrypted option', voters: [] as string[] }))
+      ? poll.options.map((option) => ({ ...option, text: 'рџ”’ Encrypted option', voters: [] as string[] }))
       : poll.options;
     const optionsMap = this.buildOptionsMap(persistedOptions);
     return {
@@ -168,7 +169,7 @@ export class PollService {
         authorId: poll.authorId,
         authorName: poll.isEncrypted ? 'encrypted' : poll.authorName,
         authorShowRealName: poll.authorShowRealName || false,
-        question: poll.isEncrypted ? '🔒 Encrypted Poll' : poll.question,
+        question: poll.isEncrypted ? 'рџ”’ Encrypted Poll' : poll.question,
         description: poll.isEncrypted ? '' : (poll.description || ''),
         createdAt: poll.createdAt,
         expiresAt: poll.expiresAt,
@@ -190,8 +191,8 @@ export class PollService {
 
   /**
    * Re-push recent locally-backed-up polls the relay does not confirm holding.
-   * Gun never retro-syncs puts made while the relay connection was dead — and a
-   * rate-limited relay can drop messages on an open socket — so without this a
+   * Gun never retro-syncs puts made while the relay connection was dead вЂ” and a
+   * rate-limited relay can drop messages on an open socket вЂ” so without this a
    * poll created during an outage stays invisible to everyone else forever.
    */
   static async republishUnconfirmedPolls(): Promise<void> {
@@ -217,7 +218,7 @@ export class PollService {
           this.republishAttempts.delete(poll.id);
           continue;
         }
-        if (confirmed === null) continue; // verification endpoint unreachable — retry next tick
+        if (confirmed === null) continue; // verification endpoint unreachable вЂ” retry next tick
         this.republishAttempts.set(poll.id, (this.republishAttempts.get(poll.id) || 0) + 1);
         const { record, optionsMap } = this.toGunPollRecord(poll);
         this.warmPollCache(record, optionsMap);
@@ -333,7 +334,7 @@ export class PollService {
           : Array.isArray(rawTags) ? rawTags : undefined)
       : undefined;
 
-    return {
+    const poll: Poll = {
       id: pollData.id, communityId: pollData.communityId || '',
       authorId: pollData.authorId || '', authorName: pollData.authorName || 'Anonymous',
       // Must be carried through on read: PollCard falls back to a pseudonym
@@ -355,12 +356,15 @@ export class PollService {
       authorPubkey: pollData.authorPubkey || undefined,
       contentSignature: pollData.contentSignature || undefined,
       voteTrustPolicy: this.parseVoteTrustPolicy(pollData.voteTrustPolicy),
-      // Moderation/categorisation metadata — written by backend after AI classification
+      // Moderation/categorisation metadata вЂ” written by backend after AI classification
       ...(pollData.category  ? { category:  String(pollData.category)  } : {}),
       ...(tags?.length       ? { tags }                                   : {}),
       ...(pollData.sentiment ? { sentiment: pollData.sentiment as Poll['sentiment'] } : {}),
       ...(pollData.nsfw      ? { nsfw: true }                             : {}),
     };
+    poll.signatureStatus = verifyPollSignature(poll);
+    if (poll.signatureStatus === 'invalid') return null;
+    return poll;
   }
 
   /** Parse the JSON-string-encoded Sybil-resistance policy stored on the Gun node. */
@@ -406,6 +410,11 @@ export class PollService {
           backedUpAt: legacyPoll.createdAt || Date.now(),
         };
       });
+      for (const [id, entry] of Object.entries(normalized)) {
+        const status = verifyPollSignature(entry.poll);
+        if (status === 'invalid') delete normalized[id];
+        else entry.poll = { ...entry.poll, signatureStatus: status };
+      }
       return normalized;
     } catch {
       return {};
@@ -533,7 +542,7 @@ export class PollService {
       .sort((a, b) => b.createdAt - a.createdAt);
   }
 
-  // ── Reduced timeouts: 300ms first attempt, 1.5s fallback (was 500ms / 3.5s) ─
+  // в”Ђв”Ђ Reduced timeouts: 300ms first attempt, 1.5s fallback (was 500ms / 3.5s) в”Ђ
   private static onceNode<T = any>(node: any, timeoutMs = 300): Promise<T | null> {
     return new Promise((resolve) => {
       let settled = false;
@@ -568,7 +577,7 @@ export class PollService {
   private static waitForNode<T = any>(
     node: any,
     predicate: (value: T | null) => boolean,
-    timeoutMs = 1500, // was 3500 — cut by more than half
+    timeoutMs = 1500, // was 3500 вЂ” cut by more than half
   ): Promise<T | null> {
     // Poll with short-lived `.once()` reads instead of a `.on()` listener. A
     // `.on()` that times out stays attached until the soul next changes, and
@@ -632,7 +641,7 @@ export class PollService {
       return votersData.filter((voterId): voterId is string => typeof voterId === 'string');
     }
     if (typeof votersData !== 'object') return [];
-    // New format: Gun-native set — { [voterId]: true }
+    // New format: Gun-native set вЂ” { [voterId]: true }
     // This allows per-voter leaf writes instead of rewriting the full array.
     return Object.entries(votersData)
       .filter(([key]) => key !== '_' && key !== '#')
@@ -674,7 +683,7 @@ export class PollService {
     }));
   }
 
-  // ── API poll fetch (metadata fallback only; vote totals are ignored) ─────────
+  // в”Ђв”Ђ API poll fetch (metadata fallback only; vote totals are ignored) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   private static async loadPollFromAPI(pollId: string): Promise<{ pollData: any | null; options: PollOption[] }> {
     try {
       const res = await fetch(`${getApiBase()}/api/poll/${pollId}`, {
@@ -703,8 +712,8 @@ export class PollService {
     const pollNode    = this.getPollPath(pollId);
     const optionsNode = pollNode.get('options');
 
-    // ── Parallel fetch: root data and options start at the same time ──────────
-    // Previously these were sequential (root wait → options wait) adding up to
+    // в”Ђв”Ђ Parallel fetch: root data and options start at the same time в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+    // Previously these were sequential (root wait в†’ options wait) adding up to
     // 300+1500+300+1500 = 3.6s worst-case per poll on a slow relay.
     // Now both fire simultaneously, cutting the wall-clock cost to max(root, options).
     const [pollData, optionsData] = await Promise.all([
@@ -743,7 +752,7 @@ export class PollService {
     // display metadata are simply absent even though the relay's copy is whole.
     // buildPollRecord would then coerce question to '' and the poll renders as
     // "Untitled Poll" with no heading. Heal from the community-scoped copy
-    // (authoritative — written with the same payload at creation), then from
+    // (authoritative вЂ” written with the same payload at creation), then from
     // the API shell, instead of publishing a question-less record.
     const healed = await this.healPartialPollData(pollId, pollData, allowApiOptionFallback);
 
@@ -760,7 +769,7 @@ export class PollService {
 
   /**
    * Fill in scalar metadata missing from a partially-replicated root poll node.
-   * Only absent keys are copied in — anything the root node already carries
+   * Only absent keys are copied in вЂ” anything the root node already carries
    * wins, so this never overwrites fresher root state (e.g. totalVotes).
    */
   private static async healPartialPollData(
@@ -951,14 +960,14 @@ export class PollService {
       })();
     };
 
-    // ── Hydration timer: 3s (was 15s) ─────────────────────────────────────────
+    // в”Ђв”Ђ Hydration timer: 3s (was 15s) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     const hydrationTimer = setTimeout(() => {
       if (disposed || snapshotHandled) return;
       snapshotHandled = true;
       flushHydrationIds().finally(() => { finalizeHydration(); });
     }, 3000);
 
-    // ── Hard timeout: 8s (was 30s) ────────────────────────────────────────────
+    // в”Ђв”Ђ Hard timeout: 8s (was 30s) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     const hardTimeout = setTimeout(() => {
       if (disposed || !hydrating) return;
       hardTimeoutFired = true;
@@ -972,7 +981,7 @@ export class PollService {
     });
     pollActiveListeners.set(listenerKey, { subscription, timer: hydrationTimer, hardTimeout });
 
-    communityPollsNode.once((allPolls) => {
+    communityPollsNode.once((allPolls: Record<string, unknown> | null) => {
       if (disposed || snapshotHandled) return;
       snapshotHandled = true;
       clearTimeout(hydrationTimer);
@@ -1063,14 +1072,14 @@ export class PollService {
       })();
     };
 
-    // ── Hydration timer: 3s (was 15s) ─────────────────────────────────────────
+    // в”Ђв”Ђ Hydration timer: 3s (was 15s) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     const hydrationTimer = setTimeout(() => {
       if (disposed || snapshotHandled) return;
       snapshotHandled = true;
       flushHydrationIds().finally(() => { finalizeHydration(); });
     }, 3000);
 
-    // ── Hard timeout: 8s (was 30s) ────────────────────────────────────────────
+    // в”Ђв”Ђ Hard timeout: 8s (was 30s) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     const hardTimeout = setTimeout(() => {
       if (disposed || !hydrating) return;
       hardTimeoutFired = true;
@@ -1084,7 +1093,7 @@ export class PollService {
     });
     pollActiveListeners.set(listenerKey, { subscription, timer: hydrationTimer, hardTimeout });
 
-    pollsNode.once((allPolls) => {
+    pollsNode.once((allPolls: Record<string, unknown> | null) => {
       if (disposed || snapshotHandled) return;
       snapshotHandled = true;
       clearTimeout(hydrationTimer);
@@ -1158,10 +1167,8 @@ export class PollService {
       const { KeyService }    = await import('./keyService');
       const { CryptoService } = await import('./cryptoService');
       const keyPair    = await KeyService.getKeyPair();
-      // Include the Sybil-resistance policy in the signed content hash so a peer
-      // can't silently weaken it (e.g. downgrade to `open`) — NOTE: poll
-      // signatures are not yet verified on read (see security-debt), so this
-      // signs the policy but full tamper-evidence needs read-side verification.
+      // Preserve the legacy wire format. Read-side verification authenticates these
+      // fields only; it does not establish integrity of options or tally counters.
       const contentHash = CryptoService.hash(JSON.stringify({ question: poll.question, communityId: poll.communityId, timestamp: poll.createdAt, voteTrustPolicy: poll.voteTrustPolicy || null }));
       const signature  = CryptoService.sign(contentHash, keyPair.privateKey);
       poll.authorPubkey      = keyPair.publicKey;
@@ -1188,7 +1195,7 @@ export class PollService {
     }
 
     const persistedPollOptions = poll.isEncrypted
-      ? pollOptions.map((option) => ({ ...option, text: '🔒 Encrypted option', voters: [] as string[] }))
+      ? pollOptions.map((option) => ({ ...option, text: 'рџ”’ Encrypted option', voters: [] as string[] }))
       : pollOptions;
     const optionsMap = this.buildOptionsMap(persistedPollOptions);
     const gunPoll = {
@@ -1197,7 +1204,7 @@ export class PollService {
       authorId: poll.authorId,
       authorName: poll.isEncrypted ? 'encrypted' : poll.authorName,
       authorShowRealName: poll.authorShowRealName,
-      question: poll.isEncrypted ? '🔒 Encrypted Poll' : poll.question,
+      question: poll.isEncrypted ? 'рџ”’ Encrypted Poll' : poll.question,
       description: poll.isEncrypted ? '' : poll.description,
       createdAt: poll.createdAt,
       expiresAt: poll.expiresAt,
@@ -1215,7 +1222,7 @@ export class PollService {
       contentSignature: poll.contentSignature,
       powNonce: poll.powNonce,
       voteTrustPolicy: poll.voteTrustPolicy ? JSON.stringify(poll.voteTrustPolicy) : undefined,
-      // Namespace tag written into the Gun node — see belongsToNamespace().
+      // Namespace tag written into the Gun node вЂ” see belongsToNamespace().
       dataVersion: GUN_NAMESPACE,
     };
 
@@ -1251,8 +1258,8 @@ export class PollService {
         this.onceNode<any>(communityPolls.get(pollId), 1000),
       ]);
       if (rootLocal?.id && communityLocal?.id) {
-        logPollDebug('create', 'Local graph confirmed poll write (offline OK — will sync on reconnect)', { pollId });
-        // Skip repair loop — fall through to return the poll
+        logPollDebug('create', 'Local graph confirmed poll write (offline OK вЂ” will sync on reconnect)', { pollId });
+        // Skip repair loop вЂ” fall through to return the poll
       } else {
 
       const createRepairDeadline = Date.now() + 45000;
@@ -1287,7 +1294,6 @@ export class PollService {
       if (!rootConfirmed?.id) {
         throw new Error('Timed out waiting for poll root write ACK and root path could not be confirmed');
       }
-      } // end else (relay confirmation path)
       if (!communityConfirmed?.id) {
         logPollDebug('create', 'Root-only confirmation detected; retrying community write repair', { pollId });
       }
@@ -1312,13 +1318,14 @@ export class PollService {
         }
       }
       if (!communityConfirmed?.id) {
-        logPollDebug('create', 'Community path write timed out — poll exists at root, community will sync on reconnect', { pollId });
+        logPollDebug('create', 'Community path write timed out вЂ” poll exists at root, community will sync on reconnect', { pollId });
       }
       logPollDebug('create', 'Root write confirmed after timeout fallback', {
         pollId,
         rootConfirmed: Boolean(rootConfirmed?.id),
         communityConfirmed: Boolean(communityConfirmed?.id),
       });
+      } // end else (relay confirmation path)
     }
 
     if (poll.isPrivate) {
@@ -1354,7 +1361,7 @@ export class PollService {
         }
       }
       if (!listConfirmed) {
-        logPollDebug('create', 'Invite code list write timed out — will sync on relay reconnect', { pollId });
+        logPollDebug('create', 'Invite code list write timed out вЂ” will sync on relay reconnect', { pollId });
       }
       const mainByCode      = this.getPollPath(pollId).get('inviteCodesByCode');
       const communityByCode = communityPolls.get(pollId).get('inviteCodesByCode');
@@ -1415,7 +1422,7 @@ export class PollService {
     return poll;
   }
 
-  // ── Canonical poll read: Gun/local only (never API vote ingestion) ───────────
+  // в”Ђв”Ђ Canonical poll read: Gun/local only (never API vote ingestion) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   static async loadPoll(pollId: string, communityId?: string): Promise<Poll | null> {
     if (communityId) {
       const rootPoll = await this.loadPollFromGun(pollId, false, false);
@@ -1435,7 +1442,7 @@ export class PollService {
     return this.loadPollFromGun(pollId, false);
   }
 
-  // ── UX fallback read: Gun first, then metadata-only API shell ─────────────────
+  // в”Ђв”Ђ UX fallback read: Gun first, then metadata-only API shell в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   static async loadPollWithApiFallback(pollId: string, communityId?: string): Promise<Poll | null> {
     if (communityId) {
       const gunPoll = await this.loadPollFromGun(pollId, false, false);
@@ -1539,9 +1546,9 @@ export class PollService {
   }
 
   static async vote(pollId: string, optionIds: string[], voterId: string, communityId?: string): Promise<void> {
-    // ── Step 1: Local vote-index check (works offline, covers all transports) ──
+    // в”Ђв”Ђ Step 1: Local vote-index check (works offline, covers all transports) в”Ђв”Ђ
     // This runs BEFORE any network calls. A match means the chain already has a
-    // block for this (pollId, deviceId) pair — reject without contacting the relay.
+    // block for this (pollId, deviceId) pair вЂ” reject without contacting the relay.
     const alreadyVotedLocally = await StorageService.hasVoted(pollId, voterId).catch(() => false);
     if (alreadyVotedLocally) {
       throw new Error('Already voted: your device has a local record of voting on this poll.');
@@ -1561,11 +1568,11 @@ export class PollService {
     // Note: this is the Gun-state check (Step 2 equivalent for Gun path).
     // The chain-level check above is the authoritative dedup gate.
     const newVoteOptions = selectedOptions.filter(opt => !opt.voters.includes(voterId));
-    if (newVoteOptions.length === 0) return; // already voted — no-op
+    if (newVoteOptions.length === 0) return; // already voted вЂ” no-op
 
     const confirmedOptionIds = newVoteOptions.map(o => o.id);
 
-    // ── Surgical per-leaf writes ────────────────────────────────────────────
+    // в”Ђв”Ђ Surgical per-leaf writes в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     // Instead of rewriting the full options map on every vote (O(all voters)),
     // we write only the changed leaves:
     //   polls/{id}/options/{optionIndex}/voters/{voterId}  = true
@@ -1573,14 +1580,14 @@ export class PollService {
     //   polls/{id}/totalVotes                             = newTotal
     //
     // Because each voter gets their own leaf, concurrent votes no longer
-    // clobber each other — Gun's last-write-wins applies per-leaf, not per-option.
+    // clobber each other вЂ” Gun's last-write-wins applies per-leaf, not per-option.
     // The totalVotes counter is still a shared counter (one writer at a time),
     // but it's only bumped AFTER the voter leaf is confirmed, so a lost update
-    // at most under-counts by the number of concurrent votes — not erases them.
+    // at most under-counts by the number of concurrent votes вЂ” not erases them.
 
     const voteWriteOptions = { timeoutMs: 12000, resolveOnTimeout: true } as const;
 
-    // Build a lookup: option.id → numeric index in the Gun options map
+    // Build a lookup: option.id в†’ numeric index in the Gun options map
     const optionIndexById = new Map<string, string>();
     {
       // Re-read the raw options node to get the numeric keys Gun uses
@@ -1606,14 +1613,14 @@ export class PollService {
       const newVotes = (option.votes || 0) + 1;
 
       if (optKey !== undefined) {
-        // Write voter presence leaf — race-safe: multiple writers all set their own key
+        // Write voter presence leaf вЂ” race-safe: multiple writers all set their own key
         const rootOptionNode = this.getPollPath(pollId).get('options').get(optKey);
         leafWrites.push(
           this.putPromise(rootOptionNode.get('voters').get(voterId), true as any, {
             ...voteWriteOptions, label: `vote root voter leaf (opt ${optKey})`,
           }),
         );
-        // Update vote count — still a shared counter but much smaller payload
+        // Update vote count вЂ” still a shared counter but much smaller payload
         leafWrites.push(
           this.putPromise(rootOptionNode.get('votes'), newVotes as any, {
             ...voteWriteOptions, label: `vote root count (opt ${optKey})`,
@@ -1694,8 +1701,8 @@ export class PollService {
       }
       if (!confirmed) {
         // Vote went to Gun's local outbox (resolveOnTimeout was true on write).
-        // The leaf will sync to the relay when reconnected — treat as locally OK.
-        logPollDebug('vote', 'Voter leaf not readable after retries — treating as locally committed (offline)', { pollId, voterId });
+        // The leaf will sync to the relay when reconnected вЂ” treat as locally OK.
+        logPollDebug('vote', 'Voter leaf not readable after retries вЂ” treating as locally committed (offline)', { pollId, voterId });
       }
     }
 
@@ -1716,7 +1723,7 @@ export class PollService {
    * Mirrors PostService.voteOnPost's toggle semantics.
    *
    * `knownCounts` is supplied by the store (from pollsMap) so we never need to
-   * load the poll from Gun — the poll may not be in the local graph if it was
+   * load the poll from Gun вЂ” the poll may not be in the local graph if it was
    * loaded via the relay REST feed (radisk/localStorage disabled).
    */
   static async voteOnPollContent(
@@ -1728,7 +1735,7 @@ export class PollService {
   ): Promise<{ upvotes: number; downvotes: number; score: number; delivery?: import('./reactionOutboxService').ReactionDelivery }> {
     const gun = this.gun;
 
-    // knownCounts is the pre-optimistic snapshot from the store — delta not yet
+    // knownCounts is the pre-optimistic snapshot from the store вЂ” delta not yet
     // applied here, we apply it below exactly once.
     let upvotes: number;
     let downvotes: number;
@@ -2086,13 +2093,16 @@ export class PollService {
         if (!valid) return poll;
       }
       const decrypted = JSON.parse(await EncryptionService.decrypt(poll.encryptedContent, aesKey));
-      return {
+      const result: Poll = {
         ...poll,
         question:    decrypted.question    || poll.question,
         description: decrypted.description || poll.description,
         options:     decrypted.options     || poll.options,
         authorName:  decrypted.authorName  || poll.authorName,
       };
+      result.signatureStatus = verifyPollSignature({ ...result, isEncrypted: false });
+      if (result.signatureStatus === 'invalid') return poll;
+      return result;
     } catch { return poll; }
   }
 }

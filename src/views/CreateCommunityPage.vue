@@ -7,7 +7,7 @@
             <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
         </ion-buttons>
-        <ion-title>Create Community</ion-title>
+        <ion-title>{{ $ui("Create Community") }}</ion-title>
       </ion-toolbar>
     </ion-header>
 
@@ -15,11 +15,11 @@
       <DesktopPageShell>
       <div class="create-page">
 
-        <p class="page-subtitle">Create a space for people to discuss topics they love</p>
+        <p class="page-subtitle">{{ $ui("Create a space for people to discuss topics they love") }}</p>
 
         <!-- Community Name -->
         <div class="field-group">
-          <label class="field-label">Community Name</label>
+          <label class="field-label">{{ $ui("Community Name") }}</label>
           <div class="field-input-wrap">
             <span class="field-prefix">c/</span>
             <input
@@ -27,7 +27,7 @@
               @input="validateName"
               class="field-native has-prefix"
               type="text"
-              placeholder="programming"
+              :placeholder="$ui('programming')"
               :maxlength="21"
               autocomplete="off"
               autocapitalize="none"
@@ -35,19 +35,19 @@
             />
           </div>
           <p class="helper-text" :class="{ error: nameError }">
-            {{ nameError || 'Lowercase letters, numbers, underscores only. No spaces.' }}
+            {{ nameError || $ui("Lowercase letters, numbers, underscores only. No spaces.") }}
           </p>
         </div>
 
         <!-- Display Name -->
         <div class="field-group">
-          <label class="field-label">Display Name</label>
+          <label class="field-label">{{ $ui("Display Name") }}</label>
           <div class="field-input-wrap">
             <input
               v-model="displayName"
               class="field-native"
               type="text"
-              placeholder="Programming"
+              :placeholder="$ui('Programming')"
               :maxlength="50"
             />
           </div>
@@ -55,12 +55,12 @@
 
         <!-- Description -->
         <div class="field-group">
-          <label class="field-label">Description</label>
+          <label class="field-label">{{ $ui("Description") }}</label>
           <div class="field-input-wrap">
             <textarea
               v-model="description"
               class="field-native"
-              placeholder="What is this community about?"
+              :placeholder="$ui('What is this community about?')"
               :maxlength="500"
               rows="4"
             ></textarea>
@@ -69,10 +69,10 @@
 
         <!-- Category -->
         <div class="field-group">
-          <label class="field-label">Category</label>
+          <label class="field-label">{{ $ui("Category") }}</label>
           <div class="field-input-wrap">
             <select v-model="category" class="field-native">
-              <option value="" disabled>Choose a category</option>
+              <option value="" disabled>{{ $ui("Choose a category") }}</option>
               <option v-for="opt in categoryOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
             </select>
           </div>
@@ -81,8 +81,8 @@
         <!-- NSFW -->
         <div class="nsfw-row">
           <div>
-            <div class="nsfw-label">Mark as NSFW</div>
-            <div class="nsfw-sub">Contains adult or sensitive content</div>
+            <div class="nsfw-label">{{ $ui("Mark as NSFW") }}</div>
+            <div class="nsfw-sub">{{ $ui("Contains adult or sensitive content") }}</div>
           </div>
           <label class="toggle-switch">
             <input type="checkbox" v-model="nsfw" />
@@ -92,9 +92,9 @@
 
         <!-- Rules -->
         <div>
-          <div class="section-heading">Community Rules</div>
+          <div class="section-heading">{{ $ui("Community Rules") }}</div>
           <div class="rules-list-edit">
-            <div v-for="(rule, index) in rules" :key="index" class="rule-row">
+            <div v-for="(_rule, index) in rules" :key="index" class="rule-row">
               <span class="rule-number">{{ index + 1 }}</span>
               <input
                 v-model="rules[index]"
@@ -103,15 +103,13 @@
                 :placeholder="`Rule ${index + 1}`"
                 :maxlength="200"
               />
-              <button v-if="rules.length > 1" class="rule-delete" @click="removeRule(index)" title="Remove rule">
+              <button v-if="rules.length > 1" class="rule-delete" @click="removeRule(index)" :title="$ui('Remove rule')">
                 <svg viewBox="0 0 24 24" fill="none" width="14" height="14"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
               </button>
             </div>
           </div>
           <button v-if="rules.length < 10" class="add-rule-btn" @click="addRule">
-            <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
-            Add Rule
-          </button>
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg> {{ $ui("Add Rule") }} </button>
         </div>
 
         <!-- Info box -->
@@ -120,8 +118,8 @@
             <ion-icon :icon="informationCircle"></ion-icon>
           </div>
           <div>
-            <p><strong>Peer-to-Peer Community</strong></p>
-            <p>This community will be stored on GunDB and synced across all peers. Once created, it cannot be deleted — that's the nature of P2P!</p>
+            <p><strong>{{ $ui("Peer-to-Peer Community") }}</strong></p>
+            <p>{{ $ui("This community will be stored on GunDB and synced across all peers. Once created, it cannot be deleted — that's the nature of P2P!") }}</p>
           </div>
         </div>
 
@@ -135,7 +133,7 @@
           :disabled="!canCreate || isCreating"
         >
           <ion-spinner v-if="isCreating" name="crescent" style="width:18px;height:18px;color:#fff"></ion-spinner>
-          {{ isCreating ? 'Creating...' : 'Create Community' }}
+          {{ isCreating ? $ui("Creating...") : $ui("Create Community") }}
         </button>
 
       </div>
@@ -436,7 +434,7 @@ select.field-native option { background: #242424; color: #fff; }
   border-radius: 14px;
   border: none;
   background: var(--app-accent);
-  color: #111214;
+  color: var(--app-on-accent);
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -471,6 +469,7 @@ select.field-native option { background: #242424; color: #fff; }
 </style>
 
 <script setup lang="ts">
+import { ui } from "../i18n";
 import { ref, computed, defineAsyncComponent } from 'vue';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
 import { useRouter } from 'vue-router';
@@ -502,7 +501,7 @@ const nsfw = ref(false);
 const rules = ref(['Be respectful', 'No spam']);
 const isCreating = ref(false);
 const nameError = ref('');
-const privacyConfig = ref<PrivateCommunityConfig>({ isPrivate: false, method: 'invite' });
+const privacyConfig = ref<PrivateCommunityConfig>({ isPrivate: false, method: 'invite', valid: true });
 
 const categoryOptions = [
   { value: 'technology', label: 'Technology' },
@@ -583,7 +582,7 @@ const createCommunity = async () => {
 
       if (result.inviteLink) {
         const toast = await toastController.create({
-          message: 'Private community created! Invite link copied to clipboard.',
+          message: ui("Private community created! Invite link copied to clipboard."),
           duration: 4000,
           color: 'success'
         });
@@ -595,7 +594,7 @@ const createCommunity = async () => {
       communityId = community.id;
 
       const toast = await toastController.create({
-        message: 'Community created successfully',
+        message: ui("Community created successfully"),
         duration: 2000,
         color: 'success'
       });
@@ -607,7 +606,7 @@ const createCommunity = async () => {
     console.error('Error creating community:', error);
     
     const toast = await toastController.create({
-      message: 'Failed to create community',
+      message: ui("Failed to create community"),
       duration: 3000,
       color: 'danger'
     });

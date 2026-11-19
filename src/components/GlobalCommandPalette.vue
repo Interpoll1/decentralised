@@ -4,10 +4,10 @@
       <div class="global-command-palette">
         <div class="global-command-palette__header">
           <div>
-            <strong>Command palette</strong>
-            <p>Navigate and run quick app actions.</p>
+            <strong>{{ $ui("Command palette") }}</strong>
+            <p>{{ $ui("Navigate and run quick app actions.") }}</p>
           </div>
-          <ion-button fill="clear" size="small" @click="emit('close')">Close</ion-button>
+          <ion-button fill="clear" size="small" @click="emit('close')">{{ $ui("Close") }}</ion-button>
         </div>
 
         <input
@@ -15,17 +15,16 @@
           v-model="query"
           class="global-command-palette__search"
           type="text"
-          placeholder="Search navigation and actions..."
+          :placeholder="$ui('Search navigation and actions...')"
           @keydown="handleKeydown"
         />
 
-        <div v-if="flatCommands.length === 0" class="global-command-palette__empty">
-          No commands match “{{ query }}”.
+        <div v-if="flatCommands.length === 0" class="global-command-palette__empty"> {{ $ui("No commands match “") }}{{ query }}”.
         </div>
 
         <div v-else class="global-command-palette__groups">
           <section v-for="group in groupedCommands" :key="group.category" class="global-command-group">
-            <h3>{{ group.title }}</h3>
+            <h3>{{ $ui(group.title) }}</h3>
             <button
               v-for="command in group.commands"
               :key="command.id"
@@ -34,7 +33,7 @@
               @click="runCommand(command.id)"
             >
               <div>
-                <strong>{{ command.title }}</strong>
+                <strong>{{ $ui(command.title) }}</strong>
                 <p>{{ command.description }}</p>
               </div>
               <span v-if="command.shortcut" class="global-command-item__shortcut">{{ command.shortcut }}</span>

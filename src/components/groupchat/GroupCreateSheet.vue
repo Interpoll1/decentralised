@@ -5,33 +5,33 @@
       <form v-if="!created" class="gcs__body" @submit.prevent="create">
         <div class="gcs__top">
           <ChatAvatar :name="name || 'New group'" :seed="name || 'new'" group size="xl" />
-          <h2 class="gcs__title">New group</h2>
+          <h2 class="gcs__title">{{ $ui("New group") }}</h2>
         </div>
 
-        <label class="gcs__label" for="gcs-name">Group name</label>
-        <input id="gcs-name" ref="nameEl" v-model="name" data-test="group-name" class="gcs__input" maxlength="60" placeholder="e.g. Weekend hike" autocomplete="off" />
+        <label class="gcs__label" for="gcs-name">{{ $ui("Group name") }}</label>
+        <input id="gcs-name" ref="nameEl" v-model="name" data-test="group-name" class="gcs__input" maxlength="60" :placeholder="$ui('e.g. Weekend hike')" autocomplete="off" />
 
-        <label class="gcs__label" for="gcs-desc">Description <span class="gcs__opt">(optional)</span></label>
-        <textarea id="gcs-desc" v-model="description" class="gcs__input gcs__input--area" maxlength="200" rows="2" placeholder="What's this group for?"></textarea>
+        <label class="gcs__label" for="gcs-desc">{{ $ui("Description") }} <span class="gcs__opt">{{ $ui("(optional)") }}</span></label>
+        <textarea id="gcs-desc" v-model="description" class="gcs__input gcs__input--area" maxlength="200" rows="2" :placeholder="$ui('What\'s this group for?')"></textarea>
 
-        <div class="gcs__choice" role="radiogroup" aria-label="Who can join">
+        <div class="gcs__choice" role="radiogroup" :aria-label="$ui('Who can join')">
           <button type="button" class="gcs__opt-card" :class="{ on: !usePassword }" role="radio" :aria-checked="!usePassword" @click="usePassword = false">
-            <span class="gcs__opt-title">You approve each person</span>
-            <span class="gcs__opt-sub">People with the link ask to join; you accept them.</span>
+            <span class="gcs__opt-title">{{ $ui("You approve each person") }}</span>
+            <span class="gcs__opt-sub">{{ $ui("People with the link ask to join; you accept them.") }}</span>
           </button>
           <button type="button" data-test="group-password-toggle" class="gcs__opt-card" :class="{ on: usePassword }" role="radio" :aria-checked="usePassword" @click="usePassword = true; focusPassword()">
-            <span class="gcs__opt-title">Password</span>
-            <span class="gcs__opt-sub">Anyone with the link and password joins right away.</span>
+            <span class="gcs__opt-title">{{ $ui("Password") }}</span>
+            <span class="gcs__opt-sub">{{ $ui("Anyone with the link and password joins right away.") }}</span>
           </button>
         </div>
-        <input v-if="usePassword" ref="passEl" v-model="password" data-test="group-password" class="gcs__input" type="password" placeholder="Choose a password" autocomplete="new-password" />
+        <input v-if="usePassword" ref="passEl" v-model="password" data-test="group-password" class="gcs__input" type="password" :placeholder="$ui('Choose a password')" autocomplete="new-password" />
 
         <p v-if="error" class="gcs__error">{{ error }}</p>
 
         <div class="gcs__actions">
-          <button type="button" class="gcs__btn gcs__btn--ghost" @click="close">Cancel</button>
+          <button type="button" class="gcs__btn gcs__btn--ghost" @click="close">{{ $ui("Cancel") }}</button>
           <button type="submit" data-test="group-create" class="gcs__btn gcs__btn--primary" :disabled="!canCreate || busy">
-            {{ busy ? 'Creating…' : 'Create group' }}
+            {{ busy ? $ui("Creating…") : $ui("Create group") }}
           </button>
         </div>
       </form>
@@ -40,20 +40,18 @@
       <div v-else class="gcs__body">
         <div class="gcs__top">
           <ChatAvatar :name="created.name" :seed="created.id" group size="xl" />
-          <h2 class="gcs__title">{{ created.name }} is ready</h2>
-          <p class="gcs__lead">
-            Send this link to the people you want in the group.
-            <template v-if="usePassword">Share the password separately.</template>
-            <template v-else>You'll approve each request from the group's info screen.</template>
+          <h2 class="gcs__title">{{ created.name }} {{ $ui("is ready") }}</h2>
+          <p class="gcs__lead"> {{ $ui("Send this link to the people you want in the group.") }} <template v-if="usePassword">{{ $ui("Share the password separately.") }}</template>
+            <template v-else>{{ $ui("You'll approve each request from the group's info screen.") }}</template>
           </p>
         </div>
         <div class="gcs__link">
           <input data-test="invite-link" class="gcs__link-input" :value="created.link" readonly @focus="($event.target as HTMLInputElement).select()" />
-          <button class="gcs__btn gcs__btn--small" @click="copy">{{ copied ? 'Copied' : 'Copy' }}</button>
+          <button class="gcs__btn gcs__btn--small" @click="copy">{{ copied ? $ui("Copied") : $ui("Copy") }}</button>
         </div>
         <div class="gcs__actions">
-          <button v-if="canShare" class="gcs__btn gcs__btn--ghost" @click="share">Share…</button>
-          <button data-test="invite-done" class="gcs__btn gcs__btn--primary" @click="openGroup">Open group</button>
+          <button v-if="canShare" class="gcs__btn gcs__btn--ghost" @click="share">{{ $ui("Share…") }}</button>
+          <button data-test="invite-done" class="gcs__btn gcs__btn--primary" @click="openGroup">{{ $ui("Open group") }}</button>
         </div>
       </div>
     </div>
@@ -153,7 +151,7 @@ function close() { emit('close'); }
 .gcs__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 .gcs__btn { border: none; border-radius: 999px; padding: 11px 20px; font: inherit; font-size: 14.5px; font-weight: 650; cursor: pointer; }
 .gcs__btn:focus-visible { outline: none; box-shadow: var(--app-focus-ring); }
-.gcs__btn--primary { background: var(--app-accent); color: #111214; }
+.gcs__btn--primary { background: var(--app-accent); color: var(--app-on-accent); }
 .gcs__btn--primary:disabled { opacity: 0.45; cursor: not-allowed; }
 .gcs__btn--ghost { background: transparent; color: var(--app-text-muted); }
 .gcs__btn--ghost:hover { color: var(--app-text); }

@@ -134,8 +134,8 @@ describe('relay push registration auth', () => {
     // Signature is valid for the attacker, but the device belongs to someone else.
     expect(res.statusCode).toBe(200);
     const stored = JSON.parse(fs.readFileSync(storePath, 'utf8'));
-    expect(stored['device-1']).toBeDefined();
-    expect(stored['device-1'].userId).toBe(me.userId);
+    expect(stored[`${me.userId}:device-1`]).toBeDefined();
+    expect(stored[`${me.userId}:device-1`].userId).toBe(me.userId);
   });
 
   it('lets the owner unregister their own device', () => {
@@ -151,7 +151,7 @@ describe('relay push registration auth', () => {
     });
     expect(res.statusCode).toBe(200);
     const stored = JSON.parse(fs.readFileSync(storePath, 'utf8'));
-    expect(stored['device-1']).toBeUndefined();
+    expect(stored[`${me.userId}:device-1`]).toBeUndefined();
   });
 
   it('rate-limits a flood of registrations from one IP', () => {
