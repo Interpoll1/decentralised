@@ -1,5 +1,5 @@
 <template>
-  <div class="interpoll-aurora" aria-hidden="true">
+  <div class="echo-aurora" aria-hidden="true">
     <div class="aurora-orb aurora-orb-1"></div>
     <div class="aurora-orb aurora-orb-2"></div>
     <div class="aurora-orb aurora-orb-3"></div>

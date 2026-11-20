@@ -508,7 +508,7 @@ function retainSkipped(state:RatchetState):RatchetState {
 }
 
 function messageAAD(senderIK: string, envelope: Omit<SignalEnvelope,'v'>): string {
-  return envelope.auth ? JSON.stringify(['interpoll/dm/message',envelope.epoch?5:4,senderIK,envelope.dh,envelope.n,
+  return envelope.auth ? JSON.stringify(['echo/dm/message',envelope.epoch?5:4,senderIK,envelope.dh,envelope.n,
     envelope.pn,envelope.eph??null,envelope.opkId??null,envelope.auth,...(envelope.epoch?[envelope.epoch]:[])]) : `${senderIK}:${envelope.dh}:${envelope.n}`;
 }
 

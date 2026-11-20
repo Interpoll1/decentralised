@@ -1,7 +1,7 @@
 import { ref } from 'vue';
 
 export type AppTheme = 'light' | 'dark';
-export const THEME_PREFERENCE_KEY = 'interpoll_theme_preference_v1';
+export const THEME_PREFERENCE_KEY = 'echo_theme_preference_v1';
 export const appTheme = ref<AppTheme>('light');
 
 /** The former `theme=dark` value was written automatically, even without a choice.

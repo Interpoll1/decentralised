@@ -1,4 +1,4 @@
-# InterPoll launch copy
+# Echo launch copy
 
 Links: site https://endless.sbs · video https://youtu.be/SnxliGXuY88 · GitHub [GITHUB_URL] · Android APK [APK_URL]
 
@@ -14,11 +14,11 @@ Core claims (all true of the current build — keep copy to these):
 ## YouTube
 
 **Channel description**
-InterPoll is a decentralised polling and discussion platform: no ads, no data collection, no company in control. Every poll, post and vote is signed on your device and replicated across peers, so nothing can be quietly altered or taken down.
+Echo is a decentralised polling and discussion platform: no ads, no data collection, no company in control. Every poll, post and vote is signed on your device and replicated across peers, so nothing can be quietly altered or taken down.
 🌐 https://endless.sbs · 💻 [GITHUB_URL]
 
 **Video description**
-InterPoll in 75 seconds. Polls and discussion with no ads, no data collection, and no way to fake a vote.
+Echo in 75 seconds. Polls and discussion with no ads, no data collection, and no way to fake a vote.
 
 ✔ No ads, ever
 ✔ Anti-bot system: proof-of-work + signed one-person votes
@@ -30,7 +30,7 @@ InterPoll in 75 seconds. Polls and discussion with no ads, no data collection, a
 💻 GitHub: [GITHUB_URL]
 📱 Android: [APK_URL]
 
-**Tags:** interpoll, decentralized polls, no ads social media, verifiable voting, encrypted chat, open source, private communities, anti bot
+**Tags:** echo, decentralized polls, no ads social media, verifiable voting, encrypted chat, open source, private communities, anti bot
 
 **Pinned comment**
 No ads, no tracking, no one deciding what you see. What poll would you start first? 👇 https://endless.sbs
@@ -39,7 +39,7 @@ No ads, no tracking, no one deciding what you see. What poll would you start fir
 
 **Caption**
 Social media without ads, bot farms or a company deciding what stays up. 🗳️
-InterPoll: polls and discussion where every vote is signed and verifiable, chats are encrypted, and you can run your own relay or skip relays entirely.
+Echo: polls and discussion where every vote is signed and verifiable, chats are encrypted, and you can run your own relay or skip relays entirely.
 Free, open source, no data collection.
 🌐 endless.sbs · ▶️ full video on YouTube (link in bio)
 
@@ -51,7 +51,7 @@ Free, open source, no data collection.
 5. Nothing can be quietly taken down
 6. Open source: run it yourself → endless.sbs
 
-**Hashtags:** #interpoll #decentralized #noads #privacy #opensource #polls #web3 #selfhosted
+**Hashtags:** #echo #decentralized #noads #privacy #opensource #polls #web3 #selfhosted
 
 ## Reddit
 
@@ -60,7 +60,7 @@ Rules: read each sub's self-promo rule first; many require a flair, a mod ping, 
 ### Template A — privacy / open source (r/privacy, r/opensource, r/selfhosted, r/degoogle)
 **Title:** We built a polling + discussion platform with no ads, no data collection, and an option to run your own relay
 **Body:**
-We were tired of platforms that decide what stays up and monetise what you do. InterPoll is open source: polls, posts and comments are signed on your device and replicated across peers, so the host can delay content but can't forge or alter it. Chats and private communities are end-to-end encrypted (keys never leave your device). You can switch relays in settings, or clone the repo and run your own.
+We were tired of platforms that decide what stays up and monetise what you do. Echo is open source: polls, posts and comments are signed on your device and replicated across peers, so the host can delay content but can't forge or alter it. Chats and private communities are end-to-end encrypted (keys never leave your device). You can switch relays in settings, or clone the repo and run your own.
 Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 Happy to answer questions about the threat model and where it's still weak.
 
@@ -75,7 +75,7 @@ Most "open" platforms are one company's database. Here posts and votes are repli
 Technical writeup: each vote is a signed block hash-linked to the previous one, gated by a proof-of-work challenge and a two-phase authorise/confirm step at the relay, with device fingerprinting for duplicate prevention. Spec: docs/protocol/IPP-00-overview.md in the repo. Feedback and attack ideas welcome. [links]
 
 ### Template D — communities / polls (r/SideProject, r/startups, r/alphaandbetausers, r/InternetIsBeautiful)
-**Title:** I built InterPoll: decentralised polls and communities, no ads, free
+**Title:** I built Echo: decentralised polls and communities, no ads, free
 **Body:** short pitch + what's different (3 bullets) + what feedback you want. [links]
 
 ### Target list (rotate templates; verify each sub's rules before posting)

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Build and deploy the InterPoll SPA to an explicitly configured destination.
+# Build and deploy the Echo SPA to an explicitly configured destination.
 #
 #   ./deploy-ftp.sh              build + upload
 #   ./deploy-ftp.sh --no-build   upload the existing dist/ as-is
@@ -104,4 +104,4 @@ $PUT_INDEX
 bye
 LFTP
 
-echo "==> done: InterPoll SPA uploaded to the configured destination"
+echo "==> done: Echo SPA uploaded to the configured destination"

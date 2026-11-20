@@ -7,7 +7,7 @@ import { CryptoService } from './cryptoService';
 import { StorageService } from './storageService';
 
 type Request = { version:1; id:string; room:string; epoch:string; kind:'send'|'leave'; binding:DeviceBinding; candidate:GroupEnvelope|null; signature:string };
-const requestBytes=(r:Request)=>JSON.stringify(['interpoll/group/request',1,r.id,r.room,r.epoch,r.kind,r.binding,r.candidate]);
+const requestBytes=(r:Request)=>JSON.stringify(['echo/group/request',1,r.id,r.room,r.epoch,r.kind,r.binding,r.candidate]);
 export type JoinRequest = { version:1; room:string; id:string; binding:DeviceBinding; name:string; ts:number; password?:string };
 const passKey=(account:string,room:string)=>`group-pass-v1:${account}:${room}`;
 const MAX_PASSWORD_ATTEMPTS=5;

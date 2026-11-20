@@ -27,7 +27,7 @@ export interface VoteFormProps {
 /**
  * The ballot. A glass {@link Card} with radio options, a one-vote-per-device
  * notice, and a full-width "Cast Vote" action. Renders the "already voted" state
- * when the device has a recorded vote. The second signature InterPoll composite.
+ * when the device has a recorded vote. The second signature Echo composite.
  */
 export const VoteForm: React.FC<VoteFormProps> = ({
   title,

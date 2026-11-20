@@ -18,7 +18,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 /**
- * Primary action control for InterPoll. Accent-filled `primary`, translucent
+ * Primary action control for Echo. Accent-filled `primary`, translucent
  * glass `secondary`, borderless `ghost`, and a `danger` variant for destructive
  * actions. Matches the app's rounded, soft-shadow button language.
  */

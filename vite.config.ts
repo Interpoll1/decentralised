@@ -21,7 +21,7 @@ const BUILD_TIME = new Date().toISOString();
 const BUILD_ID   = Date.now().toString(36);
 
 // This origin also hosts independent projects (for example /about). Keep the
-// SPA fallback restricted to paths owned by InterPoll so its service worker
+// SPA fallback restricted to paths owned by Echo so its service worker
 // never supplies index.html for another project's navigation.
 const APP_NAVIGATION_ALLOWLIST = [
   /^\/$/,
@@ -156,8 +156,8 @@ export default defineConfig({
         // registerSW.js is served immutable by the host and goes stale.
         injectRegister: null,
         manifest: {
-          name: 'InterPoll',
-          short_name: 'InterPoll',
+          name: 'Echo',
+          short_name: 'Echo',
           description: 'Decentralized, censorship-resistant polling & discussion',
           theme_color: '#e7e9ec',
           background_color: '#e7e9ec',

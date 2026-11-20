@@ -496,7 +496,7 @@ async function copyChatLink() {
 async function shareChatLink() {
   if (!chatLink.value) return;
   const name = userProfile.value?.customUsername || userProfile.value?.displayName || 'me';
-  await shareLink(chatLink.value, `Chat with ${name} on Interpoll`);
+  await shareLink(chatLink.value, `Chat with ${name} on Echo`);
 }
 
 const userProfile = ref<UserProfile | null>(null);

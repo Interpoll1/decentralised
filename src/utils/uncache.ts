@@ -15,7 +15,7 @@ export async function uncache(reload = true): Promise<void> {
 }
 
 const entryOf = (html: string) => html.match(/\/assets2\/index-[\w-]+\.js/)?.[0] ?? '';
-const RELOAD_KEY = 'interpoll_uncache_at';
+const RELOAD_KEY = 'echo_uncache_at';
 
 /** True when the server is serving a newer build than the one this tab is running. */
 export async function isBuildStale(): Promise<boolean> {

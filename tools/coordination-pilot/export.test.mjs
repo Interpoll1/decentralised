@@ -19,7 +19,7 @@ const metadata = (soul, dataHash, id, parent = null) => ({
   soul, dataHash, id, communityId: parent, isPrivate: false, isEncrypted: false,
   deleted: false, isDeleted: false, encrypted: false,
 });
-const reviewPin = m => digest(['interpoll.coordination-pilot-target-review.v1', {
+const reviewPin = m => digest(['echo.coordination-pilot-target-review.v1', {
   soul: m.soul, id: m.id, communityId: m.communityId,
   isPrivate: m.isPrivate ?? false, isEncrypted: m.isEncrypted ?? false,
   deleted: m.deleted ?? false, isDeleted: m.isDeleted ?? false, encrypted: m.encrypted,
@@ -70,7 +70,7 @@ function signDigest(value, key = SECRET) {
 function resign(bundle, { snapshot = true, snapshotKey = SECRET } = {}) {
   if (snapshot) bundle.snapshot.signature = signDigest(snapshotDigest(bundle.snapshot), snapshotKey);
   bundle.manifest.snapshotHash = digest(bundle.snapshot);
-  bundle.signature = signDigest(digest(['interpoll.coordination-pilot-export.v1', bundle.manifest]));
+  bundle.signature = signDigest(digest(['echo.coordination-pilot-export.v1', bundle.manifest]));
   return bundle;
 }
 
@@ -89,7 +89,7 @@ test('approved committed sample exports without mutating input and replays under
   assert.equal(bundle.manifest.completeness, 'not-established');
   assert.equal(bundle.manifest.receiptTime, 'relay-admission-clock-before-commit');
   assert.ok(schnorr.verify(hexToBytes(bundle.signature),
-    hexToBytes(digest(['interpoll.coordination-pilot-export.v1', bundle.manifest])),
+    hexToBytes(digest(['echo.coordination-pilot-export.v1', bundle.manifest])),
     hexToBytes(arg.policy.observer)));
   assert.equal(bundle.snapshot.observations.length, seed.observations.length);
   assert.deepEqual(bundle.snapshot.targets.map(x => x.id).sort(), arg.policy.targets.map(x => x.id).sort());

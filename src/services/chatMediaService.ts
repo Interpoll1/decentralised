@@ -25,7 +25,7 @@ function aad(meta: Pick<MediaMeta, 'version' | 'context' | 'mediaType' | 'mediaS
   if (meta.version !== 1 || typeof meta.context !== 'string' || !Number.isSafeInteger(meta.mediaSize)
     || meta.mediaSize < 0 || meta.mediaSize > MAX_MEDIA_BYTES || typeof meta.mediaName !== 'string'
     || typeof meta.mediaType !== 'string') throw new Error('Unsupported or malformed media descriptor');
-  return new TextEncoder().encode(JSON.stringify(['interpoll-dm-media', meta.version, meta.context,
+  return new TextEncoder().encode(JSON.stringify(['echo-dm-media', meta.version, meta.context,
     meta.mediaType, meta.mediaSize, meta.mediaName]));
 }
 
@@ -75,7 +75,7 @@ export async function encryptAndUpload(file: File, authToken: string): Promise<M
  * then creates an independently owned object URL. A caller can revoke its URL without breaking
  * another view, and a warm cache cannot bypass AES-GCM authentication of changed metadata.
  */
-const CIPHER_CACHE = 'interpoll-dm-media-v1';
+const CIPHER_CACHE = 'echo-dm-media-v1';
 
 async function fetchCiphertext(url: string, authToken: string): Promise<ArrayBuffer> {
   // Partition persistent ciphertext by authorization context without storing the token itself.

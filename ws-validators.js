@@ -1,5 +1,5 @@
 /**
- * ws-validators.js — WebSocket message schema validation for InterPoll.
+ * ws-validators.js — WebSocket message schema validation for Echo.
  *
  * Strict schemas for each message type. Rejects malformed, oversized,
  * or unexpected messages before they reach business logic.

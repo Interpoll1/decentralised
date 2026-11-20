@@ -16,7 +16,7 @@ import { syntheticInput } from './scenarios.mjs';
 const execute = promisify(execFile);
 const cli = fileURLToPath(new URL('./cli.mjs', import.meta.url));
 async function workspace(t) {
-  const path = await mkdtemp(join(tmpdir(), 'interpoll-pilot-test-'));
+  const path = await mkdtemp(join(tmpdir(), 'echo-pilot-test-'));
   t.after(() => rm(path, {recursive:true,force:true}));
   return path;
 }

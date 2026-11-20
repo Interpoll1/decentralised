@@ -46,20 +46,20 @@ export interface GroupState {
   senders: Record<string, { high: number; seen: Record<string, string> }>;
 }
 export const stateKey = (account: string, room: string) => `group-v1:${account}:${room}`;
-export const headerBytes = (h: GroupHeader) => json(['interpoll/group/message',1,h.roomId,h.membershipEpoch,h.keyEpoch,h.epochHash,h.messageId,h.senderAccount,h.senderDevice,h.sequence,h.timestamp]);
-export const authorshipBytes = (e: GroupEnvelope) => json(['interpoll/group/authorship',1,headerBytes(e.header),e.iv,e.ciphertext]);
-const receiptBytes = (e: GroupEnvelope) => json(['interpoll/group/accepted',1,hash(authorshipBytes(e)),e.signature,e.publication]);
-export const epochBytes = (e: Epoch) => json(['interpoll/group/epoch',1,e.roomId,bindingBytes(e.owner),e.owner.signature,e.membershipEpoch,e.keyEpoch,e.previous,
+export const headerBytes = (h: GroupHeader) => json(['echo/group/message',1,h.roomId,h.membershipEpoch,h.keyEpoch,h.epochHash,h.messageId,h.senderAccount,h.senderDevice,h.sequence,h.timestamp]);
+export const authorshipBytes = (e: GroupEnvelope) => json(['echo/group/authorship',1,headerBytes(e.header),e.iv,e.ciphertext]);
+const receiptBytes = (e: GroupEnvelope) => json(['echo/group/accepted',1,hash(authorshipBytes(e)),e.signature,e.publication]);
+export const epochBytes = (e: Epoch) => json(['echo/group/epoch',1,e.roomId,bindingBytes(e.owner),e.owner.signature,e.membershipEpoch,e.keyEpoch,e.previous,
   e.members.map(b=>[bindingBytes(b),b.signature]),e.metadata.iv,e.metadata.ciphertext,e.createdAt,e.keyCommitment,
   e.distributions.map(d=>[d.member,d.seal.ephemeral,d.seal.iv,d.seal.ciphertext])]);
 export const epochHash = (e: Epoch) => hash(epochBytes(e));
-const metadataContext=(e:Epoch)=>json(['interpoll/group/metadata',1,e.roomId,e.membershipEpoch,e.keyEpoch]);
+const metadataContext=(e:Epoch)=>json(['echo/group/metadata',1,e.roomId,e.membershipEpoch,e.keyEpoch]);
 function roomInfo(value:string){
   const info=JSON.parse(value);exact(info,['name','description']);
   if(typeof info.name!=='string' || info.name.length>256 || typeof info.description!=='string' || info.description.length>4096)throw new Error('Invalid group metadata');return info as {name:string;description:string};
 }
-const distributionContext = (e: Epoch, b: DeviceBinding) => json(['interpoll/group/key',1,e.roomId,e.membershipEpoch,e.keyEpoch,memberId(b),hash(bindingBytes(b))]);
-export const proposalContext = (room: string, request: string) => json(['interpoll/group/proposal',1,room,request]);
+const distributionContext = (e: Epoch, b: DeviceBinding) => json(['echo/group/key',1,e.roomId,e.membershipEpoch,e.keyEpoch,memberId(b),hash(bindingBytes(b))]);
+export const proposalContext = (room: string, request: string) => json(['echo/group/proposal',1,room,request]);
 
 async function sign(identity: GroupIdentity, payload: string) {
   return b64(await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},identity.ikSign.priv,utf8.encode(payload)));
@@ -170,8 +170,8 @@ function content(text: string) {
   if(typeof c.text!=='string' || (needsText && !c.text.trim()) || utf8.encode(c.text).length>GROUP_LIMITS.textBytes || typeof c.senderName!=='string' || c.senderName.length>256)throw new Error('Invalid group content');
   return c as Content;
 }
-const signalContext=(room:string,epoch:string)=>json(['interpoll/group/signal',1,room,epoch]);
-export const joinContext=(room:string,id:string)=>json(['interpoll/group/join',1,room,id]);
+const signalContext=(room:string,epoch:string)=>json(['echo/group/signal',1,room,epoch]);
+export const joinContext=(room:string,id:string)=>json(['echo/group/join',1,room,id]);
 /** Ephemeral member state: typing, presence and read position. Never stored as history. */
 export interface GroupSignal { account:string; device:string; name:string; typing:number; read:number; ts:number; relays?:string[] }
 /** Only TLS Gun relays are shared between members. */

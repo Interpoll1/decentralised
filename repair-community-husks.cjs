@@ -6,7 +6,7 @@
 //   node repair-community-husks.cjs --apply    # write
 const Gun = require('gun');
 
-const RELAY = 'https://interpoll2.endless.sbs';
+const RELAY = 'https://echo2.endless.sbs';
 const API = process.env.API_BASE || RELAY;
 const APPLY = process.argv.includes('--apply');
 

@@ -1,6 +1,6 @@
-// src/types/nostr.ts — Nostr-compatible event types for InterPoll
+// src/types/nostr.ts — Nostr-compatible event types for Echo
 
-// Event kinds for InterPoll
+// Event kinds for Echo
 export const EventKind = {
   POLL_CREATION: 100,
   VOTE_CAST: 101,

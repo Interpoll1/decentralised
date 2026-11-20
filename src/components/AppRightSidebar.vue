@@ -59,11 +59,11 @@
       </div>
     </section>
 
-    <!-- About Interpoll -->
+    <!-- About Echo -->
     <section class="ars-section ars-about">
       <div class="ars-about-row">
         <div class="ars-about-text">
-          <h2>{{ $ui("Interpoll") }}</h2>
+          <h2>{{ $ui("Echo") }}</h2>
           <p>{{ $ui("A peer-to-peer network built on GunDB. Content syncs across all peers — no central server required.") }}</p>
           <button class="ars-link ars-about-link" @click="router.push('/resilience')">{{ $ui("Learn more →") }}</button>
         </div>

@@ -1,5 +1,5 @@
 /**
- * Resend email fallback for the InterPoll relay.
+ * Resend email fallback for the Echo relay.
  *
  * Companion to `push-notifications.js`. FCM stays the primary channel; this
  * covers the cases FCM cannot: the web build (no native push), a device that
@@ -170,10 +170,10 @@ class ResendSender {
 
 /** Canonical strings the client signs. Keep in sync with src/native/emailNotifications.ts. */
 function emailRegisterMessage({ userId, email, ts }) {
-  return `interpoll-email-register-1:${userId}:${email}:${ts}`;
+  return `echo-email-register-1:${userId}:${email}:${ts}`;
 }
 function emailUnregisterMessage({ userId, ts }) {
-  return `interpoll-email-unregister-1:${userId}:${ts}`;
+  return `echo-email-unregister-1:${userId}:${ts}`;
 }
 
 function escapeHtml(value) {
@@ -185,7 +185,7 @@ function escapeHtml(value) {
 function buildMail({ appUrl, unsubscribeUrl }) {
   const open = `${appUrl.replace(/\/+$/, '')}/chat`;
   const text = [
-    'You have a new message waiting on InterPoll.',
+    'You have a new message waiting on Echo.',
     '',
     `Open it: ${open}`,
     '',
@@ -197,9 +197,9 @@ function buildMail({ appUrl, unsubscribeUrl }) {
 
   const html = [
     '<div style="font-family:system-ui,sans-serif;font-size:15px;line-height:1.6;color:#111">',
-    '<p>You have a new message waiting on InterPoll.</p>',
+    '<p>You have a new message waiting on Echo.</p>',
     `<p><a href="${escapeHtml(open)}" style="display:inline-block;padding:10px 18px;`,
-    'background:#4f46e5;color:#fff;border-radius:6px;text-decoration:none">Open InterPoll</a></p>',
+    'background:#4f46e5;color:#fff;border-radius:6px;text-decoration:none">Open Echo</a></p>',
     '<p style="color:#555;font-size:13px">The message itself is end-to-end encrypted — it can ',
     'only be read in the app, and this relay never sees its contents or who sent it.</p>',
     `<p style="color:#888;font-size:12px"><a href="${escapeHtml(unsubscribeUrl)}">`,
@@ -228,7 +228,7 @@ function attachEmailFallback(app, opts = {}) {
     return null;
   }
 
-  const from   = opts.from   || process.env.RESEND_FROM   || 'InterPoll <notifications@endless.sbs>';
+  const from   = opts.from   || process.env.RESEND_FROM   || 'Echo <notifications@endless.sbs>';
   const appUrl = opts.appUrl || process.env.APP_PUBLIC_URL || process.env.FRONTEND_ORIGIN
     || 'https://endless.social';
   // The open-the-app link points at the frontend; the unsubscribe link has to
@@ -277,14 +277,14 @@ function attachEmailFallback(app, opts = {}) {
 
   /**
    * One-click unsubscribe, for the recipient of an unwanted mail. No identity
-   * key needed — they may not be an InterPoll user at all — so the token in
+   * key needed — they may not be an Echo user at all — so the token in
    * the link is the authority.
    */
   app.get('/api/push/email/unsubscribe', (req, res) => {
     const userId = store.verifyUnsubscribeToken(req.query && req.query.token);
     if (!userId) return res.status(403).type('text/plain').send('Invalid unsubscribe link.');
     store.unregister(userId);
-    res.type('text/plain').send('Done — this address will no longer receive InterPoll emails.');
+    res.type('text/plain').send('Done — this address will no longer receive Echo emails.');
   });
 
   /**
@@ -304,7 +304,7 @@ function attachEmailFallback(app, opts = {}) {
 
     const result = await sender.send({
       to,
-      subject: 'You have a new message on InterPoll',
+      subject: 'You have a new message on Echo',
       text,
       html,
       headers: {

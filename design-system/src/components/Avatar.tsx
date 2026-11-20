@@ -30,7 +30,7 @@ function initials(name: string): string {
 /**
  * Identity avatar. Renders the user's image when available, otherwise a colored
  * disc with initials — the color is derived deterministically from the name, so
- * the same pseudonym always gets the same tint (matching InterPoll's pseudonym UI).
+ * the same pseudonym always gets the same tint (matching Echo's pseudonym UI).
  */
 export const Avatar: React.FC<AvatarProps> = ({ name, src, size = 'md', className, style, ...rest }) => {
   const color = PALETTE[hashName(name) % PALETTE.length];

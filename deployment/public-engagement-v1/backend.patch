@@ -493,7 +493,7 @@ index 0000000..791b0b1
 +const digest = text => bytesToHex(sha256(new TextEncoder().encode(text)));
 +
 +export function actionBytes(a) {
-+  return JSON.stringify(['interpoll.public-engagement.v1', 1, a.namespace, a.kind, a.actor, a.targetType, a.targetId, a.value, a.createdAt, a.nonce]);
++  return JSON.stringify(['echo.public-engagement.v1', 1, a.namespace, a.kind, a.actor, a.targetType, a.targetId, a.value, a.createdAt, a.nonce]);
 +}
 +function validPayload(a) {
 +  return a && a.version === 1 && typeof a.namespace === 'string' && /^v[1-9][0-9]{0,3}$/.test(a.namespace) && hex(a.actor, 64) && target(a.targetId)

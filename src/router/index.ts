@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from '@ionic/vue-router';
 import { RouteRecordRaw } from 'vue-router';
 
-const ONBOARDING_KEY = 'interpoll_onboarding_complete';
+const ONBOARDING_KEY = 'echo_onboarding_complete';
 
 export const routes: Array<RouteRecordRaw> = [
   {

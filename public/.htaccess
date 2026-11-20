@@ -1,4 +1,4 @@
-# InterPoll — Apache/LiteSpeed config for the static SPA at endless.sbs
+# Echo — Apache/LiteSpeed config for the static SPA at endless.sbs
 
 # ---------------------------------------------------------------------------
 # 1. MIME types
@@ -22,7 +22,7 @@
 # 3. SPA fallback
 #
 # Real files and directories (blog pages, /games, /cassandra, assets) are
-# served as-is.  Only declared InterPoll routes render index.html.  Do not use
+# served as-is.  Only declared Echo routes render index.html.  Do not use
 # a catch-all fallback here: this document root is shared with other projects
 # such as /about, which must be allowed to reach their own files/handlers.
 # ---------------------------------------------------------------------------
@@ -38,11 +38,11 @@
     RewriteRule ^ - [L]
 
     # Extensionless pages owned by other projects: /about serves /about.html
-    # when that file exists.  This must precede the InterPoll route allowlist.
+    # when that file exists.  This must precede the Echo route allowlist.
     RewriteCond %{REQUEST_FILENAME}.html -f
     RewriteRule ^(.+?)/?$ $1.html [L]
 
-    # InterPoll's root plus its static and parameterised client-side routes.
+    # Echo's root plus its static and parameterised client-side routes.
     RewriteRule ^$ /index.html [L]
     RewriteRule ^(?:onboarding|home|communities|spaces|create|create-community|create-poll|profile|settings|network|chain-explorer|search|resilience|claim-username|chatrooms)(?:/|$) /index.html [L,NC]
     RewriteRule ^(?:community|poll|post|user|u|vote|results|receipt|chat|chatroom|join)(?:/|$) /index.html [L,NC]

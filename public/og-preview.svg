@@ -13,7 +13,7 @@
   <circle cx="1040" cy="120" r="220" fill="#ff6055" opacity="0.12"/>
   <circle cx="120" cy="540" r="180" fill="#ff7a70" opacity="0.10"/>
 
-  <text x="90" y="270" font-family="'Segoe UI', Arial, sans-serif" font-size="88" font-weight="700" fill="#f8fafc">InterPoll</text>
+  <text x="90" y="270" font-family="'Segoe UI', Arial, sans-serif" font-size="88" font-weight="700" fill="#f8fafc">Echo</text>
   <rect x="92" y="300" width="360" height="8" rx="4" fill="url(#accent)"/>
 
   <text x="90" y="370" font-family="'Segoe UI', Arial, sans-serif" font-size="34" fill="#cbd5e1">Decentralized polls &amp; discussions.</text>

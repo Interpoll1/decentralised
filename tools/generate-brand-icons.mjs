@@ -74,4 +74,4 @@ const icoImages = await Promise.all([16, 32, 48].map(async (size) => ({
 
 await writeFile(path.join(publicDir, 'favicon.ico'), createIco(icoImages));
 
-console.log('Generated InterPoll web icons and social preview.');
+console.log('Generated Echo web icons and social preview.');

@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://interpoll.protocol/schemas/comment.v1.json",
-  "title": "InterPoll Comment (v1)",
+  "$id": "https://echo.protocol/schemas/comment.v1.json",
+  "title": "Echo Comment (v1)",
   "description": "Replicated Comment object as written/read by commentService.ts. Normative companion to IPP-03.",
   "type": "object",
   "required": ["id", "postId", "communityId", "authorId", "authorName", "content", "createdAt", "upvotes", "downvotes", "score"],

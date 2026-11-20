@@ -9,7 +9,7 @@
 ## Destination
 
 A locked set of architecture decisions (no spec document, no implementation) covering how an
-InterPoll peer set **recomposes itself into a working network** from invite links and
+Echo peer set **recomposes itself into a working network** from invite links and
 same-network discovery — the transport tiers, their ordering and fallback, the invite-link
 envelope, and the single seam the six existing discovery/transport services collapse onto.
 The map is done when someone could sit down and write the implementation plan without
@@ -56,7 +56,7 @@ another architectural question left open.
   until the tier ordering exists.
 - **NAT traversal without our servers.** STUN/TURN implies infrastructure, and public STUN
   exposes a real IP and NAT mapping. Sharpens once ticket 09 rules on third-party infra.
-- **Browser-tier divergence.** Ticket 01 leaves LAN tiers Chromium-only. Whether InterPoll
+- **Browser-tier divergence.** Ticket 01 leaves LAN tiers Chromium-only. Whether Echo
   ships a materially different network on Firefox/Safari, or holds every browser to the
   lowest common denominator, is a product decision that needs the tier ordering first.
 - **Compact signalling-bundle encoding.** Ticket 02 makes a ~100-byte SDP bundle load-bearing

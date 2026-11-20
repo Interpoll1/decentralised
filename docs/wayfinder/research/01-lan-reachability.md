@@ -2,7 +2,7 @@
 
 Ticket: `docs/wayfinder/tickets/01-browser-lan-reachability-matrix.md`
 
-This is a facts-only research note. No designs, no recommendations for InterPoll's
+This is a facts-only research note. No designs, no recommendations for Echo's
 architecture — just what current specs and shipping browser behavior actually allow, with
 citations. Where sources conflict or are stale, that is flagged inline.
 
@@ -240,30 +240,30 @@ Legend: "Conditional" always has the specific condition named in the row.
 
 ## 6. The `http://` deployment case
 
-- Serving InterPoll itself over plain `http://` on the LAN removes the **mixed-content**
+- Serving Echo itself over plain `http://` on the LAN removes the **mixed-content**
   barrier entirely for LAN-to-LAN requests (same-scheme `http://`→`http://`, and `ws://`→
   `ws://`), per §1 and §3.
 - It does **not** automatically restore reachability against Chrome's LNA once LNA's
   insecure-context restriction is fully enforced: the Intent-to-Ship thread states the
   end-state is "requests from insecure contexts will be silently rejected," with only a
   time-boxed reverse origin trial (141–146) as a bridge. After that trial window, an
-  `http://`-served InterPoll page attempting to reach another LAN device (even via plain
+  `http://`-served Echo page attempting to reach another LAN device (even via plain
   `http://`) would be **blocked outright by Chrome**, not merely subjected to a permission
   prompt — a strictly worse outcome than the secure-context case (permission-gated) once the
   trial ends, per that source.
   Source: https://groups.google.com/a/chromium.org/g/blink-dev/c/cwu_RUmBpzY
 - On Firefox and Safari, since no LNA/PNA gate is confirmed shipping (§2), an `http://`-served
-  InterPoll page reaching other `http://` LAN peers (fetch, WebSocket) is currently unblocked
+  Echo page reaching other `http://` LAN peers (fetch, WebSocket) is currently unblocked
   by anything found in this research — but this is explicitly described by Mozilla's own
   bug tracker (#2059274) as an area of flux, not a stable guarantee.
 - Cost of the `http://` deployment path: giving up **secure-context-gated Web Platform APIs**.
   This is well-established browser policy (not separately re-verified via a fresh citation in
   this pass, since it is long-standing, non-controversial platform behavior): `crypto.subtle`
   (Web Crypto), Service Workers, and a number of other powerful APIs require a secure context
-  (`https:` or the loopback/`localhost` exemption from §1). An InterPoll instance served over
+  (`https:` or the loopback/`localhost` exemption from §1). An Echo instance served over
   plain `http://` on a LAN IP (not loopback) cannot use `crypto.subtle` for its
   device-key signing/verification flows or register a Service Worker, both of which
-  the architecture docs describe as core to InterPoll (`cryptoService.ts` uses
+  the architecture docs describe as core to Echo (`cryptoService.ts` uses
   SHA-256 hashing/verification, `ChainService` signs with device keys). This is a structural,
   not incidental, tradeoff of the `http://`-LAN deployment path.
 
@@ -272,7 +272,7 @@ Legend: "Conditional" always has the specific condition named in the row.
 ## What this rules out
 
 - A hint that points a browser at `ws://` or `http://` on a private IP from an **`https://`**
-  InterPoll page is dead on arrival in **every** engine tested for evidence (mixed content
+  Echo page is dead on arrival in **every** engine tested for evidence (mixed content
   blocks it outright) unless the browser is Chrome with LNA granted **and** the target is
   identified up front as local (IP literal / `.local` / `targetAddressSpace`) — and even then,
   WebSocket only became eligible as of the Chrome 147 LNA-WebSocket extension, not before.
@@ -289,7 +289,7 @@ Legend: "Conditional" always has the specific condition named in the row.
   user consent before information is extracted" for this particular tier.
 - Deploying over plain `http://` to dodge mixed-content/LNA restrictions trades away
   `crypto.subtle` and Service Workers (both secure-context-gated), which are load-bearing for
-  InterPoll's signing/chain architecture — this is not a free unlock.
+  Echo's signing/chain architecture — this is not a free unlock.
 - Firefox and Safari's local-network access model is **not settled evidence** as of this
   research pass: Firefox shows a regressing/undocumented local-network permission behavior
   (Bugzilla #2059274) and Safari shows no public web-facing LNA/PNA equivalent at all — so

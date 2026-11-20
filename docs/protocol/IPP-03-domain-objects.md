@@ -14,7 +14,7 @@ the schema is authoritative for field shape and the prose for semantics.
 
 ## 1. Object families
 
-InterPoll defines five core object families. Each conforming object MUST validate
+Echo defines five core object families. Each conforming object MUST validate
 against its `*.v1.json` schema.
 
 | Object | Plane | Schema |

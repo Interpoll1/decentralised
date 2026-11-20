@@ -54,8 +54,8 @@ describe('config anonymity (Tor) mode', () => {
 
   it('persists the flag to localStorage', () => {
     config.setAnonymityMode(true);
-    expect(localStorage.getItem('interpoll_anonymity_mode')).toBe('true');
+    expect(localStorage.getItem('echo_anonymity_mode')).toBe('true');
     config.setAnonymityMode(false);
-    expect(localStorage.getItem('interpoll_anonymity_mode')).toBe(null);
+    expect(localStorage.getItem('echo_anonymity_mode')).toBe(null);
   });
 });

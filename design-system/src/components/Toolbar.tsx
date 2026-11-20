@@ -12,7 +12,7 @@ export interface ToolbarProps extends Omit<React.HTMLAttributes<HTMLDivElement>,
 
 /**
  * The frosted top app bar. A blurred, translucent toolbar with a hairline bottom
- * border — the sticky header used across InterPoll pages. Provide `start`, `title`,
+ * border — the sticky header used across Echo pages. Provide `start`, `title`,
  * and `end` slots, or arbitrary children.
  */
 export const Toolbar: React.FC<ToolbarProps> = ({ start, title, end, className, children, ...rest }) => {

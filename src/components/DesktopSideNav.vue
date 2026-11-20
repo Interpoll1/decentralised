@@ -9,7 +9,7 @@
           <path d="M12 8V16M8.5 10.5L12 12.5L15.5 10.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </span>
-      <span class="side-nav-brand-name">{{ $ui("Interpoll") }}</span>
+      <span class="side-nav-brand-name">{{ $ui("Echo") }}</span>
     </div>
 
     <!-- Collapse toggle -->
@@ -154,7 +154,7 @@ const categoriesOpen = ref(true);
 function goHome()            { router.push('/home'); }
 function goTab(tab: string)  { router.push({ path: '/home', query: { tab } }); }
 function goScope(scope: string) {
-  localStorage.setItem('interpoll_feed_scope', scope);
+  localStorage.setItem('echo_feed_scope', scope);
   router.push({ path: '/home', query: { tab: 'home', scope } });
 }
 function goCategory(id: string) {

@@ -1,8 +1,8 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.interpoll.app',
-  appName: 'InterPoll',
+  appId: 'com.echo.app',
+  appName: 'Echo',
   webDir: 'dist',
   server: {
     // https scheme gives the WebView a secure context, which crypto.subtle

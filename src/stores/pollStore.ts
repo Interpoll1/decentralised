@@ -43,7 +43,7 @@ function saveMyPollContentVotes(votes: Map<string, 'up' | 'down'>): void {
 }
 
 function isSyncDebugEnabled(): boolean {
-  return typeof window !== 'undefined' && window.localStorage.getItem('interpoll_sync_debug') === 'true';
+  return typeof window !== 'undefined' && window.localStorage.getItem('echo_sync_debug') === 'true';
 }
 
 // Same as postStore — filter Gun re-deliveries by session start time

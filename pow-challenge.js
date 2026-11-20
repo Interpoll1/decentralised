@@ -1,5 +1,5 @@
 /**
- * pow-challenge.js — Hashcash-style proof-of-work challenge system for InterPoll.
+ * pow-challenge.js — Hashcash-style proof-of-work challenge system for Echo.
  *
  * Adaptive difficulty based on bot score and spam penalty.
  * Challenges expire after 60 seconds and are single-use.

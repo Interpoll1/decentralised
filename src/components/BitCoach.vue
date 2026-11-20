@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <!-- ── First-boot tour: spotlight + Bit's speech bubble ─────────────── -->
-    <div v-if="onTourPage && bit.tourActive && step" class="bc-tour" role="dialog" aria-live="polite" :aria-label="$ui('Interpoll tour')">
+    <div v-if="onTourPage && bit.tourActive && step" class="bc-tour" role="dialog" aria-live="polite" :aria-label="$ui('Echo tour')">
       <div v-if="rect" class="bc-ring" :style="ringStyle" />
       <div v-else class="bc-dim" />
 
@@ -86,8 +86,8 @@ const flyEl = ref<HTMLElement | null>(null);
 const bubbleBit = ref<HTMLElement | null>(null);
 function takeFlight() {
   try {
-    const raw = sessionStorage.getItem('interpoll_bit_flight');
-    sessionStorage.removeItem('interpoll_bit_flight');
+    const raw = sessionStorage.getItem('echo_bit_flight');
+    sessionStorage.removeItem('echo_bit_flight');
     if (raw) flight.value = JSON.parse(raw);
   } catch { flight.value = null; }
 }

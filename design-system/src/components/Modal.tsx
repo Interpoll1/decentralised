@@ -13,7 +13,7 @@ export interface ModalProps extends Omit<React.HTMLAttributes<HTMLDivElement>, '
 }
 
 /**
- * Centered dialog on a dimmed backdrop. The panel uses the InterPoll glass
+ * Centered dialog on a dimmed backdrop. The panel uses the Echo glass
  * surface with a header, scrollable body, and optional footer actions. Render it
  * with `open` and provide `onClose` for the backdrop / close affordance.
  */

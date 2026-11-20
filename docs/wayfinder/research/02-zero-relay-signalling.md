@@ -100,7 +100,7 @@ Sources: [libp2p WebRTC (browser-to-browser) docs](https://docs.libp2p.io/concep
 
 This repo's `browserRelayService.ts` is actually a Gun-relay-in-a-tab, not a
 signalling rendezvous per se: it tries to get a public `wss://` tunnel URL from a
-bridge service (`BRIDGE_URLS`, e.g. `tunnel.interpoll.endless.sbs` or the
+bridge service (`BRIDGE_URLS`, e.g. `tunnel.echo.endless.sbs` or the
 `localtunnel` public fallback), and if no bridge answers, falls back to exposing
 `http://<lan-ip>:8765/gun` for same-network peers. Note the LAN-IP discovery trick —
 opening an `RTCPeerConnection` with no ICE servers and reading the host candidate's
@@ -122,7 +122,7 @@ guest Wi-Fi, no captive portal, no client-isolation AP setting) — a common ent
 Wi-Fi and public-hotspot restriction. User friction is moderate (must obtain and
 enter/scan an IP:port URL). Not truly serverless when it falls through to the
 tunnel-bridge path (that bridge is third-party infrastructure genuinely in the
-critical path, just not one InterPoll operates) — only the LAN-only fallback branch
+critical path, just not one Echo operates) — only the LAN-only fallback branch
 is actually serverless. Needs a Gun relay running in the serving tab and an addressed
 URL exchanged by some other channel (manual/QR again).
 
@@ -172,7 +172,7 @@ Sources: [Web Bluetooth support](https://www.testmuai.com/learning-hub/web-bluet
 
 ---
 
-## 5. Third-party-carried signalling (public infra InterPoll doesn't run)
+## 5. Third-party-carried signalling (public infra Echo doesn't run)
 
 Multiple production libraries now standardize on exactly this pattern —
 **Trystero** (actively maintained, v0.25.2 as of ~19 days before this survey) offers
@@ -188,7 +188,7 @@ architecturally identical to the Nostr-DM pattern, just on Gun instead of Nostr.
 
 **Does it violate "zero-relay"?** No single answer — it depends on what "zero-relay"
 is meant to guarantee:
-- If the goal is "the user is never dependent on infrastructure InterPoll
+- If the goal is "the user is never dependent on infrastructure Echo
   operates," then public Nostr relays, public Gun relays, BitTorrent trackers/DHT,
   and libp2p WebRTC-direct/WebTransport bootstrap nodes all qualify: **not a relay
   we run**, but the offer/answer still transits somebody's server.
@@ -197,7 +197,7 @@ is meant to guarantee:
   and the mesh-relay tier (§2, once bootstrapped) are actually relay-free.
 
 Costs of leaning on someone else's public infra:
-- **Operational**: uptime and rate limits are outside InterPoll's control (public
+- **Operational**: uptime and rate limits are outside Echo's control (public
   Nostr relays and BitTorrent trackers are known to be flaky/rate-limited under
   load); a relay operator can unilaterally block the app's traffic pattern.
 - **Privacy**: the offer/SDP (which includes ICE candidates, i.e. IP addresses)
@@ -306,7 +306,7 @@ latter only fires when both devices already share a broadcast domain, which the 
 cannot guarantee or even detect reliably in advance. Everything else that is
 low-friction and "automatic" (mesh relay, Gun inbox, Nostr, BitTorrent DHT, tunnel
 bridges, public STUN) either requires a connection to already exist or quietly
-reintroduces a third party — just one InterPoll doesn't operate. "Zero-relay
+reintroduces a third party — just one Echo doesn't operate. "Zero-relay
 capable" should therefore be documented as **"manual paste/QR, plus same-LAN
 auto-connect, plus best-effort peer-introduction once you already have one
 connection"** — not as a guarantee that two isolated strangers with no shared LAN

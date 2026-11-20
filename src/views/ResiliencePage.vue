@@ -23,7 +23,7 @@
             </div>
             <div>
               <h2 class="hero-title">{{ $ui("Network Resilience") }}</h2>
-              <p class="hero-sub">{{ $ui("Monitor relay health, rotate servers instantly, and back up your local state. Interpoll keeps running even when individual nodes go offline.") }}</p>
+              <p class="hero-sub">{{ $ui("Monitor relay health, rotate servers instantly, and back up your local state. Echo keeps running even when individual nodes go offline.") }}</p>
             </div>
           </div>
           <div class="quick-actions">
@@ -508,7 +508,7 @@ const probeResults = ref<RelayProbeResult[]>([]);
 const censorship = ref<{ blocked: RelayEndpoint[]; reachable: RelayEndpoint[]; torRequired: RelayEndpoint[] } | null>(null);
 const lastScanAt = ref<string>('');
 
-const autoFailoverEnabled = ref(localStorage.getItem('interpoll_auto_failover') === 'true');
+const autoFailoverEnabled = ref(localStorage.getItem('echo_auto_failover') === 'true');
 const newRelay = ref({ label: '', ws: '', gun: '', api: '', isTor: false, priority: 10 });
 
 // --- Fallback Rendezvous (resilience orchestrator) ---
@@ -578,7 +578,7 @@ const sharing = ref(false);
 const incomingOffer = ref<{ peerId: string; size: number; hash: string; meta: { postCount: number; communityCount: number; blockHeight: number } } | null>(null);
 const transferProgress = ref<{ direction: string; current: number; total: number; percent: number } | null>(null);
 
-const webrtcEnabled = ref(localStorage.getItem('interpoll_webrtc_enabled') === 'true');
+const webrtcEnabled = ref(localStorage.getItem('echo_webrtc_enabled') === 'true');
 const expandedGuide = ref<string | null>(null);
 
 const guides = [
@@ -586,7 +586,7 @@ const guides = [
     id: 'tor', icon: lockClosedOutline, title: 'Using Tor Browser',
     steps: [
       'Download and install <a href="https://www.torproject.org" target="_blank" rel="noopener noreferrer">Tor Browser</a>.',
-      'Open InterPoll in Tor Browser — this routes your traffic through Tor (a web app cannot do it on its own).',
+      'Open Echo in Tor Browser — this routes your traffic through Tor (a web app cannot do it on its own).',
       'Go to <strong>Settings → Network</strong> and enable <strong>Anonymity (Tor) Mode</strong> to disable WebRTC, which would otherwise leak your real IP via STUN.',
       'Optionally add a <code>.onion</code> relay address — Anonymity Mode will prefer it automatically.',
       'Use <strong>Check Tor status</strong> in that section to verify your connection is routing through Tor.',
@@ -868,7 +868,7 @@ async function removeRelay(id: string) {
 }
 
 watch(autoFailoverEnabled, (val) => {
-  localStorage.setItem('interpoll_auto_failover', String(val));
+  localStorage.setItem('echo_auto_failover', String(val));
 });
 
 function addRelay() {
@@ -945,7 +945,7 @@ function buildRelayReport(): string {
   const blockedCount = censorship.value?.blocked.length ?? 0;
   const torCount = censorship.value?.torRequired.length ?? 0;
   return [
-    'InterPoll Relay Report',
+    'Echo Relay Report',
     `Scanned: ${lastScanAt.value || 'unknown time'}`,
     ...lines,
     `Censorship signals: blocked=${blockedCount}, torRequired=${torCount}`,
@@ -985,7 +985,7 @@ function rejectOffer() {
 }
 
 watch(webrtcEnabled, async (val) => {
-  localStorage.setItem('interpoll_webrtc_enabled', String(val));
+  localStorage.setItem('echo_webrtc_enabled', String(val));
   if (val) {
     try { await SnapshotSyncService.initialize(); } catch { /* unavailable */ }
     registerSyncCallbacks();

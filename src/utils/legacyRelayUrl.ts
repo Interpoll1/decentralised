@@ -3,8 +3,8 @@ export function migrateLegacyRelayUrl(value: string): string {
   try {
     const url = new URL(value);
     const hosts: Record<string, string> = {
-      'interpoll.endless.sbs': 'interpoll.endless.social',
-      'interpoll2.endless.sbs': 'interpoll2.endless.social',
+      'echo.endless.sbs': 'echo.endless.social',
+      'echo2.endless.sbs': 'echo2.endless.social',
     };
     if (!hosts[url.hostname]) return value;
     url.hostname = hosts[url.hostname];

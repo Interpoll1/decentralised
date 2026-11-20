@@ -3,7 +3,7 @@ import { createI18n } from 'vue-i18n';
 import en from './locales/en.json';
 import uk from './locales/uk.json';
 
-export const LANGUAGE_KEY = 'interpoll_language_v1';
+export const LANGUAGE_KEY = 'echo_language_v1';
 export const supportedLanguages = [
   { code: 'en', name: 'English' },
   { code: 'uk', name: 'Українська' },

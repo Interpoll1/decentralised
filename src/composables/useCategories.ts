@@ -58,7 +58,7 @@ export const FEED_BAR_CATEGORIES = ALL_CATEGORIES.slice(0, 8);
 
 // ─── User history ─────────────────────────────────────────────────────────────
 
-const HISTORY_KEY   = 'interpoll_feed_prefs';
+const HISTORY_KEY   = 'echo_feed_prefs';
 const DECAY_RATE    = 0.95;   // multiply category weights by this each day
 const MAX_TAGS      = 20;
 

@@ -447,8 +447,8 @@ const onSplitChange = (e: MediaQueryListEvent) => { split.value = e.matches; };
 onMounted(() => { splitMql = matchMedia(SPLIT_QUERY); split.value = splitMql.matches; splitMql.addEventListener('change', onSplitChange); });
 onBeforeUnmount(() => splitMql?.removeEventListener('change', onSplitChange));
 
-const LAST_ROOM_KEY = 'interpoll_last_room';
-const PINNED_KEY = 'interpoll_pinned_rooms';
+const LAST_ROOM_KEY = 'echo_last_room';
+const PINNED_KEY = 'echo_pinned_rooms';
 function readJSON<T>(key: string, fallback: T): T {
   try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) as T : fallback; } catch { return fallback; }
 }
@@ -526,7 +526,7 @@ async function copyMyLink() {
   const name = encodeURIComponent((user as any).customUsername || user.displayName || user.username || 'User');
   const link = `${window.location.origin}/chat#id=${encodeURIComponent(user.id)}&name=${name}`;
   const shared = 'share' in navigator && matchMedia('(pointer: coarse)').matches
-    ? await navigator.share({ title: 'Message me on InterPoll', url: link }).then(() => true, () => false)
+    ? await navigator.share({ title: 'Message me on Echo', url: link }).then(() => true, () => false)
     : false;
   if (!shared) await navigator.clipboard.writeText(link).catch(() => {});
   const { toastController } = await import('@ionic/vue');

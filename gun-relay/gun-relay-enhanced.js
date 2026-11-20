@@ -893,7 +893,7 @@ app.post('/db/create-post', async (req, res) => {
 // ─── Dark Community Creation ──────────────────────────────────────────────────
 // POST /db/create-community
 // Persists darkMode, rendezvousSeed, rendezvousSoul on the community object.
-// If darkMode: true, also writes to the interpoll-rendezvous soul so peers
+// If darkMode: true, also writes to the echo-rendezvous soul so peers
 // with the invite can find the community without it appearing in the index.
 // SECURITY: Requires API_WRITE_SECRET
 app.post('/db/create-community', async (req, res) => {
@@ -928,7 +928,7 @@ app.post('/db/create-community', async (req, res) => {
     // Dark communities additionally publish a rendezvous record so invited
     // peers can discover the community without a public index entry.
     if (communityData.darkMode) {
-      const rendezvousSoul = `interpoll-rendezvous:${soul}`;
+      const rendezvousSoul = `echo-rendezvous:${soul}`;
       const rendezvousData = {
         soul,
         rendezvousSeed: communityData.rendezvousSeed,
@@ -971,10 +971,10 @@ server.on('epoch-rotate', (communities) => {
         epoch:          c.epoch          ?? null,
         updatedAt:      Date.now(),
       };
-      gun.get(`interpoll-rendezvous:${c.soul}`).get('community').put(rendezvousData);
+      gun.get(`echo-rendezvous:${c.soul}`).get('community').put(rendezvousData);
 
       if (dbConnected) {
-        const rendezvousSoul = `interpoll-rendezvous:${c.soul}/community`;
+        const rendezvousSoul = `echo-rendezvous:${c.soul}/community`;
         db.execute(
           `INSERT INTO gun_nodes (soul, data) VALUES (?, ?)
            ON DUPLICATE KEY UPDATE data = VALUES(data), updated_at = NOW()`,

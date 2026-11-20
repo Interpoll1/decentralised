@@ -112,7 +112,7 @@ export function buildNevent1(hexId: string, relayHint?: string, hexPubkey?: stri
 
 /**
  * Derive a Nostr event ID (SHA-256 of the canonical serialisation).
- * kind 101 = Interpoll vote event (custom kind in the 100–9999 range)
+ * kind 101 = Echo vote event (custom kind in the 100–9999 range)
  * kind 1   = short text note (for posts/polls shared as Nostr notes)
  */
 export interface NostrEventInput {
@@ -149,7 +149,7 @@ export function buildNostrEvent(
 }
 
 /**
- * Convert an Interpoll poll to a Nostr kind-1 short-text event.
+ * Convert an Echo poll to a Nostr kind-1 short-text event.
  * Polls are shared as human-readable text; votes use kind-101.
  */
 export function pollToNostrEvent(poll: {
@@ -175,7 +175,7 @@ export function pollToNostrEvent(poll: {
 
   const tags: string[][] = [
     ['t', 'poll'],
-    ['t', 'interpoll'],
+    ['t', 'echo'],
   ];
   if (poll.communityId) tags.push(['t', poll.communityId]);
   if (poll.relayUrl)    tags.push(['r', poll.relayUrl]);
@@ -190,7 +190,7 @@ export function pollToNostrEvent(poll: {
 }
 
 /**
- * Convert an Interpoll post to a Nostr kind-1 event.
+ * Convert an Echo post to a Nostr kind-1 event.
  */
 export function postToNostrEvent(post: {
   id:          string;
@@ -208,7 +208,7 @@ export function postToNostrEvent(post: {
   ].join('').trim();
 
   const tags: string[][] = [
-    ['t', 'interpoll'],
+    ['t', 'echo'],
     ['subject', post.title],
   ];
   if (post.communityId) tags.push(['t', post.communityId]);
@@ -224,8 +224,8 @@ export function postToNostrEvent(post: {
 }
 
 /**
- * Convert an Interpoll vote receipt to a Nostr kind-101 event.
- * kind-101 is an Interpoll-specific kind for vote attestations.
+ * Convert an Echo vote receipt to a Nostr kind-101 event.
+ * kind-101 is an Echo-specific kind for vote attestations.
  */
 export function receiptToNostrEvent(receipt: {
   pollId:     string;
@@ -246,7 +246,7 @@ export function receiptToNostrEvent(receipt: {
     pubkey:    receipt.pubkey,
     createdAt: Math.floor(receipt.timestamp / 1000),
     kind:      101,
-    tags:      [['e', receipt.pollId], ['t', 'interpoll-vote']],
+    tags:      [['e', receipt.pollId], ['t', 'echo-vote']],
     content,
   });
 }

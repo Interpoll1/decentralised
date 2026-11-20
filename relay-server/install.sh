@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# Interpoll — Home Server Installer
+# Echo — Home Server Installer
 # Targets: Raspberry Pi 4/5, Ubuntu 22.04/24.04, Debian 12
 # Run as root or with sudo
 # ─────────────────────────────────────────────────────────────────────────────
@@ -20,7 +20,7 @@ step()    { echo -e "\n${BOLD}▶ $*${NC}"; }
 [[ $EUID -ne 0 ]] && error "Run with sudo or as root"
 
 # ── Config (edit or override via env) ─────────────────────────────────────────
-INSTALL_DIR="${INSTALL_DIR:-/opt/interpoll}"
+INSTALL_DIR="${INSTALL_DIR:-/opt/echo}"
 RELAY_PORT="${RELAY_PORT:-8080}"
 DOMAIN="${DOMAIN:-}"                    # leave blank for LAN-only
 ENABLE_TOR="${ENABLE_TOR:-false}"       # true = install Tor hidden service
@@ -83,9 +83,9 @@ fi
 
 # Secure and create DB
 mysql -u root << SQL
-  CREATE DATABASE IF NOT EXISTS interpoll CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-  CREATE USER IF NOT EXISTS 'interpoll'@'localhost' IDENTIFIED BY '${MYSQL_PASS}';
-  GRANT ALL PRIVILEGES ON interpoll.* TO 'interpoll'@'localhost';
+  CREATE DATABASE IF NOT EXISTS echo CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  CREATE USER IF NOT EXISTS 'echo'@'localhost' IDENTIFIED BY '${MYSQL_PASS}';
+  GRANT ALL PRIVILEGES ON echo.* TO 'echo'@'localhost';
   FLUSH PRIVILEGES;
 SQL
 success "MySQL ready"
@@ -93,7 +93,7 @@ success "MySQL ready"
 # ── Install dir ────────────────────────────────────────────────────────────────
 step "Setting up $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"/{relay-server,data,logs}
-useradd -r -s /bin/false -d "$INSTALL_DIR" interpoll 2>/dev/null || true
+useradd -r -s /bin/false -d "$INSTALL_DIR" echo 2>/dev/null || true
 
 # ── Relay server ───────────────────────────────────────────────────────────────
 step "Installing relay server"
@@ -123,9 +123,9 @@ SERVER_ORIGIN=${DOMAIN:-http://$LOCAL_IP:$RELAY_PORT}
 
 MYSQL_HOST=127.0.0.1
 MYSQL_PORT=3306
-MYSQL_USER=interpoll
+MYSQL_USER=echo
 MYSQL_PASSWORD=${MYSQL_PASS}
-MYSQL_DATABASE=interpoll
+MYSQL_DATABASE=echo
 
 JWT_SECRET=${JWT_SECRET}
 VOTE_RESERVATION_SECRET=${VOTE_SECRET}
@@ -154,8 +154,8 @@ module.exports = {
     node_args:   '--experimental-vm-modules',
     env_file:    '.env',
     max_memory_restart: '512M',
-    error_file:  '/opt/interpoll/logs/relay-error.log',
-    out_file:    '/opt/interpoll/logs/relay-out.log',
+    error_file:  '/opt/echo/logs/relay-error.log',
+    out_file:    '/opt/echo/logs/relay-out.log',
     log_date_format: 'YYYY-MM-DD HH:mm:ss',
     restart_delay: 3000,
     max_restarts:  10,
@@ -171,7 +171,7 @@ success "PM2 configured"
 
 # ── Nginx ──────────────────────────────────────────────────────────────────────
 step "Configuring nginx"
-cat > /etc/nginx/sites-available/interpoll << NGINX
+cat > /etc/nginx/sites-available/echo << NGINX
 map \$http_upgrade \$connection_upgrade {
   default upgrade;
   ''      close;
@@ -200,7 +200,7 @@ server {
 }
 NGINX
 
-ln -sf /etc/nginx/sites-available/interpoll /etc/nginx/sites-enabled/interpoll
+ln -sf /etc/nginx/sites-available/echo /etc/nginx/sites-enabled/echo
 rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl reload nginx
 success "Nginx configured"
@@ -219,12 +219,12 @@ if [[ "$ENABLE_TOR" == "true" ]]; then
   apt-get install -y -qq tor
   cat >> /etc/tor/torrc << TOR
 
-HiddenServiceDir /var/lib/tor/interpoll/
+HiddenServiceDir /var/lib/tor/echo/
 HiddenServicePort 80 127.0.0.1:${RELAY_PORT}
 TOR
   systemctl restart tor
   sleep 3
-  ONION=$(cat /var/lib/tor/interpoll/hostname 2>/dev/null || echo "pending…")
+  ONION=$(cat /var/lib/tor/echo/hostname 2>/dev/null || echo "pending…")
   success "Tor hidden service: $ONION"
 fi
 
@@ -259,7 +259,7 @@ success "Fail2ban active"
 # ── Done ───────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}${BOLD}  Interpoll home server installed successfully!${NC}"
+echo -e "${GREEN}${BOLD}  Echo home server installed successfully!${NC}"
 echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo -e "  Relay URL:   ${BOLD}${DOMAIN:-http://$LOCAL_IP:$RELAY_PORT}${NC}"
@@ -269,7 +269,7 @@ echo -e "  MySQL pass:  ${BOLD}$MYSQL_PASS${NC}  ← save this"
 echo -e "  Logs:        ${BOLD}pm2 logs relay-server${NC}"
 echo -e "  Status:      ${BOLD}pm2 status${NC}"
 echo ""
-echo -e "  Add to Interpoll app:"
+echo -e "  Add to Echo app:"
 echo -e "  ${BOLD}Settings → Relays → Add relay → paste your URL${NC}"
 echo ""
 [[ "$ENABLE_TOR" == "true" ]] && echo -e "  Tor address: ${BOLD}$ONION${NC}\n"

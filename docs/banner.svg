@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" width="1200" height="320" role="img" aria-label="InterPoll: polls and discussions nobody can switch off">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" width="1200" height="320" role="img" aria-label="Echo: polls and discussions nobody can switch off">
   <defs>
     <radialGradient id="glow" cx="50%" cy="50%" r="60%">
       <stop offset="0" stop-color="#3dff7a" stop-opacity=".22"/>
@@ -37,7 +37,7 @@
     <animateMotion dur="4s" repeatCount="indefinite" path="M835 65 L955 145 L1085 85 L955 145 L1035 250 L875 245 Z"/>
   </rect>
 
-  <text class="t" x="64" y="148" font-size="76" font-weight="800" fill="#f3fff6" letter-spacing="-2">InterPoll</text>
+  <text class="t" x="64" y="148" font-size="76" font-weight="800" fill="#f3fff6" letter-spacing="-2">Echo</text>
   <text class="t" x="66" y="196" font-size="26" fill="#9bd9ae">Polls and discussions nobody can switch off.</text>
   <text class="t" x="66" y="248" font-size="17" fill="#5f8a6c">signed on your device  ·  copied across peers  ·  yours to run</text>
 </svg>

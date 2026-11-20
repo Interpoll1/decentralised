@@ -13,7 +13,7 @@ export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> 
 }
 
 /**
- * Text input styled as an InterPoll glass field: translucent item surface,
+ * Text input styled as an Echo glass field: translucent item surface,
  * hairline border, and an accent focus ring. Supports an optional label, leading
  * icon, and hint/error text.
  */

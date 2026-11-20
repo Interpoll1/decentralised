@@ -1,5 +1,5 @@
-// InterPoll community Gun relay.
-// Installed by install.sh / install.ps1 / vps.sh from https://interpoll.endless.social/relay-kit/
+// Echo community Gun relay.
+// Installed by install.sh / install.ps1 / vps.sh from https://echo.endless.social/relay-kit/
 //
 // Env:
 //   PORT            listen port (default 8765)
@@ -14,7 +14,7 @@ import cors from 'cors';
 const PORT = parseInt(process.env.PORT || '8765', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const DATA_DIR = process.env.GUN_DATA_DIR || './radata';
-const UPSTREAM = (process.env.UPSTREAM_PEERS ?? 'https://interpoll2.endless.social/gun')
+const UPSTREAM = (process.env.UPSTREAM_PEERS ?? 'https://echo2.endless.social/gun')
   .split(',').map((s) => s.trim()).filter(Boolean);
 
 const app = express();
@@ -23,7 +23,7 @@ app.get(['/', '/health'], (_req, res) => {
   const peers = Object.values(gun._.opt.peers || {});
   res.json({
     status: 'ok',
-    service: 'interpoll-community-relay',
+    service: 'echo-community-relay',
     peers: peers.length,
     connected: peers.filter((p) => p.wire && p.wire.readyState === 1).length,
     upstream: UPSTREAM,
@@ -35,8 +35,8 @@ const server = http.createServer(app);
 const gun = Gun({ web: server, file: DATA_DIR, radisk: true, peers: UPSTREAM });
 
 server.listen(PORT, HOST, () => {
-  console.log(`[interpoll-relay] listening on ${HOST}:${PORT}  data=${DATA_DIR}`);
-  console.log(`[interpoll-relay] upstream: ${UPSTREAM.join(', ') || '(none)'}`);
+  console.log(`[echo-relay] listening on ${HOST}:${PORT}  data=${DATA_DIR}`);
+  console.log(`[echo-relay] upstream: ${UPSTREAM.join(', ') || '(none)'}`);
   // Gun on Node only dials peers on first read; dial now so data relayed
   // through this node reaches the wider mesh immediately.
   for (const peer of Object.values(gun._.opt.peers)) gun._.opt.mesh.hi(peer);

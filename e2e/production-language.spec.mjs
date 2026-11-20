@@ -4,10 +4,10 @@ import { makePoll, mockRelay } from './support/relay.mjs';
 test('the emitted production chunks boot, switch languages and open a poll',async({context,page},testInfo)=>{
   await mockRelay(context,makePoll(),undefined,'http://127.0.0.1:5198');
   await context.addInitScript(()=>{
-    localStorage.setItem('interpoll_onboarding_complete','true');
-    localStorage.setItem('interpoll_bit_tour_v1','done');
-    localStorage.setItem('interpoll_bit_navswap_v1','1');
-    localStorage.setItem('interpoll_moderation_onboarding_complete','skipped');
+    localStorage.setItem('echo_onboarding_complete','true');
+    localStorage.setItem('echo_bit_tour_v1','done');
+    localStorage.setItem('echo_bit_navswap_v1','1');
+    localStorage.setItem('echo_moderation_onboarding_complete','skipped');
   });
   const errors=[];page.on('pageerror',error=>{ errors.push(error.message); console.error('[built-app exception]',error.message); });
   await page.goto('/settings');

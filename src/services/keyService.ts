@@ -60,7 +60,7 @@ export class KeyService {
     // Serialise across tabs too: a second tab re-reads storage inside the lock
     // and picks up the first tab's key instead of overwriting it.
     const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
-    return locks ? locks.request('interpoll-keypair-init', run) : run();
+    return locks ? locks.request('echo-keypair-init', run) : run();
   }
 
   // Get just the public key (safe to share)

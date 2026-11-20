@@ -16,7 +16,7 @@ import config from '../config'
 const WARMUP_POST_LIMIT = 50
 const WARMUP_POLL_LIMIT = 50
 const WARMUP_V1_POST_LIMIT = 50
-const WARMUP_DEBUG = localStorage.getItem('interpoll_warmup_debug') === 'true'
+const WARMUP_DEBUG = localStorage.getItem('echo_warmup_debug') === 'true'
 
 function getApiBase(): string {
   return config.relay.api

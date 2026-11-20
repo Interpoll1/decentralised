@@ -3,5 +3,5 @@
     <color name="colorPrimary">#17664B</color>
     <color name="colorPrimaryDark">#232A31</color>
     <color name="colorAccent">#17664B</color>
-    <color name="interpollSystemBar">#E7E9EC</color>
+    <color name="echoSystemBar">#E7E9EC</color>
 </resources>

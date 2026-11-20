@@ -34,7 +34,7 @@ export interface BootstrapInviteHandoff {
 }
 
 export interface BootstrapInviteArtifactV1 {
-  kind: 'interpoll-bootstrap';
+  kind: 'echo-bootstrap';
   version: 1;
   issuedAt: number;
   expiresAt?: number;
@@ -52,7 +52,7 @@ export interface BootstrapInviteArtifactV1 {
   };
 }
 
-const BOOTSTRAP_PREFIX = 'interpoll-bootstrap://';
+const BOOTSTRAP_PREFIX = 'echo-bootstrap://';
 const GUN_DISCOVERY_KEYS = ['bootstrap', 'bootstrap-v1', 'relays', 'servers', 'primary'];
 
 function base64UrlEncode(text: string): string {
@@ -146,7 +146,7 @@ export class BootstrapInviteService {
     },
   ): string {
     const artifact: BootstrapInviteArtifactV1 = {
-      kind: 'interpoll-bootstrap',
+      kind: 'echo-bootstrap',
       version: 1,
       issuedAt: Date.now(),
       expiresAt: opts?.expiresAt,
@@ -196,7 +196,7 @@ export class BootstrapInviteService {
     }
 
     const obj = parsed as Record<string, unknown>;
-    if (obj.kind !== 'interpoll-bootstrap' || obj.version !== 1) {
+    if (obj.kind !== 'echo-bootstrap' || obj.version !== 1) {
       throw new Error('Unsupported bootstrap artifact version');
     }
 
@@ -298,7 +298,7 @@ export class BootstrapInviteService {
       : undefined;
 
     return {
-      kind: 'interpoll-bootstrap',
+      kind: 'echo-bootstrap',
       version: 1,
       issuedAt,
       expiresAt,

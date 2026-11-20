@@ -16,8 +16,8 @@ import { HumanGateService } from './humanGateService';
 const CURRENT_CANON_VERSION = 2;
 
 // Post durability (mirrors pollService's relay-persistence machinery) ──────────
-const LOCAL_POSTS_META_KEY = 'interpoll-local-posts-v1';
-const LOCAL_POSTS_TOMBSTONES_META_KEY = 'interpoll-local-posts-tombstones-v1';
+const LOCAL_POSTS_META_KEY = 'echo-local-posts-v1';
+const LOCAL_POSTS_TOMBSTONES_META_KEY = 'echo-local-posts-tombstones-v1';
 const LOCAL_POST_BACKUP_TTL_MS = 30 * 60 * 1000;
 
 type LocalPostBackupEntry = { post: Post; backedUpAt: number };

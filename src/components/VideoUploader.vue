@@ -220,7 +220,7 @@ onBeforeUnmount(() => setPreview(null));
   text-align: center;
   cursor: pointer;
   transition: border-color 0.2s, background 0.2s;
-  background: var(--interpoll-surface-1, #1a1a1a);
+  background: var(--echo-surface-1, #1a1a1a);
 }
 .video-uploader__dropzone:hover,
 .video-uploader__dropzone--dragover {
@@ -242,7 +242,7 @@ onBeforeUnmount(() => setPreview(null));
   align-items: center;
   gap: 12px;
   padding: 12px;
-  background: var(--interpoll-surface-2, #242424);
+  background: var(--echo-surface-2, #242424);
   border-radius: 12px;
 }
 .video-uploader__preview-thumb {
@@ -266,7 +266,7 @@ onBeforeUnmount(() => setPreview(null));
 /* Progress */
 .video-uploader__progress {
   padding: 16px;
-  background: var(--interpoll-surface-2, #242424);
+  background: var(--echo-surface-2, #242424);
   border-radius: 12px;
 }
 .video-uploader__progress-track {

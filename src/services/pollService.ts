@@ -25,9 +25,9 @@ function getGunRelayBase(): string {
 }
 
 const pollActiveListeners = new Map<string, any>();
-const PENDING_INVITE_FINALIZATIONS_KEY = 'interpoll_pending_invite_finalizations';
-const LOCAL_POLLS_META_KEY = 'interpoll-local-polls-v1';
-const LOCAL_POLLS_TOMBSTONES_META_KEY = 'interpoll-local-polls-tombstones-v1';
+const PENDING_INVITE_FINALIZATIONS_KEY = 'echo_pending_invite_finalizations';
+const LOCAL_POLLS_META_KEY = 'echo-local-polls-v1';
+const LOCAL_POLLS_TOMBSTONES_META_KEY = 'echo-local-polls-tombstones-v1';
 const LOCAL_POLL_BACKUP_TTL_MS = 30 * 60 * 1000;
 // Scalar metadata that a partially-replicated root poll node may be missing.
 // `options` is deliberately excluded вЂ” it is a Gun reference resolved separately.
@@ -52,7 +52,7 @@ type LocalPollBackupEntry = {
 
 type LocalPollBackupMap = Record<string, LocalPollBackupEntry>;
 
-const POLL_DEBUG_KEY = 'interpoll_poll_debug';
+const POLL_DEBUG_KEY = 'echo_poll_debug';
 type PollDebugCategory = 'vote' | 'create' | 'writes' | 'index' | 'ui' | 'all';
 
 function getPollDebugCategories(): Set<string> {

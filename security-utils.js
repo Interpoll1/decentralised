@@ -1,5 +1,5 @@
 /**
- * security-utils.js — Shared security utilities for InterPoll backend servers.
+ * security-utils.js — Shared security utilities for Echo backend servers.
  *
  * Provides: input sanitization, body parsing with size limits, CORS validation,
  * security headers, and authentication helpers.

@@ -1,7 +1,7 @@
 <template>
   <section v-if="visible" class="apk-card surface-card" :aria-label="$ui('Get the Android app')">
     <div class="apk-card__copy">
-      <p class="apk-card__title">{{ $ui("Get InterPoll for Android") }}</p>
+      <p class="apk-card__title">{{ $ui("Get Echo for Android") }}</p>
       <p class="apk-card__body">{{ $ui("Install the app for faster loading and notifications.") }}</p>
     </div>
     <div class="apk-card__actions">
@@ -15,11 +15,11 @@
 import { ref } from 'vue';
 import { Capacitor } from '@capacitor/core';
 
-const DISMISS_KEY = 'interpoll_apk_banner_dismissed';
+const DISMISS_KEY = 'echo_apk_banner_dismissed';
 
 const apkUrl: string =
   import.meta.env.VITE_ANDROID_APK_URL ||
-  'https://github.com/Interpoll1/decentralised/releases/download/android-latest/interpoll.apk';
+  'https://github.com/Interpoll1/decentralised/releases/download/android-latest/echo.apk';
 
 function shouldShow(): boolean {
   if (Capacitor.isNativePlatform()) return false;

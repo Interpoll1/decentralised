@@ -1,5 +1,5 @@
 {
-  "name": "interpoll-community-relay",
+  "name": "echo-community-relay",
   "version": "1.1.0",
   "private": true,
   "type": "module",
@@ -11,6 +11,6 @@
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "gun": "^0.2020.1241",
-    "interpoll": "file:../.."
+    "echo": "file:../.."
   }
 }

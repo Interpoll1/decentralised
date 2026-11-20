@@ -4,7 +4,7 @@ Scope for branch: pavlo-user-keys-v1
 
 ## Goal
 
-Create a minimal, safe foundation for InterPoll user identity:
+Create a minimal, safe foundation for Echo user identity:
 
 - public key = real identity
 - username = readable alias

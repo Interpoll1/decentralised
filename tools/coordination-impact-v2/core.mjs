@@ -53,7 +53,7 @@ function calculate(s, expectedObserver, partition) {
   const relation = repeatedCohorts(latest, s.targets, POLICY), baseline = rank(s.targets, latest);
   const clusters = relation.clusters.map(group => {
     const removed = new Set(group.actors), after = new Map(rank(s.targets, latest, removed).map(r => [r.targetId, r]));
-    return { id: digest(['interpoll.review-cluster.v2', POLICY_DIGEST, group.actors, group.witnesses]), ...group,
+    return { id: digest(['echo.review-cluster.v2', POLICY_DIGEST, group.actors, group.witnesses]), ...group,
       impact: baseline.map(b => ({ targetId: b.targetId, beforeScore: b.score, afterScore: after.get(b.targetId).score,
         beforeRank: b.rank, afterRank: after.get(b.targetId).rank,
         removedEventIds: latest.filter(o => o.action.targetId === b.targetId && removed.has(o.action.actor)).map(o => o.action.id) })) };

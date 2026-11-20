@@ -24,7 +24,7 @@ delivered nothing.
 browser. `useChat` calls `initNotifications()` once and `notifyChatMessage()`
 per incoming message; opening a chat clears that peer's notification.
 
-Android channel: `interpoll-chat` ("Messages", high importance). Created on
+Android channel: `echo-chat` ("Messages", high importance). Created on
 first init.
 
 Nothing to configure. Rebuild and sync:
@@ -115,11 +115,11 @@ relay already has for signature verification.
 
 #### How the endpoints are authenticated
 
-There is no session to trust — InterPoll identities are keys, not accounts, and
+There is no session to trust — Echo identities are keys, not accounts, and
 the relay is explicitly untrusted. So registration is self-authenticating:
 
 - `userId` **is** the x-only Schnorr public key.
-- The client signs `interpoll-push-register-1:<userId>:<deviceId>:<token>:<ts>`
+- The client signs `echo-push-register-1:<userId>:<deviceId>:<token>:<ts>`
   with the matching private key (`CryptoService.sign`, same primitive as
   `signRawSchnorr` in `shared-validation/signatures.js`).
 - The relay verifies that signature *against `userId` itself*, so no key
@@ -130,7 +130,7 @@ the relay is explicitly untrusted. So registration is self-authenticating:
   captured request cannot be replayed. Registrations are rate-limited to 20 per
   IP per minute.
 
-Unregister is signed the same way (`interpoll-push-unregister-1:…`) and only
+Unregister is signed the same way (`echo-push-unregister-1:…`) and only
 removes a device whose stored `userId` matches the signer.
 
 ### 4. Email fallback (Resend)
@@ -147,7 +147,7 @@ scp relay-push/email-notifications.js <vps>:/path/to/relay-server/
 ```bash
 # relay environment
 RESEND_API_KEY=re_...
-RESEND_FROM='InterPoll <notifications@endless.sbs>'   # must be a Resend-verified domain
+RESEND_FROM='Echo <notifications@endless.sbs>'   # must be a Resend-verified domain
 APP_PUBLIC_URL=https://endless.sbs                    # "open the app" link
 SERVER_ORIGIN=https://relay.endless.sbs               # where the unsubscribe link points
 EMAIL_STORE=./push-emails.json                        # optional, this is the default
@@ -167,7 +167,7 @@ It adds three routes:
 | `GET /api/push/email/unsubscribe?token=…` | One-click opt-out for the *recipient* of an unwanted mail — no identity key needed, the HMAC'd token in the link is the authority |
 
 Registration is authenticated exactly like the FCM endpoints: the client signs
-`interpoll-email-register-1:<userId>:<email>:<ts>` with the identity key, and
+`echo-email-register-1:<userId>:<email>:<ts>` with the identity key, and
 the relay verifies it against `userId`. Same 5-minute freshness window, same
 replay guard, same per-IP limiter.
 
@@ -176,13 +176,13 @@ user is not online *and* the FCM path delivered nothing — no tokens on file,
 or every token came back dead. At most one mail per recipient per cooldown
 window however many messages arrive.
 
-**What the mail contains.** "You have a new message on InterPoll", a link to
+**What the mail contains.** "You have a new message on Echo", a link to
 the app, and the unsubscribe link. Not the message text (the relay cannot read
 it), and not the sender's name — that would hand the social graph to Resend.
 
 #### Privacy cost, stated plainly
 
-This is the one feature that ties an InterPoll identity to a real-world
+This is the one feature that ties an Echo identity to a real-world
 handle. The relay keeps the address in a plaintext JSON file (mode 0600)
 keyed by public key, so a relay operator — or anyone who takes the box — can
 deanonymise every user who opted in. That is why it is off by default, opt-in
@@ -200,7 +200,7 @@ The client path is behind a flag so a device with no Firebase config never
 crashes on startup:
 
 ```js
-localStorage.setItem('interpoll_push_enabled', 'true');
+localStorage.setItem('echo_push_enabled', 'true');
 ```
 
 or call `setPushEnabled(true)` from `src/native/pushNotifications.ts`.

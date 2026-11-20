@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <transition name="dap-slide">
-      <aside v-if="visible && offer" class="dap" role="dialog" :aria-label="$ui('Download InterPoll app')">
+      <aside v-if="visible && offer" class="dap" role="dialog" :aria-label="$ui('Download Echo app')">
         <button class="dap__close" type="button" :aria-label="$ui('Dismiss download prompt')" @click="dismiss">&times;</button>
         <div class="dap__mark" aria-hidden="true">
           <span class="dap__dot" />
@@ -45,7 +45,7 @@ interface DownloadOffer {
   install?: boolean;
 }
 
-const INSTALLED_KEY = 'interpoll_app_installed';
+const INSTALLED_KEY = 'echo_app_installed';
 const REMIND_AFTER_MS = 10 * 1000;
 const QUIET_PATHS = ['/onboarding', '/claim-username', '/auth/callback'];
 
@@ -57,7 +57,7 @@ const installEvent = ref<InstallPromptEvent | null>(null);
 let timer: number | undefined;
 
 const androidUrl = import.meta.env.VITE_ANDROID_APK_URL
-  || '/downloads/InterPoll-Android.apk';
+  || '/downloads/Echo-Android.apk';
 const iosUrl = import.meta.env.VITE_IOS_DOWNLOAD_URL || '';
 const desktopUrl = import.meta.env.VITE_DESKTOP_DOWNLOAD_URL || '';
 
@@ -70,31 +70,31 @@ function platformOffer(): DownloadOffer | null {
   const ua = navigator.userAgent;
   if (/Android/i.test(ua)) {
     return {
-      title: 'Get InterPoll for Android',
+      title: 'Get Echo for Android',
       body: 'Use the mobile app for a focused, full-screen experience and notifications.',
       cta: 'Download APK',
       url: androidUrl,
-      downloadName: 'InterPoll-Android.apk',
+      downloadName: 'Echo-Android.apk',
     };
   }
   if (/iPhone|iPad|iPod/i.test(ua)) {
     if (iosUrl) {
       return {
-        title: 'Download InterPoll for iPhone',
-        body: 'Get the InterPoll mobile app for a focused, full-screen experience.',
+        title: 'Download Echo for iPhone',
+        body: 'Get the Echo mobile app for a focused, full-screen experience.',
         cta: 'Download for iPhone',
         url: iosUrl,
       };
     }
     return {
-      title: 'Download InterPoll for iPhone',
+      title: 'Download Echo for iPhone',
       body: 'The native iPhone app is not published to TestFlight or the App Store yet.',
       cta: 'iPhone app unavailable',
     };
   }
   if (installEvent.value) {
     return {
-      title: 'Install InterPoll on this device',
+      title: 'Install Echo on this device',
       body: 'Launch faster, keep it in your app list, and use it without browser chrome.',
       cta: 'Install app',
       install: true,
@@ -102,22 +102,22 @@ function platformOffer(): DownloadOffer | null {
   }
   if (/Windows/i.test(ua)) {
     return {
-      title: 'Download InterPoll for Windows',
-      body: 'Install the focused desktop app and use InterPoll without browser tabs.',
+      title: 'Download Echo for Windows',
+      body: 'Install the focused desktop app and use Echo without browser tabs.',
       cta: 'Download for Windows',
-      url: desktopUrl || '/downloads/InterPoll-Setup.exe',
-      downloadName: 'InterPoll-Setup.exe',
+      url: desktopUrl || '/downloads/Echo-Setup.exe',
+      downloadName: 'Echo-Setup.exe',
     };
   }
   if (/Macintosh|Mac OS X/i.test(ua)) {
     return desktopUrl
-      ? { title: 'Download InterPoll for macOS', body: 'Install the focused desktop app and use InterPoll without browser tabs.', cta: 'Download for macOS', url: desktopUrl }
-      : { title: 'Download InterPoll for macOS', body: 'The macOS installer has not been published yet.', cta: 'Installer unavailable' };
+      ? { title: 'Download Echo for macOS', body: 'Install the focused desktop app and use Echo without browser tabs.', cta: 'Download for macOS', url: desktopUrl }
+      : { title: 'Download Echo for macOS', body: 'The macOS installer has not been published yet.', cta: 'Installer unavailable' };
   }
   if (/Linux/i.test(ua)) {
     return desktopUrl
-      ? { title: 'Download InterPoll for Linux', body: 'Install the focused desktop app and use InterPoll without browser tabs.', cta: 'Download for Linux', url: desktopUrl }
-      : { title: 'Download InterPoll for Linux', body: 'The Linux installer has not been published yet.', cta: 'Installer unavailable' };
+      ? { title: 'Download Echo for Linux', body: 'Install the focused desktop app and use Echo without browser tabs.', cta: 'Download for Linux', url: desktopUrl }
+      : { title: 'Download Echo for Linux', body: 'The Linux installer has not been published yet.', cta: 'Installer unavailable' };
   }
   return null;
 }
@@ -208,8 +208,8 @@ function showPreview() {
 onMounted(() => {
   window.addEventListener('beforeinstallprompt', captureInstallPrompt);
   window.addEventListener('appinstalled', markInstalled);
-  window.addEventListener('interpoll:user-logged-in', handleLogin);
-  window.addEventListener('interpoll:show-download-prompt', showPreview);
+  window.addEventListener('echo:user-logged-in', handleLogin);
+  window.addEventListener('echo:show-download-prompt', showPreview);
   scheduleCheck();
 });
 
@@ -217,8 +217,8 @@ onUnmounted(() => {
   window.clearTimeout(timer);
   window.removeEventListener('beforeinstallprompt', captureInstallPrompt);
   window.removeEventListener('appinstalled', markInstalled);
-  window.removeEventListener('interpoll:user-logged-in', handleLogin);
-  window.removeEventListener('interpoll:show-download-prompt', showPreview);
+  window.removeEventListener('echo:user-logged-in', handleLogin);
+  window.removeEventListener('echo:show-download-prompt', showPreview);
 });
 </script>
 

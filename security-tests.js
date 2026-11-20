@@ -1,4 +1,4 @@
-// security-tests.js — Security test suite for InterPoll backend
+// security-tests.js — Security test suite for Echo backend
 // Run: node security-tests.js [relay-url] [gun-url]
 //
 // Tests: invalid payloads, injection attempts, oversized inputs,
@@ -338,7 +338,7 @@ async function testVoteAuthorizeErrorBehavior() {
 
 // ─── Run All Tests ────────────────────────────────────────────────────────────
 async function main() {
-  console.log('🔒 InterPoll Security Test Suite');
+  console.log('🔒 Echo Security Test Suite');
   console.log(`   Relay: ${RELAY_URL}`);
   console.log(`   Gun:   ${GUN_URL}`);
   console.log('');

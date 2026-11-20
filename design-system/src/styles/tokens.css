@@ -1,6 +1,6 @@
 /*
- * InterPoll design tokens.
- * Extracted from the InterPoll app (src/style.css). Linear-style glass UI:
+ * Echo design tokens.
+ * Extracted from the Echo app (src/style.css). Linear-style glass UI:
  * indigo accent (#5e6ad2), translucent glass surfaces, layered soft shadows,
  * defined radii and motion. Light theme on :root; dark theme on .dark / [data-theme="dark"].
  */

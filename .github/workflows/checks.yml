@@ -1,4 +1,4 @@
-name: Validate InterPoll
+name: Validate Echo
 on:
   pull_request:
   push:
@@ -30,7 +30,7 @@ jobs:
       - run: npm run verify:build
       - uses: actions/upload-artifact@v4
         with:
-          name: interpoll-web-${{ github.sha }}
+          name: echo-web-${{ github.sha }}
           path: dist/
   android:
     runs-on: ubuntu-latest
@@ -55,7 +55,7 @@ jobs:
         working-directory: android
       - uses: actions/upload-artifact@v4
         with:
-          name: interpoll-android-debug-${{ github.sha }}
+          name: echo-android-debug-${{ github.sha }}
           path: |
             android/app/build/outputs/apk/debug/app-debug.apk
             dist/build-info.json

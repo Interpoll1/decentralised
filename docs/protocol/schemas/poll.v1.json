@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://interpoll.protocol/schemas/poll.v1.json",
-  "title": "InterPoll Poll (v1)",
+  "$id": "https://echo.protocol/schemas/poll.v1.json",
+  "title": "Echo Poll (v1)",
   "description": "Rich, replicated Poll object as written/read by pollService.ts. Normative companion to IPP-03. Note the wire encoding of PollOption.voters as an object map (see definitions.pollOption).",
   "type": "object",
   "required": ["id", "communityId", "authorId", "authorName", "question", "options", "createdAt", "expiresAt", "allowMultipleChoices", "showResultsBeforeVoting", "requireLogin", "isPrivate", "totalVotes", "isExpired"],

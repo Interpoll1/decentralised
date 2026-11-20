@@ -2,7 +2,7 @@
   <div v-if="!accepted" class="consent-inline" role="note" aria-labelledby="consent-title">
     <div class="consent-copy">
       <p id="consent-title" class="consent-title">{{ $ui("Decentralized network notice") }}</p>
-      <p class="consent-body"> {{ $ui("InterPoll stores data locally and syncs peer-to-peer, so content may be unmoderated and subject to your local laws.") }} </p>
+      <p class="consent-body"> {{ $ui("Echo stores data locally and syncs peer-to-peer, so content may be unmoderated and subject to your local laws.") }} </p>
     </div>
     <button ref="acceptBtn" class="consent-accept" @click="accept">{{ $ui("Got it") }}</button>
   </div>
@@ -11,7 +11,7 @@
 <script setup lang="ts">
 import { ref, nextTick, watch } from 'vue';
 
-const STORAGE_KEY = 'interpoll_consent_accepted';
+const STORAGE_KEY = 'echo_consent_accepted';
 
 function readConsent(): boolean {
   try {

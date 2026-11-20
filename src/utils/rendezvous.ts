@@ -1,4 +1,4 @@
-// Deterministic time-rotating rendezvous derivation — the "DGA" of InterPoll's
+// Deterministic time-rotating rendezvous derivation — the "DGA" of Echo's
 // resilience layer.
 //
 // Inspired by how the GameOver-Zeus P2P botnet stayed reachable under takedown
@@ -27,7 +27,7 @@ import { bytesToHex } from '@noble/hashes/utils';
  * exactly like the seed baked into a botnet DGA. Bump the version suffix to force
  * a network-wide rendezvous rotation.
  */
-export const RENDEZVOUS_SECRET = 'interpoll-rdv-v1';
+export const RENDEZVOUS_SECRET = 'echo-rdv-v1';
 
 /**
  * Length of a rendezvous window. Kept deliberately wide (6h → 4 windows/day) so

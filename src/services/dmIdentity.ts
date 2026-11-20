@@ -21,9 +21,9 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{1
 const account = /^[0-9a-f]{64}$/;
 const integer = (n: unknown): n is number => Number.isSafeInteger(n) && Number(n) > 0;
 const canonical = (fields: unknown[]) => JSON.stringify(fields);
-export const bindingBytes = (b: DeviceBinding) => canonical(['interpoll/dm/device-binding',1,b.accountId,b.deviceId,b.generation,b.ik,b.ikSignPub,'dm-auth-v1']);
-export const spkBytes = (b: AuthenticatedBundle) => canonical(['interpoll/dm/spk',1,b.binding.accountId,b.binding.deviceId,b.binding.generation,b.ik,b.ikSignPub,b.spkId,b.spkGeneration,b.spk]);
-export const opkBytes = (b: AuthenticatedBundle, opk: PublicOPK) => canonical(['interpoll/dm/opk',1,b.binding.accountId,b.binding.deviceId,b.binding.generation,b.ik,b.spkId,b.spkGeneration,opk.id,opk.pub]);
+export const bindingBytes = (b: DeviceBinding) => canonical(['echo/dm/device-binding',1,b.accountId,b.deviceId,b.generation,b.ik,b.ikSignPub,'dm-auth-v1']);
+export const spkBytes = (b: AuthenticatedBundle) => canonical(['echo/dm/spk',1,b.binding.accountId,b.binding.deviceId,b.binding.generation,b.ik,b.ikSignPub,b.spkId,b.spkGeneration,b.spk]);
+export const opkBytes = (b: AuthenticatedBundle, opk: PublicOPK) => canonical(['echo/dm/opk',1,b.binding.accountId,b.binding.deviceId,b.binding.generation,b.ik,b.spkId,b.spkGeneration,opk.id,opk.pub]);
 function bytes(value: string, length: number): Uint8Array<ArrayBuffer> {
   if (typeof value !== 'string') throw new DMIdentityError('UNKNOWN','Missing key/signature encoding');
   const result = Uint8Array.from(atob(value), c => c.charCodeAt(0));
@@ -126,12 +126,12 @@ function transcriptBundle(b: AuthenticatedBundle, includeOPK: boolean): Authenti
     opk:selectedOPK?.pub,opkId:selectedOPK?.id};
 }
 export function bootstrapContext(sender: AuthenticatedBundle, recipient: AuthenticatedBundle): string {
-  return JSON.stringify(['interpoll/dm/bootstrap',1,transcriptBundle(sender,false),transcriptBundle(recipient,true)]);
+  return JSON.stringify(['echo/dm/bootstrap',1,transcriptBundle(sender,false),transcriptBundle(recipient,true)]);
 }
 export async function verifyContext(context: string, myId: string, theirId: string, own: AuthenticatedBundle): Promise<{peer:AuthenticatedBundle;receiver:AuthenticatedBundle}> {
   let parsed: unknown;
   try { parsed=JSON.parse(context); } catch { throw new DMIdentityError('UNKNOWN','Malformed bootstrap context'); }
-  if (!Array.isArray(parsed) || parsed.length!==4 || parsed[0]!=='interpoll/dm/bootstrap' || parsed[1]!==1 || JSON.stringify(parsed)!==context)
+  if (!Array.isArray(parsed) || parsed.length!==4 || parsed[0]!=='echo/dm/bootstrap' || parsed[1]!==1 || JSON.stringify(parsed)!==context)
     throw new DMIdentityError('UNKNOWN','Unsupported bootstrap context');
   const sender=parsed[2] as AuthenticatedBundle,receiver=parsed[3] as AuthenticatedBundle;
   const localIsSender=sender?.binding?.accountId===myId;

@@ -3,7 +3,7 @@
     <canvas ref="canvasRef" class="ip-canvas" />
     <div class="ip-content">
       <BitMascot :size="64" mood="wave" class="ip-bit" />
-      <div class="ip-logo">{{ $ui("Interpoll") }}</div>
+      <div class="ip-logo">{{ $ui("Echo") }}</div>
       <div class="ip-tag">{{ $ui("peer-to-peer · decentralized") }}</div>
       <div class="ip-bar-wrap"><div class="ip-bar" /></div>
       <div class="ip-tip" :key="tipIdx">{{ $ui(TIPS[tipIdx]) }}</div>

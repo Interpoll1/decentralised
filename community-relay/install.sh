@@ -1,30 +1,30 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# InterPoll community relay — Home server installer (Linux / Raspberry Pi / macOS)
+# Echo community relay — Home server installer (Linux / Raspberry Pi / macOS)
 #
-#   curl -sSL https://interpoll.endless.social/install.sh | bash
+#   curl -sSL https://echo.endless.social/install.sh | bash
 #
 # Installs Node.js if missing, downloads the relay, and runs it as a service
 # that starts on boot (systemd on Linux, launchd on macOS). Prints the relay
 # URL when done. Re-running it upgrades in place and keeps your data.
 #
-# Env overrides: RELAY_PORT (8765), UPSTREAM_PEERS, INTERPOLL_BASE
-# Uninstall (Linux):  sudo systemctl disable --now interpoll-relay && sudo rm -rf /opt/interpoll-relay /etc/systemd/system/interpoll-relay.service
-# Uninstall (macOS):  launchctl unload ~/Library/LaunchAgents/sbs.endless.interpoll-relay.plist && rm -rf ~/.interpoll-relay ~/Library/LaunchAgents/sbs.endless.interpoll-relay.plist
+# Env overrides: RELAY_PORT (8765), UPSTREAM_PEERS, ECHO_BASE
+# Uninstall (Linux):  sudo systemctl disable --now echo-relay && sudo rm -rf /opt/echo-relay /etc/systemd/system/echo-relay.service
+# Uninstall (macOS):  launchctl unload ~/Library/LaunchAgents/sbs.endless.echo-relay.plist && rm -rf ~/.echo-relay ~/Library/LaunchAgents/sbs.endless.echo-relay.plist
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-BASE="${INTERPOLL_BASE:-https://interpoll.endless.social}"
+BASE="${ECHO_BASE:-https://echo.endless.social}"
 RELAY_PORT="${RELAY_PORT:-8765}"
-UPSTREAM_PEERS="${UPSTREAM_PEERS-https://interpoll2.endless.social/gun}"
-SERVICE=interpoll-relay
+UPSTREAM_PEERS="${UPSTREAM_PEERS-https://echo2.endless.social/gun}"
+SERVICE=echo-relay
 NODE_MAJOR_MIN=18
 
 if [ -t 1 ]; then G='\033[0;32m'; Y='\033[1;33m'; R='\033[0;31m'; B='\033[0;34m'; N='\033[0m'; else G=; Y=; R=; B=; N=; fi
-info() { printf "${B}[interpoll]${N} %s\n" "$*"; }
-ok()   { printf "${G}[interpoll]${N} %s\n" "$*"; }
-warn() { printf "${Y}[interpoll]${N} %s\n" "$*"; }
-die()  { printf "${R}[interpoll]${N} %s\n" "$*" >&2; exit 1; }
+info() { printf "${B}[echo]${N} %s\n" "$*"; }
+ok()   { printf "${G}[echo]${N} %s\n" "$*"; }
+warn() { printf "${Y}[echo]${N} %s\n" "$*"; }
+die()  { printf "${R}[echo]${N} %s\n" "$*" >&2; exit 1; }
 
 OS="$(uname -s)"
 case "$OS" in Linux|Darwin) ;; *) die "Unsupported OS: $OS (use install.ps1 on Windows)";; esac
@@ -66,7 +66,7 @@ NODE_BIN="$(command -v node)"
 NPM_BIN="$(command -v npm)"
 
 # ── Files ────────────────────────────────────────────────────────────────────
-if [ "$OS" = Darwin ]; then DIR="$HOME/.interpoll-relay"; else DIR=/opt/interpoll-relay; fi
+if [ "$OS" = Darwin ]; then DIR="$HOME/.echo-relay"; else DIR=/opt/echo-relay; fi
 info "Installing relay into $DIR"
 $SUDO mkdir -p "$DIR/radata"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
@@ -77,9 +77,9 @@ $SUDO cp "$TMP/relay.js" "$TMP/package.json" "$DIR/"
 if [ "$OS" = Linux ]; then
   RUN_USER="${SUDO_USER:-$(id -un)}"
   if [ "$RUN_USER" = root ]; then
-    id interpoll >/dev/null 2>&1 || $SUDO useradd --system --home-dir "$DIR" --shell /usr/sbin/nologin interpoll 2>/dev/null \
-      || $SUDO useradd -r -d "$DIR" -s /sbin/nologin interpoll
-    RUN_USER=interpoll
+    id echo >/dev/null 2>&1 || $SUDO useradd --system --home-dir "$DIR" --shell /usr/sbin/nologin echo 2>/dev/null \
+      || $SUDO useradd -r -d "$DIR" -s /sbin/nologin echo
+    RUN_USER=echo
   fi
   $SUDO chown -R "$RUN_USER" "$DIR"
   info "Installing dependencies…"
@@ -96,7 +96,7 @@ if [ "$OS" = Linux ]; then
   command -v systemctl >/dev/null || die "systemd not found. Start manually: cd $DIR && PORT=$RELAY_PORT node relay.js"
   $SUDO tee /etc/systemd/system/$SERVICE.service >/dev/null <<EOF
 [Unit]
-Description=InterPoll community Gun relay
+Description=Echo community Gun relay
 After=network-online.target
 Wants=network-online.target
 
@@ -124,13 +124,13 @@ EOF
   LOCAL_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
   LOGS="journalctl -u $SERVICE -f"
 else
-  PLIST="$HOME/Library/LaunchAgents/sbs.endless.interpoll-relay.plist"
+  PLIST="$HOME/Library/LaunchAgents/sbs.endless.echo-relay.plist"
   mkdir -p "$(dirname "$PLIST")"
   cat > "$PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>Label</key><string>sbs.endless.interpoll-relay</string>
+  <key>Label</key><string>sbs.endless.echo-relay</string>
   <key>ProgramArguments</key><array><string>$NODE_BIN</string><string>$DIR/relay.js</string></array>
   <key>WorkingDirectory</key><string>$DIR</string>
   <key>EnvironmentVariables</key><dict>
@@ -162,7 +162,7 @@ ok "Relay is running"
 
 echo
 echo "────────────────────────────────────────────────────────────"
-ok "InterPoll relay is live on your network:"
+ok "Echo relay is live on your network:"
 printf "\n    ${G}http://%s:%s/gun${N}\n\n" "$LOCAL_IP" "$RELAY_PORT"
 echo "  Add it in the app: Settings → Network → Relay Configuration"
 echo "  Logs: $LOGS"

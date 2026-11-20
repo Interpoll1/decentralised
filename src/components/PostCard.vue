@@ -314,7 +314,7 @@ function handleShare() {
   const url = props.post.communityId
     ? `/community/${props.post.communityId}/post/${props.post.id}`
     : `/post/${props.post.id}`;
-  void shareLink(url, props.post.title || 'Interpoll post', 'Read this post on Interpoll');
+  void shareLink(url, props.post.title || 'Echo post', 'Read this post on Echo');
 }
 function formatViewCount(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';

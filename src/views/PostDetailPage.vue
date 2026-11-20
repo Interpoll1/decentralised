@@ -367,7 +367,7 @@ const postId = computed(() => route.params.postId as string);
 // Meta tags via watch — avoids @unhead/vue context issues
 watch(post, (p) => {
   if (!p) return;
-  document.title = `${p.title} - Interpoll`;
+  document.title = `${p.title} - Echo`;
 
   const setMeta = (attr: string, val: string, content: string) => {
     let el = document.querySelector(`meta[${attr}="${val}"]`);
@@ -710,7 +710,7 @@ function sharePost() {
   if (!post.value) return;
   // Canonical path, not window.location.href: in the native shell that is
   // https://localhost, and in the browser it may carry transient query state.
-  void shareLink(`/post/${encodeURIComponent(post.value.id)}`, post.value.title || 'InterPoll post', 'Read this post on InterPoll');
+  void shareLink(`/post/${encodeURIComponent(post.value.id)}`, post.value.title || 'Echo post', 'Read this post on Echo');
 }
 
 async function loadPost() {

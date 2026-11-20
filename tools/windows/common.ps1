@@ -2,7 +2,7 @@
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$global:InterPollLastCommandExitCode = 0
+$global:EchoLastCommandExitCode = 0
 
 function Resolve-RepoRoot {
   [CmdletBinding()]
@@ -179,12 +179,12 @@ function Invoke-LoggedCommand {
   $commandLine = Format-CommandLine -FilePath $FilePath -ArgumentList $ArgumentList
   Write-Host ">> $commandLine"
 
-  $global:InterPollLastCommandExitCode = 0
+  $global:EchoLastCommandExitCode = 0
   & $FilePath @ArgumentList
   $exitCode = if ($LASTEXITCODE -is [int]) { [int]$LASTEXITCODE } else { 0 }
 
   if ($exitCode -ne 0) {
-    $global:InterPollLastCommandExitCode = $exitCode
+    $global:EchoLastCommandExitCode = $exitCode
     throw (New-CommandFailedException -Message "Command failed with exit code ${exitCode}: $commandLine" -ExitCode $exitCode -CommandLine $commandLine)
   }
 }
@@ -306,8 +306,8 @@ function Get-ErrorExitCode {
     $exception = $exception.InnerException
   }
 
-  if ($global:InterPollLastCommandExitCode -ne 0) {
-    return [int]$global:InterPollLastCommandExitCode
+  if ($global:EchoLastCommandExitCode -ne 0) {
+    return [int]$global:EchoLastCommandExitCode
   }
 
   return 1

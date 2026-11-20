@@ -13,7 +13,7 @@ export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
 }
 
 /**
- * Compact status label used across InterPoll for verification state, poll status
+ * Compact status label used across Echo for verification state, poll status
  * ("Ended"), identity trust level, and content flags. Tinted background with a
  * matching foreground color per semantic `tone`.
  */

@@ -70,7 +70,7 @@ export const useChainStore = defineStore('chain', () => {
   let lastSyncMessageAt = 0;
 
   function isSyncDebugEnabled(): boolean {
-    return typeof window !== 'undefined' && window.localStorage.getItem('interpoll_sync_debug') === 'true';
+    return typeof window !== 'undefined' && window.localStorage.getItem('echo_sync_debug') === 'true';
   }
 
   function createRateLogger(label: string, snapshot?: () => Record<string, unknown>) {

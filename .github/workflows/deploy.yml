@@ -1,4 +1,4 @@
-name: Deploy InterPoll SPA
+name: Deploy Echo SPA
 
 on:
   push:
@@ -36,7 +36,7 @@ jobs:
       - run: npm run verify:build
       - uses: actions/upload-artifact@v4
         with:
-          name: interpoll-spa-${{ github.sha }}
+          name: echo-spa-${{ github.sha }}
           path: dist/
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
       - name: Upload over FTP

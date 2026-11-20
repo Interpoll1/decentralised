@@ -32,8 +32,8 @@
                 </svg>
               </span>
               <div class="ob-option-body">
-                <strong>{{ $ui("InterPoll public relay") }}</strong>
-                <span>{{ $ui("interpoll2.endless.social — open, censorship-resistant") }}</span>
+                <strong>{{ $ui("Echo public relay") }}</strong>
+                <span>{{ $ui("echo2.endless.social — open, censorship-resistant") }}</span>
               </div>
               <span class="ob-option-check" v-if="relayChoice === 'default'">✓</span>
             </button>
@@ -153,7 +153,7 @@
             </svg>
           </div>
           <h1 class="ob-heading">{{ $ui("Your identity") }}</h1>
-          <p class="ob-sub">{{ $ui("InterPoll uses cryptographic keys — no email or phone needed. Your key is stored locally only.") }}</p>
+          <p class="ob-sub">{{ $ui("Echo uses cryptographic keys — no email or phone needed. Your key is stored locally only.") }}</p>
 
           <div class="ob-identity-card">
             <div class="ob-identity-row">
@@ -187,7 +187,7 @@
           <div class="ob-nav-right">
             <button v-if="step < 2" class="ob-btn-ghost" @click="skip">{{ $ui("Skip") }}</button>
             <button class="ob-btn-primary" :disabled="saving" @click="validateAndNext">
-              {{ step === 2 ? (saving ? $ui("Starting…") : $ui("Enter Interpoll")) : $ui("Continue") }}
+              {{ step === 2 ? (saving ? $ui("Starting…") : $ui("Enter Echo")) : $ui("Continue") }}
             </button>
           </div>
         </div>
@@ -206,7 +206,7 @@ import { useCommunityStore } from '../stores/communityStore';
 import type { Community } from '../services/communityService';
 import config from '../config';
 
-const ONBOARDING_KEY = 'interpoll_onboarding_complete';
+const ONBOARDING_KEY = 'echo_onboarding_complete';
 
 const router         = useRouter();
 const communityStore = useCommunityStore();

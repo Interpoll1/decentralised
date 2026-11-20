@@ -74,7 +74,7 @@ test('broad response survives export and fresh replay as context-required withou
 });
 
 test('file CLI honors its process clock; expired fixture is not auto-renewed', async () => {
-  const out = await mkdtemp(join(tmpdir(), 'interpoll-v2-cli-'));
+  const out = await mkdtemp(join(tmpdir(), 'echo-v2-cli-'));
   try {
     const bundle = fileURLToPath(new URL('./repro/inputs/db-export-1000.bundle.json', import.meta.url));
     const digest = 'd560c5afa315de491d782d9aad0601832d2c2c2e1f27a87250387e0764ba6a13';
@@ -89,7 +89,7 @@ test('file CLI honors its process clock; expired fixture is not auto-renewed', a
     const report = JSON.parse(await readFile(join(out, (await readdir(out))[0]), 'utf8'));
     assert.equal(report.version, 2); assert.equal(report.receipt, undefined);
   } finally {
-    if (dirname(resolve(out)) !== resolve(tmpdir()) || !basename(out).startsWith('interpoll-v2-cli-'))
+    if (dirname(resolve(out)) !== resolve(tmpdir()) || !basename(out).startsWith('echo-v2-cli-'))
       throw Error('Unexpected temporary cleanup target');
     await rm(out, { recursive: true, force: true });
   }

@@ -1,8 +1,8 @@
-# InterPoll coordination pilot work report
+# Echo coordination pilot work report
 
 27 September 2026. Review branch: `feat/coordination-pilot-v1`.
 
-This branch contains the new pilot exporter, review runner, tests and operating instructions. It is follow-up work beyond the earlier contributions already merged into InterPoll. The pilot has not been deployed or connected to the live feed. Viktor can review and test the complete package from this branch.
+This branch contains the new pilot exporter, review runner, tests and operating instructions. It is follow-up work beyond the earlier contributions already merged into Echo. The pilot has not been deployed or connected to the live feed. Viktor can review and test the complete package from this branch.
 
 Implementation and test base: `f746a471179f002e0b1e3c93deeb93c350a74553`. The saved local verification covered all 16 pilot source paths. Those bytes were checked again before publication; the only subsequent changes are the README publication note and this report. The executable code and test files are unchanged.
 

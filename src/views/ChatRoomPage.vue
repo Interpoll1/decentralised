@@ -419,7 +419,7 @@ const accountCount = computed(() => new Set(chatRoomStore.members.map(m => m.acc
 const inviteLink = computed(() => InviteLinkService.generateInviteLink(roomId.value, 'chatroom', 'epoch-v1'));
 const canShare = typeof navigator !== 'undefined' && 'share' in navigator;
 async function shareInviteNative() {
-  await navigator.share({ title: roomTitle.value, text: `Join "${roomTitle.value}" on InterPoll`, url: inviteLink.value }).catch(() => {});
+  await navigator.share({ title: roomTitle.value, text: `Join "${roomTitle.value}" on Echo`, url: inviteLink.value }).catch(() => {});
 }
 function pickFile(kind: 'media' | 'file') {
   attachOpen.value = false;

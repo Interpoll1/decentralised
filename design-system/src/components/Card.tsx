@@ -9,7 +9,7 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 /**
- * The InterPoll glass surface. A translucent, blurred panel with a soft layered
+ * The Echo glass surface. A translucent, blurred panel with a soft layered
  * shadow and hairline border — the container every poll, post, and panel sits on.
  * Set `interactive` for clickable cards that lift on hover.
  */

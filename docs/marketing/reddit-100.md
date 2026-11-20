@@ -113,7 +113,7 @@ Fill `[GITHUB_URL]` and `[APK_URL]` before posting. Times are local (your timezo
 ## Post texts
 
 ### 1. r/opensource
-**Title:** InterPoll: self-hostable decentralised polling and discussion, run your own relay
+**Title:** Echo: self-hostable decentralised polling and discussion, run your own relay
 
 Vue 3 + Pinia frontend, GunDB for the content graph, a small Node WebSocket relay. Clone the repo, start the relay and the dev server, and you have your own instance. Or skip relays and go browser-to-browser. No ads, no analytics. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 Happy to help anyone get it running.
@@ -121,7 +121,7 @@ Happy to help anyone get it running.
 ### 2. r/privacy ⚠️ mods strict on promo; lead with the threat model, ask mod first
 **Title:** Open-source polling/discussion platform with no ads and no data collection: feedback on the threat model?
 
-InterPoll is a polls-and-discussion platform built around not collecting anything. Private communities and chats are encrypted client-side (AES-256-GCM) and the keys never leave your device, so the relay only sees ciphertext. Every post/vote is signed by your device key. Known weakness: lose your key and the data is unrecoverable, by design. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
+Echo is a polls-and-discussion platform built around not collecting anything. Private communities and chats are encrypted client-side (AES-256-GCM) and the keys never leave your device, so the relay only sees ciphertext. Every post/vote is signed by your device key. Known weakness: lose your key and the data is unrecoverable, by design. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 What would you attack first?
 
 ### 3. r/decentralization
@@ -136,24 +136,24 @@ Each vote is a block hashed with SHA-256, linked to the previous one, and signed
 Attack ideas and code review welcome.
 
 ### 5. r/SideProject
-**Title:** I built InterPoll: decentralised polls and communities, no ads, free
+**Title:** I built Echo: decentralised polls and communities, no ads, free
 
 What it is: polls, posts and communities where every vote is signed and verifiable. What’s different: no ads, no data collection, anti-bot proof-of-work, encrypted private communities, and you can run your own relay. What I want: honest feedback on onboarding and what would make you start a poll. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 
 ### 6. r/polls
 **Title:** A polling platform where results can’t be botted or quietly edited
 
-InterPoll gives every vote a verification code you can check against a tamper-evident chain, with proof-of-work and signed votes making bot farms expensive. No ads, no data collection. Create a poll or a private community in your browser: https://endless.sbs
+Echo gives every vote a verification code you can check against a tamper-evident chain, with proof-of-work and signed votes making bot farms expensive. No ads, no data collection. Create a poll or a private community in your browser: https://endless.sbs
 Demo: https://youtu.be/SnxliGXuY88
 
 ### 7. r/androidapps
-**Title:** InterPoll for Android: open-source polls and communities, no ads
+**Title:** Echo for Android: open-source polls and communities, no ads
 
 Free, no ads, no tracking, open source. Polls, posts, and encrypted private communities. APK: [APK_URL] · Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 Feedback on the mobile UX appreciated.
 
 ### 8. r/FreeSoftware
-**Title:** InterPoll: ad-free, open-source polls and communities you can self-host
+**Title:** Echo: ad-free, open-source polls and communities you can self-host
 
 No ads, no data collection. Votes are signed and verifiable, chats are end-to-end encrypted, and you can switch relays or go browser-to-browser. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 What would you want to see next?
@@ -176,7 +176,7 @@ Two goals: no ads/no data collection, and a host that can delay content but can�
 Honest criticism welcome.
 
 ### 12. r/DecentralizedWeb
-**Title:** A relay can drop you, but it can’t erase your content: how InterPoll replicates posts across peers
+**Title:** A relay can drop you, but it can’t erase your content: how Echo replicates posts across peers
 
 Most “decentralised” platforms still have a single point you can pressure. We replicate polls, posts and votes across peers and relays and sign everything on the user’s device. What are the failure modes we’ve missed? Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 
@@ -220,9 +220,9 @@ Vue 3 + Pinia frontend, GunDB for the content graph, a small Node WebSocket rela
 Happy to help anyone get it running.
 
 ### 20. r/degoogle
-**Title:** No ads, no tracking, keys stay on your device: InterPoll (open source)
+**Title:** No ads, no tracking, keys stay on your device: Echo (open source)
 
-InterPoll is a polls-and-discussion platform built around not collecting anything. Private communities and chats are encrypted client-side (AES-256-GCM) and the keys never leave your device, so the relay only sees ciphertext. Every post/vote is signed by your device key. Known weakness: lose your key and the data is unrecoverable, by design. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
+Echo is a polls-and-discussion platform built around not collecting anything. Private communities and chats are encrypted client-side (AES-256-GCM) and the keys never leave your device, so the relay only sees ciphertext. Every post/vote is signed by your device key. Known weakness: lose your key and the data is unrecoverable, by design. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 What would you attack first?
 
 ### 21. r/p2p
@@ -244,11 +244,11 @@ What it is: polls, posts and communities where every vote is signed and verifiab
 ### 24. r/CommunityManager
 **Title:** What would you want from a social platform with no ads and no algorithmic feed?
 
-InterPoll gives every vote a verification code you can check against a tamper-evident chain, with proof-of-work and signed votes making bot farms expensive. No ads, no data collection. Create a poll or a private community in your browser: https://endless.sbs
+Echo gives every vote a verification code you can check against a tamper-evident chain, with proof-of-work and signed votes making bot farms expensive. No ads, no data collection. Create a poll or a private community in your browser: https://endless.sbs
 Demo: https://youtu.be/SnxliGXuY88
 
 ### 25. r/androiddev
-**Title:** InterPoll for Android: open-source polls and communities, no ads
+**Title:** Echo for Android: open-source polls and communities, no ads
 
 Free, no ads, no tracking, open source. Polls, posts, and encrypted private communities. APK: [APK_URL] · Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 Feedback on the mobile UX appreciated.
@@ -266,7 +266,7 @@ Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/Sn
 No ads, no data collection, signed and verifiable votes, run-your-own-relay.
 
 ### 28. r/fossdroid
-**Title:** InterPoll: self-hostable decentralised polling and discussion, run your own relay
+**Title:** Echo: self-hostable decentralised polling and discussion, run your own relay
 
 It’s fully open source and meant to be self-hosted: your relay, your rules, and users can leave for another relay without losing their content because it’s replicated across peers. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 
@@ -287,7 +287,7 @@ Most “decentralised” platforms still have a single point you can pressure. W
 Stack: Vue 3, Pinia, TypeScript, GunDB for the replicated graph, IndexedDB for the local chain, a tiny Node relay. Biggest lessons were around Gun write acknowledgements and keeping signed payloads canonical. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 
 ### 32. r/InternetIsBeautiful
-**Title:** I built InterPoll: decentralised polls and communities, no ads, free
+**Title:** I built Echo: decentralised polls and communities, no ads, free
 
 Solo-ish project, now live. Free, no ads. Biggest open question: what would make you move a community here from Discord/Reddit? Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 
@@ -297,13 +297,13 @@ Solo-ish project, now live. Free, no ads. Biggest open question: what would make
 Genuinely curious what you’d change. No ads, chronological, no data collection, votes you can audit. https://endless.sbs · https://youtu.be/SnxliGXuY88
 
 ### 34. r/fossdroid_apps
-**Title:** InterPoll for Android: open-source polls and communities, no ads
+**Title:** Echo for Android: open-source polls and communities, no ads
 
 Free, no ads, no tracking, open source. Polls, posts, and encrypted private communities. APK: [APK_URL] · Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 Feedback on the mobile UX appreciated.
 
 ### 35. r/ipfs
-**Title:** InterPoll: ad-free, open-source polls and communities you can self-host
+**Title:** Echo: ad-free, open-source polls and communities you can self-host
 
 Browser-first (installable PWA, Capacitor Android build), content replicated across peers, relays optional. Open source so you can run your own. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 Testers and critics both welcome.
@@ -323,11 +323,11 @@ Happy to help anyone get it running.
 ### 38. r/DigitalPrivacy
 **Title:** We built a social platform where the host can’t read your private chats or forge your votes
 
-InterPoll is a polls-and-discussion platform built around not collecting anything. Private communities and chats are encrypted client-side (AES-256-GCM) and the keys never leave your device, so the relay only sees ciphertext. Every post/vote is signed by your device key. Known weakness: lose your key and the data is unrecoverable, by design. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
+Echo is a polls-and-discussion platform built around not collecting anything. Private communities and chats are encrypted client-side (AES-256-GCM) and the keys never leave your device, so the relay only sees ciphertext. Every post/vote is signed by your device key. Known weakness: lose your key and the data is unrecoverable, by design. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 What would you attack first?
 
 ### 39. r/FreeSpeech
-**Title:** A relay can drop you, but it can’t erase your content: how InterPoll replicates posts across peers
+**Title:** A relay can drop you, but it can’t erase your content: how Echo replicates posts across peers
 
 Content lives on every participant that holds a copy, not in one company’s database. Every action is cryptographically signed and hash-linked, so a relay can delay or censor but can’t forge. Switch relays at runtime, or connect browser-to-browser with link/QR signalling and no relay at all. Free, no ads. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 
@@ -345,7 +345,7 @@ What it is: polls, posts and communities where every vote is signed and verifiab
 ### 42. r/RedditAlternatives
 **Title:** Tired of ads and bot-inflated numbers? Try polls with signed, verifiable votes
 
-InterPoll gives every vote a verification code you can check against a tamper-evident chain, with proof-of-work and signed votes making bot farms expensive. No ads, no data collection. Create a poll or a private community in your browser: https://endless.sbs
+Echo gives every vote a verification code you can check against a tamper-evident chain, with proof-of-work and signed votes making bot farms expensive. No ads, no data collection. Create a poll or a private community in your browser: https://endless.sbs
 Demo: https://youtu.be/SnxliGXuY88
 
 ### 43. r/nostr
@@ -366,7 +366,7 @@ No ads, no data collection, signed and verifiable votes, run-your-own-relay.
 It’s fully open source and meant to be self-hosted: your relay, your rules, and users can leave for another relay without losing their content because it’s replicated across peers. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 
 ### 46. r/nosurveillance
-**Title:** No ads, no tracking, keys stay on your device: InterPoll (open source)
+**Title:** No ads, no tracking, keys stay on your device: Echo (open source)
 
 Two goals: no ads/no data collection, and a host that can delay content but can’t forge it. Actions are signed and hash-linked, chats are end-to-end encrypted, and you can swap relays or run your own. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 Honest criticism welcome.
@@ -404,7 +404,7 @@ Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/Sn
 No ads, no data collection, signed and verifiable votes, run-your-own-relay.
 
 ### 53. r/homelab
-**Title:** InterPoll: self-hostable decentralised polling and discussion, run your own relay
+**Title:** Echo: self-hostable decentralised polling and discussion, run your own relay
 
 Vue 3 + Pinia frontend, GunDB for the content graph, a small Node WebSocket relay. Clone the repo, start the relay and the dev server, and you have your own instance. Or skip relays and go browser-to-browser. No ads, no analytics. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 Happy to help anyone get it running.
@@ -412,7 +412,7 @@ Happy to help anyone get it running.
 ### 54. r/signal
 **Title:** Open-source polling/discussion platform with no ads and no data collection: feedback on the threat model?
 
-InterPoll is a polls-and-discussion platform built around not collecting anything. Private communities and chats are encrypted client-side (AES-256-GCM) and the keys never leave your device, so the relay only sees ciphertext. Every post/vote is signed by your device key. Known weakness: lose your key and the data is unrecoverable, by design. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
+Echo is a polls-and-discussion platform built around not collecting anything. Private communities and chats are encrypted client-side (AES-256-GCM) and the keys never leave your device, so the relay only sees ciphertext. Every post/vote is signed by your device key. Known weakness: lose your key and the data is unrecoverable, by design. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 What would you attack first?
 
 ### 55. r/fediverse
@@ -427,18 +427,18 @@ Each vote is a block hashed with SHA-256, linked to the previous one, and signed
 Attack ideas and code review welcome.
 
 ### 57. r/IndieDev
-**Title:** I built InterPoll: decentralised polls and communities, no ads, free
+**Title:** I built Echo: decentralised polls and communities, no ads, free
 
 What it is: polls, posts and communities where every vote is signed and verifiable. What’s different: no ads, no data collection, anti-bot proof-of-work, encrypted private communities, and you can run your own relay. What I want: honest feedback on onboarding and what would make you start a poll. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 
 ### 58. r/socialmedia
 **Title:** A polling platform where results can’t be botted or quietly edited
 
-InterPoll gives every vote a verification code you can check against a tamper-evident chain, with proof-of-work and signed votes making bot farms expensive. No ads, no data collection. Create a poll or a private community in your browser: https://endless.sbs
+Echo gives every vote a verification code you can check against a tamper-evident chain, with proof-of-work and signed votes making bot farms expensive. No ads, no data collection. Create a poll or a private community in your browser: https://endless.sbs
 Demo: https://youtu.be/SnxliGXuY88
 
 ### 59. r/blockchain
-**Title:** InterPoll: ad-free, open-source polls and communities you can self-host
+**Title:** Echo: ad-free, open-source polls and communities you can self-host
 
 No ads, no data collection. Votes are signed and verifiable, chats are end-to-end encrypted, and you can switch relays or go browser-to-browser. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 What would you want to see next?
@@ -461,7 +461,7 @@ Two goals: no ads/no data collection, and a host that can delay content but can�
 Honest criticism welcome.
 
 ### 63. r/activitypub
-**Title:** A relay can drop you, but it can’t erase your content: how InterPoll replicates posts across peers
+**Title:** A relay can drop you, but it can’t erase your content: how Echo replicates posts across peers
 
 Most “decentralised” platforms still have a single point you can pressure. We replicate polls, posts and votes across peers and relays and sign everything on the user’s device. What are the failure modes we’ve missed? Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 
@@ -499,9 +499,9 @@ Vue 3 + Pinia frontend, GunDB for the content graph, a small Node WebSocket rela
 Happy to help anyone get it running.
 
 ### 70. r/matrixdotorg
-**Title:** No ads, no tracking, keys stay on your device: InterPoll (open source)
+**Title:** No ads, no tracking, keys stay on your device: Echo (open source)
 
-InterPoll is a polls-and-discussion platform built around not collecting anything. Private communities and chats are encrypted client-side (AES-256-GCM) and the keys never leave your device, so the relay only sees ciphertext. Every post/vote is signed by your device key. Known weakness: lose your key and the data is unrecoverable, by design. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
+Echo is a polls-and-discussion platform built around not collecting anything. Private communities and chats are encrypted client-side (AES-256-GCM) and the keys never leave your device, so the relay only sees ciphertext. Every post/vote is signed by your device key. Known weakness: lose your key and the data is unrecoverable, by design. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 What would you attack first?
 
 ### 71. r/Freedom
@@ -523,7 +523,7 @@ What it is: polls, posts and communities where every vote is signed and verifiab
 ### 74. r/democracy
 **Title:** What would you want from a social platform with no ads and no algorithmic feed?
 
-InterPoll gives every vote a verification code you can check against a tamper-evident chain, with proof-of-work and signed votes making bot farms expensive. No ads, no data collection. Create a poll or a private community in your browser: https://endless.sbs
+Echo gives every vote a verification code you can check against a tamper-evident chain, with proof-of-work and signed votes making bot farms expensive. No ads, no data collection. Create a poll or a private community in your browser: https://endless.sbs
 Demo: https://youtu.be/SnxliGXuY88
 
 ### 75. r/webrtc
@@ -533,7 +533,7 @@ No ads, no data collection. Votes are signed and verifiable, chats are end-to-en
 What would you want to see next?
 
 ### 76. r/selfhosting
-**Title:** InterPoll: self-hostable decentralised polling and discussion, run your own relay
+**Title:** Echo: self-hostable decentralised polling and discussion, run your own relay
 
 It’s fully open source and meant to be self-hosted: your relay, your rules, and users can leave for another relay without losing their content because it’s replicated across peers. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 
@@ -554,7 +554,7 @@ Most “decentralised” platforms still have a single point you can pressure. W
 Stack: Vue 3, Pinia, TypeScript, GunDB for the replicated graph, IndexedDB for the local chain, a tiny Node relay. Biggest lessons were around Gun write acknowledgements and keeping signed payloads canonical. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 
 ### 80. r/SaaS
-**Title:** I built InterPoll: decentralised polls and communities, no ads, free
+**Title:** I built Echo: decentralised polls and communities, no ads, free
 
 Solo-ish project, now live. Free, no ads. Biggest open question: what would make you move a community here from Discord/Reddit? Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 
@@ -564,7 +564,7 @@ Solo-ish project, now live. Free, no ads. Biggest open question: what would make
 Genuinely curious what you’d change. No ads, chronological, no data collection, votes you can audit. https://endless.sbs · https://youtu.be/SnxliGXuY88
 
 ### 82. r/tauri
-**Title:** InterPoll: ad-free, open-source polls and communities you can self-host
+**Title:** Echo: ad-free, open-source polls and communities you can self-host
 
 Browser-first (installable PWA, Capacitor Android build), content replicated across peers, relays optional. Open source so you can run your own. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 Testers and critics both welcome.
@@ -583,7 +583,7 @@ What it is: polls, posts and communities where every vote is signed and verifiab
 ### 85. r/opendata
 **Title:** Tired of ads and bot-inflated numbers? Try polls with signed, verifiable votes
 
-InterPoll gives every vote a verification code you can check against a tamper-evident chain, with proof-of-work and signed votes making bot farms expensive. No ads, no data collection. Create a poll or a private community in your browser: https://endless.sbs
+Echo gives every vote a verification code you can check against a tamper-evident chain, with proof-of-work and signed votes making bot farms expensive. No ads, no data collection. Create a poll or a private community in your browser: https://endless.sbs
 Demo: https://youtu.be/SnxliGXuY88
 
 ### 86. r/ionic
@@ -614,7 +614,7 @@ Browser-first (installable PWA, Capacitor Android build), content replicated acr
 Testers and critics both welcome.
 
 ### 91. r/buildinpublic
-**Title:** InterPoll: ad-free, open-source polls and communities you can self-host
+**Title:** Echo: ad-free, open-source polls and communities you can self-host
 
 No ads, no data collection. Votes are signed and verifiable, chats are end-to-end encrypted, and you can switch relays or go browser-to-browser. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 What would you want to see next?
@@ -632,7 +632,7 @@ No ads, no data collection. Votes are signed and verifiable, chats are end-to-en
 What would you want to see next?
 
 ### 94. r/betatests
-**Title:** InterPoll: ad-free, open-source polls and communities you can self-host
+**Title:** Echo: ad-free, open-source polls and communities you can self-host
 
 Browser-first (installable PWA, Capacitor Android build), content replicated across peers, relays optional. Open source so you can run your own. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 Testers and critics both welcome.
@@ -650,7 +650,7 @@ Browser-first (installable PWA, Capacitor Android build), content replicated acr
 Testers and critics both welcome.
 
 ### 97. r/forums
-**Title:** InterPoll: ad-free, open-source polls and communities you can self-host
+**Title:** Echo: ad-free, open-source polls and communities you can self-host
 
 No ads, no data collection. Votes are signed and verifiable, chats are end-to-end encrypted, and you can switch relays or go browser-to-browser. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 What would you want to see next?
@@ -668,7 +668,7 @@ No ads, no data collection. Votes are signed and verifiable, chats are end-to-en
 What would you want to see next?
 
 ### 100. r/discordapp
-**Title:** InterPoll: ad-free, open-source polls and communities you can self-host
+**Title:** Echo: ad-free, open-source polls and communities you can self-host
 
 Browser-first (installable PWA, Capacitor Android build), content replicated across peers, relays optional. Open source so you can run your own. Site: https://endless.sbs · Code: [GITHUB_URL] · 75s demo: https://youtu.be/SnxliGXuY88
 Testers and critics both welcome.

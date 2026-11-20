@@ -10,7 +10,7 @@
  *   Peer  ──wss──▶ /tunnel/<id>/gun        ⇄ bridge ⇄ tab (Gun mesh peer)
  *
  * Wire protocol on the tab socket (JSON text frames):
- *   tab → bridge  {type:'register', app:'interpoll'}
+ *   tab → bridge  {type:'register', app:'echo'}
  *   bridge → tab  {type:'registered', url, tunnelId}
  *   bridge → tab  {type:'open', c} | {type:'msg', c, d} | {type:'close', c}
  *   bridge → tab  {type:'peers', n}
@@ -26,7 +26,7 @@ import http from 'http';
 import crypto from 'crypto';
 
 const BRIDGE_PORT = parseInt(process.env.BRIDGE_PORT || '9000', 10);
-const PUBLIC_BASE = (process.env.TUNNEL_PUBLIC_BASE || 'wss://interpoll.endless.social/tunnel').replace(/\/+$/, '');
+const PUBLIC_BASE = (process.env.TUNNEL_PUBLIC_BASE || 'wss://echo.endless.social/tunnel').replace(/\/+$/, '');
 const MAX_CLIENTS_PER_TAB = 50;
 const MAX_TABS_PER_IP = 3;
 const MAX_PAYLOAD = 1024 * 1024;
@@ -74,7 +74,7 @@ function attachTab(ws, ip) {
     try { msg = JSON.parse(raw.toString()); } catch { return; }
 
     if (!tunnelId) {
-      if (msg.type !== 'register' || msg.app !== 'interpoll') return ws.close(4000, 'Expected register');
+      if (msg.type !== 'register' || msg.app !== 'echo') return ws.close(4000, 'Expected register');
       let perIp = 0;
       for (const t of tunnels.values()) if (t.ip === ip) perIp++;
       if (perIp >= MAX_TABS_PER_IP) return ws.close(4429, 'Too many tunnels from this address');

@@ -1,8 +1,8 @@
 <template>
   <header class="atn" role="banner">
     <div class="atn-inner">
-      <button class="atn-brand" :aria-label="$ui('Interpoll home')" @click="go('home')">
-        <span class="atn-name">{{ $ui("Interpoll") }}</span>
+      <button class="atn-brand" :aria-label="$ui('Echo home')" @click="go('home')">
+        <span class="atn-name">{{ $ui("Echo") }}</span>
       </button>
 
       <nav class="atn-tabs" :aria-label="$ui('Primary')">
@@ -15,7 +15,7 @@
 
       <form class="atn-search" data-tour="search" role="search" @submit.prevent="submitSearch">
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-        <input v-model="query" type="search" :placeholder="$ui('Search Interpoll')" :aria-label="$ui('Search Interpoll')" autocomplete="off" spellcheck="false" enterkeyhint="search" @focus="onSearchFocus" @input="onSearchInput" />
+        <input v-model="query" type="search" :placeholder="$ui('Search Echo')" :aria-label="$ui('Search Echo')" autocomplete="off" spellcheck="false" enterkeyhint="search" @focus="onSearchFocus" @input="onSearchInput" />
       </form>
 
       <div class="atn-actions">
@@ -95,7 +95,7 @@ const active = computed<TabId | ''>(() => {
 
 function lastScope(): string {
   try {
-    const s = localStorage.getItem('interpoll_feed_scope');
+    const s = localStorage.getItem('echo_feed_scope');
     return s && s !== 'explore' ? s : 'relay';
   } catch { return 'relay'; }
 }

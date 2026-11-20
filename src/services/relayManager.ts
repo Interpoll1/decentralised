@@ -36,8 +36,8 @@ export interface RelayListConfig {
   transport: TransportStrategySettings;
 }
 
-const STORAGE_KEY = 'interpoll_relay_list';
-const LEGACY_AUTO_FAILOVER_KEY = 'interpoll_auto_failover';
+const STORAGE_KEY = 'echo_relay_list';
+const LEGACY_AUTO_FAILOVER_KEY = 'echo_auto_failover';
 const HEALTH_CHECK_INTERVAL = 60_000;
 const PROBE_TIMEOUT = 8_000;
 const RUNTIME_SWITCH_DEBOUNCE_MS = 1_500;
@@ -82,7 +82,7 @@ export class RelayManager {
     if (this.config.relays.length === 0) {
       const defaultRelay: RelayEndpoint = {
         id: 'default',
-        label: 'InterPoll (Render)',
+        label: 'Echo (Render)',
         ws: config.relay.websocket,
         gun: config.relay.gun,
         api: config.relay.api,

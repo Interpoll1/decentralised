@@ -1,4 +1,4 @@
-# IPP-00: InterPoll Protocol Overview
+# IPP-00: Echo Protocol Overview
 
 **Status:** Draft
 **Version:** 1
@@ -30,7 +30,7 @@ against.
 
 ## 1. Ethos
 
-InterPoll exists to give **a voice to everyone, with records that are harder to
+Echo exists to give **a voice to everyone, with records that are harder to
 erase than on any single-server system**. Participation MUST NOT depend on a
 single central database: actions are written locally, propagated peer-to-peer,
 and replicated across distributed storage, so discussion and voting history can
@@ -43,7 +43,7 @@ platform. See [[IPP-05-vote-flow]] and IPP threat-model text for exact scope.
 
 ## 2. The three planes
 
-A conforming InterPoll node is organized into three cooperating planes:
+A conforming Echo node is organized into three cooperating planes:
 
 1. **Integrity plane (local chain).** An append-only, hash-linked log of
    actions/votes held locally (IndexedDB in the reference client). Provides

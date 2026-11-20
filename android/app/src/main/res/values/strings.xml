@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">InterPoll</string>
-    <string name="title_activity_main">InterPoll</string>
-    <string name="package_name">com.interpoll.app</string>
-    <string name="custom_url_scheme">com.interpoll.app</string>
+    <string name="app_name">Echo</string>
+    <string name="title_activity_main">Echo</string>
+    <string name="package_name">com.echo.app</string>
+    <string name="custom_url_scheme">com.echo.app</string>
 </resources>

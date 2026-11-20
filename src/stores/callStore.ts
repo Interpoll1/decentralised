@@ -6,7 +6,7 @@ import { StorageService } from '@/services/storageService';
 
 export interface CallHistoryEntry extends CallLogEntry { at: number }
 
-const HISTORY_KEY = 'interpoll_call_log';
+const HISTORY_KEY = 'echo_call_log';
 const HISTORY_MAX = 200;
 
 function loadHistory(): CallHistoryEntry[] {

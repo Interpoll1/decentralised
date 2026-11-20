@@ -67,7 +67,7 @@ dark-mode switch with a muted graphite counterpart rather than pure black and ne
 
 The legacy `theme=dark` value was automatically written by the application, so it
 cannot establish a deliberate user preference. On the first upgrade it migrates to
-light graphite; subsequent explicit choices use `interpoll_theme_preference_v1`.
+light graphite; subsequent explicit choices use `echo_theme_preference_v1`.
 This migration does not clear user identity, conversations, votes or other storage.
 
 Onboarding, the Home tour, recovery controls, post actions and accent-button

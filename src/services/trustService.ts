@@ -80,12 +80,12 @@ export const TRUST_POW_DIFFICULTY = 22;
 
 const GUN_ISSUERS_ROOT = 'trust-issuers';
 const GUN_USERNAMES_ROOT = 'usernames'; // username → { userId, pubkey, certificate? }
-const CUSTOM_ISSUERS_STORAGE_KEY = 'interpoll_custom_trust_issuers';
+const CUSTOM_ISSUERS_STORAGE_KEY = 'echo_custom_trust_issuers';
 const BUILTIN_ISSUERS: Omit<TrustIssuer, 'addedAt'>[] = [
   {
     domain: 'endless.sbs',
     contact: 'admin@endless.sbs',
-    endpoint: 'https://interpoll.endless.social/trust',
+    endpoint: 'https://echo.endless.social/trust',
     publicKey: '',
   },
 ];
@@ -105,8 +105,8 @@ export class TrustService {
   // held for the whole session, and certificates can be revoked upstream anyway.
   private static certCache = new BoundedMap<string, TrustCertificate | null>({ maxSize: 500, ttlMs: 15 * 60_000 });
   private static readonly ISSUER_REQUEST_TIMEOUT_MS = 20000;
-  private static readonly CLAIM_V2_SUPPORT_STORAGE_KEY = 'interpoll_trust_v2_support';
-  private static readonly CLAIM_V2_AUTH_PURPOSE = 'interpoll-trust-claim-v2';
+  private static readonly CLAIM_V2_SUPPORT_STORAGE_KEY = 'echo_trust_v2_support';
+  private static readonly CLAIM_V2_AUTH_PURPOSE = 'echo-trust-claim-v2';
 
   /** Release cached certificates under memory pressure (see main.ts). */
   static trimCaches(level: 'light' | 'aggressive' | 'emergency'): void {

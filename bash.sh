@@ -5,7 +5,7 @@
 set -e
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  Interpoll VPS Setup"
+echo "  Echo VPS Setup"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # ── 1. Node 20 (replaces v18) ─────────────────────────────────────────────────
@@ -31,15 +31,15 @@ systemctl start nginx
 # ── 4. Create app directories ─────────────────────────────────────────────────
 echo ""
 echo "▶ Creating app directories..."
-mkdir -p /var/www/interpoll/gun-relay
-mkdir -p /var/www/interpoll/relay-server
-mkdir -p /var/www/interpoll/gun-relay/data
-mkdir -p /var/www/interpoll/relay-server/data
+mkdir -p /var/www/echo/gun-relay
+mkdir -p /var/www/echo/relay-server
+mkdir -p /var/www/echo/gun-relay/data
+mkdir -p /var/www/echo/relay-server/data
 
 # ── 5. Install dependencies ───────────────────────────────────────────────────
 echo ""
 echo "▶ Installing dependencies for gun-relay..."
-cd /var/www/interpoll/gun-relay
+cd /var/www/echo/gun-relay
 cat > package.json << 'EOF'
 {
   "name": "gun-relay",
@@ -58,7 +58,7 @@ npm install
 
 echo ""
 echo "▶ Installing dependencies for relay-server..."
-cd /var/www/interpoll/relay-server
+cd /var/www/echo/relay-server
 cat > package.json << 'EOF'
 {
   "name": "relay-server",
@@ -76,13 +76,13 @@ npm install
 # ── 6. PM2 ecosystem config ───────────────────────────────────────────────────
 echo ""
 echo "▶ Creating PM2 ecosystem config..."
-cat > /var/www/interpoll/ecosystem.config.cjs << 'EOF'
+cat > /var/www/echo/ecosystem.config.cjs << 'EOF'
 module.exports = {
   apps: [
     {
       name: 'gun-relay',
       script: './gun-relay/gun-relay-enhanced.js',
-      cwd: '/var/www/interpoll',
+      cwd: '/var/www/echo',
       interpreter: 'node',
       env: {
         PORT: 8765,
@@ -102,7 +102,7 @@ module.exports = {
     {
       name: 'relay-server',
       script: './relay-server/relay-server-enhanced.js',
-      cwd: '/var/www/interpoll',
+      cwd: '/var/www/echo',
       interpreter: 'node',
       env: {
         PORT: 8080,
@@ -132,11 +132,11 @@ mkdir -p /var/log/pm2
 echo ""
 echo "▶ Writing Nginx config..."
 
-# Gun relay — interpoll2.endless.social (or keep using interpoll2.onrender.com for now)
+# Gun relay — echo2.endless.social (or keep using echo2.onrender.com for now)
 cat > /etc/nginx/sites-available/gun-relay << 'EOF'
 server {
     listen 80;
-    server_name interpoll2.endless.social;
+    server_name echo2.endless.social;
 
     # WebSocket support for Gun
     location /gun {
@@ -160,11 +160,11 @@ server {
 }
 EOF
 
-# Relay server — interpoll.endless.social
+# Relay server — echo.endless.social
 cat > /etc/nginx/sites-available/relay-server << 'EOF'
 server {
     listen 80;
-    server_name interpoll.endless.social;
+    server_name echo.endless.social;
 
     # WebSocket support
     location /ws {
@@ -201,23 +201,23 @@ echo "✅ Setup complete!"
 echo ""
 echo "NEXT STEPS:"
 echo "1. Upload your server files:"
-echo "   scp gun-relay-enhanced.js root@YOUR_VPS_IP:/var/www/interpoll/gun-relay/"
-echo "   scp relay-server-enhanced.js root@YOUR_VPS_IP:/var/www/interpoll/relay-server/"
+echo "   scp gun-relay-enhanced.js root@YOUR_VPS_IP:/var/www/echo/gun-relay/"
+echo "   scp relay-server-enhanced.js root@YOUR_VPS_IP:/var/www/echo/relay-server/"
 echo ""
-echo "2. Create /var/www/interpoll/.env with your MySQL credentials"
+echo "2. Create /var/www/echo/.env with your MySQL credentials"
 echo ""
 echo "3. Before restarting production, clear stale persisted vote blocks:"
-echo "   printf '[]\n' > /var/www/interpoll/relay-server/data/vote-registry.json"
+echo "   printf '[]\n' > /var/www/echo/relay-server/data/vote-registry.json"
 echo ""
 echo "4. Start servers:"
-echo "   cd /var/www/interpoll && pm2 start ecosystem.config.cjs"
+echo "   cd /var/www/echo && pm2 start ecosystem.config.cjs"
 echo "   pm2 save && pm2 startup"
 echo ""
 echo "5. Add DNS A records pointing to this VPS IP:"
-echo "   interpoll.endless.social  → $(curl -s ifconfig.me)"
-echo "   interpoll2.endless.social → $(curl -s ifconfig.me)"
+echo "   echo.endless.social  → $(curl -s ifconfig.me)"
+echo "   echo2.endless.social → $(curl -s ifconfig.me)"
 echo ""
 echo "6. Get SSL certs:"
 echo "   apt install -y certbot python3-certbot-nginx"
-echo "   certbot --nginx -d interpoll.endless.social -d interpoll2.endless.social"
+echo "   certbot --nginx -d echo.endless.social -d echo2.endless.social"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

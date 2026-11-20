@@ -1,4 +1,4 @@
-// Resilience orchestrator — the escalation ladder that keeps InterPoll reachable
+// Resilience orchestrator — the escalation ladder that keeps Echo reachable
 // under takedown / censorship pressure.
 //
 // Modeled on how the GameOver-Zeus P2P botnet survived coordinated takedowns:
@@ -25,7 +25,7 @@ import { PeerReputationService, type ReputationRecord } from '@/services/peerRep
 import { RelayManager } from '@/services/relayManager';
 import { WebSocketService } from '@/services/websocketService';
 
-const AUTO_TOGGLE_KEY = 'interpoll_rendezvous_enabled';
+const AUTO_TOGGLE_KEY = 'echo_rendezvous_enabled';
 const EVALUATE_INTERVAL_MS = 15_000;
 const RENDEZVOUS_REPUBLISH_MS = 2 * 60_000;
 // How long connectivity must stay fully lost before we escalate to rendezvous.

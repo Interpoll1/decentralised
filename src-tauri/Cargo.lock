@@ -1700,7 +1700,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "interpoll"
+name = "echo"
 version = "0.1.0"
 dependencies = [
  "serde",

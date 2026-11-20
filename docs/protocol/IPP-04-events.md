@@ -10,7 +10,7 @@ Requirements language: see [[IPP-00-overview]].
 
 ## 1. Event envelope
 
-InterPoll uses a Nostr-compatible signed-event envelope for actions that need an
+Echo uses a Nostr-compatible signed-event envelope for actions that need an
 independently verifiable, replay-able record separate from the local chain:
 
 ```ts
@@ -33,7 +33,7 @@ accepting an event.
 > **Current Implementation Note.** `src/types/nostr.ts` defines
 > `NostrEvent`/`UnsignedEvent`/`EventKind`; `src/services/eventService.ts`
 > builds and verifies events (canonical-serialize → hash → sign). This envelope
-> is Nostr-shaped for interoperability but InterPoll does not currently federate
+> is Nostr-shaped for interoperability but Echo does not currently federate
 > with the public Nostr relay network.
 
 ## 2. Event kinds

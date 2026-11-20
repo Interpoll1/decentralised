@@ -9,7 +9,7 @@
           <path d="M12 8V16M8.5 10.5L12 12.5L15.5 10.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </span>
-      <span class="asn-brand-name">{{ $ui("Interpoll") }}</span>
+      <span class="asn-brand-name">{{ $ui("Echo") }}</span>
     </div>
 
     <!-- Primary nav -->

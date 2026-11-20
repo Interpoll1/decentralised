@@ -1,32 +1,32 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# InterPoll community relay — Cloud VPS installer (Docker + Caddy + auto-TLS)
+# Echo community relay — Cloud VPS installer (Docker + Caddy + auto-TLS)
 #
-#   curl -sSL https://interpoll.endless.social/vps.sh | sudo bash -s relay.example.com [email]
+#   curl -sSL https://echo.endless.social/vps.sh | sudo bash -s relay.example.com [email]
 #
 # Requirements: Ubuntu/Debian (or any distro get.docker.com supports), a domain
 # whose A/AAAA record points at this server, and ports 80 + 443 free.
 # Installs Docker if missing, builds the relay image, and runs it behind Caddy,
 # which obtains and renews the Let's Encrypt certificate automatically.
-# Re-running upgrades in place and keeps data (in /opt/interpoll-relay/radata).
+# Re-running upgrades in place and keeps data (in /opt/echo-relay/radata).
 #
-# Env overrides: UPSTREAM_PEERS, INTERPOLL_BASE
-# Uninstall: cd /opt/interpoll-relay && docker compose down && systemctl disable interpoll-relay
+# Env overrides: UPSTREAM_PEERS, ECHO_BASE
+# Uninstall: cd /opt/echo-relay && docker compose down && systemctl disable echo-relay
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
 DOMAIN="${1:-${DOMAIN:-}}"
 EMAIL="${2:-${EMAIL:-}}"
-BASE="${INTERPOLL_BASE:-https://interpoll.endless.social}"
-UPSTREAM_PEERS="${UPSTREAM_PEERS-https://interpoll2.endless.social/gun}"
-DIR=/opt/interpoll-relay
+BASE="${ECHO_BASE:-https://echo.endless.social}"
+UPSTREAM_PEERS="${UPSTREAM_PEERS-https://echo2.endless.social/gun}"
+DIR=/opt/echo-relay
 PORT=8765
 
 if [ -t 1 ]; then G='\033[0;32m'; Y='\033[1;33m'; R='\033[0;31m'; B='\033[0;34m'; N='\033[0m'; else G=; Y=; R=; B=; N=; fi
-info() { printf "${B}[interpoll]${N} %s\n" "$*"; }
-ok()   { printf "${G}[interpoll]${N} %s\n" "$*"; }
-warn() { printf "${Y}[interpoll]${N} %s\n" "$*"; }
-die()  { printf "${R}[interpoll]${N} %s\n" "$*" >&2; exit 1; }
+info() { printf "${B}[echo]${N} %s\n" "$*"; }
+ok()   { printf "${G}[echo]${N} %s\n" "$*"; }
+warn() { printf "${Y}[echo]${N} %s\n" "$*"; }
+die()  { printf "${R}[echo]${N} %s\n" "$*" >&2; exit 1; }
 
 [ "$(uname -s)" = Linux ] || die "This installer runs on the Linux server. SSH into your VPS first, then run it there."
 [ -n "$DOMAIN" ] || die "Usage: curl -sSL $BASE/vps.sh | sudo bash -s relay.example.com [email]"
@@ -48,7 +48,7 @@ fi
 
 # ── Port check ───────────────────────────────────────────────────────────────
 for p in 80 443; do
-  if ss -ltnH "sport = :$p" 2>/dev/null | grep -q . && ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^interpoll-relay-caddy'; then
+  if ss -ltnH "sport = :$p" 2>/dev/null | grep -q . && ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^echo-relay-caddy'; then
     die "Port $p is already in use (nginx/apache?). Free ports 80 and 443, or proxy $DOMAIN to 127.0.0.1:$PORT yourself and use install.sh instead."
   fi
 done
@@ -80,11 +80,11 @@ CMD ["node", "relay.js"]
 EOF
 
 cat > "$DIR/docker-compose.yml" <<EOF
-name: interpoll-relay
+name: echo-relay
 services:
   relay:
     build: ./app
-    container_name: interpoll-relay-gun
+    container_name: echo-relay-gun
     restart: unless-stopped
     environment:
       UPSTREAM_PEERS: "${UPSTREAM_PEERS}"
@@ -99,7 +99,7 @@ services:
       retries: 3
   caddy:
     image: caddy:2-alpine
-    container_name: interpoll-relay-caddy
+    container_name: echo-relay-caddy
     restart: unless-stopped
     ports:
       - "80:80"
@@ -140,9 +140,9 @@ info "Building and starting containers…"
 cd "$DIR"
 docker compose up -d --build --remove-orphans
 
-cat > /etc/systemd/system/interpoll-relay.service <<EOF
+cat > /etc/systemd/system/echo-relay.service <<EOF
 [Unit]
-Description=InterPoll community relay (Docker Compose)
+Description=Echo community relay (Docker Compose)
 Requires=docker.service
 After=docker.service network-online.target
 Wants=network-online.target
@@ -159,7 +159,7 @@ TimeoutStartSec=300
 WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
-systemctl enable interpoll-relay >/dev/null 2>&1
+systemctl enable echo-relay >/dev/null 2>&1
 
 info "Waiting for the relay…"
 for _ in $(seq 1 60); do curl -fsS "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && break; sleep 2; done
@@ -176,7 +176,7 @@ done
 echo
 echo "────────────────────────────────────────────────────────────"
 if [ "$TLS" = yes ]; then
-  ok "InterPoll relay is live:"
+  ok "Echo relay is live:"
 else
   warn "Relay is up, but https://$DOMAIN is not reachable yet (DNS or certificate pending)."
   warn "Check: docker compose -f $DIR/docker-compose.yml logs caddy"

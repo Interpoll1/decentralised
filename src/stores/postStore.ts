@@ -16,8 +16,8 @@ import { fetchCommentCounts, fetchVoteTallies } from '../services/relayFeedServi
 const PAGE_SIZE      = 10;
 const SEEN_POSTS_KEY = 'seen-post-ids';
 const MY_VOTES_KEY   = 'my-post-votes-v1';
-const POST_DEBUG = localStorage.getItem('interpoll_post_debug') === 'true';
-const SYNC_DEBUG = localStorage.getItem('interpoll_sync_debug') === 'true';
+const POST_DEBUG = localStorage.getItem('echo_post_debug') === 'true';
+const SYNC_DEBUG = localStorage.getItem('echo_sync_debug') === 'true';
 const INCOMING_POST_FLUSH_MS = 50;
 const INCOMING_POST_BATCH_SIZE = 100;
 
@@ -266,7 +266,7 @@ export const usePostStore = defineStore('post', () => {
   // subscribeToAllPosts so feed card counts update the moment any vote lands,
   // without waiting for a Gun echo.
   if (typeof window !== 'undefined') {
-    window.addEventListener('interpoll:vote-tally', (ev: Event) => {
+    window.addEventListener('echo:vote-tally', (ev: Event) => {
       const { postId, tally } = (ev as CustomEvent<{ postId: string; tally: PostTally }>).detail ?? {};
       if (postId && tally) setTally(postId, tally);
     });

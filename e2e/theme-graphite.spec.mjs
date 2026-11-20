@@ -5,12 +5,12 @@ async function prepare(context, preference) {
   await mockRelay(context);
   await context.addInitScript(preference => {
     localStorage.setItem('theme', 'dark'); // reproduce the previously shipped automatic preference
-    if (preference) localStorage.setItem('interpoll_theme_preference_v1', preference);
+    if (preference) localStorage.setItem('echo_theme_preference_v1', preference);
     localStorage.setItem('graphite-preservation-marker', 'keep-existing-data');
-    localStorage.setItem('interpoll_onboarding_complete', 'true');
-    localStorage.setItem('interpoll_bit_tour_v1', 'done');
-    localStorage.setItem('interpoll_bit_navswap_v1', '1');
-    localStorage.setItem('interpoll_moderation_onboarding_complete', 'skipped');
+    localStorage.setItem('echo_onboarding_complete', 'true');
+    localStorage.setItem('echo_bit_tour_v1', 'done');
+    localStorage.setItem('echo_bit_navswap_v1', '1');
+    localStorage.setItem('echo_moderation_onboarding_complete', 'skipped');
   }, preference);
 }
 
@@ -131,17 +131,17 @@ test('graphite onboarding and tour use readable surfaces in both themes', async 
   await checkPaint(page);
   await expectReadable(page.locator('.bs-note').first());
   await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('onboarding-light.png') });
-  await page.evaluate(() => localStorage.setItem('interpoll_theme_preference_v1', 'dark'));
+  await page.evaluate(() => localStorage.setItem('echo_theme_preference_v1', 'dark'));
   await page.reload(); await checkPaint(page, true);
   await expectReadable(page.locator('.bs-note').first());
   await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('onboarding-dark.png') });
   await page.evaluate(() => {
-    localStorage.setItem('interpoll_onboarding_complete', 'true');
-    localStorage.setItem('interpoll_moderation_onboarding_complete', 'skipped');
-    localStorage.setItem('interpoll_theme_preference_v1', 'light');
+    localStorage.setItem('echo_onboarding_complete', 'true');
+    localStorage.setItem('echo_moderation_onboarding_complete', 'skipped');
+    localStorage.setItem('echo_theme_preference_v1', 'light');
   });
   await page.goto('/home');
-  const tour = page.getByRole('dialog', { name: 'Interpoll tour' });
+  const tour = page.getByRole('dialog', { name: 'Echo tour' });
   await expect(tour).toBeVisible({ timeout: 15000 });
   await expectReadable(tour.locator('.bc-body'));
   await expectReadable(tour.locator('.bc-btn--primary'));

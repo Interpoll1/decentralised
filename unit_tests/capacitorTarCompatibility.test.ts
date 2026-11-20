@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 
 it('Capacitor 6 extracts a real template with the patched tar 7 dependency', async () => {
-  const folder = mkdtempSync(join(tmpdir(), 'interpoll-cap-template-'));
+  const folder = mkdtempSync(join(tmpdir(), 'echo-cap-template-'));
   try {
     writeFileSync(join(folder, 'fixture.txt'), 'clean template');
     const archive = join(folder, 'template.tgz'), output = join(folder, 'output');

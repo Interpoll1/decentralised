@@ -113,7 +113,7 @@ async function copy() {
 }
 async function share() {
   if (!created.value) return;
-  await navigator.share({ title: created.value.name, text: `Join "${created.value.name}" on InterPoll`, url: created.value.link }).catch(() => {});
+  await navigator.share({ title: created.value.name, text: `Join "${created.value.name}" on Echo`, url: created.value.link }).catch(() => {});
 }
 function openGroup() {
   const id = created.value?.id;

@@ -48,12 +48,12 @@ export function generatePostHTML(post) {
   const imageUrl = post.imageIPFS ? `https://ipfs.io/ipfs/${post.imageIPFS}` : `${DOMAIN}/og-default.png`;
   const postUrl  = `${DOMAIN}/community/${post.communityId || 'general'}/post/${post.id}`;
   return buildHtmlShell(`
-    <title>${title} — Interpoll</title>
+    <title>${title} — Echo</title>
     <meta name="description" content="${desc}" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="${postUrl}" />
     <meta property="og:type" content="article" />
-    <meta property="og:site_name" content="Interpoll" />
+    <meta property="og:site_name" content="Echo" />
     <meta property="og:title" content="${title}" />
     <meta property="og:description" content="${desc}" />
     <meta property="og:image" content="${imageUrl}" />
@@ -73,12 +73,12 @@ export function generatePollHTML(poll) {
   const question = escapeHtml(poll.question);
   const pollUrl  = `${DOMAIN}/community/${poll.communityId || 'general'}/poll/${poll.id}`;
   return buildHtmlShell(`
-    <title>${question} — Interpoll</title>
+    <title>${question} — Echo</title>
     <meta name="description" content="${desc}" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="${pollUrl}" />
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Interpoll" />
+    <meta property="og:site_name" content="Echo" />
     <meta property="og:title" content="${question}" />
     <meta property="og:description" content="${desc}" />
     <meta property="og:url" content="${pollUrl}" />

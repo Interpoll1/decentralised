@@ -8,7 +8,7 @@ import config from '@/config';
  * the browser build. Handles:
  *  - the Android hardware back button;
  *  - deep links (`appUrlOpen`): both the custom scheme
- *    `com.interpoll.app://…` and https App Links to the public web origin —
+ *    `com.echo.app://…` and https App Links to the public web origin —
  *    used for invite links and the OAuth return.
  */
 export async function initCapacitorApp(router: Router): Promise<void> {
@@ -48,7 +48,7 @@ export async function handleDeepLink(url: string, router: Router): Promise<void>
 
   // 1. OAuth return — custom scheme or https path ending in /auth/callback.
   //    (M4) The relay is expected to redirect here with a `token` query param.
-  if (url.includes('/auth/callback') || url.startsWith('com.interpoll.app://auth')) {
+  if (url.includes('/auth/callback') || url.startsWith('com.echo.app://auth')) {
     try {
       const { Browser } = await import('@capacitor/browser');
       await Browser.close();
@@ -83,8 +83,8 @@ export async function handleDeepLink(url: string, router: Router): Promise<void>
 
 /** Rewrite a custom-scheme invite URL to its web-URL equivalent for parsing. */
 function normalizeToWebUrl(url: string): string {
-  if (url.startsWith('com.interpoll.app://')) {
-    return url.replace(/^com\.interpoll\.app:\/\//, `${config.web.origin}/`);
+  if (url.startsWith('com.echo.app://')) {
+    return url.replace(/^com\.echo\.app:\/\//, `${config.web.origin}/`);
   }
   return url;
 }

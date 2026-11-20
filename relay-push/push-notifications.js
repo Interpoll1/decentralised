@@ -1,5 +1,5 @@
 /**
- * Drop-in FCM push for the InterPoll relay.
+ * Drop-in FCM push for the Echo relay.
  *
  * The relay source (relay-server/relay-server-enhanced.js) is gitignored and
  * lives on the VPS, so this module is written to be copied there and wired in
@@ -14,7 +14,7 @@
  * access token is minted by signing a JWT with node's built-in crypto.
  *
  * ── Authentication ────────────────────────────────────────────────────────
- * There is no session to trust here — InterPoll identities are keys, not
+ * There is no session to trust here — Echo identities are keys, not
  * accounts, and the relay is explicitly untrusted. So registration is
  * self-authenticating: `userId` IS the x-only Schnorr public key, and the
  * client signs the (userId, deviceId, token, ts) tuple with the matching
@@ -233,7 +233,7 @@ class FcmSender {
             data,
             android: {
               priority: 'HIGH',
-              notification: { channel_id: 'interpoll-chat', tag: data.fromUserId },
+              notification: { channel_id: 'echo-chat', tag: data.fromUserId },
             },
           },
         }),
@@ -249,10 +249,10 @@ class FcmSender {
 
 /** Canonical strings the client signs. Keep in sync with src/native/pushNotifications.ts. */
 function registerMessage({ userId, deviceId, token, ts }) {
-  return `interpoll-push-register-1:${userId}:${deviceId}:${token}:${ts}`;
+  return `echo-push-register-1:${userId}:${deviceId}:${token}:${ts}`;
 }
 function unregisterMessage({ userId, deviceId, ts }) {
-  return `interpoll-push-unregister-1:${userId}:${deviceId}:${ts}`;
+  return `echo-push-unregister-1:${userId}:${deviceId}:${ts}`;
 }
 
 /**

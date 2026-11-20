@@ -1,29 +1,29 @@
 # -----------------------------------------------------------------------------
-# InterPoll community relay - Windows installer
+# Echo community relay - Windows installer
 #
-#   irm https://interpoll.endless.social/install.ps1 | iex      (PowerShell as Administrator)
+#   irm https://echo.endless.social/install.ps1 | iex      (PowerShell as Administrator)
 #
 # Installs Node.js LTS (winget) if missing, downloads the relay into
-# %ProgramData%\InterPollRelay, registers a startup Scheduled Task, opens the
+# %ProgramData%\EchoRelay, registers a startup Scheduled Task, opens the
 # firewall port and prints the relay URL. Re-running upgrades in place.
 #
 # Uninstall:
-#   Unregister-ScheduledTask InterPollRelay -Confirm:$false
-#   Remove-NetFirewallRule -DisplayName 'InterPoll Relay'
-#   Remove-Item -Recurse "$env:ProgramData\InterPollRelay"
+#   Unregister-ScheduledTask EchoRelay -Confirm:$false
+#   Remove-NetFirewallRule -DisplayName 'Echo Relay'
+#   Remove-Item -Recurse "$env:ProgramData\EchoRelay"
 # -----------------------------------------------------------------------------
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
-$Base     = if ($env:INTERPOLL_BASE) { $env:INTERPOLL_BASE } else { 'https://interpoll.endless.social' }
+$Base     = if ($env:ECHO_BASE) { $env:ECHO_BASE } else { 'https://echo.endless.social' }
 $Port     = if ($env:RELAY_PORT) { [int]$env:RELAY_PORT } else { 8765 }
-$Upstream = if ($null -ne $env:UPSTREAM_PEERS) { $env:UPSTREAM_PEERS } else { 'https://interpoll2.endless.social/gun' }
-$Dir      = Join-Path $env:ProgramData 'InterPollRelay'
-$TaskName = 'InterPollRelay'
+$Upstream = if ($null -ne $env:UPSTREAM_PEERS) { $env:UPSTREAM_PEERS } else { 'https://echo2.endless.social/gun' }
+$Dir      = Join-Path $env:ProgramData 'EchoRelay'
+$TaskName = 'EchoRelay'
 
-function Info($m) { Write-Host "[interpoll] $m" -ForegroundColor Cyan }
-function Ok($m)   { Write-Host "[interpoll] $m" -ForegroundColor Green }
-function Die($m)  { Write-Host "[interpoll] $m" -ForegroundColor Red; throw $m }
+function Info($m) { Write-Host "[echo] $m" -ForegroundColor Cyan }
+function Ok($m)   { Write-Host "[echo] $m" -ForegroundColor Green }
+function Die($m)  { Write-Host "[echo] $m" -ForegroundColor Red; throw $m }
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) { Die 'Run PowerShell as Administrator and try again.' }
@@ -78,11 +78,11 @@ $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccou
 $settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) `
                -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings `
-  -Description 'InterPoll community Gun relay' | Out-Null
+  -Description 'Echo community Gun relay' | Out-Null
 Start-ScheduledTask -TaskName $TaskName
 
-if (-not (Get-NetFirewallRule -DisplayName 'InterPoll Relay' -ErrorAction SilentlyContinue)) {
-  New-NetFirewallRule -DisplayName 'InterPoll Relay' -Direction Inbound -Protocol TCP -LocalPort $Port -Action Allow -Profile Private,Domain | Out-Null
+if (-not (Get-NetFirewallRule -DisplayName 'Echo Relay' -ErrorAction SilentlyContinue)) {
+  New-NetFirewallRule -DisplayName 'Echo Relay' -Direction Inbound -Protocol TCP -LocalPort $Port -Action Allow -Profile Private,Domain | Out-Null
   Ok "Opened TCP $Port in Windows Firewall (private networks)"
 }
 
@@ -102,7 +102,7 @@ if (-not $ip) { $ip = '127.0.0.1' }
 
 Write-Host ''
 Write-Host '------------------------------------------------------------'
-Ok 'InterPoll relay is live on your network:'
+Ok 'Echo relay is live on your network:'
 Write-Host ''
 Write-Host "    http://${ip}:$Port/gun" -ForegroundColor Green
 Write-Host ''

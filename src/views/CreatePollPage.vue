@@ -351,7 +351,7 @@ function avatarTone(id: string) {
   return TONES[code % TONES.length];
 }
 
-const POLL_DEBUG_KEY = 'interpoll_poll_debug';
+const POLL_DEBUG_KEY = 'echo_poll_debug';
 type PollDebugCategory = 'create' | 'writes' | 'index' | 'ui' | 'all';
 
 function getPollDebugCategories(): Set<string> {

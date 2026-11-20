@@ -1,5 +1,5 @@
 /**
- * spam-scorer.js — Multi-language content spam scorer for InterPoll.
+ * spam-scorer.js — Multi-language content spam scorer for Echo.
  *
  * Naughty words alone ≠ spam. The scorer only flags content when there are
  * 3+ distinct matches in a single message.  This layer provides content-quality

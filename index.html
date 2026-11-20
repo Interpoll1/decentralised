@@ -26,12 +26,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta
       name="description"
-      content="Interpoll is a browser-first decentralized social and polling app for communities, posts, chat, and verifiable voting."
+      content="Echo is a browser-first decentralized social and polling app for communities, posts, chat, and verifiable voting."
     />
-    <title>InterPoll - decentralized polls, no company in control</title>
+    <title>Echo - decentralized polls, no company in control</title>
     <link rel="canonical" href="https://endless.social/" />
-    <meta name="keywords" content="polls, voting, community, discussions, opinions, interpoll" />
-    <meta name="author" content="Interpoll" />
+    <meta name="keywords" content="polls, voting, community, discussions, opinions, echo" />
+    <meta name="author" content="Echo" />
     <meta name="robots" content="index, follow" />
 
     <!-- PWA / mobile chrome. Keep theme-color in sync with the manifest
@@ -39,36 +39,36 @@
     <meta name="theme-color" content="#e7e9ec" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="InterPoll" />
+    <meta name="apple-mobile-web-app-title" content="Echo" />
     <meta name="mobile-web-app-capable" content="yes" />
 
     <!-- Open Graph / social link previews -->
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="InterPoll" />
-    <meta property="og:title" content="InterPoll — decentralized polls, no company in control" />
+    <meta property="og:site_name" content="Echo" />
+    <meta property="og:title" content="Echo — decentralized polls, no company in control" />
     <meta property="og:description" content="Create polls and discussions that live across peers, not one company's servers. Every vote is cryptographically signed and tamper-evident." />
     <meta property="og:image" content="https://endless.social/og-preview.webp" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:type" content="image/webp" />
-    <meta property="og:image:alt" content="InterPoll — decentralized polls" />
+    <meta property="og:image:alt" content="Echo — decentralized polls" />
     <meta property="og:url" content="https://endless.social/" />
     <meta property="og:locale" content="en_US" />
 
     <!-- Twitter card -->
-    <meta name="twitter:image:alt" content="InterPoll — decentralized polls" />
+    <meta name="twitter:image:alt" content="Echo — decentralized polls" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="InterPoll — decentralized polls, no company in control" />
+    <meta name="twitter:title" content="Echo — decentralized polls, no company in control" />
     <meta name="twitter:description" content="Create polls and discussions that live across peers, not one company's servers. Every vote is cryptographically signed and tamper-evident." />
     <meta name="twitter:image" content="https://endless.social/og-preview.webp" />
     <script type="application/ld+json">
-      {"@context":"https://schema.org","@type":"WebApplication","name":"InterPoll","url":"https://endless.social/","applicationCategory":"SocialNetworkingApplication","operatingSystem":"Any","description":"Decentralized social and polling app for communities, posts, chat, and verifiable voting.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}
+      {"@context":"https://schema.org","@type":"WebApplication","name":"Echo","url":"https://endless.social/","applicationCategory":"SocialNetworkingApplication","operatingSystem":"Any","description":"Decentralized social and polling app for communities, posts, chat, and verifiable voting.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}
     </script>
     <script>
       // Match the app preference before first paint. Legacy forced-dark values are migrated by the app.
       (function() {
         var theme = 'light';
-        try { if (localStorage.getItem('interpoll_theme_preference_v1') === 'dark') theme = 'dark'; } catch (_) {}
+        try { if (localStorage.getItem('echo_theme_preference_v1') === 'dark') theme = 'dark'; } catch (_) {}
         document.documentElement.classList.toggle('dark', theme === 'dark');
         document.documentElement.dataset.theme = theme;
         document.documentElement.style.colorScheme = theme;
@@ -81,7 +81,7 @@
          Bundles can take many seconds on a cold CDN edge; without this the
          page is blank. Inline-styled because no CSS has loaded yet. -->
     <div id="app">
-      <noscript><h1>InterPoll</h1><p>Decentralized polls and discussions with cryptographically signed, verifiable votes. Enable JavaScript to use the app.</p></noscript>
+      <noscript><h1>Echo</h1><p>Decentralized polls and discussions with cryptographically signed, verifiable votes. Enable JavaScript to use the app.</p></noscript>
       <div id="boot-splash" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#232a31;color:#edf0f2;font:15px system-ui,-apple-system,sans-serif;text-align:center;padding:16px">
         <style>
           html:not(.dark) #boot-splash{background:#e7e9ec!important;color:#232a31!important}
@@ -96,7 +96,7 @@
           #boot-splash .bs-net circle{transform-box:fill-box;transform-origin:center}
           @media (prefers-reduced-motion:reduce){#boot-splash .bs-net circle{animation:none;opacity:.7}}
         </style>
-        <div class="bs-logo">Interpoll</div>
+        <div class="bs-logo">Echo</div>
         <svg class="bs-net" width="220" height="70" viewBox="0 0 220 70" aria-hidden="true">
           <line x1="20" y1="35" x2="70" y2="15"/><line x1="20" y1="35" x2="70" y2="55"/>
           <line x1="70" y1="15" x2="125" y2="35"/><line x1="70" y1="55" x2="125" y2="35"/>

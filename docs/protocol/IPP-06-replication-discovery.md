@@ -19,7 +19,7 @@ Implementations MUST NOT conflate:
   exists on one device; data survives only as long as at least one honest peer,
   device, or relay retains a copy and later reconnects.
 
-InterPoll provides *stronger practical persistence* than a single-server system,
+Echo provides *stronger practical persistence* than a single-server system,
 **not** mathematical availability.
 
 ## 2. Incremental sync
@@ -36,7 +36,7 @@ A block MUST be accepted only when chain continuity holds (or a valid genesis
 bootstrap). The same sync semantics MUST be carried over both transports:
 
 - **WebSocket relay** for cross-device fan-out.
-- **`BroadcastChannel('interpoll-sync')`** for local same-origin cross-tab
+- **`BroadcastChannel('echo-sync')`** for local same-origin cross-tab
   fan-out (no network, no relay).
 
 ## 3. Core coordination messages

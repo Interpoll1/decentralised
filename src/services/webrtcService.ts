@@ -15,8 +15,8 @@ import { SignalingService, MESH_SIGNAL_TYPE, isCallKind, type SignalTarget, type
 import config from '@/config';
 
 
-const STORAGE_KEY = 'interpoll_mesh_enabled';
-const CHANNEL_LABEL = 'interpoll-data';
+const STORAGE_KEY = 'echo_mesh_enabled';
+const CHANNEL_LABEL = 'echo-data';
 /** Manual (offline) signaling uses a fixed key so both sides agree on the connection id. */
 const MANUAL_REMOTE_ID = 'manual';
 

@@ -3,7 +3,7 @@
 // rendering of the slug — pass DISPLAY_NAME=... to override.
 const Gun = require('gun');
 
-const RELAY = 'https://interpoll2.endless.sbs';
+const RELAY = 'https://echo2.endless.sbs';
 const ID = 'c-gtaclips';
 const rec = {
   id: ID,

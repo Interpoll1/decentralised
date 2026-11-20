@@ -120,7 +120,7 @@ export interface ModerationSettings {
   /** Whether to run home-feed posts through the moderation API */
   moderateHomeFeed: boolean;
   /** Which moderation provider to use */
-  moderationProvider: 'interpoll' | 'custom';
+  moderationProvider: 'echo' | 'custom';
   /** Base URL for the moderation API (defaults to MODERATION_API_DEFAULT_BASE_URL) */
   moderationApiBaseUrl: string;
   /** Authenticated API key (stored separately in localStorage, shown masked in UI) */
@@ -131,12 +131,12 @@ const STORAGE_KEY = 'moderation_settings';
 const API_KEY_STORAGE_KEY = 'moderation_api_key';
 
 /**
- * Default URL for the InterPoll-hosted moderation API вЂ” the prefix under which
+ * Default URL for the Echo-hosted moderation API вЂ” the prefix under which
  * moderation-api's `/v1/*` routes are served (nginx maps `/moderation/v1/`).
  */
-export const MODERATION_API_DEFAULT_BASE_URL = 'https://interpoll.endless.social/moderation';
+export const MODERATION_API_DEFAULT_BASE_URL = 'https://echo.endless.social/moderation';
 /** Pre-fix default (site root, no `/v1` there); migrated on load. */
-const LEGACY_MODERATION_API_BASE_URL = 'https://interpoll.endless.social';
+const LEGACY_MODERATION_API_BASE_URL = 'https://echo.endless.social';
 
 const DEFAULT_SETTINGS: ModerationSettings = {
   minUserKarma: -1000,
@@ -150,7 +150,7 @@ const DEFAULT_SETTINGS: ModerationSettings = {
   imageFilterMode: 'manual',
   imageFilterSensitivity: 0.6,
   moderateHomeFeed: false,
-  moderationProvider: 'interpoll',
+  moderationProvider: 'echo',
   moderationApiBaseUrl: MODERATION_API_DEFAULT_BASE_URL,
   moderationApiKey: '',
 };

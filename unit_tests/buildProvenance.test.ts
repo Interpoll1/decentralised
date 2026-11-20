@@ -8,7 +8,7 @@ import { buildProvenancePlugin } from '../tools/build-provenance.mjs';
 const temporary: string[] = [];
 afterEach(() => { for (const dir of temporary.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 it('records final emitted bytes and detects subsequent artifact modification', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'interpoll-build-')); temporary.push(dir);
+  const dir = mkdtempSync(join(tmpdir(), 'echo-build-')); temporary.push(dir);
   writeFileSync(join(dir, 'index.html'), '<script src="entry.js"></script>');
   writeFileSync(join(dir, 'entry.js'), 'console.log("final bytes");');
   const plugin = buildProvenancePlugin();
@@ -16,7 +16,7 @@ it('records final emitted bytes and detects subsequent artifact modification', (
   plugin.writeBundle({ dir }, { a: { fileName: 'index.html' }, b: { fileName: 'entry.js' } });
   const info = JSON.parse(readFileSync(join(dir, 'build-info.json'), 'utf8'));
   expect(info.source.commit).toMatch(/^[a-f0-9]{40}$/);
-  expect(info.config.api).toBe('https://interpoll.endless.social');
+  expect(info.config.api).toBe('https://echo.endless.social');
   // Unit tests run inside unit_tests; the verifier must see the repository root.
   const verifier = resolve(__dirname, '../tools/verify-build.mjs');
   const env = { ...process.env, CI: '' };

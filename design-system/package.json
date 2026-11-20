@@ -1,9 +1,9 @@
 {
-  "name": "@interpoll/design-system",
+  "name": "@echo/design-system",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "InterPoll design system — React components extracted from the InterPoll visual language (Linear-style glass UI).",
+  "description": "Echo design system — React components extracted from the Echo visual language (Linear-style glass UI).",
   "main": "./dist/index.es.js",
   "module": "./dist/index.es.js",
   "types": "./dist/index.d.ts",

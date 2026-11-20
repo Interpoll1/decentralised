@@ -21,7 +21,7 @@ export interface ReputationRecord {
   failures: number;
 }
 
-const STORAGE_KEY = 'interpoll_peer_reputation';
+const STORAGE_KEY = 'echo_peer_reputation';
 const INITIAL_SCORE = 0.5;
 /** Weight of each new observation against the running score (EWMA alpha). */
 const ALPHA = 0.3;

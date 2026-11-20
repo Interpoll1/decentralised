@@ -52,7 +52,7 @@ function snapshotPayload(s) {
     check(keys(o, ['action','receivedAt']) && integer(o.receivedAt) && o.receivedAt >= s.from && o.receivedAt <= s.to
       && o.action && typeof o.action === 'object' && hex(o.action.id,64), 'OBSERVATION_SHAPE');
   }
-  return ['interpoll.coordination-snapshot.v1',s.version,s.namespace,s.targetType,s.from,s.to,s.observer,
+  return ['echo.coordination-snapshot.v1',s.version,s.namespace,s.targetType,s.from,s.to,s.observer,
     [...s.targets].sort((a,b)=>cmp(a.id,b.id)),
     [...s.observations].sort((a,b)=>cmp(a.action.id,b.action.id) || a.receivedAt-b.receivedAt)];
 }
@@ -126,7 +126,7 @@ function calculate(s, expectedObserver) {
   const baseline=rank(s.targets,latest);
   const clusters=components.map(actors=>{
     const removed=new Set(actors),after=new Map(rank(s.targets,latest,removed).map(r=>[r.targetId,r]));
-    return {id:digest(['interpoll.review-cluster.v1',actors]),actors,
+    return {id:digest(['echo.review-cluster.v1',actors]),actors,
       edges:edges.filter(e=>removed.has(e.actors[0])),
       impact:baseline.map(b=>({targetId:b.targetId,beforeScore:b.score,afterScore:after.get(b.targetId).score,
         beforeRank:b.rank,afterRank:after.get(b.targetId).rank,

@@ -1,14 +1,14 @@
-# Using InterPoll with Tor Browser
+# Using Echo with Tor Browser
 
 ## Why Tor?
 
-Tor Browser routes your traffic through the Tor network, hiding your IP address from relay servers and making it harder for ISPs or governments to block your access to InterPoll.
+Tor Browser routes your traffic through the Tor network, hiding your IP address from relay servers and making it harder for ISPs or governments to block your access to Echo.
 
 ## Quick Start
 
 1. **Download Tor Browser** from [torproject.org](https://www.torproject.org/download/)
-2. **Open InterPoll** in Tor Browser — use the same URL as your regular browser
-3. InterPoll auto-detects Tor Browser and shows a 🧅 indicator on the Resilience page
+2. **Open Echo** in Tor Browser — use the same URL as your regular browser
+3. Echo auto-detects Tor Browser and shows a 🧅 indicator on the Resilience page
 
 ## Adding .onion Relays
 
@@ -24,7 +24,7 @@ If a relay operator publishes a `.onion` address, you can add it for maximum pri
 
 ## Performance
 
-Tor adds latency (typically 2-5 seconds per request). InterPoll works fine over Tor but expect:
+Tor adds latency (typically 2-5 seconds per request). Echo works fine over Tor but expect:
 - Slower initial load and data sync
 - Higher latency on real-time features (chat, live poll updates)
 - GunDB sync may take longer to converge

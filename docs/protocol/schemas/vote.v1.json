@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://interpoll.protocol/schemas/vote.v1.json",
-  "title": "InterPoll Vote payload (v1)",
+  "$id": "https://echo.protocol/schemas/vote.v1.json",
+  "title": "Echo Vote payload (v1)",
   "description": "The vote payload recorded in the local chain (types/chain.ts Vote) and hashed into a chain block. Normative companion to IPP-03 and IPP-05.",
   "type": "object",
   "required": ["pollId", "choice", "timestamp", "deviceId"],

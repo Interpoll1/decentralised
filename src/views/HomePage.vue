@@ -3,7 +3,7 @@
     <ion-header :class="{ 'header-hidden': isHeaderHidden }">
       <ion-toolbar>
         <ion-buttons slot="start">
-          <div class="logo-title" role="button" tabindex="0" style="cursor:pointer" @click="activeTab = 'home'" @keydown.enter="activeTab = 'home'">{{ $ui("Interpoll") }}</div>
+          <div class="logo-title" role="button" tabindex="0" style="cursor:pointer" @click="activeTab = 'home'" @keydown.enter="activeTab = 'home'">{{ $ui("Echo") }}</div>
         </ion-buttons>
         <ion-buttons slot="end" class="header-util-buttons">
           <ion-button v-if="canScanQr" @click="scanQr()" :aria-label="$ui('Scan QR code')">
@@ -414,7 +414,7 @@
               v-model="moderationCustomApiUrl"
               type="url"
               inputmode="url"
-              placeholder="https://interpoll.endless.social/moderation"
+              placeholder="https://echo.endless.social/moderation"
               @input="moderationCustomApiError = ''"
             >
             <p class="moderation-onboarding-card__hint">{{ $ui("This should be the base address of your moderation API.") }}</p>
@@ -506,7 +506,7 @@ const bitStore       = useBitStore();
 const pollStore      = usePollStore();
 
 
-const HOME_GUN_FEED_ENABLED         = localStorage.getItem('interpoll_home_gun_feed') !== 'false';
+const HOME_GUN_FEED_ENABLED         = localStorage.getItem('echo_home_gun_feed') !== 'false';
 const HOME_GUN_FEED_MAX_COMMUNITIES = 8;
 
 const HOME_TABS = ['home', 'orbit', 'chat', 'create'] as const;
@@ -551,7 +551,7 @@ let feedMutObs: MutationObserver | null = null;
 type FeedScope = 'mine' | 'relay' | 'explore' | 'nearby';
 const feedScope = ref<FeedScope>(
   (route.query.scope as FeedScope)
-  || (localStorage.getItem('interpoll_feed_scope') as FeedScope)
+  || (localStorage.getItem('echo_feed_scope') as FeedScope)
   || 'relay'
 );
 function setScope(s: FeedScope) {
@@ -576,7 +576,7 @@ watch(feedScope, (sc) => { if (sc === 'nearby' && nearby.prefs.enabled) void nea
 
 // Persist scope to localStorage
 watch(feedScope, (s) => {
-  localStorage.setItem('interpoll_feed_scope', s);
+  localStorage.setItem('echo_feed_scope', s);
 });
 
 // Set of joined community IDs for "My Spaces" filtering
@@ -1319,11 +1319,11 @@ onUnmounted(() => {
   if (feedMutObs) { feedMutObs.disconnect(); feedMutObs = null; }
 });
 
-// ── DEV DEBUG — window.__interpoll ────────────────────────────────────────
+// ── DEV DEBUG — window.__echo ────────────────────────────────────────
 // Exposes stores, raw Gun, and diagnostic helpers to the browser console.
-// Usage: window.__interpoll.diagnose()
+// Usage: window.__echo.diagnose()
 if (typeof window !== 'undefined') {
-  (window as any).__interpoll = {
+  (window as any).__echo = {
     // Raw store refs
     get postStore()      { return postStore; },
     get pollStore()      { return pollStore; },
@@ -1351,7 +1351,7 @@ if (typeof window !== 'undefined') {
         const dv = (p as any).dataVersion ?? '(undefined)';
         byVersion[dv] = (byVersion[dv] || 0) + 1;
       }
-      console.group('%c[Interpoll] postsMap dataVersion breakdown', 'color:#e6e6e6;font-weight:bold');
+      console.group('%c[Echo] postsMap dataVersion breakdown', 'color:#e6e6e6;font-weight:bold');
       console.table(byVersion);
       console.log('Full sample (first 5):', entries.slice(0, 5).map((p: any) => ({
         id: p.id, title: p.title?.slice(0,40), dataVersion: p.dataVersion
@@ -1366,7 +1366,7 @@ if (typeof window !== 'undefined') {
       const polls   = pollStore.sortedPolls;
       const feed    = combinedFeed.value;
       const mapSize = postStore.postsMap?.size ?? 'N/A';
-      console.group('%c[Interpoll Debug]', 'color:#e6e6e6;font-weight:bold');
+      console.group('%c[Echo Debug]', 'color:#e6e6e6;font-weight:bold');
       console.log('postsMap size (raw store):', mapSize);
       console.log('sortedPosts length:', posts.length);
       console.log('sortedPolls length:', polls.length);
@@ -1432,10 +1432,10 @@ if (typeof window !== 'undefined') {
       console.groupEnd();
     },
   };
-  console.log('%c[Interpoll] Debug ready → window.__interpoll.diagnose()', 'color:#e6e6e6;font-style:italic');
+  console.log('%c[Echo] Debug ready → window.__echo.diagnose()', 'color:#e6e6e6;font-style:italic');
 
   // View tracking debug shortcuts
-  (window as any).__interpoll.views = {
+  (window as any).__echo.views = {
     diagnose() {
       const vt = (window as any).__viewTracking;
       if (!vt) { console.warn('[views] not initialised yet'); return; }

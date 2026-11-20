@@ -14,9 +14,9 @@ const ACCOUNT = /^[0-9a-f]{64}$/;
 const isPosInt = (n) => Number.isSafeInteger(n) && n > 0;
 const canonical = (fields) => JSON.stringify(fields);
 
-const bindingBytes = (b) => canonical(['interpoll/dm/device-binding', 1, b.accountId, b.deviceId, b.generation, b.ik, b.ikSignPub, 'dm-auth-v1']);
-const spkBytes = (b) => canonical(['interpoll/dm/spk', 1, b.binding.accountId, b.binding.deviceId, b.binding.generation, b.ik, b.ikSignPub, b.spkId, b.spkGeneration, b.spk]);
-const opkBytes = (b, opk) => canonical(['interpoll/dm/opk', 1, b.binding.accountId, b.binding.deviceId, b.binding.generation, b.ik, b.spkId, b.spkGeneration, opk.id, opk.pub]);
+const bindingBytes = (b) => canonical(['echo/dm/device-binding', 1, b.accountId, b.deviceId, b.generation, b.ik, b.ikSignPub, 'dm-auth-v1']);
+const spkBytes = (b) => canonical(['echo/dm/spk', 1, b.binding.accountId, b.binding.deviceId, b.binding.generation, b.ik, b.ikSignPub, b.spkId, b.spkGeneration, b.spk]);
+const opkBytes = (b, opk) => canonical(['echo/dm/opk', 1, b.binding.accountId, b.binding.deviceId, b.binding.generation, b.ik, b.spkId, b.spkGeneration, opk.id, opk.pub]);
 
 function bytes(value, length) {
   if (typeof value !== 'string') throw new Error('Missing key/signature encoding');

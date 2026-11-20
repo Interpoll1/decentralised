@@ -10,7 +10,7 @@ blocked-by: []
 
 ## Question
 
-What can an InterPoll page actually reach on the local network, per browser and per page
+What can an Echo page actually reach on the local network, per browser and per page
 origin? The four LAN-search tiers are only as real as this answer.
 
 Establish, with citations to current specs/browser docs (2026):
@@ -27,7 +27,7 @@ Establish, with citations to current specs/browser docs (2026):
   exposed, and can two peers on the same LAN connect directly without any STUN server?
 - **Subnet sweep feasibility**: timing/error-channel probing of a /24 from a page — what
   actually works today, what it costs, and what breaks it.
-- **The `http://` deployment case**: does serving InterPoll over plain HTTP on the LAN
+- **The `http://` deployment case**: does serving Echo over plain HTTP on the LAN
   (or from a peer's own `browserRelayService`) unlock tiers that `https://` cannot have,
   and what is lost (secure context APIs: crypto.subtle, service workers, etc.).
 
@@ -58,7 +58,7 @@ Full findings and citations: [`docs/wayfinder/research/01-lan-reachability.md`](
   exactly this case.
 - **Subnet sweeping still works** via timing side-channels; LNA's own preflight TCP handshake
   leaks an even cleaner open/closed signal *before* the user answers the prompt.
-- **Serving InterPoll over plain `http://` on the LAN** removes mixed-content/LNA blocking for
+- **Serving Echo over plain `http://` on the LAN** removes mixed-content/LNA blocking for
   same-scheme requests, but forfeits `crypto.subtle` and Service Workers — which the signing
   and chain architecture depend on. Not a free escape hatch.
 

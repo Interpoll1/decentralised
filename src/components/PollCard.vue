@@ -274,7 +274,7 @@ function handleShare() {
   const url = props.poll.communityId
     ? `/community/${props.poll.communityId}/poll/${props.poll.id}`
     : `/vote/${props.poll.id}`;
-  void shareLink(url, props.poll.question || 'InterPoll poll', 'Vote on this poll on InterPoll');
+  void shareLink(url, props.poll.question || 'Echo poll', 'Vote on this poll on Echo');
 }
 
 function getOptionPercent(option: { votes: number }): number {

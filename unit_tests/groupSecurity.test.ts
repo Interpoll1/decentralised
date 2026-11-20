@@ -117,7 +117,7 @@ it('concurrent publications use unique durable receipt positions and immutable r
 });
 it('persistent key retention is bounded and removed devices cannot derive retained peers wrapping key',async()=>{
  const {a,b,c,room}=await setup();let next=await a.change(room,{remove:memberId(c.binding)});
- await expect(openSeal(c.identity,next.distributions.find(d=>d.member===memberId(b.binding))!.seal,JSON.stringify(['interpoll/group/key',1,room,next.membershipEpoch,next.keyEpoch,memberId(b.binding),'wrong']))).rejects.toThrow();
+ await expect(openSeal(c.identity,next.distributions.find(d=>d.member===memberId(b.binding))!.seal,JSON.stringify(['echo/group/key',1,room,next.membershipEpoch,next.keyEpoch,memberId(b.binding),'wrong']))).rejects.toThrow();
  for(let i=0;i<8;i++){next=await a.change(room,i%2?{remove:memberId(c.binding)}:{add:c.binding});await b.adopt(next);}
  expect((await a.state(room))!.keys.length).toBe(GROUP_LIMITS.keys);await reopen();expect((await b.state(room))!.keys.length).toBe(GROUP_LIMITS.keys);
 });
@@ -131,7 +131,7 @@ it('transport request hides a stale-key envelope from removed member and owner r
  const {a,b,c,room}=await setup(),candidate=await b.candidate(room,'secret','Bob'),old=(await c.state(room))!.keys.at(-1)!.key;
  const id=crypto.randomUUID(),state=(await b.state(room))!;
  const request:any={version:1,id,room,epoch:epochHash(state.epoch),kind:'send',binding:b.binding,candidate,signature:''};
- request.signature=await b.signControl(JSON.stringify(['interpoll/group/request',1,id,room,request.epoch,'send',b.binding,candidate]));
+ request.signature=await b.signControl(JSON.stringify(['echo/group/request',1,id,room,request.epoch,'send',b.binding,candidate]));
  const sealed=await sealTo(a.binding,JSON.stringify(request),proposalContext(room,id));
  await a.change(room,{remove:memberId(c.binding)});
  await expect(GroupRoomTransport.process(a,room,id,{sealed:JSON.stringify(sealed)})).rejects.toThrow(/Stale/);
@@ -140,7 +140,7 @@ it('transport request hides a stale-key envelope from removed member and owner r
 it('voluntary leave is signed, epoch-bound and cannot remove a rejoined device by replay',async()=>{
  const {a,b,room}=await setup(),id=crypto.randomUUID(),state=(await a.state(room))!;
  const request:any={version:1,id,room,epoch:epochHash(state.epoch),kind:'leave',binding:b.binding,candidate:null,signature:''};
- request.signature=await b.signControl(JSON.stringify(['interpoll/group/request',1,id,room,request.epoch,'leave',b.binding,null]));
+ request.signature=await b.signControl(JSON.stringify(['echo/group/request',1,id,room,request.epoch,'leave',b.binding,null]));
  const sealed=await sealTo(a.binding,JSON.stringify(request),proposalContext(room,id));
  const response=await GroupRoomTransport.process(a,room,id,{sealed:JSON.stringify(sealed)});expect(response.epoch!.members.map(memberId)).not.toContain(memberId(b.binding));
  await a.change(room,{add:b.binding});await expect(GroupRoomTransport.process(a,room,id,{sealed:JSON.stringify(sealed)})).rejects.toThrow(/Stale/);

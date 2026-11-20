@@ -514,7 +514,7 @@ server.on('request', async (req, res) => {
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state');
     const oauthState = state ? oauthStates.get(state) : null;
-    const cookieNonce = getCookie(req, 'interpoll_oauth_state');
+    const cookieNonce = getCookie(req, 'echo_oauth_state');
     if (!code || !state || !oauthState || oauthState.provider !== 'google' || !cookieNonce || oauthState.nonce !== cookieNonce) {
       res.writeHead(400); res.end('Invalid OAuth state'); return;
     }
@@ -558,7 +558,7 @@ server.on('request', async (req, res) => {
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state');
     const oauthState = state ? oauthStates.get(state) : null;
-    const cookieNonce = getCookie(req, 'interpoll_oauth_state');
+    const cookieNonce = getCookie(req, 'echo_oauth_state');
     if (!code || !state || !oauthState || oauthState.provider !== 'microsoft' || !cookieNonce || oauthState.nonce !== cookieNonce) {
       res.writeHead(400); res.end('Invalid OAuth state'); return;
     }
@@ -1822,7 +1822,7 @@ server.on('request', async (req, res) => {
     if (!senderPub || senderPub.length < 20) { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Unauthorized' })); return; }
 
     const MAX_BYTES   = 100 * 1024 * 1024; // 100 MB — matches client cap
-    const MEDIA_DIR   = process.env.CHAT_MEDIA_DIR || '/var/www/interpoll/chat-media-blobs';
+    const MEDIA_DIR   = process.env.CHAT_MEDIA_DIR || '/var/www/echo/chat-media-blobs';
     const TTL_MS      = 7 * 24 * 60 * 60 * 1000;
     const contentType = req.headers['content-type'] || '';
     const boundaryMatch = contentType.match(/boundary=("?)([^";\s]+)\1/);

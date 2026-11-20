@@ -927,7 +927,7 @@ async function shareInviteLink() {
 let loadGeneration = 0;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 const COMMUNITY_STORE_BOOTSTRAP_TIMEOUT_MS = 2500;
-const COMMUNITY_DEBUG = typeof window !== 'undefined' && localStorage.getItem('interpoll_community_debug') === 'true';
+const COMMUNITY_DEBUG = typeof window !== 'undefined' && localStorage.getItem('echo_community_debug') === 'true';
 
 function communityDebug(step: string, payload: Record<string, unknown> = {}) {
   if (!COMMUNITY_DEBUG) return;

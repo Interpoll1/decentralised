@@ -167,7 +167,7 @@ function generateSeed(): string[] {
 
 // Derive a rendezvous soul from a custom seed (different from the network DGA)
 function deriveSpaceSoul(seed: string, epoch: number): string {
-  const input = `interpoll-space:${seed}:${epoch}`;
+  const input = `echo-space:${seed}:${epoch}`;
   return bytesToHex(sha256(new TextEncoder().encode(input))).slice(0, 32);
 }
 
@@ -238,7 +238,7 @@ async function copyJoinUrl() {
 
 async function shareViaNativeShare() {
   const text = [
-    'Join my dark space on Interpoll.',
+    'Join my dark space on Echo.',
     `Seed phrase: ${seedPhrase.value}`,
     `Paste at: ${window.location.origin}/join/rendezvous/`,
     'This space is not listed anywhere — keep the seed safe.',

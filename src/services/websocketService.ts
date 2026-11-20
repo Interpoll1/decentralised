@@ -500,7 +500,7 @@ export class WebSocketService {
   private static saveKnownServers() {
     try {
       const servers = Array.from(this.knownServers.values());
-      localStorage.setItem('interpoll_known_servers', JSON.stringify(servers));
+      localStorage.setItem('echo_known_servers', JSON.stringify(servers));
     } catch {
       // Storage full or unavailable
     }
@@ -508,7 +508,7 @@ export class WebSocketService {
 
   private static loadKnownServers() {
     try {
-      const raw = localStorage.getItem('interpoll_known_servers');
+      const raw = localStorage.getItem('echo_known_servers');
       if (raw) {
         const servers: KnownServer[] = JSON.parse(raw);
         const capped = servers.slice(-this.MAX_KNOWN_SERVERS);

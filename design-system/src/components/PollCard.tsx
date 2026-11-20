@@ -40,7 +40,7 @@ const iconTime = '⏳';
 /**
  * The primary feed unit: a poll rendered on the glass {@link Card}. Shows the
  * author/identity header, question, up to three options with animated result
- * bars, and a footer of vote/verification/time stats. The signature InterPoll
+ * bars, and a footer of vote/verification/time stats. The signature Echo
  * composite — everything a voter sees before opening a poll.
  */
 export const PollCard: React.FC<PollCardProps> = ({

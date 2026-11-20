@@ -23,7 +23,7 @@ bits encoded as lowercase hex; createdAt is a safe integer in milliseconds.
 
 The signed UTF-8 bytes are JSON.stringify of this fixed array:
 
-`["interpoll.public-engagement.v1",1,namespace,kind,actor,targetType,targetId,value,createdAt,nonce]`
+`["echo.public-engagement.v1",1,namespace,kind,actor,targetType,targetId,value,createdAt,nonce]`
 
 The action ID is lowercase SHA-256 of those bytes. The Schnorr signature is over
 that 32-byte digest. Unknown fields, missing/malformed signatures, wrong subject,

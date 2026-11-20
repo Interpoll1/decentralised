@@ -7,7 +7,7 @@ import config from '@/config';
 /**
  * Native QR scanning (Capacitor + ML Kit). Opens the platform barcode scanner,
  * then routes recognised content into the app:
- *  - InterPoll invite links (`/join/{type}/{id}#key`, full URL or path) → the
+ *  - Echo invite links (`/join/{type}/{id}#key`, full URL or path) → the
  *    JoinPrivatePage, which auto-joins from the key in the fragment.
  *  - Other same-origin app URLs → the corresponding in-app route.
  *
@@ -84,7 +84,7 @@ export function useQrScan() {
       }
 
       if (navigate && !routeScanned(value)) {
-        await toast('This QR code isn’t an InterPoll invite', 'warning');
+        await toast('This QR code isn’t an Echo invite', 'warning');
       }
       return value;
     } catch (err) {

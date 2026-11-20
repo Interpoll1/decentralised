@@ -38,7 +38,7 @@
               </div>
               <div>
                 <h3>{{ $ui("Account") }}</h3>
-                <p>{{ $ui("Your identity on Interpoll") }}</p>
+                <p>{{ $ui("Your identity on Echo") }}</p>
               </div>
             </div>
             <div class="info-table">
@@ -228,7 +228,7 @@
               <label class="field-label">{{ $ui("API Provider") }}</label>
               <div class="field-wrap">
                 <select class="field-native" v-model="modSettings.moderationProvider" @change="onModerationProviderChange">
-                  <option value="interpoll">{{ $ui("InterPoll default API") }}</option>
+                  <option value="echo">{{ $ui("Echo default API") }}</option>
                   <option value="custom">{{ $ui("Custom API") }}</option>
                 </select>
               </div>
@@ -460,7 +460,7 @@
               <label class="field-label">{{ $ui("Provider") }}</label>
               <div class="field-wrap">
                 <select class="field-native" v-model="modSettings.moderationProvider" @change="saveModerationSettings">
-                  <option value="interpoll">{{ $ui("Interpoll Moderation API") }}</option>
+                  <option value="echo">{{ $ui("Echo Moderation API") }}</option>
                   <option value="custom">{{ $ui("Custom API") }}</option>
                 </select>
               </div>
@@ -469,7 +469,7 @@
               <label class="field-label">{{ $ui("API Base URL") }}</label>
               <div class="field-wrap">
                 <input class="field-native mono-sm" v-model="modSettings.moderationApiBaseUrl"
-                  @blur="saveModerationSettings" placeholder="https://interpoll.endless.social/moderation" />
+                  @blur="saveModerationSettings" placeholder="https://echo.endless.social/moderation" />
               </div>
             </div>
             <div class="field-group mt-8">
@@ -559,7 +559,7 @@
             </div>
             <div class="alert-box info mt-12">
               <ion-icon :icon="informationCircleOutline"></ion-icon>
-              <span>{{ $ui("Web applications cannot route their own TCP traffic through Tor. To use Interpoll over Tor, open it in") }} <a href="https://www.torproject.org" target="_blank" class="link">{{ $ui("Tor Browser") }}</a>{{ $ui(", or proxy this browser's traffic through") }} <a href="https://orbot.app" target="_blank" class="link">{{ $ui("Orbot") }}</a>.</span>
+              <span>{{ $ui("Web applications cannot route their own TCP traffic through Tor. To use Echo over Tor, open it in") }} <a href="https://www.torproject.org" target="_blank" class="link">{{ $ui("Tor Browser") }}</a>{{ $ui(", or proxy this browser's traffic through") }} <a href="https://orbot.app" target="_blank" class="link">{{ $ui("Orbot") }}</a>.</span>
             </div>
             <div v-if="anonymityMode" class="mt-12">
               <div class="status-row" :class="activeRelayIsOnion ? 'row-ok' : 'row-warn'">
@@ -1944,7 +1944,7 @@ function onKarmaRangeChange(ev: CustomEvent) {
 }
 
 function saveModerationSettings() {
-  if (modSettings.value.moderationProvider === 'interpoll') {
+  if (modSettings.value.moderationProvider === 'echo') {
     modSettings.value.moderationApiBaseUrl = moderationDefaultApiUrl;
   }
   ModerationService.saveSettings({ ...modSettings.value });
@@ -1954,7 +1954,7 @@ function saveModerationSettings() {
 }
 
 function onModerationProviderChange() {
-  if (modSettings.value.moderationProvider === 'interpoll') {
+  if (modSettings.value.moderationProvider === 'echo') {
     modSettings.value.moderationApiBaseUrl = moderationDefaultApiUrl;
   }
   saveModerationSettings();
@@ -2128,14 +2128,14 @@ const vpsOs   = ref('Linux (bash)');
 const copied  = ref<'home' | 'vps' | 'tab' | null>(null);
 
 const HOME_CMDS: Record<string, string> = {
-  'Linux / Pi': 'curl -sSL https://interpoll.endless.social/install.sh | bash',
-  'macOS':      'curl -sSL https://interpoll.endless.social/install.sh | bash',
-  'Windows':    "irm https://interpoll.endless.social/install.ps1 | iex",
+  'Linux / Pi': 'curl -sSL https://echo.endless.social/install.sh | bash',
+  'macOS':      'curl -sSL https://echo.endless.social/install.sh | bash',
+  'Windows':    "irm https://echo.endless.social/install.ps1 | iex",
 };
 // vps.sh runs on the (Linux) server either way; the tab only reflects the shell you SSH from.
 const VPS_CMDS: Record<string, string> = {
-  'Linux (bash)': 'curl -sSL https://interpoll.endless.social/vps.sh | sudo bash -s yourdomain.com',
-  'macOS (zsh)':  'curl -sSL https://interpoll.endless.social/vps.sh | sudo bash -s yourdomain.com',
+  'Linux (bash)': 'curl -sSL https://echo.endless.social/vps.sh | sudo bash -s yourdomain.com',
+  'macOS (zsh)':  'curl -sSL https://echo.endless.social/vps.sh | sudo bash -s yourdomain.com',
 };
 const homeCmd = computed(() => HOME_CMDS[homeOs.value] ?? HOME_CMDS['Linux / Pi']);
 const vpsCmd  = computed(() => VPS_CMDS[vpsOs.value]  ?? VPS_CMDS['Linux (bash)']);
@@ -2264,14 +2264,14 @@ async function checkTorStatus() {
       isTor,
       note: isTor
         ? 'Confirmed: this browser is reaching the network over Tor.'
-        : 'This browser is NOT on Tor. Open InterPoll in Tor Browser to be anonymous.',
+        : 'This browser is NOT on Tor. Open Echo in Tor Browser to be anonymous.',
     };
   } catch {
     // CORS-blocked or offline — cannot read the result. Do not overclaim.
     torStatus.value = {
       checked: true,
       isTor: null,
-      note: 'Could not verify automatically. Make sure you opened InterPoll in Tor Browser.',
+      note: 'Could not verify automatically. Make sure you opened Echo in Tor Browser.',
     };
   } finally {
     torChecking.value = false;
@@ -2396,7 +2396,7 @@ async function generateBootstrapInvite() {
 
   generatedBootstrapInvite.value = BootstrapInviteService.createInvite(endpoint, {
     createdBy: myPeerId.value || 'local-node',
-    note: 'InterPoll relay bootstrap',
+    note: 'Echo relay bootstrap',
     handoff: {
       sourcePeerId: myPeerId.value || WebSocketService.getPeerId(),
       connectedServer,
@@ -2733,7 +2733,7 @@ const exportData = async () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `interpoll-backup-${Date.now()}.json`;
+    a.download = `echo-backup-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
 

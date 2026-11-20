@@ -5,10 +5,10 @@ import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import { UserService } from '../services/userService';
 
-const TOUR_KEY   = 'interpoll_bit_tour_v1';
-const NAV_STEP_KEY = 'interpoll_bit_navswap_v1';
-const REMIND_KEY = 'interpoll_bit_remind_v1';
-const REMIND_RECOVERY_KEY = 'interpoll_bit_remind_recovery_v1';
+const TOUR_KEY   = 'echo_bit_tour_v1';
+const NAV_STEP_KEY = 'echo_bit_navswap_v1';
+const REMIND_KEY = 'echo_bit_remind_v1';
+const REMIND_RECOVERY_KEY = 'echo_bit_remind_recovery_v1';
 const PENDING_GAP_MS = 3 * 60 * 60 * 1000; // re-show a pending-recovery warning at most every 3 h
 
 /** Escalating quiet periods after each dismissal: 10m, 30m, 2h, 6h, then daily. */
@@ -56,7 +56,7 @@ const BACKUP_STEP: TourStep = {
   id: 'backup', target: 'settings', title: 'Back up your key', mood: 'alert',
   body: 'Your recovery phrase is the only way back into this identity. Open Settings → Cryptographic Identity → Recovery phrase and save it somewhere safe.',
 };
-const PHRASE_SAVED_KEY = 'interpoll_phrase_saved';
+const PHRASE_SAVED_KEY = 'echo_phrase_saved';
 export function phraseSaved(): boolean { try { return localStorage.getItem(PHRASE_SAVED_KEY) === 'true'; } catch { return false; } }
 /** Tour steps for this device: if the setup wizard never saved a phrase, nudge toward Settings before the username step. */
 export function buildTourSteps(): TourStep[] {

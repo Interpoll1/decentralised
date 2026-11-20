@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# Interpoll — Cloud VPS Installer
+# Echo — Cloud VPS Installer
 # Targets: Ubuntu 22.04 / 24.04 (DigitalOcean, Hetzner, Vultr, Linode, OVH)
 # Run as root on a fresh VPS
 # ─────────────────────────────────────────────────────────────────────────────
@@ -34,8 +34,8 @@ EMAIL="${EMAIL:-}"
 
 # ── Optional config ────────────────────────────────────────────────────────────
 RELAY_PORT="${RELAY_PORT:-8080}"
-INSTALL_DIR="${INSTALL_DIR:-/opt/interpoll}"
-DEPLOY_USER="${DEPLOY_USER:-interpoll}"
+INSTALL_DIR="${INSTALL_DIR:-/opt/echo}"
+DEPLOY_USER="${DEPLOY_USER:-echo}"
 NODE_VERSION="20"
 MYSQL_PASS="${MYSQL_PASS:-$(openssl rand -base64 32 | tr -d '/+=')}"
 ADMIN_SECRET="${ADMIN_SECRET:-$(openssl rand -base64 32 | tr -d '/+=')}"
@@ -111,9 +111,9 @@ apt-get install -y -qq mysql-server
 systemctl enable --now mysql
 
 mysql -u root << SQL
-  CREATE DATABASE IF NOT EXISTS interpoll CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-  CREATE USER IF NOT EXISTS 'interpoll'@'127.0.0.1' IDENTIFIED BY '${MYSQL_PASS}';
-  GRANT ALL PRIVILEGES ON interpoll.* TO 'interpoll'@'127.0.0.1';
+  CREATE DATABASE IF NOT EXISTS echo CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  CREATE USER IF NOT EXISTS 'echo'@'127.0.0.1' IDENTIFIED BY '${MYSQL_PASS}';
+  GRANT ALL PRIVILEGES ON echo.* TO 'echo'@'127.0.0.1';
 
   -- Lock down root
   DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1');
@@ -123,7 +123,7 @@ mysql -u root << SQL
 SQL
 
 # MySQL performance tuning for a relay workload
-cat > /etc/mysql/conf.d/interpoll.cnf << MYCNF
+cat > /etc/mysql/conf.d/echo.cnf << MYCNF
 [mysqld]
 innodb_buffer_pool_size     = 256M
 innodb_log_file_size        = 64M
@@ -165,9 +165,9 @@ SERVER_ORIGIN=https://${DOMAIN}
 
 MYSQL_HOST=127.0.0.1
 MYSQL_PORT=3306
-MYSQL_USER=interpoll
+MYSQL_USER=echo
 MYSQL_PASSWORD=${MYSQL_PASS}
-MYSQL_DATABASE=interpoll
+MYSQL_DATABASE=echo
 
 JWT_SECRET=${JWT_SECRET}
 VOTE_RESERVATION_SECRET=${VOTE_SECRET}
@@ -221,7 +221,7 @@ success "PM2 configured"
 
 # ── Nginx ──────────────────────────────────────────────────────────────────────
 step "Configuring nginx"
-cat > /etc/nginx/sites-available/interpoll << NGINX
+cat > /etc/nginx/sites-available/echo << NGINX
 map \$http_upgrade \$connection_upgrade {
   default upgrade;
   ''      close;
@@ -312,14 +312,14 @@ server {
 }
 NGINX
 
-ln -sf /etc/nginx/sites-available/interpoll /etc/nginx/sites-enabled/interpoll
+ln -sf /etc/nginx/sites-available/echo /etc/nginx/sites-enabled/echo
 rm -f /etc/nginx/sites-enabled/default
 
 # ── TLS ────────────────────────────────────────────────────────────────────────
 step "Obtaining TLS certificate"
 # Temporarily serve HTTP for ACME challenge before nginx has the cert
 sed -i 's|ssl_certificate|#ssl_certificate|g; s|ssl_protocols|#ssl_protocols|g; s|ssl_ciphers|#ssl_ciphers|g; s|ssl_prefer|#ssl_prefer|g; s|ssl_session|#ssl_session|g; s|ssl_stapling|#ssl_stapling|g; s|listen 443|#listen 443|g; s|return 301|#return 301|g' \
-  /etc/nginx/sites-available/interpoll 2>/dev/null || true
+  /etc/nginx/sites-available/echo 2>/dev/null || true
 
 nginx -t && systemctl reload nginx
 
@@ -330,7 +330,7 @@ certbot certonly --nginx -d "$DOMAIN" --non-interactive \
 }
 
 # Restore full nginx config
-cat > /etc/nginx/sites-available/interpoll << NGINX2
+cat > /etc/nginx/sites-available/echo << NGINX2
 map \$http_upgrade \$connection_upgrade {
   default upgrade;
   ''      close;
@@ -424,13 +424,13 @@ if [[ "$ENABLE_TOR" == "true" ]]; then
   apt-get install -y -qq tor
   cat >> /etc/tor/torrc << TOR
 
-HiddenServiceDir /var/lib/tor/interpoll/
+HiddenServiceDir /var/lib/tor/echo/
 HiddenServicePort 80  127.0.0.1:${RELAY_PORT}
 HiddenServicePort 443 127.0.0.1:${RELAY_PORT}
 TOR
   systemctl restart tor
   sleep 5
-  ONION=$(cat /var/lib/tor/interpoll/hostname 2>/dev/null || echo "pending — check /var/lib/tor/interpoll/hostname")
+  ONION=$(cat /var/lib/tor/echo/hostname 2>/dev/null || echo "pending — check /var/lib/tor/echo/hostname")
   success "Tor: $ONION"
 fi
 
@@ -469,7 +469,7 @@ systemctl enable --now fail2ban &>/dev/null
 success "Fail2ban active"
 
 # ── Log rotation ───────────────────────────────────────────────────────────────
-cat > /etc/logrotate.d/interpoll << LR
+cat > /etc/logrotate.d/echo << LR
 ${INSTALL_DIR}/logs/*.log {
   daily
   rotate 14
@@ -486,7 +486,7 @@ LR
 success "Log rotation configured"
 
 # ── Health check cron ──────────────────────────────────────────────────────────
-cat > /etc/cron.d/interpoll-health << CRON
+cat > /etc/cron.d/echo-health << CRON
 */5 * * * * ${DEPLOY_USER} curl -sf http://127.0.0.1:${RELAY_PORT}/api/health > /dev/null || pm2 restart relay-server
 CRON
 success "Health check cron active"
@@ -494,11 +494,11 @@ success "Health check cron active"
 # ── Save credentials ───────────────────────────────────────────────────────────
 CREDS_FILE="$INSTALL_DIR/credentials.txt"
 cat > "$CREDS_FILE" << CREDS
-# Interpoll VPS credentials — keep safe, delete after noting down
+# Echo VPS credentials — keep safe, delete after noting down
 # Generated: $(date)
 
 DOMAIN:        ${DOMAIN}
-MYSQL_USER:    interpoll
+MYSQL_USER:    echo
 MYSQL_PASS:    ${MYSQL_PASS}
 ADMIN_SECRET:  ${ADMIN_SECRET}
 INSTALL_DIR:   ${INSTALL_DIR}
@@ -510,7 +510,7 @@ chmod 600 "$CREDS_FILE"
 # ── Done ───────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}${BOLD}  Interpoll VPS installed successfully!${NC}"
+echo -e "${GREEN}${BOLD}  Echo VPS installed successfully!${NC}"
 echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo -e "  Relay URL:     ${BOLD}https://${DOMAIN}${NC}"
@@ -528,6 +528,6 @@ echo -e "    ${BOLD}pm2 status${NC}                — process status"
 echo -e "    ${BOLD}pm2 restart relay-server${NC}  — restart after .env changes"
 echo -e "    ${BOLD}nano ${INSTALL_DIR}/relay-server/.env${NC}"
 echo ""
-echo -e "  Add to Interpoll app:"
+echo -e "  Add to Echo app:"
 echo -e "    ${BOLD}Settings → Relays → Add relay → https://${DOMAIN}${NC}"
 echo ""
