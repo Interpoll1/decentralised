@@ -71,7 +71,7 @@ STUN-only, which still works for most NATs.
 ## 5. Verify
 
 ```bash
-curl -s https://echo.endless.sbs/api/turn-credentials   # → 401 without auth (expected; needs session or ?pk&ts&sig)
+curl -s https://interpoll.endless.sbs/api/turn-credentials   # → 401 without auth (expected; needs session or ?pk&ts&sig)
 # Easiest real check: start a call in the app with DevTools open and inspect the 200 response.
 turnutils_uclient -u <username> -w <credential> turn.endless.sbs
 ```

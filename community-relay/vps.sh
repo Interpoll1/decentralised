@@ -2,7 +2,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Echo community relay — Cloud VPS installer (Docker + Caddy + auto-TLS)
 #
-#   curl -sSL https://echo.endless.social/vps.sh | sudo bash -s relay.example.com [email]
+#   curl -sSL https://interpoll.endless.social/vps.sh | sudo bash -s relay.example.com [email]
 #
 # Requirements: Ubuntu/Debian (or any distro get.docker.com supports), a domain
 # whose A/AAAA record points at this server, and ports 80 + 443 free.
@@ -17,8 +17,8 @@ set -euo pipefail
 
 DOMAIN="${1:-${DOMAIN:-}}"
 EMAIL="${2:-${EMAIL:-}}"
-BASE="${ECHO_BASE:-https://echo.endless.social}"
-UPSTREAM_PEERS="${UPSTREAM_PEERS-https://echo2.endless.social/gun}"
+BASE="${ECHO_BASE:-https://interpoll.endless.social}"
+UPSTREAM_PEERS="${UPSTREAM_PEERS-https://interpoll2.endless.social/gun}"
 DIR=/opt/echo-relay
 PORT=8765
 

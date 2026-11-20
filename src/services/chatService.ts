@@ -57,7 +57,7 @@ import { verifyAuthenticatedBundle, verifyContext, continuityChange, DMIdentityE
 
 /** HTTP base URL of the relay-server (port 3001) — where signal bundles and chat APIs live. */
 function chatRelayBase(): string {
-  const ws = config.relay.websocket; // e.g. wss://echo.endless.sbs
+  const ws = config.relay.websocket; // e.g. wss://interpoll.endless.sbs
   return ws.replace(/^wss:\/\//, 'https://').replace(/^ws:\/\//, 'http://').replace(/\/$/, '');
 }
 import { SignalSession, SignalPublicBundle, SignalEnvelope, SIGNAL_WIRE_VERSION, getOrCreateIdentityBundle, getOrCreateAuthenticatedIdentityBundle, generateOPKBatch, getOPKPoolSize, OPK_POOL_SIZE, OPK_POOL_LOW_WATER } from './signalProtocol';

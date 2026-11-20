@@ -169,16 +169,16 @@ function loadGunPeers(): string[] | null {
 
 // Defaults always point to Render URLs
 //const defaults = {
-//  websocket: 'wss://echo.onrender.com',
- // gun: 'https://echo2.onrender.com/gun',
- // api: 'https://echo.onrender.com',
+//  websocket: 'wss://interpoll.onrender.com',
+ // gun: 'https://interpoll2.onrender.com/gun',
+ // api: 'https://interpoll.onrender.com',
 //};
 
 // Defaults point to VPS
 const defaults = {
-  websocket: import.meta.env.VITE_WS_RELAY_URL || 'wss://echo.endless.social',
-  gun: import.meta.env.VITE_GUN_RELAY_URL || 'https://echo2.endless.social/gun',
-  api: import.meta.env.VITE_API_BASE_URL || 'https://echo.endless.social',
+  websocket: import.meta.env.VITE_WS_RELAY_URL || 'wss://interpoll.endless.social',
+  gun: import.meta.env.VITE_GUN_RELAY_URL || 'https://interpoll2.endless.social/gun',
+  api: import.meta.env.VITE_API_BASE_URL || 'https://interpoll.endless.social',
 };
 
 // ── Built-in peer tiers ───────────────────────────────────────────────────────

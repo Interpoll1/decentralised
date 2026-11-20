@@ -2,7 +2,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Echo community relay — Home server installer (Linux / Raspberry Pi / macOS)
 #
-#   curl -sSL https://echo.endless.social/install.sh | bash
+#   curl -sSL https://interpoll.endless.social/install.sh | bash
 #
 # Installs Node.js if missing, downloads the relay, and runs it as a service
 # that starts on boot (systemd on Linux, launchd on macOS). Prints the relay
@@ -14,9 +14,9 @@
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-BASE="${ECHO_BASE:-https://echo.endless.social}"
+BASE="${ECHO_BASE:-https://interpoll.endless.social}"
 RELAY_PORT="${RELAY_PORT:-8765}"
-UPSTREAM_PEERS="${UPSTREAM_PEERS-https://echo2.endless.social/gun}"
+UPSTREAM_PEERS="${UPSTREAM_PEERS-https://interpoll2.endless.social/gun}"
 SERVICE=echo-relay
 NODE_MAJOR_MIN=18
 

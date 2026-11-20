@@ -1,5 +1,5 @@
 const Gun = require('gun');
-const gun = Gun({ peers: ['https://echo2.endless.sbs/gun'], radisk:false, localStorage:false, file:false, axe:false, multicast:false });
+const gun = Gun({ peers: ['https://interpoll2.endless.sbs/gun'], radisk:false, localStorage:false, file:false, axe:false, multicast:false });
 
 const base = (id) => ({ id, name:id.slice(2), displayName:'Probe '+id, description:'probe', creatorId:'current-user-id', createdAt:Date.now(), memberCount:1, postCount:0, category:null, nsfw:false, isPrivate:false });
 

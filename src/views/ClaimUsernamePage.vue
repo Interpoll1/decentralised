@@ -58,7 +58,7 @@
               <ion-label position="stacked">{{ $ui("Issuer endpoint") }}</ion-label>
               <ion-input
                 v-model="customIssuerEndpoint"
-                placeholder="https://echo.endless.social/trust"
+                placeholder="https://interpoll.endless.social/trust"
                 autocomplete="off"
               />
             </ion-item>
@@ -212,7 +212,7 @@ const powError = ref('');
 const claimedVerified = ref(false);
 const claimedCertificate = ref<TrustCertificate | null>(null);
 const showCustomIssuerMenu = ref(false);
-const customIssuerEndpoint = ref('https://echo.endless.social/trust');
+const customIssuerEndpoint = ref('https://interpoll.endless.social/trust');
 const customIssuerContact = ref('');
 const addingCustomIssuer = ref(false);
 const customIssuerError = ref('');
@@ -229,7 +229,7 @@ onMounted(async () => {
   try {
     issuers.value = await TrustService.getIssuers();
     const defaultIssuer = issuers.value.find((issuer) =>
-      issuer.endpoint === 'https://echo.endless.social/trust' || issuer.domain === 'endless.sbs'
+      issuer.endpoint === 'https://interpoll.endless.social/trust' || issuer.domain === 'endless.sbs'
     );
     if (defaultIssuer) selectedIssuer.value = defaultIssuer;
   } catch (e) {

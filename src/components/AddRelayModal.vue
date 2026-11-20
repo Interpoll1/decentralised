@@ -190,9 +190,9 @@ const discoveredRelays = ref<RelayEndpoint[]>([]);
 // ── Presets ────────────────────────────────────────────────────────────────
 const PRESETS = [
   {
-    url:         'https://echo2.endless.social',
+    url:         'https://interpoll2.endless.social',
     label:       'Echo public relay',
-    description: 'echo2.endless.social — the default open relay',
+    description: 'interpoll2.endless.social — the default open relay',
   },
   // Add more known community relays here as they are established
 ];

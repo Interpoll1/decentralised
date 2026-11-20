@@ -132,11 +132,11 @@ mkdir -p /var/log/pm2
 echo ""
 echo "▶ Writing Nginx config..."
 
-# Gun relay — echo2.endless.social (or keep using echo2.onrender.com for now)
+# Gun relay — interpoll2.endless.social (or keep using interpoll2.onrender.com for now)
 cat > /etc/nginx/sites-available/gun-relay << 'EOF'
 server {
     listen 80;
-    server_name echo2.endless.social;
+    server_name interpoll2.endless.social;
 
     # WebSocket support for Gun
     location /gun {
@@ -160,11 +160,11 @@ server {
 }
 EOF
 
-# Relay server — echo.endless.social
+# Relay server — interpoll.endless.social
 cat > /etc/nginx/sites-available/relay-server << 'EOF'
 server {
     listen 80;
-    server_name echo.endless.social;
+    server_name interpoll.endless.social;
 
     # WebSocket support
     location /ws {
@@ -214,10 +214,10 @@ echo "   cd /var/www/echo && pm2 start ecosystem.config.cjs"
 echo "   pm2 save && pm2 startup"
 echo ""
 echo "5. Add DNS A records pointing to this VPS IP:"
-echo "   echo.endless.social  → $(curl -s ifconfig.me)"
-echo "   echo2.endless.social → $(curl -s ifconfig.me)"
+echo "   interpoll.endless.social  → $(curl -s ifconfig.me)"
+echo "   interpoll2.endless.social → $(curl -s ifconfig.me)"
 echo ""
 echo "6. Get SSL certs:"
 echo "   apt install -y certbot python3-certbot-nginx"
-echo "   certbot --nginx -d echo.endless.social -d echo2.endless.social"
+echo "   certbot --nginx -d interpoll.endless.social -d interpoll2.endless.social"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

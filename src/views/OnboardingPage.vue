@@ -33,7 +33,7 @@
               </span>
               <div class="ob-option-body">
                 <strong>{{ $ui("Echo public relay") }}</strong>
-                <span>{{ $ui("echo2.endless.social — open, censorship-resistant") }}</span>
+                <span>{{ $ui("interpoll2.endless.social — open, censorship-resistant") }}</span>
               </div>
               <span class="ob-option-check" v-if="relayChoice === 'default'">✓</span>
             </button>

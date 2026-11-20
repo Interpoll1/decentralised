@@ -61,7 +61,7 @@ const STATE_FILE = resolve(process.env.TRUST_STATE_FILE || './data/trust-issuer-
 const ALLOWED_ORIGIN_SET = new Set([
   ...FRONTEND_ORIGINS,
   'https://endless.social',
-  'https://echo.endless.social',
+  'https://interpoll.endless.social',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
 ]);
@@ -206,7 +206,7 @@ function parseAllowedOrigins(input: string | undefined): string[] {
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
-  return configured.length > 0 ? configured : ['https://endless.social', 'https://echo.endless.social'];
+  return configured.length > 0 ? configured : ['https://endless.social', 'https://interpoll.endless.social'];
 }
 
 async function start(): Promise<void> {

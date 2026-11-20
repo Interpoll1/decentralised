@@ -3,8 +3,8 @@
 </p>
 
 <p align="center">
-  <a href="https://endless.social"><img alt="Relay status" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fecho.endless.social%2Fhealth&query=%24.status&label=live%20relay&color=3dff7a&labelColor=111" /></a>
-  <a href="https://endless.social"><img alt="Clients connected" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fecho.endless.social%2Fhealth&query=%24.clients&label=clients%20connected&color=3dff7a&labelColor=111" /></a>
+  <a href="https://endless.social"><img alt="Relay status" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Finterpoll.endless.social%2Fhealth&query=%24.status&label=live%20relay&color=3dff7a&labelColor=111" /></a>
+  <a href="https://endless.social"><img alt="Clients connected" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Finterpoll.endless.social%2Fhealth&query=%24.clients&label=clients%20connected&color=3dff7a&labelColor=111" /></a>
   <a href="https://github.com/Interpoll1/decentralised/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/Interpoll1/decentralised?include_prereleases&color=3dff7a&labelColor=111" /></a>
   <a href="https://github.com/Interpoll1/decentralised/commits/master"><img alt="Last commit" src="https://img.shields.io/github/last-commit/Interpoll1/decentralised?color=3dff7a&labelColor=111" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/Interpoll1/decentralised?color=3dff7a&labelColor=111" /></a>

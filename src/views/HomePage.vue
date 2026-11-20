@@ -414,7 +414,7 @@
               v-model="moderationCustomApiUrl"
               type="url"
               inputmode="url"
-              placeholder="https://echo.endless.social/moderation"
+              placeholder="https://interpoll.endless.social/moderation"
               @input="moderationCustomApiError = ''"
             >
             <p class="moderation-onboarding-card__hint">{{ $ui("This should be the base address of your moderation API.") }}</p>

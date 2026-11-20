@@ -85,7 +85,7 @@ const BUILTIN_ISSUERS: Omit<TrustIssuer, 'addedAt'>[] = [
   {
     domain: 'endless.sbs',
     contact: 'admin@endless.sbs',
-    endpoint: 'https://echo.endless.social/trust',
+    endpoint: 'https://interpoll.endless.social/trust',
     publicKey: '',
   },
 ];

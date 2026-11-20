@@ -30,9 +30,9 @@ function flag(name, fallback) {
   return i !== -1 && args[i + 1] ? args[i + 1] : fallback;
 }
 
-const WS_URL    = flag('--ws',    'wss://echo.endless.social');
-const GUN_URL   = flag('--gun',   'https://echo2.endless.social/gun');
-const API_URL   = flag('--api',   'https://echo.endless.social');
+const WS_URL    = flag('--ws',    'wss://interpoll.endless.social');
+const GUN_URL   = flag('--gun',   'https://interpoll2.endless.social/gun');
+const API_URL   = flag('--api',   'https://interpoll.endless.social');
 const DATA_DIR  = flag('--data',  path.join(path.dirname(fileURLToPath(import.meta.url)), 'peer-data'));
 const PROXY_URL = flag('--proxy', '');
 

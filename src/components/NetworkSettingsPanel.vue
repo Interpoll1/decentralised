@@ -35,7 +35,7 @@
         <label class="toggle-row">
           <div>
             <strong>{{ $ui("Private relay") }}</strong>
-            <p class="sub">{{ $ui("Your VPS (echo2.endless.social) — fastest, most trusted") }}</p>
+            <p class="sub">{{ $ui("Your VPS (interpoll2.endless.social) — fastest, most trusted") }}</p>
           </div>
           <input type="checkbox" v-model="prefs.usePrivate" @change="savePrefs" />
         </label>

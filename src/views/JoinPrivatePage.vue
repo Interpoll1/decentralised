@@ -53,7 +53,7 @@
                   v-model="inviteUrl"
                   class="join-input"
                   type="url"
-                  placeholder="https://echo.example.com/join/community/abc…"
+                  placeholder="https://interpoll.example.com/join/community/abc…"
                   autocomplete="off"
                   @keydown.enter="joinViaLink"
                 />

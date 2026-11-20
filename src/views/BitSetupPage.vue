@@ -86,7 +86,7 @@
             <h1 class="bs-title">{{ $ui("How do you want to connect?") }}</h1>
             <div class="bs-options">
               <button class="bs-option" :class="{ on: relayChoice === 'default' }" @click="relayChoice = 'default'">
-                <strong>{{ $ui("Echo public relay") }}</strong><small>{{ $ui("echo.endless.social — open, works out of the box") }}</small>
+                <strong>{{ $ui("Echo public relay") }}</strong><small>{{ $ui("interpoll.endless.social — open, works out of the box") }}</small>
               </button>
               <button class="bs-option" :class="{ on: relayChoice === 'community' }" @click="relayChoice = 'community'">
                 <strong>{{ $ui("A relay I trust") }}</strong><small>{{ $ui("Paste the address of a community or self-hosted relay") }}</small>

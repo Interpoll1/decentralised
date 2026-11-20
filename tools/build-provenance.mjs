@@ -20,9 +20,9 @@ export function buildProvenancePlugin() {
     enforce: 'post',
     configResolved(resolved) {
       config = {
-        websocket: resolved.env.VITE_WS_RELAY_URL || 'wss://echo.endless.social',
-        gun: resolved.env.VITE_GUN_RELAY_URL || 'https://echo2.endless.social/gun',
-        api: resolved.env.VITE_API_BASE_URL || 'https://echo.endless.social',
+        websocket: resolved.env.VITE_WS_RELAY_URL || 'wss://interpoll.endless.social',
+        gun: resolved.env.VITE_GUN_RELAY_URL || 'https://interpoll2.endless.social/gun',
+        api: resolved.env.VITE_API_BASE_URL || 'https://interpoll.endless.social',
         web: resolved.env.VITE_WEB_ORIGIN || 'https://endless.social',
       };
       for (const [key, value] of Object.entries(config)) {
