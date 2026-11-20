@@ -191,7 +191,7 @@ function openSettings() {
 }
 
 // Map tiles are opt-out (they come from OpenStreetMap, which can see the area being viewed).
-const TILES_KEY = 'echo_nearby_tiles';
+const TILES_KEY = 'interpoll_nearby_tiles';
 const tilesOn = ref((() => { try { return localStorage.getItem(TILES_KEY) === '1'; } catch { return false; } })());
 function setTiles(v: boolean) { tilesOn.value = v; try { localStorage.setItem(TILES_KEY, v ? '1' : '0'); } catch { /* ignore */ } }
 const widened = computed(() => nb.prefs.enabled && nb.publishedPrecision.value > nb.prefs.precision && nb.prefs.visibility !== 'off');

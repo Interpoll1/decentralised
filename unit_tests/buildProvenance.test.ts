@@ -8,7 +8,7 @@ import { buildProvenancePlugin } from '../tools/build-provenance.mjs';
 const temporary: string[] = [];
 afterEach(() => { for (const dir of temporary.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 it('records final emitted bytes and detects subsequent artifact modification', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'echo-build-')); temporary.push(dir);
+  const dir = mkdtempSync(join(tmpdir(), 'interpoll-build-')); temporary.push(dir);
   writeFileSync(join(dir, 'index.html'), '<script src="entry.js"></script>');
   writeFileSync(join(dir, 'entry.js'), 'console.log("final bytes");');
   const plugin = buildProvenancePlugin();

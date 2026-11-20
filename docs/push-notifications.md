@@ -24,7 +24,7 @@ delivered nothing.
 browser. `useChat` calls `initNotifications()` once and `notifyChatMessage()`
 per incoming message; opening a chat clears that peer's notification.
 
-Android channel: `echo-chat` ("Messages", high importance). Created on
+Android channel: `interpoll-chat` ("Messages", high importance). Created on
 first init.
 
 Nothing to configure. Rebuild and sync:
@@ -119,7 +119,7 @@ There is no session to trust — Echo identities are keys, not accounts, and
 the relay is explicitly untrusted. So registration is self-authenticating:
 
 - `userId` **is** the x-only Schnorr public key.
-- The client signs `echo-push-register-1:<userId>:<deviceId>:<token>:<ts>`
+- The client signs `interpoll-push-register-1:<userId>:<deviceId>:<token>:<ts>`
   with the matching private key (`CryptoService.sign`, same primitive as
   `signRawSchnorr` in `shared-validation/signatures.js`).
 - The relay verifies that signature *against `userId` itself*, so no key
@@ -130,7 +130,7 @@ the relay is explicitly untrusted. So registration is self-authenticating:
   captured request cannot be replayed. Registrations are rate-limited to 20 per
   IP per minute.
 
-Unregister is signed the same way (`echo-push-unregister-1:…`) and only
+Unregister is signed the same way (`interpoll-push-unregister-1:…`) and only
 removes a device whose stored `userId` matches the signer.
 
 ### 4. Email fallback (Resend)
@@ -167,7 +167,7 @@ It adds three routes:
 | `GET /api/push/email/unsubscribe?token=…` | One-click opt-out for the *recipient* of an unwanted mail — no identity key needed, the HMAC'd token in the link is the authority |
 
 Registration is authenticated exactly like the FCM endpoints: the client signs
-`echo-email-register-1:<userId>:<email>:<ts>` with the identity key, and
+`interpoll-email-register-1:<userId>:<email>:<ts>` with the identity key, and
 the relay verifies it against `userId`. Same 5-minute freshness window, same
 replay guard, same per-IP limiter.
 
@@ -200,7 +200,7 @@ The client path is behind a flag so a device with no Firebase config never
 crashes on startup:
 
 ```js
-localStorage.setItem('echo_push_enabled', 'true');
+localStorage.setItem('interpoll_push_enabled', 'true');
 ```
 
 or call `setPushEnabled(true)` from `src/native/pushNotifications.ts`.

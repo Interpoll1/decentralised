@@ -20,7 +20,7 @@ export function turnSubject(id) {
 
 /** Message a device key signs to request TURN credentials (must match the client). */
 export function turnRequestMessage(pubkey, ts) {
-  return `echo-turn:${pubkey}:${ts}`;
+  return `interpoll-turn:${pubkey}:${ts}`;
 }
 
 /**

@@ -86,8 +86,8 @@ const flyEl = ref<HTMLElement | null>(null);
 const bubbleBit = ref<HTMLElement | null>(null);
 function takeFlight() {
   try {
-    const raw = sessionStorage.getItem('echo_bit_flight');
-    sessionStorage.removeItem('echo_bit_flight');
+    const raw = sessionStorage.getItem('interpoll_bit_flight');
+    sessionStorage.removeItem('interpoll_bit_flight');
     if (raw) flight.value = JSON.parse(raw);
   } catch { flight.value = null; }
 }

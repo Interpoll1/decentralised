@@ -506,7 +506,7 @@ const bitStore       = useBitStore();
 const pollStore      = usePollStore();
 
 
-const HOME_GUN_FEED_ENABLED         = localStorage.getItem('echo_home_gun_feed') !== 'false';
+const HOME_GUN_FEED_ENABLED         = localStorage.getItem('interpoll_home_gun_feed') !== 'false';
 const HOME_GUN_FEED_MAX_COMMUNITIES = 8;
 
 const HOME_TABS = ['home', 'orbit', 'chat', 'create'] as const;
@@ -551,7 +551,7 @@ let feedMutObs: MutationObserver | null = null;
 type FeedScope = 'mine' | 'relay' | 'explore' | 'nearby';
 const feedScope = ref<FeedScope>(
   (route.query.scope as FeedScope)
-  || (localStorage.getItem('echo_feed_scope') as FeedScope)
+  || (localStorage.getItem('interpoll_feed_scope') as FeedScope)
   || 'relay'
 );
 function setScope(s: FeedScope) {
@@ -576,7 +576,7 @@ watch(feedScope, (sc) => { if (sc === 'nearby' && nearby.prefs.enabled) void nea
 
 // Persist scope to localStorage
 watch(feedScope, (s) => {
-  localStorage.setItem('echo_feed_scope', s);
+  localStorage.setItem('interpoll_feed_scope', s);
 });
 
 // Set of joined community IDs for "My Spaces" filtering
@@ -1319,11 +1319,11 @@ onUnmounted(() => {
   if (feedMutObs) { feedMutObs.disconnect(); feedMutObs = null; }
 });
 
-// ── DEV DEBUG — window.__echo ────────────────────────────────────────
+// ── DEV DEBUG — window.__interpoll ────────────────────────────────────────
 // Exposes stores, raw Gun, and diagnostic helpers to the browser console.
-// Usage: window.__echo.diagnose()
+// Usage: window.__interpoll.diagnose()
 if (typeof window !== 'undefined') {
-  (window as any).__echo = {
+  (window as any).__interpoll = {
     // Raw store refs
     get postStore()      { return postStore; },
     get pollStore()      { return pollStore; },
@@ -1432,10 +1432,10 @@ if (typeof window !== 'undefined') {
       console.groupEnd();
     },
   };
-  console.log('%c[Echo] Debug ready → window.__echo.diagnose()', 'color:#e6e6e6;font-style:italic');
+  console.log('%c[Echo] Debug ready → window.__interpoll.diagnose()', 'color:#e6e6e6;font-style:italic');
 
   // View tracking debug shortcuts
-  (window as any).__echo.views = {
+  (window as any).__interpoll.views = {
     diagnose() {
       const vt = (window as any).__viewTracking;
       if (!vt) { console.warn('[views] not initialised yet'); return; }

@@ -154,7 +154,7 @@ const categoriesOpen = ref(true);
 function goHome()            { router.push('/home'); }
 function goTab(tab: string)  { router.push({ path: '/home', query: { tab } }); }
 function goScope(scope: string) {
-  localStorage.setItem('echo_feed_scope', scope);
+  localStorage.setItem('interpoll_feed_scope', scope);
   router.push({ path: '/home', query: { tab: 'home', scope } });
 }
 function goCategory(id: string) {

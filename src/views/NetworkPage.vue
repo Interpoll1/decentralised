@@ -289,7 +289,7 @@ const addError      = ref('');
 const newGunPeer    = ref('');
 const gunPeerError  = ref('');
 const wireFilter    = ref<'off'|'log'|'enforce'>(
-  (localStorage.getItem('echo_wire_filter_mode') as any) || 'log'
+  (localStorage.getItem('interpoll_wire_filter_mode') as any) || 'log'
 );
 
 const wireFilterDesc: Record<string, string> = {
@@ -412,7 +412,7 @@ function setTransport(partial: Partial<TransportStrategySettings>) {
 }
 
 function saveWireFilter() {
-  localStorage.setItem('echo_wire_filter_mode', wireFilter.value);
+  localStorage.setItem('interpoll_wire_filter_mode', wireFilter.value);
 }
 
 async function refreshAll() {

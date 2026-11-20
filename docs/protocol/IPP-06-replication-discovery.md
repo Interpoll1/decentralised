@@ -36,7 +36,7 @@ A block MUST be accepted only when chain continuity holds (or a valid genesis
 bootstrap). The same sync semantics MUST be carried over both transports:
 
 - **WebSocket relay** for cross-device fan-out.
-- **`BroadcastChannel('echo-sync')`** for local same-origin cross-tab
+- **`BroadcastChannel('interpoll-sync')`** for local same-origin cross-tab
   fan-out (no network, no relay).
 
 ## 3. Core coordination messages

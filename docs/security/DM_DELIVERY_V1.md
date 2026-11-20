@@ -15,7 +15,7 @@ A receipt is an ordinary v3 encrypted DM whose plaintext starts with NUL followe
 The digest hashes UTF-8 JSON of this ordered array:
 
 ```
-["echo-dm-delivery-1", id, senderId, recipientId,
+["interpoll-dm-delivery-1", id, senderId, recipientId,
  v, eph-or-empty-string, opkId-or-empty-string, dh, n, pn, ct]
 ```
 

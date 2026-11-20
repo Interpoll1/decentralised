@@ -329,7 +329,7 @@ const derivedSoul = computed(() => {
 });
 
 function deriveSpaceSoul(seed: string, epoch: number): string {
-  const input = `echo-space:${seed}:${epoch}`;
+  const input = `interpoll-space:${seed}:${epoch}`;
   return bytesToHex(sha256(new TextEncoder().encode(input))).slice(0, 32);
 }
 
@@ -387,7 +387,7 @@ async function joinViaRendezvous() {
       space = await new Promise<any>((resolve) => {
         const timeout = setTimeout(() => resolve(null), 6000);
         GunService.getGun()
-          ?.get(`echo-rendezvous:${soul}`)
+          ?.get(`interpoll-rendezvous:${soul}`)
           .get('community')
           .once((data: any) => {
             clearTimeout(timeout);

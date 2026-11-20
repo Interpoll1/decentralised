@@ -95,7 +95,7 @@ const active = computed<TabId | ''>(() => {
 
 function lastScope(): string {
   try {
-    const s = localStorage.getItem('echo_feed_scope');
+    const s = localStorage.getItem('interpoll_feed_scope');
     return s && s !== 'explore' ? s : 'relay';
   } catch { return 'relay'; }
 }

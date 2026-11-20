@@ -49,7 +49,7 @@ it('concurrent old bootstrap and valid newer reset cannot rollback authority',as
 });
 it('forged newer reset and current decrypt failure commit no epoch/session/OPK state and authorize no reset',async()=>{
  const {a,b,s,r,first}=await established();const reset=await s.resetSession('new',a,b.bundle,(await epoch()).current,'new');const before=await snapshot();
- for(const env of [{...reset,ct:btoa('bad')},{...first,ct:btoa('bad')},{...reset,epoch:reset.epoch!.replace('echo/dm/epoch','invalid')}]){await expect(r.decrypt(env,b,a.bundle.ik,BOB)).rejects.toThrow();expect(await snapshot()).toBe(before);}
+ for(const env of [{...reset,ct:btoa('bad')},{...first,ct:btoa('bad')},{...reset,epoch:reset.epoch!.replace('interpoll/dm/epoch','invalid')}]){await expect(r.decrypt(env,b,a.bundle.ik,BOB)).rejects.toThrow();expect(await snapshot()).toBe(before);}
  expect(await r.decrypt(reset,b,a.bundle.ik,BOB)).toBe('new');
 });
 it('simultaneous initial bootstraps converge and accept losing in-flight messages exactly once',async()=>{

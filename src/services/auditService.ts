@@ -17,8 +17,8 @@ interface VoteConfirmResponse {
 }
 
 export class AuditService {
-  private static readonly CLOUD_USER_KEY = 'echo_cloud_user';
-  private static readonly RETURN_URL_KEY = 'echo_auth_return_url';
+  private static readonly CLOUD_USER_KEY = 'interpoll_cloud_user';
+  private static readonly RETURN_URL_KEY = 'interpoll_auth_return_url';
 
   private static getTrustedApiBase(): string {
     return config.auth.api;
@@ -245,14 +245,14 @@ export class AuditService {
     // Instead open the system browser and rely on a deep-link return.
     //
     // NOTE (M4 — pending relay change): the relay must honour `platform=native`
-    // by redirecting the callback to `com.echo.app://auth/callback?token=…`
+    // by redirecting the callback to `com.interpoll.app://auth/callback?token=…`
     // (a token in the URL, not a cross-origin cookie). The deep-link listener in
     // src/native/capacitorApp.ts already routes that return; until the relay is
     // updated, native OAuth will open the browser but not complete sign-in.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const Cap = (globalThis as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
     if (Cap?.isNativePlatform?.()) {
-      const nativeUrl = `${startUrl}?platform=native&redirect_uri=${encodeURIComponent('com.echo.app://auth/callback')}`;
+      const nativeUrl = `${startUrl}?platform=native&redirect_uri=${encodeURIComponent('com.interpoll.app://auth/callback')}`;
       import('@capacitor/browser')
         .then(({ Browser }) => Browser.open({ url: nativeUrl }))
         .catch(() => { window.location.href = nativeUrl; });
@@ -264,7 +264,7 @@ export class AuditService {
 
   /**
    * Complete OAuth sign-in on native from a token delivered via deep link
-   * (`com.echo.app://auth/callback?token=…`). Called by the deep-link
+   * (`com.interpoll.app://auth/callback?token=…`). Called by the deep-link
    * handler in src/native/capacitorApp.ts.
    *
    * TODO (M4 — blocked on relay change): the production relay
@@ -279,7 +279,7 @@ export class AuditService {
   static async completeNativeOAuth(token: string): Promise<void> {
     if (!token) return;
     try {
-      localStorage.setItem('echo_pending_native_oauth_token', token);
+      localStorage.setItem('interpoll_pending_native_oauth_token', token);
     } catch { /* storage unavailable */ }
     console.info('[Auth] Received native OAuth token (handoff pending relay support)');
   }

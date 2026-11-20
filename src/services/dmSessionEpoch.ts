@@ -11,7 +11,7 @@ const fail=(s:string):never=>{throw new DMEpochError('STALE',s);};
 export async function readEpoch(local:string,peer:string):Promise<EpochRecord|null>{return await StorageService.getMetadata(epochKey(local,peer))??null;}
 async function digest(s:string){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',utf8(s))),b=>b.toString(16).padStart(2,'0')).join('');}
 export async function createEpoch(local:string,auth:string,eph:string,dh:string,generation:number,parent:string|null):Promise<string>{
- const payload=['echo/dm/epoch',1,generation,parent,auth,eph,dh];
+ const payload=['interpoll/dm/epoch',1,generation,parent,auth,eph,dh];
  const stored=await StorageService.getMetadata(`signal-ik-sign:${local}`);
  const key=await crypto.subtle.importKey('jwk',stored.priv,{name:'ECDSA',namedCurve:'P-256'},false,['sign']);
  const sig=await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},key,utf8(JSON.stringify(payload)));
@@ -19,7 +19,7 @@ export async function createEpoch(local:string,auth:string,eph:string,dh:string,
 }
 export async function verifyEpoch(certificate:string,auth:string):Promise<EpochInfo>{
  let p:any;try{p=JSON.parse(certificate);}catch{return fail('Malformed epoch');}
- if(!Array.isArray(p)||p.length!==8||p[0]!=='echo/dm/epoch'||p[1]!==1||JSON.stringify(p)!==certificate||p[4]!==auth||!Number.isSafeInteger(p[2])||p[2]<1||
+ if(!Array.isArray(p)||p.length!==8||p[0]!=='interpoll/dm/epoch'||p[1]!==1||JSON.stringify(p)!==certificate||p[4]!==auth||!Number.isSafeInteger(p[2])||p[2]<1||
   (p[2]===1?p[3]!==null:typeof p[3]!=='string'||!/^[0-9a-f]{64}$/.test(p[3]))||typeof p[5]!=='string'||typeof p[6]!=='string'||typeof p[7]!=='string')return fail('Invalid epoch certificate');
  const sender=JSON.parse(auth)[2];
  const sig=Uint8Array.from(atob(p[7]),c=>c.charCodeAt(0));

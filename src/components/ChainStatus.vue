@@ -68,7 +68,7 @@
         </div>
 
         <div class="rounded p-3 mt-3 border border-primary/10 bg-primary/5">
-          <p class="text-xs text-primary font-semibold"> {{ $ui("echo Network") }}<br/>
+          <p class="text-xs text-primary font-semibold"> {{ $ui("interpoll Network") }}<br/>
             <span class="opacity-70 font-normal">{{ $ui("Cross-Device · Cross-Browser · Persistent Storage") }}</span>
           </p>
         </div>

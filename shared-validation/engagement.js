@@ -12,7 +12,7 @@ const target = s => typeof s === 'string' && /^[a-z0-9_.:-]{1,128}$/.test(s);
 const digest = text => bytesToHex(sha256(new TextEncoder().encode(text)));
 
 export function actionBytes(a) {
-  return JSON.stringify(['echo.public-engagement.v1', 1, a.namespace, a.kind, a.actor, a.targetType, a.targetId, a.value, a.createdAt, a.nonce]);
+  return JSON.stringify(['interpoll.public-engagement.v1', 1, a.namespace, a.kind, a.actor, a.targetType, a.targetId, a.value, a.createdAt, a.nonce]);
 }
 function validPayload(a) {
   return a && a.version === 1 && typeof a.namespace === 'string' && /^v[1-9][0-9]{0,3}$/.test(a.namespace) && hex(a.actor, 64) && target(a.targetId)

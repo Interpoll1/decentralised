@@ -10,7 +10,7 @@
  *   Peer  ──wss──▶ /tunnel/<id>/gun        ⇄ bridge ⇄ tab (Gun mesh peer)
  *
  * Wire protocol on the tab socket (JSON text frames):
- *   tab → bridge  {type:'register', app:'echo'}
+ *   tab → bridge  {type:'register', app:'interpoll'}
  *   bridge → tab  {type:'registered', url, tunnelId}
  *   bridge → tab  {type:'open', c} | {type:'msg', c, d} | {type:'close', c}
  *   bridge → tab  {type:'peers', n}
@@ -74,7 +74,7 @@ function attachTab(ws, ip) {
     try { msg = JSON.parse(raw.toString()); } catch { return; }
 
     if (!tunnelId) {
-      if (msg.type !== 'register' || msg.app !== 'echo') return ws.close(4000, 'Expected register');
+      if (msg.type !== 'register' || msg.app !== 'interpoll') return ws.close(4000, 'Expected register');
       let perIp = 0;
       for (const t of tunnels.values()) if (t.ip === ip) perIp++;
       if (perIp >= MAX_TABS_PER_IP) return ws.close(4429, 'Too many tunnels from this address');

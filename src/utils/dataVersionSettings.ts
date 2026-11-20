@@ -3,7 +3,7 @@ import { GUN_NAMESPACE } from '../services/gunService';
 
 export type DataVersion = string;
 
-const STORAGE_KEY = 'echo_data_versions';
+const STORAGE_KEY = 'interpoll_data_versions';
 
 function versionNumber(v: DataVersion): number {
   const parsed = Number.parseInt(String(v).replace(/^v/i, ''), 10);

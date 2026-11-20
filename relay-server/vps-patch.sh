@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # ────────────────────────────────────────────────────────────────────────────────
-# VPS patch script for /var/www/echo
-# Run from: /var/www/echo
+# VPS patch script for /var/www/interpoll
+# Run from: /var/www/interpoll
 # Run as:   bash vps-patch.sh
 # ────────────────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
-cd /var/www/echo
+cd /var/www/interpoll
 
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
 ok()   { echo -e "${GREEN}✓${NC} $*"; }
@@ -87,7 +87,7 @@ bridge_entry = """,
     {
       name: 'relay-bridge',
       script: './backend/relay-bridge-server.js',
-      cwd: '/var/www/echo',
+      cwd: '/var/www/interpoll',
       interpreter: 'node',
       env: {
         TUNNEL_DOMAIN: 'tunnel.interpoll.endless.sbs',
@@ -118,10 +118,10 @@ fi
 # Look in the standard places; fall back to the project copy
 NGINX_CONF=""
 for candidate in \
-    /etc/nginx/sites-enabled/echo \
+    /etc/nginx/sites-enabled/interpoll \
     /etc/nginx/sites-enabled/default \
-    /etc/nginx/sites-enabled/echo.conf \
-    /etc/nginx/conf.d/echo.conf \
+    /etc/nginx/sites-enabled/interpoll.conf \
+    /etc/nginx/conf.d/interpoll.conf \
     /etc/nginx/conf.d/default.conf; do
   if [[ -f "$candidate" ]]; then
     NGINX_CONF="$candidate"
@@ -136,9 +136,9 @@ fi
 
 if [[ -z "$NGINX_CONF" ]]; then
   warn "Could not find active nginx config automatically."
-  warn "Will patch the project copy: nginx-echo.conf"
+  warn "Will patch the project copy: nginx-interpoll.conf"
   warn "You may need to copy it to /etc/nginx/sites-enabled/ manually."
-  NGINX_CONF="/var/www/echo/nginx-echo.conf"
+  NGINX_CONF="/var/www/interpoll/nginx-interpoll.conf"
 else
   ok "Found nginx config: $NGINX_CONF"
 fi
@@ -155,11 +155,11 @@ with open('$NGINX_CONF', 'r') as f:
 install_locs = """
     # Community relay install scripts — publicly downloadable
     location = /install-relay.sh {
-        alias /var/www/echo/community-relay/install-relay.sh;
+        alias /var/www/interpoll/community-relay/install-relay.sh;
         add_header Content-Type text/plain;
     }
     location = /install-relay-vps.sh {
-        alias /var/www/echo/community-relay/install-relay-vps.sh;
+        alias /var/www/interpoll/community-relay/install-relay-vps.sh;
         add_header Content-Type text/plain;
     }
 
@@ -180,7 +180,7 @@ PYEOF
 fi
 
 # ── Step 10: Add wildcard tunnel server block to nginx ────────────────────────
-if grep -q "tunnel.echo" "$NGINX_CONF" 2>/dev/null; then
+if grep -q "tunnel.interpoll" "$NGINX_CONF" 2>/dev/null; then
   warn "Tunnel server block already in nginx — skipping"
 else
   python3 - << PYEOF
@@ -188,7 +188,7 @@ tunnel_block = """
 # Browser tab relay — wildcard tunnel subdomains
 server {
     listen 80;
-    server_name ~^(?<subdomain>.+)\\\\.tunnel\\\\.echo\\\\.endless\\\\.sbs\$;
+    server_name ~^(?<subdomain>.+)\\\\.tunnel\\\\.interpoll\\\\.endless\\\\.sbs\$;
 
     location / {
         proxy_pass http://127.0.0.1:9000;
@@ -298,7 +298,7 @@ Add inside apps: [ ... ] before the closing ]:
     {
       name: 'relay-bridge',
       script: './backend/relay-bridge-server.js',
-      cwd: '/var/www/echo',
+      cwd: '/var/www/interpoll',
       interpreter: 'node',
       env: { TUNNEL_DOMAIN: 'tunnel.interpoll.endless.sbs' },
       max_memory_restart: '200M',

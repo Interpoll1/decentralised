@@ -9,7 +9,7 @@
 // Plain JS with no imports: shared verbatim by the browser, the solver Web
 // Worker (sha256Words is serialised with toString) and the Node relay.
 
-export const CONTENT_POW_VERSION = 'echo.content-pow.v1';
+export const CONTENT_POW_VERSION = 'interpoll.content-pow.v1';
 /** Minimum leading zero bits a relay accepts (~1M hashes, <1s on a laptop). */
 export const CONTENT_POW_MIN_BITS = 20;
 /** A fresh stamp's createdAt must be within this window of the relay clock. */

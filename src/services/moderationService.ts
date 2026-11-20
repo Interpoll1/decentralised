@@ -120,7 +120,7 @@ export interface ModerationSettings {
   /** Whether to run home-feed posts through the moderation API */
   moderateHomeFeed: boolean;
   /** Which moderation provider to use */
-  moderationProvider: 'echo' | 'custom';
+  moderationProvider: 'interpoll' | 'custom';
   /** Base URL for the moderation API (defaults to MODERATION_API_DEFAULT_BASE_URL) */
   moderationApiBaseUrl: string;
   /** Authenticated API key (stored separately in localStorage, shown masked in UI) */
@@ -150,7 +150,7 @@ const DEFAULT_SETTINGS: ModerationSettings = {
   imageFilterMode: 'manual',
   imageFilterSensitivity: 0.6,
   moderateHomeFeed: false,
-  moderationProvider: 'echo',
+  moderationProvider: 'interpoll',
   moderationApiBaseUrl: MODERATION_API_DEFAULT_BASE_URL,
   moderationApiKey: '',
 };

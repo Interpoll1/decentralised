@@ -190,8 +190,8 @@ html.dark :is(.asn-brand-mark, .side-nav-brand-mark) {
 }
 
 /* Atmosphere off: flat black canvas. */
-html.dark .echo-aurora,
-body.dark .echo-aurora {
+html.dark .interpoll-aurora,
+body.dark .interpoll-aurora {
   display: none;
 }
 

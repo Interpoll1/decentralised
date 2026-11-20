@@ -233,7 +233,7 @@ class FcmSender {
             data,
             android: {
               priority: 'HIGH',
-              notification: { channel_id: 'echo-chat', tag: data.fromUserId },
+              notification: { channel_id: 'interpoll-chat', tag: data.fromUserId },
             },
           },
         }),
@@ -249,10 +249,10 @@ class FcmSender {
 
 /** Canonical strings the client signs. Keep in sync with src/native/pushNotifications.ts. */
 function registerMessage({ userId, deviceId, token, ts }) {
-  return `echo-push-register-1:${userId}:${deviceId}:${token}:${ts}`;
+  return `interpoll-push-register-1:${userId}:${deviceId}:${token}:${ts}`;
 }
 function unregisterMessage({ userId, deviceId, ts }) {
-  return `echo-push-unregister-1:${userId}:${deviceId}:${ts}`;
+  return `interpoll-push-unregister-1:${userId}:${deviceId}:${ts}`;
 }
 
 /**

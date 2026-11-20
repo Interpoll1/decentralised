@@ -129,7 +129,7 @@ async function exportKeys() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `echo-keys-${Date.now()}.json`;
+    a.download = `interpoll-keys-${Date.now()}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();

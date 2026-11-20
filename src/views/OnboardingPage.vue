@@ -206,7 +206,7 @@ import { useCommunityStore } from '../stores/communityStore';
 import type { Community } from '../services/communityService';
 import config from '../config';
 
-const ONBOARDING_KEY = 'echo_onboarding_complete';
+const ONBOARDING_KEY = 'interpoll_onboarding_complete';
 
 const router         = useRouter();
 const communityStore = useCommunityStore();

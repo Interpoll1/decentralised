@@ -76,7 +76,7 @@ export async function resetLocalData(): Promise<void> {
   try {
     if (typeof indexedDB !== 'undefined' && indexedDB?.deleteDatabase) {
       await new Promise<void>((resolve) => {
-        const req = indexedDB.deleteDatabase('echo-db');
+        const req = indexedDB.deleteDatabase('interpoll-db');
         req.onsuccess = req.onerror = req.onblocked = () => resolve();
         // Never hang the recovery flow if the delete request stalls.
         setTimeout(resolve, 3_000);

@@ -1,5 +1,5 @@
 {
-  "name": "echo-shared-validation",
+  "name": "interpoll-shared-validation",
   "version": "1.0.0",
   "type": "module",
   "description": "Shared validation, integrity, and security library for Echo relay servers",

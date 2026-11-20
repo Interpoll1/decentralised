@@ -15,11 +15,11 @@
 import { ref } from 'vue';
 import { Capacitor } from '@capacitor/core';
 
-const DISMISS_KEY = 'echo_apk_banner_dismissed';
+const DISMISS_KEY = 'interpoll_apk_banner_dismissed';
 
 const apkUrl: string =
   import.meta.env.VITE_ANDROID_APK_URL ||
-  'https://github.com/Interpoll1/decentralised/releases/download/android-latest/echo.apk';
+  'https://github.com/Interpoll1/decentralised/releases/download/android-latest/interpoll.apk';
 
 function shouldShow(): boolean {
   if (Capacitor.isNativePlatform()) return false;

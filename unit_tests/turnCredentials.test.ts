@@ -47,7 +47,7 @@ describe('verifyTurnRequest', () => {
   const pk = Buffer.from(schnorr.getPublicKey(priv)).toString('hex');
   it('accepts a fresh client-signed request and rejects stale/forged ones', () => {
     const ts = Date.now();
-    const sig = CryptoService.sign(`echo-turn:${pk}:${ts}`, privHex);
+    const sig = CryptoService.sign(`interpoll-turn:${pk}:${ts}`, privHex);
     expect(verifyTurnRequest(pk, String(ts), sig, ts)).toBe(true);
     expect(verifyTurnRequest(pk, String(ts), sig, ts + 120_000)).toBe(false);
     expect(verifyTurnRequest(pk, String(ts + 1), sig, ts)).toBe(false);

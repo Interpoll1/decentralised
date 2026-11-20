@@ -23,7 +23,7 @@ async function verifySettingsPersistence(context, page, testInfo) {
   await polls.locator('label').click();
   await expect(polls.locator('input')).not.toBeChecked();
   await page.getByRole('button', { name: 'Latest', exact: true }).click();
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('echo_feed_preferences')))).toMatchObject({
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('interpoll_feed_preferences')))).toMatchObject({
     showPosts: true, showPolls: false, mode: 'latest',
   });
   await page.screenshot({ path: testInfo.outputPath('settings-feed.png'), fullPage: true });
@@ -53,7 +53,7 @@ test.describe('local relay integration', () => {
   let directory;
   const origin = 'http://127.0.0.1:5198';
   test.beforeAll(async () => {
-    directory = mkdtempSync(join(tmpdir(), 'echo-browser-relay-'));
+    directory = mkdtempSync(join(tmpdir(), 'interpoll-browser-relay-'));
     relay = spawn(process.execPath, [fileURLToPath(new URL('../community-relay/kit/relay.js', import.meta.url))], {
       windowsHide: true, stdio: 'ignore',
       env: { ...process.env, HOST: '127.0.0.1', PORT: '5198', UPSTREAM_PEERS: '', GUN_DATA_DIR: directory },
@@ -75,10 +75,10 @@ test.describe('local relay integration', () => {
       const id = `poll-${Date.now()}-relay-smoke`;
       for (const profile of profiles) {
         await profile.addInitScript(base => {
-          localStorage.setItem('echo_relay_config', JSON.stringify({
+          localStorage.setItem('interpoll_relay_config', JSON.stringify({
             websocket: base.replace('http:', 'ws:'), gun: base + '/gun', api: base,
           }));
-          localStorage.setItem('echo_peer_prefs', JSON.stringify({ usePrivate: false, usePublic: false }));
+          localStorage.setItem('interpoll_peer_prefs', JSON.stringify({ usePrivate: false, usePublic: false }));
         }, origin);
         await mockRelay(profile, makePoll(), origin);
         const page = await profile.newPage(); pages.push(page);
@@ -148,7 +148,7 @@ test('multiple-choice labels select and clear independent answers', async ({ con
 
 test('an active Home tour pauses on a poll and resumes on Home', async ({ context, page }) => {
   await mockRelay(context);
-  await context.addInitScript(() => localStorage.setItem('echo_onboarding_complete', 'true'));
+  await context.addInitScript(() => localStorage.setItem('interpoll_onboarding_complete', 'true'));
   await page.goto('/home');
   const tour = page.getByRole('dialog', { name: 'Echo tour' });
   await expect(tour).toBeVisible({ timeout: 15000 });
@@ -158,7 +158,7 @@ test('an active Home tour pauses on a poll and resumes on Home', async ({ contex
   await expect(tour).toHaveCount(0);
   await page.waitForTimeout(3300);
   await expect(tour).toHaveCount(0);
-  expect(await page.evaluate(() => localStorage.getItem('echo_bit_tour_v1'))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem('interpoll_bit_tour_v1'))).toBeNull();
   await navigate(page, '/home');
   await expect(tour).toBeVisible();
   await expect(tour.locator('.bc-count')).toHaveText(position);
@@ -166,7 +166,7 @@ test('an active Home tour pauses on a poll and resumes on Home', async ({ contex
 
 test('leaving Home during the welcome delay does not start the tour over a poll', async ({ context, page }) => {
   await mockRelay(context);
-  await context.addInitScript(() => localStorage.setItem('echo_onboarding_complete', 'true'));
+  await context.addInitScript(() => localStorage.setItem('interpoll_onboarding_complete', 'true'));
   await page.goto('/home');
   await navigate(page, pollPath);
   await expect(page.getByRole('heading', { name: 'Which day should we meet?' })).toBeVisible();

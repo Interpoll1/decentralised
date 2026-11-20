@@ -247,7 +247,7 @@ function buildClaimV2AuthPayload(input: {
 }): string {
   const { challengeId, username, pubkey, nonce, authTs, authNonce } = input;
   return JSON.stringify({
-    purpose: 'echo-trust-claim-v2',
+    purpose: 'interpoll-trust-claim-v2',
     issuerDomain: ISSUER_DOMAIN,
     challengeId,
     username,

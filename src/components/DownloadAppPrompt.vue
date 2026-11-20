@@ -45,7 +45,7 @@ interface DownloadOffer {
   install?: boolean;
 }
 
-const INSTALLED_KEY = 'echo_app_installed';
+const INSTALLED_KEY = 'interpoll_app_installed';
 const REMIND_AFTER_MS = 10 * 1000;
 const QUIET_PATHS = ['/onboarding', '/claim-username', '/auth/callback'];
 
@@ -57,7 +57,7 @@ const installEvent = ref<InstallPromptEvent | null>(null);
 let timer: number | undefined;
 
 const androidUrl = import.meta.env.VITE_ANDROID_APK_URL
-  || '/downloads/Echo-Android.apk';
+  || '/downloads/InterPoll-Android.apk';
 const iosUrl = import.meta.env.VITE_IOS_DOWNLOAD_URL || '';
 const desktopUrl = import.meta.env.VITE_DESKTOP_DOWNLOAD_URL || '';
 
@@ -74,7 +74,7 @@ function platformOffer(): DownloadOffer | null {
       body: 'Use the mobile app for a focused, full-screen experience and notifications.',
       cta: 'Download APK',
       url: androidUrl,
-      downloadName: 'Echo-Android.apk',
+      downloadName: 'InterPoll-Android.apk',
     };
   }
   if (/iPhone|iPad|iPod/i.test(ua)) {
@@ -105,8 +105,8 @@ function platformOffer(): DownloadOffer | null {
       title: 'Download Echo for Windows',
       body: 'Install the focused desktop app and use Echo without browser tabs.',
       cta: 'Download for Windows',
-      url: desktopUrl || '/downloads/Echo-Setup.exe',
-      downloadName: 'Echo-Setup.exe',
+      url: desktopUrl || '/downloads/InterPoll-Setup.exe',
+      downloadName: 'InterPoll-Setup.exe',
     };
   }
   if (/Macintosh|Mac OS X/i.test(ua)) {
@@ -208,8 +208,8 @@ function showPreview() {
 onMounted(() => {
   window.addEventListener('beforeinstallprompt', captureInstallPrompt);
   window.addEventListener('appinstalled', markInstalled);
-  window.addEventListener('echo:user-logged-in', handleLogin);
-  window.addEventListener('echo:show-download-prompt', showPreview);
+  window.addEventListener('interpoll:user-logged-in', handleLogin);
+  window.addEventListener('interpoll:show-download-prompt', showPreview);
   scheduleCheck();
 });
 
@@ -217,8 +217,8 @@ onUnmounted(() => {
   window.clearTimeout(timer);
   window.removeEventListener('beforeinstallprompt', captureInstallPrompt);
   window.removeEventListener('appinstalled', markInstalled);
-  window.removeEventListener('echo:user-logged-in', handleLogin);
-  window.removeEventListener('echo:show-download-prompt', showPreview);
+  window.removeEventListener('interpoll:user-logged-in', handleLogin);
+  window.removeEventListener('interpoll:show-download-prompt', showPreview);
 });
 </script>
 

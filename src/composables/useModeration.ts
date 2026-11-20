@@ -8,7 +8,7 @@
 import { ref } from 'vue';
 import { ModerationService, MODERATION_API_DEFAULT_BASE_URL } from '../services/moderationService';
 
-const MODERATION_ONBOARDING_KEY = 'echo_moderation_onboarding_complete';
+const MODERATION_ONBOARDING_KEY = 'interpoll_moderation_onboarding_complete';
 
 export function useModeration() {
   const moderationOnboardingOpen   = ref(false);
@@ -37,7 +37,7 @@ export function useModeration() {
     moderationOnboardingOpen.value = false;
   }
 
-  function saveModerationChoiceEnabled(provider: 'echo' | 'custom', baseUrl: string) {
+  function saveModerationChoiceEnabled(provider: 'interpoll' | 'custom', baseUrl: string) {
     // Use saveSettings() — the real API. enable() doesn't exist on ModerationService.
     ModerationService.saveSettings({
       moderateHomeFeed: true,
@@ -71,7 +71,7 @@ export function useModeration() {
         }
         saveModerationChoiceEnabled('custom', url);
       } else {
-        saveModerationChoiceEnabled('echo', MODERATION_API_DEFAULT_BASE_URL);
+        saveModerationChoiceEnabled('interpoll', MODERATION_API_DEFAULT_BASE_URL);
       }
     } finally {
       moderationSaving.value = false;

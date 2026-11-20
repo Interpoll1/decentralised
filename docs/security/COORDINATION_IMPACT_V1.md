@@ -30,7 +30,7 @@ Target: exactly `{id,visibility:"public"}`. Observation: exactly
 `{action,receivedAt}` with an unchanged public-engagement-v1 reaction envelope.
 The duration is exactly 600,000 ms. Receipt times lie inclusively in the window.
 The observer signs SHA-256 of canonical JSON of
-`["echo.coordination-snapshot.v1", version, namespace, targetType, from, to,
+`["interpoll.coordination-snapshot.v1", version, namespace, targetType, from, to,
 observer, sortedTargets, sortedObservations]`. Targets sort by id; observations
 by action id then receipt time. Object keys sort lexicographically, arrays retain
 this defined order, numbers are safe integers, strings are bounded. Action IDs

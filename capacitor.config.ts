@@ -1,7 +1,7 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.echo.app',
+  appId: 'com.interpoll.app',
   appName: 'Echo',
   webDir: 'dist',
   server: {

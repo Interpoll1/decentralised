@@ -52,7 +52,7 @@ android/app/build/
 android/capacitor-cordova-android-plugins/build/
 android/.idea/
 *.apk
-!public/downloads/Echo-Android.apk
+!public/downloads/InterPoll-Android.apk
 *.aab
 *.keystore
 

@@ -170,10 +170,10 @@ class ResendSender {
 
 /** Canonical strings the client signs. Keep in sync with src/native/emailNotifications.ts. */
 function emailRegisterMessage({ userId, email, ts }) {
-  return `echo-email-register-1:${userId}:${email}:${ts}`;
+  return `interpoll-email-register-1:${userId}:${email}:${ts}`;
 }
 function emailUnregisterMessage({ userId, ts }) {
-  return `echo-email-unregister-1:${userId}:${ts}`;
+  return `interpoll-email-unregister-1:${userId}:${ts}`;
 }
 
 function escapeHtml(value) {

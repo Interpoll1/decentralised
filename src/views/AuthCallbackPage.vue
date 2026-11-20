@@ -24,7 +24,7 @@ onMounted(async () => {
   // Navigate back to where the user was before login
   const returnUrl = AuditService.consumeReturnUrl();
   await router.replace(returnUrl);
-  window.dispatchEvent(new Event('echo:user-logged-in'));
+  window.dispatchEvent(new Event('interpoll:user-logged-in'));
 });
 </script>
 

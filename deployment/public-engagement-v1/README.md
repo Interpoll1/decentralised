@@ -6,7 +6,7 @@ client branch and offline coordination prototype. Do not deploy the client alone
 ## Live-tree pin (2026-09-26, supersedes the archive pin below)
 
 `backend.patch` and `manifest.json` are now pinned to the live relay tree on the
-prod VPS (`/var/www/echo`), snapshotted 2026-09-26. Three relay-server files
+prod VPS (`/var/www/interpoll`), snapshotted 2026-09-26. Three relay-server files
 matched the original preimage byte-for-byte. `gun-relay/gun-relay-enhanced.js`
 did not: the 2026-09-25 content-firewall deploy changed it. The pre-firewall
 backup matched the original preimage, so the gun-relay hunk is a 3-way merge of

@@ -10,7 +10,7 @@ export class BroadcastService {
     // channel and its onmessage closure (and double-delivering every message).
     if (this.channel) { try { this.channel.close(); } catch { /* already closed */ } }
 
-    this.channel = new BroadcastChannel('echo-sync');
+    this.channel = new BroadcastChannel('interpoll-sync');
 
     this.channel.onmessage = (event: MessageEvent) => {
       const message = event.data;

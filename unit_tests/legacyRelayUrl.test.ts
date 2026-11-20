@@ -12,8 +12,8 @@ it('migrates known legacy transports while preserving paths and custom relays', 
 it('migrates saved relay overrides and peer lists without rewriting stored identities', async () => {
   vi.resetModules();
   const values = new Map([
-    ['echo_relay_config', JSON.stringify({ websocket: 'wss://interpoll.endless.sbs', api: 'https://custom.example' })],
-    ['echo_gun_peers_v3', JSON.stringify(['https://interpoll2.endless.sbs/gun', 'https://custom.example/gun'])],
+    ['interpoll_relay_config', JSON.stringify({ websocket: 'wss://interpoll.endless.sbs', api: 'https://custom.example' })],
+    ['interpoll_gun_peers_v3', JSON.stringify(['https://interpoll2.endless.sbs/gun', 'https://custom.example/gun'])],
     ['identityUsername', 'alice@endless.sbs'],
   ]);
   vi.stubGlobal('localStorage', { getItem: (key: string) => values.get(key) ?? null });

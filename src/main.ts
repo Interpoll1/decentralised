@@ -98,10 +98,10 @@ function registerMemoryCleanupHandlers(watchdog: { onCleanup: (cb: (level: Clean
 }
 
 // One-time migration
-if (!localStorage.getItem('echo_migration_v2')) {
+if (!localStorage.getItem('interpoll_migration_v2')) {
   localStorage.removeItem('seen-post-ids');
   localStorage.removeItem('seen-poll-ids');
-  localStorage.setItem('echo_migration_v2', '1');
+  localStorage.setItem('interpoll_migration_v2', '1');
 }
 
 installToastDefaults();

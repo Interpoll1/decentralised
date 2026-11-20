@@ -22,7 +22,7 @@ export function protocolEnvelope(raw:any):SignalEnvelope {
  return e;
 }
 export async function receiveFingerprint(sender:string,recipient:string,e:SignalEnvelope):Promise<string>{
- const data=JSON.stringify(['echo/dm/receive',1,sender,recipient,e.v,e.auth,e.epoch,e.dh,e.n,e.pn,e.eph??null,e.opkId??null,e.ct]);
+ const data=JSON.stringify(['interpoll/dm/receive',1,sender,recipient,e.v,e.auth,e.epoch,e.dh,e.n,e.pn,e.eph??null,e.opkId??null,e.ct]);
  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(data))),b=>b.toString(16).padStart(2,'0')).join('');
 }
 function bounded(entries:PendingEntry[],now:number):PendingEntry[]{

@@ -191,7 +191,7 @@ export class GunService {
   private static installGunWarningTrace(): void {
     if (this.gunWarningTraceInstalled) return;
     if (typeof window === 'undefined') return;
-    if (window.localStorage.getItem('echo_sync_debug') !== 'true') return;
+    if (window.localStorage.getItem('interpoll_sync_debug') !== 'true') return;
 
     const originalWarn = console.warn.bind(console);
     const originalLog = console.log.bind(console);

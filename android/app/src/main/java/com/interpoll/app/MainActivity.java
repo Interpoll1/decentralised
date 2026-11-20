@@ -1,4 +1,4 @@
-package com.echo.app;
+package com.interpoll.app;
 
 import android.os.Bundle;
 

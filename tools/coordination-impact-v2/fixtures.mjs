@@ -20,7 +20,7 @@ export function generate({ seed, groupSizes = [8], sharedTargets = 5, unrelated 
     || burstActors > background
     || sharedTargets * groupSizes.length + unrelated > 20 || perBackground > 20)
     throw Error('INVALID_SYNTHETIC_CONFIG');
-  const tag = `echo-v2-heldout|${seed}`, rand = random(tag);
+  const tag = `interpoll-v2-heldout|${seed}`, rand = random(tag);
   const groupCount = groupSizes.reduce((a, b) => a + b, 0), count = groupCount + background;
   if (count > 300 || groupCount * (sharedTargets + unrelated) + background * perBackground > 1000)
     throw Error('SYNTHETIC_BUDGET');

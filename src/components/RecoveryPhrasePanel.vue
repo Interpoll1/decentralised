@@ -27,7 +27,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 
-const SAVED_KEY = 'echo_phrase_saved';
+const SAVED_KEY = 'interpoll_phrase_saved';
 const words = ref<string[]>([]);
 const busy = ref(false);
 const copied = ref(false);
@@ -56,7 +56,7 @@ async function copy() {
 function download() {
   const blob = new Blob([`Echo recovery phrase\n\n${words.value.join(' ')}\n\nKeep this private. Anyone with it can act as you.\n`], { type: 'text/plain' });
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = 'echo-recovery-phrase.txt'; a.click();
+  a.href = URL.createObjectURL(blob); a.download = 'interpoll-recovery-phrase.txt'; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 </script>

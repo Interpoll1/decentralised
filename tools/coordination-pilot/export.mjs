@@ -3,8 +3,8 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { canonical, digest, snapshotDigest } from '../coordination-impact/core.mjs';
 import { verifyAction } from '../../shared-validation/engagement.js';
 
-export const DOMAIN = 'echo.coordination-pilot-export.v1';
-export const REVIEW_DOMAIN = 'echo.coordination-pilot-target-review.v1';
+export const DOMAIN = 'interpoll.coordination-pilot-export.v1';
+export const REVIEW_DOMAIN = 'interpoll.coordination-pilot-target-review.v1';
 export const LIMITS = Object.freeze({ targets: 20, events: 1000, payloadBytes: 2048,
   snapshotBytes: 1_048_576, bundleBytes: 2_097_152, policyBytes: 16_384,
   windowMs: 600_000, policyLifetimeMs: 86_400_000, clockSkewMs: 30_000 });

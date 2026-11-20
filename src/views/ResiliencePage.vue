@@ -508,7 +508,7 @@ const probeResults = ref<RelayProbeResult[]>([]);
 const censorship = ref<{ blocked: RelayEndpoint[]; reachable: RelayEndpoint[]; torRequired: RelayEndpoint[] } | null>(null);
 const lastScanAt = ref<string>('');
 
-const autoFailoverEnabled = ref(localStorage.getItem('echo_auto_failover') === 'true');
+const autoFailoverEnabled = ref(localStorage.getItem('interpoll_auto_failover') === 'true');
 const newRelay = ref({ label: '', ws: '', gun: '', api: '', isTor: false, priority: 10 });
 
 // --- Fallback Rendezvous (resilience orchestrator) ---
@@ -578,7 +578,7 @@ const sharing = ref(false);
 const incomingOffer = ref<{ peerId: string; size: number; hash: string; meta: { postCount: number; communityCount: number; blockHeight: number } } | null>(null);
 const transferProgress = ref<{ direction: string; current: number; total: number; percent: number } | null>(null);
 
-const webrtcEnabled = ref(localStorage.getItem('echo_webrtc_enabled') === 'true');
+const webrtcEnabled = ref(localStorage.getItem('interpoll_webrtc_enabled') === 'true');
 const expandedGuide = ref<string | null>(null);
 
 const guides = [
@@ -868,7 +868,7 @@ async function removeRelay(id: string) {
 }
 
 watch(autoFailoverEnabled, (val) => {
-  localStorage.setItem('echo_auto_failover', String(val));
+  localStorage.setItem('interpoll_auto_failover', String(val));
 });
 
 function addRelay() {
@@ -985,7 +985,7 @@ function rejectOffer() {
 }
 
 watch(webrtcEnabled, async (val) => {
-  localStorage.setItem('echo_webrtc_enabled', String(val));
+  localStorage.setItem('interpoll_webrtc_enabled', String(val));
   if (val) {
     try { await SnapshotSyncService.initialize(); } catch { /* unavailable */ }
     registerSyncCallbacks();

@@ -31,15 +31,15 @@ systemctl start nginx
 # ── 4. Create app directories ─────────────────────────────────────────────────
 echo ""
 echo "▶ Creating app directories..."
-mkdir -p /var/www/echo/gun-relay
-mkdir -p /var/www/echo/relay-server
-mkdir -p /var/www/echo/gun-relay/data
-mkdir -p /var/www/echo/relay-server/data
+mkdir -p /var/www/interpoll/gun-relay
+mkdir -p /var/www/interpoll/relay-server
+mkdir -p /var/www/interpoll/gun-relay/data
+mkdir -p /var/www/interpoll/relay-server/data
 
 # ── 5. Install dependencies ───────────────────────────────────────────────────
 echo ""
 echo "▶ Installing dependencies for gun-relay..."
-cd /var/www/echo/gun-relay
+cd /var/www/interpoll/gun-relay
 cat > package.json << 'EOF'
 {
   "name": "gun-relay",
@@ -58,7 +58,7 @@ npm install
 
 echo ""
 echo "▶ Installing dependencies for relay-server..."
-cd /var/www/echo/relay-server
+cd /var/www/interpoll/relay-server
 cat > package.json << 'EOF'
 {
   "name": "relay-server",
@@ -76,13 +76,13 @@ npm install
 # ── 6. PM2 ecosystem config ───────────────────────────────────────────────────
 echo ""
 echo "▶ Creating PM2 ecosystem config..."
-cat > /var/www/echo/ecosystem.config.cjs << 'EOF'
+cat > /var/www/interpoll/ecosystem.config.cjs << 'EOF'
 module.exports = {
   apps: [
     {
       name: 'gun-relay',
       script: './gun-relay/gun-relay-enhanced.js',
-      cwd: '/var/www/echo',
+      cwd: '/var/www/interpoll',
       interpreter: 'node',
       env: {
         PORT: 8765,
@@ -102,7 +102,7 @@ module.exports = {
     {
       name: 'relay-server',
       script: './relay-server/relay-server-enhanced.js',
-      cwd: '/var/www/echo',
+      cwd: '/var/www/interpoll',
       interpreter: 'node',
       env: {
         PORT: 8080,
@@ -201,16 +201,16 @@ echo "✅ Setup complete!"
 echo ""
 echo "NEXT STEPS:"
 echo "1. Upload your server files:"
-echo "   scp gun-relay-enhanced.js root@YOUR_VPS_IP:/var/www/echo/gun-relay/"
-echo "   scp relay-server-enhanced.js root@YOUR_VPS_IP:/var/www/echo/relay-server/"
+echo "   scp gun-relay-enhanced.js root@YOUR_VPS_IP:/var/www/interpoll/gun-relay/"
+echo "   scp relay-server-enhanced.js root@YOUR_VPS_IP:/var/www/interpoll/relay-server/"
 echo ""
-echo "2. Create /var/www/echo/.env with your MySQL credentials"
+echo "2. Create /var/www/interpoll/.env with your MySQL credentials"
 echo ""
 echo "3. Before restarting production, clear stale persisted vote blocks:"
-echo "   printf '[]\n' > /var/www/echo/relay-server/data/vote-registry.json"
+echo "   printf '[]\n' > /var/www/interpoll/relay-server/data/vote-registry.json"
 echo ""
 echo "4. Start servers:"
-echo "   cd /var/www/echo && pm2 start ecosystem.config.cjs"
+echo "   cd /var/www/interpoll && pm2 start ecosystem.config.cjs"
 echo "   pm2 save && pm2 startup"
 echo ""
 echo "5. Add DNS A records pointing to this VPS IP:"

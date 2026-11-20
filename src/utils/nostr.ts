@@ -175,7 +175,7 @@ export function pollToNostrEvent(poll: {
 
   const tags: string[][] = [
     ['t', 'poll'],
-    ['t', 'echo'],
+    ['t', 'interpoll'],
   ];
   if (poll.communityId) tags.push(['t', poll.communityId]);
   if (poll.relayUrl)    tags.push(['r', poll.relayUrl]);
@@ -208,7 +208,7 @@ export function postToNostrEvent(post: {
   ].join('').trim();
 
   const tags: string[][] = [
-    ['t', 'echo'],
+    ['t', 'interpoll'],
     ['subject', post.title],
   ];
   if (post.communityId) tags.push(['t', post.communityId]);
@@ -246,7 +246,7 @@ export function receiptToNostrEvent(receipt: {
     pubkey:    receipt.pubkey,
     createdAt: Math.floor(receipt.timestamp / 1000),
     kind:      101,
-    tags:      [['e', receipt.pollId], ['t', 'echo-vote']],
+    tags:      [['e', receipt.pollId], ['t', 'interpoll-vote']],
     content,
   });
 }

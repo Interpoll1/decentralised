@@ -3,7 +3,7 @@ module.exports = {
     {
       name: 'gun-relay',
       script: './gun-relay/gun-relay-enhanced.js',
-      cwd: '/var/www/echo',
+      cwd: '/var/www/interpoll',
       interpreter: 'node',
       env: {
         PORT: 8765,
@@ -22,7 +22,7 @@ module.exports = {
     {
       name: 'relay-server',
       script: './relay-server/relay-server-enhanced.js',
-      cwd: '/var/www/echo',
+      cwd: '/var/www/interpoll',
       interpreter: 'node',
       env: {
         PORT: 3001,

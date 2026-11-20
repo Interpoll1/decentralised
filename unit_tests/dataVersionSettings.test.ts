@@ -55,7 +55,7 @@ describe('dataVersionSettings', () => {
 
     it('persists to localStorage', () => {
       setEnabledVersions(['v1', 'v2']);
-      const stored = JSON.parse(storage.get('echo_data_versions')!);
+      const stored = JSON.parse(storage.get('interpoll_data_versions')!);
       expect(stored).toEqual(['v1', 'v2']);
     });
   });

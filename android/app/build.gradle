@@ -1,10 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "com.echo.app"
+    namespace "com.interpoll.app"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.echo.app"
+        applicationId "com.interpoll.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
@@ -18,9 +18,9 @@ android {
     }
     signingConfigs {
         release {
-            // Keystore lives outside the repo (see ~/.echo-signing/keystore.properties)
+            // Keystore lives outside the repo (see ~/.interpoll-signing/keystore.properties)
             def ksProps = new Properties()
-            def ksFile = new File(System.getProperty('user.home'), '.echo-signing/keystore.properties')
+            def ksFile = new File(System.getProperty('user.home'), '.interpoll-signing/keystore.properties')
             if (ksFile.exists()) {
                 ksFile.withInputStream { ksProps.load(it) }
                 storeFile file(ksProps['storeFile'])

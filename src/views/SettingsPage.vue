@@ -228,7 +228,7 @@
               <label class="field-label">{{ $ui("API Provider") }}</label>
               <div class="field-wrap">
                 <select class="field-native" v-model="modSettings.moderationProvider" @change="onModerationProviderChange">
-                  <option value="echo">{{ $ui("Echo default API") }}</option>
+                  <option value="interpoll">{{ $ui("Echo default API") }}</option>
                   <option value="custom">{{ $ui("Custom API") }}</option>
                 </select>
               </div>
@@ -460,7 +460,7 @@
               <label class="field-label">{{ $ui("Provider") }}</label>
               <div class="field-wrap">
                 <select class="field-native" v-model="modSettings.moderationProvider" @change="saveModerationSettings">
-                  <option value="echo">{{ $ui("Echo Moderation API") }}</option>
+                  <option value="interpoll">{{ $ui("Echo Moderation API") }}</option>
                   <option value="custom">{{ $ui("Custom API") }}</option>
                 </select>
               </div>
@@ -1944,7 +1944,7 @@ function onKarmaRangeChange(ev: CustomEvent) {
 }
 
 function saveModerationSettings() {
-  if (modSettings.value.moderationProvider === 'echo') {
+  if (modSettings.value.moderationProvider === 'interpoll') {
     modSettings.value.moderationApiBaseUrl = moderationDefaultApiUrl;
   }
   ModerationService.saveSettings({ ...modSettings.value });
@@ -1954,7 +1954,7 @@ function saveModerationSettings() {
 }
 
 function onModerationProviderChange() {
-  if (modSettings.value.moderationProvider === 'echo') {
+  if (modSettings.value.moderationProvider === 'interpoll') {
     modSettings.value.moderationApiBaseUrl = moderationDefaultApiUrl;
   }
   saveModerationSettings();
@@ -2733,7 +2733,7 @@ const exportData = async () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `echo-backup-${Date.now()}.json`;
+    a.download = `interpoll-backup-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
 

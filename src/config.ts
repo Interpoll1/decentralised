@@ -11,19 +11,19 @@
 
 import { migrateLegacyRelayUrl } from './utils/legacyRelayUrl';
 
-const STORAGE_KEY = 'echo_relay_config';
-const ENCRYPTION_STORAGE_KEY = 'echo_encryption_config';
+const STORAGE_KEY = 'interpoll_relay_config';
+const ENCRYPTION_STORAGE_KEY = 'interpoll_encryption_config';
 // v3 — removed dead Heroku relays; existing installs get clean defaults
-const GUN_PEERS_STORAGE_KEY = 'echo_gun_peers_v3';
+const GUN_PEERS_STORAGE_KEY = 'interpoll_gun_peers_v3';
 // Dev-only: relax discovery/rendezvous endpoint-scheme validation so ws://localhost
 // endpoints validate between two local browser profiles. HARD-GATED on a dev build
 // (`import.meta.env.DEV`), so a production bundle ignores the flag entirely and an
 // attacker cannot enable insecure endpoints by planting this localStorage key.
-const DEV_INSECURE_DISCOVERY_KEY = 'echo_rdv_dev_insecure';
-const ICE_SERVERS_STORAGE_KEY = 'echo_ice_servers';
-const IDENTITY_CONFIG_STORAGE_KEY = 'echo_identity_config';
-const WIRE_FILTER_STORAGE_KEY = 'echo_wire_filter_mode';
-const PEER_PREFS_KEY = 'echo_peer_prefs';
+const DEV_INSECURE_DISCOVERY_KEY = 'interpoll_rdv_dev_insecure';
+const ICE_SERVERS_STORAGE_KEY = 'interpoll_ice_servers';
+const IDENTITY_CONFIG_STORAGE_KEY = 'interpoll_identity_config';
+const WIRE_FILTER_STORAGE_KEY = 'interpoll_wire_filter_mode';
+const PEER_PREFS_KEY = 'interpoll_peer_prefs';
 
 /**
  * How the WebRTC mesh wire bridge treats inbound Gun `put`s whose souls fall
@@ -63,7 +63,7 @@ let wireFilterMode: WireFilterMode = loadWireFilterMode();
  * Relay (WSS/Gun/API) traffic is unaffected: inside Tor Browser it is already
  * proxied through Tor, and the UI prefers `.onion` relays when available.
  */
-const ANONYMITY_MODE_KEY = 'echo_anonymity_mode';
+const ANONYMITY_MODE_KEY = 'interpoll_anonymity_mode';
 function loadAnonymityMode(): boolean {
   try {
     return localStorage.getItem(ANONYMITY_MODE_KEY) === 'true';
@@ -76,7 +76,7 @@ let anonymityMode: boolean = loadAnonymityMode();
 /** Cached relay-issued TURN credentials (see getTurnServers). */
 let turnCache: { api: string; servers: RTCIceServer[]; expiresAt: number } | null = null;
 
-const RELAY_ATT_PUBKEY_STORAGE_KEY = 'echo_relay_attestation_pubkey';
+const RELAY_ATT_PUBKEY_STORAGE_KEY = 'interpoll_relay_attestation_pubkey';
 function loadRelayAttestationPubkey(): string {
   try { return localStorage.getItem(RELAY_ATT_PUBKEY_STORAGE_KEY) || ''; } catch { return ''; }
 }
@@ -488,7 +488,7 @@ const config = {
   /**
    * Short-lived TURN credentials from the relay (`GET /api/turn-credentials`),
    * used only by 1:1 calls. `auth` is a device-key signature over
-   * `echo-turn:<pk>:<ts>` (needed unless an OAuth session cookie exists).
+   * `interpoll-turn:<pk>:<ts>` (needed unless an OAuth session cookie exists).
    * Never in Anonymity Mode. Any failure → `[]`, so the
    * call proceeds with STUN-only direct candidates.
    */

@@ -70,7 +70,7 @@ describe('idTimestamp', () => {
   });
 
   it('returns null for ids with no embedded timestamp', () => {
-    for (const id of ['c-askecho', 'general', 'test-123', '0', '']) {
+    for (const id of ['c-askinterpoll', 'general', 'test-123', '0', '']) {
       expect(idTimestamp(id)).toBeNull();
     }
   });

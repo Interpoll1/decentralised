@@ -18,7 +18,7 @@ import { SignalingService, type SignalTarget } from '@/services/signalingService
 import { DiscoveryService } from '@/services/discoveryService';
 import { BoundedMap } from '../utils/boundedMap';
 
-const STORAGE_KEY = 'echo_mesh_enabled';
+const STORAGE_KEY = 'interpoll_mesh_enabled';
 const MAX_CONNECTIONS = 10;
 const RECONCILE_INTERVAL_MS = 5000;
 const REDIAL_COOLDOWN_MS = 30_000;

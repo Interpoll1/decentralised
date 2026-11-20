@@ -70,7 +70,7 @@ test('extended execution is explicit, bounded and recorded without changing the 
 });
 
 test('snapshot file CLI analyzes and independently verifies, including paths with spaces', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'echo-v2-snapshot-'));
+  const directory = await mkdtemp(join(tmpdir(), 'interpoll-v2-snapshot-'));
   try {
     const input = join(directory, 'signed snapshot.json'), output = join(directory, 'v2 receipt.json');
     await writeFile(input, raw, { flag: 'wx' });
@@ -90,7 +90,7 @@ test('snapshot file CLI analyzes and independently verifies, including paths wit
     assert.equal(invalid.status, 1); assert.match(invalid.stderr, /RUN_OPTIONS/);
     assert.deepEqual(await readFile(output), bytes);
   } finally {
-    if (dirname(resolve(directory)) !== resolve(tmpdir()) || !basename(directory).startsWith('echo-v2-snapshot-'))
+    if (dirname(resolve(directory)) !== resolve(tmpdir()) || !basename(directory).startsWith('interpoll-v2-snapshot-'))
       throw Error('Unexpected temporary cleanup target');
     await rm(directory, { recursive: true, force: true });
   }

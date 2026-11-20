@@ -158,8 +158,8 @@ import { ModerationService, MODERATION_API_DEFAULT_BASE_URL } from '../services/
 import RestoreKeyForm from '../components/RestoreKeyForm.vue';
 import RecoverNameForm from '../components/RecoverNameForm.vue';
 
-const ONBOARDING_KEY = 'echo_onboarding_complete';
-const MODERATION_KEY = 'echo_moderation_onboarding_complete';
+const ONBOARDING_KEY = 'interpoll_onboarding_complete';
+const MODERATION_KEY = 'interpoll_moderation_onboarding_complete';
 
 const STEPS: { id: string; mood: BitMood; line: string }[] = [
   { id: 'welcome', mood: 'wave',  line: "Hi, I'm Bit! Let's get you ready — three quick things." },
@@ -176,10 +176,10 @@ const communityStore = useCommunityStore();
 const restoring = ref(false);
 const recoveringName = ref(false);
 // After restoring a key the page reloads; pick up at the spaces step.
-const resumed = sessionStorage.getItem("echo_setup_resume");
-sessionStorage.removeItem("echo_setup_resume");
+const resumed = sessionStorage.getItem("interpoll_setup_resume");
+sessionStorage.removeItem("interpoll_setup_resume");
 const step = ref(resumed === "1" ? 1 : 0);
-function onRestored() { sessionStorage.setItem("echo_setup_resume", "1"); window.location.reload(); }
+function onRestored() { sessionStorage.setItem("interpoll_setup_resume", "1"); window.location.reload(); }
 const busy = ref(false);
 const current = computed(() => STEPS[step.value]);
 
@@ -237,7 +237,7 @@ async function copyPhrase() {
 function downloadPhrase() {
   const blob = new Blob([`Echo recovery phrase\n\n${words.value.join(' ')}\n\nKeep this private. Anyone with it can act as you.\n`], { type: 'text/plain' });
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = 'echo-recovery-phrase.txt'; a.click();
+  a.href = URL.createObjectURL(blob); a.download = 'interpoll-recovery-phrase.txt'; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
@@ -284,7 +284,7 @@ function applyFilter(): boolean {
     if (!okUrl) { filterError.value = 'Enter a full address, like https://moderation.example.com'; return false; }
     ModerationService.saveSettings({ moderateHomeFeed: true, moderationProvider: 'custom', moderationApiBaseUrl: url });
   } else {
-    ModerationService.saveSettings({ moderateHomeFeed: true, moderationProvider: 'echo', moderationApiBaseUrl: MODERATION_API_DEFAULT_BASE_URL });
+    ModerationService.saveSettings({ moderateHomeFeed: true, moderationProvider: 'interpoll', moderationApiBaseUrl: MODERATION_API_DEFAULT_BASE_URL });
   }
   localStorage.setItem(MODERATION_KEY, 'true');
   return true;
@@ -305,7 +305,7 @@ async function next() {
     if (step.value === 1) {
       await Promise.allSettled(Array.from(picked.value).map(id => communityStore.joinCommunity(id)));
     }
-    if (step.value === 2 && savedKey.value) { try { localStorage.setItem('echo_phrase_saved', 'true'); } catch { /* private mode */ } }
+    if (step.value === 2 && savedKey.value) { try { localStorage.setItem('interpoll_phrase_saved', 'true'); } catch { /* private mode */ } }
     if (step.value === 3 && !applyRelay()) return;
     if (step.value === 4 && !applyFilter()) return;
     if (step.value === STEPS.length - 1) return finish();
@@ -320,7 +320,7 @@ async function finish() {
   // Bit leaps off the page; the tour on the next screen catches him mid-air.
   const r = bitWrap.value?.getBoundingClientRect();
   if (r && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    try { sessionStorage.setItem('echo_bit_flight', JSON.stringify({ x: r.left, y: r.top, w: r.width })); } catch { /* optional */ }
+    try { sessionStorage.setItem('interpoll_bit_flight', JSON.stringify({ x: r.left, y: r.top, w: r.width })); } catch { /* optional */ }
     jumping.value = true;
     await new Promise(res => setTimeout(res, 320));
   }

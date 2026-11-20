@@ -17,7 +17,7 @@ Device identity is a random UUID stored once per local account installation by a
 Binding fields: version=1, accountId, deviceId, generation (positive safe integer), ik (P-256 raw public key, canonical base64), ikSignPub (P-256 ECDSA public key, canonical base64), capabilities=`dm-auth-v1`. The account signature is lowercase hex Schnorr over SHA-256(UTF-8(JSON.stringify(the ordered array below))), using existing CryptoService.sign/verify:
 
 ```
-["echo/dm/device-binding",1,accountId,deviceId,generation,ik,ikSignPub,"dm-auth-v1"]
+["interpoll/dm/device-binding",1,accountId,deviceId,generation,ik,ikSignPub,"dm-auth-v1"]
 ```
 
 There is no implicit signer supplied by the binding. Its accountId must equal the requested account and verification uses that requested account key. A requested/pinned deviceId must also match.
@@ -25,13 +25,13 @@ There is no implicit signer supplied by the binding. Its accountId must equal th
 New `spkAuthorization` signature (legacy `spkSig` retains its original raw-SPK semantics): WebCrypto ECDSA P-256/SHA-256, canonical base64 of its 64-byte IEEE-P1363 output, over UTF-8 JSON:
 
 ```
-["echo/dm/spk",1,accountId,deviceId,bindingGeneration,ik,ikSignPub,spkId,spkGeneration,spk]
+["interpoll/dm/spk",1,accountId,deviceId,bindingGeneration,ik,ikSignPub,spkId,spkGeneration,spk]
 ```
 
 OPK signature under that authorized messaging signing key:
 
 ```
-["echo/dm/opk",1,accountId,deviceId,bindingGeneration,ik,spkId,spkGeneration,opkId,opkPub]
+["interpoll/dm/opk",1,accountId,deviceId,bindingGeneration,ik,spkId,spkGeneration,opkId,opkPub]
 ```
 
 All IDs/integers/key encodings and signature lengths are validated. Unknown versions, missing signatures, malformed encodings and incompatible capabilities fail closed. v1 has no time-based expiry; generation identifiers and continuity enforce local rollback detection. A fresh client cannot know a revocation/supersession it has never observed.
@@ -82,9 +82,9 @@ F06 bootstrap replay/reset/session epochs remain out of scope. This contract doe
 
 Bundle version 1 adds `binding`, `spkId`, `spkGeneration`, **`spkAuthorization`**, `opks` and explicit `selectedOPK` (signed candidate or null). Existing `spkSig` remains the legacy signature over raw SPK bytes; it cannot substitute for spkAuthorization. Existing opk/opkId fields, when present, must exactly match selectedOPK.
 
-The v4 `auth` string is JSON.stringify of `["echo/dm/bootstrap",1,senderTranscriptBundle,receiverTranscriptBundle]`. Sender transcript bundle has empty candidates and null selection. Receiver transcript bundle includes only its selected candidate, or an explicit empty/null choice. The parser requires exact JSON parse/stringify round-trip equality; signed field arrays above independently define signature canonicalization. This string is public AAD, not private payload.
+The v4 `auth` string is JSON.stringify of `["interpoll/dm/bootstrap",1,senderTranscriptBundle,receiverTranscriptBundle]`. Sender transcript bundle has empty candidates and null selection. Receiver transcript bundle includes only its selected candidate, or an explicit empty/null choice. The parser requires exact JSON parse/stringify round-trip equality; signed field arrays above independently define signature canonicalization. This string is public AAD, not private payload.
 
-AEAD AAD is UTF-8 JSON.stringify of `["echo/dm/message",4,senderIK,dh,n,pn,eph-or-null,opkId-or-null,auth]`. New and previous ratchet messages retain the same context. The delivery-receipt digest additionally appends auth for v4, while its v3 definition is unchanged. This is the minimum F10 compatibility change needed to acknowledge the exact v4 envelope.
+AEAD AAD is UTF-8 JSON.stringify of `["interpoll/dm/message",4,senderIK,dh,n,pn,eph-or-null,opkId-or-null,auth]`. New and previous ratchet messages retain the same context. The delivery-receipt digest additionally appends auth for v4, while its v3 definition is unchanged. This is the minimum F10 compatibility change needed to acknowledge the exact v4 envelope.
 
 A relay may suppress all OPK candidates and force an explicit no-OPK choice before encryption; availability is not authenticated by a global signed manifest. It cannot change that choice after encryption without rejection. No claim is made that relays cannot replay public bytes, that selections across remote senders are globally exclusive, or that a failed stale selection automatically recovers. Receiver single consumption remains enforced.
 

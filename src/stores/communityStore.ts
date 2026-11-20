@@ -37,12 +37,12 @@ const FALLBACK_POST_WARMUP_BATCH_SIZE = 20;
 const FALLBACK_POST_WARMUP_BATCH_DELAY_MS = 60;
 const FALLBACK_POST_EXISTING_CHECK_TIMEOUT_MS = 250;
 const COMMUNITY_GUN_LIVE_ENABLED = typeof window !== 'undefined'
-  && window.localStorage.getItem('echo_community_live') === 'true';
+  && window.localStorage.getItem('interpoll_community_live') === 'true';
 const FALLBACK_POST_WARMUP_ENABLED = typeof window !== 'undefined'
-  && window.localStorage.getItem('echo_posts_warmup') === 'true';
+  && window.localStorage.getItem('interpoll_posts_warmup') === 'true';
 
 function isSyncDebugEnabled(): boolean {
-  return typeof window !== 'undefined' && window.localStorage.getItem('echo_sync_debug') === 'true';
+  return typeof window !== 'undefined' && window.localStorage.getItem('interpoll_sync_debug') === 'true';
 }
 
 function sleep(ms: number): Promise<void> {
@@ -428,7 +428,7 @@ export const useCommunityStore = defineStore('community', () => {
     const force = options?.force === true;
     if (!FALLBACK_POST_WARMUP_ENABLED && !force) {
       if (isSyncDebugEnabled()) {
-        console.log('[SyncDebug] posts warmup disabled (set localStorage.echo_posts_warmup=true to enable)');
+        console.log('[SyncDebug] posts warmup disabled (set localStorage.interpoll_posts_warmup=true to enable)');
       }
       return Promise.resolve();
     }

@@ -1,11 +1,11 @@
 [package]
-name = "echo"
+name = "interpoll"
 version = "0.1.0"
 description = "Echo desktop app"
 edition = "2021"
 
 [lib]
-name = "echo_lib"
+name = "interpoll_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

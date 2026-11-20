@@ -11,7 +11,7 @@ const Gun = require('gun');
 const mysql = require('mysql2/promise');
 
 const API = 'http://127.0.0.1:18080', GUN = 'http://127.0.0.1:18765/gun', NS = 'v5';
-const db = await mysql.createConnection({ host: '127.0.0.1', port: 13306, user: 'root', password: 'stagepw', database: 'echo' });
+const db = await mysql.createConnection({ host: '127.0.0.1', port: 13306, user: 'root', password: 'stagepw', database: 'interpoll' });
 const results = [];
 const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ' — ' + detail : ''}`); };
 const key = () => bytesToHex(schnorr.utils.randomSecretKey());

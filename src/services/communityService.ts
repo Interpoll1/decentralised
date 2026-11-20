@@ -142,7 +142,7 @@ export class CommunityService {
     let aesKey: CryptoKey;
     let method: StoredEncryptionKey['method'];
     if (password) {
-      aesKey = await EncryptionService.deriveKeyFromPassword(password, id + 'echo-v2');
+      aesKey = await EncryptionService.deriveKeyFromPassword(password, id + 'interpoll-v2');
       method = 'password';
     } else {
       aesKey = await EncryptionService.generateKey();
@@ -280,7 +280,7 @@ export class CommunityService {
   ): Promise<Community> {
     let aesKey: CryptoKey;
     if (method === 'password') {
-      aesKey = await EncryptionService.deriveKeyFromPassword(keyOrPassword.trim(), communityId + 'echo-v2');
+      aesKey = await EncryptionService.deriveKeyFromPassword(keyOrPassword.trim(), communityId + 'interpoll-v2');
     } else {
       aesKey = await EncryptionService.importKeyFromBase64Url(keyOrPassword);
     }

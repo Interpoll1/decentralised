@@ -25,7 +25,7 @@ export class EncryptionService {
   /**
    * Derive an AES-256 key from a password using PBKDF2.
    * @param password - user-provided password
-   * @param salt - typically communityId + 'echo-v2'
+   * @param salt - typically communityId + 'interpoll-v2'
    * @param iterations - default 600 000 (OWASP 2023 recommendation for SHA-256)
    */
   static async deriveKeyFromPassword(
@@ -214,7 +214,7 @@ export class EncryptionService {
 
   /**
    * Derive a deterministic HMAC-SHA256 key from AES key material via HKDF.
-   * Domain-separated with 'echo-hmac-auth-v1' info string.
+   * Domain-separated with 'interpoll-hmac-auth-v1' info string.
    */
   private static async deriveHmacKey(aesKey: CryptoKey): Promise<CryptoKey> {
     const rawBytes = await crypto.subtle.exportKey('raw', aesKey);
@@ -228,7 +228,7 @@ export class EncryptionService {
         name: 'HKDF',
         hash: 'SHA-256',
         salt: new Uint8Array(0),
-        info: new TextEncoder().encode('echo-hmac-auth-v1'),
+        info: new TextEncoder().encode('interpoll-hmac-auth-v1'),
       },
       hkdfKey,
       { name: 'HMAC', hash: 'SHA-256' },

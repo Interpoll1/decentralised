@@ -7,7 +7,7 @@
 
 import { ref, computed } from 'vue';
 
-const TUTORIAL_STORAGE_KEY = 'echo_home_tutorial_seen';
+const TUTORIAL_STORAGE_KEY = 'interpoll_home_tutorial_seen';
 
 const TUTORIAL_STEPS = [
   {

@@ -4,11 +4,11 @@ import { makePoll, mockRelay } from './support/relay.mjs';
 async function prepare(context, preference) {
   await mockRelay(context);
   await context.addInitScript(preference => {
-    if (preference) localStorage.setItem('echo_language_v1', preference);
-    localStorage.setItem('echo_onboarding_complete', 'true');
-    localStorage.setItem('echo_bit_tour_v1', 'done');
-    localStorage.setItem('echo_bit_navswap_v1', '1');
-    localStorage.setItem('echo_moderation_onboarding_complete', 'skipped');
+    if (preference) localStorage.setItem('interpoll_language_v1', preference);
+    localStorage.setItem('interpoll_onboarding_complete', 'true');
+    localStorage.setItem('interpoll_bit_tour_v1', 'done');
+    localStorage.setItem('interpoll_bit_navswap_v1', '1');
+    localStorage.setItem('interpoll_moderation_onboarding_complete', 'skipped');
     localStorage.setItem('language-preservation-marker', 'keep-local-data');
   }, preference);
 }

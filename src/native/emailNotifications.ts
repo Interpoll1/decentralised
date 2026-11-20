@@ -22,7 +22,7 @@ import { currentUserId, signForRelay } from './relayIdentity';
  * probe which identities have addresses on file).
  */
 
-const EMAIL_KEY = 'echo_email_notifications';
+const EMAIL_KEY = 'interpoll_email_notifications';
 
 /** The address this device last registered, or '' if none. */
 export function getEmailNotificationAddress(): string {
@@ -45,10 +45,10 @@ function rememberAddress(email: string): void {
  * Keep in sync with `relay-push/email-notifications.js`.
  */
 function emailRegisterMessage(userId: string, email: string, ts: number): string {
-  return `echo-email-register-1:${userId}:${email}:${ts}`;
+  return `interpoll-email-register-1:${userId}:${email}:${ts}`;
 }
 function emailUnregisterMessage(userId: string, ts: number): string {
-  return `echo-email-unregister-1:${userId}:${ts}`;
+  return `interpoll-email-unregister-1:${userId}:${ts}`;
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

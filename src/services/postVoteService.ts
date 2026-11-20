@@ -230,7 +230,7 @@ export class PostVoteService {
             // already include them — a downvote click makes the sibling upvote
             // rows stream in and the upvote count jumps with no user action.
             // Hand subscribers the new baseline so they reset to it.
-            window.dispatchEvent(new CustomEvent('echo:vote-tally', {
+            window.dispatchEvent(new CustomEvent('interpoll:vote-tally', {
               detail: {
                 postId,
                 tally: tallyHint,
@@ -287,7 +287,7 @@ export class PostVoteService {
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
-        new CustomEvent('echo:vote-tally', {
+        new CustomEvent('interpoll:vote-tally', {
           detail: { postId, tally: tallyHint },
         }),
       );
@@ -331,7 +331,7 @@ export class PostVoteService {
       emit();
     };
     if (typeof window !== 'undefined') {
-      window.addEventListener('echo:vote-tally', onTallyEvent);
+      window.addEventListener('interpoll:vote-tally', onTallyEvent);
     }
 
     let chain: any = null;
@@ -360,7 +360,7 @@ export class PostVoteService {
       active = false;
       offReconnect();
       if (typeof window !== 'undefined') {
-        window.removeEventListener('echo:vote-tally', onTallyEvent);
+        window.removeEventListener('interpoll:vote-tally', onTallyEvent);
       }
       detach();
     };

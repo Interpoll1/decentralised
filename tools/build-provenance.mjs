@@ -16,7 +16,7 @@ export function buildProvenancePlugin() {
   const source = sourceIdentity();
   let config;
   return {
-    name: 'echo-build-provenance',
+    name: 'interpoll-build-provenance',
     enforce: 'post',
     configResolved(resolved) {
       config = {

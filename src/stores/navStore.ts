@@ -49,10 +49,10 @@ const RENAMED: Record<string, string> = { communities: 'orbit' };
 const MAX_VISIBLE = 5;
 const MIN_VISIBLE = 3;
 
-const ORDER_KEY      = 'echo_nav_order';
-const ENABLED_KEY    = 'echo_nav_enabled';
+const ORDER_KEY      = 'interpoll_nav_order';
+const ENABLED_KEY    = 'interpoll_nav_enabled';
 /** Older builds stored an explicit start tab here. Read once, folded into the order, then removed. */
-const LEGACY_START_KEY = 'echo_nav_default_tab';
+const LEGACY_START_KEY = 'interpoll_nav_default_tab';
 
 function readOrder(): string[] {
   try {

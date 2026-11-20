@@ -12,7 +12,7 @@ export default defineConfig({
   webServer: {
     cwd: fileURLToPath(new URL('..', import.meta.url)),
     command: 'node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 5198 --strictPort'
-      + (process.env.ECHO_SMOKE_NEGATIVE ? ' --outDir test-results/negative-built' : ''),
+      + (process.env.INTERPOLL_SMOKE_NEGATIVE ? ' --outDir test-results/negative-built' : ''),
     url:'http://127.0.0.1:5198',
   },
 });

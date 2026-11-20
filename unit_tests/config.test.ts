@@ -21,7 +21,7 @@ describe('config', () => {
 
   describe('relay defaults', () => {
     it('returns default websocket URL', () => {
-      expect(config.relay.websocket).toContain('echo');
+      expect(config.relay.websocket).toContain('interpoll');
     });
 
     it('returns default gun URL', () => {
@@ -57,7 +57,7 @@ describe('config', () => {
 
     it('persists to localStorage', () => {
       config.setRelayOverrides({ websocket: 'wss://test.com' });
-      const stored = JSON.parse(storage.get('echo_relay_config')!);
+      const stored = JSON.parse(storage.get('interpoll_relay_config')!);
       expect(stored.websocket).toBe('wss://test.com');
     });
   });
@@ -72,7 +72,7 @@ describe('config', () => {
     it('clears localStorage', () => {
       config.setRelayOverrides({ websocket: 'wss://test.com' });
       config.resetRelayOverrides();
-      expect(storage.has('echo_relay_config')).toBe(false);
+      expect(storage.has('interpoll_relay_config')).toBe(false);
     });
   });
 

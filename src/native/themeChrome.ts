@@ -1,6 +1,6 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
-const ThemeChrome = registerPlugin<{ setAppearance(options: { dark: boolean }): Promise<void> }>('EchoThemeChrome');
+const ThemeChrome = registerPlugin<{ setAppearance(options: { dark: boolean }): Promise<void> }>('InterpollThemeChrome');
 
 export async function syncNativeTheme(dark: boolean): Promise<void> {
   if (Capacitor.getPlatform() !== 'android') return;

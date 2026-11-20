@@ -1,6 +1,6 @@
 import { ref } from 'vue';
 
-const STORAGE_KEY = 'echo_feed_preferences';
+const STORAGE_KEY = 'interpoll_feed_preferences';
 const STORAGE_VERSION = 1;
 
 export type FeedMode = 'latest' | 'for-you';

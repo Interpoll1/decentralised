@@ -140,7 +140,7 @@ export class BrowserRelayService {
       const ws = new WebSocket(url);
       const timeout = setTimeout(() => { ws.close(); reject(new Error('Bridge timeout')); }, 8_000);
 
-      ws.onopen = () => ws.send(JSON.stringify({ type: 'register', app: 'echo' }));
+      ws.onopen = () => ws.send(JSON.stringify({ type: 'register', app: 'interpoll' }));
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);

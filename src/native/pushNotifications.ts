@@ -18,14 +18,14 @@ import { currentUserId, signForRelay } from './relayIdentity';
  *      plus an FCM sender that fires when a chat frame is relayed to a user who
  *      has no live socket. A drop-in implementation lives in
  *      `relay-push/push-notifications.js`.
- *   3. The flag: localStorage `echo_push_enabled = 'true'`.
+ *   3. The flag: localStorage `interpoll_push_enabled = 'true'`.
  *
  * Until the flag is set, `initPushNotifications` is a no-op, so it stays safe
  * to call unconditionally from app startup on devices with no FCM config.
  */
 export function isPushEnabled(): boolean {
   try {
-    return localStorage.getItem('echo_push_enabled') === 'true';
+    return localStorage.getItem('interpoll_push_enabled') === 'true';
   } catch {
     return false;
   }
@@ -33,13 +33,13 @@ export function isPushEnabled(): boolean {
 
 export function setPushEnabled(on: boolean): void {
   try {
-    localStorage.setItem('echo_push_enabled', on ? 'true' : 'false');
+    localStorage.setItem('interpoll_push_enabled', on ? 'true' : 'false');
   } catch { /* private mode — the flag just won't stick */ }
 }
 
 /** Device id the relay keys tokens by, so re-registering replaces rather than duplicates. */
 function deviceId(): string {
-  const KEY = 'echo_push_device_id';
+  const KEY = 'interpoll_push_device_id';
   try {
     let id = localStorage.getItem(KEY);
     if (!id) {
@@ -108,10 +108,10 @@ export async function initPushNotifications(): Promise<void> {
  * Keep in sync with `relay-push/push-notifications.js`.
  */
 function registerMessage(userId: string, deviceId: string, token: string, ts: number): string {
-  return `echo-push-register-1:${userId}:${deviceId}:${token}:${ts}`;
+  return `interpoll-push-register-1:${userId}:${deviceId}:${token}:${ts}`;
 }
 function unregisterMessage(userId: string, deviceId: string, ts: number): string {
-  return `echo-push-unregister-1:${userId}:${deviceId}:${ts}`;
+  return `interpoll-push-unregister-1:${userId}:${deviceId}:${ts}`;
 }
 
 /** Send the FCM token to the relay so it can target this device. */

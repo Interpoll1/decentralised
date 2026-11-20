@@ -175,7 +175,7 @@ async function copyPhrase() {
 function downloadPhrase() {
   const blob = new Blob([`Echo NAME recovery phrase for "${username.value}"\n\n${newPhrase.value.join(' ')}\n\nKeep this offline. It can move your username to a new key.\n`], { type: 'text/plain' });
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = `echo-name-recovery-${username.value}.txt`; a.click();
+  a.href = URL.createObjectURL(blob); a.download = `interpoll-name-recovery-${username.value}.txt`; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 function onStarted() { message.value = 'Recovery started — see the status above once it is visible on the network.'; void refresh(); }

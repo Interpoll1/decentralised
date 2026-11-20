@@ -34,7 +34,7 @@ Content encryption MUST use **AES-256-GCM** (Web Crypto):
 - Decryption extracts the IV from the first 12 bytes and relies on GCM
   authentication to detect tampering.
 - Each blob MUST additionally carry an **HMAC-SHA256 auth tag** derived from the
-  community key via HKDF, domain-separated with `'echo-hmac-auth-v1'` — an
+  community key via HKDF, domain-separated with `'interpoll-hmac-auth-v1'` — an
   anti-sabotage check independent of the GCM tag.
 
 For an encrypted community, encryption failure MUST be fatal (fail closed — never
@@ -49,7 +49,7 @@ Two join methods:
   MUST NOT be sent to any server (it lives only in the URL bar). The invitee
   extracts the key from the fragment.
 - **Password (derived key).** Key derived via PBKDF2-SHA-256, 600,000 iterations,
-  salt = `communityId + 'echo-v2'`. Any peer who knows the password and
+  salt = `communityId + 'interpoll-v2'`. Any peer who knows the password and
   community id derives the same key.
 
 Keys MUST be stored locally only (IndexedDB via `KeyVaultService`), never

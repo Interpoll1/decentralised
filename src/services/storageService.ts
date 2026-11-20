@@ -156,7 +156,7 @@ export class StorageService {
         // the app into the volatile in-memory fallback ("data will not
         // persist"). The upgrade handler below is idempotent вЂ” it only creates
         // stores that are missing вЂ” so bumping this is always safe.
-        const open = openDB('echo-db', 5, {
+        const open = openDB('interpoll-db', 5, {
           upgrade(db) {
             const has = (name: string) => db.objectStoreNames.contains(name as never);
             if (!has('blocks')) {

@@ -311,7 +311,7 @@ export class CallService {
       ]);
       const kp = await KeyService.getKeyPair();
       const ts = Date.now();
-      const sig = CryptoService.sign(`echo-turn:${kp.publicKey}:${ts}`, kp.privateKey);
+      const sig = CryptoService.sign(`interpoll-turn:${kp.publicKey}:${ts}`, kp.privateKey);
       return await config.getTurnServers({ pk: kp.publicKey, ts, sig });
     } catch {
       return [];

@@ -4,9 +4,9 @@
 // incl. one 8-account synchronized group), then times export + run three times.
 // Randomized: the exact DB-run input is saved as inputs/db-export-1000.bundle.json.
 // DESTRUCTIVE to the target server; use only a throwaway container:
-//   docker run -d --rm --name pilot-stage-clone -e MYSQL_ROOT_PASSWORD=PW -e MYSQL_DATABASE=echo \
+//   docker run -d --rm --name pilot-stage-clone -e MYSQL_ROOT_PASSWORD=PW -e MYSQL_DATABASE=interpoll \
 //     -p 127.0.0.1:33307:3306 mysql:8.0.46
-//   docker exec -i pilot-stage-clone sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" echo' \
+//   docker exec -i pilot-stage-clone sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" interpoll' \
 //     < tools/coordination-pilot/repro/inputs/staging-schema.sql
 //   node tools/coordination-pilot/repro/load-check.mjs 33307 PW WORKDIR   (Linux: needs /usr/bin/time)
 import { spawnSync } from 'node:child_process';
@@ -20,7 +20,7 @@ import { digest } from '../../coordination-impact/core.mjs';
 import { reviewDigest } from '../export.mjs';
 
 const [port, rootPw, work] = [Number(process.argv[2]), process.argv[3], process.argv[4]];
-const DB = 'echo', NS = 'v5';
+const DB = 'interpoll', NS = 'v5';
 const roPw = randomBytes(12).toString('hex');
 const root = await mysql.createConnection({ host: '127.0.0.1', port, user: 'root', password: rootPw, database: DB, multipleStatements: true });
 await root.query(`CREATE USER 'pilot_ro'@'%' IDENTIFIED BY '${roPw}';

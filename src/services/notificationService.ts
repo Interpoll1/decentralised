@@ -32,7 +32,7 @@ export interface ChatNotification {
 
 type NavigateFn = (path: string) => void;
 
-const ANDROID_CHANNEL_ID = 'echo-chat';
+const ANDROID_CHANNEL_ID = 'interpoll-chat';
 
 let navigate: NavigateFn | null = null;
 let initialized = false;
@@ -119,7 +119,7 @@ export async function notifyChatMessage(n: ChatNotification): Promise<void> {
           title: n.senderName,
           body: n.preview,
           channelId: ANDROID_CHANNEL_ID,
-          group: 'echo-chat',
+          group: 'interpoll-chat',
           extra: { path: n.path, fromUserId: n.fromUserId },
         }],
       });

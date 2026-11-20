@@ -30,7 +30,7 @@ Echo in 75 seconds. Polls and discussion with no ads, no data collection, and no
 💻 GitHub: [GITHUB_URL]
 📱 Android: [APK_URL]
 
-**Tags:** echo, decentralized polls, no ads social media, verifiable voting, encrypted chat, open source, private communities, anti bot
+**Tags:** interpoll, decentralized polls, no ads social media, verifiable voting, encrypted chat, open source, private communities, anti bot
 
 **Pinned comment**
 No ads, no tracking, no one deciding what you see. What poll would you start first? 👇 https://endless.sbs
@@ -51,7 +51,7 @@ Free, open source, no data collection.
 5. Nothing can be quietly taken down
 6. Open source: run it yourself → endless.sbs
 
-**Hashtags:** #echo #decentralized #noads #privacy #opensource #polls #web3 #selfhosted
+**Hashtags:** #interpoll #decentralized #noads #privacy #opensource #polls #web3 #selfhosted
 
 ## Reddit
 

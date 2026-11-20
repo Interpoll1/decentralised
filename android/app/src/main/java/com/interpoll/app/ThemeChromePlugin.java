@@ -1,4 +1,4 @@
-package com.echo.app;
+package com.interpoll.app;
 
 import android.app.Activity;
 import android.content.Context;
@@ -13,9 +13,9 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
-@CapacitorPlugin(name = "EchoThemeChrome")
+@CapacitorPlugin(name = "InterpollThemeChrome")
 public class ThemeChromePlugin extends Plugin {
-    static final String PREFERENCES = "echo-appearance";
+    static final String PREFERENCES = "interpoll-appearance";
 
     static void applyAppearance(Activity activity, boolean dark) {
         int color = dark ? Color.rgb(35, 42, 49) : Color.rgb(231, 233, 236);

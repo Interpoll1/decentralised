@@ -11,7 +11,7 @@
 <script setup lang="ts">
 import { ref, nextTick, watch } from 'vue';
 
-const STORAGE_KEY = 'echo_consent_accepted';
+const STORAGE_KEY = 'interpoll_consent_accepted';
 
 function readConsent(): boolean {
   try {

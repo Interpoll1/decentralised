@@ -1275,7 +1275,7 @@ async function initializeChat() {
     resolvedUserId = currentUser?.id || '';
   } catch { }
   if (!resolvedUserId) {
-    const ANON_KEY = 'echo-anon-id';
+    const ANON_KEY = 'interpoll-anon-id';
     let anonId = localStorage.getItem(ANON_KEY);
     if (!anonId) {
       const bytes = crypto.getRandomValues(new Uint8Array(32));

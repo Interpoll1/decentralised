@@ -447,8 +447,8 @@ const onSplitChange = (e: MediaQueryListEvent) => { split.value = e.matches; };
 onMounted(() => { splitMql = matchMedia(SPLIT_QUERY); split.value = splitMql.matches; splitMql.addEventListener('change', onSplitChange); });
 onBeforeUnmount(() => splitMql?.removeEventListener('change', onSplitChange));
 
-const LAST_ROOM_KEY = 'echo_last_room';
-const PINNED_KEY = 'echo_pinned_rooms';
+const LAST_ROOM_KEY = 'interpoll_last_room';
+const PINNED_KEY = 'interpoll_pinned_rooms';
 function readJSON<T>(key: string, fallback: T): T {
   try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) as T : fallback; } catch { return fallback; }
 }

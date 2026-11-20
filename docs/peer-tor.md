@@ -69,7 +69,7 @@ node peer.js --proxy socks5h://127.0.0.1:9050
 ## Running as a Service
 
 ```bash
-# systemd unit (save as /etc/systemd/system/echo-peer.service)
+# systemd unit (save as /etc/systemd/system/interpoll-peer.service)
 [Unit]
 Description=Echo Headless Peer (Tor)
 After=tor.service network.target
@@ -77,8 +77,8 @@ Requires=tor.service
 
 [Service]
 Type=simple
-User=echo
-WorkingDirectory=/opt/echo
+User=interpoll
+WorkingDirectory=/opt/interpoll
 ExecStart=/usr/bin/node peer.js --proxy socks5h://127.0.0.1:9050
 Restart=always
 RestartSec=10

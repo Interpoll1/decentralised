@@ -28,10 +28,10 @@ so no wildcard DNS or wildcard certificate is needed. Limits: 50 peers per tab,
 ## Deploy (VPS, no git remote there)
 
 ```
-scp install.sh vps.sh install.ps1         root@VPS:/var/www/echo/community-relay/
-scp kit/relay.js kit/package.json         root@VPS:/var/www/echo/community-relay/kit/
-scp relay-bridge-server.js                root@VPS:/var/www/echo/backend/
+scp install.sh vps.sh install.ps1         root@VPS:/var/www/interpoll/community-relay/
+scp kit/relay.js kit/package.json         root@VPS:/var/www/interpoll/community-relay/kit/
+scp relay-bridge-server.js                root@VPS:/var/www/interpoll/backend/
 ssh root@VPS 'pm2 restart relay-bridge'
 ```
 
-nginx locations for all of the above live in `/etc/nginx/sites-enabled/echo`.
+nginx locations for all of the above live in `/etc/nginx/sites-enabled/interpoll`.

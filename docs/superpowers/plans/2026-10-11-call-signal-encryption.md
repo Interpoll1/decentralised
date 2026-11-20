@@ -12,7 +12,7 @@
   - The recipient's static key is their Schnorr x-only pubkey, lifted to the even-Y point (`02` + pubkey).
   - The sender generates an ephemeral keypair for each message.
   - `shared = secp256k1.getSharedSecret(ephPriv, '02'+recipientPk)`
-  - `key = HKDF-SHA256(shared, salt=ephPub, info='echo-call-v1')`
+  - `key = HKDF-SHA256(shared, salt=ephPub, info='interpoll-call-v1')`
 - **Cipher:** AES-256-GCM via WebCrypto, with a random 12-byte IV.
 - **Wire format:** `{ v:1, to:<recipientPk>, eph:<hex>, iv:<hex>, ct:<b64>, ts }`
   - Only `to` and `ts` stay in the clear. They're needed for routing and TTL cleanup.

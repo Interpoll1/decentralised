@@ -46,9 +46,9 @@ export interface NearbySpace { id: string; hostId: string; name: string; desc: s
 
 export interface FoundPosition extends GeoPoint { accuracyKm?: number }
 
-const PREFS_KEY = 'echo_nearby_prefs_v2';
-const PUBLISHED_KEY = 'echo_nearby_published_v2';
-const STAMPS_KEY = 'echo_nearby_stamps_v1';
+const PREFS_KEY = 'interpoll_nearby_prefs_v2';
+const PUBLISHED_KEY = 'interpoll_nearby_published_v2';
+const STAMPS_KEY = 'interpoll_nearby_stamps_v1';
 export const PRESENCE_TTL_MS = 30 * 60_000;
 export const HEARTBEAT_MS = 10 * 60_000;
 const MEETUP_GRACE_MS = 3 * 60 * 60_000;
@@ -268,7 +268,7 @@ export class NearbyService {
     // x-only keys → even-y point; the shared x-coordinate is identical from both sides.
     const shared = (secp256k1 as any).getSharedSecret(priv, hexToBytes('02' + contactPub.toLowerCase())).slice(1, 33) as Uint8Array;
     const enc = new TextEncoder();
-    const keyBytes = sha256(new Uint8Array([...enc.encode('echo-nearby-key'), ...shared]));
+    const keyBytes = sha256(new Uint8Array([...enc.encode('interpoll-nearby-key'), ...shared]));
     const key = await crypto.subtle.importKey('raw', keyBytes as BufferSource, 'AES-GCM', false, ['encrypt', 'decrypt']);
     const out = { shared, key };
     this.sealCache.set(contactPub, out);
@@ -278,7 +278,7 @@ export class NearbyService {
   /** Directional tag: the record *I* leave for `contactPub`, or (sender=contactPub) the one they leave for me. */
   private static tagFor(shared: Uint8Array, senderPub: string): string {
     const enc = new TextEncoder();
-    return bytesToHex(sha256(new Uint8Array([...enc.encode('echo-nearby-tag'), ...shared, ...enc.encode(senderPub.toLowerCase())]))).slice(0, 32);
+    return bytesToHex(sha256(new Uint8Array([...enc.encode('interpoll-nearby-tag'), ...shared, ...enc.encode(senderPub.toLowerCase())]))).slice(0, 32);
   }
 
   static async outgoingTag(contactPub: string): Promise<{ tag: string; key: CryptoKey } | null> {
