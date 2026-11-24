@@ -24,13 +24,14 @@
               <li><b>{{ $ui("Relay") }}</b> {{ $ui("— choose how you connect to the network") }}</li>
             </ul>
             <p class="bs-note">{{ $ui("About a minute. No email, no phone, no account.") }}</p>
-            <button v-if="!restoring && !recoveringName" class="bs-link bs-restore-link" @click="restoring = true">{{ $ui("I already have a recovery phrase") }}</button>
+            <button v-if="!restoring && !recoveringName" class="bs-link bs-restore-link" @click="restoring = true">{{ $ui("I already have an account (passkey, vault file or phrase)") }}</button>
             <button v-if="!restoring && !recoveringName" class="bs-link bs-restore-link" @click="recoveringName = true">{{ $ui("I lost my key — recover my username") }}</button>
             <div v-if="recoveringName" class="bs-restore">
               <RecoverNameForm />
               <button class="bs-link" @click="recoveringName = false">{{ $ui("Close") }}</button>
             </div>
             <div v-else-if="restoring" class="bs-restore">
+              <DeviceVaultPanel mode="restore" @restored="onRestored" />
               <RestoreKeyForm :warn-replace="false" @restored="onRestored" />
               <button class="bs-link" @click="restoring = false">{{ $ui("Cancel") }}</button>
             </div>
@@ -156,6 +157,7 @@ import type { Community } from '../services/communityService';
 import config from '../config';
 import { ModerationService, MODERATION_API_DEFAULT_BASE_URL } from '../services/moderationService';
 import RestoreKeyForm from '../components/RestoreKeyForm.vue';
+import DeviceVaultPanel from '../components/DeviceVaultPanel.vue';
 import RecoverNameForm from '../components/RecoverNameForm.vue';
 
 const ONBOARDING_KEY = 'interpoll_onboarding_complete';

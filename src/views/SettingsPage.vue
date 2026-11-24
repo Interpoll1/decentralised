@@ -65,7 +65,7 @@
             <button class="block-btn outline mt-12" @click="showRestore = !showRestore">
               {{ showRestore ? $ui("Cancel restore") : $ui("Restore identity from recovery phrase") }}
             </button>
-            <div v-if="showRestore" class="mt-12"><RestoreKeyForm @restored="onIdentityRestored" /></div>
+            <div v-if="showRestore" class="mt-12"><DeviceVaultPanel mode="restore" @restored="onIdentityRestored" /><RestoreKeyForm @restored="onIdentityRestored" /></div>
             <button class="block-btn outline mt-12" @click="replayBitTour"> {{ $ui("Replay Bit's tour") }} </button>
             <button class="block-btn outline mt-12" @click="$router.push('/profile')">
               <ion-icon :icon="personCircleOutline"></ion-icon> {{ $ui("Edit Profile") }} </button>
@@ -107,6 +107,7 @@
                 </div>
               </div>
               <RecoveryPhrasePanel />
+              <DeviceVaultPanel />
               <div v-if="showPrivateKey" class="alert-box warning">
                 <ion-icon :icon="warningOutline"></ion-icon> {{ $ui("Never share your private key. Anyone with it can sign events as you.") }} </div>
             </div>
@@ -1612,6 +1613,7 @@ import { useNavStore } from '../stores/navStore';
 import { useBitStore } from '../stores/bitStore';
 import RestoreKeyForm from '../components/RestoreKeyForm.vue';
 import RecoveryPhrasePanel from '../components/RecoveryPhrasePanel.vue';
+import DeviceVaultPanel from '../components/DeviceVaultPanel.vue';
 import NameRecoveryCard from '../components/NameRecoveryCard.vue';
 import {
   isPushEnabled, setPushEnabled, initPushNotifications, unregisterPushNotifications,

@@ -135,6 +135,8 @@ window.addEventListener('unhandledrejection', (e) => {
 router.isReady().then(() => {
   try {
     app.mount('#app');
+    // Ask the browser not to evict IndexedDB (where the identity key lives).
+    void import('./services/deviceVaultService').then(m => m.DeviceVaultService.requestPersistence()).catch(() => {});
   } catch (err) {
     // Mounting itself failed — Vue can't render the fallback, so inject a
     // minimal static recovery screen directly.
