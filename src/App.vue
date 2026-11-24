@@ -47,7 +47,7 @@ let themeObserver: MutationObserver | null = null;
 
 function syncSystemChrome() {
   const dark = document.documentElement.classList.contains('dark');
-  const color = dark ? '#232a31' : '#e7e9ec';
+  const color = dark ? '#040506' : '#eef6f0';
   document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute('content', color);
   document.documentElement.style.setProperty('--system-chrome-color', color);
   void syncNativeTheme(dark);

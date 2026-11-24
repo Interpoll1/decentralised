@@ -19,17 +19,17 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-it('starts fresh installs in light graphite', () => {
-  expect(initializeTheme()).toBe('light');
-  expect(html.classes.has('dark')).toBe(false); expect(body.classes.has('dark')).toBe(false);
-  expect(values.get(THEME_PREFERENCE_KEY)).toBe('light');
+it('starts fresh installs in dark without persisting a choice', () => {
+  expect(initializeTheme()).toBe('dark');
+  expect(html.classes.has('dark')).toBe(true); expect(body.classes.has('dark')).toBe(true);
+  expect(values.has(THEME_PREFERENCE_KEY)).toBe(false);
 });
-it('migrates the old forced-dark value once without clearing other data', () => {
-  values.set('theme', 'dark'); values.set('identity-marker', 'keep-this');
-  expect(initializeTheme()).toBe('light');
+it('ignores legacy values and only honours an explicit light choice', () => {
+  values.set('theme', 'light'); values.set('interpoll_theme_preference_v1', 'light'); values.set('identity-marker', 'keep-this');
+  expect(initializeTheme()).toBe('dark');
   expect(values.get('identity-marker')).toBe('keep-this');
-  setTheme('dark'); expect(initializeTheme()).toBe('dark');
-  expect(html.style.colorScheme).toBe('dark');
+  setTheme('light'); expect(initializeTheme()).toBe('light');
+  expect(html.style.colorScheme).toBe('light');
 });
 it('persists both explicit choices and applies them to html/body', () => {
   setTheme('dark'); expect(appTheme.value).toBe('dark'); expect(body.classes.has('dark')).toBe(true);
@@ -37,10 +37,10 @@ it('persists both explicit choices and applies them to html/body', () => {
 });
 it('still switches themes when storage is unavailable', () => {
   vi.stubGlobal('localStorage', { getItem: () => { throw new Error('unavailable'); }, setItem: () => { throw new Error('unavailable'); } });
-  expect(initializeTheme()).toBe('light');
-  expect(() => setTheme('dark')).not.toThrow(); expect(html.classes.has('dark')).toBe(true);
+  expect(initializeTheme()).toBe('dark');
+  expect(() => setTheme('light')).not.toThrow(); expect(html.classes.has('dark')).toBe(false);
 });
-it('the real first-paint bootstrap uses the same preference and light fallback', () => {
+it('the real first-paint bootstrap defaults to dark unless light was chosen', () => {
   const source = readFileSync(resolve(__dirname, '../index.html'), 'utf8');
   const script = [...source.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)]
     .map(match => match[1]).find(text => text.includes(THEME_PREFERENCE_KEY))!;
@@ -48,9 +48,9 @@ it('the real first-paint bootstrap uses the same preference and light fallback',
   for (const choice of [null, 'dark', 'light', 'unknown']) {
     const root = element();
     runInNewContext(script, { document: { documentElement: root, querySelector: () => ({ setAttribute: () => {} }) }, localStorage: { getItem: () => choice } });
-    expect(root.classes.has('dark')).toBe(choice === 'dark');
+    expect(root.classes.has('dark')).toBe(choice !== 'light');
   }
   const root = element();
   expect(() => runInNewContext(script, { document: { documentElement: root, querySelector: () => ({ setAttribute: () => {} }) }, localStorage: { getItem: () => { throw new Error('blocked'); } } })).not.toThrow();
-  expect(root.classes.has('dark')).toBe(false);
+  expect(root.classes.has('dark')).toBe(true);
 });

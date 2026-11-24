@@ -13,7 +13,7 @@ import '@ionic/vue/css/text-transformation.css';
 import '@ionic/vue/css/flex-utils.css';
 import '@ionic/vue/css/display.css';
 import './style.css';
-import './theme-graphite.css';
+import './theme-raycast.css';
 import { initializeTheme } from './services/themeService';
 import { initializeLanguage, languagePlugin } from './i18n';
 import App from './App.vue';

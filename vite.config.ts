@@ -159,8 +159,8 @@ export default defineConfig({
           name: 'Echo',
           short_name: 'Echo',
           description: 'Decentralized, censorship-resistant polling & discussion',
-          theme_color: '#e7e9ec',
-          background_color: '#e7e9ec',
+          theme_color: '#040506',
+          background_color: '#040506',
           display: 'standalone',
           start_url: '/',
           icons: [

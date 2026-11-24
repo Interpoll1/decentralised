@@ -36,7 +36,7 @@
 
     <!-- PWA / mobile chrome. Keep theme-color in sync with the manifest
          theme_color in vite.config.ts. -->
-    <meta name="theme-color" content="#e7e9ec" />
+    <meta name="theme-color" content="#040506" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Echo" />
@@ -67,12 +67,12 @@
     <script>
       // Match the app preference before first paint. Legacy forced-dark values are migrated by the app.
       (function() {
-        var theme = 'light';
-        try { if (localStorage.getItem('interpoll_theme_preference_v1') === 'dark') theme = 'dark'; } catch (_) {}
+        var theme = 'dark';
+        try { if (localStorage.getItem('interpoll_theme_preference_v2') === 'light') theme = 'light'; } catch (_) {}
         document.documentElement.classList.toggle('dark', theme === 'dark');
         document.documentElement.dataset.theme = theme;
         document.documentElement.style.colorScheme = theme;
-        document.querySelector('meta[name="theme-color"]').setAttribute('content', theme === 'dark' ? '#232a31' : '#e7e9ec');
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', theme === 'dark' ? '#040506' : '#eef6f0');
       })();
     </script>
   </head>
@@ -82,9 +82,9 @@
          page is blank. Inline-styled because no CSS has loaded yet. -->
     <div id="app">
       <noscript><h1>Echo</h1><p>Decentralized polls and discussions with cryptographically signed, verifiable votes. Enable JavaScript to use the app.</p></noscript>
-      <div id="boot-splash" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#232a31;color:#edf0f2;font:15px system-ui,-apple-system,sans-serif;text-align:center;padding:16px">
+      <div id="boot-splash" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#040506;color:#edf0f2;font:15px system-ui,-apple-system,sans-serif;text-align:center;padding:16px">
         <style>
-          html:not(.dark) #boot-splash{background:#e7e9ec!important;color:#232a31!important}
+          html:not(.dark) #boot-splash{background:#eef6f0!important;color:#232a31!important}
           #boot-splash .bs-logo{font:400 56px/1 "Grand Hotel",cursive,system-ui;color:#edf0f2}
           html:not(.dark) #boot-splash .bs-logo{color:#232a31}
           #boot-splash .bs-net line{stroke:#17664b;stroke-opacity:.25;stroke-width:1}
