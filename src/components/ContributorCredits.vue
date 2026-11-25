@@ -25,11 +25,38 @@
       <button type="button" class="cc-btn ghost" :disabled="busy" @click="respond('disputed')">Dispute</button>
     </div>
 
+    <div v-if="current && paymentsEnabled" class="cc-pay">
+      <template v-if="status === 'active'">
+        <div class="cc-tip">
+          <span>Tip this work — split automatically between everyone above.</span>
+          <div class="cc-tip-row">
+            <button v-for="amt in [200, 500, 1000]" :key="amt" type="button" class="cc-btn ghost" :disabled="busy" @click="tip(amt)">{{ formatCents(amt) }}</button>
+            <input v-model.number="customTip" class="cc-input cc-pct" type="number" min="1" max="500" step="1" placeholder="$" />
+            <button type="button" class="cc-btn" :disabled="busy || !customTip" @click="tip(Math.round((customTip ?? 0) * 100))">Tip</button>
+          </div>
+        </div>
+      </template>
+      <p v-else class="cc-muted">Tips unlock once every contributor has accepted the split.</p>
+      <details @toggle="loadStatement">
+        <summary class="cc-muted">Revenue statement</summary>
+        <div v-if="statement" class="cc-statement">
+          <div>Gross {{ formatCents(statement.totals.grossCents) }} · Fees −{{ formatCents(statement.totals.feeCents) }} · Refunds −{{ formatCents(statement.totals.refundedCents) }} · Platform −{{ formatCents(statement.totals.platformCents) }}</div>
+          <div><strong>Distributable {{ formatCents(statement.totals.distributableCents) }}</strong></div>
+          <div v-for="c in statement.contributors" :key="c.contributorId" class="cc-stmt-row">
+            <span>{{ c.displayName }} ({{ c.role }})</span>
+            <span>paid {{ formatCents(c.paidCents) }}<template v-if="c.reservedCents"> · reserved {{ formatCents(c.reservedCents) }}</template><template v-if="c.heldCents"> · held {{ formatCents(c.heldCents) }}</template></span>
+          </div>
+          <p v-if="statement.disputed" class="cc-error">Payouts are held while a dispute is open.</p>
+          <p v-if="!statement.payments.length" class="cc-muted">No revenue yet.</p>
+        </div>
+      </details>
+    </div>
+
     <details v-if="isOwner" class="cc-editor" :open="!current">
       <summary>{{ current ? 'Propose a new split' : 'Credit collaborators' }}</summary>
       <p class="cc-muted">
         Each person must accept before they're credited. Changes need approval from everyone affected.
-        Credits only for now — no payments.
+        Shares of anyone who hasn't accepted or set up payouts are reserved for them, never paid to you.
       </p>
       <div v-for="(row, i) in draft" :key="i" class="cc-row">
         <input v-model="row.contributorId" class="cc-input" placeholder="Account ID / public key" />
@@ -57,8 +84,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { ContributionService } from '../services/contributionService';
+import { PaymentsService, type WorkStatement } from '../services/paymentsService';
 import {
-  CONTRIBUTOR_ROLES, acceptanceStates, percentToBps, splitStatus, validateSplit,
+  CONTRIBUTOR_ROLES, acceptanceStates, formatCents, percentToBps, splitStatus, validateSplit,
   type Acceptance, type ContributorRole, type SplitEntry, type SplitVersion, type WorkKind,
 } from '../utils/contributionSplit';
 
@@ -73,6 +101,10 @@ const props = defineProps<{
 type DraftRow = { contributorId: string; displayName: string; role: ContributorRole; percent: number };
 
 const current = ref<SplitVersion | null>(null);
+const history = ref<SplitVersion[]>([]);
+const paymentsEnabled = PaymentsService.enabled;
+const customTip = ref<number | null>(null);
+const statement = ref<WorkStatement | null>(null);
 const acceptances = ref<Acceptance[]>([]);
 const historyValid = ref(true);
 const busy = ref(false);
@@ -85,7 +117,8 @@ const status = computed(() => current.value ? splitStatus(current.value, accepta
 const statusLabel = computed(() => ({ active: 'All accepted', draft: 'Awaiting acceptance', disputed: 'Disputed' })[status.value]);
 const myPendingEntry = computed(() => {
   const e = current.value?.entries.find((x) => x.contributorId === props.currentUserId);
-  return e && states.value.get(e.contributorId) === 'pending' ? e : null;
+  const st = e && states.value.get(e.contributorId);
+  return e && (st === 'pending' || st === 'disputed') ? e : null;
 });
 const draftEntries = computed<SplitEntry[]>(() => draft.value.map((r) => ({
   contributorId: r.contributorId.trim(), displayName: r.displayName.trim() || r.contributorId.trim().slice(0, 12),
@@ -111,6 +144,7 @@ async function load() {
   if (!props.workId) return;
   const state = await ContributionService.load(props.workId);
   current.value = state.current;
+  history.value = state.history;
   acceptances.value = state.acceptances;
   historyValid.value = state.historyValid;
   resetDraft();
@@ -134,8 +168,25 @@ async function respond(state: 'accepted' | 'disputed') {
   try {
     const a = await ContributionService.respond(current.value, props.currentUserId, state, reason);
     acceptances.value = [...acceptances.value, a];
+    if (paymentsEnabled) {
+      // Server-side holds follow signed disputes; a later acceptance releases them.
+      if (state === 'disputed') await PaymentsService.reportDispute(a).catch(() => undefined);
+      else await PaymentsService.resolveDispute(a).catch(() => undefined);
+    }
   } catch (err: any) { error.value = err?.message || 'Could not record your response.'; }
   finally { busy.value = false; }
+}
+
+async function tip(amountCents: number) {
+  if (!current.value) return;
+  busy.value = true; error.value = '';
+  try { await PaymentsService.tip(history.value, acceptances.value, amountCents); }
+  catch (err: any) { error.value = err?.message || 'Could not start checkout.'; busy.value = false; }
+}
+
+async function loadStatement() {
+  if (statement.value || !paymentsEnabled) return;
+  try { statement.value = await PaymentsService.statement(props.workId); } catch { /* statement is optional */ }
 }
 
 onMounted(load);
@@ -166,4 +217,8 @@ watch(() => props.workId, load);
 .cc-btn.ghost { background: transparent; color: inherit; border: 1px solid var(--ion-color-step-200, rgba(127,127,127,.3)); }
 .cc-btn:disabled { opacity: .5; cursor: default; }
 .cc-error { color: var(--ion-color-danger); font-size: 13px; margin: 0; }
+.cc-pay { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 10px; background: var(--ion-color-step-50, rgba(127,127,127,.06)); font-size: 14px; }
+.cc-tip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.cc-statement { display: grid; gap: 4px; font-size: 13px; margin-top: 6px; }
+.cc-stmt-row { display: flex; justify-content: space-between; gap: 8px; }
 </style>

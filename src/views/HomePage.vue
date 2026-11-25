@@ -446,6 +446,7 @@
 </template>
 
 <script setup lang="ts">
+import { popularityScore } from '../utils/forecastScoring';
 import { ui } from "../i18n";
 import BitMascot from '../components/BitMascot.vue';
 import { useBitStore } from '../stores/bitStore';
@@ -904,7 +905,19 @@ const combinedFeed = computed(() => {
       const catRank      = category ? userTopCats.indexOf(category) : -1;
       const catScore     = catRank === 0 ? 1.0 : catRank === 1 ? 0.5 : catRank === 2 ? 0.25 : 0;
       const tagScore     = tags?.some(t => userTags.has(t)) ? 0.3 : 0;
-      const engScore     = Math.min(Math.max(score, 0) / 50, 1);
+      // Polls: participation breadth, disagreement and urgency (log-scaled so
+      // huge communities don't permanently dominate). Posts keep vote score.
+      const engScore     = item.type === 'poll'
+        ? 1 - Math.exp(-popularityScore({
+            recentActivity: item.data.totalVotes ?? 0,
+            participants: item.data.totalVotes ?? 0,
+            distribution: (item.data.options ?? []).map((o: any) => o.votes || 0),
+            discussion: 0,
+            msUntilResolution: (item.data.expiresAt ?? 0) - now,
+            meanCredibility: 50,
+            ageMs,
+          }))
+        : Math.min(Math.max(score, 0) / 50, 1);
       const recencyScore = Math.exp(-ageMs / (WEEK * 0.43));
       const shuffleSeed  = hashStringToInt(itemId + String(SESSION_SHUFFLE_SEED));
       const shuffleScore = seededRandom(shuffleSeed);

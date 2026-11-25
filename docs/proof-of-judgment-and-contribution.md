@@ -33,11 +33,23 @@ Code: `src/utils/forecastScoring.ts`, `src/services/forecastService.ts`,
 Code: `src/utils/contributionSplit.ts`, `src/services/contributionService.ts`,
 `src/components/ContributorCredits.vue`.
 
-## Deliberately not built yet
+## Phase 2 (now shipped)
 
-- Payments. Next steps follow the order: tips → memberships → paid collections → sponsorships → ads.
-  Payouts must go through a regulated processor (e.g. Stripe Connect separate charges & transfers),
-  with KYC identity kept separate from public creator names.
-- Any cash or redeemable reward for forecast accuracy — get jurisdiction-specific legal review first.
-- Push notifications for significant probability moves (`significantMove` is ready to hook into
-  `notificationService`).
+- **Leaderboards** — `/forecasters`, optional `?topic=`. Users self-publish a signed reputation
+  summary; the top 10 rows are recomputed from raw signed forecasts and dropped if inflated.
+- **Follow forecasters** — follow button + follower count on profiles.
+- **Notifications** — `forecastWatchService` (every 10 min): ≥10-point probability moves on
+  questions you forecast, resolutions/voids, and new forecasts by people you follow.
+- **Feed ranking** — "For You" ranks polls with `popularityScore` (breadth, disagreement,
+  urgency, log-scaled, time-decayed) instead of raw vote count.
+- **Payments** — `payments-api/` (Stripe Connect separate charges & transfers, no SDK).
+  Tips only on fully-accepted splits; unlinked shares reserved (default 180 days), disputes hold
+  funds, refunds/chargebacks reversed proportionally, per-work revenue statements.
+  Web app shows tip buttons / statements / payout setup only when `VITE_PAYMENTS_API` is set.
+
+## Still to do before taking real money
+
+- Legal/tax review per jurisdiction, Stripe platform agreement, live keys.
+- Move `payments-api` ledger from JSON file to the database; deploy behind TLS.
+- Memberships, paid collections, sponsorships and ads (the monetization order still applies).
+- Never pay out for forecast accuracy.

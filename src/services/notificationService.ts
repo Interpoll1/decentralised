@@ -154,3 +154,38 @@ export async function clearChatNotification(fromUserId: string): Promise<void> {
     await LocalNotifications.cancel({ notifications: [{ id }] });
   } catch { /* nothing to cancel */ }
 }
+
+export interface GenericNotification {
+  /** Stable tag so repeated alerts for the same thing replace each other. */
+  tag: string;
+  title: string;
+  body: string;
+  path: string;
+}
+
+/** Non-chat alerts (forecast moves, resolutions, followed forecasters). */
+export async function notifyGeneric(n: GenericNotification): Promise<void> {
+  if (isNative()) {
+    if (!nativeReady) return;
+    try {
+      const { LocalNotifications } = await import('@capacitor/local-notifications');
+      await LocalNotifications.schedule({
+        notifications: [{
+          id: idFor(`generic:${n.tag}`),
+          title: n.title,
+          body: n.body,
+          channelId: ANDROID_CHANNEL_ID,
+          extra: { path: n.path },
+        }],
+      });
+    } catch (err) {
+      console.warn('[Notifications] schedule failed', err);
+    }
+    return;
+  }
+  try {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    const web = new Notification(n.title, { body: n.body, icon: '/favicon.ico', tag: n.tag });
+    web.onclick = () => { window.focus(); navigate?.(n.path); web.close(); };
+  } catch { /* ignore */ }
+}

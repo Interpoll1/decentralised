@@ -130,3 +130,4 @@ HANDOFF*.md
 # Root-level notes/handoffs (README.md stays)
 /CHANGES.md
 relay-push/.push-notifications.*.cjs
+payments-ledger.json*
