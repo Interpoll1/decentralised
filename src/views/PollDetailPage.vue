@@ -296,6 +296,15 @@
             </div>
           </div>
         </div>
+
+        <ForecastPanel :poll="poll" :current-user-id="currentUserId" />
+        <ContributorCredits
+          :work-id="poll.id"
+          work-kind="poll"
+          :owner-id="poll.authorId"
+          :owner-name="poll.authorName"
+          :current-user-id="currentUserId"
+        />
       </div>
       </DesktopPageShell>
     </ion-content>
@@ -305,6 +314,8 @@
 import { relativeTime, ui, formatUi, remainingTime } from "../i18n";
 import { ref, computed, onMounted, watch } from 'vue';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
+import ForecastPanel from '../components/ForecastPanel.vue';
+import ContributorCredits from '../components/ContributorCredits.vue';
 import { useRoute, useRouter } from 'vue-router';
 import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons, IonBackButton, IonList, IonItem, IonLabel, IonCheckbox, IonRadio, IonRadioGroup, IonButton, IonIcon, IonChip, IonBadge, IonSpinner, toastController } from '@ionic/vue';
 import {

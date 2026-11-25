@@ -73,6 +73,8 @@
           </div>
         </div>
 
+        <ForecastRecord v-if="userProfile?.id" :user-id="userProfile.id" />
+
         <!-- ── Edit Profile ───────────────────────── -->
         <div class="profile-card">
           <div class="card-label">
@@ -438,6 +440,7 @@ import { ui } from "../i18n";
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
+import ForecastRecord from '../components/ForecastRecord.vue';
 import { IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons, IonIcon, toastController } from '@ionic/vue';
 import {
   personCircleOutline, settingsOutline, saveOutline, copyOutline,

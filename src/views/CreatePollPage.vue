@@ -100,6 +100,35 @@
             <svg viewBox="0 0 24 24" fill="none" width="15" height="15"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg> {{ $ui("Add Option") }} </button>
         </div>
 
+        <!-- Poll type card -->
+        <div class="form-card">
+          <div class="card-section-label">
+            <ion-icon :icon="timeOutline"></ion-icon> Poll type </div>
+          <div class="field-group poll-kind-toggle">
+            <label><input type="radio" value="opinion" v-model="pollKind" /> Opinion — no correct answer</label>
+            <label><input type="radio" value="forecast" v-model="pollKind" /> Forecast — resolves as correct, incorrect or void</label>
+          </div>
+          <template v-if="pollKind === 'forecast'">
+            <div class="field-group">
+              <label class="field-label">Resolution source</label>
+              <div class="field-wrap"><input class="field-native" v-model="resolutionSource" maxlength="300" placeholder="e.g. Official Steam store page" /></div>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Resolution criteria</label>
+              <div class="field-wrap"><textarea class="field-native" v-model="resolutionCriteria" maxlength="1000" rows="2" placeholder="e.g. Resolves to the first option if the game is purchasable before 1 December"></textarea></div>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Resolves on</label>
+              <div class="field-wrap"><input class="field-native" type="date" v-model="resolvesOn" :min="todayIso" /></div>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Topic</label>
+              <div class="field-wrap"><input class="field-native" v-model="forecastTopic" maxlength="32" placeholder="e.g. technology, games, sports" /></div>
+            </div>
+            <p class="forecast-hint">Forecasters pick an option with 50–99% confidence and can revise it. No money or stakes — accuracy builds reputation.</p>
+          </template>
+        </div>
+
         <!-- Settings card -->
         <div class="form-card">
           <div class="card-section-label">
@@ -324,6 +353,9 @@ ion-content { --background: transparent; }
   .hero-title { font-size: 22px; }
   .create-page { padding: 16px 12px 60px; }
 }
+.poll-kind-toggle { display: grid; gap: 6px; font-size: 14px; }
+.poll-kind-toggle label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+.forecast-hint { font-size: 12px; opacity: .7; margin: 4px 0 0; }
 </style>
 
 <script setup lang="ts">
@@ -342,6 +374,7 @@ import { useHumanGate } from '../composables/useHumanGate';
 import { chevronDownOutline, closeCircleOutline, timeOutline, listOutline, settingsOutline, shieldCheckmarkOutline, lockClosedOutline, informationCircleOutline } from 'ionicons/icons';
 import { useCommunityStore } from '../stores/communityStore';
 import { usePollStore } from '../stores/pollStore';
+import { ForecastService } from '../services/forecastService';
 import { Community } from '../services/communityService';
 import { checkContent, checkOption } from '../utils/contentGuard';
 
@@ -437,8 +470,22 @@ function escapeHtml(input: string): string {
     .replace(/'/g, '&#39;');
 }
 
+const pollKind = ref<'opinion' | 'forecast'>('opinion');
+const resolutionSource = ref('');
+const resolutionCriteria = ref('');
+const resolvesOn = ref('');
+const forecastTopic = ref('');
+const todayIso = new Date().toISOString().slice(0, 10);
+const forecastValid = computed(() => pollKind.value !== 'forecast' || (
+  resolutionSource.value.trim().length > 0 &&
+  resolutionCriteria.value.trim().length > 0 &&
+  !!resolvesOn.value &&
+  forecastTopic.value.trim().length > 0
+));
+
 const isValid = computed(() => {
   return (
+    forecastValid.value &&
     selectedCommunity.value !== null &&
     question.value.trim().length > 0 &&
     options.value.filter(opt => opt.text.trim().length > 0).length >= 2
@@ -563,6 +610,26 @@ async function createPoll() {
         ? undefined
         : { requiredTier: requiredTier.value, mode: gateSubTierVotes.value ? 'gate' : 'separate' },
     });
+    if (pollKind.value === 'forecast') {
+      try {
+        await ForecastService.createSpec({
+          pollId: poll.id,
+          authorId: poll.authorId,
+          resolutionSource: resolutionSource.value,
+          resolutionCriteria: resolutionCriteria.value,
+          // End of the chosen day, local time.
+          resolvesAt: new Date(`${resolvesOn.value}T23:59:59`).getTime(),
+          topic: forecastTopic.value,
+        });
+      } catch (err) {
+        console.warn('Failed to attach forecast spec:', err);
+        const toast = await toastController.create({
+          message: 'Poll created, but its forecast settings could not be saved.',
+          duration: 3500, color: 'warning',
+        });
+        await toast.present();
+      }
+    }
     logPollDebug('ui', 'pollStore.createPoll resolved', {
       pollId: poll.id,
       durationMs: Math.round(performance.now() - submitStartedAt),

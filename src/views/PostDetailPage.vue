@@ -268,6 +268,14 @@
             />
           </div>
         </div>
+        <ContributorCredits
+          v-if="post"
+          :work-id="post.id"
+          work-kind="post"
+          :owner-id="post.authorId"
+          :owner-name="post.authorName"
+          :current-user-id="(userStore.currentUser as any)?.id || ''"
+        />
       </div>
       </DesktopPageShell>
     </ion-content>
@@ -277,6 +285,7 @@
 <script setup lang="ts">
 import { relativeTime, ui } from "../i18n";
 import DesktopPageShell from '../components/DesktopPageShell.vue';
+import ContributorCredits from '../components/ContributorCredits.vue';
 import { trackDetailView } from '../services/viewTrackingService';
 import BurstOverlay     from '../components/BurstOverlay.vue';
 import { useBurst }     from '../composables/useBurst';
