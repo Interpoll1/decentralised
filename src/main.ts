@@ -169,6 +169,13 @@ router.isReady().then(() => {
       import('./services/userService').then(({ UserService }) => {
         UserService.getCurrentUser().then(u => {
           cachedUserId = u?.id || u?.publicKey || null;
+          if (cachedUserId) {
+            const uid = cachedUserId;
+            const name = (u as any)?.customUsername || u?.displayName || u?.username || '';
+            import('./services/forecastWatchService')
+              .then(({ startForecastWatch }) => startForecastWatch(uid, name))
+              .catch(() => {});
+          }
         }).catch(() => {});
       }).catch(() => {});
 

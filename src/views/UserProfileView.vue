@@ -58,6 +58,8 @@
         </div>
       </div>
 
+      <ForecastRecord v-if="userId" :user-id="userId" />
+
       <div class="divider"></div>
 
       <!-- User's Posts -->
@@ -113,6 +115,7 @@
 import { ui } from "../i18n";
 import { ref, computed, onMounted } from 'vue';
 import DesktopPageShell from '../components/DesktopPageShell.vue';
+import ForecastRecord from '../components/ForecastRecord.vue';
 import { useRouter, useRoute } from 'vue-router';
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,

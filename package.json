@@ -29,7 +29,9 @@
     "desktop:build": "tauri build",
     "typecheck": "vue-tsc --noEmit -p tsconfig.app.json",
     "check:locales": "node tools/check-locales.mjs",
-    "verify:build": "node tools/verify-build.mjs"
+    "verify:build": "node tools/verify-build.mjs",
+    "test:payments": "node --test payments-api/app.test.mjs",
+    "start:payments": "node payments-api/server.mjs"
   },
   "dependencies": {
     "@capacitor-mlkit/barcode-scanning": "^6.2.0",

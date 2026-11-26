@@ -58,6 +58,7 @@ export const routes: Array<RouteRecordRaw> = [
     component: () => import('../views/CreatePollPage.vue'),
     props: route => ({ communityId: route.params.communityId }),
   },
+  { path: '/forecasters', name: 'ForecastLeaderboard', component: () => import('../views/ForecastLeaderboardPage.vue') },
   { path: '/profile', name: 'Profile', component: () => import('../views/ProfilePage.vue') },
   { path: '/user/:userId', name: 'UserProfile', component: () => import('../views/UserProfileView.vue'), props: true },
   // Public profile by username — this is the shape author links use ("u/<name>").
