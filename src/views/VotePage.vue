@@ -106,6 +106,13 @@ watch(
 );
 
 const handleVoteSubmitted = (verificationCode: string) => {
-  router.push(receiptPath(verificationCode));
+  // Results first; the receipt link rides in history state, not the URL.
+  const pollId = route.params.pollId as string;
+  const communityId = typeof route.query.communityId === 'string' ? route.query.communityId : undefined;
+  router.replace({
+    path: `/results/${pollId}`,
+    query: communityId ? { communityId } : undefined,
+    state: { receiptPath: receiptPath(verificationCode) },
+  });
 };
 </script>

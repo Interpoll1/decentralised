@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Not found</title>
+<script>
+// Safety net for hosts that 404 a deep link instead of rewriting it to the SPA.
+// Only Echo-owned paths are bounced back into the app; anything else stays a 404.
+(function () {
+  var p = location.pathname;
+  var echo = /^\/(?:onboarding|home|communities|spaces|create|create-community|create-poll|profile|settings|network|chain-explorer|search|resilience|claim-username|chatrooms|community|poll|post|user|u|vote|results|receipt|chat|chatroom|join|auth\/callback)(?:\/|$)/;
+  if (!echo.test(p)) return;
+  try { sessionStorage.setItem('echo:redirect', p + location.search + location.hash); } catch (e) { return; }
+  location.replace('/');
+})();
+</script>
+</head>
+<body style="font-family:system-ui,sans-serif;padding:24px">
+<h1>Page not found</h1>
+<p><a href="/">Go to the home page</a></p>
+</body>
+</html>

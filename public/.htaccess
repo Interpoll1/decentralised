@@ -26,6 +26,10 @@
 # a catch-all fallback here: this document root is shared with other projects
 # such as /about, which must be allowed to reach their own files/handlers.
 # ---------------------------------------------------------------------------
+# Deep links the rewrite rules miss land on 404.html, which forwards
+# Echo-owned paths back into the SPA and leaves other paths as a real 404.
+ErrorDocument 404 /404.html
+
 <IfModule mod_rewrite.c>
     RewriteEngine On
     RewriteBase /

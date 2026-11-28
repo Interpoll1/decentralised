@@ -295,6 +295,13 @@
               <p v-if="openTrackTotal === 0" class="track-empty">{{ $ui("No open votes yet.") }}</p>
             </div>
           </div>
+
+          <!-- Receipt, tucked under the tally so first-time voters see results first -->
+          <details v-if="lastReceipt" class="vote-receipt-details">
+            <summary>{{ $ui("Your vote receipt (for verifying later)") }}</summary>
+            <ReceiptViewer :receipt="lastReceipt" />
+            <button class="receipt-link" @click="router.push(receiptPath(lastReceipt.verificationCode))">{{ $ui("Open full receipt page") }}</button>
+          </details>
         </div>
       </div>
       </DesktopPageShell>
@@ -333,7 +340,8 @@ import { UserService } from '../services/userService';
 import { VoteTrackerService } from '../services/voteTrackerService';
 import { AuditService } from '../services/auditService';
 import { GUN_NAMESPACE } from '../services/gunService';
-import type { Vote } from '../types/chain';
+import type { Vote, Receipt } from '../types/chain';
+import ReceiptViewer from '../components/ReceiptViewer.vue';
 import { generatePseudonym } from '../utils/pseudonym';
 import { formatTrustedIdentityLabel } from '../utils/identityTrust';
 import config from '../config';
@@ -352,6 +360,7 @@ const isSubmitting = ref(false);
 const selectedOption = ref<string>('');
 const selectedOptions = ref<string[]>([]);
 const hasVoted = ref(false);
+const lastReceipt = ref<Receipt | null>(null);
 const currentUserId = ref('');
 const inviteCodes = ref<{ code: string; used: boolean }[]>([]);
 const isLoadingCodes = ref(false);
@@ -534,6 +543,14 @@ async function submitVote() {
     const receipt = await chainStore.addVote(vote)
 
     hasVoted.value = true
+    lastReceipt.value = receipt
+    // Show the tally straight away; network sync below replaces this copy.
+    const picked = new Set(optionIds)
+    poll.value = {
+      ...poll.value,
+      totalVotes: (poll.value.totalVotes || 0) + 1,
+      options: poll.value.options.map(o => picked.has(o.id) ? { ...o, votes: (o.votes || 0) + 1 } : o),
+    }
     const votedPolls = readVotedPolls()
     votedPolls.push(poll.value.id)
     localStorage.setItem('voted-polls', JSON.stringify(votedPolls));
@@ -634,8 +651,7 @@ async function submitVote() {
       }, 3000)
     })()
 
-    await presentToast(ui("Vote recorded. Network sync will continue in the background."))
-    void router.push(receiptPath(receipt.verificationCode))
+    await presentToast(ui("Vote recorded. Your receipt is below the results."))
 
   } catch (error) {
     console.error('Vote error:', error);
@@ -1192,4 +1208,9 @@ ion-content {
     radial-gradient(ellipse at 50%% 100%%, rgba(230, 230, 230, 0.20) 0%%, transparent 55%%),
     #141414;
 }
+
+.vote-receipt-details { margin-top: 16px; border: 1px solid var(--app-border, rgba(127,127,127,.25)); border-radius: 12px; padding: 10px 14px; }
+.vote-receipt-details summary { cursor: pointer; font-size: 14px; font-weight: 600; }
+.vote-receipt-details[open] summary { margin-bottom: 10px; }
+.receipt-link { margin-top: 10px; background: none; border: 0; padding: 0; color: var(--ion-color-primary); cursor: pointer; font-size: 13px; }
 </style>

@@ -88,13 +88,15 @@
             <div v-for="(option, index) in options" :key="option.id" class="option-row">
               <span class="option-num">{{ index + 1 }}</span>
               <div class="field-wrap flex1">
-                <input class="field-native" v-model="options[index].text" :placeholder="`Option ${index + 1}`" :maxlength="100" />
+                <input class="field-native" :class="{ 'field-dup': duplicateOptionIds.has(option.id) }" v-model="options[index].text" :placeholder="`Option ${index + 1}`" :maxlength="100" :aria-invalid="duplicateOptionIds.has(option.id)" />
               </div>
               <button v-if="options.length > 2" class="icon-btn danger" @click="removeOption(index)" :title="$ui('Remove')">
                 <ion-icon :icon="closeCircleOutline"></ion-icon>
               </button>
             </div>
           </div>
+
+          <p v-if="duplicateOptionIds.size > 0" class="dup-warning" role="alert">{{ $ui("Two options are the same. Make each option different before posting.") }}</p>
 
           <button class="add-option-btn" @click="addOption" :disabled="options.length >= 10">
             <svg viewBox="0 0 24 24" fill="none" width="15" height="15"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg> {{ $ui("Add Option") }} </button>
@@ -293,6 +295,8 @@ ion-content { --background: transparent; }
 .picker-selected { font-size: 14px; font-weight: 600; color: var(--app-text); flex: 1; text-align: left; }
 .picker-placeholder { font-size: 14px; color: var(--app-text-subtle); flex: 1; text-align: left; }
 
+.field-native.field-dup { outline: 2px solid var(--ion-color-danger, #e5484d); outline-offset: -2px; border-radius: 8px; }
+.dup-warning { margin: 8px 0 0; font-size: 13px; color: var(--ion-color-danger, #e5484d); }
 .options-list { display: flex; flex-direction: column; gap: 8px; }
 .option-row { display: flex; align-items: center; gap: 10px; }
 .option-num { width: 24px; height: 24px; border-radius: 50%; background: rgba(230, 230, 230,.12); color: #e6e6e6; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -437,8 +441,27 @@ function escapeHtml(input: string): string {
     .replace(/'/g, '&#39;');
 }
 
+function normalizeOption(text: string): string {
+  return text.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+}
+
+// Options whose normalized text matches an earlier option. Polls can't be
+// edited after publishing, so a duplicate would leave the poll stuck.
+const duplicateOptionIds = computed(() => {
+  const seen = new Set<string>();
+  const dups = new Set<string>();
+  for (const opt of options.value) {
+    const key = normalizeOption(opt.text);
+    if (!key) continue;
+    if (seen.has(key)) dups.add(opt.id);
+    else seen.add(key);
+  }
+  return dups;
+});
+
 const isValid = computed(() => {
   return (
+    duplicateOptionIds.value.size === 0 &&
     selectedCommunity.value !== null &&
     question.value.trim().length > 0 &&
     options.value.filter(opt => opt.text.trim().length > 0).length >= 2
@@ -505,7 +528,9 @@ async function createPoll() {
       validOptionCount: options.value.filter(opt => opt.text.trim().length > 0).length,
     });
     const toast = await toastController.create({
-      message: ui("Please select a community, add a question, and provide at least two options."),
+      message: duplicateOptionIds.value.size > 0
+        ? ui("Two options are the same. Make each option different before posting.")
+        : ui("Please select a community, add a question, and provide at least two options."),
       duration: 2500,
       color: 'warning',
     });

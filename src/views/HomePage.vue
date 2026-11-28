@@ -204,6 +204,18 @@
 
             <!-- Category pills: mobile uses mobile-top-strip__cats, tablet+ uses sidebar -->
 
+            <!-- Short intro: what makes Echo different, above the feed -->
+            <div v-if="!introDismissed" class="echo-intro surface-card">
+              <button class="echo-intro__close" :aria-label="$ui('Dismiss')" @click="dismissIntro">✕</button>
+              <p class="echo-intro__title">{{ $ui("Polls you can verify") }}</p>
+              <p class="echo-intro__body">{{ $ui("Echo runs on a peer-to-peer network with no central server. Every vote is signed, so you can check your vote was counted without trusting anyone.") }}</p>
+              <div class="echo-intro__actions">
+                <button class="empty-state-btn empty-state-btn--primary" @click="router.push('/create-poll')">
+                  <ion-icon :icon="addCircleOutline"></ion-icon> {{ $ui("Create a poll") }} </button>
+                <button class="empty-state-btn empty-state-btn--ghost" @click="openSpaces()">{{ $ui("Browse Spaces") }}</button>
+              </div>
+            </div>
+
             <!-- "My Spaces" empty hint -->
             <div v-if="feedScope === 'mine' && joinedCommunityIds.size === 0" class="scope-hint surface-card">
               <ion-icon :icon="bookmarkOutline" size="large"></ion-icon>
@@ -233,9 +245,13 @@
               <button class="active-tag-clear" @click="selectCategory('all')">{{ $ui("✕ Clear") }}</button>
             </div>
 
-            <div v-if="isLoadingPosts" class="loading-container">
-              <ion-spinner></ion-spinner>
-              <p>{{ $ui("Loading content…") }}</p>
+            <div v-if="isLoadingPosts && combinedFeed.length === 0" class="feed-skeleton" aria-busy="true">
+              <p class="feed-skeleton__label"><ion-spinner name="dots"></ion-spinner> {{ $ui("Syncing with peers…") }}</p>
+              <div v-for="n in 3" :key="'sk-' + n" class="feed-skeleton__card surface-card">
+                <div class="sk-line sk-line--short"></div>
+                <div class="sk-line"></div>
+                <div class="sk-line sk-line--mid"></div>
+              </div>
             </div>
 
             <div v-else-if="combinedFeed.length > 0" ref="feedListEl" class="feed-list">
@@ -536,7 +552,15 @@ const communityFilter = ref<'all' | 'private' | 'joined'>('all');
 function setCommunityFilter(value: string) {
   if (value === 'all' || value === 'private' || value === 'joined') communityFilter.value = value;
 }
-const isLoadingPosts     = ref(false);
+// True while the first sync from peers is in flight, so a returning visitor
+// sees "Syncing…" instead of a misleading "No content yet".
+const isLoadingPosts     = ref(true);
+const INTRO_KEY = 'echo:home-intro-dismissed';
+const introDismissed = ref((() => { try { return localStorage.getItem(INTRO_KEY) === '1'; } catch { return false; } })());
+function dismissIntro() {
+  introDismissed.value = true;
+  try { localStorage.setItem(INTRO_KEY, '1'); } catch { /* ignore */ }
+}
 const voteVersion        = ref(0);
 const isHeaderHidden     = ref(false);
 const warmupComplete     = ref(false);
@@ -1174,6 +1198,12 @@ void UserService.getCurrentUser().then((u: any) => {
 onMounted(async () => {
   void bootstrapChat();
 
+  // End the syncing state once content arrives, or after a grace period.
+  const syncTimer = setTimeout(() => { isLoadingPosts.value = false; }, 12000);
+  const stopSyncWatch = watch(() => combinedFeed.value.length, (n) => {
+    if (n > 0) { isLoadingPosts.value = false; clearTimeout(syncTimer); stopSyncWatch(); }
+  }, { immediate: true });
+
   // Don't stack the moderation modal on top of the quick tour — wait until
   // the tour is finished or skipped.
   // (Bit's tour replaced the old tutorial card; its state lives in bitStore.)
@@ -1775,4 +1805,17 @@ if (typeof window !== 'undefined') {
     background: var(--app-bg-elevated) !important;
   }
 }
+
+.echo-intro { position: relative; padding: 16px 18px; margin-bottom: 12px; }
+.echo-intro__title { margin: 0 0 4px; font-weight: 700; font-size: 16px; }
+.echo-intro__body { margin: 0 0 12px; font-size: 14px; opacity: .8; line-height: 1.45; }
+.echo-intro__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.echo-intro__close { position: absolute; top: 8px; right: 10px; background: none; border: 0; color: inherit; opacity: .6; cursor: pointer; font-size: 14px; }
+.feed-skeleton { display: flex; flex-direction: column; gap: 10px; }
+.feed-skeleton__label { display: flex; align-items: center; gap: 8px; font-size: 13px; opacity: .7; margin: 4px 0; }
+.feed-skeleton__card { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.sk-line { height: 12px; border-radius: 6px; background: currentColor; opacity: .08; animation: sk-pulse 1.4s ease-in-out infinite; }
+.sk-line--short { width: 35%; } .sk-line--mid { width: 70%; }
+@keyframes sk-pulse { 0%,100% { opacity: .06; } 50% { opacity: .14; } }
+@media (prefers-reduced-motion: reduce) { .sk-line { animation: none; } }
 </style>

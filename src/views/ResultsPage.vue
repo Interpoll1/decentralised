@@ -29,6 +29,7 @@
         </ion-card-header>
 
         <ion-card-content>
+          <p v-if="justVotedReceipt" class="just-voted">{{ $ui("Your vote was recorded.") }}</p>
           <div class="poll-results">
             <div v-for="option in sortedOptions" :key="option.id" class="result-item">
               <div class="result-header">
@@ -52,6 +53,11 @@
             class="mt-3"
             @click="router.push({ path: `/vote/${route.params.pollId}`, query: poll?.communityId ? { communityId: poll.communityId } : undefined })"
           > {{ $ui("Vote in This Poll") }} </ion-button>
+          <details v-if="justVotedReceipt" class="vote-receipt-details">
+            <summary>{{ $ui("Your vote receipt (for verifying later)") }}</summary>
+            <p class="receipt-hint">{{ $ui("Save this receipt to check later that your vote was counted.") }}</p>
+            <ion-button size="small" fill="outline" @click="router.push(justVotedReceipt)">{{ $ui("View receipt") }}</ion-button>
+          </details>
         </ion-card-content>
       </ion-card>
 
@@ -66,6 +72,10 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+const justVotedReceipt = (() => {
+  const p = typeof window !== 'undefined' ? (window.history.state as { receiptPath?: unknown } | null)?.receiptPath : null;
+  return typeof p === 'string' && p.startsWith('/receipt') ? p : null;
+})();
 import { useRoute, useRouter } from 'vue-router';
 import {
   IonPage,
@@ -199,4 +209,9 @@ onMounted(async () => {
 .verified-note.inflated {
   color: var(--ion-color-warning);
 }
+
+.just-voted { margin: 0 0 12px; font-weight: 600; color: var(--ion-color-success); }
+.vote-receipt-details { margin-top: 16px; border: 1px solid rgba(127,127,127,.25); border-radius: 12px; padding: 10px 14px; }
+.vote-receipt-details summary { cursor: pointer; font-weight: 600; }
+.receipt-hint { font-size: 13px; opacity: .75; }
 </style>

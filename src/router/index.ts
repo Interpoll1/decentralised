@@ -114,4 +114,13 @@ router.beforeEach((to) => {
   return true;
 });
 
+// Restore a deep link that a host 404'd and public/404.html bounced to '/'.
+try {
+  const pending = sessionStorage.getItem('echo:redirect');
+  if (pending) {
+    sessionStorage.removeItem('echo:redirect');
+    if (pending.startsWith('/') && !pending.startsWith('//')) void router.replace(pending);
+  }
+} catch { /* storage unavailable */ }
+
 export default router;

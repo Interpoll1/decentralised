@@ -26,7 +26,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Capacitor } from '@capacitor/core';
 import { useRoute } from 'vue-router';
 import { useBitStore } from '../stores/bitStore';
@@ -47,7 +47,9 @@ interface DownloadOffer {
 
 const INSTALLED_KEY = 'interpoll_app_installed';
 const REMIND_AFTER_MS = 10 * 1000;
-const QUIET_PATHS = ['/onboarding', '/claim-username', '/auth/callback'];
+const QUIET_PATHS = ['/onboarding', '/claim-username', '/auth/callback', '/create-poll', '/create-community', '/vote/'];
+// Compose and vote screens keep their action buttons clear of the prompt.
+const QUIET_PATTERN = /\/(create-poll|create-post)(\/|$)/;
 
 const route = useRoute();
 const bit = useBitStore();
@@ -138,12 +140,21 @@ function canShow() {
     && !isStandalone()
     && document.visibilityState === 'visible'
     && !QUIET_PATHS.some(path => route.path.startsWith(path))
+    && !QUIET_PATTERN.test(route.path)
     && !bit.tourActive
     && !bit.reminderOpen
     && !!offer.value
     && !dismissedThisPage.value
     && !isKnownInstalled();
 }
+
+// Hide (without counting as a dismissal) when navigating into a quiet screen.
+watch(() => route.path, (path) => {
+  if (visible.value && (QUIET_PATTERN.test(path) || QUIET_PATHS.some(p => path.startsWith(p)))) {
+    visible.value = false;
+    scheduleCheck(20_000);
+  }
+});
 
 function scheduleCheck(delay = REMIND_AFTER_MS) {
   window.clearTimeout(timer);
@@ -226,7 +237,8 @@ onUnmounted(() => {
 .dap {
   position: fixed;
   z-index: 2147483400;
-  top: max(14px, env(safe-area-inset-top));
+  /* Bottom, above the tab bar: at the top it covered header actions like Post. */
+  bottom: calc(76px + env(safe-area-inset-bottom));
   left: 50%;
   width: min(680px, calc(100vw - 28px));
   min-height: 72px;
@@ -258,7 +270,7 @@ onUnmounted(() => {
 .dap__close { position: absolute; top: 7px; right: 9px; width: 28px; height: 28px; border: 0; background: transparent; color: #718074; font: 22px/1 system-ui; cursor: pointer; }
 .dap__close:hover { color: #fff; }
 .dap-slide-enter-active, .dap-slide-leave-active { transition: opacity 180ms ease, transform 220ms cubic-bezier(.16, 1, .3, 1); }
-.dap-slide-enter-from, .dap-slide-leave-to { opacity: 0; transform: translate(-50%, -18px); }
+.dap-slide-enter-from, .dap-slide-leave-to { opacity: 0; transform: translate(-50%, 18px); }
 @media (max-width: 560px) {
   .dap { align-items: flex-start; gap: 11px; padding: 12px 40px 12px 12px; }
   .dap__mark { width: 38px; height: 38px; flex-basis: 38px; }
